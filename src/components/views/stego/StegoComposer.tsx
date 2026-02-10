@@ -16,8 +16,9 @@ Please see LICENSE files in the repository root for full details.
 import React, { useCallback, useRef, useState, type JSX } from "react";
 
 import { StegoCodec } from "../../../steganography/StegoCodec";
-import { StegoStrategy, DEFAULT_STEGO_CONFIG } from "../../../steganography/types";
+import { StegoStrategy } from "../../../steganography/types";
 import { getEphemeralManager } from "../../../steganography/ephemeral/EphemeralManager";
+import { prepareCarrierForTransport } from "../../../steganography/CarrierTransport";
 
 /** Props for the StegoComposer component. */
 interface StegoComposerProps {
@@ -89,7 +90,8 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                 coverImage,
             });
 
-            setPreview(result.carrier);
+            const prepared = prepareCarrierForTransport(result.carrier, strategy);
+            setPreview(prepared.carrier);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Encoding failed");
         }
@@ -121,8 +123,10 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                 coverImage,
             });
 
+            const prepared = prepareCarrierForTransport(result.carrier, strategy);
+
             // Send via Matrix
-            const eventId = await onSend(result.carrier, strategy);
+            const eventId = await onSend(prepared.carrier, strategy);
 
             // Track for ephemeral deletion
             if (eventId) {

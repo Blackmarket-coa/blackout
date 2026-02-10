@@ -13,8 +13,9 @@ Please see LICENSE files in the repository root for full details.
 import React, { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 
 import { StegoCodec, type DecodeOutcome } from "../../../steganography/StegoCodec";
-import { StegoDecodeErrorCode, StegoStrategy, DECODE_ERROR_MESSAGES } from "../../../steganography/types";
+import { StegoDecodeErrorCode, StegoStrategy } from "../../../steganography/types";
 import { getEphemeralManager } from "../../../steganography/ephemeral/EphemeralManager";
+import { normalizeIncomingCarrier } from "../../../steganography/CarrierTransport";
 
 /** Props for StegoMessageView. */
 interface StegoMessageViewProps {
@@ -99,7 +100,8 @@ export const StegoMessageView: React.FC<StegoMessageViewProps> = ({
 
         async function decode(): Promise<void> {
             try {
-                const result: DecodeOutcome = await codec.decodeDiagnostic(carrier);
+                const normalizedCarrier = normalizeIncomingCarrier(carrier);
+                const result: DecodeOutcome = await codec.decodeDiagnostic(normalizedCarrier);
                 if (cancelled) return;
 
                 if (!result.ok) {

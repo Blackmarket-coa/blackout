@@ -207,12 +207,16 @@ export function deserializeEnvelopeV1(data: Uint8Array): EnvelopeV1 {
 
     let offset = 0;
 
-    if (data.length < 2 + 1 + 1 + 1 + 8 + 8 + 1) {
+    if (data.length < 2) {
         throw new Error("Envelope too short");
     }
 
     if (data[offset++] !== STEGO_MAGIC[0] || data[offset++] !== STEGO_MAGIC[1]) {
         throw new Error("Invalid envelope magic");
+    }
+
+    if (data.length < 2 + 1 + 1 + 1 + 8 + 8 + 1) {
+        throw new Error("Envelope too short");
     }
 
     const version = data[offset++];
