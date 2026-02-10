@@ -170,8 +170,8 @@ export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
             <div className="mx_StegoShareSheet_info">
                 <p>
                     {isImage
-                        ? "Share this image anywhere. Only someone with the app can decode the hidden message."
-                        : "Copy and paste these emojis anywhere. Only someone with the app can read the hidden message."}
+                        ? "Share this image in internal rooms or external platforms (chatrooms, social media, email). Only someone with the app can decode the hidden message."
+                        : "Copy and paste these emojis in internal rooms or external platforms (chatrooms, social media, email). Only someone with the app can read the hidden message."}
                 </p>
             </div>
 

@@ -27,8 +27,8 @@ interface StegoComposerProps {
     onSend: (carrier: string, strategy: StegoStrategy) => Promise<string | undefined>;
     /** Callback when the composer is dismissed. */
     onClose: () => void;
-    /** Optional: encrypt function (defaults to UTF-8 encoding for demo). */
-    encrypt?: (plaintext: string) => Promise<Uint8Array>;
+    /** Encrypt function from Matrix E2EE pipeline. */
+    encrypt: (plaintext: string) => Promise<Uint8Array>;
 }
 
 /** Strategy display labels. */
@@ -60,12 +60,7 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
     const coverImageRef = useRef<HTMLInputElement>(null);
     const codecRef = useRef(new StegoCodec());
 
-    /** Default encrypt function: UTF-8 encode (real impl would use Matrix E2EE). */
-    const defaultEncrypt = useCallback(async (plaintext: string): Promise<Uint8Array> => {
-        return new TextEncoder().encode(plaintext);
-    }, []);
-
-    const encryptFn = encrypt ?? defaultEncrypt;
+    const encryptFn = encrypt;
 
     /** Handle strategy selection. */
     const handleStrategyChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
