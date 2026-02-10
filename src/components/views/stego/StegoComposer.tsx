@@ -192,7 +192,6 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                             <option value={6}>6 hours</option>
                             <option value={24}>24 hours</option>
                             <option value={72}>72 hours (default)</option>
-                            <option value={168}>1 week</option>
                         </select>
                     </label>
 

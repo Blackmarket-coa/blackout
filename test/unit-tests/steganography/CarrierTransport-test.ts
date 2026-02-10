@@ -32,4 +32,13 @@ describe("CarrierTransport", () => {
             "Carrier compatibility validation failed",
         );
     });
+
+    it("rejects transport payloads requiring too many chunks", () => {
+        const payload = new Uint8Array(1200).fill(7);
+        const encoded = encodeEmoji(payload, Date.now() + 3600_000, StegoStrategy.EmojiString);
+
+        expect(() => prepareCarrierForTransport(encoded, StegoStrategy.EmojiString, 1)).toThrow(
+            "Carrier exceeds transport chunk cap",
+        );
+    });
 });

@@ -8,6 +8,18 @@ Please see LICENSE files in the repository root for full details.
 import { StegoCodec, getDefaultCodec } from "../../../src/steganography/StegoCodec";
 import { StegoStrategy } from "../../../src/steganography/types";
 
+
+function createTestImageDataUrl(): string {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    ctx.fillStyle = "#112233";
+    ctx.fillRect(0, 0, 64, 64);
+    return canvas.toDataURL("image/png");
+}
+
 describe("StegoCodec", () => {
     let codec: StegoCodec;
 
@@ -176,6 +188,31 @@ describe("StegoCodec", () => {
 
             expect(custom.selectStrategy(11)).toBe(StegoStrategy.EmojiString);
             expect(custom.selectStrategy(51)).toBe(StegoStrategy.Image);
+        });
+    });
+
+    describe("phase 1 hard caps", () => {
+        it("caps requested expiry at 72 hours", async () => {
+            const payload = new Uint8Array([1, 2, 3]);
+            const before = Date.now();
+            const message = await codec.encode(payload, {
+                strategy: StegoStrategy.Emoji,
+                expiryMs: 14 * 24 * 60 * 60 * 1000,
+            });
+            const after = Date.now();
+
+            const expectedMin = before + 72 * 60 * 60 * 1000;
+            const expectedMax = after + 72 * 60 * 60 * 1000;
+            expect(message.header.expiresAt).toBeGreaterThanOrEqual(expectedMin);
+            expect(message.header.expiresAt).toBeLessThanOrEqual(expectedMax);
+        });
+
+        it("rejects payloads above hard cap", async () => {
+            const payload = new Uint8Array(4097);
+
+            await expect(
+                codec.encode(payload, { strategy: StegoStrategy.Image, coverImage: createTestImageDataUrl() }),
+            ).rejects.toThrow("exceeds hard cap");
         });
     });
 });

@@ -96,8 +96,15 @@ export class StegoCodec {
      * @returns A StegoMessage containing the carrier and metadata.
      */
     public async encode(encryptedPayload: Uint8Array, options: StegoEncodeOptions = {}): Promise<StegoMessage> {
+        if (encryptedPayload.length > this.config.maxPayloadBytes) {
+            throw new Error(
+                `Payload (${encryptedPayload.length} bytes) exceeds hard cap (${this.config.maxPayloadBytes} bytes)`,
+            );
+        }
+
         const strategy = options.strategy ?? this.selectStrategy(encryptedPayload.length);
-        const expiryMs = options.expiryMs ?? this.config.defaultExpiryMs;
+        const requestedExpiryMs = options.expiryMs ?? this.config.defaultExpiryMs;
+        const expiryMs = Math.min(Math.max(0, requestedExpiryMs), this.config.maxExpiryMs);
         const expiresAt = Date.now() + expiryMs;
         const useErrorCorrection = options.errorCorrection !== false;
 

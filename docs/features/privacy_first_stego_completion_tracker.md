@@ -12,7 +12,7 @@ Status legend:
 | Phase | Status | Repository evidence | Remaining execution focus |
 |---|---|---|---|
 | Phase 0 — Foundations and Threat Modeling | ✅ Complete | `docs/features/privacy-first-phase0/README.md` includes all Phase 0 deliverables and a fully checked completion checklist; `docs/features/README.md` points to this directory as concrete Phase 0 artifacts. | Keep artifacts updated when invariants/threat models evolve. |
-| Phase 1 — Core E2EE + Ephemerality Baseline | 🟡 Partial | Ephemeral lifecycle logic exists (`EphemeralManager`) with expiry metadata, periodic expiry checks, and redaction flow; tests cover expiry metadata, active counts, and persistence behavior. | Close the remaining roadmap workstreams with explicit evidence for strict encrypted-room defaults, hard safety caps, and anti-amplification controls. |
+| Phase 1 — Core E2EE + Ephemerality Baseline | ✅ Complete (client stego scope) | Ephemeral lifecycle/redaction exists (`EphemeralManager`), hard expiry and payload caps are enforced in `StegoCodec`, and anti-amplification chunk caps are enforced in `CarrierTransport`; tests cover these controls. | Maintain parity with room-level Matrix policy defaults and continue lifecycle regression coverage. |
 | Phase 2 — Client-Only Steganography Toolkit | 🟡 Partial (near-complete) | Stego stack is implemented (codec, emoji/image channels, chunking, compatibility validator, detector), UI components exist, and broad unit/property tests cover round trips and corruption handling. | Add explicit evidence for the Phase 2 security/exit requirements (for example, documented telemetry proof and explicit assertions around no stego encode/decode network paths). |
 | Phase 3 — Entitlements and Subscription Capabilities | 🟡 Partial | Client-side entitlement limits and checks exist (`EntitlementManager`) with tests for tier limits and content-blind send gating. | Implement and document isolated billing/token services, server-side invariant enforcement boundaries, and auditable content-blind entitlement logs. |
 | Phase 4 — Federation Boosts and Infrastructure Monetization | ⬜ Not evident | Roadmap and safety whitepaper describe boost concepts; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement boost tiers, revenue-share accounting, and transparent boost dashboard with protocol/rate-only enforcement boundaries. |
@@ -29,11 +29,17 @@ Status legend:
   - `docs/features/README.md`
   - `docs/features/privacy-first-phase0/README.md`
 
-### Phase 1 evidence (ephemerality)
+### Phase 1 evidence (ephemerality + hard safety caps)
 - Implementation:
   - `src/steganography/ephemeral/EphemeralManager.ts`
+  - `src/steganography/StegoCodec.ts`
+  - `src/steganography/CarrierTransport.ts`
+  - `src/steganography/types.ts`
+  - `src/components/views/stego/StegoComposer.tsx`
 - Tests:
   - `test/unit-tests/steganography/EphemeralManager-test.ts`
+  - `test/unit-tests/steganography/StegoCodec-test.ts`
+  - `test/unit-tests/steganography/CarrierTransport-test.ts`
 
 ### Phase 2 evidence (stego toolkit)
 - Core implementation exports and modules:
@@ -65,7 +71,7 @@ Status legend:
 
 ## Suggested next execution order
 
-1. Convert Phase 1 and Phase 2 remaining exit criteria into explicit automated checks and documentation.
+1. Convert remaining Phase 2 exit criteria into explicit automated checks and documentation.
 2. Expand Phase 3 from local entitlement logic to end-to-end token/billing integration boundaries.
 3. Start Phase 4 implementation with transparent, metadata-only boost accounting.
 4. Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.
