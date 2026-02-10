@@ -136,6 +136,24 @@ export interface StegoConfig {
     emojiStringThreshold: number;
     /** Number of Reed-Solomon error correction symbols. */
     reedSolomonSymbols: number;
+    /** Optional reporter for privacy-preserving aggregate decode failure telemetry. */
+    decodeFailureReporter?: (event: StegoDecodeFailureTelemetryEvent) => void;
+}
+
+/** Privacy-preserving aggregate telemetry event for decode failures. */
+export interface StegoDecodeFailureTelemetryEvent {
+    /** Machine-readable error code. */
+    code: StegoDecodeErrorCode;
+    /** Coarse carrier type inferred before decoding. */
+    carrierType: "emoji" | "image" | "unknown";
+    /** Coarse bucket of the carrier length to avoid leaking exact sizes. */
+    lengthBucket: "0" | "1-32" | "33-128" | "129-512" | "513-2048" | "2049+";
+    /** Whether Reed-Solomon recovery was attempted. */
+    rsAttempted: boolean;
+    /** Whether Reed-Solomon corrected some errors. */
+    rsCorrected: boolean;
+    /** Whether a partial header was available at failure time. */
+    hasPartialHeader: boolean;
 }
 
 /** Default configuration values. */
