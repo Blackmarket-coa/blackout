@@ -188,6 +188,36 @@ Please read through the following:
 2. [Code style](./code_style.md)
 3. [Contribution guide](./CONTRIBUTING.md)
 
+## Steganography toolkit integration
+
+This repository includes a thin integration with
+[DominicBreuker/stego-toolkit](https://github.com/DominicBreuker/stego-toolkit)
+for fast manual inspection of suspicious PNG/JPG files during stego feature development.
+
+Prerequisites:
+
+- Docker installed and running.
+
+Usage:
+
+```bash
+yarn stego:toolkit ./path/to/image.png
+```
+
+Equivalent direct script usage:
+
+```bash
+./scripts/stego-toolkit-report.sh ./path/to/image.jpg
+```
+
+The script launches `dominicbreuker/stego-toolkit` in Docker, mounts the
+image folder as `/data`, and runs:
+
+- `check_png.sh` for `.png`
+- `check_jpg.sh` for `.jpg` / `.jpeg`
+
+Generated reports are written into the same directory as the analyzed file.
+
 # Translations
 
 To add a new translation, head to the [translating doc](docs/translating.md).
