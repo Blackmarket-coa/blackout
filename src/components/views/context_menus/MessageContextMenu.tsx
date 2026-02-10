@@ -41,6 +41,7 @@ import {
     ShareIcon,
     CopyIcon,
     TreeIcon,
+    LockIcon,
 } from "@vector-im/compound-design-tokens/assets/web/icons";
 
 import { MatrixClientPeg } from "../../../MatrixClientPeg";
@@ -75,6 +76,7 @@ import { type ShowThreadPayload } from "../../../dispatcher/payloads/ShowThreadP
 import { CardContext } from "../right_panel/context";
 import PinningUtils from "../../../utils/PinningUtils";
 import PosthogTrackers from "../../../PosthogTrackers.ts";
+import SteganographyDialog from "../dialogs/SteganographyDialog";
 
 interface IReplyInThreadButton {
     mxEvent: MatrixEvent;
@@ -347,6 +349,13 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
         this.closeMenu();
     };
 
+    private onSteganographyClick = (): void => {
+        Modal.createDialog(SteganographyDialog, {
+            mxEvent: this.props.mxEvent,
+        });
+        this.closeMenu();
+    };
+
     private onReplyClick = (): void => {
         dis.dispatch({
             action: "reply_to_event",
@@ -484,6 +493,15 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
                 icon={<InlineCodeIcon />}
                 label={_t("timeline|context_menu|view_source")}
                 onClick={this.onViewSourceClick}
+            />
+        );
+
+        // Steganography option for hiding/revealing secret messages
+        const steganographyButton = (
+            <IconizedContextMenuOption
+                icon={<LockIcon />}
+                label={_t("timeline|context_menu|steganography")}
+                onClick={this.onSteganographyClick}
             />
         );
 
@@ -728,6 +746,7 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
                 {endPollButton}
                 {forwardButton}
                 {permalinkButton}
+                {steganographyButton}
                 {reportEventButton}
                 {externalURLButton}
                 {jumpToRelatedEventButton}
