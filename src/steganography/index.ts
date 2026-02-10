@@ -50,6 +50,13 @@ export {
 export { serializeEnvelopeV1, deserializeEnvelopeV1, type EnvelopeV1 } from "./EnvelopeV1";
 export { StegoDetector, getStegoDetector, type StegoDetection, type StegoDetectionCallback } from "./StegoDetector";
 export {
+    chunkEmojiCarrier,
+    parseCarrierChunk,
+    reassembleEmojiCarrier,
+    type StegoCarrierChunk,
+} from "./CarrierChunking";
+export { validateCarrierCompatibility, type CarrierCompatibilityReport } from "./CarrierCompatibility";
+export {
     EphemeralManager,
     getEphemeralManager,
     type EphemeralMessageRecord,
