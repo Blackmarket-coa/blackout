@@ -10,6 +10,7 @@ import { validateCarrierCompatibility } from "./CarrierCompatibility";
 import { StegoStrategy } from "./types";
 
 const CHUNK_PREFIX = "mxstego:v1:";
+const MAX_CHUNK_COUNT = 32;
 
 /**
  * Prepare an encoded carrier for transport in Matrix text events.
@@ -32,6 +33,10 @@ export function prepareCarrierForTransport(
     }
 
     const chunks = chunkEmojiCarrier(carrier, maxEmojisPerChunk);
+    if (chunks.length > MAX_CHUNK_COUNT) {
+        throw new Error(`Carrier exceeds transport chunk cap (${MAX_CHUNK_COUNT})`);
+    }
+
     return {
         carrier: chunks.join("\n"),
         chunked: chunks.length > 1,

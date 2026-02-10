@@ -130,6 +130,10 @@ export interface StegoEncodeOptions {
 export interface StegoConfig {
     /** Default message lifetime in milliseconds. */
     defaultExpiryMs: number;
+    /** Hard upper bound for message lifetime in milliseconds. */
+    maxExpiryMs: number;
+    /** Hard upper bound for encoded payload size in bytes across all strategies. */
+    maxPayloadBytes: number;
     /** Maximum payload size in bytes before falling back to image stego. */
     maxEmojiPayloadBytes: number;
     /** Threshold between single emoji and emoji string strategies. */
@@ -159,6 +163,8 @@ export interface StegoDecodeFailureTelemetryEvent {
 /** Default configuration values. */
 export const DEFAULT_STEGO_CONFIG: StegoConfig = {
     defaultExpiryMs: 72 * 60 * 60 * 1000, // 72 hours
+    maxExpiryMs: 72 * 60 * 60 * 1000, // 72 hours hard cap
+    maxPayloadBytes: 4096,
     maxEmojiPayloadBytes: 1024,
     emojiStringThreshold: 64,
     reedSolomonSymbols: 16,
