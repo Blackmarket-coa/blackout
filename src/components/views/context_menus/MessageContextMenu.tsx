@@ -497,13 +497,14 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
         );
 
         // Steganography option for hiding/revealing secret messages
-        const steganographyButton = (
+        const steganographyEnabled = SettingsStore.getValue("steganographyOptIn");
+        const steganographyButton = steganographyEnabled ? (
             <IconizedContextMenuOption
                 icon={<LockIcon />}
                 label={_t("timeline|context_menu|steganography")}
                 onClick={this.onSteganographyClick}
             />
-        );
+        ) : undefined;
 
         let unhidePreviewButton: JSX.Element | undefined;
         if (eventTileOps?.isWidgetHidden()) {

@@ -49,6 +49,8 @@ export interface EphemeralManagerOptions {
     checkIntervalMs?: number;
     /** Default message lifetime in ms. Default: 72 hours. */
     defaultExpiryMs?: number;
+    /** Hard upper bound on message lifetime in ms. Default: 72 hours. */
+    maxExpiryMs?: number;
     /** Whether to redact events server-side on expiry. Default: true. */
     serverSideRedaction?: boolean;
     /** Whether to persist tracking metadata in localStorage. Default: false. */
@@ -70,6 +72,7 @@ export class EphemeralManager {
         this.options = {
             checkIntervalMs: options.checkIntervalMs ?? 60_000,
             defaultExpiryMs: options.defaultExpiryMs ?? DEFAULT_STEGO_CONFIG.defaultExpiryMs,
+            maxExpiryMs: options.maxExpiryMs ?? DEFAULT_STEGO_CONFIG.defaultExpiryMs,
             serverSideRedaction: options.serverSideRedaction ?? true,
             persistLocalState: options.persistLocalState ?? false,
         };
@@ -287,7 +290,9 @@ export class EphemeralManager {
      * @returns Unix timestamp (ms) when the message should expire.
      */
     public calculateExpiry(customExpiryMs?: number): number {
-        return Date.now() + (customExpiryMs ?? this.options.defaultExpiryMs);
+        const requested = customExpiryMs ?? this.options.defaultExpiryMs;
+        const boundedLifetimeMs = Math.min(Math.max(requested, 1), this.options.maxExpiryMs);
+        return Date.now() + boundedLifetimeMs;
     }
 
     /**
