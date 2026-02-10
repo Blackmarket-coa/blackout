@@ -15,6 +15,7 @@
 - [Kubernetes](kubernetes.md)
 - [Jitsi](jitsi.md)
 - [Encryption](e2ee.md)
+- [Regulator-facing safety whitepaper](regulator-safety-whitepaper.md)
 
 # Build
 
