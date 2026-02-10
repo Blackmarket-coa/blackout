@@ -36,6 +36,7 @@ import {
     StegoStrategy,
     type StegoConfig,
     type StegoDecodeError,
+    type StegoDecodeFailureTelemetryEvent,
     type StegoDecodeResult,
     type StegoEncodeOptions,
     type StegoMessage,
@@ -194,32 +195,69 @@ export class StegoCodec {
      * @returns DecodeOutcome with either the decoded payload or a diagnostic error.
      */
     public async decodeDiagnostic(carrier: string): Promise<DecodeOutcome> {
+        let result: DecodeOutcome;
+
         // Try emoji decode first
         if (this.looksLikeEmojiStego(carrier)) {
-            return this.decodeEmojiCarrierDiagnostic(carrier);
+            result = this.decodeEmojiCarrierDiagnostic(carrier);
+        } else if (carrier.startsWith("data:image/png")) {
+            // Try image decode
+            result = await this.decodeImageCarrierDiagnostic(carrier);
+        } else {
+            // Unknown carrier type
+            result = {
+                ok: false,
+                error: {
+                    code: StegoDecodeErrorCode.NotStegoContent,
+                    message: "This message does not contain hidden content",
+                    rsAttempted: false,
+                    rsCorrected: false,
+                },
+            };
         }
 
-        // Try image decode
-        if (carrier.startsWith("data:image/png")) {
-            return this.decodeImageCarrierDiagnostic(carrier);
+        if (!result.ok) {
+            this.reportDecodeFailure(carrier, result.error);
         }
 
-        // Unknown carrier type
-        return {
-            ok: false,
-            error: {
-                code: StegoDecodeErrorCode.NotStegoContent,
-                message: "This message does not contain hidden content",
-                rsAttempted: false,
-                rsCorrected: false,
-            },
-        };
+        return result;
     }
 
     /**
      * Check if a string might contain a steganographic payload.
      * Fast, lightweight check for scanning incoming messages.
      */
+
+    private reportDecodeFailure(carrier: string, error: StegoDecodeError): void {
+        const carrierType: StegoDecodeFailureTelemetryEvent["carrierType"] = this.looksLikeEmojiStego(carrier)
+            ? "emoji"
+            : carrier.startsWith("data:image/png")
+              ? "image"
+              : "unknown";
+
+        const length = carrier.length;
+        const lengthBucket: StegoDecodeFailureTelemetryEvent["lengthBucket"] = length === 0
+            ? "0"
+            : length <= 32
+              ? "1-32"
+              : length <= 128
+                ? "33-128"
+                : length <= 512
+                  ? "129-512"
+                  : length <= 2048
+                    ? "513-2048"
+                    : "2049+";
+
+        this.config.decodeFailureReporter?.({
+            code: error.code,
+            carrierType,
+            lengthBucket,
+            rsAttempted: error.rsAttempted,
+            rsCorrected: error.rsCorrected,
+            hasPartialHeader: error.partialHeader !== undefined,
+        });
+    }
+
     public looksLikeStego(content: string): boolean {
         return this.looksLikeEmojiStego(content) || content.startsWith("data:image/png");
     }
