@@ -51,6 +51,8 @@ export interface EphemeralManagerOptions {
     defaultExpiryMs?: number;
     /** Whether to redact events server-side on expiry. Default: true. */
     serverSideRedaction?: boolean;
+    /** Whether to persist tracking metadata in localStorage. Default: false. */
+    persistLocalState?: boolean;
 }
 
 /**
@@ -69,6 +71,7 @@ export class EphemeralManager {
             checkIntervalMs: options.checkIntervalMs ?? 60_000,
             defaultExpiryMs: options.defaultExpiryMs ?? DEFAULT_STEGO_CONFIG.defaultExpiryMs,
             serverSideRedaction: options.serverSideRedaction ?? true,
+            persistLocalState: options.persistLocalState ?? false,
         };
     }
 
@@ -77,7 +80,9 @@ export class EphemeralManager {
      */
     public start(client: MatrixClient): void {
         this.client = client;
-        this.loadFromStorage();
+        if (this.options.persistLocalState) {
+            this.loadFromStorage();
+        }
 
         // Start periodic check
         this.checkInterval = setInterval(() => {
@@ -229,6 +234,8 @@ export class EphemeralManager {
      * into a single localStorage write after a short delay.
      */
     private saveToStorage(): void {
+        if (!this.options.persistLocalState) return;
+
         this.savePending = true;
         if (this.saveTimer) return; // Already scheduled
 
@@ -245,6 +252,8 @@ export class EphemeralManager {
      * Immediately persist tracked records to localStorage.
      */
     private flushToStorage(): void {
+        if (!this.options.persistLocalState) return;
+
         try {
             const data = JSON.stringify([...this.records.entries()]);
             localStorage.setItem(STORAGE_PREFIX + "records", data);
@@ -257,6 +266,8 @@ export class EphemeralManager {
      * Load tracked records from localStorage.
      */
     private loadFromStorage(): void {
+        if (!this.options.persistLocalState) return;
+
         try {
             const data = localStorage.getItem(STORAGE_PREFIX + "records");
             if (data) {
