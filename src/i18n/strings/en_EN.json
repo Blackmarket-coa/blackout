@@ -3277,6 +3277,33 @@
         "spaces_title": "Spaces you're in",
         "start_group_chat_button": "Start a group chat"
     },
+    "steganography": {
+        "cover_text_label": "Cover text",
+        "cover_text_placeholder": "Enter the visible text that will carry the hidden message...",
+        "decode_button": "Reveal hidden message",
+        "description_decode": "Attempt to reveal a hidden message embedded in this message. If the message was encrypted, enter the passphrase below.",
+        "description_encode": "Hide a secret message inside visible cover text using zero-width characters. The message can optionally be encrypted with a passphrase.",
+        "encode_button": "Hide message",
+        "error_decoding": "Failed to decode. The passphrase may be incorrect or the data may be corrupted.",
+        "error_encoding": "Failed to encode the hidden message.",
+        "error_no_cover_text": "Please enter cover text.",
+        "error_no_hidden_message": "No hidden message was found in this text.",
+        "error_no_secret": "Please enter a secret message to hide.",
+        "hidden_message_detected": "Hidden content detected in this message.",
+        "insert_into_composer": "Insert into composer",
+        "mode_decode": "Decode",
+        "mode_encode": "Encode",
+        "passphrase_label": "Passphrase",
+        "passphrase_placeholder": "Enter a passphrase for encryption...",
+        "processing": "Processing...",
+        "result_decoded": "Revealed message:",
+        "result_encoded": "Encoded message (ready to send):",
+        "secret_message_label": "Secret message",
+        "secret_message_placeholder": "Enter the message to hide...",
+        "source_message_label": "Source message",
+        "title": "Steganography",
+        "use_encryption": "Encrypt with passphrase"
+    },
     "stickers": {
         "empty": "You don't currently have any stickerpacks enabled",
         "empty_add_prompt": "Add some now"
@@ -3346,6 +3373,7 @@
             "report": "Report",
             "resent_unsent_reactions": "Resend %(unsentCount)s reaction(s)",
             "show_url_preview": "Show preview",
+            "steganography": "Steganography",
             "view_related_event": "View related event",
             "view_source": "View source"
         },
