@@ -41,7 +41,7 @@ One of the following options **must** be supplied:
                 "base_url": "https://matrix-client.matrix.org"
             },
             "m.identity_server": {
-                "base_url": "https://vector.im"
+                "base_url": "https://matrix.org"
             }
         }
     }
@@ -535,9 +535,7 @@ If none of these sources have an identity server set, then Element will prompt t
 user to set an identity server first when attempting to use features that
 require one.
 
-Currently, the only two public identity servers are https://vector.im and
-https://matrix.org, however in the future identity servers will be
-decentralised.
+One commonly-used public identity server is https://matrix.org, however in the future identity servers will be decentralized and many deployments prefer to run their own.
 
 ## Desktop app configuration
 

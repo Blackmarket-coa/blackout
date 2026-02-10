@@ -28,7 +28,7 @@ export class Jitsi {
     private _useFor1To1Calls = false;
 
     public get preferredDomain(): string {
-        return this.domain || "meet.element.io";
+        return this.domain || "meet.jit.si";
     }
 
     public get useFor1To1Calls(): boolean {
@@ -68,7 +68,7 @@ export class Jitsi {
 
     private update = async (discoveryResponse?: IClientWellKnown): Promise<any> => {
         // Start with a default of the config's domain
-        let domain = SdkConfig.getObject("jitsi")?.get("preferred_domain") || "meet.element.io";
+        let domain = SdkConfig.getObject("jitsi")?.get("preferred_domain") || "meet.jit.si";
 
         logger.log("Attempting to get Jitsi conference information from homeserver");
         const wkJitsiConfig = discoveryResponse?.[JITSI_WK_PROPERTY] ?? discoveryResponse?.[JITSI_WK_PROPERTY_LEGACY];
