@@ -9,3 +9,4 @@ when making changes.
 
 - `privacy_first_stego_roadmap.md`: roadmap for privacy-first steganographic messaging.
 - `privacy-first-phase0/`: concrete Phase 0 foundation artifacts (ADRs, data classification, requirements, legal playbook).
+- `privacy-first-phase2/`: Phase 2 client-only steganography toolkit completion evidence (security exit criteria, telemetry proof, test inventory).
