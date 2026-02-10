@@ -371,6 +371,7 @@ export interface Settings {
     "inviteRules": IBaseSetting<ComputedInviteConfig>;
     "blockInvites": IBaseSetting<boolean>;
     "Developer.elementCallUrl": IBaseSetting<string>;
+    "steganographyOptIn": IBaseSetting<boolean>;
 }
 
 export type SettingKey = keyof Settings;
@@ -1487,5 +1488,11 @@ export const SETTINGS: Settings = {
         supportedLevels: [SettingLevel.DEVICE],
         displayName: _td("devtools|settings|elementCallUrl"),
         default: "",
+    },
+    "steganographyOptIn": {
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS,
+        displayName: _td("settings|steganography|opt_in_label"),
+        description: _td("settings|steganography|opt_in_description"),
+        default: false,
     },
 };

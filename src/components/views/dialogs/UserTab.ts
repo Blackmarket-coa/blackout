@@ -20,4 +20,5 @@ export enum UserTab {
     Mjolnir = "USER_MJOLNIR_TAB",
     Help = "USER_HELP_TAB",
     SessionManager = "USER_SESSION_MANAGER_TAB",
+    Steganography = "USER_STEGANOGRAPHY_TAB",
 }

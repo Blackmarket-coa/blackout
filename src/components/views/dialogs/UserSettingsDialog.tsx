@@ -20,6 +20,7 @@ import KeyIcon from "@vector-im/compound-design-tokens/assets/web/icons/key";
 import SidebarIcon from "@vector-im/compound-design-tokens/assets/web/icons/sidebar";
 import MicOnIcon from "@vector-im/compound-design-tokens/assets/web/icons/mic-on";
 import LockIcon from "@vector-im/compound-design-tokens/assets/web/icons/lock";
+import VisibilityOffIcon from "@vector-im/compound-design-tokens/assets/web/icons/visibility-off";
 import LabsIcon from "@vector-im/compound-design-tokens/assets/web/icons/labs";
 import BlockIcon from "@vector-im/compound-design-tokens/assets/web/icons/block";
 import HelpIcon from "@vector-im/compound-design-tokens/assets/web/icons/help";
@@ -36,6 +37,7 @@ import PreferencesUserSettingsTab from "../settings/tabs/user/PreferencesUserSet
 import VoiceUserSettingsTab from "../settings/tabs/user/VoiceUserSettingsTab";
 import HelpUserSettingsTab from "../settings/tabs/user/HelpUserSettingsTab";
 import MjolnirUserSettingsTab from "../settings/tabs/user/MjolnirUserSettingsTab";
+import SteganographyUserSettingsTab from "../settings/tabs/user/SteganographyUserSettingsTab";
 import { UIFeature } from "../../../settings/UIFeature";
 import BaseDialog from "./BaseDialog";
 import SidebarUserSettingsTab from "../settings/tabs/user/SidebarUserSettingsTab";
@@ -90,6 +92,8 @@ function titleForTabID(tabId: UserTab): React.ReactNode {
             return _t("settings|labs|dialog_title", undefined, subs);
         case UserTab.Mjolnir:
             return _t("settings|labs_mjolnir|dialog_title", undefined, subs);
+        case UserTab.Steganography:
+            return _t("settings|steganography|dialog_title", undefined, subs);
         case UserTab.Help:
             return _t("setting|help_about|dialog_title", undefined, subs);
     }
@@ -219,6 +223,16 @@ export default function UserSettingsDialog(props: IProps): JSX.Element {
                 <EncryptionUserSettingsTab initialState={initialEncryptionState} />,
                 "UserSettingsEncryption",
                 showSetupRecoveryIndicator ? "mx_SettingsDialog_tabLabelsAlert" : undefined,
+            ),
+        );
+
+        tabs.push(
+            new Tab(
+                UserTab.Steganography,
+                _td("settings|steganography|title"),
+                <VisibilityOffIcon />,
+                <SteganographyUserSettingsTab />,
+                "UserSettingsSteganography",
             ),
         );
 

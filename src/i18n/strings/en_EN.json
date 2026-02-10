@@ -3021,6 +3021,15 @@
             "label": "Open %(brand)s when you log in to your computer",
             "minimised": "Minimised"
         },
+        "steganography": {
+            "dialog_title": "<strong>Settings:</strong> Steganography",
+            "opt_in_description": "When enabled, messages can be encoded into innocuous-looking emoji sequences or images with ephemeral 72-hour lifetimes.",
+            "opt_in_detail": "Steganography allows you to hide encrypted messages inside emoji sequences or images. Hidden messages automatically expire after 72 hours. This feature uses end-to-end encryption with Reed-Solomon error correction for reliable delivery.",
+            "opt_in_heading": "Enable steganography",
+            "opt_in_label": "Enable steganographic messaging",
+            "section_heading": "Steganographic messaging",
+            "title": "Steganography"
+        },
         "tac_only_notifications": "Only show notifications in the thread activity centre",
         "use_12_hour_format": "Show timestamps in 12 hour format (e.g. 2:30pm)",
         "use_command_enter_send_message": "Use Command + Enter to send a message",
