@@ -165,6 +165,21 @@ describe("EphemeralManager", () => {
             expect(expiry).toBeGreaterThanOrEqual(before + 60 * 60 * 1000);
             expect(expiry).toBeLessThanOrEqual(after + 60 * 60 * 1000);
         });
+
+        it("should cap custom expiry at configured maximum", () => {
+            const cappedManager = new EphemeralManager({
+                defaultExpiryMs: 72 * 60 * 60 * 1000,
+                maxExpiryMs: 72 * 60 * 60 * 1000,
+            });
+
+            const before = Date.now();
+            const expiry = cappedManager.calculateExpiry(30 * 24 * 60 * 60 * 1000); // 30 days requested
+            const after = Date.now();
+
+            expect(expiry).toBeGreaterThanOrEqual(before + 72 * 60 * 60 * 1000);
+            expect(expiry).toBeLessThanOrEqual(after + 72 * 60 * 60 * 1000);
+            cappedManager.stop();
+        });
     });
 
     describe("createExpiryContent", () => {

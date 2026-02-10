@@ -55,6 +55,7 @@ export {
     type EphemeralMessageRecord,
     type EphemeralManagerOptions,
 } from "./ephemeral/EphemeralManager";
+export { EntitlementManager, type EntitlementToken, type EntitlementLimits, type EntitlementTier } from "./entitlements/EntitlementManager";
 export {
     StegoStrategy,
     EMOJI_POOL,
