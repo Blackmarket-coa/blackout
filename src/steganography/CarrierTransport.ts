@@ -64,11 +64,5 @@ export function normalizeIncomingCarrier(rawCarrier: string): string {
         return rawCarrier;
     }
 
-    try {
-        return reassembleEmojiCarrier(lines);
-    } catch {
-        // Keep decode paths fail-closed but resilient: malformed chunk metadata
-        // should not crash message rendering pipelines.
-        return rawCarrier;
-    }
+    return reassembleEmojiCarrier(lines);
 }

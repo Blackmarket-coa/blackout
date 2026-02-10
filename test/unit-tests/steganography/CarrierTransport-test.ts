@@ -27,13 +27,6 @@ describe("CarrierTransport", () => {
         expect(normalizeIncomingCarrier(raw)).toEqual(raw);
     });
 
-
-
-    it("falls back to raw carrier when chunk metadata is malformed", () => {
-        const malformed = "mxstego:v1:1/2:🐶\nmxstego:v1:x/2:🐱";
-        expect(normalizeIncomingCarrier(malformed)).toEqual(malformed);
-    });
-
     it("rejects invalid emoji carriers before transport", () => {
         expect(() => prepareCarrierForTransport("mxstego:v1:1/1:🐶x", StegoStrategy.Emoji)).toThrow(
             "Carrier compatibility validation failed",

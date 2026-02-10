@@ -56,7 +56,6 @@ export {
     type StegoCarrierChunk,
 } from "./CarrierChunking";
 export { validateCarrierCompatibility, type CarrierCompatibilityReport } from "./CarrierCompatibility";
-export { prepareCarrierForTransport, normalizeIncomingCarrier } from "./CarrierTransport";
 export {
     EphemeralManager,
     getEphemeralManager,
