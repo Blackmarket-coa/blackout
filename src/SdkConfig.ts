@@ -17,6 +17,12 @@ import { type DeepReadonly, type Defaultize } from "./@types/common";
 // see element-web config.md for docs, or the IConfigOptions interface for dev docs
 export const DEFAULTS: DeepReadonly<IConfigOptions> = {
     brand: "Element",
+    default_server_config: {
+        "m.homeserver": {
+            base_url: "https://matrix-client.matrix.org",
+            server_name: "matrix.org",
+        },
+    },
     help_url: "https://element.io/help",
     help_encryption_url: "https://element.io/help#encryption",
     uisi_autorageshake_app: "element-auto-uisi",
