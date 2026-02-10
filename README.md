@@ -114,13 +114,13 @@ instead of adding that last line.
 # Building From Source
 
 Element is a modular webapp built with modern ES6 and uses a Node.js build system.
-Ensure you have the latest LTS version of Node.js installed.
+Ensure you have a supported Node.js version installed (see [package.json](./package.json): `node >=22.18`).
 
-Using `yarn` instead of `npm` is recommended. Please see the Yarn [install
+Using Yarn Classic (`yarn` v1.x) instead of `npm` is recommended. Please see the Yarn [install
 guide](https://classic.yarnpkg.com/en/docs/install) if you do not have it already.
 
-1. Install or update `node.js` so that your `node` is at least the current recommended LTS.
-1. Install `yarn` if not present already.
+1. Install or update Node.js so that `node --version` satisfies `>=22.18`.
+1. Install Yarn Classic (`yarn` v1.x) if not present already.
 1. Clone the repo: `git clone https://github.com/element-hq/element-web.git`.
 1. Switch to the element-web directory: `cd element-web`.
 1. Install the prerequisites: `yarn install`.
