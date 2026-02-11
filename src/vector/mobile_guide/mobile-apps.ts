@@ -28,31 +28,31 @@ export interface MobileAppMetadata {
 
 export const mobileApps: Record<MobileAppVariant, MobileAppMetadata> = {
     [MobileAppVariant.Classic]: {
-        name: "Element",
-        appleAppId: "id1083446067",
-        appStoreUrl: "https://apps.apple.com/app/element-messenger/id1083446067",
-        playStoreUrl: "https://play.google.com/store/apps/details?id=im.vector.app",
-        fDroidUrl: "https://f-droid.org/packages/im.vector.app",
+        name: "Blackout",
+        appleAppId: "id0000000000",
+        appStoreUrl: "https://apps.apple.com/app/blackout-secure/id0000000000",
+        playStoreUrl: "https://play.google.com/store/apps/details?id=io.blackout.app",
+        fDroidUrl: "https://f-droid.org/packages/io.blackout.app",
         deepLinkPath: "",
         usesLegacyDeepLink: true,
         isProApp: false,
     },
     [MobileAppVariant.X]: {
-        name: "Element X",
-        appleAppId: "id1631335820",
-        appStoreUrl: "https://apps.apple.com/app/element-x-secure-chat-call/id1631335820",
-        playStoreUrl: "https://play.google.com/store/apps/details?id=io.element.android.x",
-        fDroidUrl: "https://f-droid.org/packages/io.element.android.x",
-        deepLinkPath: "/element",
+        name: "Blackout X",
+        appleAppId: "id0000000001",
+        appStoreUrl: "https://apps.apple.com/app/blackout-x-secure-chat/id0000000001",
+        playStoreUrl: "https://play.google.com/store/apps/details?id=io.blackout.app.x",
+        fDroidUrl: "https://f-droid.org/packages/io.blackout.app.x",
+        deepLinkPath: "/blackout",
         usesLegacyDeepLink: false,
         isProApp: false,
     },
     [MobileAppVariant.Pro]: {
-        name: "Element Pro",
-        appleAppId: "id6502951615",
-        appStoreUrl: "https://apps.apple.com/app/element-pro-for-work/id6502951615",
-        playStoreUrl: "https://play.google.com/store/apps/details?id=io.element.enterprise",
-        deepLinkPath: "/element-pro",
+        name: "Blackout Pro",
+        appleAppId: "id0000000002",
+        appStoreUrl: "https://apps.apple.com/app/blackout-pro-work/id0000000002",
+        playStoreUrl: "https://play.google.com/store/apps/details?id=io.blackout.enterprise",
+        deepLinkPath: "/blackout-pro",
         usesLegacyDeepLink: false,
         isProApp: true,
     },
@@ -63,7 +63,7 @@ export function updateMobilePage(metadata: MobileAppMetadata, deepLinkUrl: strin
     appleMeta.setAttribute("content", `app-id=${metadata.appleAppId}`);
 
     if (server) {
-        (document.getElementById("header_title") as HTMLHeadingElement).innerText = `Join ${server} on Element`;
+        (document.getElementById("header_title") as HTMLHeadingElement).innerText = `Join ${server} on Blackout`;
     }
     (document.getElementById("app_store_link") as HTMLAnchorElement).href = metadata.appStoreUrl;
     (document.getElementById("play_store_link") as HTMLAnchorElement).href = metadata.playStoreUrl;

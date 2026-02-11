@@ -13,7 +13,7 @@
     "disable_login_language_selector": false,
     "disable_3pid_login": false,
     "force_verification": false,
-    "brand": "Element",
+    "brand": "Blackout",
     "default_widget_container_height": 280,
     "default_country_code": "GB",
     "show_labs_settings": false,
@@ -37,7 +37,15 @@
     },
     "element_call": {
         "url": "https://call.example.com",
-        "brand": "Element Call"
+        "brand": "Blackout Calls"
+    },
+    "security": {
+        "hardened_mode": true,
+        "steganography": {
+            "enabled": false,
+            "mode": "image-lsb",
+            "require_verification": true
+        }
     },
     "map_style_url": "https://api.maptiler.com/maps/streets/style.json?key=fU3vlMsMn4Jb6dnEIFsx"
 }
