@@ -22,16 +22,26 @@ const ZW_1 = "\u200C"; // binary 1
 const ZW_SEP = "\u200D"; // byte separator
 const ZW_MARKER = "\uFEFF"; // start/end marker
 
+function getWebCrypto(): Crypto {
+    const webCrypto = globalThis.crypto ?? (typeof window !== "undefined" ? window.crypto : undefined);
+    if (!webCrypto?.subtle) {
+        throw new Error("Web Crypto API is not available in this environment.");
+    }
+
+    return webCrypto;
+}
+
 /**
  * Derive an AES-GCM key from a passphrase using PBKDF2.
  */
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+    const webCrypto = getWebCrypto();
     const encoder = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(passphrase), "PBKDF2", false, [
+    const keyMaterial = await webCrypto.subtle.importKey("raw", encoder.encode(passphrase), "PBKDF2", false, [
         "deriveKey",
     ]);
 
-    return crypto.subtle.deriveKey(
+    return webCrypto.subtle.deriveKey(
         {
             name: "PBKDF2",
             salt,
@@ -50,12 +60,13 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
  * Returns a Uint8Array of: salt (16) + iv (12) + ciphertext.
  */
 async function encryptData(plaintext: string, passphrase: string): Promise<Uint8Array> {
+    const webCrypto = getWebCrypto();
     const encoder = new TextEncoder();
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const salt = webCrypto.getRandomValues(new Uint8Array(16));
+    const iv = webCrypto.getRandomValues(new Uint8Array(12));
     const key = await deriveKey(passphrase, salt);
 
-    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(plaintext));
+    const ciphertext = await webCrypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(plaintext));
 
     const result = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
     result.set(salt, 0);
@@ -68,12 +79,13 @@ async function encryptData(plaintext: string, passphrase: string): Promise<Uint8
  * Decrypt ciphertext produced by `encryptData`.
  */
 async function decryptData(data: Uint8Array, passphrase: string): Promise<string> {
+    const webCrypto = getWebCrypto();
     const salt = data.slice(0, 16);
     const iv = data.slice(16, 28);
     const ciphertext = data.slice(28);
     const key = await deriveKey(passphrase, salt);
 
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    const plaintext = await webCrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
 
     return new TextDecoder().decode(plaintext);
 }
