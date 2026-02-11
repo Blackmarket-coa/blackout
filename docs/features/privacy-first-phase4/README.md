@@ -22,7 +22,7 @@ This directory captures current implementation evidence for **Phase 4 — Federa
 
 ## Current status
 
-Phase 4 is now **in implementation** with core policy/accounting primitives and tests. Remaining execution is focused on wiring these primitives into production UI and service boundaries.
+Phase 4 is now **complete** for the privacy-first stego roadmap scope in this repository. Tier policy, metadata-only throttling, transparent revenue-share accounting, and dashboard snapshot reporting are implemented with unit coverage.
 
 ## Test inventory
 
@@ -36,5 +36,5 @@ Phase 4 is now **in implementation** with core policy/accounting primitives and 
 - [x] Add revenue-share accounting primitives.
 - [x] Implement metadata-only throttling differential logic.
 - [x] Produce transparent dashboard snapshot aggregates.
-- [ ] Integrate dashboard snapshot into surfaced product reporting UI.
-- [ ] Integrate accounting and throttling into live federation service pipeline.
+- [x] Integrate dashboard snapshot into surfaced product reporting UI.
+- [x] Integrate accounting and throttling into live federation service pipeline.
