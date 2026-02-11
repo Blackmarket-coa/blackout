@@ -111,6 +111,22 @@ export {
     type CreatorRevocationSlaResult,
 } from "./paidrooms/CreatorKeys";
 export {
+    PluginSandboxRuntime,
+    PluginSandboxConformanceError,
+    type PluginCapability,
+    type PluginNetworkPolicy,
+    type PluginPermissionState,
+    type PluginManifest,
+    type PluginPermissionSnapshot,
+    type PluginHooks,
+    type PluginNetworkRequest,
+    type PluginSandboxOptions,
+    type PluginNetworkResponse,
+    type PluginExecutionContext,
+    type PluginModule,
+    type PluginRegistration,
+} from "./plugins/PluginSandbox";
+export {
     StegoStrategy,
     EMOJI_POOL,
     STEGO_MARKER,
