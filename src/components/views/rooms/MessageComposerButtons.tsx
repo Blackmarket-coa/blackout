@@ -22,6 +22,7 @@ import {
     PollsIcon,
     StickerIcon,
     TextFormattingIcon,
+    LockIcon,
 } from "@vector-im/compound-design-tokens/assets/web/icons";
 
 import { _t } from "../../../languageHandler";
@@ -31,6 +32,7 @@ import dis from "../../../dispatcher/dispatcher";
 import ErrorDialog from "../dialogs/ErrorDialog";
 import { LocationButton } from "../location";
 import Modal from "../../../Modal";
+import SteganographyDialog from "../dialogs/SteganographyDialog";
 import PollCreateDialog from "../elements/PollCreateDialog";
 import { MatrixClientPeg } from "../../../MatrixClientPeg";
 import ContentMessages from "../../../ContentMessages";
@@ -69,6 +71,7 @@ const MessageComposerButtons: React.FC<IProps> = (props: IProps) => {
     const { room, narrow } = useScopedRoomContext("room", "narrow");
 
     const isWysiwygLabEnabled = useSettingValue("feature_wysiwyg_composer");
+    const steganographyEnabled = useSettingValue("steganographyOptIn");
 
     if (!matrixClient || !room || props.haveRecording) {
         return null;
@@ -90,6 +93,7 @@ const MessageComposerButtons: React.FC<IProps> = (props: IProps) => {
         ];
         moreButtons = [
             uploadButton(), // props passed via UploadButtonContext
+            steganographyButton(steganographyEnabled),
             showStickersButton(props),
             voiceRecordingButton(props, narrow),
             props.showPollsButton ? pollButton(room, props.relation) : null,
@@ -107,6 +111,7 @@ const MessageComposerButtons: React.FC<IProps> = (props: IProps) => {
                 emojiButton(props)
             ),
             uploadButton(), // props passed via UploadButtonContext
+            steganographyButton(steganographyEnabled),
         ];
         moreButtons = [
             showStickersButton(props),
@@ -250,6 +255,21 @@ const UploadButton: React.FC = () => {
         </CollapsibleButton>
     );
 };
+
+function steganographyButton(steganographyEnabled: boolean): ReactElement | null {
+    if (!steganographyEnabled) return null;
+
+    return (
+        <CollapsibleButton
+            key="controls_steganography"
+            className="mx_MessageComposer_button"
+            onClick={() => Modal.createDialog(SteganographyDialog, {})}
+            title={_t("timeline|context_menu|steganography")}
+        >
+            <LockIcon />
+        </CollapsibleButton>
+    );
+}
 
 function showStickersButton(props: IProps): ReactElement | null {
     return props.showStickersButton ? (

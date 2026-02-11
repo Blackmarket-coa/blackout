@@ -74,6 +74,7 @@ describe("MessageComposer", () => {
                     "MessageComposerInput.showStickersButton",
                     "MessageComposerInput.showPollsButton",
                     "feature_wysiwyg_composer",
+                    "steganographyOptIn",
                 ] as const
             ).forEach((setting): void => {
                 SettingsStore.setValue(setting, null, SettingLevel.DEVICE, SettingsStore.getDefaultValue(setting));
@@ -245,6 +246,25 @@ describe("MessageComposer", () => {
                             }
                         });
                     });
+                });
+            });
+        });
+
+        [true, false].forEach((value: boolean) => {
+            describe(`when steganographyOptIn = ${value}`, () => {
+                beforeEach(async () => {
+                    await act(() => SettingsStore.setValue("steganographyOptIn", null, SettingLevel.DEVICE, value));
+                    wrapAndRender({ room });
+                });
+
+                it(`should${value ? "" : " not"} display the steganography button`, () => {
+                    if (value) {
+                        // eslint-disable-next-line jest/no-conditional-expect
+                        expect(screen.getByLabelText("Steganography")).toBeInTheDocument();
+                    } else {
+                        // eslint-disable-next-line jest/no-conditional-expect
+                        expect(screen.queryByLabelText("Steganography")).not.toBeInTheDocument();
+                    }
                 });
             });
         });
