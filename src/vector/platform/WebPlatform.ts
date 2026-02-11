@@ -61,6 +61,11 @@ export default class WebPlatform extends BasePlatform {
     }
 
     private async registerServiceWorker(): Promise<void> {
+        if (!navigator.serviceWorker) {
+            logger.warn("Service workers are not supported by this browser");
+            return;
+        }
+
         // sw.js is exported by webpack, sourced from `/src/serviceworker/index.ts`
         const registration = await navigator.serviceWorker.register("sw.js");
         if (!registration) {

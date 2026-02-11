@@ -41,6 +41,16 @@ describe("WebPlatform", () => {
             expect(navigator.serviceWorker.register).toHaveBeenCalled();
         });
 
+        it("skips registration when unsupported", () => {
+            jest.spyOn(global, "navigator", "get").mockReturnValue({
+                ...navigator,
+                // @ts-expect-error - mocking readonly object
+                serviceWorker: undefined,
+            });
+
+            expect(() => new WebPlatform()).not.toThrow();
+        });
+
         it("handles errors", async () => {
             jest.spyOn(global, "navigator", "get").mockReturnValue({
                 serviceWorker: {
