@@ -18,6 +18,7 @@ import {
 } from "../../../utils/Steganography";
 import dis from "../../../dispatcher/dispatcher";
 import { Action } from "../../../dispatcher/actions";
+import { TimelineRenderingType } from "../../../contexts/RoomContext";
 
 type Mode = "encode" | "decode";
 
@@ -93,7 +94,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
         dis.dispatch({
             action: Action.ComposerInsert,
             text: result,
-            timelineRenderingType: undefined,
+            timelineRenderingType: TimelineRenderingType.Room,
         });
         onFinished();
     }, [result, onFinished]);
