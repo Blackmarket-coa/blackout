@@ -13,3 +13,4 @@ when making changes.
 - `privacy-first-phase3/`: Phase 3 entitlement and subscription capability artifacts (billing/token boundaries, content-blind audits, server safety invariants).
 - `privacy-first-phase4/`: Phase 4 federation boost primitives (tier policy, throttling, revenue-share accounting, dashboard snapshots).
 - `privacy-first-phase5/`: Phase 5 paid encrypted room creator-key lifecycle artifacts (payment-gated grants, device binding, rotation/revocation, private discovery defaults).
+- `privacy-first-phase6/`: Phase 6 plugin sandbox and cosmetic marketplace safety artifacts (capability manifests, explicit/revocable permissions, network/exfiltration conformance tests).

@@ -17,7 +17,7 @@ Status legend:
 | Phase 3 — Entitlements and Subscription Capabilities | ✅ Complete | Entitlement stack now includes isolated billing/token boundaries, client capability enforcement, metadata-only server safety invariants, and auditable content-blind logging with dedicated tests. | Maintain billing/token boundary tests and extend audit schema versioning as capabilities evolve. |
 | Phase 4 — Federation Boosts and Infrastructure Monetization | ✅ Complete | Federation boost tier policy, metadata-only throttling, revenue-share accounting, and dashboard snapshot reporting are implemented with unit coverage and documented as complete in the Phase 4 artifact README. | Keep boost policy and accounting tests updated as federation transport capabilities evolve. |
 | Phase 5 — Paid Encrypted Rooms and Creator Keys | ✅ Complete | Paid-room creator key lifecycle primitives now cover payment-gated grant issuance, device binding, rotation/revocation tooling, private discovery defaults, and revocation SLA evaluation with dedicated unit tests and Phase 5 artifact docs. | Maintain SLA checks and key lifecycle coverage as paid-room orchestration integrates with production services. |
-| Phase 6 — Plugin Ecosystem and Cosmetic Marketplace | ⬜ Not evident | Safety whitepaper describes plugin marketplace constraints; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement sandbox runtime, capability-scoped plugin APIs, and conformance tests for exfiltration/network constraints. |
+| Phase 6 — Plugin Ecosystem and Cosmetic Marketplace | 🟡 Partial | Plugin sandbox runtime and conformance tests are implemented with explicit/revocable permission flows and network/exfiltration guardrails; signed cosmetic pack pipeline is not yet end-to-end. | Complete signed cosmetic pack distribution pipeline and integrate marketplace publication controls. |
 
 ## Evidence map
 
@@ -107,8 +107,15 @@ Status legend:
 - Tests:
   - `test/unit-tests/steganography/CreatorKeys-test.ts`
 
-### Phase 6 planning-only evidence
-- Planning/policy documents:
+### Phase 6 evidence (plugin sandbox + marketplace guardrails)
+- Artifact directory and execution checklist:
+  - `docs/features/privacy-first-phase6/README.md`
+- Implementation:
+  - `src/steganography/plugins/PluginSandbox.ts`
+  - `src/steganography/index.ts`
+- Tests:
+  - `test/unit-tests/steganography/PluginSandboxRuntime-test.ts`
+- Planning/policy continuity:
   - `docs/features/privacy_first_stego_roadmap.md`
   - `docs/regulator-safety-whitepaper.md`
 
@@ -117,4 +124,5 @@ Status legend:
 1. ~~Convert remaining Phase 2 exit criteria into explicit automated checks and documentation.~~ ✅ Done.
 2. ~~Integrate Phase 4 primitives into production federation services and user-visible dashboard reporting.~~ ✅ Done.
 3. ~~Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.~~ ✅ Done.
-4. Implement Phase 6 plugin sandbox runtime and conformance tests.
+4. ~~Implement Phase 6 plugin sandbox runtime and conformance tests.~~ ✅ Done.
+5. Complete signed cosmetic pack pipeline and marketplace publication controls.
