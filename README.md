@@ -188,6 +188,58 @@ Please read through the following:
 2. [Code style](./code_style.md)
 3. [Contribution guide](./CONTRIBUTING.md)
 
+## QA audit: scope and current status
+
+This repository includes a broad QA surface. The current practical audit scope
+is listed below so contributors can consistently validate both core app changes
+and the steganography feature set that is currently under active development.
+
+### Audit scope
+
+- **Environment and dependency health**
+    - Validate toolchain compatibility (`node`, `yarn`, lockfile install).
+    - Ensure local dependency patching and shared component build complete.
+- **Static quality gates**
+    - Type checking (`yarn lint:types`) for app, tests, Playwright harness, and
+      module system.
+    - ESLint + Prettier (`yarn lint:js`) for source and test code.
+    - Stylelint (`yarn lint:style`) for PostCSS stylesheets.
+- **Automated functional checks**
+    - Unit tests (`yarn test ...`) with focus runs for steganography-related
+      subsystems when changes touch that area.
+- **Steganography-specific quality dimensions**
+    - Codec correctness (emoji/image encoding and decoding).
+    - Carrier chunking and transport normalization behavior.
+    - Entitlement enforcement and audit pathways.
+    - Ephemeral data handling and security hardening regressions.
+
+### Current findings from local QA audit
+
+Audit run summary (local run on this branch):
+
+- `yarn install --frozen-lockfile`: **pass**
+- `yarn lint:types`: **fail** (multiple TypeScript issues)
+- `yarn lint:js`: **fail** (ESLint issues across steganography sources/tests)
+- `yarn lint:style`: **fail** (Stylelint issues in steganography styles)
+- `yarn test test/unit-tests/steganography --runInBand`: **fail**
+    - 20 suites passed, 1 failed (`CarrierTransportProperty-test.ts`), 184 tests
+      total with 1 failing assertion.
+
+### Recommended QA baseline before merge
+
+For steganography or cross-cutting changes, run this baseline locally:
+
+```bash
+yarn install --frozen-lockfile
+yarn lint:types
+yarn lint:js
+yarn lint:style
+yarn test test/unit-tests/steganography --runInBand
+```
+
+When touching non-steganography areas, keep the same lint/type/style gates and
+run an appropriately scoped Jest target for the modified subsystem.
+
 ## Steganography toolkit integration
 
 This repository includes a thin integration with
