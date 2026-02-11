@@ -22,7 +22,7 @@ import { Action } from "../../../dispatcher/actions";
 type Mode = "encode" | "decode";
 
 interface IProps {
-    mxEvent: MatrixEvent;
+    mxEvent?: MatrixEvent;
     onFinished(): void;
 }
 
@@ -32,10 +32,11 @@ interface IProps {
  * Supports optional AES-GCM encryption via passphrase.
  */
 export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JSX.Element {
-    const messageBody = mxEvent.getContent().body || "";
+    const messageBody = mxEvent?.getContent().body || "";
     const hasHidden = containsSteganographyMessage(messageBody);
+    const canDecode = Boolean(mxEvent);
 
-    const [mode, setMode] = useState<Mode>(hasHidden ? "decode" : "encode");
+    const [mode, setMode] = useState<Mode>(canDecode && hasHidden ? "decode" : "encode");
     const [secretMessage, setSecretMessage] = useState("");
     const [coverText, setCoverText] = useState("");
     const [passphrase, setPassphrase] = useState("");
@@ -112,30 +113,32 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
         >
             <div className="mx_Dialog_content" id="mx_Dialog_content">
                 {/* Mode toggle */}
-                <div className="mx_SteganographyDialog_modeToggle">
-                    <button
-                        type="button"
-                        className={`mx_SteganographyDialog_modeButton ${mode === "encode" ? "mx_SteganographyDialog_modeButton--active" : ""}`}
-                        onClick={() => {
-                            setMode("encode");
-                            setResult(null);
-                            setError(null);
-                        }}
-                    >
-                        {_t("steganography|mode_encode")}
-                    </button>
-                    <button
-                        type="button"
-                        className={`mx_SteganographyDialog_modeButton ${mode === "decode" ? "mx_SteganographyDialog_modeButton--active" : ""}`}
-                        onClick={() => {
-                            setMode("decode");
-                            setResult(null);
-                            setError(null);
-                        }}
-                    >
-                        {_t("steganography|mode_decode")}
-                    </button>
-                </div>
+                {canDecode && (
+                    <div className="mx_SteganographyDialog_modeToggle">
+                        <button
+                            type="button"
+                            className={`mx_SteganographyDialog_modeButton ${mode === "encode" ? "mx_SteganographyDialog_modeButton--active" : ""}`}
+                            onClick={() => {
+                                setMode("encode");
+                                setResult(null);
+                                setError(null);
+                            }}
+                        >
+                            {_t("steganography|mode_encode")}
+                        </button>
+                        <button
+                            type="button"
+                            className={`mx_SteganographyDialog_modeButton ${mode === "decode" ? "mx_SteganographyDialog_modeButton--active" : ""}`}
+                            onClick={() => {
+                                setMode("decode");
+                                setResult(null);
+                                setError(null);
+                            }}
+                        >
+                            {_t("steganography|mode_decode")}
+                        </button>
+                    </div>
+                )}
 
                 <p className="mx_SteganographyDialog_description">
                     {mode === "encode"
