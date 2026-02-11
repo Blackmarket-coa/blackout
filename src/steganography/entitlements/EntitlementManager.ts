@@ -6,6 +6,13 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { DEFAULT_STEGO_CONFIG } from "../types";
+import {
+    bucketDeviceCount,
+    bucketPayloadSize,
+    bucketRequestedExpiry,
+    EntitlementAuditLogger,
+    type EntitlementAuditReason,
+} from "./EntitlementInfrastructure";
 
 export type EntitlementTier = "free" | "plus" | "pro";
 
@@ -71,5 +78,58 @@ export class EntitlementManager {
         }
 
         return { allowed: true };
+    }
+
+    public evaluateAndAudit(
+        logger: EntitlementAuditLogger,
+        input: {
+            accountId: string;
+            token: EntitlementToken;
+            request: { payloadSizeBytes: number; requestedExpiryMs: number; linkedDeviceCount: number };
+            now?: number;
+        },
+    ): { allowed: true } | { allowed: false; reason: EntitlementAuditReason } {
+        const now = input.now ?? Date.now();
+
+        if (!this.isTokenActive(input.token, now)) {
+            logger.record({
+                timestamp: now,
+                accountId: input.accountId,
+                tokenTier: input.token.tier,
+                result: "deny",
+                reason: "token_inactive",
+                payloadSizeBucket: bucketPayloadSize(input.request.payloadSizeBytes),
+                requestedExpiryBucket: bucketRequestedExpiry(input.request.requestedExpiryMs),
+                linkedDeviceCountBucket: bucketDeviceCount(input.request.linkedDeviceCount),
+            });
+            return { allowed: false, reason: "token_inactive" };
+        }
+
+        const decision = this.canSend(input.token, input.request);
+        if (decision.allowed) {
+            logger.record({
+                timestamp: now,
+                accountId: input.accountId,
+                tokenTier: input.token.tier,
+                result: "allow",
+                reason: "ok",
+                payloadSizeBucket: bucketPayloadSize(input.request.payloadSizeBytes),
+                requestedExpiryBucket: bucketRequestedExpiry(input.request.requestedExpiryMs),
+                linkedDeviceCountBucket: bucketDeviceCount(input.request.linkedDeviceCount),
+            });
+            return decision;
+        }
+
+        logger.record({
+            timestamp: now,
+            accountId: input.accountId,
+            tokenTier: input.token.tier,
+            result: "deny",
+            reason: decision.reason,
+            payloadSizeBucket: bucketPayloadSize(input.request.payloadSizeBytes),
+            requestedExpiryBucket: bucketRequestedExpiry(input.request.requestedExpiryMs),
+            linkedDeviceCountBucket: bucketDeviceCount(input.request.linkedDeviceCount),
+        });
+        return { allowed: false, reason: decision.reason };
     }
 }

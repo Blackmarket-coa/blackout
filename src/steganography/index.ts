@@ -62,7 +62,38 @@ export {
     type EphemeralMessageRecord,
     type EphemeralManagerOptions,
 } from "./ephemeral/EphemeralManager";
-export { EntitlementManager, type EntitlementToken, type EntitlementLimits, type EntitlementTier } from "./entitlements/EntitlementManager";
+export {
+    EntitlementManager,
+    type EntitlementToken,
+    type EntitlementLimits,
+    type EntitlementTier,
+} from "./entitlements/EntitlementManager";
+export {
+    EntitlementTokenService,
+    EntitlementAuditLogger,
+    ServerSafetyInvariantEnforcer,
+    bucketPayloadSize,
+    bucketRequestedExpiry,
+    bucketDeviceCount,
+    type BillingService,
+    type BillingAccountState,
+    type EntitlementAuditRecord,
+    type EntitlementAuditReason,
+    type EntitlementAuditResult,
+} from "./entitlements/EntitlementInfrastructure";
+export {
+    BOOST_TIER_POLICIES,
+    RevenueShareLedger,
+    BoostThrottler,
+    buildBoostDashboardSnapshot,
+    type BoostTier,
+    type BoostTierPolicy,
+    type BoostUsageRecord,
+    type RevenueShareEntry,
+    type BoostThrottleInput,
+    type BoostThrottleDecision,
+    type BoostDashboardSnapshot,
+} from "./boosts/FederationBoosts";
 export {
     StegoStrategy,
     EMOJI_POOL,
