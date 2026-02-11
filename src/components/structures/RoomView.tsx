@@ -385,6 +385,7 @@ function RoomStatusBarWrappedView(props: ConstructorParameters<typeof RoomStatus
     useEffect(() => {
         // Note: We need to tell the parent component whether the viewmodel expects to render anything
         // (see onStatusBarVisible). This is ugly, but works.
+        let unsubscribe: (() => void) | undefined;
         if ("onVisible" in props) {
             // Initial setup
             if (vm.getSnapshot().state !== null) {
@@ -392,7 +393,7 @@ function RoomStatusBarWrappedView(props: ConstructorParameters<typeof RoomStatus
             } else {
                 props.onHidden?.();
             }
-            vm.subscribe(() => {
+            unsubscribe = vm.subscribe(() => {
                 if (vm.getSnapshot().state !== null) {
                     props.onVisible?.();
                 } else {
@@ -400,6 +401,8 @@ function RoomStatusBarWrappedView(props: ConstructorParameters<typeof RoomStatus
                 }
             });
         }
+
+        return () => unsubscribe?.();
     }, [vm, props]);
 
     return <RoomStatusBarView vm={vm} />;
