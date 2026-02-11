@@ -95,6 +95,22 @@ export {
     type BoostDashboardSnapshot,
 } from "./boosts/FederationBoosts";
 export {
+    CreatorKeyLifecycleManager,
+    PaidRoomAccessService,
+    resolvePaidRoomDiscoveryPolicy,
+    evaluateRevocationSla,
+    type PaidRoomDiscoveryVisibility,
+    type PaidRoomDiscoveryPolicy,
+    type PaymentVerificationService,
+    type PaymentVerificationRequest,
+    type PaymentVerificationResult,
+    type CreatorKeyGrantInput,
+    type CreatorKeyGrant,
+    type PaymentGateDecision,
+    type CreatorKeyLifecycleMetrics,
+    type CreatorRevocationSlaResult,
+} from "./paidrooms/CreatorKeys";
+export {
     StegoStrategy,
     EMOJI_POOL,
     STEGO_MARKER,

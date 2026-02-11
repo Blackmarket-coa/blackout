@@ -16,7 +16,7 @@ Status legend:
 | Phase 2 — Client-Only Steganography Toolkit | ✅ Complete | Stego stack is implemented (codec, emoji/image channels, chunking, compatibility validator, detector), UI components exist, and broad unit/property tests cover round trips and corruption handling. Security exit criteria are enforced by automated tests in `Phase2SecurityExit-test.ts` (no-network-path assertions, telemetry privacy proof, encrypted-only payload verification). Completion checklist in `docs/features/privacy-first-phase2/README.md`. | Maintain test coverage as stego modules evolve; update Phase 2 docs if new stego channels are added. |
 | Phase 3 — Entitlements and Subscription Capabilities | ✅ Complete | Entitlement stack now includes isolated billing/token boundaries, client capability enforcement, metadata-only server safety invariants, and auditable content-blind logging with dedicated tests. | Maintain billing/token boundary tests and extend audit schema versioning as capabilities evolve. |
 | Phase 4 — Federation Boosts and Infrastructure Monetization | ✅ Complete | Federation boost tier policy, metadata-only throttling, revenue-share accounting, and dashboard snapshot reporting are implemented with unit coverage and documented as complete in the Phase 4 artifact README. | Keep boost policy and accounting tests updated as federation transport capabilities evolve. |
-| Phase 5 — Paid Encrypted Rooms and Creator Keys | ⬜ Not evident | Safety whitepaper describes paid-room key concepts; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement key issuance/grant/revocation lifecycle and private discovery defaults with measurable SLAs. |
+| Phase 5 — Paid Encrypted Rooms and Creator Keys | ✅ Complete | Paid-room creator key lifecycle primitives now cover payment-gated grant issuance, device binding, rotation/revocation tooling, private discovery defaults, and revocation SLA evaluation with dedicated unit tests and Phase 5 artifact docs. | Maintain SLA checks and key lifecycle coverage as paid-room orchestration integrates with production services. |
 | Phase 6 — Plugin Ecosystem and Cosmetic Marketplace | ⬜ Not evident | Safety whitepaper describes plugin marketplace constraints; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement sandbox runtime, capability-scoped plugin APIs, and conformance tests for exfiltration/network constraints. |
 
 ## Evidence map
@@ -98,7 +98,16 @@ Status legend:
 - Tests:
   - `test/unit-tests/steganography/FederationBoosts-test.ts`
 
-### Phase 5-6 planning-only evidence
+### Phase 5 evidence (paid encrypted rooms and creator keys)
+- Artifact directory and completed execution checklist:
+  - `docs/features/privacy-first-phase5/README.md`
+- Implementation:
+  - `src/steganography/paidrooms/CreatorKeys.ts`
+  - `src/steganography/index.ts`
+- Tests:
+  - `test/unit-tests/steganography/CreatorKeys-test.ts`
+
+### Phase 6 planning-only evidence
 - Planning/policy documents:
   - `docs/features/privacy_first_stego_roadmap.md`
   - `docs/regulator-safety-whitepaper.md`
@@ -107,4 +116,5 @@ Status legend:
 
 1. ~~Convert remaining Phase 2 exit criteria into explicit automated checks and documentation.~~ ✅ Done.
 2. ~~Integrate Phase 4 primitives into production federation services and user-visible dashboard reporting.~~ ✅ Done.
-3. Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.
+3. ~~Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.~~ ✅ Done.
+4. Implement Phase 6 plugin sandbox runtime and conformance tests.
