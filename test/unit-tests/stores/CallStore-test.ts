@@ -6,7 +6,7 @@
  */
 
 import { type CallMembership, MatrixRTCSessionManagerEvents } from "matrix-js-sdk/src/matrixrtc";
-import { type MatrixClient, type Room } from "matrix-js-sdk/src/matrix";
+import { MatrixError, type MatrixClient, type Room } from "matrix-js-sdk/src/matrix";
 import { type MockedObject } from "jest-mock";
 
 import { ElementCall } from "../../../src/models/Call";
@@ -65,5 +65,18 @@ describe("CallStore", () => {
             { type: "type-c", other_data: "bar" },
             { type: "type-d", other_data: "baz" },
         ]);
+    });
+
+    it("does not warn when RTC transports endpoint is unrecognized", async () => {
+        const logger = await import("matrix-js-sdk/src/logger");
+        const warnSpy = jest.spyOn(logger.logger, "warn").mockImplementation(() => {});
+        client._unstable_getRTCTransports.mockRejectedValue(
+            new MatrixError({ errcode: "M_UNRECOGNIZED", error: "Unsupported endpoint" }),
+        );
+
+        await setupAsyncStoreWithClient(CallStore.instance, client);
+
+        expect(CallStore.instance.getConfiguredRTCTransports()).toEqual([]);
+        expect(warnSpy).not.toHaveBeenCalled();
     });
 });
