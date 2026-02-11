@@ -14,8 +14,8 @@ Status legend:
 | Phase 0 — Foundations and Threat Modeling | ✅ Complete | `docs/features/privacy-first-phase0/README.md` includes all Phase 0 deliverables and a fully checked completion checklist; `docs/features/README.md` points to this directory as concrete Phase 0 artifacts. | Keep artifacts updated when invariants/threat models evolve. |
 | Phase 1 — Core E2EE + Ephemerality Baseline | ✅ Complete (client stego scope) | Ephemeral lifecycle/redaction exists (`EphemeralManager`), hard expiry and payload caps are enforced in `StegoCodec`, and anti-amplification chunk caps are enforced in `CarrierTransport`; tests cover these controls. | Maintain parity with room-level Matrix policy defaults and continue lifecycle regression coverage. |
 | Phase 2 — Client-Only Steganography Toolkit | ✅ Complete | Stego stack is implemented (codec, emoji/image channels, chunking, compatibility validator, detector), UI components exist, and broad unit/property tests cover round trips and corruption handling. Security exit criteria are enforced by automated tests in `Phase2SecurityExit-test.ts` (no-network-path assertions, telemetry privacy proof, encrypted-only payload verification). Completion checklist in `docs/features/privacy-first-phase2/README.md`. | Maintain test coverage as stego modules evolve; update Phase 2 docs if new stego channels are added. |
-| Phase 3 — Entitlements and Subscription Capabilities | 🟡 Partial | Client-side entitlement limits and checks exist (`EntitlementManager`) with tests for tier limits and content-blind send gating. | Implement and document isolated billing/token services, server-side invariant enforcement boundaries, and auditable content-blind entitlement logs. |
-| Phase 4 — Federation Boosts and Infrastructure Monetization | ⬜ Not evident | Roadmap and safety whitepaper describe boost concepts; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement boost tiers, revenue-share accounting, and transparent boost dashboard with protocol/rate-only enforcement boundaries. |
+| Phase 3 — Entitlements and Subscription Capabilities | ✅ Complete | Entitlement stack now includes isolated billing/token boundaries, client capability enforcement, metadata-only server safety invariants, and auditable content-blind logging with dedicated tests. | Maintain billing/token boundary tests and extend audit schema versioning as capabilities evolve. |
+| Phase 4 — Federation Boosts and Infrastructure Monetization | 🟡 Partial | Core boost primitives now exist: tier policy definitions, metadata-only throttling, revenue-share ledger entries, and dashboard snapshot aggregation, all with unit coverage. | Wire boost accounting/throttling into live federation services and surface dashboard data in product reporting UI. |
 | Phase 5 — Paid Encrypted Rooms and Creator Keys | ⬜ Not evident | Safety whitepaper describes paid-room key concepts; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement key issuance/grant/revocation lifecycle and private discovery defaults with measurable SLAs. |
 | Phase 6 — Plugin Ecosystem and Cosmetic Marketplace | ⬜ Not evident | Safety whitepaper describes plugin marketplace constraints; no concrete implementation artifact was found under `docs/features/` beyond Phase 0 docs. | Implement sandbox runtime, capability-scoped plugin APIs, and conformance tests for exfiltration/network constraints. |
 
@@ -81,12 +81,24 @@ Status legend:
   - `test/unit-tests/steganography/crc32-test.ts`
 
 ### Phase 3 evidence (entitlements)
+- Artifact directory and completion checklist:
+  - `docs/features/privacy-first-phase3/README.md`
 - Implementation:
   - `src/steganography/entitlements/EntitlementManager.ts`
+  - `src/steganography/entitlements/EntitlementInfrastructure.ts`
 - Tests:
   - `test/unit-tests/steganography/EntitlementManager-test.ts`
+  - `test/unit-tests/steganography/EntitlementInfrastructure-test.ts`
 
-### Phase 4-6 planning-only evidence
+### Phase 4 evidence (federation boosts)
+- Artifact directory and execution checklist:
+  - `docs/features/privacy-first-phase4/README.md`
+- Implementation:
+  - `src/steganography/boosts/FederationBoosts.ts`
+- Tests:
+  - `test/unit-tests/steganography/FederationBoosts-test.ts`
+
+### Phase 5-6 planning-only evidence
 - Planning/policy documents:
   - `docs/features/privacy_first_stego_roadmap.md`
   - `docs/regulator-safety-whitepaper.md`
@@ -94,6 +106,5 @@ Status legend:
 ## Suggested next execution order
 
 1. ~~Convert remaining Phase 2 exit criteria into explicit automated checks and documentation.~~ ✅ Done.
-2. Expand Phase 3 from local entitlement logic to end-to-end token/billing integration boundaries.
-3. Start Phase 4 implementation with transparent, metadata-only boost accounting.
-4. Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.
+2. Integrate Phase 4 primitives into production federation services and user-visible dashboard reporting.
+3. Sequence Phase 5 key issuance/revocation before Phase 6 plugin marketplace rollout.
