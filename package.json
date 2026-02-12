@@ -155,7 +155,9 @@
         "tar-js": "^0.3.0",
         "ua-parser-js": "1.0.40",
         "uuid": "^13.0.0",
-        "what-input": "^5.2.10"
+        "what-input": "^5.2.10",
+        "y-indexeddb": "^9.0.12",
+        "yjs": "^13.6.23"
     },
     "devDependencies": {
         "@action-validator/cli": "^0.6.0",
