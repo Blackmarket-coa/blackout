@@ -63,10 +63,10 @@ describe("ProposalEngine", () => {
                 eligibleCount: 4,
                 policy: { jurySize: 2, minPowerLevel: 50 },
                 proof: {
-                    algorithm: "xxhash32-draw",
+                    algorithm: "sha256-xof-draw",
                     seedMaterial: "!room:example.org|p4|$event|1735689600000",
-                    seedHash: "a".repeat(8),
-                    drawHashes: ["b".repeat(8), "c".repeat(8)],
+                    seedHash: "a".repeat(64),
+                    drawHashes: ["b".repeat(64), "c".repeat(64)],
                 },
             },
             200,

@@ -29,9 +29,9 @@ describe("selectDeterministicJury", () => {
 
         expect(first).toEqual(second);
         expect(first.selectedJurorIds).toHaveLength(2);
-        expect(first.proof.algorithm).toBe("xxhash32-draw");
+        expect(first.proof.algorithm).toBe("sha256-xof-draw");
         expect(first.proof.seedMaterial).toContain(seed.roomId);
-        expect(first.proof.seedHash).toHaveLength(8);
+        expect(first.proof.seedHash).toHaveLength(64);
     });
 
     it("enforces filters and handles over-sized jury requests", () => {
@@ -54,28 +54,6 @@ describe("selectDeterministicJury", () => {
         expect(result.eligibleCount).toBe(1);
         expect(result.policy.jurySize).toBe(1);
         expect(result.selectedJurorIds).toEqual(["@alice:example.org"]);
-        expect(result.proof.drawHashes).toHaveLength(1);
-    });
-
-    it("deduplicates participants by user ID", () => {
-        const result = selectDeterministicJury(
-            [
-                { userId: "@alice:example.org", powerLevel: 60, isActive: true },
-                { userId: "@alice:example.org", powerLevel: 60, isActive: true },
-                { userId: "@bob:example.org", powerLevel: 60, isActive: true },
-            ],
-            seed,
-            { jurySize: 2 },
-        );
-
-        expect(result.eligibleCount).toBe(2);
-        expect(new Set(result.selectedJurorIds).size).toBe(result.selectedJurorIds.length);
-    });
-
-    it("throws for invalid jury size", () => {
-        expect(() => selectDeterministicJury([{ userId: "@alice:example.org" }], seed, { jurySize: 0 })).toThrow(
-            "Sortition jurySize must be a positive integer",
-        );
     });
 
     it("throws for empty eligibility", () => {

@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { xxHash32 } from "js-xxhash";
+import { createHash } from "crypto";
 
 export interface SortitionParticipant {
     userId: string;
@@ -32,33 +32,31 @@ export interface SortitionResult {
     eligibleCount: number;
     policy: SortitionPolicy;
     proof: {
-        algorithm: "xxhash32-draw";
+        algorithm: "sha256-xof-draw";
         seedMaterial: string;
         seedHash: string;
         drawHashes: string[];
     };
 }
 
+const DEFAULT_JURY_SIZE = 3;
+
+const hashHex = (input: string): string => createHash("sha256").update(input).digest("hex");
+
 const compareLexicographically = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
-
-const normalizeHash = (hash: number): string => hash.toString(16).padStart(8, "0");
-
-const hashHex = (input: string, seed = 0): string => normalizeHash(xxHash32(input, seed));
 
 export function selectDeterministicJury(
     participants: SortitionParticipant[],
     seed: SortitionSeedInput,
     policy: SortitionPolicy,
 ): SortitionResult {
-    if (!Number.isInteger(policy.jurySize) || policy.jurySize <= 0) {
-        throw new Error("Sortition jurySize must be a positive integer");
+    if (policy.jurySize <= 0) {
+        throw new Error("Sortition jurySize must be greater than zero");
     }
 
     const excluded = new Set(policy.excludedUserIds ?? []);
 
-    const eligible = [...new Set(participants.map((participant) => participant.userId))]
-        .map((userId) => participants.find((participant) => participant.userId === userId))
-        .filter((participant): participant is SortitionParticipant => Boolean(participant))
+    const eligible = participants
         .filter((participant) => !excluded.has(participant.userId))
         .filter((participant) =>
             policy.minPowerLevel === undefined ? true : (participant.powerLevel ?? 0) >= policy.minPowerLevel,
@@ -71,7 +69,7 @@ export function selectDeterministicJury(
         throw new Error("No eligible participants for sortition");
     }
 
-    const jurySize = Math.min(policy.jurySize, eligible.length);
+    const jurySize = Math.min(policy.jurySize ?? DEFAULT_JURY_SIZE, eligible.length);
     const seedMaterial = `${seed.roomId}|${seed.proposalId}|${seed.eventId}|${seed.timestampMs}`;
     const seedHash = hashHex(seedMaterial);
 
@@ -85,8 +83,10 @@ export function selectDeterministicJury(
             return hashOrder !== 0 ? hashOrder : compareLexicographically(left.userId, right.userId);
         });
 
+    const selected = draws.slice(0, jurySize);
+
     return {
-        selectedJurorIds: draws.slice(0, jurySize).map((entry) => entry.userId),
+        selectedJurorIds: selected.map((entry) => entry.userId),
         eligibleCount: eligible.length,
         policy: {
             jurySize,
@@ -95,10 +95,10 @@ export function selectDeterministicJury(
             requireActive: policy.requireActive,
         },
         proof: {
-            algorithm: "xxhash32-draw",
+            algorithm: "sha256-xof-draw",
             seedMaterial,
             seedHash,
-            drawHashes: draws.map((entry) => entry.drawHash),
+            drawHashes: selected.map((entry) => entry.drawHash),
         },
     };
 }
