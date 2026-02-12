@@ -1,0 +1,12 @@
+/*
+Copyright 2026 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+import React from "react";
+
+export default function MutualAidHome(): React.JSX.Element {
+    return <section data-testid="blackout-mutual-aid-view" />;
+}

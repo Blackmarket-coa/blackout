@@ -19,6 +19,11 @@
         "user_menu": "User menu"
     },
     "a11y_jump_first_unread_room": "Jump to first unread room.",
+    "blackout": {
+        "nav_education": "Education",
+        "nav_governance": "Governance",
+        "nav_mutual_aid": "Mutual Aid"
+    },
     "action": {
         "accept": "Accept",
         "add": "Add",
