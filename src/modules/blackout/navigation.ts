@@ -36,3 +36,8 @@ const BLACKOUT_MODULE_NAVIGATION_ITEMS: readonly BlackoutModuleNavigationItem[] 
 export function getEnabledBlackoutModuleNavigationItems(): BlackoutModuleNavigationItem[] {
     return BLACKOUT_MODULE_NAVIGATION_ITEMS.filter((item) => isBlackoutFeatureEnabled(item.feature));
 }
+
+export function getBlackoutRouteById(id: BlackoutModuleNavigationItem["id"]): string {
+    return `/blackout/${id}`;
+}
+
