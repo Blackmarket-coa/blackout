@@ -14,10 +14,10 @@ Legend:
 | Matrix backbone | ✅ | Already core platform. |
 | CRDT (Yjs + y-indexeddb) | ✅ | Core document manager and persistence are present. |
 | Governance lifecycle + voting | 🟡 | Basic engines exist; needs Matrix/Yjs persistence and production rules. |
-| Deliberation clustering | ⬜ | Service exists as a placeholder; no algorithm implementation yet. |
+| Deliberation clustering | 🟡 | Deterministic clustering service and baseline tests exist; governance UI integration remains. |
 | Delegation / liquid democracy | 🟡 | Graph and delegated tally exist; needs persistence, policy, and UX hardening. |
-| Education module | 🟡 | Models exist; home view is currently empty. |
-| Mutual aid board | 🟡 | Task board model exists; home view is currently empty. |
+| Education module | 🟡 | Home view now supports basic study-circle/curriculum workflows; Yjs binding still pending. |
+| Mutual aid board | 🟡 | Home view now exposes basic board lanes and transitions; Yjs binding/filters pending. |
 | IPFS storage | ⬜ | Service is a stub and currently reports unconfigured. |
 | Sortition / random jury | ⬜ | No dedicated implementation found yet. |
 
@@ -43,12 +43,12 @@ Status: 🟡
 
 ## 2) Deliberation clustering (Pol.is-inspired algorithm layer)
 
-Status: ⬜
+Status: 🟡
 
 ### Remaining tasks
-- [ ] Implement clustering algorithm in `src/services/deliberation/clustering.ts`.
-- [ ] Define input/output schema for opinion vectors and cluster metadata.
-- [ ] Add tests with realistic synthetic data (small/medium/large room sizes).
+- [x] Implement clustering algorithm in `src/services/deliberation/clustering.ts` (deterministic cosine-similarity bucketing).
+- [x] Define input/output schema for opinion vectors and cluster metadata.
+- [x] Add tests with realistic synthetic data (small room size baseline added; medium/large still pending).
 - [ ] Add UI integration in governance proposal detail flow.
 - [ ] Add safeguards for sparse datasets and adversarial input.
 
@@ -64,8 +64,8 @@ Status: 🟡
 
 ### Remaining tasks
 - [ ] Persist delegation graph state to Matrix/CRDT rather than in-memory only.
-- [ ] Add per-topic and global delegation precedence rules.
-- [ ] Implement explicit vote override semantics (direct vote overrides delegated vote).
+- [x] Add per-topic and global delegation precedence rules.
+- [x] Implement explicit vote override semantics (direct vote overrides delegated vote).
 - [ ] Add revocation windows and historical delegation audit trails.
 - [ ] Add moderation/abuse controls for delegation spam loops.
 
@@ -80,7 +80,7 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
-- [ ] Replace placeholder home view with curriculum/study-circle UI.
+- [x] Replace placeholder home view with curriculum/study-circle UI.
 - [ ] Bind `StudyCircleDocument` and `CurriculumDocument` to Yjs docs.
 - [ ] Add collaborative section editing and conflict-safe merges.
 - [ ] Add module navigation between study circles, lessons, and resources.
@@ -96,8 +96,8 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
-- [ ] Replace placeholder home view with board UI.
-- [ ] Implement `todo -> doing -> done` transitions with validation rules.
+- [x] Replace placeholder home view with board UI.
+- [x] Implement `todo -> doing -> done` transitions with validation rules.
 - [ ] Bind board state to Yjs for concurrent edits.
 - [ ] Add room-scoped filters (needs/offers, assignee, urgency).
 - [ ] Add event/audit rendering for assignment and completion changes.

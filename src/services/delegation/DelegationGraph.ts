@@ -12,6 +12,8 @@ export interface DelegationResolution {
 }
 
 export class DelegationGraph {
+    public static readonly GlobalTopic = "*";
+
     private readonly graph = new Map<string, Map<string, string>>();
 
     public setDelegation(topic: string, fromUserId: string, toUserId: string): void {
@@ -71,11 +73,9 @@ export class DelegationGraph {
             };
         }
 
-        const topicGraph = this.getTopicGraph(topic);
         const path = [userId];
         const seen = new Set(path);
-
-        let current = topicGraph.get(userId);
+        let current = this.resolveNextDelegate(topic, userId);
         while (current) {
             path.push(current);
             if (directVoterIds.has(current)) {
@@ -90,7 +90,7 @@ export class DelegationGraph {
             }
 
             seen.add(current);
-            current = topicGraph.get(current);
+            current = this.resolveNextDelegate(topic, current);
         }
 
         return {
@@ -108,5 +108,18 @@ export class DelegationGraph {
         }
 
         return topicGraph;
+    }
+
+    private resolveNextDelegate(topic: string, userId: string): string | undefined {
+        const topicDelegate = this.getTopicGraph(topic).get(userId);
+        if (topicDelegate) {
+            return topicDelegate;
+        }
+
+        if (topic === DelegationGraph.GlobalTopic) {
+            return undefined;
+        }
+
+        return this.getTopicGraph(DelegationGraph.GlobalTopic).get(userId);
     }
 }
