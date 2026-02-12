@@ -46,4 +46,19 @@ describe("ProposalEngine", () => {
         expect(decided.state).toBe("decide");
         expect(() => engine.transition(draft, "decide")).toThrow("Invalid proposal transition");
     });
+
+    it("emits matrix summary event payloads", () => {
+        const proposal = engine.create({
+            id: "p3",
+            roomId: "!room:example.org",
+            title: "Policy",
+            body: "text",
+            authorUserId: "@alice:example.org",
+        });
+
+        expect(engine.toSummaryEvent(proposal)).toMatchObject({
+            type: "im.blackout.governance.proposal",
+            content: proposal,
+        });
+    });
 });

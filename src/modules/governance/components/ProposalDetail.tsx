@@ -1,0 +1,72 @@
+/*
+Copyright 2026 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+import React from "react";
+
+import type { ProposalDocument, VoteDocument } from "../models/types";
+import type { Ballot, VoteTally } from "../../../services/governance/VotingEngine";
+
+interface Props {
+    proposal: ProposalDocument;
+    vote?: VoteDocument;
+    tally?: VoteTally;
+    onAdvanceState: () => void;
+    onStartVote: () => void;
+    onCastVote: (ballot: Ballot) => void;
+    onCloseVote: () => void;
+}
+
+export default function ProposalDetail({
+    proposal,
+    vote,
+    tally,
+    onAdvanceState,
+    onStartVote,
+    onCastVote,
+    onCloseVote,
+}: Props): React.JSX.Element {
+    const isVoteOpen = Boolean(vote && !vote.closedAt);
+
+    return (
+        <section data-testid="blackout-proposal-detail">
+            <h3>{proposal.title}</h3>
+            <p>{proposal.body}</p>
+            <p>
+                <strong>State:</strong> {proposal.state}
+            </p>
+            <button type="button" onClick={onAdvanceState} data-testid="blackout-proposal-advance">
+                Advance state
+            </button>
+            {!vote && proposal.state === "close" && (
+                <button type="button" onClick={onStartVote} data-testid="blackout-vote-start">
+                    Start vote
+                </button>
+            )}
+            {isVoteOpen && (
+                <div>
+                    <button type="button" onClick={() => onCastVote("approve")}>
+                        Approve
+                    </button>
+                    <button type="button" onClick={() => onCastVote("reject")}>
+                        Reject
+                    </button>
+                    <button type="button" onClick={() => onCastVote("abstain")}>
+                        Abstain
+                    </button>
+                    <button type="button" onClick={onCloseVote} data-testid="blackout-vote-close">
+                        Close vote
+                    </button>
+                </div>
+            )}
+            {tally && (
+                <p data-testid="blackout-vote-tally">
+                    approve: {tally.approve}, reject: {tally.reject}, abstain: {tally.abstain}, passed: {String(tally.passed)}
+                </p>
+            )}
+        </section>
+    );
+}

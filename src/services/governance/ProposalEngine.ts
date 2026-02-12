@@ -66,4 +66,11 @@ export class ProposalEngine {
     public getStateOrder(state: GovernanceLifecycleState): number {
         return ORDERED_STATES.indexOf(state);
     }
+
+    public toSummaryEvent(proposal: ProposalDocument): { type: "im.blackout.governance.proposal"; content: ProposalDocument } {
+        return {
+            type: "im.blackout.governance.proposal",
+            content: proposal,
+        };
+    }
 }
