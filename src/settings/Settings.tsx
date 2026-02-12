@@ -229,6 +229,9 @@ export interface Settings {
     "feature_new_room_list": IFeature;
     "feature_ask_to_join": IFeature;
     "feature_notifications": IFeature;
+    "feature_blackout_governance": IFeature;
+    "feature_blackout_education": IFeature;
+    "feature_blackout_mutual_aid": IFeature;
     "feature_msc4362_encrypted_state_events": IFeature;
     // These are in the feature namespace but aren't actually features
     "feature_hidebold": IBaseSetting<boolean>;
@@ -783,6 +786,27 @@ export const SETTINGS: Settings = {
         labsGroup: LabGroup.Messaging,
         displayName: _td("labs|notifications"),
         description: _td("labs|unrealiable_e2e"),
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_governance": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_education": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_mutual_aid": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
