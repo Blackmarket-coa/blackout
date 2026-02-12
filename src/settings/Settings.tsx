@@ -793,6 +793,7 @@ export const SETTINGS: Settings = {
     "feature_blackout_governance": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_governance"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -800,6 +801,7 @@ export const SETTINGS: Settings = {
     "feature_blackout_education": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_education"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -807,6 +809,7 @@ export const SETTINGS: Settings = {
     "feature_blackout_mutual_aid": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_mutual_aid"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
