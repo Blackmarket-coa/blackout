@@ -13,6 +13,7 @@ import type { ProposalDocument, VoteDocument } from "../models/types";
 import ProposalComposer from "./ProposalComposer";
 import ProposalDetail from "./ProposalDetail";
 import ProposalList from "./ProposalList";
+import DelegationAttestationsPanel from "./DelegationAttestationsPanel";
 
 const ROOM_ID = "!blackout-governance:local";
 const CURRENT_USER_ID = "@me:blackout.local";
@@ -128,6 +129,7 @@ export default function GovernanceHome(): React.JSX.Element {
                     onCloseVote={handleCloseVote}
                 />
             )}
+            <DelegationAttestationsPanel />
         </section>
     );
 }
