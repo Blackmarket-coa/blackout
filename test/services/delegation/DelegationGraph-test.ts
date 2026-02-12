@@ -37,4 +37,25 @@ describe("DelegationGraph", () => {
             path: ["@alice:example.org", "@bob:example.org", "@carol:example.org"],
         });
     });
+
+    it("uses global delegations when topic-specific delegation is missing", () => {
+        const graph = new DelegationGraph();
+        graph.setDelegation(DelegationGraph.GlobalTopic, "@alice:example.org", "@bob:example.org");
+
+        const resolution = graph.resolve("budget", "@alice:example.org", new Set(["@bob:example.org"]));
+        expect(resolution).toMatchObject({
+            effectiveVoter: "@bob:example.org",
+            reason: "delegation_chain",
+            path: ["@alice:example.org", "@bob:example.org"],
+        });
+    });
+
+    it("prefers topic-specific delegation over global delegation", () => {
+        const graph = new DelegationGraph();
+        graph.setDelegation(DelegationGraph.GlobalTopic, "@alice:example.org", "@bob:example.org");
+        graph.setDelegation("budget", "@alice:example.org", "@carol:example.org");
+
+        const resolution = graph.resolve("budget", "@alice:example.org", new Set(["@carol:example.org"]));
+        expect(resolution.path).toEqual(["@alice:example.org", "@carol:example.org"]);
+    });
 });

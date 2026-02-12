@@ -5,8 +5,123 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import React from "react";
+import React, { useMemo, useState } from "react";
+
+import type { TaskBoardColumn, TaskBoardDocument, TaskBoardItem } from "../models/TaskBoard";
+
+const ROOM_ID = "!blackout-mutual-aid:local";
+
+function moveToNextColumn(column: TaskBoardColumn): TaskBoardColumn {
+    if (column === "todo") return "doing";
+    if (column === "doing") return "done";
+    return "done";
+}
 
 export default function MutualAidHome(): React.JSX.Element {
-    return <section data-testid="blackout-mutual-aid-view" />;
+    const [board, setBoard] = useState<TaskBoardDocument>({
+        roomId: ROOM_ID,
+        needs: [],
+        offers: [],
+        updatedAt: Date.now(),
+    });
+    const [activeLane, setActiveLane] = useState<"needs" | "offers">("needs");
+    const [title, setTitle] = useState("");
+
+    const items = activeLane === "needs" ? board.needs : board.offers;
+    const grouped = useMemo(
+        () => ({
+            todo: items.filter((item) => item.column === "todo"),
+            doing: items.filter((item) => item.column === "doing"),
+            done: items.filter((item) => item.column === "done"),
+        }),
+        [items],
+    );
+
+    const handleCreate = (): void => {
+        if (!title.trim()) return;
+
+        const now = Date.now();
+        const item: TaskBoardItem = {
+            id: `${activeLane}-${now}`,
+            title: title.trim(),
+            column: "todo",
+            updatedAt: now,
+        };
+
+        setBoard((current) => ({
+            ...current,
+            updatedAt: now,
+            needs: activeLane === "needs" ? [item, ...current.needs] : current.needs,
+            offers: activeLane === "offers" ? [item, ...current.offers] : current.offers,
+        }));
+        setTitle("");
+    };
+
+    const handleAdvance = (itemId: string): void => {
+        const now = Date.now();
+        const update = (item: TaskBoardItem): TaskBoardItem => {
+            if (item.id !== itemId || item.column === "done") {
+                return item;
+            }
+
+            return { ...item, column: moveToNextColumn(item.column), updatedAt: now };
+        };
+
+        setBoard((current) => ({
+            ...current,
+            updatedAt: now,
+            needs: current.needs.map(update),
+            offers: current.offers.map(update),
+        }));
+    };
+
+    return (
+        <section data-testid="blackout-mutual-aid-view">
+            <h2>Mutual aid board</h2>
+            <p>Track needs and offers through todo, doing, and done.</p>
+
+            <div>
+                <button type="button" onClick={() => setActiveLane("needs")} data-testid="blackout-mutual-aid-needs-lane">
+                    Needs
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveLane("offers")}
+                    data-testid="blackout-mutual-aid-offers-lane"
+                >
+                    Offers
+                </button>
+            </div>
+
+            <div>
+                <input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder={`New ${activeLane.slice(0, -1)} item`}
+                    data-testid="blackout-mutual-aid-item-title"
+                />
+                <button type="button" onClick={handleCreate} data-testid="blackout-mutual-aid-create-item">
+                    Add {activeLane.slice(0, -1)}
+                </button>
+            </div>
+
+            {(["todo", "doing", "done"] as const).map((column) => (
+                <section key={column}>
+                    <h3>{column}</h3>
+                    <ul data-testid={`blackout-mutual-aid-column-${column}`}>
+                        {grouped[column].map((item) => (
+                            <li key={item.id}>
+                                <span>{item.title}</span>
+                                {item.column !== "done" && (
+                                    <button type="button" onClick={() => handleAdvance(item.id)}>
+                                        Move to {moveToNextColumn(item.column)}
+                                    </button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            ))}
+        </section>
+    );
 }
