@@ -1,0 +1,74 @@
+/*
+Copyright 2026 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+import type { VoteDocument } from "../../modules/governance/models/types";
+import { DelegationGraph, type DelegationResolution } from "../delegation/DelegationGraph";
+
+import type { Ballot, VoteTally } from "./VotingEngine";
+
+export interface DelegatedVoteAttribution {
+    voterUserId: string;
+    ballot: Ballot;
+    representedUserIds: string[];
+}
+
+export interface DelegatedVoteTally extends VoteTally {
+    attributions: DelegatedVoteAttribution[];
+    resolutionsByUserId: Record<string, DelegationResolution>;
+}
+
+export class DelegatedVotingEngine {
+    public tally(
+        vote: VoteDocument,
+        topic: string,
+        participantUserIds: string[],
+        delegationGraph: DelegationGraph,
+    ): DelegatedVoteTally {
+        const directVoterIds = new Set(Object.keys(vote.votesByUserId));
+        const representedByVoter = new Map<string, string[]>();
+        const resolutionsByUserId: Record<string, DelegationResolution> = {};
+
+        for (const participantUserId of participantUserIds) {
+            const resolution = delegationGraph.resolve(topic, participantUserId, directVoterIds);
+            resolutionsByUserId[participantUserId] = resolution;
+
+            if (!directVoterIds.has(resolution.effectiveVoter)) {
+                continue;
+            }
+
+            const represented = representedByVoter.get(resolution.effectiveVoter) ?? [];
+            represented.push(participantUserId);
+            representedByVoter.set(resolution.effectiveVoter, represented);
+        }
+
+        const summary: DelegatedVoteTally = {
+            approve: 0,
+            reject: 0,
+            abstain: 0,
+            totalVotes: 0,
+            passed: false,
+            attributions: [],
+            resolutionsByUserId,
+        };
+
+        for (const [voterUserId, representedUserIds] of representedByVoter.entries()) {
+            const ballot = vote.votesByUserId[voterUserId];
+            if (!ballot) {
+                continue;
+            }
+
+            summary[ballot] += representedUserIds.length;
+            summary.totalVotes += representedUserIds.length;
+            summary.attributions.push({ voterUserId, ballot, representedUserIds });
+        }
+
+        summary.attributions.sort((a, b) => a.voterUserId.localeCompare(b.voterUserId));
+        summary.passed = summary.approve > summary.reject;
+
+        return summary;
+    }
+}
