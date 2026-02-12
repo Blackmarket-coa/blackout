@@ -13,9 +13,27 @@ export interface ProposalDocument {
     title: string;
     body: string;
     authorUserId: string;
+    jurySelection?: JurySelectionRecord;
     state: GovernanceLifecycleState;
     createdAt: number;
     updatedAt: number;
+}
+
+export interface JurySelectionRecord {
+    selectedJurorIds: string[];
+    eligibleCount: number;
+    policy: {
+        jurySize: number;
+        minPowerLevel?: number;
+        excludedUserIds?: string[];
+        requireActive?: boolean;
+    };
+    proof: {
+        algorithm: string;
+        seedMaterial: string;
+        seedHash: string;
+        drawHashes: string[];
+    };
 }
 
 export interface VoteDocument {

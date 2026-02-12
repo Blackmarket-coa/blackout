@@ -47,6 +47,35 @@ describe("ProposalEngine", () => {
         expect(() => engine.transition(draft, "decide")).toThrow("Invalid proposal transition");
     });
 
+    it("attaches deterministic jury selection details to proposal records", () => {
+        const proposal = engine.create({
+            id: "p4",
+            roomId: "!room:example.org",
+            title: "Policy",
+            body: "text",
+            authorUserId: "@alice:example.org",
+        });
+
+        const updated = engine.attachJurySelection(
+            proposal,
+            {
+                selectedJurorIds: ["@alice:example.org", "@bob:example.org"],
+                eligibleCount: 4,
+                policy: { jurySize: 2, minPowerLevel: 50 },
+                proof: {
+                    algorithm: "xxhash32-draw",
+                    seedMaterial: "!room:example.org|p4|$event|1735689600000",
+                    seedHash: "a".repeat(8),
+                    drawHashes: ["b".repeat(8), "c".repeat(8)],
+                },
+            },
+            200,
+        );
+
+        expect(updated.jurySelection?.selectedJurorIds).toEqual(["@alice:example.org", "@bob:example.org"]);
+        expect(updated.updatedAt).toBe(200);
+    });
+
     it("emits matrix summary event payloads", () => {
         const proposal = engine.create({
             id: "p3",
