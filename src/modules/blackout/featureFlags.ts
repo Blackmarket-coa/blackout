@@ -11,8 +11,28 @@ export enum BlackoutFeature {
     Governance = "feature_blackout_governance",
     Education = "feature_blackout_education",
     MutualAid = "feature_blackout_mutual_aid",
+    DeliberationClustering = "feature_blackout_deliberation_clustering",
+    IpfsStorage = "feature_blackout_ipfs_storage",
 }
 
+const LEGACY_FLAG_ALIASES: Partial<Record<BlackoutFeature, string>> = {
+    [BlackoutFeature.Governance]: "feature_governance",
+    [BlackoutFeature.Education]: "feature_education",
+    [BlackoutFeature.MutualAid]: "feature_mutual_aid",
+    [BlackoutFeature.DeliberationClustering]: "feature_deliberation_clustering",
+    [BlackoutFeature.IpfsStorage]: "feature_ipfs_storage",
+};
+
 export function isBlackoutFeatureEnabled(feature: BlackoutFeature): boolean {
-    return Boolean(SettingsStore.getValue(feature));
+    const primary = Boolean(SettingsStore.getValue(feature));
+    if (primary) {
+        return true;
+    }
+
+    const alias = LEGACY_FLAG_ALIASES[feature];
+    if (!alias) {
+        return false;
+    }
+
+    return Boolean(SettingsStore.getValue(alias));
 }
