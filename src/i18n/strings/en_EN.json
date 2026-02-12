@@ -19,6 +19,12 @@
         "user_menu": "User menu"
     },
     "a11y_jump_first_unread_room": "Jump to first unread room.",
+    "blackout": {
+        "home_section_title": "Blackout modules",
+        "nav_education": "Education",
+        "nav_governance": "Governance",
+        "nav_mutual_aid": "Mutual Aid"
+    },
     "action": {
         "accept": "Accept",
         "add": "Add",
@@ -1503,6 +1509,9 @@
         "beta_feedback_leave_button": "To leave the beta, visit your settings.",
         "beta_feedback_title": "%(featureName)s Beta feedback",
         "beta_section": "Upcoming features",
+        "blackout_education": "Blackout Education",
+        "blackout_governance": "Blackout Governance",
+        "blackout_mutual_aid": "Blackout Mutual Aid",
         "bridge_state": "Show info about bridges in room settings",
         "bridge_state_channel": "Channel: <channelLink/>",
         "bridge_state_creator": "This bridge was provisioned by <user />.",

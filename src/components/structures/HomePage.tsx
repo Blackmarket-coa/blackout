@@ -25,6 +25,7 @@ import MatrixClientContext, { useMatrixClientContext } from "../../contexts/Matr
 import MiniAvatarUploader, { AVATAR_SIZE } from "../views/elements/MiniAvatarUploader";
 import PosthogTrackers from "../../PosthogTrackers";
 import EmbeddedPage from "./EmbeddedPage";
+import { getEnabledBlackoutModuleNavigationItems } from "../../modules/blackout/navigation";
 
 const onClickSendDm = (ev: ButtonEvent): void => {
     PosthogTrackers.trackInteraction("WebHomeCreateChatButton", ev);
@@ -88,6 +89,7 @@ const UserWelcomeTop: React.FC = () => {
 };
 
 const HomePage: React.FC<IProps> = ({ justRegistered = false }) => {
+    const blackoutNavigationItems = getEnabledBlackoutModuleNavigationItems();
     const cli = useMatrixClientContext();
     const config = SdkConfig.get();
     const pageUrl = getHomePageUrl(config, cli);
@@ -116,6 +118,24 @@ const HomePage: React.FC<IProps> = ({ justRegistered = false }) => {
         <AutoHideScrollbar className="mx_HomePage mx_HomePage_default" element="main">
             <div className="mx_HomePage_default_wrapper">
                 {introSection}
+                {blackoutNavigationItems.length > 0 && (
+                    <section className="mx_HomePage_default_blackout" data-testid="blackout-home-navigation">
+                        <h3>{_t("blackout|home_section_title")}</h3>
+                        <div className="mx_HomePage_default_buttons">
+                            {blackoutNavigationItems.map((item) => (
+                                <AccessibleButton
+                                    key={item.id}
+                                    onClick={() => {
+                                        window.location.hash = `#/${item.route}`;
+                                    }}
+                                    data-testid={`blackout-home-link-${item.id}`}
+                                >
+                                    {_t(item.label)}
+                                </AccessibleButton>
+                            ))}
+                        </div>
+                    </section>
+                )}
                 <div className="mx_HomePage_default_buttons">
                     <AccessibleButton onClick={onClickSendDm} className="mx_HomePage_button_sendDm">
                         <ChatSolidIcon />

@@ -30,6 +30,7 @@ import { ElementWebExtrasApi } from "./ExtrasApi.ts";
 import { ElementWebBuiltinsApi } from "./BuiltinsApi.tsx";
 import { ClientApi } from "./ClientApi.ts";
 import { StoresApi } from "./StoresApi.ts";
+import { registerBlackoutNavigation } from "./blackout/registerNavigation";
 
 const legacyCustomisationsFactory = <T extends object>(baseCustomisations: T) => {
     let used = false;
@@ -44,6 +45,10 @@ const legacyCustomisationsFactory = <T extends object>(baseCustomisations: T) =>
  * Implementation of the @element-hq/element-web-module-api runtime module API.
  */
 export class ModuleApi implements Api {
+    public constructor() {
+        registerBlackoutNavigation(this.navigation);
+    }
+
     private static _instance: ModuleApi;
 
     public static get instance(): ModuleApi {

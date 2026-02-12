@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
+import { SETTINGS } from "../../settings/Settings";
 import SettingsStore from "../../settings/SettingsStore";
 
 export enum BlackoutFeature {
@@ -31,6 +32,10 @@ export function isBlackoutFeatureEnabled(feature: BlackoutFeature): boolean {
 
     const alias = LEGACY_FLAG_ALIASES[feature];
     if (!alias) {
+        return false;
+    }
+
+    if (!(alias in SETTINGS)) {
         return false;
     }
 
