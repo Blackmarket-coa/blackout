@@ -232,6 +232,11 @@ export interface Settings {
     "feature_blackout_governance": IFeature;
     "feature_blackout_education": IFeature;
     "feature_blackout_mutual_aid": IFeature;
+    "feature_governance": IFeature;
+    "feature_education": IFeature;
+    "feature_mutual_aid": IFeature;
+    "feature_deliberation_clustering": IFeature;
+    "feature_ipfs_storage": IFeature;
     "feature_msc4362_encrypted_state_events": IFeature;
     // These are in the feature namespace but aren't actually features
     "feature_hidebold": IBaseSetting<boolean>;
@@ -810,6 +815,47 @@ export const SETTINGS: Settings = {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
         displayName: _td("labs|blackout_mutual_aid"),
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    // Legacy aliases retained for backwards compatibility with older config keys.
+    "feature_governance": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: "Blackout governance (legacy)",
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_education": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: "Blackout education (legacy)",
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_mutual_aid": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: "Blackout mutual aid (legacy)",
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_deliberation_clustering": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: "Blackout deliberation clustering (legacy)",
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_ipfs_storage": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: "Blackout IPFS storage (legacy)",
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
