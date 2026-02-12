@@ -3,23 +3,24 @@
 This tracker captures work that still needs to be completed from the reuse strategy.
 
 Legend:
+
 - ✅ Complete
 - 🟡 In progress / partial
 - ⬜ Not started
 
 ## Overall status snapshot
 
-| Area | Status | Notes |
-| --- | --- | --- |
-| Matrix backbone | ✅ | Already core platform. |
-| CRDT (Yjs + y-indexeddb) | ✅ | Core document manager and persistence are present. |
-| Governance lifecycle + voting | 🟡 | Basic engines exist; needs Matrix/Yjs persistence and production rules. |
-| Deliberation clustering | 🟡 | Deterministic clustering service and baseline tests exist; governance UI integration remains. |
-| Delegation / liquid democracy | 🟡 | Graph and delegated tally exist; needs persistence, policy, and UX hardening. |
-| Education module | 🟡 | Home view now supports basic study-circle/curriculum workflows; Yjs binding still pending. |
-| Mutual aid board | 🟡 | Home view now exposes basic board lanes and transitions; Yjs binding/filters pending. |
-| IPFS storage | ⬜ | Service is a stub and currently reports unconfigured. |
-| Sortition / random jury | ⬜ | No dedicated implementation found yet. |
+| Area                          | Status | Notes                                                                                                       |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| Matrix backbone               | ✅     | Already core platform.                                                                                      |
+| CRDT (Yjs + y-indexeddb)      | ✅     | Core document manager and persistence are present.                                                          |
+| Governance lifecycle + voting | 🟡     | Basic engines exist; needs Matrix/Yjs persistence and production rules.                                     |
+| Deliberation clustering       | 🟡     | Deterministic clustering service and baseline tests exist; governance UI integration remains.               |
+| Delegation / liquid democracy | 🟡     | Graph and delegated tally exist; needs persistence, policy, and UX hardening.                               |
+| Education module              | 🟡     | Home view now supports basic study-circle/curriculum workflows; Yjs binding still pending.                  |
+| Mutual aid board              | 🟡     | Home view now exposes basic board lanes and transitions; Yjs binding/filters pending.                       |
+| IPFS storage                  | ⬜     | Service is a stub and currently reports unconfigured.                                                       |
+| Sortition / random jury       | 🟡     | Deterministic sortition service now exists with reproducibility proof output; governance wiring is partial. |
 
 ---
 
@@ -28,6 +29,7 @@ Legend:
 Status: 🟡
 
 ### Remaining tasks
+
 - [ ] Persist proposal lifecycle state to Matrix room events (not only local component state).
 - [ ] Back proposal and vote documents with CRDT snapshots keyed by room + proposal IDs.
 - [ ] Add quorum/threshold policy support (simple majority is currently hardcoded).
@@ -36,6 +38,7 @@ Status: 🟡
 - [ ] Add migration/version handling for governance document schemas.
 
 ### Exit criteria
+
 - Proposal and voting state survive reload/device switch.
 - Governance decisions can be verified from room history + CRDT state.
 
@@ -46,6 +49,7 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
+
 - [x] Implement clustering algorithm in `src/services/deliberation/clustering.ts` (deterministic cosine-similarity bucketing).
 - [x] Define input/output schema for opinion vectors and cluster metadata.
 - [x] Add tests with realistic synthetic data (small room size baseline added; medium/large still pending).
@@ -53,6 +57,7 @@ Status: 🟡
 - [ ] Add safeguards for sparse datasets and adversarial input.
 
 ### Exit criteria
+
 - Cluster results are deterministic and explainable.
 - Proposal detail can display cluster summaries for large debates.
 
@@ -63,6 +68,7 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
+
 - [ ] Persist delegation graph state to Matrix/CRDT rather than in-memory only.
 - [x] Add per-topic and global delegation precedence rules.
 - [x] Implement explicit vote override semantics (direct vote overrides delegated vote).
@@ -70,6 +76,7 @@ Status: 🟡
 - [ ] Add moderation/abuse controls for delegation spam loops.
 
 ### Exit criteria
+
 - Delegation behavior is stable across reloads and clients.
 - Delegation attribution is auditable and policy-compliant.
 
@@ -80,6 +87,7 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
+
 - [x] Replace placeholder home view with curriculum/study-circle UI.
 - [ ] Bind `StudyCircleDocument` and `CurriculumDocument` to Yjs docs.
 - [ ] Add collaborative section editing and conflict-safe merges.
@@ -87,6 +95,7 @@ Status: 🟡
 - [ ] Add access policy checks for room-scoped curricula.
 
 ### Exit criteria
+
 - Users can create/edit study circles and curriculum content collaboratively.
 
 ---
@@ -96,6 +105,7 @@ Status: 🟡
 Status: 🟡
 
 ### Remaining tasks
+
 - [x] Replace placeholder home view with board UI.
 - [x] Implement `todo -> doing -> done` transitions with validation rules.
 - [ ] Bind board state to Yjs for concurrent edits.
@@ -103,6 +113,7 @@ Status: 🟡
 - [ ] Add event/audit rendering for assignment and completion changes.
 
 ### Exit criteria
+
 - Multiple members can manage shared needs/offers board in real time.
 
 ---
@@ -112,6 +123,7 @@ Status: 🟡
 Status: ⬜
 
 ### Remaining tasks
+
 - [ ] Implement real `IpfsService` configuration and health checks.
 - [ ] Add upload flow returning CID and metadata.
 - [ ] Add download/resolve flow by CID.
@@ -119,22 +131,25 @@ Status: ⬜
 - [ ] Add feature-flag-driven UX for unavailable IPFS backends.
 
 ### Exit criteria
+
 - Users can upload and resolve shared assets via CID from within Blackout flows.
 
 ---
 
 ## 7) Sortition / random jury selection
 
-Status: ⬜
+Status: 🟡
 
 ### Remaining tasks
-- [ ] Define sortition policy (input seed fields, eligibility filters).
-- [ ] Implement deterministic selection function.
-- [ ] Add reproducibility proof output (seed + hash details).
-- [ ] Integrate selection results into governance proposal process.
+
+- [x] Define sortition policy (input seed fields, eligibility filters).
+- [x] Implement deterministic selection function.
+- [x] Add reproducibility proof output (seed + hash details).
+- [x] Integrate selection results into governance proposal process (proposal records can now carry jury selection metadata).
 - [ ] Add fairness tests and edge-case handling.
 
 ### Exit criteria
+
 - Jury selections are deterministic, reproducible, and auditable.
 
 ---
@@ -144,6 +159,7 @@ Status: ⬜
 Status: ⬜
 
 ### Remaining tasks
+
 - [ ] Add end-to-end tests for governance + delegation + voting lifecycle.
 - [ ] Add telemetry/events for key module outcomes and failures.
 - [ ] Add localization strings for new module UIs.
@@ -152,6 +168,7 @@ Status: ⬜
 - [ ] Add performance budget checks for large-room proposal activity.
 
 ### Exit criteria
+
 - All new modules meet reliability, observability, localization, and security baselines.
 
 ---

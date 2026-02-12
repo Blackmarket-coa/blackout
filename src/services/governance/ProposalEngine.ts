@@ -5,7 +5,11 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import type { GovernanceLifecycleState, ProposalDocument } from "../../modules/governance/models/types";
+import type {
+    GovernanceLifecycleState,
+    JurySelectionRecord,
+    ProposalDocument,
+} from "../../modules/governance/models/types";
 
 const ORDERED_STATES: GovernanceLifecycleState[] = ["draft", "discuss", "amend", "close", "decide"];
 
@@ -59,6 +63,17 @@ export class ProposalEngine {
         };
     }
 
+    public attachJurySelection(
+        proposal: ProposalDocument,
+        jurySelection: JurySelectionRecord,
+        now: number = Date.now(),
+    ): ProposalDocument {
+        return {
+            ...proposal,
+            jurySelection,
+            updatedAt: now,
+        };
+    }
     public canVote(proposal: ProposalDocument): boolean {
         return proposal.state === "close";
     }
@@ -67,7 +82,10 @@ export class ProposalEngine {
         return ORDERED_STATES.indexOf(state);
     }
 
-    public toSummaryEvent(proposal: ProposalDocument): { type: "im.blackout.governance.proposal"; content: ProposalDocument } {
+    public toSummaryEvent(proposal: ProposalDocument): {
+        type: "im.blackout.governance.proposal";
+        content: ProposalDocument;
+    } {
         return {
             type: "im.blackout.governance.proposal",
             content: proposal,
