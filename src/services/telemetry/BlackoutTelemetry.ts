@@ -5,33 +5,22 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { PosthogAnalytics, type IPosthogEvent } from "../../PosthogAnalytics";
-
-interface BlackoutModuleAdoptionEvent extends IPosthogEvent {
-    eventName: "BlackoutModuleAdoption";
-    moduleName: "governance" | "education" | "mutual-aid";
+export interface BlackoutTelemetryEvent {
+    name: string;
+    at: number;
+    properties?: Record<string, unknown>;
 }
 
-interface BlackoutModuleErrorEvent extends IPosthogEvent {
-    eventName: "BlackoutModuleError";
-    moduleName: "governance" | "education" | "mutual-aid";
-    operation: string;
+const events: BlackoutTelemetryEvent[] = [];
+
+export function trackBlackoutEvent(name: string, properties?: Record<string, unknown>): void {
+    events.push({ name, at: Date.now(), properties });
 }
 
-export function trackBlackoutModuleAdoption(moduleName: BlackoutModuleAdoptionEvent["moduleName"]): void {
-    PosthogAnalytics.instance.trackEvent<BlackoutModuleAdoptionEvent>({
-        eventName: "BlackoutModuleAdoption",
-        moduleName,
-    });
+export function getBlackoutTelemetryEvents(): BlackoutTelemetryEvent[] {
+    return [...events];
 }
 
-export function trackBlackoutModuleError(
-    moduleName: BlackoutModuleErrorEvent["moduleName"],
-    operation: string,
-): void {
-    PosthogAnalytics.instance.trackEvent<BlackoutModuleErrorEvent>({
-        eventName: "BlackoutModuleError",
-        moduleName,
-        operation,
-    });
+export function clearBlackoutTelemetryEvents(): void {
+    events.length = 0;
 }
