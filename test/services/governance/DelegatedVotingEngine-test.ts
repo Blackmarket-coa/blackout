@@ -64,4 +64,25 @@ describe("DelegatedVotingEngine", () => {
             reason: "direct_vote",
         });
     });
+
+    it("applies quorum policy to delegated tallies", () => {
+        const delegationGraph = new DelegationGraph();
+        delegationGraph.setDelegation("budget", "@bob:example.org", "@alice:example.org");
+
+        let vote = votingEngine.open("p1", "!room:example.org", 100);
+        vote = votingEngine.cast(vote, "@alice:example.org", "approve");
+
+        const tally = delegatedVotingEngine.tally(
+            vote,
+            "budget",
+            ["@alice:example.org", "@bob:example.org"],
+            delegationGraph,
+            { quorum: 3 },
+        );
+
+        expect(tally.totalVotes).toBe(2);
+        expect(tally.quorumMet).toBe(false);
+        expect(tally.passed).toBe(false);
+    });
+
 });

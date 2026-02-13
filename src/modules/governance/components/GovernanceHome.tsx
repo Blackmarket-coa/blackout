@@ -18,6 +18,7 @@ import DelegationAttestationsPanel from "./DelegationAttestationsPanel";
 
 const ROOM_ID = "!blackout-governance:local";
 const CURRENT_USER_ID = "@me:blackout.local";
+const PERMISSION_CONTEXT = { actorUserId: CURRENT_USER_ID, isRoomMember: true, powerLevel: 100 };
 
 const proposalEngine = new ProposalEngine();
 const votingEngine = new VotingEngine();
@@ -74,7 +75,7 @@ export default function GovernanceHome(): React.JSX.Element {
             title,
             body,
             authorUserId: CURRENT_USER_ID,
-        });
+        }, PERMISSION_CONTEXT);
 
         setProposals((current) => [proposal, ...current]);
         setSelectedProposalId(proposal.id);
@@ -90,7 +91,7 @@ export default function GovernanceHome(): React.JSX.Element {
             return;
         }
 
-        const transitioned = proposalEngine.transition(selectedProposal, nextState);
+        const transitioned = proposalEngine.transition(selectedProposal, nextState, PERMISSION_CONTEXT);
         setProposals((current) =>
             current.map((proposal) => (proposal.id === transitioned.id ? transitioned : proposal)),
         );

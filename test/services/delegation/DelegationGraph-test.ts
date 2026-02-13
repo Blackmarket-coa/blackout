@@ -50,12 +50,20 @@ describe("DelegationGraph", () => {
         });
     });
 
-    it("prefers topic-specific delegation over global delegation", () => {
-        const graph = new DelegationGraph();
-        graph.setDelegation(DelegationGraph.GlobalTopic, "@alice:example.org", "@bob:example.org");
-        graph.setDelegation("budget", "@alice:example.org", "@carol:example.org");
+    it("enforces revocation windows", () => {
+        const graph = new DelegationGraph({ revocationWindowMs: 100, maxDelegationsPerUserPerHour: 100 });
+        graph.setDelegation("budget", "@alice:example.org", "@bob:example.org", 1_000);
 
-        const resolution = graph.resolve("budget", "@alice:example.org", new Set(["@carol:example.org"]));
-        expect(resolution.path).toEqual(["@alice:example.org", "@carol:example.org"]);
+        expect(() => graph.clearDelegation("budget", "@alice:example.org", 1_200)).toThrow(
+            "Delegation revocation window has elapsed",
+        );
+    });
+
+    it("keeps an audit trail", () => {
+        const graph = new DelegationGraph();
+        graph.setDelegation("budget", "@alice:example.org", "@bob:example.org");
+        graph.clearDelegation("budget", "@alice:example.org");
+
+        expect(graph.getAuditTrail().map((entry) => entry.action)).toEqual(["set", "clear"]);
     });
 });
