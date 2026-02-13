@@ -5,7 +5,13 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { ProposalEngine } from "../../../src/services/governance/ProposalEngine";
+import { ProposalEngine, type GovernancePermissionContext } from "../../../src/services/governance/ProposalEngine";
+
+const permissionContext: GovernancePermissionContext = {
+    actorUserId: "@alice:example.org",
+    isRoomMember: true,
+    powerLevel: 100,
+};
 
 describe("ProposalEngine", () => {
     const engine = new ProposalEngine();
@@ -19,11 +25,14 @@ describe("ProposalEngine", () => {
                 body: "initial",
                 authorUserId: "@alice:example.org",
             },
+            permissionContext,
             100,
         );
 
         expect(proposal.state).toBe("draft");
+        expect(proposal.schemaVersion).toBe(2);
         expect(proposal.createdAt).toBe(100);
+        expect(proposal.auditTimeline).toHaveLength(1);
     });
 
     it("enforces lifecycle transitions", () => {
@@ -35,26 +44,47 @@ describe("ProposalEngine", () => {
                 body: "text",
                 authorUserId: "@alice:example.org",
             },
+            permissionContext,
             100,
         );
 
-        const discuss = engine.transition(draft, "discuss", 101);
-        const amend = engine.transition(discuss, "amend", 102);
-        const closed = engine.transition(amend, "close", 103);
-        const decided = engine.transition(closed, "decide", 104);
+        const discuss = engine.transition(draft, "discuss", permissionContext, 101);
+        const amend = engine.transition(discuss, "amend", permissionContext, 102);
+        const closed = engine.transition(amend, "close", permissionContext, 103);
+        const decided = engine.transition(closed, "decide", permissionContext, 104);
 
         expect(decided.state).toBe("decide");
-        expect(() => engine.transition(draft, "decide")).toThrow("Invalid proposal transition");
+        expect(() => engine.transition(draft, "decide", permissionContext)).toThrow("Invalid proposal transition");
+    });
+
+    it("records amendment history", () => {
+        const draft = engine.create(
+            {
+                id: "p-amend",
+                roomId: "!room:example.org",
+                title: "Policy",
+                body: "text",
+                authorUserId: "@alice:example.org",
+            },
+            permissionContext,
+        );
+
+        const amended = engine.amend(draft, "new text", permissionContext, 200);
+        expect(amended.amendments).toHaveLength(1);
+        expect(amended.auditTimeline.at(-1)?.action).toBe("amend");
     });
 
     it("attaches deterministic jury selection details to proposal records", () => {
-        const proposal = engine.create({
-            id: "p4",
-            roomId: "!room:example.org",
-            title: "Policy",
-            body: "text",
-            authorUserId: "@alice:example.org",
-        });
+        const proposal = engine.create(
+            {
+                id: "p4",
+                roomId: "!room:example.org",
+                title: "Policy",
+                body: "text",
+                authorUserId: "@alice:example.org",
+            },
+            permissionContext,
+        );
 
         const updated = engine.attachJurySelection(
             proposal,
@@ -76,18 +106,21 @@ describe("ProposalEngine", () => {
         expect(updated.updatedAt).toBe(200);
     });
 
-    it("emits matrix summary event payloads", () => {
-        const proposal = engine.create({
-            id: "p3",
+    it("migrates older documents", () => {
+        const migrated = engine.migrate({
+            schemaVersion: 1,
+            id: "old",
             roomId: "!room:example.org",
-            title: "Policy",
-            body: "text",
+            title: "Old",
+            body: "old",
             authorUserId: "@alice:example.org",
+            state: "draft",
+            createdAt: 1,
+            updatedAt: 1,
+            amendments: [],
+            auditTimeline: [],
         });
 
-        expect(engine.toSummaryEvent(proposal)).toMatchObject({
-            type: "im.blackout.governance.proposal",
-            content: proposal,
-        });
+        expect(migrated.schemaVersion).toBe(2);
     });
 });

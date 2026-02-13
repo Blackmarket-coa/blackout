@@ -17,12 +17,12 @@ interface ManagedDoc {
 
 const managedDocs = new Map<string, ManagedDoc>();
 
-function getKey(roomId: string, docType: CrdtDocType): string {
-    return `${roomId}:${docType}`;
+function getKey(roomId: string, docType: CrdtDocType, docId?: string): string {
+    return docId ? `${roomId}:${docType}:${docId}` : `${roomId}:${docType}`;
 }
 
-export async function open(roomId: string, docType: CrdtDocType): Promise<YDoc> {
-    const key = getKey(roomId, docType);
+export async function open(roomId: string, docType: CrdtDocType, docId?: string): Promise<YDoc> {
+    const key = getKey(roomId, docType, docId);
     const existing = managedDocs.get(key);
     if (existing) {
         await existing.persistenceReady;
@@ -30,7 +30,7 @@ export async function open(roomId: string, docType: CrdtDocType): Promise<YDoc> 
     }
 
     const yDoc = new YDoc();
-    const persistence = createIndexedDbPersistence(roomId, docType, yDoc);
+    const persistence = createIndexedDbPersistence(roomId, docType, yDoc, docId);
     const persistenceReady = persistence.whenSynced.then(() => undefined);
 
     managedDocs.set(key, { yDoc, persistenceReady });
@@ -38,8 +38,8 @@ export async function open(roomId: string, docType: CrdtDocType): Promise<YDoc> 
     return yDoc;
 }
 
-export function close(roomId: string, docType: CrdtDocType): void {
-    const key = getKey(roomId, docType);
+export function close(roomId: string, docType: CrdtDocType, docId?: string): void {
+    const key = getKey(roomId, docType, docId);
     const doc = managedDocs.get(key);
     if (!doc) return;
 
@@ -47,8 +47,8 @@ export function close(roomId: string, docType: CrdtDocType): void {
     managedDocs.delete(key);
 }
 
-export function snapshot(roomId: string, docType: CrdtDocType): Uint8Array | undefined {
-    const key = getKey(roomId, docType);
+export function snapshot(roomId: string, docType: CrdtDocType, docId?: string): Uint8Array | undefined {
+    const key = getKey(roomId, docType, docId);
     const doc = managedDocs.get(key);
     if (!doc) return undefined;
 

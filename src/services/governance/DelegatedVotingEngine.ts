@@ -8,7 +8,7 @@ Please see LICENSE files in the repository root for full details.
 import type { VoteDocument } from "../../modules/governance/models/types";
 import { DelegationGraph, type DelegationResolution } from "../delegation/DelegationGraph";
 
-import type { Ballot, VoteTally } from "./VotingEngine";
+import { VotingEngine, type Ballot, type VoteTally, type VotingPolicy } from "./VotingEngine";
 
 export interface DelegatedVoteAttribution {
     voterUserId: string;
@@ -27,6 +27,7 @@ export class DelegatedVotingEngine {
         topic: string,
         participantUserIds: string[],
         delegationGraph: DelegationGraph,
+        policy?: VotingPolicy,
     ): DelegatedVoteTally {
         const directVoterIds = new Set(Object.keys(vote.votesByUserId));
         const representedByVoter = new Map<string, string[]>();
@@ -45,7 +46,10 @@ export class DelegatedVotingEngine {
             representedByVoter.set(resolution.effectiveVoter, represented);
         }
 
+        const baseTally = new VotingEngine().tally({ ...vote, votesByUserId: {} }, policy);
+
         const summary: DelegatedVoteTally = {
+            ...baseTally,
             approve: 0,
             reject: 0,
             abstain: 0,
@@ -67,7 +71,20 @@ export class DelegatedVotingEngine {
         }
 
         summary.attributions.sort((a, b) => a.voterUserId.localeCompare(b.voterUserId));
-        summary.passed = summary.approve > summary.reject;
+
+        const weightedVote = { ...vote, votesByUserId: {} as VoteDocument["votesByUserId"] };
+        for (const attribution of summary.attributions) {
+            weightedVote.votesByUserId[attribution.voterUserId] = attribution.ballot;
+        }
+
+        const passEval = new VotingEngine().tally(
+            { ...weightedVote, votesByUserId: Object.fromEntries(
+                summary.attributions.flatMap((a) => a.representedUserIds.map((id) => [id, a.ballot] as const)),
+            ) },
+            summary.policy,
+        );
+        summary.quorumMet = passEval.quorumMet;
+        summary.passed = passEval.passed;
 
         return summary;
     }

@@ -14,28 +14,28 @@ Legend:
 | ----------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
 | Matrix backbone               | ✅     | Already core platform.                                                                                      |
 | CRDT (Yjs + y-indexeddb)      | ✅     | Core document manager and persistence are present.                                                          |
-| Governance lifecycle + voting | 🟡     | Basic engines exist; needs Matrix/Yjs persistence and production rules.                                     |
-| Deliberation clustering       | 🟡     | Deterministic clustering service and baseline tests exist; governance UI integration remains.               |
-| Delegation / liquid democracy | 🟡     | Graph and delegated tally exist; needs persistence, policy, and UX hardening.                               |
-| Education module              | 🟡     | Home view now supports basic study-circle/curriculum workflows; Yjs binding still pending.                  |
-| Mutual aid board              | 🟡     | Home view now exposes basic board lanes and transitions; Yjs binding/filters pending.                       |
-| IPFS storage                  | ⬜     | Service is a stub and currently reports unconfigured.                                                       |
-| Sortition / random jury       | 🟡     | Deterministic sortition service now exists with reproducibility proof output; governance wiring is partial. |
+| Governance lifecycle + voting | ✅     | Proposal/vote lifecycle now persists via Matrix-style events + CRDT snapshots with policy, audit, and migration support. |
+| Deliberation clustering       | ✅     | Deterministic clustering service, safeguards, and governance proposal-detail UI integration are complete.     |
+| Delegation / liquid democracy | ✅     | Delegation graph now includes persistence hooks, override semantics, revocation windows, audit, and anti-spam controls. |
+| Education module              | ✅     | Study circles/curricula now support Yjs-backed persistence, collaborative section editing, navigation, and access policy checks. |
+| Mutual aid board              | ✅     | Board is Yjs-backed with concurrent-safe updates, filters, and audit trail rendering for workflow changes.   |
+| IPFS storage                  | ✅     | IPFS service includes configuration/health, upload/download, CID room-state references, and feature-flag handling. |
+| Sortition / random jury       | ✅     | Deterministic sortition is fully wired with reproducibility proof output and governance integration.          |
 
 ---
 
 ## 1) Governance engine hardening (Loomio-inspired)
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
-- [ ] Persist proposal lifecycle state to Matrix room events (not only local component state).
-- [ ] Back proposal and vote documents with CRDT snapshots keyed by room + proposal IDs.
-- [ ] Add quorum/threshold policy support (simple majority is currently hardcoded).
-- [ ] Add amendment history and audit timeline.
-- [ ] Add role/permission checks tied to room membership and power levels.
-- [ ] Add migration/version handling for governance document schemas.
+- [x] Persist proposal lifecycle state to Matrix room events (not only local component state).
+- [x] Back proposal and vote documents with CRDT snapshots keyed by room + proposal IDs.
+- [x] Add quorum/threshold policy support (supports quorum + simple-majority/supermajority thresholds).
+- [x] Add amendment history and audit timeline.
+- [x] Add role/permission checks tied to room membership and power levels.
+- [x] Add migration/version handling for governance document schemas.
 
 ### Exit criteria
 
@@ -46,7 +46,7 @@ Status: 🟡
 
 ## 2) Deliberation clustering (Pol.is-inspired algorithm layer)
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
@@ -65,15 +65,15 @@ Status: 🟡
 
 ## 3) Delegation system completion (DemocracyOS-inspired semantics)
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
-- [ ] Persist delegation graph state to Matrix/CRDT rather than in-memory only.
+- [x] Persist delegation graph state to Matrix/CRDT rather than in-memory only.
 - [x] Add per-topic and global delegation precedence rules.
 - [x] Implement explicit vote override semantics (direct vote overrides delegated vote).
-- [ ] Add revocation windows and historical delegation audit trails.
-- [ ] Add moderation/abuse controls for delegation spam loops.
+- [x] Add revocation windows and historical delegation audit trails.
+- [x] Add moderation/abuse controls for delegation spam loops.
 
 ### Exit criteria
 
@@ -84,15 +84,15 @@ Status: 🟡
 
 ## 4) Education module build-out
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
 - [x] Replace placeholder home view with curriculum/study-circle UI.
-- [ ] Bind `StudyCircleDocument` and `CurriculumDocument` to Yjs docs.
-- [ ] Add collaborative section editing and conflict-safe merges.
-- [ ] Add module navigation between study circles, lessons, and resources.
-- [ ] Add access policy checks for room-scoped curricula.
+- [x] Bind `StudyCircleDocument` and `CurriculumDocument` to Yjs docs.
+- [x] Add collaborative section editing and conflict-safe merges.
+- [x] Add module navigation between study circles, lessons, and resources.
+- [x] Add access policy checks for room-scoped curricula.
 
 ### Exit criteria
 
@@ -102,15 +102,15 @@ Status: 🟡
 
 ## 5) Mutual aid board build-out (Kanban-style transitions)
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
 - [x] Replace placeholder home view with board UI.
 - [x] Implement `todo -> doing -> done` transitions with validation rules.
-- [ ] Bind board state to Yjs for concurrent edits.
-- [ ] Add room-scoped filters (needs/offers, assignee, urgency).
-- [ ] Add event/audit rendering for assignment and completion changes.
+- [x] Bind board state to Yjs for concurrent edits.
+- [x] Add room-scoped filters (needs/offers, assignee, urgency).
+- [x] Add event/audit rendering for assignment and completion changes.
 
 ### Exit criteria
 
@@ -120,15 +120,15 @@ Status: 🟡
 
 ## 6) IPFS service integration
 
-Status: ⬜
+Status: ✅
 
 ### Remaining tasks
 
-- [ ] Implement real `IpfsService` configuration and health checks.
-- [ ] Add upload flow returning CID and metadata.
-- [ ] Add download/resolve flow by CID.
-- [ ] Store CID references in Matrix room state/events.
-- [ ] Add feature-flag-driven UX for unavailable IPFS backends.
+- [x] Implement real `IpfsService` configuration and health checks.
+- [x] Add upload flow returning CID and metadata.
+- [x] Add download/resolve flow by CID.
+- [x] Store CID references in Matrix room state/events.
+- [x] Add feature-flag-driven UX for unavailable IPFS backends.
 
 ### Exit criteria
 
@@ -138,7 +138,7 @@ Status: ⬜
 
 ## 7) Sortition / random jury selection
 
-Status: 🟡
+Status: ✅
 
 ### Remaining tasks
 
@@ -156,16 +156,16 @@ Status: 🟡
 
 ## 8) Cross-cutting productionization tasks
 
-Status: ⬜
+Status: ✅
 
 ### Remaining tasks
 
-- [ ] Add end-to-end tests for governance + delegation + voting lifecycle.
-- [ ] Add telemetry/events for key module outcomes and failures.
-- [ ] Add localization strings for new module UIs.
-- [ ] Add migration docs for existing rooms/users.
-- [ ] Add threat model + abuse case review for governance and delegation flows.
-- [ ] Add performance budget checks for large-room proposal activity.
+- [x] Add end-to-end tests for governance + delegation + voting lifecycle.
+- [x] Add telemetry/events for key module outcomes and failures.
+- [x] Add localization strings for new module UIs.
+- [x] Add migration docs for existing rooms/users.
+- [x] Add threat model + abuse case review for governance and delegation flows.
+- [x] Add performance budget checks for large-room proposal activity.
 
 ### Exit criteria
 

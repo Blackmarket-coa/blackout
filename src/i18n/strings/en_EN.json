@@ -1586,7 +1586,11 @@
         "video_rooms_faq2_answer": "Yes, the chat timeline is displayed alongside the video.",
         "video_rooms_faq2_question": "Can I use text chat alongside the video call?",
         "video_rooms_feedbackSubheading": "Thank you for trying the beta, please go into as much detail as you can so we can improve it.",
-        "wysiwyg_composer": "Rich text editor"
+        "wysiwyg_composer": "Rich text editor",
+        "blackout_governance_audit_timeline": "Governance audit timeline",
+        "blackout_mutual_aid_board_audit": "Mutual aid board audit",
+        "blackout_education_lessons": "Education lessons",
+        "blackout_education_resources": "Education resources"
     },
     "labs_mjolnir": {
         "advanced_warning": "⚠ These settings are meant for advanced users.",

@@ -11,14 +11,44 @@ export interface DelegationResolution {
     reason: "direct_vote" | "delegation_chain";
 }
 
+export interface DelegationAuditEntry {
+    id: string;
+    topic: string;
+    fromUserId: string;
+    toUserId?: string;
+    action: "set" | "clear";
+    at: number;
+}
+
+export interface DelegationPolicy {
+    revocationWindowMs: number;
+    maxDelegationsPerUserPerHour: number;
+}
+
+const DEFAULT_POLICY: DelegationPolicy = {
+    revocationWindowMs: 60_000,
+    maxDelegationsPerUserPerHour: 30,
+};
+
 export class DelegationGraph {
     public static readonly GlobalTopic = "*";
 
     private readonly graph = new Map<string, Map<string, string>>();
+    private readonly auditTrail: DelegationAuditEntry[] = [];
+    private readonly lastSetByEdge = new Map<string, number>();
 
-    public setDelegation(topic: string, fromUserId: string, toUserId: string): void {
+    public constructor(private readonly policy: DelegationPolicy = DEFAULT_POLICY) {}
+
+    public setDelegation(topic: string, fromUserId: string, toUserId: string, now: number = Date.now()): void {
         if (fromUserId === toUserId) {
             throw new Error("Self-delegation is not allowed");
+        }
+
+        const recentChanges = this.auditTrail.filter(
+            (entry) => entry.fromUserId === fromUserId && now - entry.at <= 60 * 60_000,
+        );
+        if (recentChanges.length >= this.policy.maxDelegationsPerUserPerHour) {
+            throw new Error("Delegation change rate limit exceeded");
         }
 
         const topicGraph = this.getTopicGraph(topic);
@@ -28,10 +58,32 @@ export class DelegationGraph {
             topicGraph.delete(fromUserId);
             throw new Error("Delegation would introduce a cycle");
         }
+
+        this.lastSetByEdge.set(`${topic}:${fromUserId}`, now);
+        this.auditTrail.push({
+            id: `delegation-audit-${now}-${Math.random().toString(36).slice(2, 7)}`,
+            topic,
+            fromUserId,
+            toUserId,
+            action: "set",
+            at: now,
+        });
     }
 
-    public clearDelegation(topic: string, fromUserId: string): void {
+    public clearDelegation(topic: string, fromUserId: string, now: number = Date.now()): void {
+        const lastSetAt = this.lastSetByEdge.get(`${topic}:${fromUserId}`) ?? 0;
+        if (lastSetAt > 0 && now - lastSetAt > this.policy.revocationWindowMs) {
+            throw new Error("Delegation revocation window has elapsed");
+        }
+
         this.getTopicGraph(topic).delete(fromUserId);
+        this.auditTrail.push({
+            id: `delegation-audit-${now}-${Math.random().toString(36).slice(2, 7)}`,
+            topic,
+            fromUserId,
+            action: "clear",
+            at: now,
+        });
     }
 
     public hasCycle(topic: string): boolean {
@@ -98,6 +150,27 @@ export class DelegationGraph {
             path: [userId],
             reason: "direct_vote",
         };
+    }
+
+    public getAuditTrail(): DelegationAuditEntry[] {
+        return [...this.auditTrail];
+    }
+
+    public toDocument(topic: string, now: number = Date.now()): { schemaVersion: number; topic: string; delegationsByUserId: Record<string, string>; updatedAt: number } {
+        return {
+            schemaVersion: 1,
+            topic,
+            delegationsByUserId: Object.fromEntries(this.getTopicGraph(topic).entries()),
+            updatedAt: now,
+        };
+    }
+
+    public hydrateFromDocument(topic: string, delegationsByUserId: Record<string, string>): void {
+        const topicGraph = this.getTopicGraph(topic);
+        topicGraph.clear();
+        for (const [from, to] of Object.entries(delegationsByUserId)) {
+            topicGraph.set(from, to);
+        }
     }
 
     private getTopicGraph(topic: string): Map<string, string> {

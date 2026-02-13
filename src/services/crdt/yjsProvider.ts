@@ -10,10 +10,26 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import type { Doc as YDoc } from "yjs";
 import { type CrdtDocType } from "./types";
 
-export function getPersistenceKey(roomId: string, docType: CrdtDocType): string {
-    return `${roomId}:${docType}`;
+export interface CrdtPersistence {
+    whenSynced: Promise<void>;
 }
 
-export function createIndexedDbPersistence(roomId: string, docType: CrdtDocType, yDoc: YDoc): IndexeddbPersistence {
-    return new IndexeddbPersistence(getPersistenceKey(roomId, docType), yDoc);
+export function getPersistenceKey(roomId: string, docType: CrdtDocType, docId?: string): string {
+    const base = `${roomId}:${docType}`;
+    return docId ? `${base}:${docId}` : base;
+}
+
+export function createIndexedDbPersistence(
+    roomId: string,
+    docType: CrdtDocType,
+    yDoc: YDoc,
+    docId?: string,
+): CrdtPersistence {
+    if (typeof globalThis.indexedDB === "undefined") {
+        return {
+            whenSynced: Promise.resolve(),
+        };
+    }
+
+    return new IndexeddbPersistence(getPersistenceKey(roomId, docType, docId), yDoc);
 }
