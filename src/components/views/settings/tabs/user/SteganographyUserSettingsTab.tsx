@@ -26,9 +26,7 @@ export default function SteganographyUserSettingsTab(): JSX.Element {
             >
                 <SettingsSection heading={_t("settings|steganography|section_heading")}>
                     <SettingsSubsection heading={_t("settings|steganography|opt_in_heading")}>
-                        <SettingsSubsectionText>
-                            {_t("settings|steganography|opt_in_detail")}
-                        </SettingsSubsectionText>
+                        <SettingsSubsectionText>{_t("settings|steganography|opt_in_detail")}</SettingsSubsectionText>
                         <SettingsFlag name="steganographyOptIn" level={SettingLevel.DEVICE} />
                     </SettingsSubsection>
                 </SettingsSection>

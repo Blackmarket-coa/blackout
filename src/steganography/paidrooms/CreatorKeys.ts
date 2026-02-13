@@ -12,9 +12,7 @@ export interface PaidRoomDiscoveryPolicy {
     listedInGlobalDirectory: boolean;
 }
 
-export function resolvePaidRoomDiscoveryPolicy(
-    policy?: Partial<PaidRoomDiscoveryPolicy>,
-): PaidRoomDiscoveryPolicy {
+export function resolvePaidRoomDiscoveryPolicy(policy?: Partial<PaidRoomDiscoveryPolicy>): PaidRoomDiscoveryPolicy {
     return {
         visibility: policy?.visibility ?? "private",
         listedInGlobalDirectory: policy?.listedInGlobalDirectory ?? false,

@@ -25,10 +25,7 @@ export function trackBlackoutModuleAdoption(moduleName: BlackoutModuleAdoptionEv
     });
 }
 
-export function trackBlackoutModuleError(
-    moduleName: BlackoutModuleErrorEvent["moduleName"],
-    operation: string,
-): void {
+export function trackBlackoutModuleError(moduleName: BlackoutModuleErrorEvent["moduleName"], operation: string): void {
     PosthogAnalytics.instance.trackEvent<BlackoutModuleErrorEvent>({
         eventName: "BlackoutModuleError",
         moduleName,

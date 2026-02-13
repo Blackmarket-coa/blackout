@@ -211,10 +211,7 @@ describe("EphemeralManager", () => {
             manager.track("$e0", "!room:test", Date.now() + 1000);
             jest.advanceTimersByTime(600);
 
-            expect(localStorageMock.setItem).not.toHaveBeenCalledWith(
-                "mx_stego_ephemeral_records",
-                expect.any(String),
-            );
+            expect(localStorageMock.setItem).not.toHaveBeenCalledWith("mx_stego_ephemeral_records", expect.any(String));
         });
 
         it("should save to localStorage on track", () => {
@@ -229,10 +226,7 @@ describe("EphemeralManager", () => {
 
             persistentManager.track("$e1", "!room:test", Date.now() + 1000);
             jest.advanceTimersByTime(600);
-            expect(localStorageMock.setItem).toHaveBeenCalledWith(
-                "mx_stego_ephemeral_records",
-                expect.any(String),
-            );
+            expect(localStorageMock.setItem).toHaveBeenCalledWith("mx_stego_ephemeral_records", expect.any(String));
 
             persistentManager.stop();
         });
@@ -251,10 +245,7 @@ describe("EphemeralManager", () => {
 
             persistentManager.markRead("$e1");
             jest.advanceTimersByTime(600);
-            expect(localStorageMock.setItem).toHaveBeenCalledWith(
-                "mx_stego_ephemeral_records",
-                expect.any(String),
-            );
+            expect(localStorageMock.setItem).toHaveBeenCalledWith("mx_stego_ephemeral_records", expect.any(String));
 
             persistentManager.stop();
         });

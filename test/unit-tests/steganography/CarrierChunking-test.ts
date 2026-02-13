@@ -6,7 +6,11 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { decodeEmoji, encodeEmoji } from "../../../src/steganography/EmojiStego";
-import { chunkEmojiCarrier, parseCarrierChunk, reassembleEmojiCarrier } from "../../../src/steganography/CarrierChunking";
+import {
+    chunkEmojiCarrier,
+    parseCarrierChunk,
+    reassembleEmojiCarrier,
+} from "../../../src/steganography/CarrierChunking";
 import { StegoStrategy } from "../../../src/steganography/types";
 
 describe("CarrierChunking", () => {

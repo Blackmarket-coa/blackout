@@ -122,10 +122,16 @@ export default function MutualAidHome(): React.JSX.Element {
         <section data-testid="blackout-mutual-aid-view">
             <h2>Mutual aid board</h2>
             <p>Track needs and offers through todo, doing, and done.</p>
-            <p>Total {activeLane}: {items.length} · Visible: {filteredItems.length}</p>
+            <p>
+                Total {activeLane}: {items.length} · Visible: {filteredItems.length}
+            </p>
 
             <div>
-                <button type="button" onClick={() => setActiveLane("needs")} data-testid="blackout-mutual-aid-needs-lane">
+                <button
+                    type="button"
+                    onClick={() => setActiveLane("needs")}
+                    data-testid="blackout-mutual-aid-needs-lane"
+                >
                     Needs
                 </button>
                 <button
@@ -160,7 +166,10 @@ export default function MutualAidHome(): React.JSX.Element {
                     onChange={(event) => setAssigneeFilter(event.target.value)}
                     placeholder="Filter assignee"
                 />
-                <select value={urgencyFilter} onChange={(event) => setUrgencyFilter(event.target.value as "all" | "urgent" | "normal")}>
+                <select
+                    value={urgencyFilter}
+                    onChange={(event) => setUrgencyFilter(event.target.value as "all" | "urgent" | "normal")}
+                >
                     <option value="all">All urgency</option>
                     <option value="urgent">Urgent</option>
                     <option value="normal">Normal</option>
@@ -190,7 +199,9 @@ export default function MutualAidHome(): React.JSX.Element {
                 <h3>Board audit trail</h3>
                 <ul>
                     {events.map((event) => (
-                        <li key={event.id}>{event.action}: {event.detail}</li>
+                        <li key={event.id}>
+                            {event.action}: {event.detail}
+                        </li>
                     ))}
                 </ul>
             </section>

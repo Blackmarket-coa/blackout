@@ -35,9 +35,7 @@ describe("EmojiValidator", () => {
             // Validate with wrong index — should fail round-trip
             const result = validateEmoji("🐶", 99);
             expect(result.roundTripOk).toBe(false);
-            expect(result.warnings).toContain(
-                "Round-trip mismatch: encode/decode would produce different byte",
-            );
+            expect(result.warnings).toContain("Round-trip mismatch: encode/decode would produce different byte");
         });
     });
 

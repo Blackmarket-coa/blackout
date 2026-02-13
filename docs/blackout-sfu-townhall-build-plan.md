@@ -85,8 +85,8 @@ Minimal connect path:
 import { connect } from "livekit-client";
 
 const room = await connect(LIVEKIT_URL, token, {
-  adaptiveStream: true,
-  dynacast: true,
+    adaptiveStream: true,
+    dynacast: true,
 });
 ```
 

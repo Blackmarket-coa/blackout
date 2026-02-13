@@ -25,9 +25,6 @@ describe("blackout navigation", () => {
             return settingName === BlackoutFeature.Governance || settingName === BlackoutFeature.MutualAid;
         });
 
-        expect(getEnabledBlackoutModuleNavigationItems().map((item) => item.id)).toEqual([
-            "governance",
-            "mutual-aid",
-        ]);
+        expect(getEnabledBlackoutModuleNavigationItems().map((item) => item.id)).toEqual(["governance", "mutual-aid"]);
     });
 });

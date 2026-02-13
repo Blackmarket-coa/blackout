@@ -49,7 +49,7 @@ Escalate to legal + security leadership when requests:
 ## 6. Transparency and accountability
 
 - Publish periodic transparency metrics when lawful:
-  - number/type of legal requests,
-  - percentage fulfilled/partially fulfilled/rejected,
-  - categories of data produced.
+    - number/type of legal requests,
+    - percentage fulfilled/partially fulfilled/rejected,
+    - categories of data produced.
 - Include plain-language statement that E2EE plaintext is not server-accessible.

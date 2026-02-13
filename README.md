@@ -247,14 +247,13 @@ Audit run summary (local run on this branch):
 
 - `yarn install --frozen-lockfile`: **pass**
 - `yarn lint:types`: **pass**
-- `yarn lint:js`: **fail** (Prettier check reports formatting drift in 64 files)
-- `yarn lint:style`: **fail** (5 Stylelint violations in steganography styles)
-- `yarn test test/unit-tests/steganography --runInBand`: **fail**
-    - 20 suites passed, 1 failed (`CarrierTransportProperty-test.ts`), 184 tests
-      total with 1 failing assertion.
+- `yarn lint:js`: **pass**
+- `yarn lint:style`: **pass**
+- `yarn test test/unit-tests/steganography --runInBand`: **pass**
+    - 21 suites passed, 184 tests passed.
 - `yarn audit --groups dependencies --level moderate`: **fail**
     - 1 moderate vulnerability reported for transitive dependency `counterpart`
-      (no upstream patch available).
+      under `@element-hq/web-shared-components` (no upstream patch available).
 
 ### Recommended QA baseline before merge
 
@@ -271,6 +270,8 @@ yarn audit --groups dependencies --level moderate
 
 When touching non-steganography areas, keep the same lint/type/style gates and
 run an appropriately scoped Jest target for the modified subsystem.
+
+A concise action checklist for bringing the repo back to a fully green state is in `docs/repo-readiness-next-steps.md`; ongoing prioritization is tracked in `docs/qa-triage-start.md`.
 
 ## Steganography toolkit integration
 

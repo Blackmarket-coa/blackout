@@ -30,13 +30,7 @@ Please see LICENSE files in the repository root for full details.
 
 export { StegoCodec, getDefaultCodec, type DecodeOutcome } from "./StegoCodec";
 export { encodeEmoji, decodeEmoji, hasStegoMarker, looksLikeStegoEmoji, segmentEmojis } from "./EmojiStego";
-export {
-    encodeImage,
-    decodeImage,
-    calculateCapacity,
-    dataUrlToImageData,
-    imageDataToDataUrl,
-} from "./ImageStego";
+export { encodeImage, decodeImage, calculateCapacity, dataUrlToImageData, imageDataToDataUrl } from "./ImageStego";
 export { rsEncode, rsDecode, rsHasErrors } from "./ReedSolomon";
 export { crc32 } from "./crc32";
 export {

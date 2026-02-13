@@ -70,13 +70,16 @@ export default function GovernanceHome(): React.JSX.Element {
     }, [selectedVote]);
 
     const handleCreate = ({ title, body }: { title: string; body: string }): void => {
-        const proposal = proposalEngine.create({
-            id: `proposal-${Date.now()}`,
-            roomId: ROOM_ID,
-            title,
-            body,
-            authorUserId: CURRENT_USER_ID,
-        }, PERMISSION_CONTEXT);
+        const proposal = proposalEngine.create(
+            {
+                id: `proposal-${Date.now()}`,
+                roomId: ROOM_ID,
+                title,
+                body,
+                authorUserId: CURRENT_USER_ID,
+            },
+            PERMISSION_CONTEXT,
+        );
 
         setProposals((current) => [proposal, ...current]);
         setSelectedProposalId(proposal.id);
@@ -144,7 +147,9 @@ export default function GovernanceHome(): React.JSX.Element {
     return (
         <section data-testid="blackout-governance-view">
             <h2>Governance</h2>
-            <p>Proposals: {proposals.length} · Open votes: {openVotesCount}</p>
+            <p>
+                Proposals: {proposals.length} · Open votes: {openVotesCount}
+            </p>
             <ProposalComposer onCreate={handleCreate} />
             <ProposalList
                 proposals={proposals}

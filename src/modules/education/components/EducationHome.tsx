@@ -7,7 +7,12 @@ Please see LICENSE files in the repository root for full details.
 
 import React, { useEffect, useMemo, useState } from "react";
 
-import { loadCurriculum, loadStudyCircle, saveCurriculum, saveStudyCircle } from "../../../services/crdt/educationBinding";
+import {
+    loadCurriculum,
+    loadStudyCircle,
+    saveCurriculum,
+    saveStudyCircle,
+} from "../../../services/crdt/educationBinding";
 import type { CurriculumDocument, StudyCircleDocument } from "../models/types";
 
 const ROOM_ID = "!blackout-education:local";
@@ -34,7 +39,9 @@ export default function EducationHome(): React.JSX.Element {
 
     const selectedCurriculum = selectedStudyCircleId ? curriculaByStudyCircleId[selectedStudyCircleId] : undefined;
     const canCreateCircle = Boolean(circleTitle.trim());
-    const canSaveSection = Boolean(selectedStudyCircle && selectedCurriculum && sectionTitle.trim() && sectionMarkdown.trim());
+    const canSaveSection = Boolean(
+        selectedStudyCircle && selectedCurriculum && sectionTitle.trim() && sectionMarkdown.trim(),
+    );
 
     useEffect(() => {
         if (!selectedStudyCircleId) {
@@ -147,9 +154,15 @@ export default function EducationHome(): React.JSX.Element {
             <p>Study circles and collaborative curriculum drafts.</p>
 
             <nav>
-                <button type="button" onClick={() => setActiveTab("study_circles")}>Study circles</button>
-                <button type="button" onClick={() => setActiveTab("lessons")}>Lessons</button>
-                <button type="button" onClick={() => setActiveTab("resources")}>Resources</button>
+                <button type="button" onClick={() => setActiveTab("study_circles")}>
+                    Study circles
+                </button>
+                <button type="button" onClick={() => setActiveTab("lessons")}>
+                    Lessons
+                </button>
+                <button type="button" onClick={() => setActiveTab("resources")}>
+                    Resources
+                </button>
             </nav>
 
             {activeTab === "study_circles" && (
@@ -185,7 +198,9 @@ export default function EducationHome(): React.JSX.Element {
             {selectedStudyCircle && activeTab !== "resources" && (
                 <section data-testid="blackout-education-curriculum">
                     <h3>{selectedStudyCircle.title} curriculum</h3>
-                    {!hasCurriculumAccess(selectedStudyCircle) && <p>You do not have access to edit this curriculum.</p>}
+                    {!hasCurriculumAccess(selectedStudyCircle) && (
+                        <p>You do not have access to edit this curriculum.</p>
+                    )}
                     {hasCurriculumAccess(selectedStudyCircle) && (
                         <>
                             <input

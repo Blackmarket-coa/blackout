@@ -248,7 +248,9 @@ export function validateBijection(): { valid: boolean; errors: string[] } {
         const emoji = EMOJI_POOL[i];
         const reverse = map.get(emoji);
         if (reverse !== i) {
-            errors.push(`Byte 0x${i.toString(16).padStart(2, "0")}: forward maps to "${emoji}", reverse maps to ${reverse}`);
+            errors.push(
+                `Byte 0x${i.toString(16).padStart(2, "0")}: forward maps to "${emoji}", reverse maps to ${reverse}`,
+            );
         }
     }
 

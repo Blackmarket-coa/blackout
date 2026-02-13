@@ -15,15 +15,15 @@ Without strict trust boundaries, accidental coupling between identity, billing, 
 Adopt five-layer separation with strict data ownership:
 
 1. **Client Layer**
-   - Owns keys, encryption/decryption, stego encode/decode, local TTL policy execution.
+    - Owns keys, encryption/decryption, stego encode/decode, local TTL policy execution.
 2. **Matrix/Federation Layer**
-   - Owns encrypted event transport, federation routing, and expiry enforcement.
+    - Owns encrypted event transport, federation routing, and expiry enforcement.
 3. **Infrastructure Layer**
-   - Owns reliability controls (relay/cache/retry/anti-DDoS), never plaintext semantics.
+    - Owns reliability controls (relay/cache/retry/anti-DDoS), never plaintext semantics.
 4. **Commerce Layer**
-   - Owns subscriptions/boosts/payouts/entitlements, never message content or room plaintext.
+    - Owns subscriptions/boosts/payouts/entitlements, never message content or room plaintext.
 5. **Governance/Safety Layer**
-   - Owns abuse-friction controls, key lifecycle controls, and legal operations.
+    - Owns abuse-friction controls, key lifecycle controls, and legal operations.
 
 ## Non-negotiable invariants
 

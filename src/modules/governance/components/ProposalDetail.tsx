@@ -55,9 +55,15 @@ export default function ProposalDetail({
             {isVoteOpen && (
                 <div>
                     <h4>Cast ballot</h4>
-                    <button type="button" onClick={() => onCastVote("approve")}>Approve</button>
-                    <button type="button" onClick={() => onCastVote("reject")}>Reject</button>
-                    <button type="button" onClick={() => onCastVote("abstain")}>Abstain</button>
+                    <button type="button" onClick={() => onCastVote("approve")}>
+                        Approve
+                    </button>
+                    <button type="button" onClick={() => onCastVote("reject")}>
+                        Reject
+                    </button>
+                    <button type="button" onClick={() => onCastVote("abstain")}>
+                        Abstain
+                    </button>
                     <button type="button" onClick={onCloseVote} data-testid="blackout-vote-close">
                         Close vote
                     </button>

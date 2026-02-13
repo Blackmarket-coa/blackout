@@ -12,10 +12,7 @@ import SteganographyDialog from "../../../../../src/components/views/dialogs/Ste
 import dis from "../../../../../src/dispatcher/dispatcher";
 import { Action } from "../../../../../src/dispatcher/actions";
 import { TimelineRenderingType } from "../../../../../src/contexts/RoomContext";
-import {
-    encodeSteganographyMessage,
-    containsSteganographyMessage,
-} from "../../../../../src/utils/Steganography";
+import { encodeSteganographyMessage, containsSteganographyMessage } from "../../../../../src/utils/Steganography";
 
 jest.mock("../../../../../src/utils/Steganography", () => ({
     encodeSteganographyMessage: jest.fn(),

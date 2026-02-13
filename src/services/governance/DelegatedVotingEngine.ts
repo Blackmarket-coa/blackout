@@ -77,9 +77,12 @@ export class DelegatedVotingEngine {
         }
 
         const passEval = new VotingEngine().tally(
-            { ...weightedVote, votesByUserId: Object.fromEntries(
-                summary.attributions.flatMap((a) => a.representedUserIds.map((id) => [id, a.ballot] as const)),
-            ) },
+            {
+                ...weightedVote,
+                votesByUserId: Object.fromEntries(
+                    summary.attributions.flatMap((a) => a.representedUserIds.map((id) => [id, a.ballot] as const)),
+                ),
+            },
             summary.policy,
         );
         summary.quorumMet = passEval.quorumMet;
