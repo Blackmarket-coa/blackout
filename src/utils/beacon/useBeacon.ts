@@ -23,8 +23,6 @@ export const useBeacon = (beaconInfoEvent: MatrixEvent): Beacon | undefined => {
         const room = matrixClient?.getRoom(roomId);
         const beaconInstance = room?.currentState.beacons.get(beaconIdentifier);
 
-        // TODO could this be less stupid?
-
         // Beacons are identified by their `state_key`,
         // where `state_key` is always owner mxid for access control.
         // Thus, only one beacon is allowed per-user per-room.

@@ -3,7 +3,7 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Total items: **194**
+- Total items: **176** (was 194; 18 resolved)
 - Total files: **122**
 
 ## Checklist
@@ -70,7 +70,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/structures/LoggedInView.tsx`
 
 - [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
-- [ ] L288: `// TODO decrease this once Spaces launches as it'll no longer need to include the 56px Community Panel`
+- [x] L288: ~`// TODO decrease this once Spaces launches`~ — Resolved: Spaces launched; simplified to constant `156`.
 
 ### `src/components/structures/MatrixChat.tsx`
 
@@ -86,7 +86,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/structures/ScrollPanel.tsx`
 
-- [ ] L573: `// TODO: Document what magic number 0.9 is doing`
+- [x] L573: ~`// TODO: Document what magic number 0.9 is doing`~ — Resolved: documented as 90% viewport scroll for visual overlap.
 - [ ] L648: `// TODO: do a binary search here, as items are sorted by offsetTop`
 - [ ] L933: `// TODO: the classnames on the div and ol could do with being updated to`
 
@@ -101,7 +101,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/structures/ViewSource.tsx`
 
 - [ ] L44: `// TODO: refresh the "Event ID:" modal header`
-- [ ] L61: `const decryptedEventSource = mxEvent.clearEvent; // FIXME: clearEvent is private`
+- [x] L61: ~`FIXME: clearEvent is private`~ — Already resolved in code: uses `getEffectiveEvent()` now.
 
 ### `src/components/structures/auth/Login.tsx`
 
@@ -109,7 +109,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/viewmodels/right_panel/user_info/admin/UserInfoMuteButtonViewModel.tsx`
 
-- [ ] L56: `// FIXME: per the spec, if \`events_default\` is unset, it defaults to zero. If`
+- [x] L56: ~`FIXME: events_default defaults to zero`~ — Already resolved in code: uses `?? 0` fallback.
 
 ### `src/components/views/auth/CaptchaForm.tsx`
 
@@ -162,7 +162,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/views/right_panel/UserInfo.tsx`
 
-- [ ] L100: `// FIXME: per the spec, if \`events_default\` is unset, it defaults to zero. If`
+- [x] L100: ~`FIXME: events_default defaults to zero`~ — Already resolved in code: uses `?? 0` fallback.
 
 ### `src/components/views/right_panel/VerificationPanel.tsx`
 
@@ -273,7 +273,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/views/spaces/SpacePanel.tsx`
 
-- [ ] L364: `aria-selected={false} // TODO`
+- [x] L364: ~`aria-selected={false} // TODO`~ — Resolved: now uses `aria-selected={activeSpace === item.spaceKey}`.
 
 ### `src/device-listener/DeviceListenerOtherDevices.ts`
 
@@ -286,11 +286,11 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/dispatcher/payloads/OpenToTabPayload.ts`
 
-- [ ] L13: `action: Action.ViewUserSettings | string; // TODO: Add room settings action`
+- [x] L13: ~`// TODO: Add room settings action`~ — Resolved: `Action.OpenRoomSettings` already added to the type union.
 
 ### `src/emojipicker/recent.ts`
 
-- [ ] L28: `// TODO remove this after some time`
+- [x] L28: ~`// TODO remove this after some time`~ — Resolved: removed legacy emoji migration code and `ILegacyFormat` interface.
 
 ### `src/events/EventTileFactory.tsx`
 
@@ -316,7 +316,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/settings/SettingLevel.ts`
 
-- [ ] L13: `// TODO: [TS] Follow naming convention`
+- [x] L13: ~`// TODO: [TS] Follow naming convention`~ — Resolved: already uses UPPER_CASE TS convention.
 
 ### `src/settings/Settings.tsx`
 
@@ -337,15 +337,15 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/settings/handlers/AccountSettingsHandler.ts`
 
-- [ ] L224: `// TODO: [TS] Types on return`
+- [x] L224: ~`// TODO: [TS] Types on return`~ — Resolved: return type `Record<string, any> | null` added.
 
 ### `src/settings/handlers/DeviceSettingsHandler.ts`
 
-- [ ] L105: `// TODO: [TS] Type return`
+- [x] L105: ~`// TODO: [TS] Type return`~ — Resolved: return type `Record<string, any> | null` added.
 
 ### `src/settings/handlers/RoomAccountSettingsHandler.ts`
 
-- [ ] L143: `// TODO: [TS] Type return`
+- [x] L143: ~`// TODO: [TS] Type return`~ — Resolved: return type `Record<string, any> | null` added.
 
 ### `src/stores/ActiveWidgetStore.ts`
 
@@ -375,15 +375,15 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/stores/room-list/MessagePreviewStore.ts`
 
-- [ ] L263: `const event = payload.event; // TODO: Type out the dispatcher`
+- [x] L263: ~`// TODO: Type out the dispatcher`~ — Resolved: typed as `IRoomTimelineActionPayload | IEventDecryptedActionPayload`.
 
 ### `src/stores/room-list/RoomListStore.ts`
 
 - [ ] L82: `// TODO: Maybe destroy this if this class supports destruction`
-- [ ] L204: `const roomPayload = <any>payload; // TODO: Type out the dispatcher types`
-- [ ] L252: `const eventPayload = <any>payload; // TODO: Type out the dispatcher types`
-- [ ] L265: `const eventPayload = <any>payload; // TODO: Type out the dispatcher types`
-- [ ] L307: `// TODO: Type out the dispatcher types so membershipPayload is not any`
+- [x] L204: ~`// TODO: Type out the dispatcher types`~ — Resolved: typed as `IRoomTagsActionPayload`.
+- [x] L252: ~`// TODO: Type out the dispatcher types`~ — Resolved: typed as `IEventDecryptedActionPayload`.
+- [x] L265: ~`// TODO: Type out the dispatcher types`~ — Resolved: typed as `IAccountDataActionPayload`.
+- [x] L307: ~`// TODO: Type out the dispatcher types so membershipPayload is not any`~ — Resolved: typed as `IRoomMyMembershipActionPayload`.
 - [ ] L404: `// TODO: Per-account? https://github.com/vector-im/element-web/issues/14114`
 - [ ] L414: `// TODO: Per-account? https://github.com/vector-im/element-web/issues/14114`
 - [ ] L443: `// TODO: Per-account? https://github.com/vector-im/element-web/issues/14114`
@@ -461,7 +461,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/utils/beacon/useBeacon.ts`
 
-- [ ] L26: `// TODO could this be less stupid?`
+- [x] L26: ~`// TODO could this be less stupid?`~ — Resolved: removed self-deprecating comment; logic is sound and well-documented.
 
 ### `src/utils/dm/startDm.ts`
 

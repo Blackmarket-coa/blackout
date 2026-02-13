@@ -39,15 +39,13 @@ function createSyncAction(matrixClient: MatrixClient, state: string, prevState: 
     };
 }
 
-/**
- * @typedef AccountDataAction
- * @type {Object}
- * @property {string} action 'MatrixActions.accountData'.
- * @property {MatrixEvent} event the MatrixEvent that triggered the dispatch.
- * @property {string} event_type the type of the MatrixEvent, e.g. "m.direct".
- * @property {Object} event_content the content of the MatrixEvent.
- * @property {MatrixEvent} previousEvent the previous account data event of the same type, if present
- */
+export interface IAccountDataActionPayload extends Pick<ActionPayload, "action"> {
+    action: "MatrixActions.accountData";
+    event: MatrixEvent;
+    event_type: string;
+    event_content: Record<string, any>;
+    previousEvent?: MatrixEvent;
+}
 
 /**
  * Create a MatrixActions.accountData action that represents a MatrixClient `accountData`
@@ -56,13 +54,13 @@ function createSyncAction(matrixClient: MatrixClient, state: string, prevState: 
  * @param {MatrixClient} matrixClient the matrix client.
  * @param {MatrixEvent} accountDataEvent the account data event.
  * @param {MatrixEvent | undefined} previousAccountDataEvent the previous account data event of the same type, if present
- * @returns {AccountDataAction} an action of type MatrixActions.accountData.
+ * @returns {IAccountDataActionPayload} an action of type MatrixActions.accountData.
  */
 function createAccountDataAction(
     matrixClient: MatrixClient,
     accountDataEvent: MatrixEvent,
     previousAccountDataEvent?: MatrixEvent,
-): ActionPayload {
+): IAccountDataActionPayload {
     return {
         action: "MatrixActions.accountData",
         event: accountDataEvent,
@@ -124,12 +122,10 @@ function createRoomAction(matrixClient: MatrixClient, room: Room): ActionPayload
     return { action: "MatrixActions.Room", room };
 }
 
-/**
- * @typedef RoomTagsAction
- * @type {Object}
- * @property {string} action 'MatrixActions.Room.tags'.
- * @property {Room} room the Room whose tags changed.
- */
+export interface IRoomTagsActionPayload extends Pick<ActionPayload, "action"> {
+    action: "MatrixActions.Room.tags";
+    room: Room;
+}
 
 /**
  * Create a MatrixActions.Room.tags action that represents a MatrixClient
@@ -139,9 +135,13 @@ function createRoomAction(matrixClient: MatrixClient, room: Room): ActionPayload
  * @param {MatrixClient} matrixClient the matrix client.
  * @param {MatrixEvent} roomTagsEvent the m.tag event.
  * @param {Room} room the Room whose tags were changed.
- * @returns {RoomTagsAction} an action of type `MatrixActions.Room.tags`.
+ * @returns {IRoomTagsActionPayload} an action of type `MatrixActions.Room.tags`.
  */
-function createRoomTagsAction(matrixClient: MatrixClient, roomTagsEvent: MatrixEvent, room: Room): ActionPayload {
+function createRoomTagsAction(
+    matrixClient: MatrixClient,
+    roomTagsEvent: MatrixEvent,
+    room: Room,
+): IRoomTagsActionPayload {
     return { action: "MatrixActions.Room.tags", room };
 }
 
@@ -256,14 +256,12 @@ function createRoomStateEventsAction(
     };
 }
 
-/**
- * @typedef RoomMembershipAction
- * @type {Object}
- * @property {string} action 'MatrixActions.Room.myMembership'.
- * @property {Room} room to room for which the self-membership changed.
- * @property {string} membership the new membership
- * @property {string} oldMembership the previous membership, can be null.
- */
+export interface IRoomMyMembershipActionPayload extends Pick<ActionPayload, "action"> {
+    action: "MatrixActions.Room.myMembership";
+    room: Room;
+    membership: string;
+    oldMembership: string;
+}
 
 /**
  * Create a MatrixActions.Room.myMembership action that represents
@@ -274,23 +272,21 @@ function createRoomStateEventsAction(
  * @param {Room} room to room for which the self-membership changed.
  * @param {string} membership the new membership
  * @param {string} oldMembership the previous membership, can be null.
- * @returns {RoomMembershipAction} an action of type `MatrixActions.Room.myMembership`.
+ * @returns {IRoomMyMembershipActionPayload} an action of type `MatrixActions.Room.myMembership`.
  */
 function createSelfMembershipAction(
     matrixClient: MatrixClient,
     room: Room,
     membership: string,
     oldMembership: string,
-): ActionPayload {
+): IRoomMyMembershipActionPayload {
     return { action: "MatrixActions.Room.myMembership", room, membership, oldMembership };
 }
 
-/**
- * @typedef EventDecryptedAction
- * @type {Object}
- * @property {string} action 'MatrixActions.Event.decrypted'.
- * @property {MatrixEvent} event the matrix event that was decrypted.
- */
+export interface IEventDecryptedActionPayload extends Pick<ActionPayload, "action"> {
+    action: "MatrixActions.Event.decrypted";
+    event: MatrixEvent;
+}
 
 /**
  * Create a MatrixActions.Event.decrypted action that represents
@@ -299,9 +295,12 @@ function createSelfMembershipAction(
  *
  * @param {MatrixClient} matrixClient the matrix client.
  * @param {MatrixEvent} event the matrix event that was decrypted.
- * @returns {EventDecryptedAction} an action of type `MatrixActions.Event.decrypted`.
+ * @returns {IEventDecryptedActionPayload} an action of type `MatrixActions.Event.decrypted`.
  */
-function createEventDecryptedAction(matrixClient: MatrixClient, event: MatrixEvent): ActionPayload {
+function createEventDecryptedAction(
+    matrixClient: MatrixClient,
+    event: MatrixEvent,
+): IEventDecryptedActionPayload {
     return { action: "MatrixActions.Event.decrypted", event };
 }
 
