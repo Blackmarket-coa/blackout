@@ -60,8 +60,8 @@ const plEventsToShow: Record<string, IEventShowOpts> = {
     [ElementCallEventType.name]: { isState: true, hideForSpace: true },
     [ElementCallMemberEventType.name]: { isState: true, hideForSpace: true },
 
-    // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
     "im.vector.modular.widgets": { isState: true, hideForSpace: true },
+    "m.widget": { isState: true, hideForSpace: true },
 };
 
 // parse a string as an integer; if the input is undefined, or cannot be parsed
@@ -271,8 +271,8 @@ export default class RolesRoomSettingsTab extends React.Component<IProps, RolesR
             [EventType.RoomRedaction]: _td("room_settings|permissions|m.room.redaction"),
             [EventType.RoomPinnedEvents]: _td("room_settings|permissions|m.room.pinned_events"),
 
-            // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
             "im.vector.modular.widgets": isSpaceRoom ? null : _td("room_settings|permissions|m.widget"),
+            "m.widget": isSpaceRoom ? null : _td("room_settings|permissions|m.widget"),
         };
 
         // MSC3401: Native Group VoIP signaling

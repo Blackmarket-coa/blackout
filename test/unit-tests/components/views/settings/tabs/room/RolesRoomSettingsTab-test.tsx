@@ -157,6 +157,31 @@ describe("RolesRoomSettingsTab", () => {
         });
     });
 
+
+    it("shows translated label for stable m.widget power level", async () => {
+        mocked(room.currentState.getStateEvents).mockImplementation((type, key) => {
+            if (key === undefined) return [] as MatrixEvent[];
+            if (type === EventType.RoomPowerLevels) {
+                return new MatrixEvent({
+                    sender: "@sender:server",
+                    room_id: roomId,
+                    type: EventType.RoomPowerLevels,
+                    state_key: "",
+                    content: {
+                        events: {
+                            "m.widget": 50,
+                        },
+                    },
+                });
+            }
+            return null;
+        });
+
+        await renderTab();
+
+        expect(screen.getAllByText("Modify widgets").length).toBeGreaterThan(0);
+    });
+
     describe("Banned users", () => {
         it("should not render banned section when no banned users", () => {
             const room = new Room(roomId, cli, userId);
