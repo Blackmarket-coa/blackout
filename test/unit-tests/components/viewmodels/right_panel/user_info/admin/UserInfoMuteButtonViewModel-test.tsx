@@ -227,4 +227,13 @@ describe("useMuteButtonViewModel", () => {
         const lowerPowerLevelContents = { events: { "m.room.message": 10 }, events_default: -10 };
         expect(isMuted(defaultMember, lowerPowerLevelContents)).toBe(true);
     });
+    it("uses m.room.message when it is 0", () => {
+        const mutedByDefaultEventOnly = {
+            ...defaultMember,
+            powerLevel: -1,
+        } as RoomMember;
+
+        const powerLevelContents = { events: { "m.room.message": 0 }, events_default: 50 };
+        expect(isMuted(mutedByDefaultEventOnly, powerLevelContents)).toBe(true);
+    });
 });
