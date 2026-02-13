@@ -2,6 +2,8 @@
 
 This plan translates the strategy into an implementation roadmap for this repository, with open-source-first options and copy/paste starter code.
 
+> Phase 1 completion details are tracked in `docs/security-phase1-foundation.md`.
+
 ## 0) Goals, constraints, and success metrics
 
 ### Primary goals
@@ -18,7 +20,7 @@ This plan translates the strategy into an implementation roadmap for this reposi
 
 ## 1) Implementation phases (12-week baseline)
 
-## Phase 1 (Weeks 1-2): Foundation and guardrails
+## Phase 1 (Weeks 1-2): Foundation and guardrails ✅ Complete
 
 ### Deliverables
 1. Security baseline in CI (SAST, dependency audit, secret scanning).
