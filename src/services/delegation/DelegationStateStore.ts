@@ -32,7 +32,7 @@ export class DelegationStateStore {
             return {};
         }
 
-        return ((JSON.parse(raw) as { delegationsByUserId?: Record<string, string> }).delegationsByUserId ?? {});
+        return (JSON.parse(raw) as { delegationsByUserId?: Record<string, string> }).delegationsByUserId ?? {};
     }
 
     public getSnapshot(roomId: string, topic: string): Uint8Array | undefined {

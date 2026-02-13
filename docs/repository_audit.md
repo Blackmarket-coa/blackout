@@ -42,12 +42,12 @@ The intent is to preserve strong confidentiality while making ciphertext appear 
 
 **Container modes**
 
-1. **Emoji-compact mode** (short payloads)  
-   - Encodes encrypted bytes + metadata into a short emoji sequence.
-2. **Emoji-stream mode** (medium payloads)  
-   - Encodes larger payloads into longer emoji strings.
-3. **Image-LSB mode** (large payloads fallback)  
-   - Embeds payload bits into PNG/lossless carrier.
+1. **Emoji-compact mode** (short payloads)
+    - Encodes encrypted bytes + metadata into a short emoji sequence.
+2. **Emoji-stream mode** (medium payloads)
+    - Encodes larger payloads into longer emoji strings.
+3. **Image-LSB mode** (large payloads fallback)
+    - Embeds payload bits into PNG/lossless carrier.
 
 ### C. Ephemeral Lifecycle Manager
 
@@ -95,12 +95,12 @@ This envelope is the payload for stego codecs.
 2. Matrix E2EE encrypts message payload for recipient/device set.
 3. Envelope is built with `created_ts` and `expiry_ts = now + 72h`.
 4. Stego mode selection based on payload size:
-   - Small => emoji-compact
-   - Medium => emoji-stream
-   - Large => image-LSB
+    - Small => emoji-compact
+    - Medium => emoji-stream
+    - Large => image-LSB
 5. Encoded container is emitted:
-   - Matrix message event and/or
-   - external share target (copy/share sheet)
+    - Matrix message event and/or
+    - external share target (copy/share sheet)
 6. UI stores local expiry state and displays countdown metadata.
 
 ### Receiving Path
@@ -126,7 +126,7 @@ This envelope is the payload for stego codecs.
 ### Why this approach
 
 - Deterministic, reversible encoding
-- Avoids fragile Unicode tricks as the *primary* channel
+- Avoids fragile Unicode tricks as the _primary_ channel
 - Easier to test than dense zero-width-only encoding
 
 ### Optional stealth extensions (advanced)

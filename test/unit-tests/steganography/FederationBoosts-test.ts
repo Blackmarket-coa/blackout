@@ -88,7 +88,15 @@ describe("FederationBoosts", () => {
                     timestamp: 3,
                 },
             ],
-            [{ homeserverId: "hs-1", periodKey: "2026-01", grossCredits: 20, platformCredits: 6, homeserverCredits: 14 }],
+            [
+                {
+                    homeserverId: "hs-1",
+                    periodKey: "2026-01",
+                    grossCredits: 20,
+                    platformCredits: 6,
+                    homeserverCredits: 14,
+                },
+            ],
             500,
         );
 

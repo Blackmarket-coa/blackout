@@ -90,15 +90,27 @@ export default function DelegationAttestationsPanel(): React.JSX.Element {
 
             <label>
                 Topic
-                <input value={topic} onChange={(event) => setTopic(event.target.value)} data-testid="blackout-delegation-topic" />
+                <input
+                    value={topic}
+                    onChange={(event) => setTopic(event.target.value)}
+                    data-testid="blackout-delegation-topic"
+                />
             </label>
             <label>
                 Delegator
-                <input value={fromUserId} onChange={(event) => setFromUserId(event.target.value)} data-testid="blackout-delegation-from" />
+                <input
+                    value={fromUserId}
+                    onChange={(event) => setFromUserId(event.target.value)}
+                    data-testid="blackout-delegation-from"
+                />
             </label>
             <label>
                 Delegate
-                <input value={toUserId} onChange={(event) => setToUserId(event.target.value)} data-testid="blackout-delegation-to" />
+                <input
+                    value={toUserId}
+                    onChange={(event) => setToUserId(event.target.value)}
+                    data-testid="blackout-delegation-to"
+                />
             </label>
             <button type="button" onClick={handleSetDelegation} data-testid="blackout-delegation-set">
                 Save delegation
@@ -127,7 +139,8 @@ export default function DelegationAttestationsPanel(): React.JSX.Element {
 
             {resolution && (
                 <p data-testid="blackout-delegation-resolution">
-                    Effective voter: {resolution.effectiveVoter} ({resolution.reason}) via {resolution.path.join(" -> ")}
+                    Effective voter: {resolution.effectiveVoter} ({resolution.reason}) via{" "}
+                    {resolution.path.join(" -> ")}
                 </p>
             )}
             {delegationError && <p data-testid="blackout-delegation-error">{delegationError}</p>}
@@ -136,7 +149,11 @@ export default function DelegationAttestationsPanel(): React.JSX.Element {
 
             <label>
                 Issuer
-                <input value={issuerUserId} onChange={(event) => setIssuerUserId(event.target.value)} data-testid="blackout-attestation-issuer" />
+                <input
+                    value={issuerUserId}
+                    onChange={(event) => setIssuerUserId(event.target.value)}
+                    data-testid="blackout-attestation-issuer"
+                />
             </label>
             <label>
                 Subject
@@ -148,7 +165,11 @@ export default function DelegationAttestationsPanel(): React.JSX.Element {
             </label>
             <label>
                 Kind
-                <select value={kind} onChange={(event) => setKind(event.target.value as AttestationKind)} data-testid="blackout-attestation-kind">
+                <select
+                    value={kind}
+                    onChange={(event) => setKind(event.target.value as AttestationKind)}
+                    data-testid="blackout-attestation-kind"
+                >
                     <option value="trust">trust</option>
                     <option value="credential">credential</option>
                 </select>
@@ -163,11 +184,19 @@ export default function DelegationAttestationsPanel(): React.JSX.Element {
             </label>
             <label>
                 Weight
-                <input value={weightInput} onChange={(event) => setWeightInput(event.target.value)} data-testid="blackout-attestation-weight" />
+                <input
+                    value={weightInput}
+                    onChange={(event) => setWeightInput(event.target.value)}
+                    data-testid="blackout-attestation-weight"
+                />
             </label>
             <label>
                 Signature
-                <input value={signature} onChange={(event) => setSignature(event.target.value)} data-testid="blackout-attestation-signature" />
+                <input
+                    value={signature}
+                    onChange={(event) => setSignature(event.target.value)}
+                    data-testid="blackout-attestation-signature"
+                />
             </label>
             <button type="button" onClick={handleAddAttestation} data-testid="blackout-attestation-add">
                 Add attestation

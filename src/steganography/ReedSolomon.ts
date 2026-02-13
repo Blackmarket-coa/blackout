@@ -247,7 +247,7 @@ export function rsDecode(encoded: Uint8Array, nsym: number): Uint8Array | null {
 
         let errLocDeriv = 0;
         for (let i = 1; i < errLoc.length; i += 2) {
-            errLocDeriv ^= gfMul(errLoc[errLoc.length - 1 - i], EXP_TABLE[((i) * (encoded.length - 1 - pos)) % 255]);
+            errLocDeriv ^= gfMul(errLoc[errLoc.length - 1 - i], EXP_TABLE[(i * (encoded.length - 1 - pos)) % 255]);
         }
 
         if (errLocDeriv === 0) return null;

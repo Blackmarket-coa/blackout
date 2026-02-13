@@ -238,12 +238,8 @@ export const StegoMessageView: React.FC<StegoMessageViewProps> = ({
                 aria-label="Reveal hidden steganographic message"
             >
                 <span className="mx_StegoMessage_icon">{strategyIcon}</span>
-                <span className="mx_StegoMessage_text">
-                    Hidden message — tap to reveal
-                </span>
-                <span className="mx_StegoMessage_timer">
-                    {formatRemainingTime(remainingTime)}
-                </span>
+                <span className="mx_StegoMessage_text">Hidden message — tap to reveal</span>
+                <span className="mx_StegoMessage_timer">{formatRemainingTime(remainingTime)}</span>
             </div>
         );
     }
@@ -254,13 +250,9 @@ export const StegoMessageView: React.FC<StegoMessageViewProps> = ({
             <div className="mx_StegoMessage_header">
                 <span className="mx_StegoMessage_icon">{strategyIcon}</span>
                 <span className="mx_StegoMessage_badge">Stego</span>
-                <span className="mx_StegoMessage_timer">
-                    {formatRemainingTime(remainingTime)}
-                </span>
+                <span className="mx_StegoMessage_timer">{formatRemainingTime(remainingTime)}</span>
             </div>
-            <div className="mx_StegoMessage_content">
-                {plaintext}
-            </div>
+            <div className="mx_StegoMessage_content">{plaintext}</div>
         </div>
     );
 };

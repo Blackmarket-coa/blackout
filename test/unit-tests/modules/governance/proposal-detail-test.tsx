@@ -6,7 +6,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import React from "react";
-import { render, screen } from "jest-matrix-react"
+import { render, screen } from "jest-matrix-react";
 
 import ProposalDetail from "../../../../src/modules/governance/components/ProposalDetail";
 import type { ProposalDocument } from "../../../../src/modules/governance/models/types";

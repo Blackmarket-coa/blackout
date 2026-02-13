@@ -5,13 +5,13 @@ This directory contains concrete deliverables for **Phase 0 — Foundations and 
 ## Included deliverables
 
 1. `adr-stack-boundaries.md`
-   - Architecture decisions and trust boundary rules.
+    - Architecture decisions and trust boundary rules.
 2. `data-classification-matrix.md`
-   - Data classes, storage/transit, retention, and access constraints.
+    - Data classes, storage/transit, retention, and access constraints.
 3. `privacy-abuse-friction-requirements.md`
-   - Security/privacy invariants and abuse-friction acceptance criteria.
+    - Security/privacy invariants and abuse-friction acceptance criteria.
 4. `legal-response-playbook.md`
-   - Minimal legal operations interface and disclosure boundaries.
+    - Minimal legal operations interface and disclosure boundaries.
 
 ## Phase 0 completion checklist
 

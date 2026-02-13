@@ -10,12 +10,7 @@ import { encodeEmoji } from "../../../src/steganography/EmojiStego";
 import { STEGO_MARKER, StegoStrategy } from "../../../src/steganography/types";
 
 // Minimal mock for MatrixEvent
-function createMockEvent(
-    eventId: string,
-    roomId: string,
-    body?: string,
-    extra?: Record<string, unknown>,
-): any {
+function createMockEvent(eventId: string, roomId: string, body?: string, extra?: Record<string, unknown>): any {
     const content: Record<string, unknown> = {};
     if (body !== undefined) content.body = body;
     if (extra) Object.assign(content, extra);

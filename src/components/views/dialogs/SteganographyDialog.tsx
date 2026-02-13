@@ -189,9 +189,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                             {messageBody.length > 200 ? messageBody.slice(0, 200) + "..." : messageBody}
                         </div>
                         {hasHidden && (
-                            <p className="mx_SteganographyDialog_hint">
-                                {_t("steganography|hidden_message_detected")}
-                            </p>
+                            <p className="mx_SteganographyDialog_hint">{_t("steganography|hidden_message_detected")}</p>
                         )}
                     </div>
                 )}
@@ -210,9 +208,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                         </label>
                     )}
                     {mode === "encode" && !encryptionAvailable && (
-                        <p className="mx_SteganographyDialog_hint">
-                            {_t("steganography|encryption_unavailable_hint")}
-                        </p>
+                        <p className="mx_SteganographyDialog_hint">{_t("steganography|encryption_unavailable_hint")}</p>
                     )}
                     {(mode === "decode" || useEncryption) && (
                         <div className="mx_SteganographyDialog_field">
@@ -235,10 +231,12 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
 
                 {result && (
                     <div className="mx_SteganographyDialog_result">
-                        <label>{mode === "encode" ? _t("steganography|result_encoded") : _t("steganography|result_decoded")}</label>
-                        <div className="mx_SteganographyDialog_resultContent">
-                            {result}
-                        </div>
+                        <label>
+                            {mode === "encode"
+                                ? _t("steganography|result_encoded")
+                                : _t("steganography|result_decoded")}
+                        </label>
+                        <div className="mx_SteganographyDialog_resultContent">{result}</div>
                         {mode === "encode" && (
                             <div className="mx_SteganographyDialog_resultActions">
                                 <button type="button" onClick={onSendEncoded} className="mx_Dialog_primary">

@@ -49,15 +49,7 @@ describe("EnvelopeV1", () => {
     });
 
     it("should reject unsupported version", () => {
-        const bytes = Uint8Array.from([
-            STEGO_MAGIC[0],
-            STEGO_MAGIC[1],
-            99,
-            0,
-            0,
-            ...new Array(16).fill(0),
-            0,
-        ]);
+        const bytes = Uint8Array.from([STEGO_MAGIC[0], STEGO_MAGIC[1], 99, 0, 0, ...new Array(16).fill(0), 0]);
 
         expect(() => deserializeEnvelopeV1(bytes)).toThrow("Unsupported envelope version");
     });

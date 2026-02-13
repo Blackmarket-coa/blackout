@@ -197,9 +197,7 @@ export class StegoDetector {
         if (detection) {
             // Track with ephemeral manager
             const ephemeral = getEphemeralManager();
-            const expiryContent = event.getContent()?.["io.element.stego"] as
-                | { expires_at?: number }
-                | undefined;
+            const expiryContent = event.getContent()?.["io.element.stego"] as { expires_at?: number } | undefined;
             if (expiryContent?.expires_at) {
                 ephemeral.track(detection.eventId, detection.roomId, expiryContent.expires_at);
             }

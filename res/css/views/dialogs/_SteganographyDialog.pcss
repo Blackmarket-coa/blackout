@@ -21,13 +21,16 @@ Please see LICENSE files in the repository root for full details.
         color: var(--cpd-color-text-secondary);
         font: var(--cpd-font-body-md-medium);
         cursor: pointer;
-        transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+        transition:
+            background-color 0.15s,
+            color 0.15s,
+            border-color 0.15s;
 
         &:hover {
             border-color: var(--cpd-color-border-interactive-hovered);
         }
 
-        &--active {
+        &.mx_SteganographyDialog_modeButton--active {
             background: var(--cpd-color-bg-action-primary-rest);
             color: var(--cpd-color-text-on-solid-primary);
             border-color: var(--cpd-color-bg-action-primary-rest);
@@ -68,7 +71,7 @@ Please see LICENSE files in the repository root for full details.
             }
 
             &::placeholder {
-                color: var(--cpd-color-text-placeholder);
+                color: var(--cpd-color-text-secondary);
             }
         }
     }

@@ -415,9 +415,7 @@ describe("Phase 2 — codec operates on encrypted payloads, not plaintext", () =
             StegoDecodeErrorCode.UncorrectableCorruption,
             StegoDecodeErrorCode.NotStegoContent,
         ];
-        const isAcceptable = result.ok
-            ? result.payload.length >= 0
-            : allowedFailureCodes.includes(result.error.code);
+        const isAcceptable = result.ok ? result.payload.length >= 0 : allowedFailureCodes.includes(result.error.code);
         expect(isAcceptable).toBe(true);
     });
 
