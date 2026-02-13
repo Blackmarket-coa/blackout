@@ -1924,17 +1924,27 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
             if (room.substring(domainOffset).indexOf("/") > -1) {
                 eventOffset = domainOffset + room.substring(domainOffset).indexOf("/");
             }
-            const roomString = room.substring(0, eventOffset);
-            let eventId: string | undefined = room.substring(eventOffset + 1); // empty string if no event id given
+            const rawRoomString = room.substring(0, eventOffset);
+            let rawEventId: string | undefined = room.substring(eventOffset + 1); // empty string if no event id given
 
             // Previously we pulled the eventID from the segments in such a way
             // where if there was no eventId then we'd get undefined. However, we
             // now do a splice and join to handle v3 event IDs which results in
             // an empty string. To maintain our potential contract with the rest
             // of the app, we coerce the eventId to be undefined where applicable.
-            if (!eventId) eventId = undefined;
+            if (!rawEventId) rawEventId = undefined;
 
-            // TODO: Handle encoded room/event IDs: https://github.com/vector-im/element-web/issues/9149
+            const decodePathPart = (value: string): string => {
+                try {
+                    return decodeURIComponent(value);
+                } catch {
+                    logger.warn("Failed to decode room/event identifier from URL fragment", { value });
+                    return value;
+                }
+            };
+
+            const roomString = decodePathPart(rawRoomString);
+            const eventId = rawEventId ? decodePathPart(rawEventId) : undefined;
 
             let threepidInvite: IThreepidInvite | undefined;
             // if we landed here from a 3PID invite, persist it
