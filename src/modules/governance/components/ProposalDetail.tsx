@@ -9,11 +9,13 @@ import React from "react";
 
 import type { ProposalDocument, VoteDocument } from "../models/types";
 import type { Ballot, VoteTally } from "../../../services/governance/VotingEngine";
+import type { OpinionCluster } from "../../../services/deliberation/clustering";
 
 interface Props {
     proposal: ProposalDocument;
     vote?: VoteDocument;
     tally?: VoteTally;
+    deliberationClusters?: OpinionCluster[];
     onAdvanceState: () => void;
     onStartVote: () => void;
     onCastVote: (ballot: Ballot) => void;
@@ -24,6 +26,7 @@ export default function ProposalDetail({
     proposal,
     vote,
     tally,
+    deliberationClusters,
     onAdvanceState,
     onStartVote,
     onCastVote,
@@ -64,8 +67,21 @@ export default function ProposalDetail({
             )}
             {tally && (
                 <p data-testid="blackout-vote-tally">
-                    approve: {tally.approve}, reject: {tally.reject}, abstain: {tally.abstain}, passed: {String(tally.passed)}
+                    approve: {tally.approve}, reject: {tally.reject}, abstain: {tally.abstain}, passed:{" "}
+                    {String(tally.passed)}
                 </p>
+            )}
+            {deliberationClusters && deliberationClusters.length > 0 && (
+                <section data-testid="blackout-deliberation-clusters">
+                    <h4>Deliberation clusters</h4>
+                    <ul>
+                        {deliberationClusters.map((cluster) => (
+                            <li key={cluster.id}>
+                                {cluster.id}: {cluster.memberIds.length} members
+                            </li>
+                        ))}
+                    </ul>
+                </section>
             )}
         </section>
     );

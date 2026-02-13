@@ -32,4 +32,28 @@ describe("clusterOpinions", () => {
         expect(clusters).toHaveLength(1);
         expect(clusters[0].memberIds).toEqual(["@alice:example.org"]);
     });
+
+    it("filters adversarial vectors (duplicate users, non-finite values, mismatched dimensions)", () => {
+        const clusters = clusterOpinions([
+            { userId: "@alice:example.org", values: [1, 0.9, 0.1] },
+            { userId: "@alice:example.org", values: [0.9, 0.9, 0.2] },
+            { userId: "@bob:example.org", values: [0.98, 0.88, 0.12] },
+            { userId: "@mallory:example.org", values: [Number.NaN, 0.1, 0.2] },
+            { userId: "@eve:example.org", values: [1, 0.1] },
+            { userId: "", values: [0.5, 0.5, 0.5] },
+        ]);
+
+        expect(clusters).toHaveLength(1);
+        expect(clusters[0].memberIds).toEqual(["@alice:example.org", "@bob:example.org"]);
+    });
+
+    it("throws for invalid config bounds", () => {
+        expect(() =>
+            clusterOpinions([{ userId: "@alice:example.org", values: [1, 1] }], { similarityThreshold: 2 }),
+        ).toThrow("similarityThreshold must be a finite number between -1 and 1");
+
+        expect(() =>
+            clusterOpinions([{ userId: "@alice:example.org", values: [1, 1] }], { minimumVectorLength: 0 }),
+        ).toThrow("minimumVectorLength must be a positive integer");
+    });
 });
