@@ -28,7 +28,10 @@ export interface IBodyProps {
     maxImageHeight?: number;
     replacingEventId?: string;
     editState?: EditorStateTransfer;
-    onMessageAllowed?: () => void; // TODO: Docs
+    /**
+     * Called when media in a message transitions into an allowed/visible state.
+     */
+    onMessageAllowed?: () => void;
     permalinkCreator?: RoomPermalinkCreator;
     mediaEventHelper?: MediaEventHelper;
 
