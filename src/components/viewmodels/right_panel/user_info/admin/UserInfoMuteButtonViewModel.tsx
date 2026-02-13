@@ -66,7 +66,7 @@ export const useMuteButtonViewModel = (props: RoomAdminToolsProps): MuteButtonSt
 
         const powerLevelEvent = room.currentState.getStateEvents("m.room.power_levels", "");
         const powerLevels = powerLevelEvent?.getContent();
-        const levelToSend = powerLevels?.events?.["m.room.message"] ?? powerLevels?.events_default;
+        const levelToSend = powerLevels?.events?.["m.room.message"] ?? powerLevels?.events_default ?? 0;
 
         let level;
         if (muted) {
@@ -76,10 +76,9 @@ export const useMuteButtonViewModel = (props: RoomAdminToolsProps): MuteButtonSt
             // mute
             level = levelToSend - 1;
         }
-        level = parseInt(level);
+        level = Number(level);
 
-        console.log("level", level);
-        if (isNaN(level)) {
+        if (Number.isNaN(level)) {
             stopUpdating();
             return;
         }

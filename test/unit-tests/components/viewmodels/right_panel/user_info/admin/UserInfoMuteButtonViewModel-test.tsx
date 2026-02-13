@@ -192,6 +192,28 @@ describe("useMuteButtonViewModel", () => {
         expect(mockClient.setPowerLevel).toHaveBeenCalledWith(mockRoom.roomId, defaultMember.userId, -1);
     });
 
+    it("should default message powerlevel to 0 when missing", async () => {
+        const defaultUnmutedMember = {
+            ...defaultMember,
+            powerLevel: 0,
+            membership: KnownMembership.Join,
+        } as RoomMember;
+
+        jest.spyOn(mockRoom.currentState, "getStateEvents").mockReturnValueOnce({
+            getContent: jest.fn().mockReturnValue({}),
+        } as unknown as MatrixEvent);
+
+        const { result } = renderMuteButtonHook({
+            ...defaultAdminToolsProps,
+            member: defaultUnmutedMember,
+            isUpdating: false,
+        });
+
+        await result.current.onMuteButtonClick();
+
+        expect(mockClient.setPowerLevel).toHaveBeenCalledWith(mockRoom.roomId, defaultMember.userId, -1);
+    });
+
     it("returns false if either argument is falsy", () => {
         // @ts-ignore to let us purposely pass incorrect args
         expect(isMuted(defaultMember, null)).toBe(false);
