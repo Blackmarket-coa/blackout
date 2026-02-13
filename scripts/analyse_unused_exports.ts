@@ -46,10 +46,11 @@ exec(command, (error, stdout, stderr) => {
     // ts-prune has bug where if the unused export is in a dependency, the path
     // won't have an "/" character at the start, so we try to fix that for
     // better UX
-    // TODO: This might break on Windows
     lines = lines.reduce<string[]>((newLines, line) => {
-        if (!line.startsWith("/")) newLines.push("/" + line);
-        else newLines.push(line);
+        const withPosixSeparators = line.replaceAll("\\", "/");
+        const hasAbsolutePathPrefix = withPosixSeparators.startsWith("/") || /^[A-Za-z]:\//.test(withPosixSeparators);
+        const normalised = hasAbsolutePathPrefix ? withPosixSeparators : `/${withPosixSeparators}`;
+        newLines.push(normalised);
         return newLines;
     }, []);
 
