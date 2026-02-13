@@ -67,7 +67,7 @@ if [[ "$head" == *":"* ]]; then
     fi
     TRY_BRANCH=${BRANCH_ARRAY[1]}
 fi
-if [ "$TRY_BRANCH" != "null" ]; then
+if [ -n "$TRY_BRANCH" ] && [ "$TRY_BRANCH" != "null" ]; then
     clone ${TRY_ORG} $defrepo ${TRY_BRANCH}
 fi
 
