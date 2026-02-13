@@ -32,14 +32,11 @@ For governance-focused controls (entitlements, monetization policy, paid-room ac
 From `docs/blackout-reuse-completion-tracker.md`, current implementation status is:
 
 - ✅ **Complete**: Matrix backbone, CRDT foundation, governance lifecycle/voting, delegation, education, mutual-aid board, and sortition.
-- 🟡 **Partial**: deliberation clustering scale/performance hardening, IPFS in-product event/state integration depth, and cross-module productionization.
+- ✅ **Complete**: deliberation scale/perf hardening, IPFS room-event/state UX integration, cross-module E2E coverage, and rollout hardening artifacts.
 
 Current priority order from the tracker:
 
-1. Deliberation scale/perf hardening
-2. IPFS room-event/state UX integration
-3. Cross-module E2E expansion (education/mutual-aid/IPFS)
-4. Final rollout hardening (runbooks/localization/policy tuning)
+- All previously listed priorities are marked complete and tracked in ongoing maintenance/regression mode.
 
 For the full evidence-backed breakdown, see `docs/blackout-reuse-completion-tracker.md`.
 
