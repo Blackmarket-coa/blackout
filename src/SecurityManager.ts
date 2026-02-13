@@ -80,10 +80,10 @@ async function getSecretStorageKey(
         // Fall back to a heuristic of using the
         // only available key, if only one key is set
         const usefulKeys = Object.keys(keyInfos);
-        if (usefulKeys.length > 1) {
-            throw new Error("Multiple storage key requests not implemented");
-        }
-        keyId = usefulKeys[0];
+        // If we are asked for multiple possible keys and no default key is available,
+        // prefer a key that is already cached in-memory for this operation.
+        const cachedKeyId = usefulKeys.find((id) => Boolean(secretStorageKeys[id]));
+        keyId = cachedKeyId ?? usefulKeys[0];
     }
     const keyInfo = keyInfos[keyId];
     logger.debug(
@@ -103,11 +103,7 @@ async function getSecretStorageKey(
         return [keyId, keyFromCustomisations];
     }
 
-    // We only prompt the user for the default key
-    if (keyId !== defaultKeyId) {
-        logger.debug(`getSecretStorageKey: request for non-default key ${keyId}: not prompting user`);
-        throw new Error("Request for non-default 4S key");
-    }
+    // Prompt for whichever key we selected above, including non-default keys.
 
     logger.debug(`getSecretStorageKey: prompting user for key ${keyId}`);
     const inputToKey = makeInputToKey(keyInfo);
