@@ -18,6 +18,10 @@ import {
 import { isNullOrUndefined } from "matrix-js-sdk/src/utils";
 
 import { type ActionPayload } from "../../dispatcher/payloads";
+import {
+    type IEventDecryptedActionPayload,
+    type IRoomTimelineActionPayload,
+} from "../../actions/MatrixActionCreators";
 import { AsyncStoreWithClient } from "../AsyncStoreWithClient";
 import defaultDispatcher from "../../dispatcher/dispatcher";
 import { MessageEventPreview } from "./previews/MessageEventPreview";
@@ -260,7 +264,8 @@ export class MessagePreviewStore extends AsyncStoreWithClient<EmptyObject> {
         if (!this.matrixClient) return;
 
         if (payload.action === "MatrixActions.Room.timeline" || payload.action === "MatrixActions.Event.decrypted") {
-            const event = payload.event; // TODO: Type out the dispatcher
+            const typedPayload = payload as IRoomTimelineActionPayload | IEventDecryptedActionPayload;
+            const event = typedPayload.event;
             const roomId = event.getRoomId();
             const isHistoricalEvent = payload.hasOwnProperty("isLiveEvent") && !payload.isLiveEvent;
 

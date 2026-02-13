@@ -361,7 +361,7 @@ const InnerSpacePanel = React.memo<IInnerSpacePanelProps>(
                             collapsed: isPanelCollapsed,
                         })}
                         role="treeitem"
-                        aria-selected={false} // TODO
+                        aria-selected={activeSpace === item.spaceKey}
                     >
                         <SpaceButton
                             {...item}

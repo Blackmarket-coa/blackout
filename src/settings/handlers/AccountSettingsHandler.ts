@@ -220,8 +220,7 @@ export default class AccountSettingsHandler extends MatrixClientBackedSettingsHa
         return this.client && !this.client.isGuest();
     }
 
-    private getSettings(eventType: keyof AccountDataEvents = "im.vector.web.settings"): any {
-        // TODO: [TS] Types on return
+    private getSettings(eventType: keyof AccountDataEvents = "im.vector.web.settings"): Record<string, any> | null {
         if (!this.client) return null;
 
         const event = this.client.getAccountData(eventType);

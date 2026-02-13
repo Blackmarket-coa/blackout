@@ -139,8 +139,7 @@ export default class RoomAccountSettingsHandler extends MatrixClientBackedSettin
         return this.client && !this.client.isGuest();
     }
 
-    private getSettings(roomId: string, eventType = DEFAULT_SETTINGS_EVENT_TYPE): any {
-        // TODO: [TS] Type return
+    private getSettings(roomId: string, eventType = DEFAULT_SETTINGS_EVENT_TYPE): Record<string, any> | null {
         const event = this.client.getRoom(roomId)?.getAccountData(eventType);
         if (!event || !event.getContent()) return null;
         return objectClone(event.getContent()); // clone to prevent mutation

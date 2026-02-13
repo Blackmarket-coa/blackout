@@ -11,7 +11,6 @@ import { type Action } from "../actions";
 
 export interface OpenToTabPayload extends ActionPayload {
     action: Action.ViewUserSettings | Action.OpenRoomSettings | string;
-
     /**
      * The tab ID to open in the settings view to start, if possible.
      */
