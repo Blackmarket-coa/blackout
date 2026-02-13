@@ -48,6 +48,7 @@ export default function MutualAidHome(): React.JSX.Element {
     }, []);
 
     const items = activeLane === "needs" ? board.needs : board.offers;
+    const canCreate = Boolean(title.trim());
     const filteredItems = items.filter((item) => {
         const assigneeMatches = !assigneeFilter || item.assignedToUserId === assigneeFilter;
         const urgencyMatches =
@@ -121,6 +122,7 @@ export default function MutualAidHome(): React.JSX.Element {
         <section data-testid="blackout-mutual-aid-view">
             <h2>Mutual aid board</h2>
             <p>Track needs and offers through todo, doing, and done.</p>
+            <p>Total {activeLane}: {items.length} · Visible: {filteredItems.length}</p>
 
             <div>
                 <button type="button" onClick={() => setActiveLane("needs")} data-testid="blackout-mutual-aid-needs-lane">
@@ -142,7 +144,12 @@ export default function MutualAidHome(): React.JSX.Element {
                     placeholder={`New ${activeLane.slice(0, -1)} item`}
                     data-testid="blackout-mutual-aid-item-title"
                 />
-                <button type="button" onClick={() => void handleCreate()} data-testid="blackout-mutual-aid-create-item">
+                <button
+                    type="button"
+                    onClick={() => void handleCreate()}
+                    disabled={!canCreate}
+                    data-testid="blackout-mutual-aid-create-item"
+                >
                     Add {activeLane.slice(0, -1)}
                 </button>
             </div>
@@ -164,6 +171,7 @@ export default function MutualAidHome(): React.JSX.Element {
                 <section key={column}>
                     <h3>{column}</h3>
                     <ul data-testid={`blackout-mutual-aid-column-${column}`}>
+                        {grouped[column].length === 0 && <li>No items in {column}.</li>}
                         {grouped[column].map((item) => (
                             <li key={item.id}>
                                 <span>{item.title}</span>
