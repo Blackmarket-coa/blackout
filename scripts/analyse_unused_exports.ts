@@ -48,7 +48,8 @@ exec(command, (error, stdout, stderr) => {
     // better UX
     lines = lines.reduce<string[]>((newLines, line) => {
         const withPosixSeparators = line.replaceAll("\\", "/");
-        const normalised = withPosixSeparators.startsWith("/") ? withPosixSeparators : `/${withPosixSeparators}`;
+        const hasAbsolutePathPrefix = withPosixSeparators.startsWith("/") || /^[A-Za-z]:\//.test(withPosixSeparators);
+        const normalised = hasAbsolutePathPrefix ? withPosixSeparators : `/${withPosixSeparators}`;
         newLines.push(normalised);
         return newLines;
     }, []);

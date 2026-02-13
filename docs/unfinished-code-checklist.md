@@ -3,24 +3,10 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Total items: **219**
-- Total files: **134**
+- Total items: **211**
+- Total files: **131**
 
 ## Checklist
-
-### `scripts/analyse_unused_exports.ts`
-- [ ] L49: `// TODO: This might break on Windows`
-
-### `scripts/deploy.py`
-- [ ] L21: `pass`
-
-### `scripts/gen-workflow-mermaid.ts`
-- [ ] L232: `// TODO workflow_call reusables`
-- [ ] L275: `// TODO should we be just dropping these?`
-- [ ] L507: `// TODO separate disconnected nodes into their own graph`
-- [ ] L543: `// TODO unsure about this edge`
-- [ ] L549: `// TODO handle job.if on github.event_name`
-- [ ] L594: `// TODO validate edge case`
 
 ### `src/LegacyCallHandler.tsx`
 - [ ] L586: `// TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)`
