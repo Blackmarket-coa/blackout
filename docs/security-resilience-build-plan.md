@@ -3,6 +3,8 @@
 This plan translates the strategy into an implementation roadmap for this repository, with open-source-first options and copy/paste starter code.
 
 > Phase 1 completion details are tracked in `docs/security-phase1-foundation.md`.
+> Phase 2 completion details are tracked in `docs/security-phase2-app-hardening.md`.
+> Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -146,7 +148,7 @@ export const CreateProfileSchema = z.object({
 
 ---
 
-## Phase 3 (Weeks 5-6): Authentication modernization (non-technical UX first)
+## Phase 3 (Weeks 5-6): Authentication modernization (non-technical UX first) ✅ Complete
 
 ### Deliverables
 1. OAuth/OIDC login (Google, Apple, generic OIDC).
