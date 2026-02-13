@@ -124,12 +124,8 @@ describe("ImageStego", () => {
             const imageData = createMockImageData(50, 50);
             const decoded = decodeImage(imageData);
 
-            // Might return null if magic bytes don't match
-            if (decoded !== null) {
-                // If by chance the LSBs happen to form magic bytes,
-                // the payload length would be nonsensical
-                expect(decoded.header.payloadLength).toBeDefined();
-            }
+            // Usually null for non-stego input; if false-positive occurs it still has a parsed header.
+            expect(decoded === null || decoded.header.payloadLength >= 0).toBe(true);
         });
     });
 

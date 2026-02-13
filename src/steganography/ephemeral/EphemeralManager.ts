@@ -18,10 +18,7 @@ Please see LICENSE files in the repository root for full details.
  *   - Clean up local IndexedDB/localStorage entries
  */
 
-import type { MatrixClient } from "matrix-js-sdk/src/client";
-import type { MatrixEvent } from "matrix-js-sdk/src/models/event";
-import type { Room } from "matrix-js-sdk/src/models/room";
-
+import type { MatrixClient, MatrixEvent, Room } from "matrix-js-sdk/src/matrix";
 import { DEFAULT_STEGO_CONFIG } from "../types";
 
 /** Storage key prefix for tracked ephemeral messages. */

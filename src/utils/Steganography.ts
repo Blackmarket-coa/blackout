@@ -182,7 +182,7 @@ export async function decodeSteganographyMessage(text: string, passphrase?: stri
  * Check if text contains a steganographic message.
  */
 export function containsSteganographyMessage(text: string): boolean {
-    const markerRegex = new RegExp(`${ZW_MARKER}([${ZW_0}${ZW_1}${ZW_SEP}]+)${ZW_MARKER}`);
+    const markerRegex = new RegExp(`${ZW_MARKER}([\u200B\u200C\u200D]+)${ZW_MARKER}`);
     return markerRegex.test(text);
 }
 
@@ -190,6 +190,7 @@ export function containsSteganographyMessage(text: string): boolean {
  * Strip all steganographic content from text, returning clean visible text.
  */
 export function stripSteganographyContent(text: string): string {
-    const allZeroWidth = new RegExp(`[${ZW_0}${ZW_1}${ZW_SEP}${ZW_MARKER}]`, "g");
-    return text.replace(allZeroWidth, "");
+    return Array.from(text)
+        .filter((char) => char !== ZW_0 && char !== ZW_1 && char !== ZW_SEP && char !== ZW_MARKER)
+        .join("");
 }
