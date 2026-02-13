@@ -246,12 +246,15 @@ and the steganography feature set that is currently under active development.
 Audit run summary (local run on this branch):
 
 - `yarn install --frozen-lockfile`: **pass**
-- `yarn lint:types`: **fail** (multiple TypeScript issues)
-- `yarn lint:js`: **fail** (ESLint issues across steganography sources/tests)
-- `yarn lint:style`: **fail** (Stylelint issues in steganography styles)
+- `yarn lint:types`: **pass**
+- `yarn lint:js`: **fail** (Prettier check reports formatting drift in 64 files)
+- `yarn lint:style`: **fail** (5 Stylelint violations in steganography styles)
 - `yarn test test/unit-tests/steganography --runInBand`: **fail**
     - 20 suites passed, 1 failed (`CarrierTransportProperty-test.ts`), 184 tests
       total with 1 failing assertion.
+- `yarn audit --groups dependencies --level moderate`: **fail**
+    - 1 moderate vulnerability reported for transitive dependency `counterpart`
+      (no upstream patch available).
 
 ### Recommended QA baseline before merge
 
@@ -263,6 +266,7 @@ yarn lint:types
 yarn lint:js
 yarn lint:style
 yarn test test/unit-tests/steganography --runInBand
+yarn audit --groups dependencies --level moderate
 ```
 
 When touching non-steganography areas, keep the same lint/type/style gates and
