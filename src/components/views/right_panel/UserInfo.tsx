@@ -91,15 +91,7 @@ export interface IPowerLevelsContent {
 export const isMuted = (member: RoomMember, powerLevelContent: IPowerLevelsContent): boolean => {
     if (!powerLevelContent || !member) return false;
 
-    const levelToSend =
-        (powerLevelContent.events ? powerLevelContent.events["m.room.message"] : null) ||
-        powerLevelContent.events_default;
-
-    // levelToSend could be undefined as .events_default is optional. Coercing in this case using
-    // Number() would always return false, so this preserves behaviour
-    // FIXME: per the spec, if `events_default` is unset, it defaults to zero. If
-    //   the member has a negative powerlevel, this will give an incorrect result.
-    if (levelToSend === undefined) return false;
+    const levelToSend = powerLevelContent.events?.["m.room.message"] ?? powerLevelContent.events_default ?? 0;
 
     return member.powerLevel < levelToSend;
 };
