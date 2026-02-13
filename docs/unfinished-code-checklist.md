@@ -3,8 +3,8 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Total items: **207**
-- Total files: **131**
+- Total items: **200**
+- Total files: **128**
 
 ## Checklist
 
@@ -236,9 +236,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/spaces/SpacePanel.tsx`
 - [ ] L364: `aria-selected={false} // TODO`
 
-### `src/components/views/voip/VideoFeed.tsx`
-- [ ] L202: `else; // TBD`
-
 ### `src/device-listener/DeviceListenerOtherDevices.ts`
 - [ ] L86: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
 - [ ] L121: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
@@ -436,19 +433,9 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `test/unit-tests/components/structures/auth/ForgotPassword-test.tsx`
 - [ ] L51: `// not implemented by js-dom https://github.com/jsdom/jsdom/issues/1937`
 
-### `test/unit-tests/components/viewmodels/right_panel/user_info/UserInfoHeaderViewModel-test.tsx`
-- [ ] L160: `throw new Error("Function not implemented.");`
-- [ ] L163: `throw new Error("Function not implemented.");`
-- [ ] L166: `throw new Error("Function not implemented.");`
-- [ ] L169: `throw new Error("Function not implemented.");`
-
 ### `test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx`
 - [ ] L152: `// TODO: test clicking buttons`
 - [ ] L153: `// TODO: add live location share warning test (should not render if there is an active live location share)`
-
-### `test/unit-tests/components/views/dialogs/VerificationRequestDialog-test.tsx`
-- [ ] L331: `throw new Error("Method not implemented.");`
-- [ ] L335: `throw new Error("Method not implemented.");`
 
 ### `test/unit-tests/components/views/messages/MessageActionBar-test.tsx`
 - [ ] L205: `// TODO file bug`
