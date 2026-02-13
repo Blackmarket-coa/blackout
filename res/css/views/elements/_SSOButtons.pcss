@@ -28,11 +28,24 @@ Please see LICENSE files in the repository root for full details.
         border: 1px solid $input-border-color;
         color: $primary-content;
 
-        > img {
+        > img,
+        > .mx_SSOButton_fallbackIcon {
             object-fit: contain;
             position: absolute;
             left: 8px;
             top: 4px;
+        }
+
+        > .mx_SSOButton_fallbackIcon {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: $panel-actions;
+            color: $primary-content;
+            font: var(--cpd-font-body-sm-semibold);
         }
     }
 
@@ -57,7 +70,8 @@ Please see LICENSE files in the repository root for full details.
         min-width: 50px; /* prevent crushing by the flexbox */
         padding: 12px;
 
-        > img {
+        > img,
+        > .mx_SSOButton_fallbackIcon {
             left: 12px;
             top: 12px;
         }

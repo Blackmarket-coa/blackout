@@ -3,8 +3,8 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Total items: **200**
-- Total files: **128**
+- Total items: **194**
+- Total files: **122**
 
 ## Checklist
 
@@ -99,17 +99,8 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/beacon/RoomCallBanner.tsx`
 - [ ] L46: `// TODO matrix rtc`
 
-### `src/components/views/dialogs/FeedbackDialog.tsx`
-- [ ] L48: `// TODO: Handle rejection.`
-
-### `src/components/views/dialogs/GenericFeatureFeedbackDialog.tsx`
-- [ ] L41: `// TODO: Handle rejection.`
-
 ### `src/components/views/dialogs/ModalWidgetDialog.tsx`
 - [ ] L149: `// TODO: Replace these with proper widget params`
-
-### `src/components/views/dialogs/PollHistoryDialog.tsx`
-- [ ] L29: `// @TODO hide dialog title somehow`
 
 ### `src/components/views/dialogs/WidgetCapabilitiesPromptDialog.tsx`
 - [ ] L30: `widgetKind: WidgetKind; // TODO: Refactor into the Widget class`
@@ -123,12 +114,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/elements/RoomAliasField.tsx`
 - [ ] L152: `// XXX: FIXME https://github.com/matrix-org/matrix-doc/issues/668`
 
-### `src/components/views/elements/SSOButtons.tsx`
-- [ ] L125: `// TODO fallback icon`
-
-### `src/components/views/messages/IBodyProps.ts`
-- [ ] L31: `onMessageAllowed?: () => void; // TODO: Docs`
-
 ### `src/components/views/messages/MFileBody.tsx`
 - [ ] L275: `TODO: Move iframe (and dummy link) into FileDownloader.`
 
@@ -141,9 +126,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/messages/TextualBody.tsx`
 - [ ] L149: `// TODO: make this configurable?`
 - [ ] L165: `// FIXME: persist this somewhere smarter than local storage`
-
-### `src/components/views/polls/pollHistory/PollHistory.tsx`
-- [ ] L62: `{/* @TODO this probably needs some style */}`
 
 ### `src/components/views/right_panel/UserInfo.tsx`
 - [ ] L100: `// FIXME: per the spec, if \`events_default\` is unset, it defaults to zero. If`

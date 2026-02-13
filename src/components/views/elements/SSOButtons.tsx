@@ -108,6 +108,13 @@ const SSOButton: React.FC<ISSOButtonProps> = ({
     } else if (typeof idp?.icon === "string" && idp.icon.startsWith("mxc://")) {
         const src = mediaFromMxc(idp.icon, matrixClient).getSquareThumbnailHttp(24) ?? undefined;
         icon = <img src={src} height="24" width="24" alt={idp.name} />;
+    } else if (idp?.name) {
+        const fallbackInitial = idp.name.charAt(0).toUpperCase();
+        icon = (
+            <span className="mx_SSOButton_fallbackIcon" aria-hidden="true">
+                {fallbackInitial}
+            </span>
+        );
     }
 
     const brandPart = brandClass ? { [brandClass]: brandClass } : undefined;
@@ -122,7 +129,6 @@ const SSOButton: React.FC<ISSOButtonProps> = ({
     );
 
     if (mini) {
-        // TODO fallback icon
         return (
             <AccessibleButton {...props} title={label} className={classes} onClick={onClick}>
                 {icon}
