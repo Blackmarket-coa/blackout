@@ -53,8 +53,8 @@ Status: 🟡
 - [x] Implement clustering algorithm in `src/services/deliberation/clustering.ts` (deterministic cosine-similarity bucketing).
 - [x] Define input/output schema for opinion vectors and cluster metadata.
 - [x] Add tests with realistic synthetic data (small room size baseline added; medium/large still pending).
-- [ ] Add UI integration in governance proposal detail flow.
-- [ ] Add safeguards for sparse datasets and adversarial input.
+- [x] Add UI integration in governance proposal detail flow (cluster summaries now render in proposal detail when enough ballots exist).
+- [x] Add safeguards for sparse datasets and adversarial input.
 
 ### Exit criteria
 
@@ -146,7 +146,7 @@ Status: 🟡
 - [x] Implement deterministic selection function.
 - [x] Add reproducibility proof output (seed + hash details).
 - [x] Integrate selection results into governance proposal process (proposal records can now carry jury selection metadata).
-- [ ] Add fairness tests and edge-case handling.
+- [x] Add fairness tests and edge-case handling.
 
 ### Exit criteria
 

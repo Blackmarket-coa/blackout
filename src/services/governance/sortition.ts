@@ -39,8 +39,6 @@ export interface SortitionResult {
     };
 }
 
-const DEFAULT_JURY_SIZE = 3;
-
 const hashHex = (input: string): string => createHash("sha256").update(input).digest("hex");
 
 const compareLexicographically = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
@@ -50,13 +48,26 @@ export function selectDeterministicJury(
     seed: SortitionSeedInput,
     policy: SortitionPolicy,
 ): SortitionResult {
-    if (policy.jurySize <= 0) {
-        throw new Error("Sortition jurySize must be greater than zero");
+    if (!Number.isInteger(policy.jurySize) || policy.jurySize <= 0) {
+        throw new Error("Sortition jurySize must be a positive integer");
     }
 
     const excluded = new Set(policy.excludedUserIds ?? []);
 
-    const eligible = participants
+    const participantByUserId = new Map<string, SortitionParticipant>();
+    participants.forEach((participant) => {
+        if (!participant.userId) {
+            throw new Error("Sortition participants must have a non-empty userId");
+        }
+
+        if (participantByUserId.has(participant.userId)) {
+            throw new Error(`Duplicate participant for sortition: ${participant.userId}`);
+        }
+
+        participantByUserId.set(participant.userId, participant);
+    });
+
+    const eligible = [...participantByUserId.values()]
         .filter((participant) => !excluded.has(participant.userId))
         .filter((participant) =>
             policy.minPowerLevel === undefined ? true : (participant.powerLevel ?? 0) >= policy.minPowerLevel,
@@ -69,7 +80,7 @@ export function selectDeterministicJury(
         throw new Error("No eligible participants for sortition");
     }
 
-    const jurySize = Math.min(policy.jurySize ?? DEFAULT_JURY_SIZE, eligible.length);
+    const jurySize = Math.min(policy.jurySize, eligible.length);
     const seedMaterial = `${seed.roomId}|${seed.proposalId}|${seed.eventId}|${seed.timestampMs}`;
     const seedHash = hashHex(seedMaterial);
 

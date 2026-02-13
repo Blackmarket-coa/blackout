@@ -21,6 +21,10 @@ export interface ClusterConfig {
     minimumVectorLength?: number;
 }
 
+function isFiniteNumber(value: number): boolean {
+    return Number.isFinite(value);
+}
+
 function cosineSimilarity(a: number[], b: number[]): number {
     let dot = 0;
     let aMagnitude = 0;
@@ -55,9 +59,48 @@ export function clusterOpinions(vectors: OpinionVector[], config: ClusterConfig 
     const similarityThreshold = config.similarityThreshold ?? 0.85;
     const minimumVectorLength = config.minimumVectorLength ?? 1;
 
-    const validVectors = vectors
-        .filter((vector) => vector.values.length >= minimumVectorLength)
-        .sort((a, b) => a.userId.localeCompare(b.userId));
+    if (!Number.isFinite(similarityThreshold) || similarityThreshold < -1 || similarityThreshold > 1) {
+        throw new Error("similarityThreshold must be a finite number between -1 and 1");
+    }
+
+    if (!Number.isInteger(minimumVectorLength) || minimumVectorLength <= 0) {
+        throw new Error("minimumVectorLength must be a positive integer");
+    }
+
+    const seenUserIds = new Set<string>();
+    const normalizedVectors: OpinionVector[] = [];
+    let expectedLength: number | undefined;
+
+    for (const vector of vectors) {
+        if (!vector.userId) {
+            continue;
+        }
+
+        if (seenUserIds.has(vector.userId)) {
+            continue;
+        }
+
+        if (vector.values.length < minimumVectorLength) {
+            continue;
+        }
+
+        if (!vector.values.every(isFiniteNumber)) {
+            continue;
+        }
+
+        if (expectedLength === undefined) {
+            expectedLength = vector.values.length;
+        }
+
+        if (vector.values.length !== expectedLength) {
+            continue;
+        }
+
+        seenUserIds.add(vector.userId);
+        normalizedVectors.push(vector);
+    }
+
+    const validVectors = normalizedVectors.sort((a, b) => a.userId.localeCompare(b.userId));
 
     if (validVectors.length === 0) {
         return [];

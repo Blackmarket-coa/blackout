@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 
 import { ProposalEngine } from "../../../services/governance/ProposalEngine";
 import { VotingEngine, type Ballot } from "../../../services/governance/VotingEngine";
+import { clusterOpinions } from "../../../services/deliberation/clustering";
 import type { ProposalDocument, VoteDocument } from "../models/types";
 import ProposalComposer from "./ProposalComposer";
 import ProposalDetail from "./ProposalDetail";
@@ -20,6 +21,12 @@ const CURRENT_USER_ID = "@me:blackout.local";
 
 const proposalEngine = new ProposalEngine();
 const votingEngine = new VotingEngine();
+
+const BALLOT_VECTORS: Record<Ballot, number[]> = {
+    approve: [1, 0, 0],
+    reject: [0, 1, 0],
+    abstain: [0, 0, 1],
+};
 
 const NEXT_STATES = {
     draft: "discuss",
@@ -40,6 +47,25 @@ export default function GovernanceHome(): React.JSX.Element {
     );
 
     const selectedVote = selectedProposal ? votesByProposalId[selectedProposal.id] : undefined;
+    const deliberationClusters = useMemo(() => {
+        if (!selectedVote) {
+            return undefined;
+        }
+
+        const opinionVectors = Object.entries(selectedVote.votesByUserId).map(([userId, ballot]) => ({
+            userId,
+            values: BALLOT_VECTORS[ballot],
+        }));
+
+        if (opinionVectors.length < 3) {
+            return undefined;
+        }
+
+        return clusterOpinions(opinionVectors, {
+            similarityThreshold: 0.95,
+            minimumVectorLength: 3,
+        });
+    }, [selectedVote]);
 
     const handleCreate = ({ title, body }: { title: string; body: string }): void => {
         const proposal = proposalEngine.create({
@@ -117,12 +143,17 @@ export default function GovernanceHome(): React.JSX.Element {
         <section data-testid="blackout-governance-view">
             <h2>Governance</h2>
             <ProposalComposer onCreate={handleCreate} />
-            <ProposalList proposals={proposals} selectedProposalId={selectedProposalId} onSelect={setSelectedProposalId} />
+            <ProposalList
+                proposals={proposals}
+                selectedProposalId={selectedProposalId}
+                onSelect={setSelectedProposalId}
+            />
             {selectedProposal && (
                 <ProposalDetail
                     proposal={selectedProposal}
                     vote={selectedVote}
                     tally={selectedVote ? votingEngine.tally(selectedVote) : undefined}
+                    deliberationClusters={deliberationClusters}
                     onAdvanceState={handleAdvanceState}
                     onStartVote={handleStartVote}
                     onCastVote={handleCastVote}

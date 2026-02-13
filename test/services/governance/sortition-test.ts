@@ -65,4 +65,44 @@ describe("selectDeterministicJury", () => {
             }),
         ).toThrow("No eligible participants for sortition");
     });
+
+    it("throws when jurySize is not a positive integer", () => {
+        expect(() =>
+            selectDeterministicJury([{ userId: "@alice:example.org", powerLevel: 100 }], seed, {
+                jurySize: 0,
+            }),
+        ).toThrow("Sortition jurySize must be a positive integer");
+
+        expect(() =>
+            selectDeterministicJury([{ userId: "@alice:example.org", powerLevel: 100 }], seed, {
+                jurySize: 1.5,
+            }),
+        ).toThrow("Sortition jurySize must be a positive integer");
+    });
+
+    it("throws for duplicate participants to prevent ambiguous eligibility", () => {
+        expect(() =>
+            selectDeterministicJury(
+                [
+                    { userId: "@alice:example.org", powerLevel: 10, isActive: false },
+                    { userId: "@alice:example.org", powerLevel: 80, isActive: true },
+                    { userId: "@bob:example.org", powerLevel: 70, isActive: true },
+                ],
+                seed,
+                {
+                    jurySize: 2,
+                    minPowerLevel: 50,
+                    requireActive: true,
+                },
+            ),
+        ).toThrow("Duplicate participant for sortition: @alice:example.org");
+    });
+
+    it("throws for participants with missing userId", () => {
+        expect(() =>
+            selectDeterministicJury([{ userId: "", powerLevel: 100 }], seed, {
+                jurySize: 1,
+            }),
+        ).toThrow("Sortition participants must have a non-empty userId");
+    });
 });
