@@ -24,7 +24,7 @@ Please see LICENSE files in the repository root for full details.
 
 import { StegoCodec } from "../../../src/steganography/StegoCodec";
 import { encodeEmoji, decodeEmoji } from "../../../src/steganography/EmojiStego";
-import { encodeImage, decodeImage, calculateCapacity } from "../../../src/steganography/ImageStego";
+import { encodeImage, decodeImage } from "../../../src/steganography/ImageStego";
 import { rsEncode, rsDecode } from "../../../src/steganography/ReedSolomon";
 import { validateCarrierCompatibility } from "../../../src/steganography/CarrierCompatibility";
 import { chunkEmojiCarrier, reassembleEmojiCarrier } from "../../../src/steganography/CarrierChunking";
@@ -47,16 +47,6 @@ function createTestImageData(width = 64, height = 64): ImageData {
     ctx.fillStyle = "#336699";
     ctx.fillRect(0, 0, width, height);
     return ctx.getImageData(0, 0, width, height);
-}
-
-function createTestImageDataUrl(width = 64, height = 64): string {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#336699";
-    ctx.fillRect(0, 0, width, height);
-    return canvas.toDataURL("image/png");
 }
 
 function randomBytes(length: number): Uint8Array {

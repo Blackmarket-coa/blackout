@@ -5,10 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only
 Please see LICENSE files in the repository root for full details.
 */
 
-import { StegoCodec, type DecodeOutcome } from "../../../src/steganography/StegoCodec";
+import { StegoCodec } from "../../../src/steganography/StegoCodec";
 import { StegoDecodeErrorCode, StegoStrategy, STEGO_MARKER, EMOJI_POOL } from "../../../src/steganography/types";
-import { encodeEmoji } from "../../../src/steganography/EmojiStego";
-import { rsEncode } from "../../../src/steganography/ReedSolomon";
 
 describe("StegoCodec diagnostic decode", () => {
     let codec: StegoCodec;

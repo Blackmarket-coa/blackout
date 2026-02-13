@@ -92,7 +92,7 @@ export async function upgradeRoom(
 
     let newRoomId: string;
     try {
-        ({ replacement_room: newRoomId } = await cli.upgradeRoom(room.roomId, targetVersion, additionalCreators));
+        ({ replacement_room: newRoomId } = await cli.upgradeRoom(room.roomId, targetVersion));
     } catch (e) {
         if (!handleError) throw e;
         logger.error(e);

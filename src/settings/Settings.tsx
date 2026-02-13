@@ -823,7 +823,7 @@ export const SETTINGS: Settings = {
     "feature_governance": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
-        displayName: "Blackout governance (legacy)",
+        displayName: _td("labs|blackout_governance"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -831,7 +831,7 @@ export const SETTINGS: Settings = {
     "feature_education": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
-        displayName: "Blackout education (legacy)",
+        displayName: _td("labs|blackout_education"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -839,7 +839,7 @@ export const SETTINGS: Settings = {
     "feature_mutual_aid": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
-        displayName: "Blackout mutual aid (legacy)",
+        displayName: _td("labs|blackout_mutual_aid"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -847,7 +847,6 @@ export const SETTINGS: Settings = {
     "feature_deliberation_clustering": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
-        displayName: "Blackout deliberation clustering (legacy)",
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -855,7 +854,6 @@ export const SETTINGS: Settings = {
     "feature_ipfs_storage": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
-        displayName: "Blackout IPFS storage (legacy)",
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,

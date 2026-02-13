@@ -52,7 +52,7 @@ function gfInv(a: number): number {
 }
 
 /** Polynomial multiplication in GF(2^8)[x]. */
-function polyMul(p: Uint8Array, q: Uint8Array): Uint8Array {
+function polyMul(p: Uint8Array<ArrayBufferLike>, q: Uint8Array<ArrayBufferLike>): Uint8Array<ArrayBufferLike> {
     const result = new Uint8Array(p.length + q.length - 1);
     for (let i = 0; i < p.length; i++) {
         for (let j = 0; j < q.length; j++) {
@@ -63,16 +63,16 @@ function polyMul(p: Uint8Array, q: Uint8Array): Uint8Array {
 }
 
 /** Cache of generator polynomials keyed by nsym. */
-const generatorCache = new Map<number, Uint8Array>();
+const generatorCache = new Map<number, Uint8Array<ArrayBufferLike>>();
 
 /** Build the generator polynomial for `nsym` error correction symbols. */
-function buildGenerator(nsym: number): Uint8Array {
+function buildGenerator(nsym: number): Uint8Array<ArrayBufferLike> {
     const cached = generatorCache.get(nsym);
     if (cached) return cached;
 
-    let g = new Uint8Array([1]);
+    let g: Uint8Array<ArrayBufferLike> = Uint8Array.from([1]);
     for (let i = 0; i < nsym; i++) {
-        g = polyMul(g, new Uint8Array([1, EXP_TABLE[i]]));
+        g = polyMul(g, new Uint8Array([1, EXP_TABLE[i] ?? 0]));
     }
     generatorCache.set(nsym, g);
     return g;

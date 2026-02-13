@@ -44,7 +44,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     return webCrypto.subtle.deriveKey(
         {
             name: "PBKDF2",
-            salt,
+            salt: salt as BufferSource,
             iterations: 100000,
             hash: "SHA-256",
         },
@@ -80,9 +80,9 @@ async function encryptData(plaintext: string, passphrase: string): Promise<Uint8
  */
 async function decryptData(data: Uint8Array, passphrase: string): Promise<string> {
     const webCrypto = getWebCrypto();
-    const salt = data.slice(0, 16);
-    const iv = data.slice(16, 28);
-    const ciphertext = data.slice(28);
+    const salt = Uint8Array.from(data.subarray(0, 16));
+    const iv = Uint8Array.from(data.subarray(16, 28));
+    const ciphertext = Uint8Array.from(data.subarray(28));
     const key = await deriveKey(passphrase, salt);
 
     const plaintext = await webCrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);

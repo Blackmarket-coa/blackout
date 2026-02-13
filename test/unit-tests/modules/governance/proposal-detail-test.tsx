@@ -21,6 +21,9 @@ describe("ProposalDetail", () => {
         state: "discuss",
         createdAt: 1735689600000,
         updatedAt: 1735689600000,
+        schemaVersion: 1,
+        amendments: [],
+        auditTimeline: [],
     };
 
     it("renders deliberation cluster summaries when provided", () => {

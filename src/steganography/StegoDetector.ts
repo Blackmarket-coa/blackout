@@ -20,7 +20,6 @@ import type { Room } from "matrix-js-sdk/src/models/room";
 import { hasStegoMarker, looksLikeStegoEmoji } from "./EmojiStego";
 import { StegoCodec } from "./StegoCodec";
 import { getEphemeralManager } from "./ephemeral/EphemeralManager";
-import { STEGO_MARKER } from "./types";
 
 /** Detection result for a single event. */
 export interface StegoDetection {

@@ -6,7 +6,6 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { calculateCapacity, encodeImage, decodeImage } from "../../../src/steganography/ImageStego";
-import { STEGO_MAGIC } from "../../../src/steganography/types";
 
 /** Create a mock ImageData of given dimensions. */
 function createMockImageData(width: number, height: number): ImageData {

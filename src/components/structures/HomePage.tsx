@@ -25,7 +25,7 @@ import MatrixClientContext, { useMatrixClientContext } from "../../contexts/Matr
 import MiniAvatarUploader, { AVATAR_SIZE } from "../views/elements/MiniAvatarUploader";
 import PosthogTrackers from "../../PosthogTrackers";
 import EmbeddedPage from "./EmbeddedPage";
-import { getEnabledBlackoutModuleNavigationItems } from "../../modules/blackout/navigation";
+import { getBlackoutRouteById, getEnabledBlackoutModuleNavigationItems } from "../../modules/blackout/navigation";
 
 const onClickSendDm = (ev: ButtonEvent): void => {
     PosthogTrackers.trackInteraction("WebHomeCreateChatButton", ev);
@@ -120,13 +120,13 @@ const HomePage: React.FC<IProps> = ({ justRegistered = false }) => {
                 {introSection}
                 {blackoutNavigationItems.length > 0 && (
                     <section className="mx_HomePage_default_blackout" data-testid="blackout-home-navigation">
-                        <h3>{_t("blackout|home_section_title")}</h3>
+                        <h3>{_t("common|home")}</h3>
                         <div className="mx_HomePage_default_buttons">
                             {blackoutNavigationItems.map((item) => (
                                 <AccessibleButton
                                     key={item.id}
                                     onClick={() => {
-                                        window.location.hash = `#/${item.route}`;
+                                        window.location.hash = `#${getBlackoutRouteById(item.id)}`;
                                     }}
                                     data-testid={`blackout-home-link-${item.id}`}
                                 >
