@@ -3,7 +3,7 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Total items: **211**
+- Total items: **207**
 - Total files: **131**
 
 ## Checklist
@@ -28,12 +28,8 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [ ] L10: `// TODO: Generify the name of this and all components within - it's not just for scalar.`
 - [ ] L192: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
 - [ ] L211: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-- [ ] L762: `sendError(event, _t("scalar|failed_send_event"), new Error("Sending message events is not implemented"));`
-- [ ] L839: `sendError(event, _t("scalar|failed_read_event"), new Error("Reading message events is not implemented"));`
 - [ ] L868: `// TODO -- Scalar postMessage API should be namespaced with event.data.api field`
 
-### `src/SecurityManager.ts`
-- [ ] L84: `throw new Error("Multiple storage key requests not implemented");`
 
 ### `src/SendHistoryManager.ts`
 - [ ] L30: `// TODO: Performance issues?`
