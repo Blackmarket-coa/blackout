@@ -18,7 +18,7 @@ from urllib.request import urlretrieve
 
 
 class DeployException(Exception):
-    pass
+    """Raised for recoverable deployment errors."""
 
 
 def create_relative_symlink(linkname, target):
