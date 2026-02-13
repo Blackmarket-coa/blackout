@@ -12,6 +12,37 @@
 Element (formerly known as Vector and Riot) is a Matrix web client built using the [Matrix
 JS SDK](https://github.com/matrix-org/matrix-js-sdk).
 
+## Repository functionality at a glance
+
+This fork contains the upstream Element Web client architecture plus an expanded steganography
+capability set. The high-level flow is:
+
+- **Bootstrap/runtime shell** in `src/vector/*` (feature checks, platform selection, config/language/theme load,
+  module/plugin initialization).
+- **Core Matrix client** in `src/components`, `src/models`, `src/settings`, and related app infrastructure.
+- **Steganography subsystem** in `src/steganography/*` (emoji/image carriers, envelope/chunking,
+  detection, ephemeral lifecycle management, and entitlement/audit infrastructure).
+
+For a deeper code-driven walkthrough, see `docs/repository_functionality_analysis.md`.
+
+For governance-focused controls (entitlements, monetization policy, paid-room access governance, and plugin permission boundaries), see `docs/features/governance_features_analysis.md`.
+
+## Blackout reuse status snapshot
+
+From `docs/blackout-reuse-completion-tracker.md`, current implementation status is:
+
+- ✅ **Complete**: Matrix backbone, CRDT foundation, governance lifecycle/voting, delegation, education, mutual-aid board, and sortition.
+- 🟡 **Partial**: deliberation clustering scale/performance hardening, IPFS in-product event/state integration depth, and cross-module productionization.
+
+Current priority order from the tracker:
+
+1. Deliberation scale/perf hardening
+2. IPFS room-event/state UX integration
+3. Cross-module E2E expansion (education/mutual-aid/IPFS)
+4. Final rollout hardening (runbooks/localization/policy tuning)
+
+For the full evidence-backed breakdown, see `docs/blackout-reuse-completion-tracker.md`.
+
 # Supported Environments
 
 Element has several tiers of support for different environments:

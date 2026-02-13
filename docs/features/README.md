@@ -1,9 +1,22 @@
-# Feature documention
+# Feature documentation
 
 The idea of this folder is to document the features we support in different parts of the app.
 In case anyone needs to work on a given part, and isn't aware of all the features in the area,
 they will hopefully get an idea for all the supported functionality to know what to take into account
 when making changes.
+
+For a repository-wide code analysis that maps bootstrap, core client, and steganography architecture, see `docs/repository_functionality_analysis.md`.
+
+For governance-focused analysis (entitlements, boost policies, paid-room key governance, and plugin permissions), see `docs/features/governance_features_analysis.md`.
+
+## Blackout reuse tracker highlights
+
+The reuse tracker currently marks:
+
+- ✅ Complete: governance lifecycle/voting, delegation semantics, education module, mutual-aid board, and sortition.
+- 🟡 Partial: deliberation clustering at scale, IPFS end-to-end product integration, and cross-cutting productionization/E2E depth.
+
+See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and execution order.
 
 ## Additional feature planning docs
 
