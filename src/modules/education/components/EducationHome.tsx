@@ -33,6 +33,8 @@ export default function EducationHome(): React.JSX.Element {
     );
 
     const selectedCurriculum = selectedStudyCircleId ? curriculaByStudyCircleId[selectedStudyCircleId] : undefined;
+    const canCreateCircle = Boolean(circleTitle.trim());
+    const canSaveSection = Boolean(selectedStudyCircle && selectedCurriculum && sectionTitle.trim() && sectionMarkdown.trim());
 
     useEffect(() => {
         if (!selectedStudyCircleId) {
@@ -158,13 +160,19 @@ export default function EducationHome(): React.JSX.Element {
                         placeholder="New study circle"
                         data-testid="blackout-education-circle-title"
                     />
-                    <button type="button" onClick={() => void handleCreateStudyCircle()} data-testid="blackout-education-create-circle">
+                    <button
+                        type="button"
+                        onClick={() => void handleCreateStudyCircle()}
+                        disabled={!canCreateCircle}
+                        data-testid="blackout-education-create-circle"
+                    >
                         Create study circle
                     </button>
                 </div>
             )}
 
             <ul data-testid="blackout-education-circles">
+                {studyCircles.length === 0 && <li>No study circles yet.</li>}
                 {studyCircles.map((circle) => (
                     <li key={circle.id}>
                         <button type="button" onClick={() => setSelectedStudyCircleId(circle.id)}>
@@ -192,13 +200,19 @@ export default function EducationHome(): React.JSX.Element {
                                 placeholder="Section markdown"
                                 data-testid="blackout-education-section-markdown"
                             />
-                            <button type="button" onClick={() => void handleUpsertSection()} data-testid="blackout-education-add-section">
+                            <button
+                                type="button"
+                                onClick={() => void handleUpsertSection()}
+                                disabled={!canSaveSection}
+                                data-testid="blackout-education-add-section"
+                            >
                                 {selectedSectionId ? "Save section" : "Add section"}
                             </button>
                         </>
                     )}
 
                     <ol>
+                        {selectedCurriculum?.sections.length === 0 && <li>No sections yet.</li>}
                         {selectedCurriculum?.sections.map((section) => (
                             <li key={section.id}>
                                 <strong>{section.title}</strong>

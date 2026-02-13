@@ -48,6 +48,7 @@ export default function GovernanceHome(): React.JSX.Element {
     );
 
     const selectedVote = selectedProposal ? votesByProposalId[selectedProposal.id] : undefined;
+    const openVotesCount = Object.values(votesByProposalId).filter((vote) => !vote.closedAt).length;
     const deliberationClusters = useMemo(() => {
         if (!selectedVote) {
             return undefined;
@@ -143,6 +144,7 @@ export default function GovernanceHome(): React.JSX.Element {
     return (
         <section data-testid="blackout-governance-view">
             <h2>Governance</h2>
+            <p>Proposals: {proposals.length} · Open votes: {openVotesCount}</p>
             <ProposalComposer onCreate={handleCreate} />
             <ProposalList
                 proposals={proposals}

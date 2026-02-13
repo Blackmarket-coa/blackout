@@ -41,9 +41,12 @@ export default function ProposalDetail({
             <p>
                 <strong>State:</strong> {proposal.state}
             </p>
-            <button type="button" onClick={onAdvanceState} data-testid="blackout-proposal-advance">
-                Advance state
-            </button>
+            <div>
+                <button type="button" onClick={onAdvanceState} data-testid="blackout-proposal-advance">
+                    Advance state
+                </button>
+                <small>Lifecycle: draft → discuss → amend → close → decide</small>
+            </div>
             {!vote && proposal.state === "close" && (
                 <button type="button" onClick={onStartVote} data-testid="blackout-vote-start">
                     Start vote
@@ -51,25 +54,26 @@ export default function ProposalDetail({
             )}
             {isVoteOpen && (
                 <div>
-                    <button type="button" onClick={() => onCastVote("approve")}>
-                        Approve
-                    </button>
-                    <button type="button" onClick={() => onCastVote("reject")}>
-                        Reject
-                    </button>
-                    <button type="button" onClick={() => onCastVote("abstain")}>
-                        Abstain
-                    </button>
+                    <h4>Cast ballot</h4>
+                    <button type="button" onClick={() => onCastVote("approve")}>Approve</button>
+                    <button type="button" onClick={() => onCastVote("reject")}>Reject</button>
+                    <button type="button" onClick={() => onCastVote("abstain")}>Abstain</button>
                     <button type="button" onClick={onCloseVote} data-testid="blackout-vote-close">
                         Close vote
                     </button>
                 </div>
             )}
             {tally && (
-                <p data-testid="blackout-vote-tally">
-                    approve: {tally.approve}, reject: {tally.reject}, abstain: {tally.abstain}, passed:{" "}
-                    {String(tally.passed)}
-                </p>
+                <dl data-testid="blackout-vote-tally">
+                    <dt>Approve</dt>
+                    <dd>{tally.approve}</dd>
+                    <dt>Reject</dt>
+                    <dd>{tally.reject}</dd>
+                    <dt>Abstain</dt>
+                    <dd>{tally.abstain}</dd>
+                    <dt>Passed</dt>
+                    <dd>{String(tally.passed)}</dd>
+                </dl>
             )}
             {deliberationClusters && deliberationClusters.length > 0 && (
                 <section data-testid="blackout-deliberation-clusters">
