@@ -29,7 +29,7 @@ import { MatrixRTCSession, type SessionMembershipData, type IRTCNotificationCont
 
 import { MatrixClientPeg } from "./MatrixClientPeg";
 import { PosthogAnalytics } from "./PosthogAnalytics";
-import SdkConfig from "./SdkConfig";
+import SdkConfig, { DEFAULTS } from "./SdkConfig";
 import PlatformPeg from "./PlatformPeg";
 import * as TextForEvent from "./TextForEvent";
 import * as Avatar from "./Avatar";
@@ -270,8 +270,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
             plaf.requestNotificationPermission().then((result) => {
                 if (result !== "granted") {
                     // The permission request was dismissed or denied
-                    // TODO: Support alternative branding in messaging
-                    const brand = SdkConfig.get().brand;
+                    const brand = SdkConfig.get().brand ?? DEFAULTS.brand;
                     const description =
                         result === "denied"
                             ? _t("settings|notifications|error_permissions_denied", { brand })

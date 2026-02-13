@@ -914,8 +914,8 @@ const stateHandlers: IHandlers = {
     [EventType.RoomJoinRules]: textForJoinRulesEvent,
     [EventType.RoomGuestAccess]: textForGuestAccessEvent,
 
-    // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
     "im.vector.modular.widgets": textForWidgetEvent,
+    "m.widget": textForWidgetEvent,
     [WIDGET_LAYOUT_EVENT_TYPE]: textForWidgetLayoutEvent,
 };
 
