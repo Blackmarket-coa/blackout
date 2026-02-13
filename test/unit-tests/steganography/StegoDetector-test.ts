@@ -138,11 +138,6 @@ describe("StegoDetector", () => {
             const callback = jest.fn();
             detector.onDetection(callback);
 
-            // Simulate detection via scanEvent
-            const payload = new Uint8Array([1, 2, 3]);
-            const carrier = encodeEmoji(payload, Date.now() + 1000, StegoStrategy.Emoji);
-            const event = createMockEvent("$event1", "!room:test", carrier);
-
             // scanEvent doesn't fire callbacks (only onTimelineEvent does),
             // but we can verify the callback was registered
             expect(typeof callback).toBe("function");

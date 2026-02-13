@@ -16,7 +16,15 @@ export interface VoteTally {
     passed: boolean;
     totalVotes: number;
     quorumMet: boolean;
-    policy: VotingPolicy;
+    policy: NormalizedVotingPolicy;
+}
+
+interface NormalizedVotingPolicy {
+    quorum: number;
+    threshold: {
+        type: "simple_majority" | "supermajority";
+        ratio: number;
+    };
 }
 
 export interface VotingPolicy {
@@ -27,7 +35,7 @@ export interface VotingPolicy {
     };
 }
 
-const DEFAULT_VOTING_POLICY: Required<VotingPolicy> = {
+const DEFAULT_VOTING_POLICY: NormalizedVotingPolicy = {
     quorum: 0,
     threshold: {
         type: "simple_majority",
@@ -35,16 +43,20 @@ const DEFAULT_VOTING_POLICY: Required<VotingPolicy> = {
     },
 };
 
-function normalizePolicy(policy?: VotingPolicy): Required<VotingPolicy> {
+function normalizePolicy(policy?: VotingPolicy): NormalizedVotingPolicy {
     const quorum = Math.max(0, Math.floor(policy?.quorum ?? DEFAULT_VOTING_POLICY.quorum));
     const thresholdType = policy?.threshold?.type ?? DEFAULT_VOTING_POLICY.threshold.type;
-    const ratio = policy?.threshold?.ratio ?? DEFAULT_VOTING_POLICY.threshold.ratio;
+    const ratioRaw = policy?.threshold?.ratio;
+    const ratio = typeof ratioRaw === "number" ? ratioRaw : DEFAULT_VOTING_POLICY.threshold.ratio;
 
     return {
         quorum,
         threshold: {
             type: thresholdType,
-            ratio: Number.isFinite(ratio) ? Math.min(Math.max(ratio, 0), 1) : DEFAULT_VOTING_POLICY.threshold.ratio,
+            ratio:
+                typeof ratio === "number" && Number.isFinite(ratio)
+                    ? Math.min(Math.max(ratio, 0), 1)
+                    : DEFAULT_VOTING_POLICY.threshold.ratio,
         },
     };
 }
@@ -114,7 +126,8 @@ export class VotingEngine {
                 return summary;
             }
 
-            summary.passed = summary.approve / consideredVotes >= effectivePolicy.threshold.ratio;
+            const thresholdRatio = effectivePolicy.threshold.ratio;
+            summary.passed = summary.approve / consideredVotes >= thresholdRatio;
             return summary;
         }
 

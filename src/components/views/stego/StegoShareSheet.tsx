@@ -152,7 +152,7 @@ export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
                 {isImage ? (
                     <img
                         src={carrier}
-                        alt="Steganographic image"
+                        alt="Steganographic carrier"
                         className="mx_StegoShareSheet_previewImage"
                     />
                 ) : (

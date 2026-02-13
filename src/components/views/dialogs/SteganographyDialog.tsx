@@ -71,7 +71,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                 useEncryption && passphrase ? passphrase : undefined,
             );
             setResult(encoded);
-        } catch (e) {
+        } catch {
             setError(_t("steganography|error_encoding"));
         } finally {
             setProcessing(false);
@@ -88,7 +88,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
             } else {
                 setResult(decoded);
             }
-        } catch (e) {
+        } catch {
             setError(_t("steganography|error_decoding"));
         } finally {
             setProcessing(false);

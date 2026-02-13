@@ -232,7 +232,7 @@ export default function UserSettingsDialog(props: IProps): JSX.Element {
                 _td("settings|steganography|title"),
                 <VisibilityOffIcon />,
                 <SteganographyUserSettingsTab />,
-                "UserSettingsSteganography",
+                undefined,
             ),
         );
 

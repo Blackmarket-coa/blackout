@@ -277,14 +277,6 @@ export class StegoCodec {
     }
 
     /**
-     * Decode an emoji carrier string (backward-compatible wrapper).
-     */
-    private decodeEmojiCarrier(carrier: string): { payload: Uint8Array; header: StegoDecodeResult } | null {
-        const result = this.decodeEmojiCarrierDiagnostic(carrier);
-        return result.ok ? { payload: result.payload, header: result.header } : null;
-    }
-
-    /**
      * Decode an emoji carrier string with full diagnostics.
      */
     private decodeEmojiCarrierDiagnostic(carrier: string): DecodeOutcome {
@@ -480,15 +472,6 @@ export class StegoCodec {
         };
     }
 
-    /**
-     * Decode an image carrier (backward-compatible wrapper).
-     */
-    private async decodeImageCarrier(
-        carrier: string,
-    ): Promise<{ payload: Uint8Array; header: StegoDecodeResult } | null> {
-        const result = await this.decodeImageCarrierDiagnostic(carrier);
-        return result.ok ? { payload: result.payload, header: result.header } : null;
-    }
 }
 
 /** Singleton codec instance with default config. */

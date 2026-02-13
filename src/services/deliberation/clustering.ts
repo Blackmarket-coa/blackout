@@ -48,18 +48,6 @@ function cosineSimilarity(a: number[], b: number[]): number {
     return dot / (Math.sqrt(aMagnitude) * Math.sqrt(bMagnitude));
 }
 
-function recomputeCentroid(vectors: OpinionVector[]): number[] {
-    const total = new Array(vectors[0].values.length).fill(0);
-
-    for (const vector of vectors) {
-        for (let index = 0; index < vector.values.length; index += 1) {
-            total[index] += vector.values[index];
-        }
-    }
-
-    return total.map((value) => value / vectors.length);
-}
-
 export function clusterOpinions(vectors: OpinionVector[], config: ClusterConfig = {}): OpinionCluster[] {
     const similarityThreshold = config.similarityThreshold ?? 0.85;
     const minimumVectorLength = config.minimumVectorLength ?? 1;

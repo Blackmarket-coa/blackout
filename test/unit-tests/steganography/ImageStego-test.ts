@@ -6,7 +6,6 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { calculateCapacity, encodeImage, decodeImage } from "../../../src/steganography/ImageStego";
-import { STEGO_MAGIC } from "../../../src/steganography/types";
 
 /** Create a mock ImageData of given dimensions. */
 function createMockImageData(width: number, height: number): ImageData {
@@ -125,12 +124,8 @@ describe("ImageStego", () => {
             const imageData = createMockImageData(50, 50);
             const decoded = decodeImage(imageData);
 
-            // Might return null if magic bytes don't match
-            if (decoded !== null) {
-                // If by chance the LSBs happen to form magic bytes,
-                // the payload length would be nonsensical
-                expect(decoded.header.payloadLength).toBeDefined();
-            }
+            // Usually null for non-stego input; if false-positive occurs it still has a parsed header.
+            expect(decoded === null || decoded.header.payloadLength >= 0).toBe(true);
         });
     });
 

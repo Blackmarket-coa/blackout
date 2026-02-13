@@ -34,8 +34,11 @@ export function validateCarrierCompatibility(carrier: string): CarrierCompatibil
 
     payload = payload.replace(CHUNK_HEADER_REGEX, "");
 
-    const disallowedControlChars = payload.match(/[\u0000-\u001F\u007F]/g);
-    if (disallowedControlChars) {
+    const hasDisallowedControlChars = Array.from(payload).some((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code <= 0x1f || code === 0x7f;
+    });
+    if (hasDisallowedControlChars) {
         issues.push("Carrier contains disallowed control characters");
     }
 

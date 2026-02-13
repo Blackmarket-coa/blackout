@@ -13,14 +13,10 @@ Please see LICENSE files in the repository root for full details.
  * When detected, notifies the UI to render the StegoMessageView.
  */
 
-import type { MatrixClient } from "matrix-js-sdk/src/client";
-import type { MatrixEvent } from "matrix-js-sdk/src/models/event";
-import type { Room } from "matrix-js-sdk/src/models/room";
-
+import type { MatrixClient, MatrixEvent, Room } from "matrix-js-sdk/src/matrix";
 import { hasStegoMarker, looksLikeStegoEmoji } from "./EmojiStego";
 import { StegoCodec } from "./StegoCodec";
 import { getEphemeralManager } from "./ephemeral/EphemeralManager";
-import { STEGO_MARKER } from "./types";
 
 /** Detection result for a single event. */
 export interface StegoDetection {

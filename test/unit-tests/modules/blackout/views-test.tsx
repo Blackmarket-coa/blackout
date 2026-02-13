@@ -6,57 +6,52 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "jest-matrix-react";
 
-import GovernanceView from "../../../../src/modules/governance/views/GovernanceView";
+import * as featureFlags from "../../../../src/modules/blackout/featureFlags";
 import EducationView from "../../../../src/modules/education/views/EducationView";
+import GovernanceView from "../../../../src/modules/governance/views/GovernanceView";
 import MutualAidView from "../../../../src/modules/mutualAid/views/MutualAidView";
-
-jest.mock("../../../../src/modules/blackout/featureFlags", () => ({
-    ...jest.requireActual("../../../../src/modules/blackout/featureFlags"),
-    isBlackoutFeatureEnabled: jest.fn(),
-}));
-
-jest.mock("../../../../src/services/telemetry/BlackoutTelemetry", () => ({
-    trackBlackoutModuleAdoption: jest.fn(),
-}));
-
-import { isBlackoutFeatureEnabled } from "../../../../src/modules/blackout/featureFlags";
-import { trackBlackoutModuleAdoption } from "../../../../src/services/telemetry/BlackoutTelemetry";
+import * as blackoutTelemetry from "../../../../src/services/telemetry/BlackoutTelemetry";
 
 describe("blackout module views", () => {
-    const isBlackoutFeatureEnabledMock = isBlackoutFeatureEnabled as jest.Mock;
-    const trackBlackoutModuleAdoptionMock = trackBlackoutModuleAdoption as jest.Mock;
+    let isFeatureEnabledSpy: jest.SpyInstance;
+    let trackAdoptionSpy: jest.SpyInstance;
 
     beforeEach(() => {
-        isBlackoutFeatureEnabledMock.mockReset();
-        trackBlackoutModuleAdoptionMock.mockReset();
+        isFeatureEnabledSpy = jest.spyOn(featureFlags, "isBlackoutFeatureEnabled").mockReturnValue(false);
+        trackAdoptionSpy = jest.spyOn(blackoutTelemetry, "trackBlackoutModuleAdoption").mockImplementation(jest.fn());
+    });
+
+    afterEach(() => {
+        isFeatureEnabledSpy.mockRestore();
+        trackAdoptionSpy.mockRestore();
     });
 
     it("renders governance view and tracks adoption when enabled", () => {
-        isBlackoutFeatureEnabledMock.mockReturnValue(true);
+        isFeatureEnabledSpy.mockReturnValue(true);
 
         render(<GovernanceView />);
 
         expect(screen.getByTestId("blackout-governance-view")).toBeInTheDocument();
-        expect(trackBlackoutModuleAdoptionMock).toHaveBeenCalledWith("governance");
+        expect(trackAdoptionSpy).toHaveBeenCalledWith("governance");
     });
 
     it("renders education view and tracks adoption when enabled", () => {
-        isBlackoutFeatureEnabledMock.mockReturnValue(true);
+        isFeatureEnabledSpy.mockReturnValue(true);
 
         render(<EducationView />);
 
         expect(screen.getByTestId("blackout-education-view")).toBeInTheDocument();
-        expect(trackBlackoutModuleAdoptionMock).toHaveBeenCalledWith("education");
+        expect(trackAdoptionSpy).toHaveBeenCalledWith("education");
     });
 
     it("returns null and does not track when disabled", () => {
-        isBlackoutFeatureEnabledMock.mockReturnValue(false);
+        isFeatureEnabledSpy.mockReturnValue(false);
 
         const { container } = render(<MutualAidView />);
 
         expect(container).toBeEmptyDOMElement();
-        expect(trackBlackoutModuleAdoptionMock).not.toHaveBeenCalled();
+        expect(trackAdoptionSpy).not.toHaveBeenCalled();
     });
 });

@@ -6,9 +6,8 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import type { VoteDocument } from "../../modules/governance/models/types";
-import { DelegationGraph, type DelegationResolution } from "../delegation/DelegationGraph";
-
-import { VotingEngine, type Ballot, type VoteTally, type VotingPolicy } from "./VotingEngine";
+import type { DelegationResolution, DelegationGraph } from "../delegation/DelegationGraph";
+import { type Ballot, type VoteTally, type VotingPolicy, VotingEngine } from "./VotingEngine";
 
 export interface DelegatedVoteAttribution {
     voterUserId: string;

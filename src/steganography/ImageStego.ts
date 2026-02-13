@@ -28,7 +28,6 @@ const CHANNELS_PER_PIXEL = 3;
 const BITS_PER_PIXEL = BITS_PER_CHANNEL * CHANNELS_PER_PIXEL;
 
 /** Length prefix size in bytes (4 bytes = 32-bit unsigned). */
-const LENGTH_PREFIX_BYTES = 4;
 
 /** Minimum header for image stego: magic(2) + version(1) + length(4) + crc(4) + expiry(6) = 17 bytes. */
 const IMAGE_HEADER_BYTES = 17;

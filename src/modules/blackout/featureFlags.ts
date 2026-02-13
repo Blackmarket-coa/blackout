@@ -5,6 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
+import type { SettingKey } from "../../settings/Settings";
 import SettingsStore from "../../settings/SettingsStore";
 
 export enum BlackoutFeature {
@@ -24,7 +25,7 @@ const LEGACY_FLAG_ALIASES: Partial<Record<BlackoutFeature, string>> = {
 };
 
 export function isBlackoutFeatureEnabled(feature: BlackoutFeature): boolean {
-    const primary = Boolean(SettingsStore.getValue(feature));
+    const primary = Boolean(SettingsStore.getValue(feature as SettingKey));
     if (primary) {
         return true;
     }
@@ -34,5 +35,5 @@ export function isBlackoutFeatureEnabled(feature: BlackoutFeature): boolean {
         return false;
     }
 
-    return Boolean(SettingsStore.getValue(alias));
+    return Boolean(SettingsStore.getValue(alias as SettingKey));
 }
