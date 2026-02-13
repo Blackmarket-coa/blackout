@@ -86,9 +86,13 @@ function observeReadableStream(readableStream, pendingContext = {}) {
  */
 const fetchCache = new Map();
 function fetchAsSubject(endpoint) {
-    if (fetchCache.has(endpoint)) {
-        // TODO: expiry/retry logic here?
-        return fetchCache.get(endpoint);
+    const cachedFetcher = fetchCache.get(endpoint);
+    if (cachedFetcher) {
+        /* Re-fetch if the previous attempt failed so the UI can recover from transient issues. */
+        if (cachedFetcher.value.tag !== "error") {
+            return cachedFetcher;
+        }
+        fetchCache.delete(endpoint);
     }
     const fetcher = new rxjs.BehaviorSubject(Pending.of());
     fetchCache.set(endpoint, fetcher);
