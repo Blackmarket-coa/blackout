@@ -3314,7 +3314,9 @@
         "secret_message_placeholder": "Enter the message to hide...",
         "source_message_label": "Source message",
         "title": "Steganography",
-        "use_encryption": "Encrypt with passphrase"
+        "use_encryption": "Encrypt with passphrase",
+        "error_encryption_unavailable": "Encryption requires a secure context (HTTPS or localhost).",
+        "encryption_unavailable_hint": "Encryption is unavailable in this browser context. Use HTTPS or localhost to enable it."
     },
     "stickers": {
         "empty": "You don't currently have any stickerpacks enabled",

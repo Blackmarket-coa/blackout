@@ -33,6 +33,7 @@ interface IProps {
  * Supports optional AES-GCM encryption via passphrase.
  */
 export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JSX.Element {
+    const encryptionAvailable = Boolean(globalThis.crypto?.subtle);
     const messageBody = mxEvent?.getContent().body || "";
     const hasHidden = containsSteganographyMessage(messageBody);
     const canDecode = Boolean(mxEvent);
@@ -41,7 +42,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
     const [secretMessage, setSecretMessage] = useState("");
     const [coverText, setCoverText] = useState("");
     const [passphrase, setPassphrase] = useState("");
-    const [useEncryption, setUseEncryption] = useState(true);
+    const [useEncryption, setUseEncryption] = useState(encryptionAvailable);
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
@@ -53,6 +54,11 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
         }
         if (!secretMessage.trim()) {
             setError(_t("steganography|error_no_secret"));
+            return;
+        }
+
+        if (useEncryption && !encryptionAvailable) {
+            setError(_t("steganography|error_encryption_unavailable"));
             return;
         }
 
@@ -70,7 +76,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
         } finally {
             setProcessing(false);
         }
-    }, [coverText, secretMessage, passphrase, useEncryption]);
+    }, [coverText, encryptionAvailable, secretMessage, passphrase, useEncryption]);
 
     const onDecode = useCallback(async () => {
         setProcessing(true);
@@ -197,10 +203,16 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                             <input
                                 type="checkbox"
                                 checked={useEncryption}
+                                disabled={!encryptionAvailable}
                                 onChange={(e) => setUseEncryption(e.target.checked)}
                             />
                             {_t("steganography|use_encryption")}
                         </label>
+                    )}
+                    {mode === "encode" && !encryptionAvailable && (
+                        <p className="mx_SteganographyDialog_hint">
+                            {_t("steganography|encryption_unavailable_hint")}
+                        </p>
                     )}
                     {(mode === "decode" || useEncryption) && (
                         <div className="mx_SteganographyDialog_field">
