@@ -14,7 +14,7 @@ For governance-focused analysis (entitlements, boost policies, paid-room key gov
 The reuse tracker currently marks:
 
 - ✅ Complete: governance lifecycle/voting, delegation semantics, education module, mutual-aid board, and sortition.
-- 🟡 Partial: deliberation clustering at scale, IPFS end-to-end product integration, and cross-cutting productionization/E2E depth.
+- ✅ Complete: deliberation scale/perf hardening, IPFS room-event/state UX integration, cross-module E2E depth, and rollout hardening.
 
 See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and execution order.
 
@@ -27,3 +27,5 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 - `privacy-first-phase4/`: Phase 4 federation boost primitives (tier policy, throttling, revenue-share accounting, dashboard snapshots).
 - `privacy-first-phase5/`: Phase 5 paid encrypted room creator-key lifecycle artifacts (payment-gated grants, device binding, rotation/revocation, private discovery defaults).
 - `privacy-first-phase6/`: Phase 6 plugin sandbox and cosmetic marketplace safety artifacts (capability manifests, explicit/revocable permissions, network/exfiltration conformance tests).
+
+- `../blackout-rollout-runbook.md`: rollout hardening checklist for operations, localization readiness, and policy tuning.

@@ -21,6 +21,11 @@ export interface ClusterConfig {
     minimumVectorLength?: number;
 }
 
+interface ClusterBucket {
+    vectors: OpinionVector[];
+    total: number[];
+}
+
 function isFiniteNumber(value: number): boolean {
     return Number.isFinite(value);
 }
@@ -106,26 +111,29 @@ export function clusterOpinions(vectors: OpinionVector[], config: ClusterConfig 
         return [];
     }
 
-    const clusterBuckets: OpinionVector[][] = [];
+    const clusterBuckets: ClusterBucket[] = [];
 
     for (const vector of validVectors) {
         const matchingBucket = clusterBuckets.find((bucket) => {
-            const centroid = recomputeCentroid(bucket);
+            const centroid = bucket.total.map((value) => value / bucket.vectors.length);
             return cosineSimilarity(vector.values, centroid) >= similarityThreshold;
         });
 
         if (matchingBucket) {
-            matchingBucket.push(vector);
+            matchingBucket.vectors.push(vector);
+            for (let index = 0; index < vector.values.length; index += 1) {
+                matchingBucket.total[index] += vector.values[index];
+            }
         } else {
-            clusterBuckets.push([vector]);
+            clusterBuckets.push({ vectors: [vector], total: [...vector.values] });
         }
     }
 
     return clusterBuckets
         .map((bucket, index) => ({
             id: `cluster-${index + 1}`,
-            memberIds: bucket.map((vector) => vector.userId).sort((a, b) => a.localeCompare(b)),
-            centroid: recomputeCentroid(bucket),
+            memberIds: bucket.vectors.map((vector) => vector.userId).sort((a, b) => a.localeCompare(b)),
+            centroid: bucket.total.map((value) => value / bucket.vectors.length),
         }))
         .sort((a, b) => a.memberIds[0].localeCompare(b.memberIds[0]));
 }
