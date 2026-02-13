@@ -15,6 +15,7 @@ import { submitFeedback } from "../../../rageshake/submit-rageshake";
 import StyledCheckbox from "../elements/StyledCheckbox";
 import Modal from "../../../Modal";
 import InfoDialog from "./InfoDialog";
+import ErrorDialog, { extractErrorMessageFromError } from "./ErrorDialog";
 
 interface IProps {
     title: string;
@@ -38,8 +39,20 @@ const GenericFeatureFeedbackDialog: React.FC<IProps> = ({
 
     const sendFeedback = async (ok: boolean): Promise<void> => {
         if (!ok) return onFinished(false);
-        // TODO: Handle rejection.
-        submitFeedback(rageshakeLabel, comment, canContact, rageshakeData);
+
+        try {
+            await submitFeedback(rageshakeLabel, comment, canContact, rageshakeData);
+        } catch (error) {
+            Modal.createDialog(ErrorDialog, {
+                title: _t("common|error"),
+                description: extractErrorMessageFromError(
+                    error,
+                    _t("bug_reporting|failed_send_logs_causes|unknown_error"),
+                ),
+            });
+            return onFinished(false);
+        }
+
         onFinished(true);
 
         Modal.createDialog(InfoDialog, {
