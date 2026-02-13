@@ -309,7 +309,7 @@ test.describe("Spaces", () => {
             // This finds the expand button with the class name "mx_SpaceButton_toggleCollapse". Note there is another
             // button with the same name with different class name "mx_SpacePanel_toggleCollapse".
             await spaceTree.getByRole("button", { name: "Expand" }).click();
-            await expect(page.locator(".mx_SpacePanel:not(.collapsed)")).toBeVisible(); // TODO: replace :not() selector
+            await expect(page.locator(".mx_SpacePanel")).not.toHaveClass(/collapsed/);
 
             const item = page.locator(".mx_SpaceItem", { hasText: "Root Space" });
             await expect(item).toBeVisible();
