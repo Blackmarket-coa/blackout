@@ -150,6 +150,18 @@ export type Tags = Record<string, SubstitutionValue>;
 
 export type TranslatedString = string | React.ReactNode;
 
+const regexCache = new Map<string, RegExp>();
+
+function getOrCreateRegexp(regexpString: string): RegExp {
+    let regexp = regexCache.get(regexpString);
+    if (!regexp) {
+        regexp = new RegExp(regexpString, "g");
+        regexCache.set(regexpString, regexp);
+    }
+
+    return regexp;
+}
+
 // For development/testing purposes it is useful to also output the original string
 // Don't do that for release versions
 const annotateStrings = (result: TranslatedString, translationKey: TranslationKey): TranslatedString => {
@@ -277,8 +289,7 @@ export function replaceByRegexes(text: string, mapping: IVariables | Tags): stri
     let shouldWrapInSpan = false;
 
     for (const regexpString in mapping) {
-        // TODO: Cache regexps
-        const regexp = new RegExp(regexpString, "g");
+        const regexp = getOrCreateRegexp(regexpString);
 
         // Loop over what output we have so far and perform replacements
         // We look for matches: if we find one, we get three parts: everything before the match, the replaced part,
@@ -294,6 +305,7 @@ export function replaceByRegexes(text: string, mapping: IVariables | Tags): stri
 
             // process every match in the string
             // starting with the first
+            regexp.lastIndex = 0;
             let match = regexp.exec(inputText);
 
             if (!match) continue;
