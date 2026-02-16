@@ -142,10 +142,10 @@ export default class AccountSettingsHandler extends MatrixClientBackedSettingsHa
     }
 
     // helper function to set account data then await it being echoed back
-    private async setAccountData<K extends keyof AccountDataEvents, F extends keyof AccountDataEvents[K]>(
+    private async setAccountData<K extends keyof AccountDataEvents>(
         eventType: K,
-        field: F,
-        value: AccountDataEvents[K][F],
+        field: string,
+        value: unknown,
         legacyEventType?: keyof AccountDataEvents,
     ): Promise<void> {
         let content = this.getSettings(eventType);
@@ -163,14 +163,15 @@ export default class AccountSettingsHandler extends MatrixClientBackedSettingsHa
         // which race between different lines.
         const deferred = Promise.withResolvers<void>();
         const handler = (event: MatrixEvent): void => {
-            if (event.getType() !== eventType || !isEqual(event.getContent<AccountDataEvents[K]>()[field], value))
+            if (event.getType() !== eventType || !isEqual(event.getContent<Record<string, unknown>>()[field], value)) {
                 return;
+            }
             this.client.off(ClientEvent.AccountData, handler);
             deferred.resolve();
         };
         this.client.on(ClientEvent.AccountData, handler);
 
-        await this.client.setAccountData(eventType, content);
+        await this.client.setAccountData(eventType, content as AccountDataEvents[K]);
 
         await deferred.promise;
     }

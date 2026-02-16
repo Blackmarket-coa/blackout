@@ -706,7 +706,9 @@ describe("Notifier", () => {
 
     describe("setEnabled", () => {
         it("uses default brand when config brand is missing for denied permissions", async () => {
-            MockPlatform.requestNotificationPermission = jest.fn().mockResolvedValue("denied");
+            MockPlatform.requestNotificationPermission = jest
+                .fn()
+                .mockResolvedValue("denied") as unknown as typeof MockPlatform.requestNotificationPermission;
             jest.spyOn(SdkConfig, "get").mockReturnValue({} as any);
             jest.spyOn(Notifier, "isEnabled").mockReturnValue(true);
             const createDialogSpy = jest.spyOn(Modal, "createDialog").mockReset();
@@ -719,5 +721,4 @@ describe("Notifier", () => {
             });
         });
     });
-
 });

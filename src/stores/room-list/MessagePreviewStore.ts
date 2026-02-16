@@ -18,10 +18,7 @@ import {
 import { isNullOrUndefined } from "matrix-js-sdk/src/utils";
 
 import { type ActionPayload } from "../../dispatcher/payloads";
-import {
-    type IEventDecryptedActionPayload,
-    type IRoomTimelineActionPayload,
-} from "../../actions/MatrixActionCreators";
+import { type IEventDecryptedActionPayload, type IRoomTimelineActionPayload } from "../../actions/MatrixActionCreators";
 import { AsyncStoreWithClient } from "../AsyncStoreWithClient";
 import defaultDispatcher from "../../dispatcher/dispatcher";
 import { MessageEventPreview } from "./previews/MessageEventPreview";
