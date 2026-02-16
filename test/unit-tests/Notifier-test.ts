@@ -19,7 +19,7 @@ import {
     type AccountDataEvents,
 } from "matrix-js-sdk/src/matrix";
 import { waitFor } from "jest-matrix-react";
-import { CallMembership, type SessionMembershipData, type MatrixRTCSession } from "matrix-js-sdk/src/matrixrtc";
+import { CallMembership, MatrixRTCSession, type SessionMembershipData } from "matrix-js-sdk/src/matrixrtc";
 import { randomUUID } from "node:crypto";
 
 import type BasePlatform from "../../src/BasePlatform";
@@ -465,7 +465,7 @@ describe("Notifier", () => {
             expect(ToastStore.sharedInstance().addOrReplaceToast).toHaveBeenCalledTimes(1);
         });
 
-        it("shows group call toast even if the call membership is not stored locally", () => {
+        it("shows group call toast even if the call membership is not stored locally", async () => {
             jest.spyOn(testRoom, "findEventById").mockReturnValue(undefined);
             jest.spyOn(mockClient, "fetchRoomEvent").mockImplementation(async (roomId, eventId) => {
                 if (eventId === "$memberEventId" && roomId === testRoom.roomId) {
@@ -479,7 +479,7 @@ describe("Notifier", () => {
             });
 
             const notificationEvent = emitCallNotificationEvent();
-            waitFor(() => {
+            await waitFor(() => {
                 expect(ToastStore.sharedInstance().addOrReplaceToast).toHaveBeenCalledWith(
                     expect.objectContaining({
                         key: getIncomingCallToastKey(callId, roomId),
@@ -496,21 +496,21 @@ describe("Notifier", () => {
             { "m.relates_to": undefined },
             { "m.relates_to": { rel_type: "m.reference" } },
             { "m.relates_to": { event_id: "$memberEventId", rel_type: "something.else" } },
-        ])("ignores invalid relations for call notification", (content) => {
+        ])("ignores invalid relations for call notification", async (content) => {
             emitCallNotificationEvent({ content });
-            waitFor(() => {
+            await waitFor(() => {
                 expect(ToastStore.sharedInstance().addOrReplaceToast).not.toHaveBeenCalled();
             });
         });
 
-        it("ignores a call if the membership is missing", () => {
+        it("ignores a call if the membership is missing", async () => {
             jest.spyOn(testRoom, "findEventById").mockReturnValue(undefined);
             jest.spyOn(mockClient, "fetchRoomEvent").mockImplementation(async () => {
                 throw new Error("Test mockClient.fetchRoomEvent expected not to find event");
             });
 
             emitCallNotificationEvent();
-            waitFor(() => {
+            await waitFor(() => {
                 expect(ToastStore.sharedInstance().addOrReplaceToast).not.toHaveBeenCalled();
             });
         });
@@ -544,7 +544,7 @@ describe("Notifier", () => {
                 slotDescription: { application: "m.call", id: "" },
             } as unknown as MatrixRTCSession;
 
-            mockClient.matrixRTC.getRoomSession.mockReturnValue(mockRtcSession);
+            jest.spyOn(MatrixRTCSession, "sessionForSlot").mockReturnValue(mockRtcSession);
 
             emitCallNotificationEvent();
             expect(ToastStore.sharedInstance().addOrReplaceToast).not.toHaveBeenCalled();
