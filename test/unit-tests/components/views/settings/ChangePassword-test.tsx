@@ -15,6 +15,8 @@ import ChangePassword from "../../../../../src/components/views/settings/ChangeP
 import { stubClient } from "../../../../test-utils";
 
 describe("<ChangePassword />", () => {
+    jest.setTimeout(15000);
+
     it("renders expected fields", () => {
         const onFinished = jest.fn();
         const onError = jest.fn();

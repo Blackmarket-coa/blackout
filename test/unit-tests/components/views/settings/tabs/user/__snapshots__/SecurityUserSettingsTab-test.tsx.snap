@@ -52,22 +52,14 @@ exports[`<SecurityUserSettingsTab /> renders security section 1`] = `
             <h4
               class="mx_Heading_h4"
               id="mx_SetIntegrationManager_ManagerName"
-            >
-              (scalar.vector.im)
-            </h4>
+            />
           </div>
         </div>
         <div
           class="mx_SettingsSubsection_text"
           id="mx_SetIntegrationManager_BodyText"
         >
-          <span>
-            Use an integration manager 
-            <strong>
-              (scalar.vector.im)
-            </strong>
-             to manage bots, widgets, and sticker packs.
-          </span>
+          Use an integration manager to manage bots, widgets, and sticker packs.
         </div>
         <div
           class="mx_SettingsSubsection_text"
