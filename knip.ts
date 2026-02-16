@@ -29,6 +29,17 @@ export default {
             ],
         },
     },
+    ignoreIssues: {
+        // Stego UI and governance/IPFS scaffolding are intentionally staged before wiring.
+        "src/components/views/stego/**": ["files"],
+        "src/steganography/index.ts": ["files"],
+        "src/steganography/StegoDetector.ts": ["exports"],
+        "src/steganography/types.ts": ["exports"],
+        "src/services/crdt/documentManager.ts": ["exports"],
+        "src/services/storage/ipfsRoomEvents.ts": ["exports"],
+        "src/modules/governance/models/types.ts": ["types"],
+        "src/services/crdt/types.ts": ["types"],
+    },
     ignoreDependencies: [
         // Required for `action-validator`
         "@action-validator/*",

@@ -19,11 +19,6 @@
         "user_menu": "User menu"
     },
     "a11y_jump_first_unread_room": "Jump to first unread room.",
-    "blackout": {
-        "nav_education": "Education",
-        "nav_governance": "Governance",
-        "nav_mutual_aid": "Mutual Aid"
-    },
     "action": {
         "accept": "Accept",
         "add": "Add",
@@ -401,6 +396,11 @@
         "username_in_use": "Someone already has that username, please try another.",
         "verify_email_explainer": "We need to know it’s you before resetting your password. Click the link in the email we just sent to <b>%(email)s</b>",
         "verify_email_heading": "Verify your email to continue"
+    },
+    "blackout": {
+        "nav_education": "Education",
+        "nav_governance": "Governance",
+        "nav_mutual_aid": "Mutual Aid"
     },
     "bug_reporting": {
         "additional_context": "If there is additional context that would help in analysing the issue, such as what you were doing at the time, room IDs, user IDs, etc., please include those things here.",
@@ -1586,11 +1586,7 @@
         "video_rooms_faq2_answer": "Yes, the chat timeline is displayed alongside the video.",
         "video_rooms_faq2_question": "Can I use text chat alongside the video call?",
         "video_rooms_feedbackSubheading": "Thank you for trying the beta, please go into as much detail as you can so we can improve it.",
-        "wysiwyg_composer": "Rich text editor",
-        "blackout_governance_audit_timeline": "Governance audit timeline",
-        "blackout_mutual_aid_board_audit": "Mutual aid board audit",
-        "blackout_education_lessons": "Education lessons",
-        "blackout_education_resources": "Education resources"
+        "wysiwyg_composer": "Rich text editor"
     },
     "labs_mjolnir": {
         "advanced_warning": "⚠ These settings are meant for advanced users.",
@@ -3296,8 +3292,10 @@
         "description_decode": "Attempt to reveal a hidden message embedded in this message. If the message was encrypted, enter the passphrase below.",
         "description_encode": "Hide a secret message inside visible cover text using zero-width characters. The message can optionally be encrypted with a passphrase.",
         "encode_button": "Hide message",
+        "encryption_unavailable_hint": "Encryption is unavailable in this browser context. Use HTTPS or localhost to enable it.",
         "error_decoding": "Failed to decode. The passphrase may be incorrect or the data may be corrupted.",
         "error_encoding": "Failed to encode the hidden message.",
+        "error_encryption_unavailable": "Encryption requires a secure context (HTTPS or localhost).",
         "error_no_cover_text": "Please enter cover text.",
         "error_no_hidden_message": "No hidden message was found in this text.",
         "error_no_secret": "Please enter a secret message to hide.",
@@ -3314,9 +3312,7 @@
         "secret_message_placeholder": "Enter the message to hide...",
         "source_message_label": "Source message",
         "title": "Steganography",
-        "use_encryption": "Encrypt with passphrase",
-        "error_encryption_unavailable": "Encryption requires a secure context (HTTPS or localhost).",
-        "encryption_unavailable_hint": "Encryption is unavailable in this browser context. Use HTTPS or localhost to enable it."
+        "use_encryption": "Encrypt with passphrase"
     },
     "stickers": {
         "empty": "You don't currently have any stickerpacks enabled",
