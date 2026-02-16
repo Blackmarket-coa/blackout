@@ -47,7 +47,7 @@ jobs:
                   fi
 
             - name: OSV scanner
-              uses: google/osv-scanner-action@v2.3.3
+              uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
               with:
                   scan-args: |-
                       --lockfile=yarn.lock
