@@ -47,7 +47,7 @@ jobs:
               uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: "lts/*"
-                  cache: "yarn"
+                  package-manager-cache: false
 
             - name: Install Deps
               run: "./scripts/layered.sh"
@@ -126,7 +126,7 @@ jobs:
               uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   node-version: "lts/*"
-                  cache: "yarn"
+                  package-manager-cache: false
 
             - name: Install Shared Component Deps
               working-directory: "packages/shared-components"

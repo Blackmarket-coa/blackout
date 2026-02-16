@@ -297,10 +297,7 @@ export interface IEventDecryptedActionPayload extends Pick<ActionPayload, "actio
  * @param {MatrixEvent} event the matrix event that was decrypted.
  * @returns {IEventDecryptedActionPayload} an action of type `MatrixActions.Event.decrypted`.
  */
-function createEventDecryptedAction(
-    matrixClient: MatrixClient,
-    event: MatrixEvent,
-): IEventDecryptedActionPayload {
+function createEventDecryptedAction(matrixClient: MatrixClient, event: MatrixEvent): IEventDecryptedActionPayload {
     return { action: "MatrixActions.Event.decrypted", event };
 }
 

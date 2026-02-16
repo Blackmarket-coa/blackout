@@ -13,8 +13,22 @@ set -ex
 # because some CI systems do not allow moving to a directory above the checkout
 # for the primary repo (element-web in this case).
 
+install_with_project_package_manager() {
+    local package_manager
+    package_manager=$(jq -r '.packageManager // empty' package.json)
+
+    if [[ "$package_manager" == pnpm@* ]]; then
+        # Ensure pnpm is available in CI images where only Node is preinstalled.
+        corepack enable
+        corepack pnpm install --frozen-lockfile "$@"
+        return
+    fi
+
+    yarn install --frozen-lockfile "$@"
+}
+
 # Install dependencies
-yarn install --frozen-lockfile
+install_with_project_package_manager
 
 # Pass appropriate repo to fetchdep.sh
 export PR_ORG=element-hq
@@ -29,6 +43,7 @@ pushd matrix-js-sdk
 js_sdk_package_manager=$(jq -r '.packageManager // empty' package.json)
 if [[ "$js_sdk_package_manager" == *"pnpm@"* ]]; then
     echo "Skipping matrix-js-sdk link: packageManager '$js_sdk_package_manager' is not compatible with yarn classic link in layered.sh"
+    install_with_project_package_manager
 else
     yarn link
     yarn install --frozen-lockfile
@@ -51,4 +66,4 @@ fi
 # Link the layers into element-web
 [ "$MATRIX_JS_SDK_LINKED" -eq 1 ] && yarn link matrix-js-sdk
 [ -d matrix-analytics-events ] && yarn link @matrix-org/analytics-events
-yarn install --frozen-lockfile $@
+install_with_project_package_manager "$@"

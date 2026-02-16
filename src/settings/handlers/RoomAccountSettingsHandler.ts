@@ -87,10 +87,10 @@ export default class RoomAccountSettingsHandler extends MatrixClientBackedSettin
         field: string | null,
         value: any,
     ): Promise<void> {
-        let content: ReturnType<RoomAccountSettingsHandler["getSettings"]>;
+        let content: Record<string, any>;
 
         if (field === null) {
-            content = value;
+            content = value as Record<string, any>;
         } else {
             content = this.getSettings(roomId, eventType) || {};
             content[field] = value;

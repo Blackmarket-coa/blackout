@@ -246,11 +246,22 @@ and the steganography feature set that is currently under active development.
 Audit run summary (local run on this branch):
 
 - `yarn install --frozen-lockfile`: **pass**
-- `yarn lint:types`: **pass**
-- `yarn lint:js`: **pass**
+- `yarn lint:types`: **fail**
+    - TypeScript failures are currently reported in settings handlers and a few
+      impacted test fixtures (see compiler output for
+      `AccountSettingsHandler.ts`, `RoomAccountSettingsHandler.ts`,
+      `Notifier-test.ts`, `RolesRoomSettingsTab-test.tsx`, and
+      `RoomListStore-test.ts`).
+- `yarn lint:js`: **fail**
+    - Prettier check reports style drift in six files
+      (`MatrixActionCreators.ts`, `Notifier.ts`,
+      `MessagePreviewStore.ts`, `RolesRoomSettingsTab-test.tsx`,
+      `Notifier-test.ts`, `TextForEvent-test.ts`).
 - `yarn lint:style`: **pass**
 - `yarn test test/unit-tests/steganography --runInBand`: **pass**
     - 21 suites passed, 184 tests passed.
+- `yarn test test/unit-tests/components/structures/MatrixChat-test.tsx --runInBand`: **pass**
+    - 1 suite passed, 77 tests passed.
 - `yarn audit --groups dependencies --level moderate`: **fail**
     - 1 moderate vulnerability reported for transitive dependency `counterpart`
       under `@element-hq/web-shared-components` (no upstream patch available).

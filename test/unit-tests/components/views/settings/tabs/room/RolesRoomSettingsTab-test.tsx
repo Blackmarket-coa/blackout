@@ -156,9 +156,8 @@ describe("RolesRoomSettingsTab", () => {
             expect(getJoinCallSelectedOption(tab)).toBeFalsy();
         });
     });
-
-
     it("shows translated label for stable m.widget power level", async () => {
+        // @ts-ignore - mocked doesn't support overloads properly
         mocked(room.currentState.getStateEvents).mockImplementation((type, key) => {
             if (key === undefined) return [] as MatrixEvent[];
             if (type === EventType.RoomPowerLevels) {

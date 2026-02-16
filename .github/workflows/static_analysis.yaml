@@ -26,7 +26,7 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   node-version: "lts/*"
 
             - name: Install Dependencies
@@ -86,7 +86,7 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   node-version: "lts/*"
 
             # Does not need branch matching as only analyses this layer
@@ -110,7 +110,7 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   node-version: "lts/*"
 
             # Does not need branch matching as only analyses this layer
@@ -128,7 +128,7 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   node-version: "lts/*"
 
             # Does not need branch matching as only analyses this layer
@@ -146,7 +146,7 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   node-version: "lts/*"
 
             - name: Install Deps

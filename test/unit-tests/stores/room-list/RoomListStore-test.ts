@@ -122,6 +122,7 @@ describe("RoomListStore", () => {
         // When we tell it we joined a new room that has an old room as
         // predecessor in the create event
         const payload = {
+            action: "MatrixActions.Room.myMembership" as const,
             oldMembership: KnownMembership.Invite,
             membership: KnownMembership.Join,
             room: roomWithCreatePredecessor,
@@ -141,6 +142,7 @@ describe("RoomListStore", () => {
 
         // When we tell it we joined a new room with no predecessor
         const payload = {
+            action: "MatrixActions.Room.myMembership" as const,
             oldMembership: KnownMembership.Invite,
             membership: KnownMembership.Join,
             room: roomNoPredecessor,
@@ -258,6 +260,7 @@ describe("RoomListStore", () => {
             // When we tell it we joined a new room that has an old room as
             // predecessor in the create event
             const payload = {
+                action: "MatrixActions.Room.myMembership" as const,
                 oldMembership: KnownMembership.Invite,
                 membership: KnownMembership.Join,
                 room: roomWithPredecessorEvent,

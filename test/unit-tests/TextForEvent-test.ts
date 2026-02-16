@@ -53,8 +53,6 @@ function mockPinnedEvent(pinnedMessageIds?: string[], prevPinnedMessageIds?: str
 describe("TextForEvent", () => {
     const mockClient = createTestClient();
 
-
-
     describe("Widget events", () => {
         it("renders stable m.widget events", () => {
             const event = new MatrixEvent({
