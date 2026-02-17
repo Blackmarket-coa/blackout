@@ -14,6 +14,7 @@ import RoomUpgradeWarningDialog, {
 } from "../../../src/components/views/dialogs/RoomUpgradeWarningDialog";
 import { type Command } from "../../../src/slash-commands/SlashCommands";
 import { parseUpgradeRoomArgs } from "../../../src/slash-commands/upgraderoom/parseUpgradeRoomArgs";
+import * as RoomUpgradeUtils from "../../../src/utils/RoomUpgrade";
 import Modal from "../../../src/Modal";
 import { setUpCommandTest } from "./utils";
 
@@ -38,13 +39,12 @@ describe("/upgraderoom", () => {
         const { command, client } = setUpCommandTest(roomId, "/upgraderoom");
 
         const createDialog = jest.spyOn(Modal, "createDialog");
-        const upgradeRoom = jest.fn().mockResolvedValue({ replacement_room: "!newroom" });
+        const upgradeRoom = jest.spyOn(RoomUpgradeUtils, "upgradeRoom").mockResolvedValue("!newroom");
         const resp: IFinishedOpts = { continue: continueUpgrade, invite: false };
         createDialog.mockReturnValue({
             finished: Promise.resolve([resp]),
             close: jest.fn(),
         });
-        client.upgradeRoom = upgradeRoom;
 
         return { command, client, createDialog, upgradeRoom };
     }
@@ -97,7 +97,17 @@ describe("/upgraderoom", () => {
         );
 
         // And when they said yes, we called into upgradeRoom
-        expect(upgradeRoom).toHaveBeenCalledWith("!room:example.com", "12", ["@foo:bar.com", "@baz:qux.uk"]);
+        expect(upgradeRoom).toHaveBeenCalledWith(
+            client.getRoom("!room:example.com"),
+            "12",
+            false,
+            true,
+            true,
+            false,
+            undefined,
+            false,
+            ["@foo:bar.com", "@baz:qux.uk"],
+        );
     });
 
     it("should not upgrade the room if the user changes their mind", async () => {
@@ -119,6 +129,6 @@ describe("/upgraderoom", () => {
         );
 
         // And when they said no, we did not call into upgradeRoom
-        expect(upgradeRoom).not.toHaveBeenCalledWith("!room:example.com", "12", ["@foo:bar.com", "@baz:qux.uk"]);
+        expect(upgradeRoom).not.toHaveBeenCalled();
     });
 });
