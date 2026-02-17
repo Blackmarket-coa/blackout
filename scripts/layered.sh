@@ -24,7 +24,9 @@ install_with_project_package_manager() {
         return
     fi
 
-    yarn install --frozen-lockfile "$@"
+    # CI can run with an older Node major than declared in some layered deps.
+    # We intentionally bypass engine checks here so layered setup can proceed.
+    yarn install --frozen-lockfile --ignore-engines "$@"
 }
 
 # Install dependencies
@@ -46,7 +48,7 @@ if [[ "$js_sdk_package_manager" == *"pnpm@"* ]]; then
     install_with_project_package_manager
 else
     yarn link
-    yarn install --frozen-lockfile
+    yarn install --frozen-lockfile --ignore-engines
     MATRIX_JS_SDK_LINKED=1
 fi
 popd
@@ -58,7 +60,7 @@ scripts/fetchdep.sh matrix-org matrix-analytics-events
 if [ -d matrix-analytics-events ]; then
     pushd matrix-analytics-events
     yarn link
-    yarn install --frozen-lockfile
+    yarn install --frozen-lockfile --ignore-engines
     yarn build:ts
     popd
 fi
