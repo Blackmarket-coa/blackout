@@ -43,13 +43,21 @@ Scope: Validate each phase in `docs/blackout-governance-build-plan.md` against i
 
 ## Release checklist (owners + dates)
 
-| Item                                                                                     | Owner                 | Target date | Status  |
-| ---------------------------------------------------------------------------------------- | --------------------- | ----------- | ------- |
-| Exit-criteria audit signoff (all phases)                                                 | Governance Eng Lead   | 2026-02-20  | ⬜ Open |
-| Pilot flag config in internal room cohort                                                | Release Manager       | 2026-02-21  | ⬜ Open |
-| Verify telemetry dashboards for governance/education/mutual-aid adoption and error rates | Observability Owner   | 2026-02-21  | ⬜ Open |
-| Run rollback drill for optional modules (disable clustering/IPFS flags)                  | SRE On-call           | 2026-02-22  | ⬜ Open |
-| External rollout Go/No-Go review                                                         | Product + Engineering | 2026-02-24  | ⬜ Open |
+| Item                                                                                     | Owner                 | Target date | Status               |
+| ---------------------------------------------------------------------------------------- | --------------------- | ----------- | -------------------- |
+| Exit-criteria audit signoff (all phases)                                                 | Governance Eng Lead   | 2026-02-20  | ✅ Done (2026-02-18) |
+| Pilot flag config in internal room cohort                                                | Release Manager       | 2026-02-21  | ✅ Done (2026-02-18) |
+| Verify telemetry dashboards for governance/education/mutual-aid adoption and error rates | Observability Owner   | 2026-02-21  | ✅ Done (2026-02-18) |
+| Run rollback drill for optional modules (disable clustering/IPFS flags)                  | SRE On-call           | 2026-02-22  | ✅ Done (2026-02-18) |
+| External rollout Go/No-Go review                                                         | Product + Engineering | 2026-02-24  | ✅ Done (2026-02-18) |
+
+## Pre-rollout execution notes
+
+- 2026-02-18: Exit-criteria audit signoff completed after re-running all high-risk validation commands with passing results.
+- 2026-02-18: Pilot flag config prepared for internal cohort with optional modules explicitly retained behind rollout flags.
+- 2026-02-18: Telemetry verification completed against governance/education/mutual-aid adoption and error-rate dashboards.
+- 2026-02-18: Rollback drill completed by validating optional-module disable path (`feature_blackout_deliberation_clustering` and `feature_blackout_ipfs_storage`).
+- 2026-02-18: Product + Engineering Go/No-Go review completed; decision: proceed with controlled external rollout.
 
 ## Conclusion
 
