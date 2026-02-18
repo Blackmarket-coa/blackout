@@ -26,6 +26,11 @@ This tracker maps the implementation status in this repository to the phases def
 - Completed phases: 8 / 8
 - Overall completion: **100%**
 
+
+## Exit-criteria audit artifact
+
+- Latest pre-rollout audit: `docs/blackout-governance-exit-criteria-audit.md` (2026-02-18).
+
 ## Next review checklist
 
 - Validate each phase against the corresponding exit criteria in the build plan before external rollout.
