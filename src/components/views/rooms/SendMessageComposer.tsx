@@ -60,7 +60,6 @@ import { type IDiff } from "../../../editor/diff";
 import { getBlobSafeMimeType } from "../../../utils/blobs";
 import { EMOJI_REGEX } from "../../../HtmlUtils";
 import { attachMentions, attachRelation } from "../../../utils/messages";
-import { sendBlackoutSignalEvent } from "../../../p2p";
 
 // The prefix used when persisting editor drafts to localstorage.
 export const EDITOR_STATE_STORAGE_PREFIX = "mx_cider_state_";
@@ -430,9 +429,6 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
                 this.props.mxClient,
             );
 
-            if (SettingsStore.getValue("feature_blackout_p2p_data_plane")) {
-                prom.then(() => sendBlackoutSignalEvent(this.props.mxClient, roomId, content!, threadId ?? null));
-            }
             if (replyToEvent) {
                 // Clear reply_to_event as we put the message into the queue
                 // if the send fails, retry will handle resending.

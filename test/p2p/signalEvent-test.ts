@@ -7,9 +7,15 @@ Please see LICENSE files in the repository root for full details.
 
 import { MsgType } from "matrix-js-sdk/src/matrix";
 
-import { createBlackoutSignalEventContent, isBlackoutSignalEventContent, sha256 } from "../../src/p2p";
+import {
+    createBlackoutSignalEventContent,
+    getBlackoutSignalTelemetrySnapshot,
+    isBlackoutSignalEventContent,
+    maybeSendBlackoutSignalEventForAttachment,
+    sha256,
+} from "../../src/p2p";
 
-describe("signalEvent", () => {
+describe("signalEvent schema and telemetry", () => {
     it("creates valid m.blackout.signal content", async () => {
         const content = await createBlackoutSignalEventContent(
             "!room:example.org",
@@ -21,10 +27,51 @@ describe("signalEvent", () => {
         );
 
         expect(isBlackoutSignalEventContent(content)).toBe(true);
+        expect(content.schema_version).toBe(1);
         expect(content.hash).toMatch(/^sha256:[a-f0-9]{64}$/);
-        expect(content.message_id).toHaveLength(36);
+        expect(content.message_id).toMatch(/^[0-9a-f-]{36}$/i);
         expect(content.room_id).toEqual("!room:example.org");
         expect(content.content_type).toEqual(MsgType.Text);
+    });
+
+    it("rejects malformed schema content", () => {
+        expect(
+            isBlackoutSignalEventContent({
+                message_id: "not-a-uuid",
+                hash: "sha256:abc",
+                size: -1,
+                content_type: "m.text",
+                room_id: "!room:example.org",
+                schema_version: 99,
+            }),
+        ).toBe(false);
+    });
+
+    it("records telemetry skip counters for disabled/non-attachment paths", async () => {
+        const sendEvent = jest.fn();
+        const client = { sendEvent } as any;
+        const before = getBlackoutSignalTelemetrySnapshot();
+
+        await maybeSendBlackoutSignalEventForAttachment(
+            client,
+            "!room:example.org",
+            { body: "hello", msgtype: MsgType.Text },
+            null,
+            false,
+        );
+
+        await maybeSendBlackoutSignalEventForAttachment(
+            client,
+            "!room:example.org",
+            { body: "hello", msgtype: MsgType.Text },
+            null,
+            true,
+        );
+
+        const after = getBlackoutSignalTelemetrySnapshot();
+        expect(sendEvent).not.toHaveBeenCalled();
+        expect(after.skipped_feature_disabled).toBe(before.skipped_feature_disabled + 1);
+        expect(after.skipped_non_attachment).toBe(before.skipped_non_attachment + 1);
     });
 
     it("produces stable digest for the same input", async () => {

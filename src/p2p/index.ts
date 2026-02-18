@@ -11,7 +11,10 @@ export { RTCTransport, type RTCEnvelope, type RTCPeerHandle } from "./rtcTranspo
 export {
     BLACKOUT_SIGNAL_EVENT_TYPE,
     createBlackoutSignalEventContent,
+    getBlackoutSignalTelemetrySnapshot,
+    isAttachmentMessageType,
     isBlackoutSignalEventContent,
+    maybeSendBlackoutSignalEventForAttachment,
     sendBlackoutSignalEvent,
     sha256,
     type BlackoutSignalEventContent,

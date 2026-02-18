@@ -56,6 +56,7 @@ import { createThumbnail } from "./utils/image-media";
 import { attachMentions, attachRelation } from "./utils/messages.ts";
 import { doMaybeLocalRoomAction } from "./utils/local-room";
 import { blobIsAnimated } from "./utils/Image.ts";
+import { maybeSendBlackoutSignalEventForAttachment } from "./p2p";
 
 // scraped out of a macOS hidpi (5660ppm) screenshot png
 //                  5669 px (x-axis)      , 5669 px (y-axis)      , per metre
@@ -647,6 +648,14 @@ export default class ContentMessages {
             const threadId = relation?.rel_type === THREAD_RELATION_TYPE.name ? relation.event_id : null;
 
             const response = await matrixClient.sendMessage(roomId, threadId ?? null, content as MediaEventContent);
+
+            await maybeSendBlackoutSignalEventForAttachment(
+                matrixClient,
+                roomId,
+                content as MediaEventContent,
+                threadId ?? null,
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+            );
 
             if (SettingsStore.getValue("Performance.addSendMessageTimingMetadata")) {
                 sendRoundTripMetric(matrixClient, roomId, response.event_id);
