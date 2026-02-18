@@ -6,6 +6,7 @@ This plan translates the strategy into an implementation roadmap for this reposi
 > Phase 2 completion details are tracked in `docs/security-phase2-app-hardening.md`.
 > Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
 > Phase 4 completion details are tracked in `docs/security-phase4-resilience-ha.md`.
+> Phase 5 implementation artifacts are tracked in `docs/security-phase5-cluster-platform-security.md`.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -298,6 +299,7 @@ spec:
 
 - New workloads are blocked unless policy-compliant.
 - Cross-namespace traffic restricted by explicit policy.
+- In-repo templates provide namespace segmentation, default-deny networking, Kyverno enforcement, and Vault-backed external secret wiring baselines.
 
 ---
 
