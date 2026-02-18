@@ -5,6 +5,7 @@ This plan translates the strategy into an implementation roadmap for this reposi
 > Phase 1 completion details are tracked in `docs/security-phase1-foundation.md`.
 > Phase 2 completion details are tracked in `docs/security-phase2-app-hardening.md`.
 > Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
+> Phase 4 completion details are tracked in `docs/security-phase4-resilience-ha.md`.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -200,7 +201,7 @@ export const oidc = new UserManager({
 
 ---
 
-## Phase 4 (Weeks 7-8): Resilience and high availability
+## Phase 4 (Weeks 7-8): Resilience and high availability ✅ Complete
 
 ### Deliverables
 
