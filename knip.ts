@@ -39,6 +39,8 @@ export default {
         "src/services/storage/ipfsRoomEvents.ts": ["exports"],
         "src/modules/governance/models/types.ts": ["types"],
         "src/services/crdt/types.ts": ["types"],
+        // P2P transport scaffolding is exported for upcoming integrations.
+        "src/p2p/peerManager.ts": ["exports"],
     },
     ignoreDependencies: [
         // Required for `action-validator`
