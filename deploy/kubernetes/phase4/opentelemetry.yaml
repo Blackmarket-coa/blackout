@@ -1,0 +1,29 @@
+# Optional OpenTelemetry Collector deployment for Phase 4 tracing.
+# Assumes the OpenTelemetry Operator/CRDs are installed in-cluster.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: element-otel
+spec:
+  mode: deployment
+  replicas: 2
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+    processors:
+      batch:
+    exporters:
+      debug: {}
+      otlp:
+        endpoint: jaeger-collector.observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp, debug]

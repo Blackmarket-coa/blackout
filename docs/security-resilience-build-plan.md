@@ -253,6 +253,7 @@ readinessProbe:
 
 - Single node/pod failure does not impact user-facing availability.
 - Service-level objectives defined with alert thresholds.
+- In-repo manifests include probe endpoints, HA scaling primitives, OpenTelemetry collector bootstrap, and optional upstream retry/circuit-breaker policy templates.
 
 ---
 

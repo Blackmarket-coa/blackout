@@ -52,6 +52,8 @@ Phase 4 deliverables are now represented directly in repository artifacts:
 - `Dockerfile` container healthcheck now targets `/health/ready`.
 - `deploy/kubernetes/phase4/element-ha.yaml` provides horizontal scaling, topology spread, graceful shutdown, and disruption budget baselines.
 - `deploy/kubernetes/phase4/observability.yaml` provides ServiceMonitor/PrometheusRule examples aligned to SLO alerting.
+- `deploy/kubernetes/phase4/opentelemetry.yaml` provides a basic OpenTelemetry Collector pipeline for trace export.
+- `deploy/kubernetes/phase4/upstream-circuit-breaker.yaml` provides retries/circuit-breaker wrappers for upstream dependencies (Istio environments).
 - `docs/kubernetes.md` deployment example now uses HA defaults and explicit readiness/liveness probe paths.
 
 ## Definition of done for Phase 4
