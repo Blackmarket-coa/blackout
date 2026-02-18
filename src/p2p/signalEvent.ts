@@ -136,7 +136,11 @@ export async function createBlackoutSignalEventContent(
     };
 }
 
-async function persistEncryptedPayloadLocally(roomId: string, signal: BlackoutSignalEventContent, content: unknown): Promise<void> {
+async function persistEncryptedPayloadLocally(
+    roomId: string,
+    signal: BlackoutSignalEventContent,
+    content: unknown,
+): Promise<void> {
     const payloadStore = getEncryptedPayloadStore();
     await payloadStore.put(roomId, signal.message_id, JSON.stringify(content));
     recordTelemetry("stored_local_payload");

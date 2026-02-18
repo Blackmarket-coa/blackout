@@ -2,48 +2,48 @@
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: require-restricted-pod-security
+    name: require-restricted-pod-security
 spec:
-  validationFailureAction: Enforce
-  background: true
-  rules:
-    - name: require-non-root
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-      validate:
-        message: "Pods must run as non-root."
-        pattern:
-          spec:
-            securityContext:
-              runAsNonRoot: true
-    - name: require-drop-all-capabilities
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-      validate:
-        message: "Containers must drop all Linux capabilities."
-        foreach:
-          - list: "request.object.spec.containers"
-            pattern:
-              securityContext:
-                capabilities:
-                  drop:
-                    - ALL
-    - name: require-read-only-root-filesystem
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-      validate:
-        message: "Containers must use read-only root filesystems."
-        foreach:
-          - list: "request.object.spec.containers"
-            pattern:
-              securityContext:
-                readOnlyRootFilesystem: true
+    validationFailureAction: Enforce
+    background: true
+    rules:
+        - name: require-non-root
+          match:
+              any:
+                  - resources:
+                        kinds:
+                            - Pod
+          validate:
+              message: "Pods must run as non-root."
+              pattern:
+                  spec:
+                      securityContext:
+                          runAsNonRoot: true
+        - name: require-drop-all-capabilities
+          match:
+              any:
+                  - resources:
+                        kinds:
+                            - Pod
+          validate:
+              message: "Containers must drop all Linux capabilities."
+              foreach:
+                  - list: "request.object.spec.containers"
+                    pattern:
+                        securityContext:
+                            capabilities:
+                                drop:
+                                    - ALL
+        - name: require-read-only-root-filesystem
+          match:
+              any:
+                  - resources:
+                        kinds:
+                            - Pod
+          validate:
+              message: "Containers must use read-only root filesystems."
+              foreach:
+                  - list: "request.object.spec.containers"
+                    pattern:
+                        securityContext:
+                            readOnlyRootFilesystem: true

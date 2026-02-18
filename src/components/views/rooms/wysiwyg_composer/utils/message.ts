@@ -255,7 +255,9 @@ export async function editMessage(
             const event = editorStateTransfer.getEvent();
             const threadId = event.threadRootId || null;
 
-            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(SettingsStore.getValue("feature_blackout_p2p_data_plane"));
+            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+            );
             response = metadataOnlyMode
                 ? maybeSendBlackoutSignalEventForMessage(
                       mxClient,

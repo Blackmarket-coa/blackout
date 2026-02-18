@@ -438,7 +438,8 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
                   ).then(() => ({ event_id: this.props.mxClient.makeTxnId() }))
                 : doMaybeLocalRoomAction(
                       roomId,
-                      (actualRoomId: string) => this.props.mxClient.sendMessage(actualRoomId, threadId ?? null, content!),
+                      (actualRoomId: string) =>
+                          this.props.mxClient.sendMessage(actualRoomId, threadId ?? null, content!),
                       this.props.mxClient,
                   );
 
