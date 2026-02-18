@@ -267,7 +267,7 @@ export async function editMessage(
                       SettingsStore.getValue("feature_blackout_p2p_data_plane"),
                   ).then(() => ({ event_id: mxClient.makeTxnId() }))
                 : mxClient.sendMessage(roomId, threadId, editContent);
-            if (!metadataOnlyMode) {
+            if (!metadataOnlyMode && response) {
                 void response.then(() =>
                     maybeSendBlackoutSignalEventForMessage(
                         mxClient,
