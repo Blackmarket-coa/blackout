@@ -41,8 +41,10 @@ while preserving existing custom feature work until each phase is production-rea
 
 ### Phase 1: dual-write signaling
 
+Status: **in progress** (initial text-send dual-write is now wired behind the labs flag).
+
 - Continue sending `m.room.message` as today.
-- Add parallel `m.blackout.signal` events containing message/file metadata only:
+- Add parallel `m.blackout.signal` events containing message/file metadata only (first send-path integration currently covers message composer sends):
   - `message_id`
   - `hash`
   - `size`

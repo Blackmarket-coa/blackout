@@ -34,6 +34,7 @@ import { runSlashCommand, shouldSendAnyway } from "../../../../../editor/command
 import { Action } from "../../../../../dispatcher/actions";
 import { addReplyToMessageContent } from "../../../../../utils/Reply";
 import { attachRelation } from "../../../../../utils/messages";
+import { sendBlackoutSignalEvent } from "../../../../../p2p";
 
 export interface SendMessageParams {
     mxClient: MatrixClient;
@@ -133,6 +134,10 @@ export async function sendMessage(
         (actualRoomId: string) => mxClient.sendMessage(actualRoomId, threadId, content!),
         mxClient,
     );
+
+    if (SettingsStore.getValue("feature_blackout_p2p_data_plane")) {
+        prom.then(() => sendBlackoutSignalEvent(mxClient, roomId, content!, threadId));
+    }
 
     if (replyToEvent) {
         // Clear reply_to_event as we put the message into the queue

@@ -8,3 +8,11 @@ Please see LICENSE files in the repository root for full details.
 export { PeerManager, type PeerSnapshot } from "./peerManager";
 export { RoomMesh, type ChunkInventory } from "./roomMesh";
 export { RTCTransport, type RTCEnvelope, type RTCPeerHandle } from "./rtcTransport";
+export {
+    BLACKOUT_SIGNAL_EVENT_TYPE,
+    createBlackoutSignalEventContent,
+    isBlackoutSignalEventContent,
+    sendBlackoutSignalEvent,
+    sha256,
+    type BlackoutSignalEventContent,
+} from "./signalEvent";
