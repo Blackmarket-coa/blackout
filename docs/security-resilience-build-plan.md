@@ -5,6 +5,8 @@ This plan translates the strategy into an implementation roadmap for this reposi
 > Phase 1 completion details are tracked in `docs/security-phase1-foundation.md`.
 > Phase 2 completion details are tracked in `docs/security-phase2-app-hardening.md`.
 > Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
+> Phase 4 completion details are tracked in `docs/security-phase4-resilience-ha.md`.
+> Phase 5 implementation artifacts are tracked in `docs/security-phase5-cluster-platform-security.md`.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -200,7 +202,7 @@ export const oidc = new UserManager({
 
 ---
 
-## Phase 4 (Weeks 7-8): Resilience and high availability
+## Phase 4 (Weeks 7-8): Resilience and high availability ✅ Complete
 
 ### Deliverables
 
@@ -252,6 +254,7 @@ readinessProbe:
 
 - Single node/pod failure does not impact user-facing availability.
 - Service-level objectives defined with alert thresholds.
+- In-repo manifests include probe endpoints, HA scaling primitives, OpenTelemetry collector bootstrap, and optional upstream retry/circuit-breaker policy templates.
 
 ---
 
@@ -296,6 +299,7 @@ spec:
 
 - New workloads are blocked unless policy-compliant.
 - Cross-namespace traffic restricted by explicit policy.
+- In-repo templates provide namespace segmentation, default-deny networking, Kyverno enforcement, and Vault-backed external secret wiring baselines.
 
 ---
 

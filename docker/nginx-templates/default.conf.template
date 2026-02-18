@@ -42,6 +42,20 @@ server {
     location /modules {
         alias /modules;
     }
+    # Health endpoints for Kubernetes/container probes.
+
+    location = /health/live {
+        add_header Cache-Control "no-store" always;
+        default_type application/json;
+        return 200 '{"status":"live"}';
+    }
+
+    location = /health/ready {
+        add_header Cache-Control "no-store" always;
+        default_type application/json;
+        return 200 '{"status":"ready"}';
+    }
+
     # redirect server error pages to the static page /50x.html
     #
     error_page   500 502 503 504  /50x.html;
