@@ -55,7 +55,7 @@ jobs:
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
                   package-manager-cache: false
-                  node-version: "20"
+                  node-version-file: ".node-version"
 
             - name: Fetch layered build
               env:
@@ -134,7 +134,7 @@ jobs:
               with:
                   package-manager-cache: false
                   cache-dependency-path: yarn.lock
-                  node-version: "20"
+                  node-version-file: ".node-version"
 
             - name: Install dependencies
               run: yarn install --frozen-lockfile
@@ -200,7 +200,7 @@ jobs:
               if: inputs.skip != true
               with:
                   package-manager-cache: false
-                  node-version: "20"
+                  node-version-file: ".node-version"
 
             - name: Install dependencies
               if: inputs.skip != true
