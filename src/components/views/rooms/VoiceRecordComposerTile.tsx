@@ -36,7 +36,7 @@ import { type IUpload, type VoiceMessageRecording } from "../../../audio/VoiceMe
 import { createVoiceMessageContent } from "../../../utils/createVoiceMessageContent";
 import AccessibleButton from "../elements/AccessibleButton";
 import SettingsStore from "../../../settings/SettingsStore";
-import { maybeSendBlackoutSignalEventForAttachment } from "../../../p2p";
+import { isMetadataOnlyMatrixModeEnabled, maybeSendBlackoutSignalEventForAttachment } from "../../../p2p";
 
 interface IProps {
     room: Room;
@@ -134,11 +134,17 @@ export default class VoiceRecordComposerTile extends React.PureComponent<IProps,
                 });
             }
 
-            const sendPromise = doMaybeLocalRoomAction(
-                this.props.room.roomId,
-                (actualRoomId: string) => MatrixClientPeg.safeGet().sendMessage(actualRoomId, content),
-                this.props.room.client,
+            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
             );
+
+            const sendPromise = metadataOnlyMode
+                ? Promise.resolve({ event_id: MatrixClientPeg.safeGet().makeTxnId() })
+                : doMaybeLocalRoomAction(
+                      this.props.room.roomId,
+                      (actualRoomId: string) => MatrixClientPeg.safeGet().sendMessage(actualRoomId, content),
+                      this.props.room.client,
+                  );
 
             void sendPromise.then(() =>
                 maybeSendBlackoutSignalEventForAttachment(

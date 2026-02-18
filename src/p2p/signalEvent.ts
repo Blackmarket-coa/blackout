@@ -11,6 +11,9 @@ import { logger } from "matrix-js-sdk/src/logger";
 import { type RoomMessageEventContent } from "matrix-js-sdk/src/types";
 import { v4 as uuidv4 } from "uuid";
 
+import { canEnableMetadataOnlyMatrixMode, getCutoverReadiness } from "./cutoverGate";
+import { getEncryptedPayloadStore } from "./payloadStore";
+
 export const BLACKOUT_SIGNAL_EVENT_TYPE = "m.blackout.signal";
 
 export interface BlackoutSignalEventContent {
@@ -29,10 +32,12 @@ export interface BlackoutSignalEventContent {
 interface BlackoutSignalTelemetryCounters {
     attempted: number;
     failed: number;
+    metadata_only_mode: number;
     sent: number;
     skipped_feature_disabled: number;
     skipped_invalid_content: number;
     skipped_non_attachment: number;
+    stored_local_payload: number;
 }
 
 const telemetry: BlackoutSignalTelemetryCounters = {
@@ -42,6 +47,8 @@ const telemetry: BlackoutSignalTelemetryCounters = {
     skipped_feature_disabled: 0,
     skipped_non_attachment: 0,
     skipped_invalid_content: 0,
+    metadata_only_mode: 0,
+    stored_local_payload: 0,
 };
 
 const SHA256_REGEX = /^sha256:[a-f0-9]{64}$/;
@@ -123,6 +130,12 @@ export async function createBlackoutSignalEventContent(
     };
 }
 
+async function persistEncryptedPayloadLocally(roomId: string, signal: BlackoutSignalEventContent, content: unknown): Promise<void> {
+    const payloadStore = getEncryptedPayloadStore();
+    await payloadStore.put(roomId, signal.message_id, JSON.stringify(content));
+    recordTelemetry("stored_local_payload");
+}
+
 export async function sendBlackoutSignalEvent(
     mxClient: MatrixClient,
     roomId: string,
@@ -136,6 +149,8 @@ export async function sendBlackoutSignalEvent(
         recordTelemetry("skipped_invalid_content");
         throw new Error("Generated blackout signal event content failed schema validation");
     }
+
+    await persistEncryptedPayloadLocally(roomId, signalContent, messageContent);
 
     try {
         await mxClient.sendEvent(roomId, BLACKOUT_SIGNAL_EVENT_TYPE as never, signalContent as never);
@@ -166,7 +181,34 @@ export async function maybeSendBlackoutSignalEventForAttachment(
     try {
         await sendBlackoutSignalEvent(mxClient, roomId, messageContent, threadId);
     } catch (error) {
-        recordTelemetry("failed");
         logger.warn("Blackout signal attachment dual-write failed", error);
     }
+}
+
+export async function maybeSendBlackoutSignalEventForMessage(
+    mxClient: MatrixClient,
+    roomId: string,
+    messageContent: RoomMessageEventContent,
+    threadId: string | null,
+    featureEnabled: boolean,
+): Promise<void> {
+    if (!featureEnabled) {
+        recordTelemetry("skipped_feature_disabled");
+        return;
+    }
+
+    try {
+        await sendBlackoutSignalEvent(mxClient, roomId, messageContent, threadId);
+    } catch (error) {
+        logger.warn("Blackout signal message dual-write failed", error);
+    }
+}
+
+export function isMetadataOnlyMatrixModeEnabled(featureEnabled: boolean): boolean {
+    const readiness = getCutoverReadiness(featureEnabled);
+    const enabled = canEnableMetadataOnlyMatrixMode(readiness);
+    if (enabled) {
+        recordTelemetry("metadata_only_mode");
+    }
+    return enabled;
 }

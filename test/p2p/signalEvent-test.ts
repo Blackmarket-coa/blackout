@@ -12,6 +12,7 @@ import {
     getBlackoutSignalTelemetrySnapshot,
     isBlackoutSignalEventContent,
     maybeSendBlackoutSignalEventForAttachment,
+    maybeSendBlackoutSignalEventForMessage,
     sha256,
 } from "../../src/p2p";
 
@@ -72,6 +73,21 @@ describe("signalEvent schema and telemetry", () => {
         expect(sendEvent).not.toHaveBeenCalled();
         expect(after.skipped_feature_disabled).toBe(before.skipped_feature_disabled + 1);
         expect(after.skipped_non_attachment).toBe(before.skipped_non_attachment + 1);
+    });
+
+
+    it("dual-writes metadata for text when phase-1 all-events helper is used", async () => {
+        const sendEvent = jest.fn().mockResolvedValue({ event_id: "$signal" });
+
+        await maybeSendBlackoutSignalEventForMessage(
+            { sendEvent } as any,
+            "!room:example.org",
+            { body: "text", msgtype: MsgType.Text },
+            null,
+            true,
+        );
+
+        expect(sendEvent).toHaveBeenCalledTimes(1);
     });
 
     it("produces stable digest for the same input", async () => {

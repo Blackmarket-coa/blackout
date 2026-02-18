@@ -14,8 +14,20 @@ export {
     getBlackoutSignalTelemetrySnapshot,
     isAttachmentMessageType,
     isBlackoutSignalEventContent,
+    isMetadataOnlyMatrixModeEnabled,
     maybeSendBlackoutSignalEventForAttachment,
+    maybeSendBlackoutSignalEventForMessage,
     sendBlackoutSignalEvent,
     sha256,
     type BlackoutSignalEventContent,
 } from "./signalEvent";
+export {
+    canEnableMetadataOnlyMatrixMode,
+    CUTOVER_KILL_SWITCH_STORAGE_KEY,
+    CUTOVER_PARITY_STORAGE_KEY,
+    CUTOVER_RECOVERY_STORAGE_KEY,
+    getCutoverReadiness,
+    type CutoverReadiness,
+} from "./cutoverGate";
+export { EncryptedPayloadStore, getEncryptedPayloadStore, type StoredEncryptedPayload } from "./payloadStore";
+export { WebRTCRoomMesh, type WebRTCPeerState } from "./webrtcMesh";

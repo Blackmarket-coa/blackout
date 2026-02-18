@@ -41,7 +41,7 @@ while preserving existing custom feature work until each phase is production-rea
 
 ### Phase 1: dual-write signaling
 
-Status: **in progress** (attachment metadata dual-write is now wired behind the labs flag while timeline payloads still use Matrix).
+Status: **complete** (dual-write metadata now covers text, edits, attachments, and voice while Matrix timeline sends remain primary by default).
 
 - Continue sending `m.room.message` as today.
 - Add parallel `m.blackout.signal` events containing message/file metadata only (first send-path integration currently covers attachment sends):
@@ -53,11 +53,15 @@ Status: **in progress** (attachment metadata dual-write is now wired behind the 
 
 ### Phase 2: optional P2P delivery (feature gated)
 
+Status: **entry implemented** (RTCDataChannel room mesh + encrypted local payload store are available with Matrix fallback still primary).
+
 - On flagged clients, attempt WebRTC first for payload delivery.
 - Maintain Matrix fallback path to prevent data loss.
 - Persist payload/chunks in IndexedDB and sync on reconnect.
 
 ### Phase 3: metadata-only Matrix timeline
+
+Status: **gated** (enabled only when parity/recovery checks pass and kill-switch is off).
 
 - Switch flagged rooms/clients to metadata-only Matrix events.
 - Payload reconstruction from local + peers via chunk gossip.

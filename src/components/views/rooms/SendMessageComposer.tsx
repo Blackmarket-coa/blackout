@@ -60,6 +60,7 @@ import { type IDiff } from "../../../editor/diff";
 import { getBlobSafeMimeType } from "../../../utils/blobs";
 import { EMOJI_REGEX } from "../../../HtmlUtils";
 import { attachMentions, attachRelation } from "../../../utils/messages";
+import { isMetadataOnlyMatrixModeEnabled, maybeSendBlackoutSignalEventForMessage } from "../../../p2p";
 
 // The prefix used when persisting editor drafts to localstorage.
 export const EDITOR_STATE_STORAGE_PREFIX = "mx_cider_state_";
@@ -423,11 +424,35 @@ export class SendMessageComposer extends React.Component<ISendMessageComposerPro
             const threadId =
                 this.props.relation?.rel_type === THREAD_RELATION_TYPE.name ? this.props.relation.event_id : null;
 
-            const prom = doMaybeLocalRoomAction(
-                roomId,
-                (actualRoomId: string) => this.props.mxClient.sendMessage(actualRoomId, threadId ?? null, content!),
-                this.props.mxClient,
+            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
             );
+
+            const prom = metadataOnlyMode
+                ? maybeSendBlackoutSignalEventForMessage(
+                      this.props.mxClient,
+                      roomId,
+                      content!,
+                      threadId ?? null,
+                      SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                  ).then(() => ({ event_id: this.props.mxClient.makeTxnId() }))
+                : doMaybeLocalRoomAction(
+                      roomId,
+                      (actualRoomId: string) => this.props.mxClient.sendMessage(actualRoomId, threadId ?? null, content!),
+                      this.props.mxClient,
+                  );
+
+            if (!metadataOnlyMode) {
+                void prom.then(() =>
+                    maybeSendBlackoutSignalEventForMessage(
+                        this.props.mxClient,
+                        roomId,
+                        content!,
+                        threadId ?? null,
+                        SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                    ),
+                );
+            }
 
             if (replyToEvent) {
                 // Clear reply_to_event as we put the message into the queue
