@@ -18,7 +18,10 @@ export interface GossipRequest {
 export class GossipReplicator {
     private readonly mesh: RoomMesh;
 
-    public constructor(private readonly roomId: string, private readonly redundancyTarget = 3) {
+    public constructor(
+        private readonly roomId: string,
+        private readonly redundancyTarget = 3,
+    ) {
         this.mesh = new RoomMesh(roomId);
     }
 

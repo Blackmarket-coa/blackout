@@ -33,9 +33,9 @@ while preserving existing custom feature work until each phase is production-rea
 ### Phase 0 (this change): scaffolding only
 
 - Add `src/p2p/` core abstractions:
-  - `RTCTransport` (peer channel registry + broadcast)
-  - `RoomMesh` (chunk inventory + missing-hash computation)
-  - `PeerManager` (room-level orchestration)
+    - `RTCTransport` (peer channel registry + broadcast)
+    - `RoomMesh` (chunk inventory + missing-hash computation)
+    - `PeerManager` (room-level orchestration)
 - No timeline send behavior changes.
 - Labs flag added but no end-user transport switch yet.
 
@@ -45,10 +45,10 @@ Status: **complete** (dual-write metadata now covers text, edits, attachments, a
 
 - Continue sending `m.room.message` as today.
 - Add parallel `m.blackout.signal` events containing message/file metadata only (first send-path integration currently covers attachment sends):
-  - `message_id`
-  - `hash`
-  - `size`
-  - `content_type`
+    - `message_id`
+    - `hash`
+    - `size`
+    - `content_type`
 - Introduce local encryption + hash generation pipeline.
 
 ### Phase 2: optional P2P delivery (feature gated)

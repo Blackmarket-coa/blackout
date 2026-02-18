@@ -28,5 +28,4 @@ kubectl apply -f deploy/kubernetes/phase4/upstream-circuit-breaker.yaml
 
 Tune `minReplicas/maxReplicas`, CPU targets, and alert thresholds for your SLO budget.
 
-
 > Note: `opentelemetry.yaml` requires OpenTelemetry Operator CRDs.

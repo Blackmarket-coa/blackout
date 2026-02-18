@@ -75,7 +75,6 @@ describe("signalEvent schema and telemetry", () => {
         expect(after.skipped_non_attachment).toBe(before.skipped_non_attachment + 1);
     });
 
-
     it("dual-writes metadata for text when phase-1 all-events helper is used", async () => {
         const sendEvent = jest.fn().mockResolvedValue({ event_id: "$signal" });
 
