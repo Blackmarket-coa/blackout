@@ -237,6 +237,7 @@ export interface Settings {
     "feature_mutual_aid": IFeature;
     "feature_deliberation_clustering": IFeature;
     "feature_ipfs_storage": IFeature;
+    "feature_blackout_p2p_data_plane": IFeature;
     "feature_msc4362_encrypted_state_events": IFeature;
     // These are in the feature namespace but aren't actually features
     "feature_hidebold": IBaseSetting<boolean>;
@@ -856,6 +857,16 @@ export const SETTINGS: Settings = {
         labsGroup: LabGroup.Experimental,
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_p2p_data_plane": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_p2p_data_plane"),
+        description: _td("labs|blackout_p2p_data_plane_description"),
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        shouldWarn: true,
         default: false,
     },
     "feature_msc4362_encrypted_state_events": {

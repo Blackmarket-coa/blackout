@@ -34,6 +34,7 @@ import { runSlashCommand, shouldSendAnyway } from "../../../../../editor/command
 import { Action } from "../../../../../dispatcher/actions";
 import { addReplyToMessageContent } from "../../../../../utils/Reply";
 import { attachRelation } from "../../../../../utils/messages";
+import { isMetadataOnlyMatrixModeEnabled, maybeSendBlackoutSignalEventForMessage } from "../../../../../p2p";
 
 export interface SendMessageParams {
     mxClient: MatrixClient;
@@ -128,11 +129,33 @@ export async function sendMessage(
 
     const threadId = relation?.event_id && relation?.rel_type === THREAD_RELATION_TYPE.name ? relation.event_id : null;
 
-    const prom = doMaybeLocalRoomAction(
-        roomId,
-        (actualRoomId: string) => mxClient.sendMessage(actualRoomId, threadId, content!),
-        mxClient,
-    );
+    const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(SettingsStore.getValue("feature_blackout_p2p_data_plane"));
+
+    const prom = metadataOnlyMode
+        ? maybeSendBlackoutSignalEventForMessage(
+              mxClient,
+              roomId,
+              content!,
+              threadId,
+              SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+          ).then(() => ({ event_id: mxClient.makeTxnId() }))
+        : doMaybeLocalRoomAction(
+              roomId,
+              (actualRoomId: string) => mxClient.sendMessage(actualRoomId, threadId, content!),
+              mxClient,
+          );
+
+    if (!metadataOnlyMode) {
+        void prom.then(() =>
+            maybeSendBlackoutSignalEventForMessage(
+                mxClient,
+                roomId,
+                content!,
+                threadId,
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+            ),
+        );
+    }
 
     if (replyToEvent) {
         // Clear reply_to_event as we put the message into the queue
@@ -232,7 +255,27 @@ export async function editMessage(
             const event = editorStateTransfer.getEvent();
             const threadId = event.threadRootId || null;
 
-            response = mxClient.sendMessage(roomId, threadId, editContent);
+            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(SettingsStore.getValue("feature_blackout_p2p_data_plane"));
+            response = metadataOnlyMode
+                ? maybeSendBlackoutSignalEventForMessage(
+                      mxClient,
+                      roomId,
+                      editContent,
+                      threadId,
+                      SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                  ).then(() => ({ event_id: mxClient.makeTxnId() }))
+                : mxClient.sendMessage(roomId, threadId, editContent);
+            if (!metadataOnlyMode) {
+                void response.then(() =>
+                    maybeSendBlackoutSignalEventForMessage(
+                        mxClient,
+                        roomId,
+                        editContent,
+                        threadId,
+                        SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                    ),
+                );
+            }
             dis.dispatch({ action: "message_sent" });
         }
     }

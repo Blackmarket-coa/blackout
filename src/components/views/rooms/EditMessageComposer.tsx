@@ -46,6 +46,7 @@ import type DocumentOffset from "../../../editor/offset";
 import { attachMentions, attachRelation } from "../../../utils/messages";
 import { filterBoolean } from "../../../utils/arrays";
 import { MatrixClientPeg } from "../../../MatrixClientPeg";
+import { isMetadataOnlyMatrixModeEnabled, maybeSendBlackoutSignalEventForMessage } from "../../../p2p";
 
 // exported for tests
 export function createEditContent(
@@ -348,7 +349,29 @@ class EditMessageComposer extends React.Component<IEditMessageComposerProps, ISt
                 const event = this.props.editState.getEvent();
                 const threadId = event.threadRootId || null;
 
-                this.props.mxClient.sendMessage(roomId, threadId, editContent);
+                const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(
+                    SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                );
+                const sendPromise = metadataOnlyMode
+                    ? maybeSendBlackoutSignalEventForMessage(
+                          this.props.mxClient,
+                          roomId,
+                          editContent,
+                          threadId,
+                          SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                      )
+                    : this.props.mxClient.sendMessage(roomId, threadId, editContent);
+                if (!metadataOnlyMode) {
+                    void sendPromise.then(() =>
+                        maybeSendBlackoutSignalEventForMessage(
+                            this.props.mxClient,
+                            roomId,
+                            editContent,
+                            threadId,
+                            SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                        ),
+                    );
+                }
                 dis.dispatch({ action: "message_sent" });
             }
         }

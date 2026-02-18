@@ -7,7 +7,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import React, { type ReactNode } from "react";
-import { type Room, type IEventRelation, type MatrixEvent } from "matrix-js-sdk/src/matrix";
+import { type Room, type IEventRelation, type MatrixEvent, THREAD_RELATION_TYPE } from "matrix-js-sdk/src/matrix";
 import { logger } from "matrix-js-sdk/src/logger";
 import { DeleteIcon, StopSolidIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
 
@@ -35,6 +35,8 @@ import RoomContext from "../../../contexts/RoomContext";
 import { type IUpload, type VoiceMessageRecording } from "../../../audio/VoiceMessageRecording";
 import { createVoiceMessageContent } from "../../../utils/createVoiceMessageContent";
 import AccessibleButton from "../elements/AccessibleButton";
+import SettingsStore from "../../../settings/SettingsStore";
+import { isMetadataOnlyMatrixModeEnabled, maybeSendBlackoutSignalEventForAttachment } from "../../../p2p";
 
 interface IProps {
     room: Room;
@@ -132,10 +134,26 @@ export default class VoiceRecordComposerTile extends React.PureComponent<IProps,
                 });
             }
 
-            doMaybeLocalRoomAction(
-                this.props.room.roomId,
-                (actualRoomId: string) => MatrixClientPeg.safeGet().sendMessage(actualRoomId, content),
-                this.props.room.client,
+            const metadataOnlyMode = isMetadataOnlyMatrixModeEnabled(
+                SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+            );
+
+            const sendPromise = metadataOnlyMode
+                ? Promise.resolve({ event_id: MatrixClientPeg.safeGet().makeTxnId() })
+                : doMaybeLocalRoomAction(
+                      this.props.room.roomId,
+                      (actualRoomId: string) => MatrixClientPeg.safeGet().sendMessage(actualRoomId, content),
+                      this.props.room.client,
+                  );
+
+            void sendPromise.then(() =>
+                maybeSendBlackoutSignalEventForAttachment(
+                    MatrixClientPeg.safeGet(),
+                    this.props.room.roomId,
+                    content,
+                    relation?.rel_type === THREAD_RELATION_TYPE.name ? (relation.event_id ?? null) : null,
+                    SettingsStore.getValue("feature_blackout_p2p_data_plane"),
+                ),
             );
         } catch (e) {
             logger.error("Error sending voice message:", e);
