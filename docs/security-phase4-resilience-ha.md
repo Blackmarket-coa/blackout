@@ -44,6 +44,16 @@ Deployment/operator minimums:
 - Request/error/latency dashboards for app delivery and upstream dependencies.
 - Tracing/monitoring integration for incident triage across identity + Matrix flows.
 
+## 5) In-repo implementation artifacts
+
+Phase 4 deliverables are now represented directly in repository artifacts:
+
+- `docker/nginx-templates/default.conf.template` exposes `/health/live` and `/health/ready` for readiness/liveness probes.
+- `Dockerfile` container healthcheck now targets `/health/ready`.
+- `deploy/kubernetes/phase4/element-ha.yaml` provides horizontal scaling, topology spread, graceful shutdown, and disruption budget baselines.
+- `deploy/kubernetes/phase4/observability.yaml` provides ServiceMonitor/PrometheusRule examples aligned to SLO alerting.
+- `docs/kubernetes.md` deployment example now uses HA defaults and explicit readiness/liveness probe paths.
+
 ## Definition of done for Phase 4
 
 - Stateless, horizontally scalable deployment is defined for this repository's delivery model.

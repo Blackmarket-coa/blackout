@@ -43,4 +43,4 @@ USER nginx
 # HTTP listen port
 ENV ELEMENT_WEB_PORT=80
 
-HEALTHCHECK --start-period=5s CMD wget -q --spider http://localhost:$ELEMENT_WEB_PORT/config.json
+HEALTHCHECK --start-period=5s CMD wget -q --spider http://localhost:$ELEMENT_WEB_PORT/health/ready
