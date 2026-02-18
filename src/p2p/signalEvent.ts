@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from "uuid";
 
 import { canEnableMetadataOnlyMatrixMode, getCutoverReadiness } from "./cutoverGate";
 import { getEncryptedPayloadStore } from "./payloadStore";
+import { RTCSignalingManager } from "./rtcSignaling";
+import { sendWithRtcFallback } from "./rtcFallbackRouter";
 
 export const BLACKOUT_SIGNAL_EVENT_TYPE = "m.blackout.signal";
 
@@ -52,6 +54,10 @@ const telemetry: BlackoutSignalTelemetryCounters = {
 };
 
 const SHA256_REGEX = /^sha256:[a-f0-9]{64}$/;
+function fallbackTxnId(): string {
+    return `blackout-${Math.random().toString(16).slice(2)}-${Date.now()}`;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function recordTelemetry(key: keyof BlackoutSignalTelemetryCounters): void {
@@ -143,6 +149,7 @@ export async function sendBlackoutSignalEvent(
     threadId: string | null,
 ): Promise<void> {
     recordTelemetry("attempted");
+    RTCSignalingManager.instance.registerClient(mxClient);
 
     const signalContent = await createBlackoutSignalEventContent(roomId, messageContent, threadId);
     if (!isBlackoutSignalEventContent(signalContent)) {
@@ -198,7 +205,17 @@ export async function maybeSendBlackoutSignalEventForMessage(
     }
 
     try {
-        await sendBlackoutSignalEvent(mxClient, roomId, messageContent, threadId);
+        await sendWithRtcFallback({
+            roomId,
+            content: messageContent,
+            featureEnabled,
+            mxClient,
+            matrixSend: async () => {
+                await sendBlackoutSignalEvent(mxClient, roomId, messageContent, threadId);
+                return { event_id: (mxClient as any).makeTxnId?.() ?? fallbackTxnId() };
+            },
+            maxRtcRetries: 2,
+        });
     } catch (error) {
         logger.warn("Blackout signal message dual-write failed", error);
     }

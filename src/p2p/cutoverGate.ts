@@ -25,6 +25,14 @@ export function canEnableMetadataOnlyMatrixMode(readiness: CutoverReadiness): bo
     );
 }
 
+function readBooleanEnvFlag(envKey: string): boolean {
+    try {
+        return process?.env?.[envKey] === "true";
+    } catch {
+        return false;
+    }
+}
+
 function readBooleanStorageFlag(storageKey: string): boolean {
     try {
         return globalThis.localStorage?.getItem(storageKey) === "true";
@@ -36,8 +44,11 @@ function readBooleanStorageFlag(storageKey: string): boolean {
 export function getCutoverReadiness(featureEnabled: boolean): CutoverReadiness {
     return {
         featureEnabled,
-        parityTestsPassed: readBooleanStorageFlag(CUTOVER_PARITY_STORAGE_KEY),
-        recoveryTestsPassed: readBooleanStorageFlag(CUTOVER_RECOVERY_STORAGE_KEY),
-        killSwitchEnabled: readBooleanStorageFlag(CUTOVER_KILL_SWITCH_STORAGE_KEY),
+        parityTestsPassed:
+            readBooleanEnvFlag("BLACKOUT_P2P_PARITY_PASSED") || readBooleanStorageFlag(CUTOVER_PARITY_STORAGE_KEY),
+        recoveryTestsPassed:
+            readBooleanEnvFlag("BLACKOUT_P2P_RECOVERY_PASSED") || readBooleanStorageFlag(CUTOVER_RECOVERY_STORAGE_KEY),
+        killSwitchEnabled:
+            readBooleanEnvFlag("BLACKOUT_P2P_KILL_SWITCH") || readBooleanStorageFlag(CUTOVER_KILL_SWITCH_STORAGE_KEY),
     };
 }

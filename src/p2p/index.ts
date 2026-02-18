@@ -31,3 +31,6 @@ export {
 } from "./cutoverGate";
 export { EncryptedPayloadStore, getEncryptedPayloadStore, type StoredEncryptedPayload } from "./payloadStore";
 export { WebRTCRoomMesh, type WebRTCPeerState } from "./webrtcMesh";
+export { GossipReplicator, type GossipRequest } from "./gossipReplication";
+export { sendWithRtcFallback, type SendWithRtcFallbackOptions } from "./rtcFallbackRouter";
+export { RTCSignalingManager } from "./rtcSignaling";

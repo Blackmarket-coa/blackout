@@ -20,6 +20,18 @@ export class WebRTCRoomMesh {
 
     public constructor(private readonly rtcConfiguration: RTCConfiguration) {}
 
+    public hasPeer(peerId: string): boolean {
+        return this.peers.has(peerId);
+    }
+
+    public getPeer(peerId: string): WebRTCPeerState | undefined {
+        return this.peers.get(peerId);
+    }
+
+    public getOrCreatePeer(peerId: string): WebRTCPeerState {
+        return this.peers.get(peerId) ?? this.createPeer(peerId);
+    }
+
     public createPeer(peerId: string): WebRTCPeerState {
         const connection = new RTCPeerConnection(this.rtcConfiguration);
         const channel = connection.createDataChannel(`blackout:${peerId}`, { ordered: true });

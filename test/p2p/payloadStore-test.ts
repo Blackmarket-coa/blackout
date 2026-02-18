@@ -20,4 +20,18 @@ describe("EncryptedPayloadStore", () => {
         const plaintext = await store.readPlainText("!room:example.org", "message-1");
         expect(plaintext).toEqual("hello");
     });
+
+    it("stores chunk index and verifies merkle root", async () => {
+        const store = new EncryptedPayloadStore();
+        const payload = "x".repeat(300_000);
+
+        const index = await store.putChunked("!room:example.org", "message-2", payload);
+        expect(index.chunkHashes.length).toBeGreaterThan(1);
+
+        const storedIndex = await store.getChunkIndex("!room:example.org", "message-2");
+        expect(storedIndex?.merkleRoot).toEqual(index.merkleRoot);
+
+        const verified = await store.verifyMerkleRoot("!room:example.org", "message-2", index.merkleRoot);
+        expect(verified).toBe(true);
+    });
 });
