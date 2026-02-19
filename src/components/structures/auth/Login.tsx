@@ -9,7 +9,7 @@ Please see LICENSE files in the repository root for full details.
 import React, { type JSX, type ReactNode } from "react";
 import classNames from "classnames";
 import { logger } from "matrix-js-sdk/src/logger";
-import { type SSOFlow, SSOAction } from "matrix-js-sdk/src/matrix";
+import { MatrixError, type SSOFlow, SSOAction } from "matrix-js-sdk/src/matrix";
 
 import { _t, UserFriendlyError } from "../../../languageHandler";
 import Login, { type ClientLoginFlow, type OidcNativeFlow } from "../../../Login";
@@ -62,6 +62,7 @@ interface IState {
     loginIncorrect: boolean;
     // can we attempt to log in or are there validation errors?
     canTryLogin: boolean;
+    registrationEnabled?: boolean;
 
     flows?: ClientLoginFlow[];
 
@@ -360,12 +361,14 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         loginLogic
             .getFlows()
             .then(
-                (flows) => {
+                async (flows) => {
                     // look for a flow where we understand all of the steps.
                     const supportedFlows = flows.filter(this.isSupportedFlow);
+                    const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
 
                     this.setState({
                         flows: supportedFlows,
+                        registrationEnabled,
                     });
 
                     if (supportedFlows.length === 0) {
@@ -387,6 +390,27 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                     busy: false,
                 });
             });
+    }
+
+    private async isRegistrationEnabled(loginLogic: Login): Promise<boolean> {
+        if (!SettingsStore.getValue(UIFeature.Registration)) return false;
+
+        try {
+            await loginLogic.createTemporaryClient().registerRequest({});
+            return true;
+        } catch (error) {
+            if (error instanceof MatrixError) {
+                if (error.httpStatus === 401) {
+                    return true;
+                }
+                if (error.httpStatus === 403 || error.errcode === "M_FORBIDDEN") {
+                    return false;
+                }
+            }
+
+            logger.warn("Unable to determine whether registration is enabled; defaulting to enabled", error);
+            return true;
+        }
     }
 
     private isSupportedFlow = (flow: ClientLoginFlow): boolean => {
@@ -510,7 +534,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                     )}
                 </div>
             );
-        } else if (SettingsStore.getValue(UIFeature.Registration)) {
+        } else if (SettingsStore.getValue(UIFeature.Registration) && this.state.registrationEnabled !== false) {
             footer = (
                 <span className="mx_AuthBody_changeFlow">
                     {_t(

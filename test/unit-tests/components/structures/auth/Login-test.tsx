@@ -9,7 +9,7 @@ import React from "react";
 import { fireEvent, render, screen, waitForElementToBeRemoved } from "jest-matrix-react";
 import { mocked, type MockedObject } from "jest-mock";
 import fetchMock from "@fetch-mock/jest";
-import { DELEGATED_OIDC_COMPATIBILITY, IdentityProviderBrand, type OidcClientConfig } from "matrix-js-sdk/src/matrix";
+import { DELEGATED_OIDC_COMPATIBILITY, IdentityProviderBrand, MatrixError, type OidcClientConfig } from "matrix-js-sdk/src/matrix";
 import { logger } from "matrix-js-sdk/src/logger";
 import * as Matrix from "matrix-js-sdk/src/matrix";
 import { OidcError } from "matrix-js-sdk/src/oidc/error";
@@ -35,6 +35,7 @@ describe("Login", function () {
     const mockClient = mocked({
         login: jest.fn().mockResolvedValue({}),
         loginFlows: jest.fn(),
+        registerRequest: jest.fn(),
     } as unknown as Matrix.MatrixClient);
 
     beforeEach(function () {
@@ -49,6 +50,7 @@ describe("Login", function () {
             user_id: "@user:server",
         });
         mockClient.loginFlows.mockClear().mockResolvedValue({ flows: [{ type: "m.login.password" }] });
+        mockClient.registerRequest.mockClear().mockRejectedValue(new MatrixError({ flows: [] }, 401));
         jest.spyOn(Matrix, "createClient").mockImplementation((opts) => {
             mockClient.idBaseUrl = opts.idBaseUrl;
             mockClient.baseUrl = opts.baseUrl;
@@ -128,6 +130,15 @@ describe("Login", function () {
 
         const ssoButton = container.querySelector(".mx_SSOButton");
         expect(ssoButton).toBeTruthy();
+    });
+
+    it("should hide register link when registration is disabled on the server", async () => {
+        mockClient.registerRequest.mockRejectedValue(new MatrixError({}, 403));
+
+        const { container } = getComponent();
+        await waitForElementToBeRemoved(() => screen.queryAllByLabelText("Loading…"));
+
+        expect(container.querySelector(".mx_AuthBody_changeFlow")).not.toBeInTheDocument();
     });
 
     it("should show multiple SSO buttons if multiple identity_providers are available", async () => {
