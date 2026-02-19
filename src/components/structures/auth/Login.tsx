@@ -285,6 +285,12 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
     };
 
     public onTryRegisterClick = (ev: ButtonEvent): void => {
+        if (this.state.registrationEnabled === false) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            return;
+        }
+
         const hasPasswordFlow = this.state.flows?.find((flow) => flow.type === "m.login.password");
         const ssoFlow = this.state.flows?.find((flow) => flow.type === "m.login.sso" || flow.type === "m.login.cas");
         // If we have no password flow but do have SSO, guess that the user wants to register with SSO.
@@ -357,41 +363,30 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         });
         this.loginLogic = loginLogic;
 
-        loginLogic
-            .getFlows()
-            .then(
-                async (flows) => {
-                    // look for a flow where we understand all of the steps.
-                    const supportedFlows = flows.filter(this.isSupportedFlow);
-                    const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
-                    if (this.unmounted || this.loginLogic !== loginLogic) return;
+        try {
+            const flows = await loginLogic.getFlows();
+            const supportedFlows = flows.filter(this.isSupportedFlow);
+            const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
 
-                    this.setState({
-                        flows: supportedFlows,
-                        registrationEnabled,
-                    });
-
-                    if (supportedFlows.length === 0) {
-                        this.setState({
-                            errorText: _t("auth|unsupported_auth"),
-                        });
-                    }
-                },
-                (err) => {
-                    if (this.unmounted || this.loginLogic !== loginLogic) return;
-                    this.setState({
-                        errorText: messageForConnectionError(err, this.props.serverConfig),
-                        loginIncorrect: false,
-                        canTryLogin: false,
-                    });
-                },
-            )
-            .finally(() => {
-                if (this.unmounted || this.loginLogic !== loginLogic) return;
-                this.setState({
-                    busy: false,
-                });
+            this.setState({
+                flows: supportedFlows,
+                registrationEnabled,
+                errorText: supportedFlows.length === 0 ? _t("auth|unsupported_auth") : this.state.errorText,
             });
+        } catch (err) {
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            this.setState({
+                errorText: messageForConnectionError(err, this.props.serverConfig),
+                loginIncorrect: false,
+                canTryLogin: false,
+            });
+        } finally {
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            this.setState({
+                busy: false,
+            });
+        }
     }
 
     private async isRegistrationEnabled(loginLogic: Login): Promise<boolean> {

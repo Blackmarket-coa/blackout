@@ -141,6 +141,15 @@ describe("Login", function () {
         expect(container.querySelector(".mx_AuthBody_changeFlow")).not.toBeInTheDocument();
     });
 
+    it("should show register link if registration probe errors unexpectedly", async () => {
+        mockClient.registerRequest.mockRejectedValue(new Error("boom"));
+
+        const { container } = getComponent();
+        await waitForElementToBeRemoved(() => screen.queryAllByLabelText("Loading…"));
+
+        expect(container.querySelector(".mx_AuthBody_changeFlow")).toBeInTheDocument();
+    });
+
     it("should show multiple SSO buttons if multiple identity_providers are available", async () => {
         mockClient.loginFlows.mockResolvedValue({
             flows: [
