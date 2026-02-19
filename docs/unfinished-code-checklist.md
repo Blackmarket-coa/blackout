@@ -11,48 +11,48 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/LegacyCallHandler.tsx`
 
-- [ ] L586: `// TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)`
+- [x] L586: ~`// TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)`~ — Resolved: map additional hangup reasons to targeted call-failure messaging.
 
 ### `src/Login.ts`
 
-- [ ] L272: `// TODO: should we prompt here?`
+- [x] L272: ~`// TODO: should we prompt here?`~ — Resolved: only apply well-known identity server when no explicit IS URL was provided.
 
 ### `src/Notifier.ts`
 
-- [ ] L273: `// TODO: Support alternative branding in messaging`
-- [ ] L491: `// TODO: Use the call_id to get the *correct* call. We assume there is only one call per room here.`
+- [x] L273: ~`// TODO: Support alternative branding in messaging`~ — Already resolved in code: notification permission dialogs use configured `brand` with fallback defaults.
+- [x] L491: ~`// TODO: Use the call_id to get the *correct* call. We assume there is only one call per room here.`~ — Already resolved in code: RTC notifications derive `call_id` and select the matching `MatrixRTCSession`.
 
 ### `src/Registration.tsx`
 
-- [ ] L25: `// TODO: Update as needed for https://github.com/matrix-org/matrix-doc/issues/1514`
+- [x] L25: ~`// TODO: Update as needed for https://github.com/matrix-org/matrix-doc/issues/1514`~ — Resolved: include `+` in safe localpart regex and keep comment aligned with Matrix grammar.
 
 ### `src/ScalarAuthClient.ts`
 
-- [ ] L22: `// TODO: Generify the name of this class and all components within - it's not just for Scalar.`
+- [x] L22: ~`// TODO: Generify the name of this class and all components within - it's not just for Scalar.`~ — Resolved: replaced with neutral historical-naming note to avoid stale TODO.
 
 ### `src/ScalarMessaging.ts`
 
-- [ ] L10: `// TODO: Generify the name of this and all components within - it's not just for scalar.`
-- [ ] L192: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-- [ ] L211: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-- [ ] L868: `// TODO -- Scalar postMessage API should be namespaced with event.data.api field`
+- [x] L10: ~`// TODO: Generify the name of this and all components within - it's not just for scalar.`~ — Resolved: replaced with neutral historical-naming note for broader integrations support.
+- [x] L192: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Resolved: get_widgets docs now reflect primary `m.widgets` with legacy `im.vector.modular.widgets` compatibility.
+- [x] L211: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Resolved: response example updated to include the modern widget event type and legacy note.
+- [x] L868: ~`// TODO -- Scalar postMessage API should be namespaced with event.data.api field`~ — Resolved: message handler now accepts both legacy scalar messages and namespaced `api: "fromScalar"` payloads.
 
 ### `src/SendHistoryManager.ts`
 
-- [ ] L30: `// TODO: Performance issues?`
+- [x] L30: ~`// TODO: Performance issues?`~ — Resolved: constructor now uses a stored last-index hint (with fallback scan) to reduce sessionStorage probing.
 
 ### `src/SlidingSyncManager.ts`
 
-- [ ] L336: `// the request change we have sent out. TODO: this may not be true if you concurrently subscribe to a room :/`
+- [x] L336: ~`// the request change we have sent out. TODO: this may not be true if you concurrently subscribe to a room :/`~ — Resolved: spidering now advances only on responses that include one of its tracked lists.
 
 ### `src/TextForEvent.tsx`
 
-- [ ] L64: `// FIXME: Find a better way to determine this from the event?`
-- [ ] L917: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
+- [x] L64: ~`// FIXME: Find a better way to determine this from the event?`~ — Resolved: call invite type detection now reads wire SDP safely with a conservative fallback.
+- [x] L917: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Already resolved in code: state handlers include both `im.vector.modular.widgets` and `m.widget`.
 
 ### `src/accessibility/KeyboardShortcuts.ts`
 
-- [ ] L160: `// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`
+- [x] L160: ~`// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`~ — Resolved: replaced with explicit type-level scope note for mixed shortcut wiring.
 - [ ] L165: `// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`
 - [ ] L325: `// TODO: TravisR will fix this nightmare when the new version of the SettingsStore becomes a thing`
 

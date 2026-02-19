@@ -18,6 +18,8 @@ interface IHistoryItem {
     replyEventId?: string;
 }
 
+const LAST_INDEX_STORAGE_KEY = "[last]";
+
 export default class SendHistoryManager {
     public history: Array<IHistoryItem> = [];
     public prefix: string;
@@ -27,18 +29,31 @@ export default class SendHistoryManager {
     public constructor(roomId: string, prefix: string) {
         this.prefix = prefix + roomId;
 
-        // TODO: Performance issues?
-        let index = 0;
-        let itemJSON;
+        let itemJSON: string | null;
+        const storedLastIndex = Number.parseInt(sessionStorage.getItem(`${this.prefix}${LAST_INDEX_STORAGE_KEY}`) ?? "", 10);
 
-        while ((itemJSON = sessionStorage.getItem(`${this.prefix}[${index}]`))) {
-            try {
-                this.history.push(JSON.parse(itemJSON));
-            } catch (e) {
-                logger.warn("Throwing away unserialisable history", e);
-                break;
+        if (Number.isInteger(storedLastIndex) && storedLastIndex >= 0) {
+            for (let index = 0; index <= storedLastIndex; index++) {
+                itemJSON = sessionStorage.getItem(`${this.prefix}[${index}]`);
+                if (!itemJSON) break;
+                try {
+                    this.history.push(JSON.parse(itemJSON));
+                } catch (e) {
+                    logger.warn("Throwing away unserialisable history", e);
+                    break;
+                }
             }
-            ++index;
+        } else {
+            let index = 0;
+            while ((itemJSON = sessionStorage.getItem(`${this.prefix}[${index}]`))) {
+                try {
+                    this.history.push(JSON.parse(itemJSON));
+                } catch (e) {
+                    logger.warn("Throwing away unserialisable history", e);
+                    break;
+                }
+                ++index;
+            }
         }
         this.lastIndex = this.history.length - 1;
         // reset currentIndex to account for any unserialisable history
@@ -58,6 +73,7 @@ export default class SendHistoryManager {
         this.currentIndex = this.history.length;
         this.lastIndex += 1;
         sessionStorage.setItem(`${this.prefix}[${this.lastIndex}]`, JSON.stringify(item));
+        sessionStorage.setItem(`${this.prefix}${LAST_INDEX_STORAGE_KEY}`, this.lastIndex.toString());
     }
 
     public getItem(offset: number): IHistoryItem {
