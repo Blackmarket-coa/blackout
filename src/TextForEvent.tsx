@@ -61,8 +61,8 @@ function textForCallEvent(event: MatrixEvent, client: MatrixClient): () => strin
 
 function textForCallInviteEvent(event: MatrixEvent, client: MatrixClient): (() => string) | null {
     const senderName = getSenderName(event);
-    // FIXME: Find a better way to determine this from the event?
-    const isVoice = !event.getContent().offer?.sdp?.includes("m=video");
+    const offerSdp = event.getWireContent()?.offer?.sdp;
+    const isVoice = typeof offerSdp === "string" ? !offerSdp.includes("m=video") : true;
     const isSupported = client.supportsVoip();
 
     // This ladder could be reduced down to a couple string variables, however other languages

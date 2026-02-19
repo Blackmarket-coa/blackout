@@ -39,20 +39,20 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/SendHistoryManager.ts`
 
-- [ ] L30: `// TODO: Performance issues?`
+- [x] L30: ~`// TODO: Performance issues?`~ — Resolved: constructor now uses a stored last-index hint (with fallback scan) to reduce sessionStorage probing.
 
 ### `src/SlidingSyncManager.ts`
 
-- [ ] L336: `// the request change we have sent out. TODO: this may not be true if you concurrently subscribe to a room :/`
+- [x] L336: ~`// the request change we have sent out. TODO: this may not be true if you concurrently subscribe to a room :/`~ — Resolved: spidering now advances only on responses that include one of its tracked lists.
 
 ### `src/TextForEvent.tsx`
 
-- [ ] L64: `// FIXME: Find a better way to determine this from the event?`
-- [ ] L917: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
+- [x] L64: ~`// FIXME: Find a better way to determine this from the event?`~ — Resolved: call invite type detection now reads wire SDP safely with a conservative fallback.
+- [x] L917: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Already resolved in code: state handlers include both `im.vector.modular.widgets` and `m.widget`.
 
 ### `src/accessibility/KeyboardShortcuts.ts`
 
-- [ ] L160: `// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`
+- [x] L160: ~`// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`~ — Resolved: replaced with explicit type-level scope note for mixed shortcut wiring.
 - [ ] L165: `// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager`
 - [ ] L325: `// TODO: TravisR will fix this nightmare when the new version of the SettingsStore becomes a thing`
 
