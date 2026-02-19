@@ -212,6 +212,7 @@ interface IState {
     // and disable it when there are no dialogs
     hideToSRUsers: boolean;
     syncError: Error | null;
+    initError: Error | null;
     serverConfig?: ValidatedServerConfig;
 
     /** Has our MatrixClient started? */
@@ -275,6 +276,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
             isMobileRegistration: false,
 
             syncError: null, // If the current syncing status is ERROR, the error object, otherwise null.
+            initError: null,
             ready: false,
         };
 
@@ -315,8 +317,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         const initProm = this.initSession();
 
         initProm.catch((err) => {
-            // TODO: show an error screen, rather than a spinner of doom
             logger.error("Error initialising Matrix session", err);
+            this.setState({ initError: err instanceof Error ? err : new Error(String(err)) });
         });
     };
 
@@ -2167,11 +2169,30 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         let view: JSX.Element;
 
         if (this.state.view === Views.LOADING) {
-            view = (
-                <div className="mx_MatrixChat_splash">
-                    <Spinner />
-                </div>
-            );
+            if (this.state.initError) {
+                view = (
+                    <div className="mx_MatrixChat_splash">
+                        <p>{_t("auth|splash_error")}</p>
+                        <p>{this.state.initError.message}</p>
+                        <button
+                            className="mx_AccessibleButton mx_AccessibleButton_kind_primary"
+                            type="button"
+                            onClick={() => {
+                                this.setState({ initError: null });
+                                this.startInitSession();
+                            }}
+                        >
+                            {_t("action|retry")}
+                        </button>
+                    </div>
+                );
+            } else {
+                view = (
+                    <div className="mx_MatrixChat_splash">
+                        <Spinner />
+                    </div>
+                );
+            }
         } else if (this.state.view === Views.CONFIRM_LOCK_THEFT) {
             view = (
                 <ConfirmSessionLockTheftView
