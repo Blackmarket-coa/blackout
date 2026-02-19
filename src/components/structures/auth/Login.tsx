@@ -287,9 +287,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
     public onTryRegisterClick = (ev: ButtonEvent): void => {
         const hasPasswordFlow = this.state.flows?.find((flow) => flow.type === "m.login.password");
         const ssoFlow = this.state.flows?.find((flow) => flow.type === "m.login.sso" || flow.type === "m.login.cas");
-        // If has no password flow but an SSO flow guess that the user wants to register with SSO.
-        // TODO: instead hide the Register button if registration is disabled by checking with the server,
-        // has no specific errCode currently and uses M_FORBIDDEN.
+        // If we have no password flow but do have SSO, guess that the user wants to register with SSO.
         if (ssoFlow && !hasPasswordFlow) {
             ev.preventDefault();
             ev.stopPropagation();
@@ -348,6 +346,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         this.setState({
             busy: true,
             loginIncorrect: false,
+            registrationEnabled: undefined,
         });
 
         await this.checkServerLiveliness({ hsUrl, isUrl });
@@ -365,6 +364,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                     // look for a flow where we understand all of the steps.
                     const supportedFlows = flows.filter(this.isSupportedFlow);
                     const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
+                    if (this.unmounted || this.loginLogic !== loginLogic) return;
 
                     this.setState({
                         flows: supportedFlows,
@@ -378,6 +378,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                     }
                 },
                 (err) => {
+                    if (this.unmounted || this.loginLogic !== loginLogic) return;
                     this.setState({
                         errorText: messageForConnectionError(err, this.props.serverConfig),
                         loginIncorrect: false,
@@ -386,6 +387,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                 },
             )
             .finally(() => {
+                if (this.unmounted || this.loginLogic !== loginLogic) return;
                 this.setState({
                     busy: false,
                 });
