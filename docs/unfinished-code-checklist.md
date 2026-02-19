@@ -76,7 +76,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/structures/MatrixChat.tsx`
 
 - [ ] L183: `* TODO: this doesn't work well, because updates to React state are not instantaneous, meaning that if several`
-- [ ] L318: `// TODO: show an error screen, rather than a spinner of doom`
+- [x] L318: ~`// TODO: show an error screen, rather than a spinner of doom`~ — Resolved: loading view now renders an explicit init-error state with retry action.
 - [ ] L1235: `// TODO: Immutable DMs replaces this`
 - [ ] L1937: `// TODO: Handle encoded room/event IDs: https://github.com/vector-im/element-web/issues/9149`
 - [ ] L1973: `// TODO: Replace oob_data with the threepidInvite (which has the same info).`
@@ -97,7 +97,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/structures/TimelinePanel.tsx`
 
-- [ ] L893: `// TODO: We should restrict this to only events in our timeline,`
+- [x] L893: ~`// TODO: We should restrict this to only events in our timeline,`~ — Resolved: decrypted-event refresh now guards on `timelineSet.findEventById` before rerendering.
 
 ### `src/components/structures/ViewSource.tsx`
 
