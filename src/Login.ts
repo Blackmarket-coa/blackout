@@ -268,8 +268,7 @@ export async function sendLoginRequest(
             hsUrl = wellknown["m.homeserver"]["base_url"];
             logger.log(`Overrode homeserver setting with ${hsUrl} from login response`);
         }
-        if (wellknown["m.identity_server"]?.["base_url"]) {
-            // TODO: should we prompt here?
+        if (wellknown["m.identity_server"]?.["base_url"] && !isUrl) {
             isUrl = wellknown["m.identity_server"]["base_url"];
             logger.log(`Overrode IS setting with ${isUrl} from login response`);
         }

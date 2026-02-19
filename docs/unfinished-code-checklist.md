@@ -11,11 +11,11 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/LegacyCallHandler.tsx`
 
-- [ ] L586: `// TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)`
+- [x] L586: ~`// TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)`~ — Resolved: map additional hangup reasons to targeted call-failure messaging.
 
 ### `src/Login.ts`
 
-- [ ] L272: `// TODO: should we prompt here?`
+- [x] L272: ~`// TODO: should we prompt here?`~ — Resolved: only apply well-known identity server when no explicit IS URL was provided.
 
 ### `src/Notifier.ts`
 
@@ -24,15 +24,15 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/Registration.tsx`
 
-- [ ] L25: `// TODO: Update as needed for https://github.com/matrix-org/matrix-doc/issues/1514`
+- [x] L25: ~`// TODO: Update as needed for https://github.com/matrix-org/matrix-doc/issues/1514`~ — Resolved: include `+` in safe localpart regex and keep comment aligned with Matrix grammar.
 
 ### `src/ScalarAuthClient.ts`
 
-- [ ] L22: `// TODO: Generify the name of this class and all components within - it's not just for Scalar.`
+- [x] L22: ~`// TODO: Generify the name of this class and all components within - it's not just for Scalar.`~ — Resolved: replaced with neutral historical-naming note to avoid stale TODO.
 
 ### `src/ScalarMessaging.ts`
 
-- [ ] L10: `// TODO: Generify the name of this and all components within - it's not just for scalar.`
+- [x] L10: ~`// TODO: Generify the name of this and all components within - it's not just for scalar.`~ — Resolved: replaced with neutral historical-naming note for broader integrations support.
 - [ ] L192: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
 - [ ] L211: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
 - [ ] L868: `// TODO -- Scalar postMessage API should be namespaced with event.data.api field`

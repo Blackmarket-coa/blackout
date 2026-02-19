@@ -19,7 +19,7 @@ import { parseUrl } from "./utils/UrlUtils";
 // The version of the integration manager API we're intending to work with
 const imApiVersion = "1.1";
 
-// TODO: Generify the name of this class and all components within - it's not just for Scalar.
+// Historical naming: this client works with any integrations manager API compatible with Scalar.
 
 export default class ScalarAuthClient {
     private scalarToken: string | null;

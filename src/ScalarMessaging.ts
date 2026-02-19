@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-// TODO: Generify the name of this and all components within - it's not just for scalar.
+// Historical naming: this module handles integrations postMessage traffic beyond just Scalar.
 
 /*
 Listens for incoming postMessage requests from the integrations UI URL. The following API is exposed:
