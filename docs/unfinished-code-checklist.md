@@ -19,8 +19,8 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/Notifier.ts`
 
-- [ ] L273: `// TODO: Support alternative branding in messaging`
-- [ ] L491: `// TODO: Use the call_id to get the *correct* call. We assume there is only one call per room here.`
+- [x] L273: ~`// TODO: Support alternative branding in messaging`~ — Already resolved in code: notification permission dialogs use configured `brand` with fallback defaults.
+- [x] L491: ~`// TODO: Use the call_id to get the *correct* call. We assume there is only one call per room here.`~ — Already resolved in code: RTC notifications derive `call_id` and select the matching `MatrixRTCSession`.
 
 ### `src/Registration.tsx`
 
@@ -33,9 +33,9 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/ScalarMessaging.ts`
 
 - [x] L10: ~`// TODO: Generify the name of this and all components within - it's not just for scalar.`~ — Resolved: replaced with neutral historical-naming note for broader integrations support.
-- [ ] L192: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-- [ ] L211: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-- [ ] L868: `// TODO -- Scalar postMessage API should be namespaced with event.data.api field`
+- [x] L192: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Resolved: get_widgets docs now reflect primary `m.widgets` with legacy `im.vector.modular.widgets` compatibility.
+- [x] L211: ~`// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`~ — Resolved: response example updated to include the modern widget event type and legacy note.
+- [x] L868: ~`// TODO -- Scalar postMessage API should be namespaced with event.data.api field`~ — Resolved: message handler now accepts both legacy scalar messages and namespaced `api: "fromScalar"` payloads.
 
 ### `src/SendHistoryManager.ts`
 
