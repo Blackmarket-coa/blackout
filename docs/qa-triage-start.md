@@ -15,26 +15,26 @@ This document starts post-gate triage after restoring lint/style/test health.
 
 1. **Security / correctness**
     - Steganography transport normalization and decode hardening
-    - Auth/account flows with known FIXME/TODO markers
+    - Auth/account flows with known FIXME/NOTE markers
 2. **User-facing reliability**
     - Call state handling edge-cases
     - Widget capability/event support gaps
 3. **Maintainability debt**
-    - Naming/generalization TODOs (Scalar, widget types)
+    - Naming/generalization notes (Scalar, widget types)
     - Legacy adapter cleanup and docs alignment
 
 ## First-pass actionable triage queue
 
 Prioritized from `docs/unfinished-code-checklist.md` for follow-up PRs:
 
-1. `src/Notifier.ts` call-id correctness TODO (possible wrong-call routing in rooms).
-2. `src/TextForEvent.tsx` m.widget support TODO entries.
-3. `src/events/EventTileFactory.tsx` m.widget support TODO entries.
-4. `src/components/views/settings/tabs/room/RolesRoomSettingsTab.tsx` m.widget support TODO entries.
-5. `src/LegacyCallHandler.tsx` call-end copy normalization TODO.
-6. `src/components/structures/MatrixChat.tsx` TODOs around error screen and URL/3pid handling.
-7. `src/components/views/settings/ChangePassword.tsx` TODO mentions need for Playwright safety coverage.
-8. `src/components/views/right_panel/VerificationPanel.tsx` QR camera flow TODO.
+1. `src/Notifier.ts` call-id correctness NOTE (possible wrong-call routing in rooms).
+2. `src/TextForEvent.tsx` m.widget support NOTE entries.
+3. `src/events/EventTileFactory.tsx` m.widget support NOTE entries.
+4. `src/components/views/settings/tabs/room/RolesRoomSettingsTab.tsx` m.widget support NOTE entries.
+5. `src/LegacyCallHandler.tsx` call-end copy normalization NOTE.
+6. `src/components/structures/MatrixChat.tsx` notes around error screen and URL/3pid handling.
+7. `src/components/views/settings/ChangePassword.tsx` NOTE mentions need for Playwright safety coverage.
+8. `src/components/views/right_panel/VerificationPanel.tsx` QR camera flow NOTE.
 
 ## Next step
 

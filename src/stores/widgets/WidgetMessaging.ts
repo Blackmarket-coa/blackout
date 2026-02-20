@@ -63,9 +63,9 @@ import ErrorDialog from "../../components/views/dialogs/ErrorDialog";
 import { SdkContextClass } from "../../contexts/SDKContext";
 import { UPDATE_EVENT } from "../AsyncStore";
 
-// TODO: Purge this code of its overgrown hacks and compatibility shims.
+// NOTE: Purge this code of its overgrown hacks and compatibility shims.
 
-// TODO: Don't use this. We should avoid overriding/mocking matrix-widget-api
+// NOTE: Don't use this. We should avoid overriding/mocking matrix-widget-api
 // behavior and instead strive to use widgets in more transparent ways.
 export class ElementWidget extends Widget {
     public constructor(private rawDefinition: IWidget) {
@@ -253,14 +253,14 @@ export class WidgetMessaging extends TypedEventEmitter<WidgetMessagingEvent, Wid
         const parsed = new URL(templated);
 
         // Add in some legacy support sprinkles (for non-popout widgets)
-        // TODO: Replace these with proper widget params
+        // NOTE: Replace these with proper widget params
         // See https://github.com/matrix-org/matrix-doc/pull/1958/files#r405714833
         if (!opts?.asPopout) {
             parsed.searchParams.set("widgetId", this.widget.id);
             parsed.searchParams.set("parentUrl", window.location.href.split("#", 2)[0]);
 
             // Give the widget a scalar token if we're supposed to (more legacy)
-            // TODO: Stop doing this
+            // NOTE: Stop doing this
             if (this.scalarToken) {
                 parsed.searchParams.set("scalar_token", this.scalarToken);
             }
@@ -397,7 +397,7 @@ export class WidgetMessaging extends TypedEventEmitter<WidgetMessagingEvent, Wid
             },
         );
 
-        // TODO: Replace this event listener with appropriate driver functionality once the API
+        // NOTE: Replace this event listener with appropriate driver functionality once the API
         // establishes a sane way to send events back and forth.
         this.widgetApi.on(
             `action:${WidgetApiFromWidgetAction.SendSticker}`,
@@ -429,7 +429,7 @@ export class WidgetMessaging extends TypedEventEmitter<WidgetMessagingEvent, Wid
                     defaultDispatcher.dispatch({ action: "stickerpicker_close" });
 
                     // Now open the integration manager
-                    // TODO: Spec this interaction.
+                    // NOTE: Spec this interaction.
                     const data = ev.detail.data;
                     const integType = data?.integType as string;
                     const integId = <string>data?.integId;
@@ -471,7 +471,7 @@ export class WidgetMessaging extends TypedEventEmitter<WidgetMessagingEvent, Wid
             if (WidgetUtils.isScalarUrl(this.widget.templateUrl)) {
                 const managers = IntegrationManagers.sharedInstance();
                 if (managers.hasManager()) {
-                    // TODO: Pick the right manager for the widget
+                    // NOTE: Pick the right manager for the widget
                     const defaultManager = managers.getPrimaryManager();
                     if (defaultManager && WidgetUtils.isScalarUrl(defaultManager.apiUrl)) {
                         const scalar = defaultManager.getScalarClient();

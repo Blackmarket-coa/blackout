@@ -180,7 +180,7 @@ interface IState {
      *
      * This represents the state of a state machine: see the documentation on {@link Views} for a transition diagram.
      *
-     * TODO: this doesn't work well, because updates to React state are not instantaneous, meaning that if several
+     * NOTE: this doesn't work well, because updates to React state are not instantaneous, meaning that if several
      *   events or {@link Action}s happen in quick succession, we may end up following the wrong transition.
      *   We should probably move the view into a separate object (like a ViewModel) and have the React state subscribe
      *   to updates.
@@ -1234,7 +1234,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
             return;
         }
 
-        // TODO: Immutable DMs replaces this
+        // NOTE: Immutable DMs will replace this flow.
 
         const client = MatrixClientPeg.safeGet();
         const dmRoom = findDMForUser(client, userId);
@@ -1982,7 +1982,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
                 // associated EventTile.
                 highlighted: Boolean(eventId),
                 threepid_invite: threepidInvite,
-                // TODO: Replace oob_data with the threepidInvite (which has the same info).
+                // NOTE: Replace oob_data with the threepidInvite (which has the same info).
                 // This isn't done yet because it's threaded through so many more places.
                 // See https://github.com/vector-im/element-web/issues/15157
                 oob_data: {

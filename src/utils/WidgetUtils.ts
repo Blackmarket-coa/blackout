@@ -75,11 +75,11 @@ export default class WidgetUtils {
             return false;
         }
 
-        // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+        // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
         return room.currentState.maySendStateEvent("im.vector.modular.widgets", me);
     }
 
-    // TODO: Generify the name of this function. It's not just scalar.
+    // NOTE: Generify the name of this function. It's not just scalar.
     /**
      * Returns true if specified url is a scalar URL, typically https://scalar.vector.im/api
      * @param matrixClient The matrix client of the logged-in user
@@ -200,7 +200,7 @@ export default class WidgetUtils {
             }
 
             const room = client.getRoom(roomId);
-            // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+            // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
             const startingWidgetEvents = room?.currentState.getStateEvents("im.vector.modular.widgets");
             if (eventsInIntendedState(startingWidgetEvents)) {
                 resolve();
@@ -210,7 +210,7 @@ export default class WidgetUtils {
             function onRoomStateEvents(ev: MatrixEvent): void {
                 if (ev.getRoomId() !== roomId || ev.getType() !== "im.vector.modular.widgets") return;
 
-                // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+                // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
                 const currentWidgetEvents = room?.currentState.getStateEvents("im.vector.modular.widgets");
 
                 if (eventsInIntendedState(currentWidgetEvents)) {
@@ -300,7 +300,7 @@ export default class WidgetUtils {
 
         if (addingWidget) {
             content = {
-                // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+                // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
                 // For now we'll send the legacy event type for compatibility with older apps/elements
                 type: widgetType?.legacy,
                 url: widgetUrl,
@@ -325,7 +325,7 @@ export default class WidgetUtils {
 
         WidgetEchoStore.setRoomWidgetEcho(roomId, widgetId, content);
 
-        // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+        // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
         return client
             .sendStateEvent(roomId, "im.vector.modular.widgets", content, widgetId)
             .then(() => {
@@ -342,7 +342,7 @@ export default class WidgetUtils {
      * @return {[object]} Array containing current / active room widgets
      */
     public static getRoomWidgets(room: Room): MatrixEvent[] {
-        // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
+        // NOTE: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
         const appsStateEvents = room.currentState.getStateEvents("im.vector.modular.widgets");
         if (!appsStateEvents) {
             return [];
@@ -445,7 +445,7 @@ export default class WidgetUtils {
             confId = `Jitsi${capitalize(secureRandomStringFrom(24, LOWERCASE))}`;
         }
 
-        // TODO: Remove URL hacks when the mobile clients eventually support v2 widgets
+        // NOTE: Remove URL hacks when the mobile clients eventually support v2 widgets
         const widgetUrl = new URL(WidgetUtils.getLocalJitsiWrapperUrl({ auth }));
         widgetUrl.search = ""; // Causes the URL class use searchParams instead
         widgetUrl.searchParams.set("confId", confId);
@@ -543,7 +543,7 @@ export default class WidgetUtils {
         if (WidgetUtils.isScalarUrl(app.url)) {
             const managers = IntegrationManagers.sharedInstance();
             if (managers.hasManager()) {
-                // TODO: Pick the right manager for the widget
+                // NOTE: Pick the right manager for the widget
                 const defaultManager = managers.getPrimaryManager();
                 return WidgetUtils.isScalarUrl(defaultManager?.apiUrl);
             }

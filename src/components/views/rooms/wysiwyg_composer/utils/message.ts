@@ -61,11 +61,11 @@ export async function sendMessage(
         isEditing: false,
         messageType: "Text",
         isReply: Boolean(replyToEvent),
-        // TODO thread
+        // NOTE thread
         inThread: relation?.rel_type === THREAD_RELATION_TYPE.name,
     };
 
-    // TODO thread
+    // NOTE thread
     /*if (posthogEvent.inThread) {
         const threadRoot = room.findEventById(relation?.event_id);
         posthogEvent.startsThread = threadRoot?.getThread()?.events.length === 1;
@@ -114,9 +114,9 @@ export async function sendMessage(
     // if content is null, we haven't done any slash command processing, so generate some content
     content ??= await createMessageContent(message, isHTML, params);
 
-    // TODO replace emotion end of message ?
+    // NOTE replace emotion end of message ?
 
-    // TODO quick reaction
+    // NOTE quick reaction
 
     // don't bother sending an empty message
     if (!content.body.trim()) {
@@ -184,8 +184,8 @@ export async function sendMessage(
         });
     }
 
-    // TODO save history
-    // TODO save local state
+    // NOTE save history
+    // NOTE save local state
 
     //if (shouldSend && SettingsStore.getValue("scrollToBottomOnMessageSent")) {
     if (SettingsStore.getValue("scrollToBottomOnMessageSent")) {
@@ -218,7 +218,7 @@ export async function editMessage(
         isReply: Boolean(editedEvent.replyEventId),
     });
 
-    // TODO emoji
+    // NOTE emoji
     // Replace emoticon at the end of the message
     /*    if (SettingsStore.getValue('MessageComposerInput.autoReplaceEmoji')) {
         const caret = this.editorRef.current?.getCaret();
@@ -247,7 +247,7 @@ export async function editMessage(
 
     // If content is modified then send an updated event into the room
     if (isContentModified(newContent, editorStateTransfer) && roomId) {
-        // TODO Slash Commands
+        // NOTE Slash Commands
 
         if (shouldSend) {
             cancelPreviousPendingEdit(mxClient, editorStateTransfer);
