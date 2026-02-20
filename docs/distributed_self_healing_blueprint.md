@@ -160,11 +160,6 @@ Multi-region evolution:
 - Do not run without tested restore drills.
 - Do not expose replication listener interfaces publicly.
 
-## Acceptance checklist
+## Project completion tracker
 
-- [ ] No single point of failure in app, DB, cache, or ingress.
-- [ ] All critical alerts mapped to runbooks.
-- [ ] Restore drill completed in the last quarter.
-- [ ] Failover drill completed in the last quarter.
-- [ ] Federation backlog recovery validated after induced outage.
-- [ ] Blackout-mode rejection/acceptance telemetry reviewed after each release.
+The operational completion tracker is maintained in `docs/project_completion_tracker.md`.
