@@ -535,10 +535,13 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
             return;
         }
 
-        // If we cannot determine the key, we'll accept it but assume it's empty string.
-        // This means if you have malformed notifications or call memberships your notifications
-        // will overwrite, but the solution to that is to use well-formed events.
-        const callId = callMembership.getContent<SessionMembershipData>().call_id ?? "";
+        const callId = callMembership.getContent<SessionMembershipData>().call_id;
+        if (typeof callId !== "string" || callId.length === 0) {
+            logger.warn(
+                `Could not determine call_id from call membership (${referencedMembershipEventId} ${roomId}) for notification event.`,
+            );
+            return;
+        }
 
         const rtcSession = MatrixRTCSession.sessionForSlot(room.client, room, { application: "m.call", id: callId });
         if (rtcSession.memberships.some((membership) => membership.userId === room.client.getUserId())) {

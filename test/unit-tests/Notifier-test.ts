@@ -515,6 +515,23 @@ describe("Notifier", () => {
             });
         });
 
+        it("ignores a call if membership has no call_id", async () => {
+            jest.spyOn(testRoom, "findEventById").mockReturnValue(
+                mkEvent({
+                    event: true,
+                    room: roomId,
+                    user: "@alice:foo",
+                    type: EventType.GroupCallMemberPrefix,
+                    content: {},
+                }),
+            );
+
+            emitCallNotificationEvent();
+            await waitFor(() => {
+                expect(ToastStore.sharedInstance().addOrReplaceToast).not.toHaveBeenCalled();
+            });
+        });
+
         it("should not show toast when group call is already connected", () => {
             const members = [
                 new CallMembership(
