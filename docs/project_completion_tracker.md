@@ -5,6 +5,14 @@ This tracker consolidates rollout milestones and readiness gates for distributed
 
 Use this consolidated tracker as the single source of truth for rollout progress.
 
+## Progress snapshot
+
+- Overall checklist completion: **8/39 items (20.5%)**.
+- Fully complete sections: **F) Documentation and architecture deliverables**.
+- Sections with remaining work: **A-E (rollout, reliability, data protection, observability, security/operations)**.
+
+> Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
+
 Status legend:
 
 - [ ] Not started
