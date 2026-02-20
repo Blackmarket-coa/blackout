@@ -105,13 +105,14 @@ These items are not blockers for distributed self-healing readiness, but they ar
   - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
   - **Evidence:** `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`, `docs/operations/dashboards/blackout_module_adoption_dashboard.json`, `docs/operations/blackout_degraded_state_support_note.md`.
 
-- [ ] **Governance and feature reuse trackers still in progress**
+- [x] **Governance and feature reuse trackers still in progress**
   - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
   - **Action steps:**
     1. Add a dated status snapshot section to each tracker with remaining unchecked items explicitly listed.
     2. Map each remaining item to owner, dependency, and next review date.
     3. Review in weekly program sync until both trackers reach complete state.
   - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
+  - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
 
 ## Exit criterion
 
