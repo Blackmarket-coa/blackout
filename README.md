@@ -24,6 +24,7 @@ For deeper architecture context:
 - `docs/repository_functionality_analysis.md`
 - `docs/features/governance_features_analysis.md`
 - `docs/blackout-reuse-completion-tracker.md`
+- `docs/distributed_self_healing_blueprint.md`
 
 ---
 
