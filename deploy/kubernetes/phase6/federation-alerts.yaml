@@ -1,0 +1,43 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: federation-and-edge-alerts
+  namespace: element-web
+spec:
+  groups:
+    - name: federation.reliability
+      rules:
+        - alert: FederationRemoteRetrySaturation
+          expr: sum(rate(matrix_federation_retry_total[5m])) > 25
+          for: 15m
+          labels:
+            severity: page
+          annotations:
+            summary: Remote-server retry saturation is sustained
+            runbook: docs/runbooks/distributed_self_healing_operations.md#3-federation-and-observability
+        - alert: FederationBacklogDrainStalled
+          expr: max_over_time(matrix_federation_sender_backlog[30m]) > 1000
+          for: 20m
+          labels:
+            severity: page
+          annotations:
+            summary: Federation sender backlog is not recovering
+            runbook: docs/runbooks/distributed_self_healing_operations.md#3-federation-and-observability
+    - name: edge.expiry
+      rules:
+        - alert: TLSCertificateExpiry30Days
+          expr: min(probe_ssl_earliest_cert_expiry - time()) < 30 * 24 * 3600
+          for: 1h
+          labels:
+            severity: ticket
+          annotations:
+            summary: TLS certificate expires within 30 days
+            runbook: docs/runbooks/distributed_self_healing_operations.md#3-federation-and-observability
+        - alert: DNSResolutionFailures
+          expr: sum(rate(probe_dns_lookup_timeouts_total[15m])) > 0
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: DNS resolution failures detected
+            runbook: docs/runbooks/distributed_self_healing_operations.md#3-federation-and-observability
