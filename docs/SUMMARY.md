@@ -47,6 +47,7 @@
 
 # Deep dive
 
+- [Distributed self-healing blueprint](distributed_self_healing_blueprint.md)
 - [Skinning](skinning.md)
 - [Cider editor](ciderEditor.md)
 - [Iconography](icons.md)
