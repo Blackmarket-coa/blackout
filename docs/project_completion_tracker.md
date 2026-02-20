@@ -54,6 +54,18 @@ Status legend:
 - [ ] Last game-day exercise completed and tracked with action items.
 - [ ] Blackout-mode rejection/acceptance telemetry reviewed after each release.
 
+
+### F) Documentation and architecture deliverables
+
+- [x] `docs/distributed_self_healing_blueprint.md` includes text-form architectural diagram.
+- [x] `docs/distributed_self_healing_blueprint.md` includes target modular folder structure (`core/`, `network/`, `crypto/`, `governance/`, `tasks/`, `ledger/`, `streaming/`).
+- [x] `docs/distributed_self_healing_blueprint.md` includes refactor checklist for event sourcing, CRDTs, replication, encryption, and migration.
+- [x] `docs/distributed_self_healing_blueprint.md` includes example event schema with hash-chain and signature fields.
+- [x] `docs/distributed_self_healing_blueprint.md` includes CRDT integration snippet and encrypted message flow.
+- [x] `docs/distributed_self_healing_blueprint.md` includes node boot and recovery sequences.
+- [x] `docs/distributed_self_healing_blueprint.md` includes performance optimization notes and security audit checklist.
+- [x] `README.md` includes a self-healing federation roadmap section linking blueprint and tracker.
+
 ### Exit criterion
 
 A deployment is considered **distributed self-healing ready** when:
