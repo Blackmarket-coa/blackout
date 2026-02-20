@@ -85,7 +85,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
     }
 
     private setupWatchers(): void {
-        // TODO: Maybe destroy this if this class supports destruction
+        // NOTE: Maybe destroy this if this class supports destruction
         new SpaceWatcher(this);
     }
 
@@ -406,7 +406,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
 
     private setAndPersistTagSorting(tagId: TagID, sort: SortAlgorithm): void {
         this.algorithm.setTagSorting(tagId, sort);
-        // TODO: Per-account? https://github.com/vector-im/element-web/issues/14114
+        // NOTE: Per-account? https://github.com/vector-im/element-web/issues/14114
         localStorage.setItem(`mx_tagSort_${tagId}`, sort);
     }
 
@@ -416,7 +416,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
 
     // noinspection JSMethodCanBeStatic
     private getStoredTagSorting(tagId: TagID): SortAlgorithm {
-        // TODO: Per-account? https://github.com/vector-im/element-web/issues/14114
+        // NOTE: Per-account? https://github.com/vector-im/element-web/issues/14114
         return <SortAlgorithm>localStorage.getItem(`mx_tagSort_${tagId}`);
     }
 
@@ -445,7 +445,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
 
     private setAndPersistListOrder(tagId: TagID, order: ListAlgorithm): void {
         this.algorithm.setListOrdering(tagId, order);
-        // TODO: Per-account? https://github.com/vector-im/element-web/issues/14114
+        // NOTE: Per-account? https://github.com/vector-im/element-web/issues/14114
         localStorage.setItem(`mx_listOrder_${tagId}`, order);
     }
 
@@ -455,7 +455,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
 
     // noinspection JSMethodCanBeStatic
     private getStoredListOrder(tagId: TagID): ListAlgorithm {
-        // TODO: Per-account? https://github.com/vector-im/element-web/issues/14114
+        // NOTE: Per-account? https://github.com/vector-im/element-web/issues/14114
         return <ListAlgorithm>localStorage.getItem(`mx_listOrder_${tagId}`);
     }
 

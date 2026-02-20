@@ -87,12 +87,12 @@ const normalizeTurnServer = ({ urls, username, credential }: IClientTurnServer):
  * authorized actions on the widget's behalf). Essentially this is a glorified
  * set of callbacks.
  */
-// TODO: Consider alternative designs for matrix-widget-api?
+// NOTE: Consider alternative designs for matrix-widget-api?
 // Replace with matrix-rust-sdk?
 export class ElementWidgetDriver extends WidgetDriver {
     private allowedCapabilities: Set<Capability>;
 
-    // TODO: Refactor widgetKind into the Widget class
+    // NOTE: Refactor widgetKind into the Widget class
     public constructor(
         private forWidget: Widget,
         private forWidgetKind: WidgetKind,
@@ -265,7 +265,7 @@ export class ElementWidgetDriver extends WidgetDriver {
             });
         }
 
-        // TODO: Do something when the widget requests new capabilities not yet asked for
+        // NOTE: Do something when the widget requests new capabilities not yet asked for
         let rememberApproved = false;
         if (missing.size > 0) {
             try {
@@ -282,7 +282,7 @@ export class ElementWidgetDriver extends WidgetDriver {
         }
 
         // discard all previously allowed capabilities if they are not requested
-        // TODO: this results in an unexpected behavior when this function is called during the capabilities renegotiation of MSC2974 that will be resolved later.
+        // NOTE: this results in an unexpected behavior when this function is called during the capabilities renegotiation of MSC2974 that will be resolved later.
         const allAllowed = new Set(iterableIntersection(allowedSoFar, requested));
 
         if (rememberApproved) {

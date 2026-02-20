@@ -162,7 +162,7 @@ export type IKeyboardShortcuts = Partial<Record<KeyBindingAction, KeyboardShortc
 
 export interface ICategory {
     categoryLabel?: TranslationKey;
-    // TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager
+    // NOTE: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager
     settingNames: KeyBindingAction[];
 }
 
@@ -322,7 +322,7 @@ export const MAC_ONLY_SHORTCUTS = [KeyBindingAction.OpenUserSettings];
 
 // This is very intentionally modelled after SETTINGS as it will make it easier
 // to implement customizable keyboard shortcuts
-// TODO: TravisR will fix this nightmare when the new version of the SettingsStore becomes a thing
+// NOTE: TravisR will fix this nightmare when the new version of the SettingsStore becomes a thing
 // XXX: Exported for tests
 export const KEYBOARD_SHORTCUTS: IKeyboardShortcuts = {
     [KeyBindingAction.FormatBold]: {

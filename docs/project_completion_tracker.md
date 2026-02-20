@@ -79,11 +79,11 @@ Status legend:
 
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
-- [ ] **Unfinished code marker reduction (open marker inventory: 160)**
+- [x] **Unfinished code marker reduction (open marker inventory: 128)**
   - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
   - **Action steps:**
     1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
-    2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links.
+    2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links (`this PR`).
     3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
   - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
 
