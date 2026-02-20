@@ -28,6 +28,30 @@ For deeper architecture context:
 
 ---
 
+
+## Self-healing federation architecture (Blackout roadmap)
+
+This project now defines a target architecture for a decentralized, encrypted, self-healing federation model that can run on low-power nodes (including recycled Android phones).
+
+Primary blueprint:
+
+- `docs/distributed_self_healing_blueprint.md`
+
+What the blueprint includes:
+
+- Event-sourced, append-only, hash-linked data model
+- CRDT-based deterministic state rebuild
+- Peer replication + gossip discovery + snapshot/replay recovery
+- End-to-end encryption model (X25519, AES-GCM, ratchet flows)
+- Governance features (voting, tasks, bounty ledger, streaming)
+- Migration strategy that preserves compatibility during rollout
+
+Implementation status should be tracked in:
+
+- `docs/project_completion_tracker.md`
+
+---
+
 ## Quick start
 
 ### Prerequisites

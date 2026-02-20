@@ -1,231 +1,302 @@
-# Distributed self-healing blueprint (community-operated)
+# Distributed Self-Healing Blueprint (Community-Operated)
+
+This blueprint defines a practical target architecture for a **self-healing, decentralized, encrypted, lightweight federation system** that can run on low-power nodes (including recycled Android phones via Termux). It is implementation-oriented and compatible with incremental adoption.
+
+---
+
+## 1) Architectural diagram (text form)
+
+```text
+                        ┌───────────────────────────────────────────────┐
+                        │            Federation Control Plane           │
+                        │ DID identities • seed list • trust policies  │
+                        └───────────────────────────────────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+      ┌───────▼────────┐      ┌───────▼────────┐      ┌───────▼────────┐
+      │ Node A         │◄────►│ Node B         │◄────►│ Node C         │
+      │ (Phone/VM)     │Gossip│ (Phone/VM)     │Gossip│ (Phone/VM)     │
+      ├────────────────┤      ├────────────────┤      ├────────────────┤
+      │ API Gateway    │      │ API Gateway    │      │ API Gateway    │
+      │ Peer Manager   │      │ Peer Manager   │      │ Peer Manager   │
+      │ Event Store    │      │ Event Store    │      │ Event Store    │
+      │ Snapshot Eng.  │      │ Snapshot Eng.  │      │ Snapshot Eng.  │
+      │ CRDT Engine    │      │ CRDT Engine    │      │ CRDT Engine    │
+      │ Crypto Layer   │      │ Crypto Layer   │      │ Crypto Layer   │
+      ├────────────────┤      ├────────────────┤      ├────────────────┤
+      │ SQLite/Badger  │      │ SQLite/Badger  │      │ SQLite/Badger  │
+      │ Encrypted blobs│      │ Encrypted blobs│      │ Encrypted blobs│
+      └────────────────┘      └────────────────┘      └────────────────┘
+              │                       │                       │
+              └────────── WebRTC / WebSocket / HTTP bootstrap ──────────┘
+```
+
+---
+
+## 2) Folder structure (target modularization)
+
+```text
+core/
+  event_store/
+  snapshot_engine/
+  state_rebuilder/
+  compatibility/
+network/
+  peer_manager/
+  gossip/
+  transport_webrtc/
+  transport_ws/
+  bootstrap_http/
+crypto/
+  identity/
+  key_exchange/
+  ratchet/
+  envelope/
+governance/
+  voting/
+  policy/
+tasks/
+  workflow/
+  claims/
+ledger/
+  internal_token/
+  escrow/
+  multisig/
+streaming/
+  p2p_mesh/
+  sfu_fallback/
+docs/
+  termux_setup.md
+  low_memory_mode.md
+  migration_plan.md
+```
+
+---
+
+## 3) Refactor checklist
+
+- [ ] Adopt append-only event log with hash-linked records.
+- [ ] Add CRDT state layer (Yjs/Automerge) for deterministic merge.
+- [ ] Implement snapshot + replay recovery flow.
+- [ ] Add peer replication and configurable replication factor.
+- [ ] Implement gossip peer discovery with static seed fallback.
+- [ ] Add DID-style public-key identity (Ed25519 signing).
+- [ ] Add X25519 + AES-GCM encrypted payload envelopes.
+- [ ] Add double-ratchet messaging paths for chat forward secrecy.
+- [ ] Add vote/task/bounty/stream event types and handlers.
+- [ ] Add low-memory mode profile (<1GB RAM target).
+- [ ] Add Docker and Termux deployment guides.
+- [ ] Provide compatibility layer and migration scripts.
+
+---
+
+## 4) Example event schema
+
+```json
+{
+  "eventId": "01J...",
+  "eventType": "MESSAGE_CREATED",
+  "timestamp": 1735689600000,
+  "actorPublicKey": "ed25519:...",
+  "signature": "base64sig",
+  "encryptedPayload": "base64ciphertext",
+  "previousHash": "sha256:...",
+  "contentHash": "sha256:...",
+  "roomId": "room:alpha",
+  "crdtClock": "lamport:12345"
+}
+```
 
-This guide translates the goal "hard to take down" into practical reliability engineering for Blackout Server deployments. It is written as an operator-facing blueprint you can execute in phases, measure, and continuously improve.
+Validation rules:
 
-## Reality check: "impossible to take down"
+1. Verify signature against `actorPublicKey`.
+2. Verify `previousHash` chain continuity.
+3. Verify payload integrity (`contentHash`).
+4. Apply CRDT operation deterministically.
 
-No system is literally impossible to disrupt. Design for:
+---
 
-- no single points of failure,
-- fast automatic recovery,
-- graceful degradation,
-- and rapid operator intervention.
+## 5) Example CRDT integration snippet
 
-Use measurable targets (SLOs) instead of absolutes, and review them at least monthly.
+```ts
+// Pseudocode (TypeScript style)
+import * as Y from "yjs";
 
-## Target outcomes (SLO examples)
+const doc = new Y.Doc();
+const messages = doc.getArray("messages");
 
-- API availability: 99.95% monthly.
-- Federation send backlog recovers to normal within 15 minutes after a regional incident.
-- Data durability: no permanent loss from single-node failure.
-- Recovery objectives:
-  - RPO <= 1 minute (WAL shipping / synchronous replication based on latency budget).
-  - RTO <= 5 minutes for primary database failover.
+export function applyEvent(event: FederatedEvent) {
+  assertValidHashChain(event);
+  assertValidSignature(event);
 
-SLO process recommendations:
+  const op = decryptAndDecode(event.encryptedPayload);
+  doc.transact(() => {
+    messages.push([op]);
+  }, event.eventId);
+}
 
-- Track SLOs with a monthly burn-rate report.
-- Define explicit error budget policy (for example: freeze non-critical deploys when >50% monthly budget is consumed).
-- Keep one owner per SLO with clear escalation contact.
+export function snapshotState() {
+  return Y.encodeStateAsUpdate(doc);
+}
+```
 
-## Architecture layers
+---
 
-## 1) Community distribution model (users as resilience)
+## 6) Example encrypted message flow
 
-Use multiple independently-operated homeservers (different operators, networks, and regions). This prevents a single organization, data center, or ISP from taking out the whole community.
+1. Sender resolves recipient room public keys.
+2. Sender performs X25519 key agreement for session material.
+3. Sender derives per-room symmetric key (ratchet step for chats).
+4. Payload is encrypted with AES-GCM.
+5. Sender signs event metadata with Ed25519.
+6. Node stores only encrypted blob + metadata hash chain.
+7. Recipient fetches encrypted event, verifies signature/hash, decrypts.
 
-Operational implications:
+Design invariant: **server nodes never require plaintext access**.
 
-- Keep federation enabled and healthy.
-- Publish bootstrap/runbook docs so new operators can join quickly.
-- Encourage at least 3 independent operators before calling a network "resilient".
-- Maintain a public operator status channel with outage and maintenance notices.
-- Rotate cross-operator incident commander duty so no single team becomes a bottleneck.
+---
 
-## 2) Per-homeserver high availability
+## 7) Node boot sequence
 
-For each homeserver deployment:
+1. Start in low-memory mode defaults when device profile is constrained.
+2. Load node keys and DID identity.
+3. Initialize embedded store (SQLite/LiteFS/BadgerDB).
+4. Load latest snapshot checkpoint.
+5. Replay local append-only log from checkpoint.
+6. Join gossip network using seed nodes.
+7. Sync missing event ranges from peers.
+8. Validate hash chain and signatures.
+9. Rebuild CRDT materialized state.
+10. Announce healthy and begin relay/replication/signaling duties.
 
-- **Synapse workers** split request handling by role.
-- **Redis** for replication/pub-sub and cache coherence.
-- **PostgreSQL HA** (primary + replicas + automated failover).
-- **Reverse proxy / load balancer** routing to healthy workers.
+---
 
-### Recommended worker baseline
+## 8) Recovery sequence (self-healing)
 
-Start conservative, then scale by metrics:
+When a node fails:
 
-- 2x generic workers for client API paths.
-- 1x federation sender.
-- 1x background worker.
-- 1x event persister.
-- Main process for coordination.
+- Peers continue appending events and replicating encrypted blobs.
+- Periodic snapshots are retained with retention policy.
 
-Scale out with additional workers per bottleneck domain (`/sync`, federation, media, pushers).
+When node returns:
 
-Sizing and placement notes:
+1. Request missing hash ranges from peers.
+2. Verify continuity and cryptographic signatures.
+3. Backfill missing encrypted payloads.
+4. Replay events into CRDT engine.
+5. Recompute materialized views (chat, voting, tasks, ledger).
+6. Rejoin federation and advertise capacity.
 
-- Place at least one generic worker in each availability zone.
-- Keep event persister close to the database (low-latency path).
-- Reserve CPU for burst handling (target <65% sustained CPU at p95).
+Stateless replacement is supported by restoring identity keys (or rotating identity with trust update), then replaying snapshot + log.
 
-## 3) Control plane and self-healing
+---
 
-Use one orchestrator style consistently:
+## 9) Performance optimization notes
 
-- **Systemd** for VM/bare-metal deployments.
-- **Kubernetes** for container-first environments.
+- Target binary protocol (CBOR or Protobuf) for high-volume replication.
+- Batch event propagation and acknowledgments.
+- Use lazy history sync (hash-range pagination).
+- Keep hot indexes in memory; spill cold history to compact embedded storage.
+- Use adaptive sync windows for unstable mobile nodes.
+- Isolate SFU fallback as optional lightweight service (mediasoup/Pion).
+- For 10k+ concurrent users per federation cluster, scale horizontally by room partitioning and replication-factor tuning.
 
-Self-healing controls:
+Phone-hostable profile:
 
-- Liveness/readiness checks on every worker.
-- Auto-restart on process crash.
-- Anti-affinity for critical replicas.
-- Automatic database failover.
-- Automated rollback for bad deploys.
+- Memory target: 512MB–1GB RAM.
+- CPU-aware background compaction.
+- Disk quotas for encrypted blobs + snapshot pruning.
 
-Deployment safety gates:
+---
 
-- Canary 5-10% of traffic first, then roll to 50%, then 100%.
-- Abort rollout automatically on p95 latency regression >20% or error rate +1% absolute.
-- Keep schema migrations backward-compatible for at least one deploy cycle.
+## 10) Security audit checklist
 
-## 4) Data safety and consistency
+- [ ] Ed25519 signatures validated for all event types.
+- [ ] Hash-chain tamper checks enforced at ingest.
+- [ ] X25519 key exchange implemented with key rotation policy.
+- [ ] AES-GCM nonce management is safe and unique.
+- [ ] Double-ratchet path tested for forward secrecy.
+- [ ] Servers store only encrypted payloads, not plaintext.
+- [ ] Replay and duplication attacks are rejected.
+- [ ] Snapshot integrity signatures verified before restore.
+- [ ] Multi-sig release logic tested for bounty escrow.
+- [ ] Incident response and key compromise runbooks are documented.
 
-- Daily full backups + frequent incremental/WAL backups.
-- Quarterly restore drills to a clean environment.
-- Connection keepalives tuned to reduce long DB stalls during path failure.
-- Capacity alerts on DB growth, purge lag, and replication lag.
-- Backup immutability or retention lock where possible.
-- Encrypt backups at rest and in transit; test key recovery separately.
+---
 
-## 5) Observability and auto-remediation
+## Core feature mapping
 
-Use dashboards + alerting for:
+### Large group chats
 
-- Worker process health.
-- DB replication lag and failover state.
-- Redis availability and latency.
-- Federation retry/failure trends.
-- Event rejection rates (especially in blackout mode).
+- Room-level CRDT with partial sync and lazy loading.
+- Hash-range pagination for message history.
+- Offline-first reconciliation.
+- Role-based moderation events.
 
-Automations to add:
+### Robust voting
 
-- If federation destination repeatedly fails, auto-create incident annotation.
-- If queue lag exceeds threshold, scale related worker pool.
-- If rejection rate spikes after deploy, trigger rollback or config canary halt.
+- `PROPOSAL_CREATED`, `VOTE_CAST`, `VOTE_CLOSED` events.
+- Signed ballots and verifiable tally replay.
+- Optional anonymous mode and weighted policy module.
 
-Alerting policy recommendations:
+### Work allocation
 
-- Use multi-window burn-rate alerts for availability SLOs.
-- Route paging alerts to humans only for actionable incidents.
-- Auto-close alerts when recovery criteria hold for a cooldown period.
+- `TASK_CREATED`, `TASK_CLAIMED`, `TASK_STATUS_CHANGED` events.
+- Skill tags, deterministic status transitions, DAO-policy hooks.
 
-## Threat model to design against
+### Bounty system
 
-Plan for at least these events:
+- Internal signed ledger with Merkle proofs.
+- Escrow and multi-sig release events.
+- Proof-of-work submission records + reputation updates.
 
-- Single server loss.
-- Zone/region outage.
-- DNS outage.
-- Certificate expiration.
-- Upstream dependency outage.
-- Malicious traffic spikes.
-- Operator mistakes (bad config, bad rollout).
-- Partial network partition and asymmetric latency.
-- Long-tail storage latency spikes.
+### Streaming
 
-Each threat should have:
+- WebRTC mesh by default; optional SFU fallback.
+- Encrypted stream metadata and transport keys.
 
-1. Detection signal.
-2. Automated first response.
-3. Manual fallback runbook.
-4. Postmortem checklist.
+---
 
-Add explicit runbook metadata:
+## Networking model
 
-- Owner and backup owner.
-- Last review date.
-- Time-to-mitigate target.
-- Links to dashboards and logs.
+### Layer 1: Identity + federation
 
-## Reference topology (practical)
+- Public-key identity, DID-style identifiers.
+- No central auth dependency.
 
-Small resilient cluster (single region, production-capable):
+### Layer 2: Peer discovery
 
-- 3x app nodes (Synapse workers + main distributed across nodes).
-- 3x PostgreSQL nodes (1 primary, 2 replicas).
-- 3x Redis Sentinel/Cluster-compatible nodes.
-- 2x reverse proxies (active/active).
-- Offsite backup target in second region.
+- Gossip protocol + distributed peer table.
+- Seed nodes as bootstrap fallback.
 
-Multi-region evolution:
+### Layer 3: Data transport
 
-- Active/active app tier in 2 regions.
-- Regional read replicas.
-- Clearly-defined write strategy (single-writer or carefully scoped multi-writer).
-- Global DNS with health-based routing.
+- WebRTC for high-bandwidth group transfer.
+- WebSocket fallback for constrained networks.
+- Minimal HTTP bootstrap endpoints.
 
-## Reliability acceptance checklist
+---
 
-A deployment should not be labeled "self-healing" until all are true:
+## Migration plan (non-breaking)
 
-- [ ] Automatic app process restart and health-gated traffic routing are enabled.
-- [ ] DB primary failover succeeds in testing within RTO target.
-- [ ] Backup restore drill completed in the last 90 days.
-- [ ] TLS certificate expiry alerting and auto-renewal are tested.
-- [ ] On-call escalation and incident roles are documented.
-- [ ] At least one chaos exercise completed in the last quarter.
+1. Introduce compatibility layer that mirrors current writes into the new event store.
+2. Backfill existing state into signed event streams.
+3. Enable read-path dual mode (legacy + event-derived).
+4. Switch feature-by-feature to event-derived state.
+5. Enable snapshots, then peer replication.
+6. Turn on strict cryptographic validation after soak period.
 
-## Incident operating model
+---
 
-Minimal roles during incidents:
+## Optional advanced enhancements
 
-- Incident Commander (decision owner).
-- Operations Driver (executes technical actions).
-- Communications Lead (status updates internally and to operators).
-- Scribe (timeline and action tracking).
-
-Golden rules:
-
-- Prioritize mitigation over root-cause debate.
-- Keep changes reversible during active incidents.
-- Publish an initial status update within 10 minutes.
-
-## 30/60/90 day rollout plan
-
-### Day 0-30
-
-- Migrate all production homeservers to PostgreSQL (if any are not already).
-- Introduce workers + Redis in staging, then production.
-- Add health checks and restart policies.
-- Set initial SLOs and alert thresholds.
-- Define incident roles and escalation trees.
-
-### Day 31-60
-
-- Deploy Postgres automated failover.
-- Implement backup verification pipeline.
-- Add federation health dashboard and incident playbook.
-- Run first chaos exercise (kill worker, kill app node, fail DB primary).
-- Introduce canary deploy + automated rollback gates.
-
-### Day 61-90
-
-- Add second region DR footprint.
-- Automate scale-out triggers for top bottlenecks.
-- Run game day for full-region failover simulation.
-- Publish operator onboarding pack for community-run nodes.
-- Add monthly reliability review cadence.
-
-## What not to do
-
-- Do not claim absolute uptime/impossibility.
-- Do not keep SQLite in any deployment requiring worker-based scaling.
-- Do not run without tested restore drills.
-- Do not expose replication listener interfaces publicly.
-- Do not perform irreversible schema changes without rollback strategy.
+- Tor hidden service mode for node endpoints.
+- NAT traversal automation for mobile peers.
+- LAN-only federation mode.
+- Offline QR-based sync handoff.
+- Emergency read-only failover mode.
 
 ## Project completion tracker
 
-The operational completion tracker is maintained in `docs/project_completion_tracker.md`.
+Track implementation status in `docs/project_completion_tracker.md`.
