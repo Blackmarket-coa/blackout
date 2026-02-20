@@ -1,127 +1,102 @@
-# Unfinished Code Priority Plan (Aligned to Blackout Frontend Architecture)
+# Unfinished Code Priority Plan
 
-This plan aligns unresolved TODO/FIXME markers with the Blackout frontend direction:
-
-- Matrix transports **metadata-only signal events**.
-- Message/file payloads move to **local encryption + WebRTC P2P** paths.
-- Storage and replication become **chunked, local-first, and gossip-driven**.
+This plan prioritizes unresolved TODO/FIXME markers from `docs/unfinished-code-checklist.md` by user risk, production impact, and implementation leverage.
 
 ## Inputs
 
-- Completion tracker baseline: `docs/blackout-reuse-completion-tracker.md`.
-- Unfinished marker inventory: `docs/unfinished-code-checklist.md`.
-- Target architecture: Blackout frontend plan (metadata-only Matrix events, room mesh RTC data channels, distributed chunk storage/replication, encrypted attachments, direct large-file transfer).
+- Completion tracker baseline: `docs/blackout-reuse-completion-tracker.md` (all major reuse-strategy epics complete; current phase is maintenance).
+- Open marker inventory: `docs/unfinished-code-checklist.md` (repository-wide TODO/FIXME/TBD backlog).
 
-## Alignment principles (what changes in prioritization)
+## Prioritization model
 
-1. **Messaging correctness now means metadata correctness**
-   - Matrix events must carry only routing/integrity fields (`message_id`, `hash`, `size`, content type).
-2. **Transport reliability shifts to WebRTC mesh health**
-   - Peer discovery/reconnect/inventory sync paths are now critical-path functionality.
-3. **Storage integrity is hash/chunk/Merkle based**
-   - Local chunk lifecycle and verification become P0/P1 depending on user-impact surface.
-4. **UI TODOs are sequenced by impact on P2P rollout safety**
-   - Error handling, event scoping, and encoded-ID routing remain high priority because they gate operability of deeper P2P work.
+- **P0 (stability/security correctness):** can cause broken UX, data correctness issues, or policy/security regressions.
+- **P1 (product/operational impact):** missing behavior that degrades key workflows, scalability, or operability.
+- **P2 (maintainability/debt):** naming/cleanup/ergonomics/documentation improvements.
 
-## Workstream mapping to the 6 architecture tracks
+## Recommended execution order
 
-### 1) Disable server message persistence (metadata-only Matrix events)
+### P0 — do first
 
-**Priority:** P0
+1. **Notifier call lookup correctness**
+   - `src/Notifier.ts` L491: TODO to use `call_id` for correct call targeting instead of single-call-per-room assumption.
+   - Why first: incorrect call lookup can misroute call notifications/actions.
 
-- Extend existing event-send TODO handling to enforce `m.blackout.signal`-style metadata events.
-- Immediate tie-ins from current backlog:
-  - `src/components/structures/TimelinePanel.tsx` L893 (event-scope guard).
-  - `src/components/structures/MatrixChat.tsx` L1937 (encoded room/event IDs).
-  - `src/components/structures/MatrixChat.tsx` L318 (explicit error state for rejected/invalid signal payloads).
+2. **MatrixChat error-state handling**
+   - `src/components/structures/MatrixChat.tsx` L318: TODO to render explicit error screen instead of spinner-only fallback.
+   - Why first: failure masking blocks user recovery and support diagnosis.
 
-### 2) WebRTC mesh messaging layer (`src/p2p/`)
+3. **TimelinePanel event scope guard**
+   - `src/components/structures/TimelinePanel.tsx` L893: TODO to restrict behavior to events in local timeline.
+   - Why first: cross-timeline behavior risks acting on unintended events.
 
-**Priority:** P0
+4. **Room/event ID encoding handling**
+   - `src/components/structures/MatrixChat.tsx` L1937: TODO to handle encoded room/event IDs.
+   - Why first: malformed or encoded links can break navigation/open flows.
 
-- Add foundational modules:
-  - `src/p2p/peerManager.ts`
-  - `src/p2p/rtcTransport.ts`
-  - `src/p2p/roomMesh.ts`
-- Reuse existing call signaling where practical; decouple from call-only assumptions.
-- Backlog tie-ins:
-  - `src/Notifier.ts` L491 (replace one-call-per-room assumptions with ID-scoped targeting concepts that also apply to per-peer RTC sessions).
-  - `src/LegacyCallHandler.tsx` L586 and `src/components/structures/LegacyCallEventGrouper.ts` L95 (legacy call semantics cleanup to avoid conflicts when RTC is used for both calls and messaging transport).
+5. **Legacy call-hangup messaging logic**
+   - `src/LegacyCallHandler.tsx` L586: TODO around call end-reason copy/semantics.
+   - Why first: user-facing call-end states are high-visibility and support-sensitive.
 
-### 3) Split + distributed local storage (message/file chunks)
+6. **Auth flow register-button correctness**
+   - `src/components/structures/auth/Login.tsx` L290: TODO to check server registration support before showing register action.
+   - Why first: exposing unavailable auth actions causes dead-end onboarding.
 
-**Priority:** P1
+### P1 — next wave
 
-- Add chunk model standards (256KB chunking, SHA-256 per chunk, Merkle root for file payload sets).
-- IndexedDB room/chunk namespace strategy should be documented and tested.
-- Backlog tie-ins:
-  - `src/SendHistoryManager.ts` L30 (performance concern likely amplified under local-first persistence).
-  - `src/components/structures/ScrollPanel.tsx` L648 (binary search TODO helps timeline scalability with chunk-backed history growth).
+7. **Per-room hide controls in MessagePanel**
+   - `src/components/structures/MessagePanel.tsx` L468: TODO for granular hide options.
 
-### 4) Gossip replication (inventory exchange + redundancy targets)
+8. **ScrollPanel search optimization**
+   - `src/components/structures/ScrollPanel.tsx` L648: TODO for binary search over sorted offsets.
 
-**Priority:** P1
+9. **Keyboard shortcut handling gaps**
+   - `src/accessibility/KeyboardShortcuts.ts` L160, L165, L325: TODOs about unmanaged shortcuts/settings migration.
 
-- Define room-level replication policy defaults (target redundancy >= 3, configurable).
-- Add sync protocol lifecycle: inventory exchange, missing-hash requests, chunk transfer, convergence checks.
-- Backlog tie-ins:
-  - `src/components/structures/MatrixChat.tsx` L183 (state consistency TODO is relevant for bursty gossip updates).
-  - `src/components/structures/MessagePanel.tsx` L468 (granular controls can evolve into per-room replication/retention visibility).
+10. **Widget event support expansion**
+    - `src/ScalarMessaging.ts` L192, L211 and `src/TextForEvent.tsx` L917: TODO to support `m.widget` events.
 
-### 5) Encrypted file attachments (Matrix metadata + P2P data plane)
+11. **Import E2E keys feedback UX**
+    - `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx` L110: TODO for import-result feedback.
 
-**Priority:** P0/P1 boundary (start in P0 for safety)
+12. **MatrixChat state consistency note**
+    - `src/components/structures/MatrixChat.tsx` L183: TODO about non-instant React state updates under bursts.
 
-- Enforce no-server-blob rule: Matrix stores only metadata (Merkle root, file metadata, key reference ID).
-- Add attachment encryption workflow and key wrapping integration before broad UI exposure.
-- Backlog tie-ins:
-  - `src/ScalarMessaging.ts` L192/L211 and `src/TextForEvent.tsx` L917 (`m.widget` support should not block attachment metadata events but may need compatibility mapping).
-  - `src/components/structures/ViewSource.tsx` L44 (update event header semantics for new metadata-centric events).
+13. **Notifier alternative branding path**
+    - `src/Notifier.ts` L273: TODO for branding-aware messaging.
 
-### 6) P2P direct transfer for large files
+14. **Legacy call event grouping heuristic**
+    - `src/components/structures/LegacyCallEventGrouper.ts` L95 and `src/TextForEvent.tsx` L64: FIXME for better event-derived grouping logic.
 
-**Priority:** P1
+15. **SpaceHierarchy reset TODO**
+    - `src/components/structures/SpaceHierarchy.tsx` L622: inline TODO on room reset semantics.
 
-- Prefer direct RTC streaming when peers are online; fallback to replicated chunk retrieval when offline.
-- Add transfer mode telemetry and UX states (direct, fallback swarm, unavailable).
-- Backlog tie-ins:
-  - `src/components/structures/MatrixChat.tsx` L318 (error screen requirement is critical for transfer-mode failures).
-  - `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx` L110 (feedback patterns should be mirrored in transfer/import status UX).
+### P2 — maintenance backlog
 
-## Updated TODO/FIXME execution order (architecture-aligned)
+16. **Scalar naming generification**
+    - `src/ScalarAuthClient.ts` L22 and `src/ScalarMessaging.ts` L10, L868: TODOs to remove Scalar-specific naming/API assumptions.
 
-### P0 — rollout blockers
+17. **Registration issue tracker follow-up**
+    - `src/Registration.tsx` L25: TODO linked to historical matrix-doc issue.
 
-1. Matrix metadata-event safety rails (event scope + encoded-ID handling + explicit invalid-signal error states).
-2. RTC mesh foundation (`peerManager`, `rtcTransport`, `roomMesh`) with reconnect semantics.
-3. Notifier/call-path ID correctness (`call_id` and peer/session targeting assumptions).
-4. Legacy call/event grouping cleanup to prevent signaling-path ambiguity.
-5. Attachment metadata-only guardrails + encryption pipeline skeleton.
+18. **Captcha mobile_register retirement cleanup**
+    - `src/components/views/auth/CaptchaForm.tsx` L68: TODO remove temporary compatibility path.
 
-### P1 — scale and resilience
+19. **ViewSource modal header refresh**
+    - `src/components/structures/ViewSource.tsx` L44: TODO for event header wording refresh.
 
-6. Chunking + hash/Merkle local storage implementation and tests.
-7. Gossip replication protocol + redundancy policy configuration.
-8. Timeline/scroll/history performance fixes (binary search + send history profiling).
-9. Direct-transfer mode + swarm fallback UX and telemetry.
-10. Product controls and compatibility layers (message panel granularity, widget/event integration where required).
+20. **Send history performance investigation**
+    - `src/SendHistoryManager.ts` L30: TODO asking about potential performance issues.
 
-### P2 — maintenance/debt
+## Mapping to completion-tracker maintenance themes
 
-11. Scalar naming generalization and API namespacing cleanup.
-12. Auth/registration and legacy compatibility retirement TODOs.
-13. Low-risk UI wording/cleanup items.
+The completion tracker indicates major Blackout reuse epics are complete and now in maintenance mode. This priority list aligns with that phase by focusing first on:
+
+- correctness/safety regressions in high-traffic flows (calls, timeline, auth),
+- operational resilience (explicit error states, deterministic event handling),
+- then incremental product polish and debt retirement.
 
 ## Suggested delivery cadence
 
-- **Sprint A (P0):** metadata-only event contract + RTC mesh skeleton + correctness/error rails.
-- **Sprint B (P1):** chunk store + gossip replication + performance hardening.
-- **Sprint C (P1/P2):** direct-transfer polish, compatibility, and debt retirement.
-
-## Definition of done for this plan
-
-- Message bodies are no longer persisted to Matrix events in standard send flows.
-- Room-level RTC mesh reliably exchanges encrypted payloads with reconnect behavior.
-- File/message chunk verification succeeds via hash checks and Merkle-root validation.
-- Replication policy converges to configured redundancy target in routine peer churn.
-- UI clearly communicates transfer/sync/error states for metadata-only + P2P operation.
+- **Sprint A (P0):** items 1–6, plus regression tests for call lookup, encoded-ID navigation, and login/register gating.
+- **Sprint B (P1):** items 7–15, with perf checks for scroll/search and keyboard shortcut handling tests.
+- **Sprint C (P2):** items 16–20 during maintenance windows or adjacent feature work.

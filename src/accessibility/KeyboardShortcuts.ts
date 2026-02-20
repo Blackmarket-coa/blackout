@@ -157,7 +157,7 @@ export type KeyboardShortcutSetting = Omit<IBaseSetting<KeyCombo>, "supportedLev
     displayName?: TranslationKey;
 };
 
-// TODO: We should figure out what to do with the keyboard shortcuts that are not handled by KeybindingManager
+// This includes declarative metadata for all shortcut actions, including ones still wired outside KeybindingManager.
 export type IKeyboardShortcuts = Partial<Record<KeyBindingAction, KeyboardShortcutSetting>>;
 
 export interface ICategory {

@@ -885,14 +885,13 @@ class TimelinePanel extends React.Component<IProps, IState> {
 
         if (!this.hasTimelineSetFor(ev.getRoomId())) return;
 
+        if (!ev.getId() || !this.props.timelineSet.findEventById(ev.getId())) return;
+
         if (!this.state.events.includes(ev)) return;
 
         // Need to update as we don't display event tiles for events that
         // haven't yet been decrypted. The event will have just been updated
         // in place so we just need to re-render.
-        // TODO: We should restrict this to only events in our timeline,
-        // but possibly the event tile itself should just update when this
-        // happens to save us re-rendering the whole timeline.
         this.buildLegacyCallEventGroupers(this.state.events);
         this.forceUpdate();
     };

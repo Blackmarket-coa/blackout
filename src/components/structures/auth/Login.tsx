@@ -9,7 +9,7 @@ Please see LICENSE files in the repository root for full details.
 import React, { type JSX, type ReactNode } from "react";
 import classNames from "classnames";
 import { logger } from "matrix-js-sdk/src/logger";
-import { type SSOFlow, SSOAction } from "matrix-js-sdk/src/matrix";
+import { MatrixError, type SSOFlow, SSOAction } from "matrix-js-sdk/src/matrix";
 
 import { _t, UserFriendlyError } from "../../../languageHandler";
 import Login, { type ClientLoginFlow, type OidcNativeFlow } from "../../../Login";
@@ -62,6 +62,7 @@ interface IState {
     loginIncorrect: boolean;
     // can we attempt to log in or are there validation errors?
     canTryLogin: boolean;
+    registrationEnabled?: boolean;
 
     flows?: ClientLoginFlow[];
 
@@ -284,11 +285,15 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
     };
 
     public onTryRegisterClick = (ev: ButtonEvent): void => {
+        if (this.state.registrationEnabled === false) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            return;
+        }
+
         const hasPasswordFlow = this.state.flows?.find((flow) => flow.type === "m.login.password");
         const ssoFlow = this.state.flows?.find((flow) => flow.type === "m.login.sso" || flow.type === "m.login.cas");
-        // If has no password flow but an SSO flow guess that the user wants to register with SSO.
-        // TODO: instead hide the Register button if registration is disabled by checking with the server,
-        // has no specific errCode currently and uses M_FORBIDDEN.
+        // If we have no password flow but do have SSO, guess that the user wants to register with SSO.
         if (ssoFlow && !hasPasswordFlow) {
             ev.preventDefault();
             ev.stopPropagation();
@@ -347,6 +352,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         this.setState({
             busy: true,
             loginIncorrect: false,
+            registrationEnabled: undefined,
         });
 
         await this.checkServerLiveliness({ hsUrl, isUrl });
@@ -357,36 +363,51 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         });
         this.loginLogic = loginLogic;
 
-        loginLogic
-            .getFlows()
-            .then(
-                (flows) => {
-                    // look for a flow where we understand all of the steps.
-                    const supportedFlows = flows.filter(this.isSupportedFlow);
+        try {
+            const flows = await loginLogic.getFlows();
+            const supportedFlows = flows.filter(this.isSupportedFlow);
+            const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
 
-                    this.setState({
-                        flows: supportedFlows,
-                    });
-
-                    if (supportedFlows.length === 0) {
-                        this.setState({
-                            errorText: _t("auth|unsupported_auth"),
-                        });
-                    }
-                },
-                (err) => {
-                    this.setState({
-                        errorText: messageForConnectionError(err, this.props.serverConfig),
-                        loginIncorrect: false,
-                        canTryLogin: false,
-                    });
-                },
-            )
-            .finally(() => {
-                this.setState({
-                    busy: false,
-                });
+            this.setState({
+                flows: supportedFlows,
+                registrationEnabled,
+                errorText: supportedFlows.length === 0 ? _t("auth|unsupported_auth") : this.state.errorText,
             });
+        } catch (err) {
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            this.setState({
+                errorText: messageForConnectionError(err, this.props.serverConfig),
+                loginIncorrect: false,
+                canTryLogin: false,
+            });
+        } finally {
+            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            this.setState({
+                busy: false,
+            });
+        }
+    }
+
+    private async isRegistrationEnabled(loginLogic: Login): Promise<boolean> {
+        if (!SettingsStore.getValue(UIFeature.Registration)) return false;
+
+        try {
+            await loginLogic.createTemporaryClient().registerRequest({});
+            return true;
+        } catch (error) {
+            if (error instanceof MatrixError) {
+                if (error.httpStatus === 401) {
+                    return true;
+                }
+                if (error.httpStatus === 403 || error.errcode === "M_FORBIDDEN") {
+                    return false;
+                }
+            }
+
+            logger.warn("Unable to determine whether registration is enabled; defaulting to enabled", error);
+            return true;
+        }
     }
 
     private isSupportedFlow = (flow: ClientLoginFlow): boolean => {
@@ -510,7 +531,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                     )}
                 </div>
             );
-        } else if (SettingsStore.getValue(UIFeature.Registration)) {
+        } else if (SettingsStore.getValue(UIFeature.Registration) && this.state.registrationEnabled !== false) {
             footer = (
                 <span className="mx_AuthBody_changeFlow">
                     {_t(

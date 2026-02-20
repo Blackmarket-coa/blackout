@@ -581,15 +581,26 @@ export default class LegacyCallHandler extends TypedEventEmitter<LegacyCallHandl
                     // Don't show a modal when we got rejected/the call was hung up
                     if (!hangupReason || [CallErrorCode.UserHangup, "user hangup"].includes(hangupReason)) break;
 
-                    let title: string;
-                    let description: string;
-                    // TODO: We should either do away with these or figure out a copy for each code (expect user_hangup...)
-                    if (call.hangupReason === CallErrorCode.UserBusy) {
-                        title = _t("voip|user_busy");
-                        description = _t("voip|user_busy_description");
-                    } else {
-                        title = _t("voip|call_failed");
-                        description = _t("voip|call_failed_description");
+                    let title = _t("voip|call_failed");
+                    let description = _t("voip|call_failed_description");
+
+                    switch (call.hangupReason) {
+                        case CallErrorCode.UserBusy:
+                            title = _t("voip|user_busy");
+                            description = _t("voip|user_busy_description");
+                            break;
+                        case CallErrorCode.InviteTimeout:
+                            title = _t("voip|call_timeout");
+                            description = _t("voip|call_timeout_description");
+                            break;
+                        case CallErrorCode.IceFailed:
+                        case CallErrorCode.CreateAnswer:
+                        case CallErrorCode.CreateOffer:
+                        case CallErrorCode.SetRemoteDescription:
+                        case CallErrorCode.SetLocalDescription:
+                            title = _t("voip|connection_lost");
+                            description = _t("voip|connection_lost_description");
+                            break;
                     }
 
                     Modal.createDialog(ErrorDialog, {

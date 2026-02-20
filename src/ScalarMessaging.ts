@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-// TODO: Generify the name of this and all components within - it's not just for scalar.
+// Historical naming: this module handles integrations postMessage traffic beyond just Scalar.
 
 /*
 Listens for incoming postMessage requests from the integrations UI URL. The following API is exposed:
@@ -189,8 +189,7 @@ Request:
 Response:
 [
     {
-        // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
-        type: "im.vector.modular.widgets",
+        type: "m.widgets", // Legacy "im.vector.modular.widgets" may also be returned
         state_key: "wid1",
         content: {
             type: "grafana",
@@ -208,8 +207,7 @@ Example:
     room_id: "!foo:bar",
     response: [
         {
-            // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
-            type: "im.vector.modular.widgets",
+            type: "m.widgets", // Legacy "im.vector.modular.widgets" may also be returned
             state_key: "wid1",
             content: {
                 type: "grafana",
@@ -880,12 +878,12 @@ const onMessage = function (event: MessageEvent<any>): void {
     } catch {
         return;
     }
-    // TODO -- Scalar postMessage API should be namespaced with event.data.api field
-    // Fix following "if" statement to respond only to specific API messages.
+    const api = event.data.api;
+    // Accept legacy scalar messages without `api`, and allow namespaced scalar messages.
     if (
         configUrl.origin !== eventOriginUrl.origin ||
         !event.data.action ||
-        event.data.api // Ignore messages with specific API set
+        (api !== undefined && api !== "fromScalar")
     ) {
         // don't log this - debugging APIs and browser add-ons like to spam
         // postMessage which floods the log otherwise

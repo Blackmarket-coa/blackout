@@ -332,16 +332,20 @@ export class SlidingSyncManager {
         );
         console.log("startSpidering:", listToUpperBound);
 
-        // listen for a response from the server. ANY 200 OK will do here, as we assume that it is ACKing
-        // the request change we have sent out. TODO: this may not be true if you concurrently subscribe to a room :/
-        // but in that case, for spidering at least, it isn't the end of the world as request N+1 includes all indexes
-        // from request N.
+        // listen for a response from the server and only advance when one of our spidering lists
+        // is present in the response. This avoids racing with unrelated list subscriptions.
         const lifecycle = async (
             state: SlidingSyncState,
-            _: MSC3575SlidingSyncResponse | null,
+            response: MSC3575SlidingSyncResponse | null,
             err?: Error,
         ): Promise<void> => {
             if (state !== SlidingSyncState.Complete) {
+                return;
+            }
+
+            const hasSpideringListUpdate =
+                !!response?.lists && Object.keys(response.lists).some((listName) => listToUpperBound.has(listName));
+            if (!hasSpideringListUpdate) {
                 return;
             }
             await sleep(gapBetweenRequestsMs); // don't tightloop; even on errors
