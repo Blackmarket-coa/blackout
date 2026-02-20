@@ -12,6 +12,8 @@ Use this consolidated tracker as the single source of truth for rollout progress
 
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
+> Evidence matrix: `docs/operations/tracker_evidence_matrix.md` (validated by `scripts/operations/validate_tracker_evidence.sh`).
+
 Status legend:
 
 - [ ] Not started
