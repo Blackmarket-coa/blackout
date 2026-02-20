@@ -7,10 +7,11 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 - **No single point of failure:** deploy at least 3 `element` replicas with zone spread (`deploy/kubernetes/phase4/element-ha.yaml`).
 - **Health checks:** `/health/live` and `/health/ready` on every app-serving process.
 - **Automatic restart policy chaos test:**
-  - `kubectl delete pod -n element-web -l app=element --force --grace-period=0`
-  - `kubectl wait --for=condition=ready pod -n element-web -l app=element --timeout=180s`
+  - `scripts/operations/chaos_restart_verification.sh element-web app=element`
+  - Evidence: `docs/operations/evidence/2026-02-20-chaos-restart-verification.md`
 - **One-command rollback:**
-  - `kubectl rollout undo deployment/element -n element-web`
+  - `scripts/operations/rollback_verification.sh element-web element`
+  - Evidence: `docs/operations/evidence/2026-02-20-rollback-verification.md`
 
 ## 2. Data protection and recovery
 
@@ -29,6 +30,8 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 - Validate backlog recovery by introducing 20-minute synthetic egress block and tracking backlog drain.
 - Alert on DNS cert-chain issues and TLS certificate expiry with 30/14/7 day notifications.
 - Map each critical alert to a runbook path in `deploy/kubernetes/phase6/federation-alerts.yaml` annotations.
+- Dashboard spec: `docs/operations/dashboards/federation_resilience_dashboard.json`.
+- Drill evidence: `docs/operations/evidence/2026-02-20-federation-backlog-recovery-drill.md`.
 
 ## 4. Security and incident operations
 
@@ -44,7 +47,7 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 
 ## 5. Evidence cadence
 
-- Weekly: health probe/restart and federation retry panel checks.
+- Weekly: health probe/restart and federation retry panel checks (attach evidence markdown in `docs/operations/evidence/`).
 - Monthly: rollback validation and automated failover scenario in staging.
 - Quarterly: PITR restore + failover drills and game-day exercise with action items.
 - Per release: blackout-mode rejection/acceptance telemetry review and link in release notes.

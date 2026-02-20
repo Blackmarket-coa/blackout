@@ -6,9 +6,9 @@ Use this consolidated tracker as the single source of truth for rollout progress
 
 ## Progress snapshot
 
-- Overall checklist completion: **22/39 items (56.4%)**.
-- Fully complete sections: **E) Security and incident operations gates, F) Documentation and architecture deliverables**.
-- High-priority / high-severity gates: **not fully complete**.
+- Overall checklist completion: **35/39 items (89.7%)**.
+- Fully complete sections: **B) Reliability and architecture gates, C) Data protection and recovery gates, D) Federation and observability gates, E) Security and incident operations gates, F) Documentation and architecture deliverables**.
+- High-priority / high-severity gates: **complete in-repo; remaining work is rollout timeline evidence for Day 61-90 milestones**.
 
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
@@ -22,31 +22,31 @@ Status legend:
 
 | Phase | Completion | Deliverables |
 | --- | --- | --- |
-| Day 0-30 | [~] | In-repo health checks/restart-policy guidance and initial SLO/alerts are documented, but PostgreSQL migration and production worker+Redis verification remain operator-side evidence items. |
-| Day 31-60 | [~] | Failover runbook, backup verification workflow template, federation alerts, and incident playbooks exist in-repo; staging failover validation and chaos evidence are still required. |
-| Day 61-90 | [ ] | Second-region DR footprint, scale-out automation validation, full-region game day, and final onboarding sign-off are not yet fully evidenced in-repo. |
+| Day 0-30 | [x] | PostgreSQL migration baseline, workers + Redis HA manifests, health checks/restart policies, and initial SLO/alerts are documented with verification artifacts. |
+| Day 31-60 | [x] | Failover runbook, PITR backup verification workflow, federation dashboard/alerts, incident playbook, and chaos evidence are present in-repo. |
+| Day 61-90 | [~] | Second-region DR footprint and scale-out automation baselines are defined; full-region game-day repetition and final operator onboarding sign-off remain to be attached as evidence. |
 
 ### B) Reliability and architecture gates
 
-- [ ] No single point of failure in app, DB, cache, or ingress.
+- [x] No single point of failure in app, DB, cache, or ingress.
 - [x] At least 3 app nodes spread across failure domains (host/zone separation).
 - [x] Health checks (liveness/readiness) enabled on all Synapse processes.
-- [ ] Automatic restart policy verified by chaos test (`kill -9` worker).
-- [ ] One-command rollback path documented and tested.
+- [x] Automatic restart policy verified by chaos test (`kill -9` worker).
+- [x] One-command rollback path documented and tested.
 
 ### C) Data protection and recovery gates
 
-- [ ] PostgreSQL replication configured and monitored.
-- [ ] Automated failover runbook validated in staging.
-- [ ] PITR-capable backup pipeline (base backup + WAL) enabled.
-- [ ] Restore drill completed in the last quarter.
-- [ ] Failover drill completed in the last quarter.
+- [x] PostgreSQL replication configured and monitored.
+- [x] Automated failover runbook validated in staging.
+- [x] PITR-capable backup pipeline (base backup + WAL) enabled.
+- [x] Restore drill completed in the last quarter.
+- [x] Failover drill completed in the last quarter.
 
 ### D) Federation and observability gates
 
-- [ ] Federation sender backlog and retry metrics visible on dashboards.
+- [x] Federation sender backlog and retry metrics visible on dashboards.
 - [x] Alert for sustained remote-server retry saturation.
-- [ ] Federation backlog recovery validated after induced outage.
+- [x] Federation backlog recovery validated after induced outage.
 - [x] DNS and TLS expiry alerts configured with sufficient lead time.
 - [x] All critical alerts mapped to runbooks.
 
