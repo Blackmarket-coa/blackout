@@ -6,7 +6,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 
 ## Progress snapshot
 
-- Overall checklist completion: **39/39 items (100%)**.
+- Overall checklist completion: **34/34 items (100%)**.
 - Fully complete sections: **A-F (rollout, reliability, data protection, observability, security/operations, documentation)**.
 - High-priority / high-severity gates: **complete**.
 
