@@ -9,12 +9,12 @@ import { PosthogAnalytics, type IPosthogEvent } from "../../PosthogAnalytics";
 
 interface BlackoutModuleAdoptionEvent extends IPosthogEvent {
     eventName: "BlackoutModuleAdoption";
-    moduleName: "governance" | "education" | "mutual-aid";
+    moduleName: "governance" | "education" | "mutual-aid" | "townhall";
 }
 
 interface BlackoutModuleErrorEvent extends IPosthogEvent {
     eventName: "BlackoutModuleError";
-    moduleName: "governance" | "education" | "mutual-aid";
+    moduleName: "governance" | "education" | "mutual-aid" | "townhall";
     operation: string;
 }
 

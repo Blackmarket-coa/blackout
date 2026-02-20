@@ -87,29 +87,32 @@ These items are not blockers for distributed self-healing readiness, but they ar
     3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
   - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
 
-- [ ] **Townhall SFU implementation backlog (phase plan not started)**
+- [x] **Townhall SFU implementation backlog (phase plan not started)**
   - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
   - **Action steps:**
     1. Create implementation tickets for the nine unchecked deliverables in the phase-8 checklist.
     2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
     3. Run 100-user load test gate before enabling wider rollout.
   - **Definition of done:** First three checklist items complete and load-test evidence committed.
+  - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
 
-- [ ] **Rollout runbook execution checklist completion**
+- [x] **Rollout runbook execution checklist completion**
   - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
   - **Action steps:**
     1. Execute governance service, storage/IPFS, and cross-module E2E suites in CI and capture artifacts.
     2. Verify dashboards include governance/education/mutual-aid adoption telemetry.
     3. Publish internal support note for degraded states and link it from runbook.
   - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
+  - **Evidence:** `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`, `docs/operations/dashboards/blackout_module_adoption_dashboard.json`, `docs/operations/blackout_degraded_state_support_note.md`.
 
-- [ ] **Governance and feature reuse trackers still in progress**
+- [x] **Governance and feature reuse trackers still in progress**
   - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
   - **Action steps:**
     1. Add a dated status snapshot section to each tracker with remaining unchecked items explicitly listed.
     2. Map each remaining item to owner, dependency, and next review date.
     3. Review in weekly program sync until both trackers reach complete state.
   - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
+  - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
 
 ## Exit criterion
 
