@@ -96,13 +96,14 @@ These items are not blockers for distributed self-healing readiness, but they ar
   - **Definition of done:** First three checklist items complete and load-test evidence committed.
   - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
 
-- [ ] **Rollout runbook execution checklist completion**
+- [x] **Rollout runbook execution checklist completion**
   - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
   - **Action steps:**
     1. Execute governance service, storage/IPFS, and cross-module E2E suites in CI and capture artifacts.
     2. Verify dashboards include governance/education/mutual-aid adoption telemetry.
     3. Publish internal support note for degraded states and link it from runbook.
   - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
+  - **Evidence:** `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`, `docs/operations/dashboards/blackout_module_adoption_dashboard.json`, `docs/operations/blackout_degraded_state_support_note.md`.
 
 - [ ] **Governance and feature reuse trackers still in progress**
   - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
