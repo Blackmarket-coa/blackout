@@ -6,9 +6,9 @@ Use this consolidated tracker as the single source of truth for rollout progress
 
 ## Progress snapshot
 
-- Overall checklist completion: **35/39 items (89.7%)**.
-- Fully complete sections: **B) Reliability and architecture gates, C) Data protection and recovery gates, D) Federation and observability gates, E) Security and incident operations gates, F) Documentation and architecture deliverables**.
-- High-priority / high-severity gates: **complete in-repo; remaining work is rollout timeline evidence for Day 61-90 milestones**.
+- Overall checklist completion: **39/39 items (100%)**.
+- Fully complete sections: **A-F (rollout, reliability, data protection, observability, security/operations, documentation)**.
+- High-priority / high-severity gates: **complete**.
 
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
@@ -24,7 +24,7 @@ Status legend:
 | --- | --- | --- |
 | Day 0-30 | [x] | PostgreSQL migration baseline, workers + Redis HA manifests, health checks/restart policies, and initial SLO/alerts are documented with verification artifacts. |
 | Day 31-60 | [x] | Failover runbook, PITR backup verification workflow, federation dashboard/alerts, incident playbook, and chaos evidence are present in-repo. |
-| Day 61-90 | [~] | Second-region DR footprint and scale-out automation baselines are defined; full-region game-day repetition and final operator onboarding sign-off remain to be attached as evidence. |
+| Day 61-90 | [x] | Second-region DR footprint validation, scale-out automation validation, two full-region game-day records, and operator onboarding sign-off are attached in evidence artifacts. |
 
 ### B) Reliability and architecture gates
 
