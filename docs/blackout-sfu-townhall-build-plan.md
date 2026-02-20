@@ -285,12 +285,15 @@ Use observed bitrate/CPU metrics from pilot events to refine codec/layer default
 
 ## 12) Integration checklist (implementation-ready)
 
-- [ ] Add townhall widget feature flag in Blackout.
-- [ ] Implement widget shell and Matrix context binding.
-- [ ] Implement backend token service with role policy engine.
+- [x] Add townhall widget feature flag in Blackout.
+- [x] Implement widget shell and Matrix context binding.
+- [x] Implement backend token service with role policy engine.
 - [ ] Define and document Matrix state events for townhall policy.
 - [ ] Provision LiveKit + coturn + TLS endpoint.
 - [ ] Add moderation controls and audit logging.
 - [ ] Add observability dashboards/alerts/runbooks.
-- [ ] Execute 100/250/500 load test gates.
+- [ ] Execute 100/250/500 load test gates. (100-user gate evidence committed in `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`)
 - [ ] Complete security review and rollout signoff.
+
+
+Implementation tickets: `docs/blackout-sfu-townhall-implementation-tickets.md`.

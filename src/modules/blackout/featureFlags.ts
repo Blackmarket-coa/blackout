@@ -14,6 +14,7 @@ export enum BlackoutFeature {
     MutualAid = "feature_blackout_mutual_aid",
     DeliberationClustering = "feature_blackout_deliberation_clustering",
     IpfsStorage = "feature_blackout_ipfs_storage",
+    Townhall = "feature_blackout_townhall",
 }
 
 const LEGACY_FLAG_ALIASES: Partial<Record<BlackoutFeature, string>> = {
@@ -22,6 +23,7 @@ const LEGACY_FLAG_ALIASES: Partial<Record<BlackoutFeature, string>> = {
     [BlackoutFeature.MutualAid]: "feature_mutual_aid",
     [BlackoutFeature.DeliberationClustering]: "feature_deliberation_clustering",
     [BlackoutFeature.IpfsStorage]: "feature_ipfs_storage",
+    [BlackoutFeature.Townhall]: "feature_townhall",
 };
 
 export function isBlackoutFeatureEnabled(feature: BlackoutFeature): boolean {

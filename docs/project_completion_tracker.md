@@ -87,13 +87,14 @@ These items are not blockers for distributed self-healing readiness, but they ar
     3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
   - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
 
-- [ ] **Townhall SFU implementation backlog (phase plan not started)**
+- [x] **Townhall SFU implementation backlog (phase plan not started)**
   - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
   - **Action steps:**
     1. Create implementation tickets for the nine unchecked deliverables in the phase-8 checklist.
     2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
     3. Run 100-user load test gate before enabling wider rollout.
   - **Definition of done:** First three checklist items complete and load-test evidence committed.
+  - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
 
 - [ ] **Rollout runbook execution checklist completion**
   - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
