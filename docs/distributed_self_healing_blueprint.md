@@ -168,3 +168,49 @@ Multi-region evolution:
 - [ ] Failover drill completed in the last quarter.
 - [ ] Federation backlog recovery validated after induced outage.
 - [ ] Blackout-mode rejection/acceptance telemetry reviewed after each release.
+
+## Minimum rollout checklist (operator-ready)
+
+Use this as a go/no-go list before calling a deployment "self-healing".
+
+### Platform and orchestration
+
+- [ ] At least 3 app nodes spread across failure domains (host/zone separation).
+- [ ] Health checks (liveness/readiness) enabled on all Synapse processes.
+- [ ] Automatic restart policy verified by chaos test (`kill -9` worker).
+- [ ] One-command rollback path documented and tested.
+
+### Data and persistence
+
+- [ ] PostgreSQL replication configured and monitored.
+- [ ] Automated failover runbook validated in staging.
+- [ ] PITR-capable backup pipeline (base backup + WAL) enabled.
+- [ ] Last successful restore drill completed within the past quarter.
+
+### Federation resilience
+
+- [ ] Federation sender backlog and retry metrics on dashboard.
+- [ ] Alert for sustained remote-server retry saturation.
+- [ ] DNS and TLS expiry alerts configured with sufficient lead time.
+
+### Security and abuse pressure
+
+- [ ] WAF/rate-limiting profile for login, registration, media upload, and federation endpoints.
+- [ ] Bot/abuse spike playbook includes temporary degradation modes.
+- [ ] Secrets rotation and break-glass access policy documented.
+
+### Incident operations
+
+- [ ] On-call escalation tree includes at least two independent operators.
+- [ ] Service-level objectives and error-budget policy published.
+- [ ] Incident template and postmortem template available in-repo.
+- [ ] Last game-day exercise completed and tracked with action items.
+
+### Exit criterion
+
+A deployment is considered "distributed self-healing ready" when all checklist items are complete,
+and two consecutive game-day exercises demonstrate:
+
+- successful automatic recovery from a worker/node failure,
+- successful database failover without data loss beyond stated RPO,
+- and restoration of nominal federation throughput within the stated RTO/SLO envelope.
