@@ -1,0 +1,19 @@
+name: tracker-evidence-validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  validate-tracker-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tracker evidence artifacts
+        run: scripts/operations/validate_tracker_evidence.sh

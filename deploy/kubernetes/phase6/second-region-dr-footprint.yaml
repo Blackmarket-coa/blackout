@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: element-multi-region
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - region: primary-eu
+            cluster: https://kubernetes.default.svc
+          - region: secondary-us
+            cluster: https://secondary-cluster.example.com
+  template:
+    metadata:
+      name: 'element-{{region}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/blackout/blackout
+        targetRevision: HEAD
+        path: deploy/kubernetes/phase4
+      destination:
+        server: '{{cluster}}'
+        namespace: element-web
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
