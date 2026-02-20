@@ -9,6 +9,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 - Overall checklist completion: **34/34 items (100%)**.
 - Fully complete sections: **A-F (rollout, reliability, data protection, observability, security/operations, documentation)**.
 - High-priority / high-severity gates: **complete**.
+- Additional engineering backlog outside the rollout gates remains and is tracked in section **G** below.
 
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
@@ -73,6 +74,42 @@ Status legend:
 - [x] `docs/distributed_self_healing_blueprint.md` includes node boot and recovery sequences.
 - [x] `docs/distributed_self_healing_blueprint.md` includes performance optimization notes and security audit checklist.
 - [x] `README.md` includes a self-healing federation roadmap section linking blueprint and tracker.
+
+### G) Post-rollout outstanding work (actionable backlog)
+
+These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
+
+- [ ] **Unfinished code marker reduction (open marker inventory: 160)**
+  - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
+  - **Action steps:**
+    1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
+    2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links.
+    3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
+  - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
+
+- [ ] **Townhall SFU implementation backlog (phase plan not started)**
+  - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
+  - **Action steps:**
+    1. Create implementation tickets for the nine unchecked deliverables in the phase-8 checklist.
+    2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
+    3. Run 100-user load test gate before enabling wider rollout.
+  - **Definition of done:** First three checklist items complete and load-test evidence committed.
+
+- [ ] **Rollout runbook execution checklist completion**
+  - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
+  - **Action steps:**
+    1. Execute governance service, storage/IPFS, and cross-module E2E suites in CI and capture artifacts.
+    2. Verify dashboards include governance/education/mutual-aid adoption telemetry.
+    3. Publish internal support note for degraded states and link it from runbook.
+  - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
+
+- [ ] **Governance and feature reuse trackers still in progress**
+  - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
+  - **Action steps:**
+    1. Add a dated status snapshot section to each tracker with remaining unchecked items explicitly listed.
+    2. Map each remaining item to owner, dependency, and next review date.
+    3. Review in weekly program sync until both trackers reach complete state.
+  - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
 
 ## Exit criterion
 
