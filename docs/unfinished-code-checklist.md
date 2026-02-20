@@ -3,8 +3,8 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/`.
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **177**
-- Resolved items tracked in this checklist: **18**
+- Open items: **160**
+- Resolved items tracked in this checklist: **35**
 - Total files with tracked markers: **121**
 
 ## Checklist
