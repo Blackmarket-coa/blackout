@@ -3,8 +3,11 @@
 set -ex
 
 # Automatically link to develop if we're building develop, but only if the caller
-# hasn't asked us to build something else
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+# hasn't asked us to build something else.
+#
+# Some remote builders strip the `.git` directory from the Docker context, so
+# we must tolerate running outside of a git repository.
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 if [[ $USE_CUSTOM_SDKS == false ]] && [[ $BRANCH == 'develop' ]]
 then
     echo "using develop dependencies for react-sdk and js-sdk"
