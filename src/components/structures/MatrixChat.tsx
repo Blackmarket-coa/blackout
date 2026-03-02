@@ -2172,7 +2172,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
             if (this.state.initError) {
                 view = (
                     <div className="mx_MatrixChat_splash">
-                        <p>{_t("auth|splash_error")}</p>
+                        <p>{_t("cant_load_page")}</p>
                         <p>{this.state.initError.message}</p>
                         <button
                             className="mx_AccessibleButton mx_AccessibleButton_kind_primary"

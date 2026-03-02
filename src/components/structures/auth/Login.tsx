@@ -377,7 +377,7 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         } catch (err) {
             if (this.unmounted || this.loginLogic !== loginLogic) return;
             this.setState({
-                errorText: messageForConnectionError(err, this.props.serverConfig),
+                errorText: messageForConnectionError(err instanceof Error ? err : new Error(String(err)), this.props.serverConfig),
                 loginIncorrect: false,
                 canTryLogin: false,
             });
