@@ -25,7 +25,7 @@ describe("townhall 100-user load gate", () => {
 
         const service = new TownhallTokenService({
             endpoint: "/api/townhall/token",
-            fetchImpl: fetchImpl as typeof fetch,
+            fetchImpl: fetchImpl as unknown as typeof fetch,
         });
 
         const start = Date.now();

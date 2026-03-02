@@ -24,7 +24,7 @@ interface Props {
     tokenService?: TownhallTokenService;
 }
 
-export default function TownhallWidgetShell({ context, tokenService }: Props): JSX.Element {
+export default function TownhallWidgetShell({ context, tokenService }: Props): React.JSX.Element {
     const [error, setError] = useState<string>();
     const [session, setSession] = useState<TownhallTokenResponse>();
     const [isConnecting, setIsConnecting] = useState(false);

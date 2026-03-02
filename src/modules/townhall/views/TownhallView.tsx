@@ -17,7 +17,7 @@ const DEMO_CONTEXT = {
     displayName: "Staging Demo",
 };
 
-export default function TownhallView(): JSX.Element | null {
+export default function TownhallView(): React.JSX.Element | null {
     const enabled = isBlackoutFeatureEnabled(BlackoutFeature.Townhall);
 
     useEffect(() => {
