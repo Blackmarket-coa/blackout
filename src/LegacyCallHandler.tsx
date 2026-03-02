@@ -590,8 +590,8 @@ export default class LegacyCallHandler extends TypedEventEmitter<LegacyCallHandl
                             description = _t("voip|user_busy_description");
                             break;
                         case CallErrorCode.InviteTimeout:
-                            title = _t("voip|call_timeout");
-                            description = _t("voip|call_timeout_description");
+                            title = _t("voip|call_failed");
+                            description = _t("voip|call_failed_description");
                             break;
                         case CallErrorCode.IceFailed:
                         case CallErrorCode.CreateAnswer:

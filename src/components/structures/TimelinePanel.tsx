@@ -885,7 +885,8 @@ class TimelinePanel extends React.Component<IProps, IState> {
 
         if (!this.hasTimelineSetFor(ev.getRoomId())) return;
 
-        if (!ev.getId() || !this.props.timelineSet.findEventById(ev.getId())) return;
+        const eventId = ev.getId();
+        if (!eventId || !this.props.timelineSet.findEventById(eventId)) return;
 
         if (!this.state.events.includes(ev)) return;
 
