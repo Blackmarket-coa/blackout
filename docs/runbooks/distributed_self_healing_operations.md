@@ -7,11 +7,11 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 - **No single point of failure:** deploy at least 3 `element` replicas with zone spread (`deploy/kubernetes/phase4/element-ha.yaml`).
 - **Health checks:** `/health/live` and `/health/ready` on every app-serving process.
 - **Automatic restart policy chaos test:**
-  - `scripts/operations/chaos_restart_verification.sh element-web app=element`
-  - Evidence: `docs/operations/evidence/2026-02-20-chaos-restart-verification.md`
+    - `scripts/operations/chaos_restart_verification.sh element-web app=element`
+    - Evidence: `docs/operations/evidence/2026-02-20-chaos-restart-verification.md`
 - **One-command rollback:**
-  - `scripts/operations/rollback_verification.sh element-web element`
-  - Evidence: `docs/operations/evidence/2026-02-20-rollback-verification.md`
+    - `scripts/operations/rollback_verification.sh element-web element`
+    - Evidence: `docs/operations/evidence/2026-02-20-rollback-verification.md`
 
 ## 2. Data protection and recovery
 
@@ -20,8 +20,8 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 - **Backup verification:** restore latest base backup and replay WAL to target timestamp in staging daily.
 - **Automated failover staging validation:** run monthly controlled primary failure in staging and validate RPO/RTO.
 - **Quarterly drills:**
-  - Restore drill: PITR restore to isolated environment.
-  - Failover drill: promote replica and redirect traffic.
+    - Restore drill: PITR restore to isolated environment.
+    - Failover drill: promote replica and redirect traffic.
 
 ## 3. Federation and observability
 
@@ -37,10 +37,10 @@ This runbook is the implementation anchor for `docs/project_completion_tracker.m
 
 - Apply WAF and endpoint rate limits for login, registration, media upload, and federation ingress.
 - Use bot/abuse playbook for temporary degradation modes:
-  - registration invite-only,
-  - media upload throttling,
-  - federation queue caps,
-  - room join pacing.
+    - registration invite-only,
+    - media upload throttling,
+    - federation queue caps,
+    - room join pacing.
 - Execute secrets rotation every 90 days and maintain audited break-glass flow.
 - Keep two independent operators in on-call escalation tree.
 - Maintain SLO + error budget policy and enforce release gating when burn-rate policy is breached.

@@ -1,6 +1,6 @@
 # Making Blackout "impossible to take down": practical resilience plan
 
-No system is literally impossible to take down, but this architecture can be made *extremely hard* to disrupt by removing single points of failure and improving fault isolation, failover, and recovery.
+No system is literally impossible to take down, but this architecture can be made _extremely hard_ to disrupt by removing single points of failure and improving fault isolation, failover, and recovery.
 
 This plan builds on existing in-repo HA, platform-security, and P2P migration work.
 
@@ -34,10 +34,10 @@ This plan builds on existing in-repo HA, platform-security, and P2P migration wo
 
 1. Define availability SLOs per user journey (auth, timeline sync, send path, media path).
 2. Create and drill game-day scenarios monthly:
-   - CDN/provider outage
-   - zone loss
-   - homeserver partial failure
-   - signaling degradation
+    - CDN/provider outage
+    - zone loss
+    - homeserver partial failure
+    - signaling degradation
 3. Track RTO/RPO and MTTD/MTTR, with explicit error-budget policies.
 4. Maintain an emergency "degraded mode" profile: metadata-only sends, reduced media previews, and aggressive backoff.
 

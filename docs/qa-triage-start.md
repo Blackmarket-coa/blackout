@@ -9,7 +9,7 @@ This document starts post-gate triage after restoring lint/style/test health.
 - ✅ `yarn lint:style`
 - ✅ `yarn test test/unit-tests/steganography --runInBand`
 - ⚠️ `yarn audit --groups dependencies --level moderate`
-    - Remaining issue: transitive `counterpart` in `@element-hq/web-shared-components` with no upstream patch currently available.
+    - Remaining findings (`dompurify`, `counterpart`) are formally accepted with compensating controls in `docs/security-dependency-risk-acceptance-2026-03-06.md`.
 
 ## Triage buckets (initial)
 
@@ -23,19 +23,19 @@ This document starts post-gate triage after restoring lint/style/test health.
     - Naming/generalization notes (Scalar, widget types)
     - Legacy adapter cleanup and docs alignment
 
-## First-pass actionable triage queue
+## Ranked follow-up queue (owners + milestones)
 
-Prioritized from `docs/unfinished-code-checklist.md` for follow-up PRs:
-
-1. `src/Notifier.ts` call-id correctness NOTE (possible wrong-call routing in rooms).
-2. `src/TextForEvent.tsx` m.widget support NOTE entries.
-3. `src/events/EventTileFactory.tsx` m.widget support NOTE entries.
-4. `src/components/views/settings/tabs/room/RolesRoomSettingsTab.tsx` m.widget support NOTE entries.
-5. `src/LegacyCallHandler.tsx` call-end copy normalization NOTE.
-6. `src/components/structures/MatrixChat.tsx` notes around error screen and URL/3pid handling.
-7. `src/components/views/settings/ChangePassword.tsx` NOTE mentions need for Playwright safety coverage.
-8. `src/components/views/right_panel/VerificationPanel.tsx` QR camera flow NOTE.
+| Rank | Item                                                                                              | Owner                | Target milestone |
+| ---- | ------------------------------------------------------------------------------------------------- | -------------------- | ---------------- |
+| 1    | `src/Notifier.ts` call-id correctness NOTE (possible wrong-call routing in rooms).                | Messaging Core       | M1 (next sprint) |
+| 2    | `src/TextForEvent.tsx` m.widget support NOTE entries.                                             | Timeline UX          | M1               |
+| 3    | `src/events/EventTileFactory.tsx` m.widget support NOTE entries.                                  | Timeline UX          | M1               |
+| 4    | `src/components/views/settings/tabs/room/RolesRoomSettingsTab.tsx` m.widget support NOTE entries. | Room Settings        | M2               |
+| 5    | `src/LegacyCallHandler.tsx` call-end copy normalization NOTE.                                     | Calling              | M2               |
+| 6    | `src/components/structures/MatrixChat.tsx` notes around error screen and URL/3pid handling.       | Client Shell         | M2               |
+| 7    | `src/components/views/settings/ChangePassword.tsx` NOTE for Playwright safety coverage.           | Auth + QA Automation | M3               |
+| 8    | `src/components/views/right_panel/VerificationPanel.tsx` QR camera flow NOTE.                     | Security UX          | M3               |
 
 ## Next step
 
-Address queue item 1 in the next PR with focused tests, then iterate by risk order.
+Execute rank 1 and rank 2 as parallel PRs, then re-score residual queue by incident impact before sprint close.

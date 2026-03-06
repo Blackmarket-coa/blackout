@@ -11,12 +11,12 @@
 
 - Monthly budget for 99.95% SLO: 21m 54s.
 - Burn-rate policy:
-  - **Page:** 2-hour burn-rate at or above 3x budget-consumption pace.
-  - **Ticket:** 24-hour burn-rate at or above 1.5x budget-consumption pace.
+    - **Page:** 2-hour burn-rate at or above 3x budget-consumption pace.
+    - **Ticket:** 24-hour burn-rate at or above 1.5x budget-consumption pace.
 - Breach response:
-  1. Freeze non-critical releases.
-  2. Prioritize reliability fixes until burn-rate stabilizes.
-  3. Require incident review + corrective action before feature-only deploys resume.
+    1. Freeze non-critical releases.
+    2. Prioritize reliability fixes until burn-rate stabilizes.
+    3. Require incident review + corrective action before feature-only deploys resume.
 
 ## Release gate
 

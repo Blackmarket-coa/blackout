@@ -20,13 +20,13 @@ describe("TownhallTokenService", () => {
             }),
         }));
 
-        const service = new TownhallTokenService({ endpoint: "/api/townhall/token", fetchImpl: fetchImpl as unknown as typeof fetch });
+        const service = new TownhallTokenService({
+            endpoint: "/api/townhall/token",
+            fetchImpl: fetchImpl as unknown as typeof fetch,
+        });
 
         await service.requestToken({ roomId: "!room:example.org", userId: "@alice:example.org" });
 
-        expect(fetchImpl).toHaveBeenCalledWith(
-            "/api/townhall/token",
-            expect.objectContaining({ method: "POST" }),
-        );
+        expect(fetchImpl).toHaveBeenCalledWith("/api/townhall/token", expect.objectContaining({ method: "POST" }));
     });
 });

@@ -95,16 +95,16 @@ docs/
 
 ```json
 {
-  "eventId": "01J...",
-  "eventType": "MESSAGE_CREATED",
-  "timestamp": 1735689600000,
-  "actorPublicKey": "ed25519:...",
-  "signature": "base64sig",
-  "encryptedPayload": "base64ciphertext",
-  "previousHash": "sha256:...",
-  "contentHash": "sha256:...",
-  "roomId": "room:alpha",
-  "crdtClock": "lamport:12345"
+    "eventId": "01J...",
+    "eventType": "MESSAGE_CREATED",
+    "timestamp": 1735689600000,
+    "actorPublicKey": "ed25519:...",
+    "signature": "base64sig",
+    "encryptedPayload": "base64ciphertext",
+    "previousHash": "sha256:...",
+    "contentHash": "sha256:...",
+    "roomId": "room:alpha",
+    "crdtClock": "lamport:12345"
 }
 ```
 
@@ -127,17 +127,17 @@ const doc = new Y.Doc();
 const messages = doc.getArray("messages");
 
 export function applyEvent(event: FederatedEvent) {
-  assertValidHashChain(event);
-  assertValidSignature(event);
+    assertValidHashChain(event);
+    assertValidSignature(event);
 
-  const op = decryptAndDecode(event.encryptedPayload);
-  doc.transact(() => {
-    messages.push([op]);
-  }, event.eventId);
+    const op = decryptAndDecode(event.encryptedPayload);
+    doc.transact(() => {
+        messages.push([op]);
+    }, event.eventId);
 }
 
 export function snapshotState() {
-  return Y.encodeStateAsUpdate(doc);
+    return Y.encodeStateAsUpdate(doc);
 }
 ```
 

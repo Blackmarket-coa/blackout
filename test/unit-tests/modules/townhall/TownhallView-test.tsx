@@ -15,9 +15,7 @@ import * as blackoutTelemetry from "../../../../src/services/telemetry/BlackoutT
 describe("TownhallView", () => {
     it("renders widget shell and tracks adoption when feature is enabled", () => {
         jest.spyOn(featureFlags, "isBlackoutFeatureEnabled").mockReturnValue(true);
-        const telemetrySpy = jest
-            .spyOn(blackoutTelemetry, "trackBlackoutModuleAdoption")
-            .mockImplementation(jest.fn());
+        const telemetrySpy = jest.spyOn(blackoutTelemetry, "trackBlackoutModuleAdoption").mockImplementation(jest.fn());
 
         render(<TownhallView />);
 

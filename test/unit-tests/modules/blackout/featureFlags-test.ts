@@ -31,7 +31,6 @@ describe("blackout feature flags", () => {
         expect(isBlackoutFeatureEnabled(BlackoutFeature.Governance)).toBe(true);
     });
 
-
     it("supports the townhall primary and legacy feature flags", () => {
         getValueSpy.mockImplementation((key: string) => key === "feature_townhall");
 
