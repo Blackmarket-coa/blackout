@@ -363,11 +363,13 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
         });
         this.loginLogic = loginLogic;
 
+        const canUpdateState = (): boolean => !this.unmounted && this.loginLogic === loginLogic;
+
         try {
             const flows = await loginLogic.getFlows();
             const supportedFlows = flows.filter(this.isSupportedFlow);
             const registrationEnabled = await this.isRegistrationEnabled(loginLogic);
-            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            if (!canUpdateState()) return;
 
             this.setState({
                 flows: supportedFlows,
@@ -375,18 +377,18 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                 errorText: supportedFlows.length === 0 ? _t("auth|unsupported_auth") : this.state.errorText,
             });
         } catch (err) {
-            if (this.unmounted || this.loginLogic !== loginLogic) return;
+            if (!canUpdateState()) return;
             this.setState({
                 errorText: messageForConnectionError(err instanceof Error ? err : new Error(String(err)), this.props.serverConfig),
                 loginIncorrect: false,
                 canTryLogin: false,
             });
-        } finally {
-            if (this.unmounted || this.loginLogic !== loginLogic) return;
-            this.setState({
-                busy: false,
-            });
         }
+
+        if (!canUpdateState()) return;
+        this.setState({
+            busy: false,
+        });
     }
 
     private async isRegistrationEnabled(loginLogic: Login): Promise<boolean> {
