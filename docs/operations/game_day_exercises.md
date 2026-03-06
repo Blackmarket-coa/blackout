@@ -12,7 +12,6 @@
 - **Results:** restore completed successfully and consistency checks passed.
 - **Actions:** keep daily verification artifact in CI workflow.
 
-
 ## 2026-02-20 — Full-region resilience game day (repeat)
 
 - **Scenario:** repeat of worker crash + DB failover + federation egress interruption under higher synthetic load.

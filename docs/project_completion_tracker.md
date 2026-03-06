@@ -23,11 +23,11 @@ Status legend:
 
 ### A) Rollout timeline milestones (30/60/90)
 
-| Phase | Completion | Deliverables |
-| --- | --- | --- |
-| Day 0-30 | [x] | PostgreSQL migration baseline, workers + Redis HA manifests, health checks/restart policies, and initial SLO/alerts are documented with verification artifacts. |
-| Day 31-60 | [x] | Failover runbook, PITR backup verification workflow, federation dashboard/alerts, incident playbook, and chaos evidence are present in-repo. |
-| Day 61-90 | [x] | Second-region DR footprint validation, scale-out automation validation, two full-region game-day records, and operator onboarding sign-off are attached in evidence artifacts. |
+| Phase     | Completion | Deliverables                                                                                                                                                                   |
+| --------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Day 0-30  | [x]        | PostgreSQL migration baseline, workers + Redis HA manifests, health checks/restart policies, and initial SLO/alerts are documented with verification artifacts.                |
+| Day 31-60 | [x]        | Failover runbook, PITR backup verification workflow, federation dashboard/alerts, incident playbook, and chaos evidence are present in-repo.                                   |
+| Day 61-90 | [x]        | Second-region DR footprint validation, scale-out automation validation, two full-region game-day records, and operator onboarding sign-off are attached in evidence artifacts. |
 
 ### B) Reliability and architecture gates
 
@@ -80,39 +80,39 @@ Status legend:
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
 - [x] **Unfinished code marker reduction (open marker inventory: 128)**
-  - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
-  - **Action steps:**
-    1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
-    2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links (`this PR`).
-    3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
-  - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
+    - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
+    - **Action steps:**
+        1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
+        2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links (`this PR`).
+        3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
+    - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
 
 - [x] **Townhall SFU implementation backlog (phase plan not started)**
-  - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
-  - **Action steps:**
-    1. Create implementation tickets for the nine unchecked deliverables in the phase-8 checklist.
-    2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
-    3. Run 100-user load test gate before enabling wider rollout.
-  - **Definition of done:** First three checklist items complete and load-test evidence committed.
-  - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
+    - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
+    - **Action steps:**
+        1. Create implementation tickets for the nine unchecked deliverables in the phase-8 checklist.
+        2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
+        3. Run 100-user load test gate before enabling wider rollout.
+    - **Definition of done:** First three checklist items complete and load-test evidence committed.
+    - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
 
 - [x] **Rollout runbook execution checklist completion**
-  - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
-  - **Action steps:**
-    1. Execute governance service, storage/IPFS, and cross-module E2E suites in CI and capture artifacts.
-    2. Verify dashboards include governance/education/mutual-aid adoption telemetry.
-    3. Publish internal support note for degraded states and link it from runbook.
-  - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
-  - **Evidence:** `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`, `docs/operations/dashboards/blackout_module_adoption_dashboard.json`, `docs/operations/blackout_degraded_state_support_note.md`.
+    - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
+    - **Action steps:**
+        1. Execute governance service, storage/IPFS, and cross-module E2E suites in CI and capture artifacts.
+        2. Verify dashboards include governance/education/mutual-aid adoption telemetry.
+        3. Publish internal support note for degraded states and link it from runbook.
+    - **Definition of done:** All five runbook pre-flight checkboxes are checked with evidence links.
+    - **Evidence:** `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`, `docs/operations/dashboards/blackout_module_adoption_dashboard.json`, `docs/operations/blackout_degraded_state_support_note.md`.
 
 - [x] **Governance and feature reuse trackers still in progress**
-  - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
-  - **Action steps:**
-    1. Add a dated status snapshot section to each tracker with remaining unchecked items explicitly listed.
-    2. Map each remaining item to owner, dependency, and next review date.
-    3. Review in weekly program sync until both trackers reach complete state.
-  - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
-  - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
+    - **Source:** `docs/blackout-governance-completion-tracker.md`, `docs/blackout-reuse-completion-tracker.md`.
+    - **Action steps:**
+        1. Add a dated status snapshot section to each tracker with remaining unchecked items explicitly listed.
+        2. Map each remaining item to owner, dependency, and next review date.
+        3. Review in weekly program sync until both trackers reach complete state.
+    - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
+    - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
 
 ## Exit criterion
 
@@ -120,6 +120,6 @@ A deployment is considered **distributed self-healing ready** when:
 
 1. All tracker items above are complete.
 2. Two consecutive game-day exercises demonstrate:
-   - successful automatic recovery from a worker/node failure,
-   - successful database failover without data loss beyond stated RPO,
-   - restoration of nominal federation throughput within the stated RTO/SLO envelope.
+    - successful automatic recovery from a worker/node failure,
+    - successful database failover without data loss beyond stated RPO,
+    - restoration of nominal federation throughput within the stated RTO/SLO envelope.

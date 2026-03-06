@@ -1,52 +1,52 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: blackout-postgres
-  namespace: element-web
+    name: blackout-postgres
+    namespace: element-web
 spec:
-  instances: 3
-  storage:
-    size: 200Gi
-  monitoring:
-    enablePodMonitor: true
-  replicationSlots:
-    highAvailability:
-      enabled: true
-  backup:
-    retentionPolicy: 30d
-    barmanObjectStore:
-      destinationPath: s3://blackout-postgres-backups/prod
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-  bootstrap:
-    initdb:
-      database: synapse
-      owner: synapse
+    instances: 3
+    storage:
+        size: 200Gi
+    monitoring:
+        enablePodMonitor: true
+    replicationSlots:
+        highAvailability:
+            enabled: true
+    backup:
+        retentionPolicy: 30d
+        barmanObjectStore:
+            destinationPath: s3://blackout-postgres-backups/prod
+            wal:
+                compression: gzip
+            data:
+                compression: gzip
+    bootstrap:
+        initdb:
+            database: synapse
+            owner: synapse
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: postgres-replication-alerts
-  namespace: element-web
+    name: postgres-replication-alerts
+    namespace: element-web
 spec:
-  groups:
-    - name: postgres.replication
-      rules:
-        - alert: PostgresReplicationLagHigh
-          expr: max(cnpg_pg_replication_lag_bytes) > 52428800
-          for: 10m
-          labels:
-            severity: page
-          annotations:
-            summary: PostgreSQL replication lag exceeds 50MB
-            runbook: docs/runbooks/distributed_self_healing_operations.md#2-data-protection-and-recovery
-        - alert: PostgresArchiverStalled
-          expr: increase(cnpg_pg_stat_archiver_failed_count[15m]) > 0
-          for: 15m
-          labels:
-            severity: page
-          annotations:
-            summary: WAL archiving has failures
-            runbook: docs/runbooks/distributed_self_healing_operations.md#2-data-protection-and-recovery
+    groups:
+        - name: postgres.replication
+          rules:
+              - alert: PostgresReplicationLagHigh
+                expr: max(cnpg_pg_replication_lag_bytes) > 52428800
+                for: 10m
+                labels:
+                    severity: page
+                annotations:
+                    summary: PostgreSQL replication lag exceeds 50MB
+                    runbook: docs/runbooks/distributed_self_healing_operations.md#2-data-protection-and-recovery
+              - alert: PostgresArchiverStalled
+                expr: increase(cnpg_pg_stat_archiver_failed_count[15m]) > 0
+                for: 15m
+                labels:
+                    severity: page
+                annotations:
+                    summary: WAL archiving has failures
+                    runbook: docs/runbooks/distributed_self_healing_operations.md#2-data-protection-and-recovery

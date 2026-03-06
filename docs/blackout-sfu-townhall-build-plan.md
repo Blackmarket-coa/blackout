@@ -295,5 +295,4 @@ Use observed bitrate/CPU metrics from pilot events to refine codec/layer default
 - [ ] Execute 100/250/500 load test gates. (100-user gate evidence committed in `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`)
 - [ ] Complete security review and rollout signoff.
 
-
 Implementation tickets: `docs/blackout-sfu-townhall-implementation-tickets.md`.

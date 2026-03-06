@@ -15,18 +15,18 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 
 ## Top-10 production-impact triage (owner + milestone)
 
-| Rank | Item | Source marker | Priority | Owner | Target milestone | Tracking issue |
-|---|---|---|---|---|---|---|
-| 1 | Notifier call lookup correctness | `src/Notifier.ts` L491 | P0 | RTC/Calling | 2026.03 | `blackout#uc-001` |
-| 2 | MatrixChat error-state handling continuity | `src/components/structures/MatrixChat.tsx` L318 | P0 | Web Platform | 2026.03 | `blackout#uc-002` |
-| 3 | TimelinePanel event scope guard | `src/components/structures/TimelinePanel.tsx` L893 | P0 | Timeline/Rooms | 2026.03 | `blackout#uc-003` |
-| 4 | Room/event ID encoding handling | `src/components/structures/MatrixChat.tsx` L1937 | P0 | Navigation | 2026.04 | `blackout#uc-004` |
-| 5 | Auth flow register-button correctness | `src/components/structures/auth/Login.tsx` L290 | P0 | Auth/Identity | 2026.04 | `blackout#uc-005` |
-| 6 | Per-room hide controls in MessagePanel | `src/components/structures/MessagePanel.tsx` L468 | P1 | Rooms UX | 2026.05 | `blackout#uc-006` |
-| 7 | ScrollPanel search optimization | `src/components/structures/ScrollPanel.tsx` L648 | P1 | Timeline/Perf | 2026.05 | `blackout#uc-007` |
-| 8 | Keyboard shortcut handling gaps | `src/accessibility/KeyboardShortcuts.ts` L165, L325 | P1 | Accessibility | 2026.05 | `blackout#uc-008` |
-| 9 | Import E2E keys feedback UX | `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx` L110 | P1 | Security UX | 2026.05 | `blackout#uc-009` |
-| 10 | MatrixChat state consistency under burst actions | `src/components/structures/MatrixChat.tsx` L183 | P1 | Web Platform | 2026.06 | `blackout#uc-010` |
+| Rank | Item                                             | Source marker                                                              | Priority | Owner          | Target milestone | Tracking issue    |
+| ---- | ------------------------------------------------ | -------------------------------------------------------------------------- | -------- | -------------- | ---------------- | ----------------- |
+| 1    | Notifier call lookup correctness                 | `src/Notifier.ts` L491                                                     | P0       | RTC/Calling    | 2026.03          | `blackout#uc-001` |
+| 2    | MatrixChat error-state handling continuity       | `src/components/structures/MatrixChat.tsx` L318                            | P0       | Web Platform   | 2026.03          | `blackout#uc-002` |
+| 3    | TimelinePanel event scope guard                  | `src/components/structures/TimelinePanel.tsx` L893                         | P0       | Timeline/Rooms | 2026.03          | `blackout#uc-003` |
+| 4    | Room/event ID encoding handling                  | `src/components/structures/MatrixChat.tsx` L1937                           | P0       | Navigation     | 2026.04          | `blackout#uc-004` |
+| 5    | Auth flow register-button correctness            | `src/components/structures/auth/Login.tsx` L290                            | P0       | Auth/Identity  | 2026.04          | `blackout#uc-005` |
+| 6    | Per-room hide controls in MessagePanel           | `src/components/structures/MessagePanel.tsx` L468                          | P1       | Rooms UX       | 2026.05          | `blackout#uc-006` |
+| 7    | ScrollPanel search optimization                  | `src/components/structures/ScrollPanel.tsx` L648                           | P1       | Timeline/Perf  | 2026.05          | `blackout#uc-007` |
+| 8    | Keyboard shortcut handling gaps                  | `src/accessibility/KeyboardShortcuts.ts` L165, L325                        | P1       | Accessibility  | 2026.05          | `blackout#uc-008` |
+| 9    | Import E2E keys feedback UX                      | `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx` L110 | P1       | Security UX    | 2026.05          | `blackout#uc-009` |
+| 10   | MatrixChat state consistency under burst actions | `src/components/structures/MatrixChat.tsx` L183                            | P1       | Web Platform   | 2026.06          | `blackout#uc-010` |
 
 ## Status update for highest-impact items
 
