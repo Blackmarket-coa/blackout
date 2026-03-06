@@ -9,7 +9,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "jest-matrix-react";
 
 import TownhallWidgetShell from "../../../../src/modules/townhall/components/TownhallWidgetShell";
-import { TownhallTokenService } from "../../../../src/services/townhall/TownhallTokenService";
+import type { TownhallTokenService } from "../../../../src/services/townhall/TownhallTokenService";
 
 describe("TownhallWidgetShell", () => {
     const context = {

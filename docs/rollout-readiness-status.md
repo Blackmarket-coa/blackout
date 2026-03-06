@@ -50,6 +50,20 @@ yarn dist
 4. WO-04 and WO-05 (artifact + smoke validation).
 5. WO-06 (post-gate debt management for sustained rollout safety).
 
+
+## Latest execution snapshot (2026-03-06)
+
+- `yarn lint:js` no longer reports the previously tracked ESLint errors in `Login.tsx` and `TownhallWidgetShell-test.tsx`.
+- Lint gate remains blocked by repository-wide Prettier drift (33 files currently reported by `prettier --check .`).
+- `yarn audit --groups dependencies --level moderate` still reports two moderate findings:
+  - `dompurify` via `posthog-js` (patched in `>=3.3.2`, dependency path not yet upgraded here).
+  - `counterpart` via `@element-hq/web-shared-components` (no patch available).
+
+### Task status adjustments
+
+- WO-01: **In progress** (targeted ESLint fixes landed; gate still blocked pending formatting baseline cleanup).
+- WO-02: **Open** (same two advisories pending upgrade or risk acceptance record).
+
 ## Go/No-Go decision rule
 
 Proceed to rollout only when:
