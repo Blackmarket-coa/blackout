@@ -40,7 +40,6 @@ This matrix maps tracker gates to in-repo artifacts so completion status can be 
 - Blueprint: `docs/distributed_self_healing_blueprint.md`.
 - Roadmap link: `README.md` (self-healing federation roadmap section).
 
-
 ## G) Blackout rollout runbook execution
 
 - Checklist execution evidence: `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`.

@@ -52,7 +52,7 @@ This tracker maps the implementation status in this repository to the phases def
 
 ### Approved exception notes (dated)
 
-| Item | Exception type | Owner | Dependency | Next review date | Approval date |
-| --- | --- | --- | --- | --- | --- |
-| Policy tuning follow-ups (quorum/threshold defaults) | Post-completion maintenance item (non-blocking) | Governance Domain Owner | Pilot room policy telemetry and charter updates | 2026-02-27 | 2026-02-20 |
-| New governance-action integration test expansion | Post-completion maintenance item (non-blocking) | QA/Automation Owner | New governance action scope entering sprint plan | 2026-02-27 | 2026-02-20 |
+| Item                                                 | Exception type                                  | Owner                   | Dependency                                       | Next review date | Approval date |
+| ---------------------------------------------------- | ----------------------------------------------- | ----------------------- | ------------------------------------------------ | ---------------- | ------------- |
+| Policy tuning follow-ups (quorum/threshold defaults) | Post-completion maintenance item (non-blocking) | Governance Domain Owner | Pilot room policy telemetry and charter updates  | 2026-02-27       | 2026-02-20    |
+| New governance-action integration test expansion     | Post-completion maintenance item (non-blocking) | QA/Automation Owner     | New governance action scope entering sprint plan | 2026-02-27       | 2026-02-20    |

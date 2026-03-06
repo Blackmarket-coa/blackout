@@ -1,30 +1,30 @@
 name: dr-backup-verification
 
 on:
-  schedule:
-    - cron: "30 3 * * *"
-  workflow_dispatch:
+    schedule:
+        - cron: "30 3 * * *"
+    workflow_dispatch:
 
 jobs:
-  verify-backup-and-pitr:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    verify-backup-and-pitr:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Record PITR verification procedure
-        run: |
-          mkdir -p artifacts
-          cat > artifacts/pitr-verification-checklist.txt <<TXT
-          1. Pull latest base backup from backup object storage.
-          2. Rehydrate staging PostgreSQL instance.
-          3. Replay WAL to a chosen point-in-time.
-          4. Run consistency checks and federation queue integrity checks.
-          5. Publish RPO/RTO metrics and attach evidence.
-          TXT
+            - name: Record PITR verification procedure
+              run: |
+                  mkdir -p artifacts
+                  cat > artifacts/pitr-verification-checklist.txt <<TXT
+                  1. Pull latest base backup from backup object storage.
+                  2. Rehydrate staging PostgreSQL instance.
+                  3. Replay WAL to a chosen point-in-time.
+                  4. Run consistency checks and federation queue integrity checks.
+                  5. Publish RPO/RTO metrics and attach evidence.
+                  TXT
 
-      - name: Upload verification artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pitr-verification-checklist
-          path: artifacts/pitr-verification-checklist.txt
+            - name: Upload verification artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pitr-verification-checklist
+                  path: artifacts/pitr-verification-checklist.txt

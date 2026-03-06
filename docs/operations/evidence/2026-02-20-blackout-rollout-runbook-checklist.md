@@ -10,6 +10,7 @@ yarn -s test test/services/governance
 ```
 
 Result: **pass**
+
 - Suites: 7 passed / 7 total
 - Tests: 20 passed / 20 total
 
@@ -20,6 +21,7 @@ yarn -s test test/services/storage/ipfsService-test.ts test/services/storage/ipf
 ```
 
 Result: **pass**
+
 - Suites: 2 passed / 2 total
 - Tests: 9 passed / 9 total
 
@@ -30,6 +32,7 @@ yarn -s test test/services/blackout/CrossModuleIntegration-e2e-test.ts
 ```
 
 Result: **pass**
+
 - Suites: 1 passed / 1 total
 - Tests: 1 passed / 1 total
 

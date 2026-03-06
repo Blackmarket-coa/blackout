@@ -19,6 +19,6 @@
 ## Corrective actions
 
 | Action | Owner | Due date | Status |
-| --- | --- | --- | --- |
+| ------ | ----- | -------- | ------ |
 
 ## Lessons learned

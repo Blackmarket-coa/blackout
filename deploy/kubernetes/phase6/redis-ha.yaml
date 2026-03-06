@@ -1,33 +1,33 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: redis
-  namespace: element-web
+    name: redis
+    namespace: element-web
 spec:
-  serviceName: redis
-  replicas: 3
-  selector:
-    matchLabels:
-      app: redis
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      containers:
-        - name: redis
-          image: redis:7-alpine
-          ports:
-            - containerPort: 6379
-              name: redis
+    serviceName: redis
+    replicas: 3
+    selector:
+        matchLabels:
+            app: redis
+    template:
+        metadata:
+            labels:
+                app: redis
+        spec:
+            containers:
+                - name: redis
+                  image: redis:7-alpine
+                  ports:
+                      - containerPort: 6379
+                        name: redis
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: redis
-  namespace: element-web
+    name: redis
+    namespace: element-web
 spec:
-  minAvailable: 2
-  selector:
-    matchLabels:
-      app: redis
+    minAvailable: 2
+    selector:
+        matchLabels:
+            app: redis

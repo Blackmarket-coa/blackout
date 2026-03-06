@@ -30,7 +30,10 @@ export default class SendHistoryManager {
         this.prefix = prefix + roomId;
 
         let itemJSON: string | null;
-        const storedLastIndex = Number.parseInt(sessionStorage.getItem(`${this.prefix}${LAST_INDEX_STORAGE_KEY}`) ?? "", 10);
+        const storedLastIndex = Number.parseInt(
+            sessionStorage.getItem(`${this.prefix}${LAST_INDEX_STORAGE_KEY}`) ?? "",
+            10,
+        );
 
         if (Number.isInteger(storedLastIndex) && storedLastIndex >= 0) {
             for (let index = 0; index <= storedLastIndex; index++) {

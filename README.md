@@ -28,7 +28,6 @@ For deeper architecture context:
 
 ---
 
-
 ## Self-healing federation architecture (Blackout roadmap)
 
 This project now defines a target architecture for a decentralized, encrypted, self-healing federation model that can run on low-power nodes (including recycled Android phones).
