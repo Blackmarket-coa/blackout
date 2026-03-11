@@ -1,0 +1,13 @@
+Source: blackout-web
+Maintainer: support@blackmarket.coa
+Section: web
+Priority: optional
+Homepage: https://github.com/Blackmarket-coa/blackout
+
+Package: blackout-web
+Architecture: all
+Recommends: httpd
+Description:
+  Blackout: secure communication platform
+  This package contains the web-based client that can be served through a web
+   server.
