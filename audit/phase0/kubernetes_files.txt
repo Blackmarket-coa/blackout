@@ -1,0 +1,15 @@
+deploy/kubernetes/phase4/README.md
+deploy/kubernetes/phase4/element-ha.yaml
+deploy/kubernetes/phase4/observability.yaml
+deploy/kubernetes/phase4/opentelemetry.yaml
+deploy/kubernetes/phase4/upstream-circuit-breaker.yaml
+deploy/kubernetes/phase5/README.md
+deploy/kubernetes/phase5/network-security.yaml
+deploy/kubernetes/phase5/pod-security-policy.yaml
+deploy/kubernetes/phase5/secrets-workload-identity.yaml
+deploy/kubernetes/phase6/federation-alerts.yaml
+deploy/kubernetes/phase6/ingress-waf-rate-limit.yaml
+deploy/kubernetes/phase6/postgres-dr-baseline.yaml
+deploy/kubernetes/phase6/redis-ha.yaml
+deploy/kubernetes/phase6/scaleout-automation.yaml
+deploy/kubernetes/phase6/second-region-dr-footprint.yaml
