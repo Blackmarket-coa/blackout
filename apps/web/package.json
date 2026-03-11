@@ -1,0 +1,22 @@
+{
+  "name": "@blackout/web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Blackout web application shell",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'no build yet'",
+    "dev": "echo 'no dev server yet'",
+    "lint": "tsc --noEmit",
+    "test": "echo 'no tests yet'",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@blackout/core": "workspace:*",
+    "@blackout/ui": "workspace:*",
+    "@blackout/design": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
