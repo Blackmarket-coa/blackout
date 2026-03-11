@@ -1,0 +1,7 @@
+patches/@matrix-org+react-sdk-module-api+2.5.0.patch
+patches/@vector-im+matrix-wysiwyg+2.40.0.patch
+patches/await-lock+3.0.0.patch
+patches/jest-fixed-jsdom+0.0.11.patch
+patches/jsdom+26.1.0.patch
+patches/linkify-html+4.3.2.patch
+patches/react-blurhash+0.3.0.patch

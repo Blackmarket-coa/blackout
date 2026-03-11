@@ -2,6 +2,20 @@
 
 Phase 0 deliverable for the Blackout monorepo migration.
 
+## 0. Preservation snapshot status
+
+- Local archive branch created: `archive/element-web-fork`.
+- Local tag created: `v0-element-fork`.
+- Remote push steps are documented in `PHASE0_STATUS.md` and are blocked in this environment because no `origin` remote is configured.
+
+## Audit artifacts
+
+Detailed generated file lists are committed under `audit/phase0/` and can be regenerated with:
+
+```bash
+./scripts/migration/phase0_audit.sh
+```
+
 ## Audit scope
 
 This inventory was built from the current repository state and focuses on:
