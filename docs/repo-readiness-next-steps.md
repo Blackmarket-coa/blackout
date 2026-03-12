@@ -13,9 +13,11 @@ pnpm test
 pnpm audit --audit-level moderate
 ```
 
-Current blocker from baseline execution (latest run in this branch):
+Current baseline status (latest run in this branch):
 
-- `pnpm lint` and `pnpm test` fail in `@blackout/ui` because `packages/ui/tsconfig.json` references projects that are missing `"composite": true` (`packages/core`, `packages/design`; TS6306).
+- `pnpm lint` ✅
+- `pnpm test` ✅
+- `pnpm audit --audit-level moderate` ✅ (no known vulnerabilities found)
 
 ## Follow-on: cross-doc incomplete-work queue
 
@@ -37,13 +39,13 @@ Treat these as the canonical “what’s next” documents after build gates.
 
 Current branch status from baseline execution:
 
-- `pnpm lint` ❌ (blocked by `TS6306` in `@blackout/ui` project references).
-- `pnpm test` ❌ (blocked by the same `@blackout/ui` build/reference error).
-- `pnpm audit --audit-level moderate` ✅ (no known vulnerabilities found).
+- `pnpm lint` ✅
+- `pnpm test` ✅
+- `pnpm audit --audit-level moderate` ✅ (no known vulnerabilities found)
 
 ## 3) Re-run the baseline before merge/deploy
 
-After fixes, run the same baseline used by this repo:
+Before merge/deploy, run:
 
 ```bash
 pnpm install --no-frozen-lockfile
@@ -69,4 +71,4 @@ Once quality gates pass:
 
 ## 6) Operational recommendation
 
-Treat the repo as functionally close but not yet fully "green" until the `@blackout/ui` TypeScript project-reference blocker is resolved and baseline gates are green.
+Treat the repo as baseline-green for lint/test/audit. Prioritize the follow-on incomplete-work queue above for implementation progress.
