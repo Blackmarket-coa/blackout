@@ -56,7 +56,7 @@ pnpm audit --audit-level moderate
 
 ## 4) Triage remaining implementation debt
 
-The unfinished-code scan currently reports a large backlog of `TODO`/`FIXME` markers.
+The unfinished-code scan currently reports a large backlog of unresolved implementation markers.
 Prioritize this list by user-facing impact and production risk (security, data loss, and message correctness first).
 
 A kickoff triage queue is captured in `docs/qa-triage-start.md`.

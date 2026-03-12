@@ -3,9 +3,9 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **128**
+- Open items: **126**
 - Resolved items tracked in this checklist: **0**
-- Total files with tracked markers: **96**
+- Total files with tracked markers: **94**
 
 ## Checklist
 
@@ -352,14 +352,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `docs/blackout-reuse-completion-tracker.md`
 
 - [ ] L104: `- \`todo -> doing -> done\` transitions are implemented with guardrails.`
-
-### `docs/qa-triage-start.md`
-
-- [ ] L18: `- Auth/account flows with known FIXME/NOTE markers`
-
-### `docs/repo-readiness-next-steps.md`
-
-- [ ] L33: `The unfinished-code scan currently reports a large backlog of \`TODO\`/\`FIXME\` markers.`
 
 ### `test/jest-mocks.ts`
 

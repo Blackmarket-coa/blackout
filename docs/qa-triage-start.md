@@ -15,7 +15,7 @@ This document starts post-gate triage after restoring lint/style/test health.
 
 1. **Security / correctness**
     - Steganography transport normalization and decode hardening
-    - Auth/account flows with known FIXME/NOTE markers
+    - Auth/account flows with known issue/NOTE markers
 2. **User-facing reliability**
     - Call state handling edge-cases
     - Widget capability/event support gaps
