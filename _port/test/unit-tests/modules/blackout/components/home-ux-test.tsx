@@ -43,7 +43,7 @@ describe("blackout home ux", () => {
         render(<MutualAidHome />);
 
         expect(screen.getByText("Total needs: 0 · Visible: 0")).toBeInTheDocument();
-        expect(screen.getByText("No items in todo.")).toBeInTheDocument();
+        expect(screen.getByText("No items in backlog.")).toBeInTheDocument();
         expect(screen.getByTestId("blackout-mutual-aid-create-item")).toBeDisabled();
     });
 });

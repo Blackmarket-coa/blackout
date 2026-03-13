@@ -101,7 +101,7 @@ Status: ✅
 ### Evidence
 
 - Mutual-aid view supports lane switching and item creation.
-- `todo -> doing -> done` transitions are implemented with guardrails.
+- `backlog -> in_progress -> done` transitions are implemented with guardrails.
 - CRDT board bindings persist room-scoped task board documents.
 - Audit trail and filters (assignee/urgency) are rendered in UI.
 

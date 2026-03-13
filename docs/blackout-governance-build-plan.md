@@ -208,7 +208,7 @@ src/
 
 ### Tasks
 
-1. Implement board states (ToDo/Doing/Done) and transitions.
+1. Implement board states (Backlog/In-Progress/Done) and transitions.
 2. Add matching hints between needs/offers.
 3. Persist board state with Yjs and scope to Matrix room.
 
