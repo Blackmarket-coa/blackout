@@ -121,6 +121,16 @@ export {
     type PluginRegistration,
 } from "./plugins/PluginSandbox";
 export {
+    CosmeticPackPipeline,
+    CosmeticPackPipelineConformanceError,
+    type CosmeticAsset,
+    type CosmeticPackManifest,
+    type SignedCosmeticPack,
+    type MarketplacePublicationRequest,
+    type MarketplacePublicationRecord,
+    type CosmeticPackPipelineOptions,
+} from "./plugins/CosmeticPackPipeline";
+export {
     StegoStrategy,
     EMOJI_POOL,
     STEGO_MARKER,
