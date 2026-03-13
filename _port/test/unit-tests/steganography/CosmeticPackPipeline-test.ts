@@ -60,6 +60,23 @@ describe("CosmeticPackPipeline", () => {
         expect(pipeline.verifySignedPack(pack)).toBe(false);
     });
 
+    it("keeps signed pack manifest immutable from subsequent source-manifest changes", () => {
+        const pipeline = createPipeline();
+        const sourceManifest: CosmeticPackManifest = {
+            ...manifest,
+            assets: manifest.assets.map((asset) => ({ ...asset })),
+        };
+
+        const pack = pipeline.signPack(sourceManifest, "signing-key-a");
+        sourceManifest.assets[0] = {
+            ...sourceManifest.assets[0],
+            payload: "theme://source-mutated-after-sign",
+        };
+
+        expect(pack.manifest.assets[0].payload).toBe("theme://aurora");
+        expect(pipeline.verifySignedPack(pack)).toBe(true);
+    });
+
     it("publishes only verified packs from approved publishers with review ticket controls", () => {
         const pipeline = createPipeline();
         const pack = pipeline.signPack(manifest, "signing-key-a");
@@ -100,5 +117,43 @@ describe("CosmeticPackPipeline", () => {
                 reviewTicket: "   ",
             }),
         ).toThrow(CosmeticPackPipelineConformanceError);
+    });
+
+    it("rejects duplicate publication for the same pack version", () => {
+        const pipeline = createPipeline();
+        const pack = pipeline.signPack(manifest, "signing-key-a");
+
+        pipeline.publishPack({
+            pack,
+            requestedBy: "publisher:cosmetics",
+            reviewTicket: "security-review-2026-0312",
+        });
+
+        expect(() =>
+            pipeline.publishPack({
+                pack,
+                requestedBy: "publisher:cosmetics",
+                reviewTicket: "security-review-2026-0313",
+            }),
+        ).toThrow(CosmeticPackPipelineConformanceError);
+    });
+
+    it("returns deterministic published-pack inventory", () => {
+        const pipeline = createPipeline();
+        const packV1 = pipeline.signPack(manifest, "signing-key-a");
+        const packV2 = pipeline.signPack({ ...manifest, version: "1.3.0" }, "signing-key-a");
+
+        pipeline.publishPack({
+            pack: packV2,
+            requestedBy: "publisher:cosmetics",
+            reviewTicket: "security-review-2026-0314",
+        });
+        pipeline.publishPack({
+            pack: packV1,
+            requestedBy: "publisher:cosmetics",
+            reviewTicket: "security-review-2026-0312",
+        });
+
+        expect(pipeline.listPublishedPacks().map((record) => record.version)).toEqual(["1.2.0", "1.3.0"]);
     });
 });

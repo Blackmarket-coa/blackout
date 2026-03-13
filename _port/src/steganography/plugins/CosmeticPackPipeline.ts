@@ -76,6 +76,7 @@ const canonicalizeManifest = (manifest: CosmeticPackManifest): string =>
 export class CosmeticPackPipeline {
     private readonly signingSecretsByKeyId: Map<string, string>;
     private readonly approvedPublishers: Set<string>;
+    private readonly publishedPackVersions = new Map<string, MarketplacePublicationRecord>();
 
     public constructor(options: CosmeticPackPipelineOptions) {
         if (!Object.keys(options.signingSecretsByKeyId).length) {
@@ -93,16 +94,22 @@ export class CosmeticPackPipeline {
             throw new CosmeticPackPipelineConformanceError(`Unknown signing key: ${signerKeyId}`);
         }
 
+        const manifestSnapshot = this.createManifestSnapshot(manifest);
+
         return {
-            manifest,
+            manifest: manifestSnapshot,
             signerKeyId,
             signatureVersion: SIGNATURE_VERSION,
-            signature: this.computeSignature(manifest, secret),
+            signature: this.computeSignature(manifestSnapshot, secret),
         };
     }
 
     public verifySignedPack(pack: SignedCosmeticPack): boolean {
-        this.assertManifestConformance(pack.manifest);
+        try {
+            this.assertManifestConformance(pack.manifest);
+        } catch {
+            return false;
+        }
 
         if (pack.signatureVersion !== SIGNATURE_VERSION) {
             return false;
@@ -110,6 +117,10 @@ export class CosmeticPackPipeline {
 
         const secret = this.signingSecretsByKeyId.get(pack.signerKeyId);
         if (!secret) {
+            return false;
+        }
+
+        if (!/^[a-f0-9]{64}$/i.test(pack.signature)) {
             return false;
         }
 
@@ -142,13 +153,37 @@ export class CosmeticPackPipeline {
             throw new CosmeticPackPipelineConformanceError("Pack signature verification failed for marketplace publication");
         }
 
-        return {
+        const publicationKey = this.getPublicationKey(pack.manifest.packId, pack.manifest.version);
+        if (this.publishedPackVersions.has(publicationKey)) {
+            throw new CosmeticPackPipelineConformanceError(
+                `Pack ${pack.manifest.packId}@${pack.manifest.version} is already published`,
+            );
+        }
+
+        const publicationRecord: MarketplacePublicationRecord = {
             packId: pack.manifest.packId,
             version: pack.manifest.version,
             publishedBy: requestedBy,
             reviewTicket,
             publishedAtMs: Date.now(),
         };
+
+        this.publishedPackVersions.set(publicationKey, publicationRecord);
+        return publicationRecord;
+    }
+
+    public listPublishedPacks(): MarketplacePublicationRecord[] {
+        return [...this.publishedPackVersions.values()].sort((left, right) => {
+            if (left.packId !== right.packId) {
+                return left.packId < right.packId ? -1 : 1;
+            }
+
+            if (left.version !== right.version) {
+                return left.version < right.version ? -1 : 1;
+            }
+
+            return left.publishedAtMs - right.publishedAtMs;
+        });
     }
 
     private computeSignature(manifest: CosmeticPackManifest, secret: string): string {
@@ -173,6 +208,35 @@ export class CosmeticPackPipeline {
                     `Cosmetic pack asset must include id and payload: ${JSON.stringify(asset)}`,
                 );
             }
+
+            if (asset.kind !== "sticker" && asset.kind !== "theme" && asset.kind !== "frame") {
+                throw new CosmeticPackPipelineConformanceError(
+                    `Cosmetic pack asset has unsupported kind: ${JSON.stringify(asset)}`,
+                );
+            }
         }
+
+        const assetIds = manifest.assets.map((asset) => asset.id);
+        if (new Set(assetIds).size !== assetIds.length) {
+            throw new CosmeticPackPipelineConformanceError("Cosmetic pack assets must have unique ids");
+        }
+    }
+
+    private createManifestSnapshot(manifest: CosmeticPackManifest): CosmeticPackManifest {
+        return {
+            packId: manifest.packId,
+            version: manifest.version,
+            publisherId: manifest.publisherId,
+            displayName: manifest.displayName,
+            assets: manifest.assets.map((asset) => ({
+                id: asset.id,
+                kind: asset.kind,
+                payload: asset.payload,
+            })),
+        };
+    }
+
+    private getPublicationKey(packId: string, version: string): string {
+        return `${packId}@${version}`;
     }
 }
