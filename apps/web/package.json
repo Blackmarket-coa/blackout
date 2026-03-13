@@ -5,10 +5,10 @@
   "description": "Blackout web application shell",
   "type": "module",
   "scripts": {
-    "build": "echo 'no build yet'",
+    "build": "tsc --build",
     "dev": "echo 'no dev server yet'",
     "lint": "tsc --noEmit",
-    "test": "echo 'no tests yet'",
+    "test": "tsc --noEmit",
     "clean": "rimraf dist"
   },
   "dependencies": {
