@@ -21,8 +21,8 @@ interface BoardEvent {
 }
 
 function moveToNextColumn(column: TaskBoardColumn): TaskBoardColumn {
-    if (column === "todo") return "doing";
-    if (column === "doing") return "done";
+    if (column === "backlog") return "in_progress";
+    if (column === "in_progress") return "done";
     return "done";
 }
 
@@ -60,8 +60,8 @@ export default function MutualAidHome(): React.JSX.Element {
     });
     const grouped = useMemo(
         () => ({
-            todo: filteredItems.filter((item) => item.column === "todo"),
-            doing: filteredItems.filter((item) => item.column === "doing"),
+            backlog: filteredItems.filter((item) => item.column === "backlog"),
+            in_progress: filteredItems.filter((item) => item.column === "in_progress"),
             done: filteredItems.filter((item) => item.column === "done"),
         }),
         [filteredItems],
@@ -75,7 +75,7 @@ export default function MutualAidHome(): React.JSX.Element {
             id: `${activeLane}-${now}`,
             title: title.trim(),
             description: "normal",
-            column: "todo",
+            column: "backlog",
             updatedAt: now,
         };
 
@@ -121,7 +121,7 @@ export default function MutualAidHome(): React.JSX.Element {
     return (
         <section data-testid="blackout-mutual-aid-view">
             <h2>Mutual aid board</h2>
-            <p>Track needs and offers through todo, doing, and done.</p>
+            <p>Track needs and offers through backlog, in-progress, and done.</p>
             <p>
                 Total {activeLane}: {items.length} · Visible: {filteredItems.length}
             </p>
@@ -176,7 +176,7 @@ export default function MutualAidHome(): React.JSX.Element {
                 </select>
             </div>
 
-            {(["todo", "doing", "done"] as const).map((column) => (
+            {(["backlog", "in_progress", "done"] as const).map((column) => (
                 <section key={column}>
                     <h3>{column}</h3>
                     <ul data-testid={`blackout-mutual-aid-column-${column}`}>

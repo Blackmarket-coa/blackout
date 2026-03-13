@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "lint": "tsc --noEmit",
-    "test": "echo 'no tests yet'",
+    "test": "tsc --noEmit",
     "clean": "rimraf dist"
   },
   "dependencies": {

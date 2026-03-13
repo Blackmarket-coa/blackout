@@ -42,13 +42,13 @@ describe("Blackout cross-module e2e", () => {
             roomId,
             updatedAt: now,
             needs: [
-                { id: "n1", title: "Meal drop", column: "todo", updatedAt: now, requestedByUserId: "@bob:example.org" },
+                { id: "n1", title: "Meal drop", column: "backlog", updatedAt: now, requestedByUserId: "@bob:example.org" },
             ],
             offers: [
                 {
                     id: "o1",
                     title: "First-aid training",
-                    column: "doing",
+                    column: "in_progress",
                     updatedAt: now,
                     assignedToUserId: "@alice:example.org",
                 },

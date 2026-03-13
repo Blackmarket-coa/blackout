@@ -3,9 +3,9 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **128**
+- Open items: **116**
 - Resolved items tracked in this checklist: **0**
-- Total files with tracked markers: **96**
+- Total files with tracked markers: **88**
 
 ## Checklist
 
@@ -209,18 +209,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L22: `// TODO: Move this and related files to the js-sdk or something once finalized.`
 
-### `src/modules/mutualAid/components/MutualAidHome.tsx`
-
-- [ ] L24: `if (column === "todo") return "doing";`
-- [ ] L63: `todo: filteredItems.filter((item) => item.column === "todo"),`
-- [ ] L78: `column: "todo",`
-- [ ] L124: `<p>Track needs and offers through todo, doing, and done.</p>`
-- [ ] L179: `{(["todo", "doing", "done"] as const).map((column) => (`
-
-### `src/modules/mutualAid/models/TaskBoard.ts`
-
-- [ ] L8: `export type TaskBoardColumn = "todo" | "doing" | "done";`
-
 ### `src/resizer/resizer.ts`
 
 - [ ] L36: `// TODO move vertical/horizontal to config option/container class`
@@ -345,29 +333,9 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L9: `// TODO: Move to matrix-widget-api`
 
-### `docs/blackout-governance-build-plan.md`
-
-- [ ] L211: `1. Implement board states (ToDo/Doing/Done) and transitions.`
-
-### `docs/blackout-reuse-completion-tracker.md`
-
-- [ ] L104: `- \`todo -> doing -> done\` transitions are implemented with guardrails.`
-
-### `docs/qa-triage-start.md`
-
-- [ ] L18: `- Auth/account flows with known FIXME/NOTE markers`
-
-### `docs/repo-readiness-next-steps.md`
-
-- [ ] L33: `The unfinished-code scan currently reports a large backlog of \`TODO\`/\`FIXME\` markers.`
-
 ### `test/jest-mocks.ts`
 
 - [ ] L9: `// https://jestjs.io/docs/en/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom`
-
-### `test/services/blackout/CrossModuleIntegration-e2e-test.ts`
-
-- [ ] L45: `{ id: "n1", title: "Meal drop", column: "todo", updatedAt: now, requestedByUserId: "@bob:example.org" },`
 
 ### `test/setup/setupManualMocks.ts`
 
@@ -408,10 +376,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `test/unit-tests/models/Call-test.ts`
 
 - [ ] L844: `// TODO refactor initial device configuration to use the EW settings.`
-
-### `test/unit-tests/modules/blackout/components/home-ux-test.tsx`
-
-- [ ] L46: `expect(screen.getByText("No items in todo.")).toBeInTheDocument();`
 
 ### `test/unit-tests/slash-commands/utils.ts`
 
