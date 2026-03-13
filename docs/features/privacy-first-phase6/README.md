@@ -29,7 +29,8 @@ This directory captures implementation evidence for **Phase 6 — Plugin Ecosyst
 - Initial guardrails established in plugin runtime:
     - Cosmetic/render plugins can run as render-only capabilities without network permissions.
     - Network access for remote cosmetic assets is explicit, policy-gated, and revocable.
-- Full signed cosmetic pack distribution pipeline remains a follow-on implementation item.
+- Signed cosmetic pack distribution pipeline is implemented with manifest conformance checks, HMAC-based signing/verification, and marketplace publication controls that require approved publisher identity plus a review ticket.
+- Additional hardening now blocks duplicate publication of the same `packId@version` and signs an immutable manifest snapshot so post-sign source mutations cannot invalidate or silently alter signed artifacts.
 
 ## Exit criteria evidence
 
@@ -50,6 +51,7 @@ This directory captures implementation evidence for **Phase 6 — Plugin Ecosyst
 | Test file                                                    | Coverage area                                                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | `test/unit-tests/steganography/PluginSandboxRuntime-test.ts` | Capability manifest conformance, permission prompt/grant/revoke lifecycle, banned socket/exfiltration targets |
+| `test/unit-tests/steganography/CosmeticPackPipeline-test.ts` | Signed cosmetic-pack conformance, tamper detection, immutable-signature input behavior, approved-publisher publication gate, duplicate-publication prevention, and review-ticket enforcement |
 
 ## Phase 6 completion checklist
 
@@ -57,4 +59,4 @@ This directory captures implementation evidence for **Phase 6 — Plugin Ecosyst
 - [x] Add plugin API primitives (`encode`, `decode`, `render`, `transform`) with runtime gating.
 - [x] Enforce runtime network bans and explicit permission prompts.
 - [x] Add conformance tests for disallowed network/exfiltration behavior.
-- [ ] Implement signed cosmetic pack pipeline end-to-end.
+- [x] Implement signed cosmetic pack pipeline end-to-end.

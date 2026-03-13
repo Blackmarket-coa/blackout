@@ -1,0 +1,269 @@
+# Blackout Centralized Build Checklist + Work Order
+
+This document centralizes current build context, architecture techniques, open work, and an execution work order for **Blackout (Encrypted Communication & Governance)**.
+
+## 1) Mission Context
+
+Blackout is a secure communication and governance platform on Matrix/Synapse with emphasis on:
+
+- End-to-end encryption and metadata minimization.
+- Resilient community coordination under adverse conditions.
+- Governance-grade integrity, auditability, and compartmentalization.
+
+## 2) Technique-to-Architecture Mapping
+
+### 2.1 Image steganography
+
+**Fit in Blackout:**
+
+- Embed encrypted metadata or secondary payloads inside images shared in Matrix rooms.
+- Use cases: covert coordination hints, governance vote/signature attachment, and anti-scraper signal reduction.
+
+**Integration point:**
+
+- Client-side layer between UI compose/send flow and Matrix media upload endpoint.
+
+### 2.2 Dead drop patterns
+
+**Fit in Blackout:**
+
+- Asynchronous encrypted message queues implemented via specialized Matrix room mode.
+- “Dead drop room” profile with unlisted discovery and automatic expiration.
+
+**Integration point:**
+
+- Room presets + expiry policy controls + encrypted retention guardrails.
+
+### 2.3 Broadcast messaging
+
+**Fit in Blackout:**
+
+- Coalition-wide announcement/governance channels with minimized observer insight into readership.
+- Federation propagation keeps delivery decoupled from direct recipient exposure.
+
+**Integration point:**
+
+- Signed announcement events and privacy-safe analytics on delivery health.
+
+### 2.4 Cell structure access control
+
+**Fit in Blackout:**
+
+- Chapter/cell-only visibility with selective shared broadcast channels.
+- Limit compromise blast radius to one chapter/homeserver domain.
+
+**Integration point:**
+
+- Matrix spaces + per-room ACL/power-level templates + cross-cell bridge policy.
+
+### 2.5 Mesh networking (Blackout_blackbox)
+
+**Fit in Blackout:**
+
+- Device-hosted relay/homeserver options for degraded/no-internet operation.
+- Target links: LoRa, Bluetooth, Wi-Fi Direct style transport overlays.
+
+**Integration point:**
+
+- Store-and-forward relay profile + deferred federation synchronization policies.
+
+### 2.6 Covert timing channel mitigation
+
+**Fit in Blackout:**
+
+- Counter traffic analysis despite E2EE by adding message batching and randomized send delay.
+
+**Integration point:**
+
+- Sender policy engine (opt-in by room profile), plus latency/UX guardrails and abuse controls.
+
+---
+
+## 3) Current Known Open Work (Program Level)
+
+1. **Unfinished marker backlog reduction** remains a major execution stream (open TODO/FIXME marker inventory).
+2. **Governance maintenance follow-ups** remain active (policy tuning + integration expansion).
+3. **Reuse maintenance follow-ups** remain active (delegation abuse tuning, moderation/access policy depth, workflow automation, fairness validation).
+4. **Operational consistency cleanup** needed where tracker snapshots differ (e.g., marker counts between docs).
+
+---
+
+## 4) Centralized Completion Checklist
+
+Use this as the canonical execution checklist for the next completion push.
+
+### A. Program hygiene and tracker alignment
+
+- [ ] Reconcile inconsistent counts/claims across tracker docs and regenerate evidence snapshots.
+- [ ] Standardize all tracker legends/status wording (`Complete`, `In progress`, `Partial`, exceptions).
+- [ ] Add explicit “last verified by command + date” section to each major tracker.
+
+### B. Security + privacy hardening
+
+- [ ] Add key-rotation runbook for cosmetic/signature workflows with rollback validation.
+- [ ] Add integrity verification audit trail for signed artifacts and publication controls.
+- [ ] Add metadata leakage threat test cases for timing and batching profiles.
+
+### C. Steganography delivery completion
+
+- [ ] Implement/validate image stego send pipeline integration in Matrix media flow.
+- [ ] Add dead-drop room profile (unlisted + expiry + strict access defaults).
+- [ ] Add governance signature/vote payload carrier format and verification hooks.
+
+### D. Governance and cell model completion
+
+- [ ] Deliver cell-based space templates and chapter isolation policy pack.
+- [ ] Add compromise-containment game-day scenario and acceptance criteria.
+- [ ] Expand governance action integration tests for cross-module flows.
+
+### E. Mesh/off-grid readiness
+
+- [ ] Define minimal Blackout_blackbox relay protocol profile and sync semantics.
+- [ ] Add degraded/offline operation test matrix and reliability gates.
+- [ ] Document federated resync conflict resolution behavior after partition recovery.
+
+### F. Traffic analysis countermeasures
+
+- [ ] Add room-level batching/random-delay policy options with safe defaults.
+- [ ] Add telemetry-safe performance metrics for delivery latency bands.
+- [ ] Add anti-abuse limits to prevent delay policy misuse.
+
+### G. Quality and release gates
+
+- [ ] Close remaining highest-priority unfinished marker issues (P0/P1 sequence).
+- [ ] Ensure each completed item has linked tests and evidence docs.
+- [ ] Run final release-readiness checklist with owner/date sign-off.
+
+---
+
+## 5) Work Order With Actionable AI Prompts
+
+Each prompt is designed for direct use with an AI coding/documentation agent.
+
+### Work Order 1 — Tracker normalization and evidence refresh
+
+**Owner role:** Program/Release Engineering
+
+**AI prompt:**
+
+> Audit all completion trackers under `docs/` for inconsistent status wording, stale snapshot dates, and conflicting numeric counts. Propose and apply a normalized schema (`status`, `evidence`, `remaining work`, `next review date`, `owner`) and update all affected documents. Include a concise changelog section and list exact commands used for verification.
+
+**Done when:** all trackers use the same schema and no conflicting counts remain.
+
+---
+
+### Work Order 2 — Image stego integration path
+
+**Owner role:** Client Security + Messaging
+
+**AI prompt:**
+
+> Implement an image steganography integration layer in the client send flow so encrypted secondary payloads can be embedded into outbound images before Matrix media upload. Add feature-flag gating, payload size limits, corruption handling, and tests for encode/decode round trip across realistic media samples.
+
+**Done when:** feature-flagged flow works end-to-end with tests and rollback path documented.
+
+---
+
+### Work Order 3 — Dead drop room profile
+
+**Owner role:** Messaging Platform
+
+**AI prompt:**
+
+> Create a dead-drop room profile for Blackout: unlisted room defaults, strict invite/access policy, auto-expiring encrypted messages, and explicit UI indicators for expiry semantics. Add configuration docs and tests that validate retention and access controls.
+
+**Done when:** room profile can be created, used, and policy-validated automatically.
+
+---
+
+### Work Order 4 — Governance payload attestation in media channels
+
+**Owner role:** Governance + Crypto
+
+**AI prompt:**
+
+> Define and implement a signed governance payload envelope suitable for optional stego carriage inside media. Include schema versioning, signer identity binding, signature verification, and rejection reasons for malformed/forged payloads. Add unit tests and documentation examples.
+
+**Done when:** valid payloads verify deterministically and invalid payloads are rejected with auditable errors.
+
+---
+
+### Work Order 5 — Cell-structured access enforcement
+
+**Owner role:** Identity/Access + Governance
+
+**AI prompt:**
+
+> Implement chapter/cell-based access templates using Matrix spaces and room ACL defaults. Ensure users only see chapter-local rooms plus explicitly shared broadcast channels. Add integration tests demonstrating compromise containment boundaries.
+
+**Done when:** policy templates are reusable and boundary tests pass.
+
+---
+
+### Work Order 6 — Mesh/off-grid relay baseline
+
+**Owner role:** Blackbox/Infra
+
+**AI prompt:**
+
+> Draft and implement a minimal mesh relay operating mode for Blackout_blackbox devices with store-and-forward behavior, eventual federation sync, and conflict-resolution rules for partition recovery. Include simulation tests and operational docs.
+
+**Done when:** offline-to-online recovery scenarios are reproducible with evidence.
+
+---
+
+### Work Order 7 — Timing obfuscation policy engine
+
+**Owner role:** Privacy Engineering
+
+**AI prompt:**
+
+> Add room-level traffic-analysis countermeasures: randomized send delay and batching windows with configurable bounds, abuse protections, and UX guardrails. Provide privacy-safe telemetry to compare baseline vs obfuscated timing leakage.
+
+**Done when:** policy engine is test-covered and latency/privacy tradeoffs are documented.
+
+---
+
+### Work Order 8 — Finish high-priority unfinished markers
+
+**Owner role:** Core App Teams
+
+**AI prompt:**
+
+> Use `docs/unfinished-code-priority-plan.md` and `docs/unfinished-code-checklist.md` to execute the next highest-priority unresolved markers (remaining P0 then P1). For each resolved marker, include code change, regression tests, checklist regeneration, and tracker count updates.
+
+**Done when:** target marker batch is closed and all related counts are synchronized in docs.
+
+---
+
+### Work Order 9 — Release-readiness synthesis
+
+**Owner role:** Release Management
+
+**AI prompt:**
+
+> Build a final release-readiness report combining security controls, governance readiness, stego/marketplace status, dead-drop and cell-model completion, and operational runbook validation. Include explicit go/no-go criteria with owner sign-off blocks.
+
+**Done when:** report can be used directly as release gate artifact.
+
+---
+
+## 6) Recommended Execution Sequence
+
+1. Work Orders 1 + 8 (data hygiene and high-priority debt).
+2. Work Orders 2 + 3 + 4 (core secure comms feature set).
+3. Work Orders 5 + 7 (access segmentation and metadata protections).
+4. Work Order 6 (off-grid resilience baseline).
+5. Work Order 9 (final synthesis and go/no-go gate).
+
+## 7) Reporting Template (Use for Each Completed Work Order)
+
+- **Work order:**
+- **Owner:**
+- **Date completed:**
+- **Files changed:**
+- **Tests/commands run:**
+- **Evidence links:**
+- **Risks/known follow-ups:**
+- **Next review date:**
+
