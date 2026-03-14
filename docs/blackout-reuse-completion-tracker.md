@@ -4,30 +4,31 @@ This tracker now reflects a **code-backed analysis** of reuse-strategy feature s
 
 Legend:
 
-- ✅ Complete
-- 🟡 In progress / partial
-- ⬜ Not started
+- Complete
+- In progress
+- Partial
+- Blocked
 
 ## Overall status snapshot
 
-| Area                            | Status | Evidence summary                                                                                                                                                                   |
-| ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Matrix backbone                 | ✅     | Core Element/Matrix app architecture and routing are present; Blackout modules are integrated as feature-flagged additions.                                                        |
-| CRDT (Yjs + y-indexeddb)        | ✅     | Document manager/provider/bindings exist for governance, delegation, education, and mutual-aid docs.                                                                               |
-| Governance lifecycle + voting   | ✅     | Proposal/vote engines, lifecycle transitions, persistence store, delegated tallying, and lifecycle tests are present.                                                              |
-| Deliberation clustering         | ✅     | Deterministic clustering now maintains incremental centroids for lower runtime overhead while preserving deterministic grouping and coverage, improving large-room scale behavior. |
-| Delegation / liquid democracy   | ✅     | Delegation graph + persistence + delegated vote attribution are implemented and tested.                                                                                            |
-| Education module                | ✅     | Education view supports study-circle creation, curriculum editing, tab navigation, and CRDT persistence helpers.                                                                   |
-| Mutual aid board                | ✅     | Mutual-aid board supports lane transitions, filters, audit trail rendering, and CRDT persistence.                                                                                  |
-| IPFS storage                    | ✅     | IPFS service now includes Matrix room-event/state payload helpers with strict parsing/room checks and dedicated tests for CID UX integration.                                      |
-| Sortition / random jury         | ✅     | Deterministic jury selection with reproducibility proof and tests is implemented.                                                                                                  |
-| Cross-cutting productionization | ✅     | Added cross-module e2e coverage (education + mutual-aid + IPFS references) and module rollout hardening docs/checklists for operations and policy tuning.                          |
+| Area                            | Status   | Owner                     | Evidence summary                                                                                                                                                                   | Remaining work | Next review date |
+| ------------------------------- | -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------------- |
+| Matrix backbone                 | Complete | Platform Architecture     | Core Element/Matrix app architecture and routing are present; Blackout modules are integrated as feature-flagged additions.                                                       | None           | 2026-03-21       |
+| CRDT (Yjs + y-indexeddb)        | Complete | Governance Platform       | Document manager/provider/bindings exist for governance, delegation, education, and mutual-aid docs.                                                                              | None           | 2026-03-21       |
+| Governance lifecycle + voting   | Complete | Governance Domain Owner   | Proposal/vote engines, lifecycle transitions, persistence store, delegated tallying, and lifecycle tests are present.                                                             | None           | 2026-03-21       |
+| Deliberation clustering         | Complete | Governance Science Owner  | Deterministic clustering now maintains incremental centroids for lower runtime overhead while preserving deterministic grouping and coverage, improving large-room scale behavior. | None           | 2026-03-21       |
+| Delegation / liquid democracy   | Complete | Delegation Domain Owner   | Delegation graph + persistence + delegated vote attribution are implemented and tested.                                                                                           | None           | 2026-03-21       |
+| Education module                | Complete | Education Domain Owner    | Education view supports study-circle creation, curriculum editing, tab navigation, and CRDT persistence helpers.                                                                  | None           | 2026-03-21       |
+| Mutual aid board                | Complete | Mutual-aid Domain Owner   | Mutual-aid board supports lane transitions, filters, audit trail rendering, and CRDT persistence.                                                                                 | None           | 2026-03-21       |
+| IPFS storage                    | Complete | Platform Storage Owner    | IPFS service now includes Matrix room-event/state payload helpers with strict parsing/room checks and dedicated tests for CID UX integration.                                     | None           | 2026-03-21       |
+| Sortition / random jury         | Complete | Governance Science Owner  | Deterministic jury selection with reproducibility proof and tests is implemented.                                                                                                 | None           | 2026-03-21       |
+| Cross-cutting productionization | Complete | Release Engineering       | Added cross-module e2e coverage (education + mutual-aid + IPFS references) and module rollout hardening docs/checklists for operations and policy tuning.                         | None           | 2026-03-21       |
 
 ---
 
 ## 1) Governance engine hardening (Loomio-inspired)
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -45,7 +46,7 @@ Status: ✅
 
 ## 2) Deliberation clustering (Pol.is-inspired algorithm layer)
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -63,7 +64,7 @@ Status: ✅
 
 ## 3) Delegation system completion (DemocracyOS-inspired semantics)
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -79,7 +80,7 @@ Status: ✅
 
 ## 4) Education module build-out
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -96,7 +97,7 @@ Status: ✅
 
 ## 5) Mutual aid board build-out (Kanban-style transitions)
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -113,7 +114,7 @@ Status: ✅
 
 ## 6) IPFS service integration
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -126,7 +127,7 @@ Status: ✅
 
 ## 7) Sortition / random jury selection
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -142,7 +143,7 @@ Status: ✅
 
 ## 8) Cross-cutting productionization tasks
 
-Status: ✅
+Status: Complete
 
 ### Evidence
 
@@ -158,7 +159,7 @@ Status: ✅
 
 All four priority items have now been completed and moved into maintenance mode (regression + rollout monitoring).
 
-## Dated status snapshot (2026-02-20)
+## Dated status snapshot (2026-03-14)
 
 - Snapshot result: **100% complete** across tracked reuse strategy areas.
 - Remaining unchecked items: **none**.
@@ -167,12 +168,21 @@ All four priority items have now been completed and moved into maintenance mode 
 
 | Item                                                       | Owner                    | Dependency                                      | Next review date | Approval date |
 | ---------------------------------------------------------- | ------------------------ | ----------------------------------------------- | ---------------- | ------------- |
-| Delegation abuse-pattern tuning for high-churn graphs      | Delegation Domain Owner  | Production abuse telemetry and alert thresholds | 2026-02-27       | 2026-02-20    |
-| Education moderation/access policy options                 | Education Domain Owner   | Product policy requirements from pilot cohort   | 2026-02-27       | 2026-02-20    |
-| Mutual-aid workflow automation expansion                   | Mutual-aid Domain Owner  | Community scale/volume thresholds               | 2026-02-27       | 2026-02-20    |
-| Sortition fairness validation at larger participant scales | Governance Science Owner | Large-room participation datasets               | 2026-02-27       | 2026-02-20    |
+| Delegation abuse-pattern tuning for high-churn graphs      | Delegation Domain Owner  | Production abuse telemetry and alert thresholds | 2026-03-21       | 2026-02-20    |
+| Education moderation/access policy options                 | Education Domain Owner   | Product policy requirements from pilot cohort   | 2026-03-21       | 2026-02-20    |
+| Mutual-aid workflow automation expansion                   | Mutual-aid Domain Owner  | Community scale/volume thresholds               | 2026-03-21       | 2026-02-20    |
+| Sortition fairness validation at larger participant scales | Governance Science Owner | Large-room participation datasets               | 2026-03-21       | 2026-02-20    |
 
 ### Weekly program sync review log
 
 - 2026-02-20: Tracker reviewed in program sync; all core reuse items remain complete, follow-ups retained as approved non-blocking maintenance exceptions.
-- Next scheduled review: 2026-02-27.
+- Next scheduled review: 2026-03-21.
+
+
+## Verification
+
+- Last verified date: 2026-03-14
+- Verified by: Codex (GPT-5.2-Codex)
+- Commands:
+  - `git diff -- docs/blackout-reuse-completion-tracker.md`
+  - `rg "Complete|In progress|Partial|Blocked" docs/blackout-reuse-completion-tracker.md`

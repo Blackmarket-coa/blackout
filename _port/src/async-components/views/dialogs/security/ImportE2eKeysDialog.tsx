@@ -15,6 +15,8 @@ import * as MegolmExportEncryption from "../../../../utils/MegolmExportEncryptio
 import { _t } from "../../../../languageHandler";
 import BaseDialog from "../../../../components/views/dialogs/BaseDialog";
 import Field from "../../../../components/views/elements/Field";
+import GenericToast from "../../../../components/views/toasts/GenericToast";
+import ToastStore from "../../../../stores/ToastStore";
 
 function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
     return new Promise((resolve, reject) => {
@@ -48,6 +50,8 @@ interface IState {
     errStr: string | null;
     passphrase: string;
 }
+
+const IMPORT_E2E_KEYS_TOAST_KEY = "mx_import_e2e_keys_success";
 
 export default class ImportE2eKeysDialog extends React.Component<IProps, IState> {
     private unmounted = false;
@@ -107,7 +111,16 @@ export default class ImportE2eKeysDialog extends React.Component<IProps, IState>
                 return this.props.matrixClient.getCrypto()!.importRoomKeysAsJson(keys);
             })
             .then(() => {
-                // TODO: it would probably be nice to give some feedback about what we've imported here.
+                ToastStore.sharedInstance().addOrReplaceToast({
+                    key: IMPORT_E2E_KEYS_TOAST_KEY,
+                    priority: 20,
+                    component: GenericToast,
+                    props: {
+                        description: _t("settings|key_export_import|import_success_toast"),
+                        primaryLabel: _t("action|ok"),
+                        onPrimaryClick: () => ToastStore.sharedInstance().dismissToast(IMPORT_E2E_KEYS_TOAST_KEY),
+                    },
+                });
                 this.props.onFinished(true);
             })
             .catch((e) => {

@@ -3,15 +3,11 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **116**
+- Open items: **114**
 - Resolved items tracked in this checklist: **0**
-- Total files with tracked markers: **88**
+- Total files with tracked markers: **87**
 
 ## Checklist
-
-### `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx`
-
-- [ ] L110: `// TODO: it would probably be nice to give some feedback about what we've imported here.`
 
 ### `src/autocomplete/UserProvider.tsx`
 
@@ -35,7 +31,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ### `src/components/structures/ScrollPanel.tsx`
 
-- [ ] L649: `// TODO: do a binary search here, as items are sorted by offsetTop`
 - [ ] L934: `// TODO: the classnames on the div and ol could do with being updated to`
 
 ### `src/components/structures/ViewSource.tsx`

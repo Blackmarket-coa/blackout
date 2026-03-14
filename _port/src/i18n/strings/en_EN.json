@@ -2747,6 +2747,7 @@
             "import_description_1": "This process allows you to import encryption keys that you had previously exported from another Matrix client. You will then be able to decrypt any messages that the other client could decrypt.",
             "import_description_2": "The export file will be protected with a passphrase. You should enter the passphrase here, to decrypt the file.",
             "import_title": "Import room keys",
+            "import_success_toast": "Room keys imported successfully",
             "phrase_cannot_be_empty": "Passphrase must not be empty",
             "phrase_must_match": "Passphrases must match",
             "phrase_strong_enough": "Great! This passphrase looks strong enough"

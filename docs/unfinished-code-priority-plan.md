@@ -33,9 +33,11 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 - **Notifier call lookup correctness (uc-001):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
 - **MatrixChat error-state handling continuity (uc-002):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
 - **TimelinePanel event scope guard (uc-003):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
+- **ScrollPanel search optimization (uc-007):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
+- **Import E2E keys feedback UX (uc-009):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
 
 ## Suggested delivery cadence
 
 - **Sprint A (remaining P0):** items 4–5, plus regression tests for encoded-ID navigation and login/register gating.
-- **Sprint B (P1):** items 6–10, with perf checks for scroll/search and keyboard shortcut handling tests.
+- **Sprint B (P1):** remaining items 6, 8, and 10, with keyboard shortcut handling tests and room-UX controls.
 - **Sprint C (P2):** maintenance-window cleanups and deferred naming/documentation debt.
