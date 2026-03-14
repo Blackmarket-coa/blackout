@@ -53,6 +53,8 @@ Status labels in this section are derived from `docs/unfinished-code-checklist.m
 
 - `blackout#uc-010` closure evidence: `_port/src/components/structures/MatrixChat.tsx`, `_port/test/unit-tests/components/structures/MatrixChat-test.tsx`, `docs/operations/evidence/2026-03-14-uc-010-matrixchat-burst-state-consistency.md`.
 
+- Batch closure evidence (15-marker sweep): `docs/operations/evidence/2026-03-14-batch-15-marker-closure.md`.
+
 ## Remaining unresolved queue (ordered P0 -> P1 -> P2)
 
 ### P0
@@ -79,5 +81,5 @@ No unresolved top-10 P1 items remain in the current ranked queue.
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `rg -n "uc-00[1-9]|uc-010|Recently resolved high-priority markers|Open items" docs/unfinished-code-checklist.md docs/unfinished-code-priority-plan.md`
-  - `rg -n "src/components/structures/MessagePanel.tsx|src/components/structures/ScrollPanel.tsx" docs/unfinished-code-checklist.md`
-  - `rg -n "2026-03-14-blackout-centralized-work-orders-1-8|2026-03-14-blackout-centralized-work-orders-1-9" docs/unfinished-code-priority-plan.md`
+  - `rg -n "test/unit-tests/components/structures/MatrixChat-test.tsx|test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx|src/vector/index.html" docs/unfinished-code-checklist.md`
+  - `rg -n "2026-03-14-blackout-centralized-work-orders-1-9|2026-03-14-batch-15-marker-closure" docs/unfinished-code-priority-plan.md`

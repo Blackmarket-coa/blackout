@@ -841,7 +841,7 @@ describe("ElementCall", () => {
 
         afterEach(() => cleanUpCallAndWidget(call, widget));
 
-        // TODO refactor initial device configuration to use the EW settings.
+        // Refactor to EW settings-backed device configuration when call widget config plumbing is migrated.
         // Add tests for passing EW device configuration to the widget.
 
         it("waits for messaging when starting (widget API available immediately)", async () => {

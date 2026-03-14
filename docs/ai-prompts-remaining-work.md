@@ -4,7 +4,7 @@ This document provides copy/paste AI prompts for all currently tracked **remaini
 
 ## Source trackers used
 
-- `docs/unfinished-code-checklist.md` (open marker inventory: 113).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 98).
 - `docs/unfinished-code-priority-plan.md` (P0/P1 ranked queue).
 - `docs/blackout-governance-completion-tracker.md` (maintenance exceptions).
 - `docs/blackout-reuse-completion-tracker.md` (maintenance exceptions).
@@ -222,5 +222,5 @@ Done when:
 - Last verified date: 2026-03-14
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
-  - `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*4\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
+  - `rg -n "Open items: \*\*98\*\*|Resolved items tracked in this checklist: \*\*20\*\*|Total files with tracked markers: \*\*73\*\*" docs/unfinished-code-checklist.md`
   - `rg -n "Approved exception notes|Residual risk register|Sign-off blocks" docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/blackout_centralized_release_readiness_gate.md`

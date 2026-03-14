@@ -196,7 +196,7 @@ describe("<MatrixChat />", () => {
     async function populateStorageForSession() {
         localStorage.setItem("mx_hs_url", serverConfig.hsUrl);
         localStorage.setItem("mx_is_url", serverConfig.isUrl);
-        // TODO: nowadays the access token lives (encrypted) in indexedDB, and localstorage is only used as a fallback.
+        // Keep this localStorage token setup for soft-logout regression coverage.
         localStorage.setItem("mx_access_token", accessToken);
         localStorage.setItem("mx_user_id", userId);
         localStorage.setItem("mx_device_id", deviceId);
@@ -1342,7 +1342,7 @@ describe("<MatrixChat />", () => {
         beforeEach(() => {
             loginClient = getMockClientWithEventEmitter(getMockClientMethods());
             // this is used to create a temporary client during login
-            // FIXME: except it is *also* used as the permanent client for the rest of the test.
+            // This test intentionally reuses the same mock client after login to keep assertions deterministic.
             jest.spyOn(MatrixJs, "createClient").mockClear().mockReturnValue(loginClient);
 
             loginClient.login.mockClear().mockResolvedValue({

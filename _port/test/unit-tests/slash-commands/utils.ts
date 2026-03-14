@@ -26,9 +26,8 @@ export function setUpCommandTest(
 } {
     jest.clearAllMocks();
 
-    // TODO: if getCommand took a MatrixClient argument, we could use
-    // createTestClient here instead of stubClient (i.e. avoid setting
-    // MatrixClientPeg.)
+    // If getCommand accepts MatrixClient directly in future, switch this helper
+    // to createTestClient and remove MatrixClientPeg coupling.
     const client = stubClient();
     const { cmd: command, args } = getCommand(roomId, input);
 

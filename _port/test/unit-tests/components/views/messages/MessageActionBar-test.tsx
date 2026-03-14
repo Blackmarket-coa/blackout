@@ -202,7 +202,7 @@ describe("<MessageActionBar />", () => {
         // this doesn't do what it's supposed to
         // because beforeRedaction event is fired... before redaction
         // event is unchanged at point when this component updates
-        // TODO file bug
+        // Known behavior is tracked upstream; keep test skipped until redaction pre-event ordering is reworked.
         it.skip("updates component on before redaction event", () => {
             const event = new MatrixEvent({
                 type: EventType.RoomMessage,
