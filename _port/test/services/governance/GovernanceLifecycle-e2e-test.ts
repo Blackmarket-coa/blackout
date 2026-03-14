@@ -46,4 +46,59 @@ describe("governance + delegation + voting lifecycle", () => {
         expect(tally.totalVotes).toBe(2);
         expect(proposal.auditTimeline.length).toBeGreaterThan(1);
     });
+
+    it("keeps governance actions deterministic under bounded policy tuning", () => {
+        const proposalEngine = new ProposalEngine();
+        const votingEngine = new VotingEngine({
+            defaults: { quorum: 2, threshold: { type: "supermajority", ratio: 0.66 } },
+            bounds: {
+                quorum: { min: 1, max: 5 },
+                supermajorityRatio: { min: 0.6, max: 0.8 },
+            },
+        });
+        const delegatedVotingEngine = new DelegatedVotingEngine();
+        const graph = new DelegationGraph();
+
+        const ctx = { actorUserId: "@alice:example.org", isRoomMember: true, powerLevel: 100 };
+        const proposal = proposalEngine.transition(
+            proposalEngine.create(
+                {
+                    id: "p-bounded",
+                    roomId: "!room:example.org",
+                    title: "Bounded policy",
+                    body: "proposal body",
+                    authorUserId: "@alice:example.org",
+                },
+                ctx,
+            ),
+            "discuss",
+            ctx,
+        );
+
+        let vote = votingEngine.open(proposal.id, proposal.roomId);
+        vote = votingEngine.cast(vote, "@alice:example.org", "approve");
+        vote = votingEngine.cast(vote, "@bob:example.org", "approve");
+
+        graph.setDelegation("budget", "@carol:example.org", "@alice:example.org");
+
+        const directTally = votingEngine.tally(vote, {
+            quorum: 0,
+            threshold: { type: "supermajority", ratio: 0.2 },
+        });
+        const delegatedTally = delegatedVotingEngine.tally(
+            vote,
+            "budget",
+            ["@alice:example.org", "@bob:example.org", "@carol:example.org"],
+            graph,
+            {
+                quorum: 2,
+                threshold: { type: "supermajority", ratio: 0.6 },
+            },
+        );
+
+        expect(directTally.policy.quorum).toBe(1);
+        expect(directTally.policy.threshold.ratio).toBe(0.6);
+        expect(delegatedTally.totalVotes).toBe(3);
+        expect(delegatedTally.passed).toBe(true);
+    });
 });
