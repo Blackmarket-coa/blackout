@@ -78,5 +78,57 @@ describe("KeyboardShortcutUtils", () => {
             mockPlatformPeg({ overrideBrowserShortcuts: jest.fn().mockReturnValue(true) });
             expect((await getUtils()).getKeyboardShortcuts()).toEqual({ Keybind1: {}, Keybind2: {} });
         });
+
+        it("filters malformed shortcut definitions and keeps valid shortcuts", async () => {
+            mockKeyboardShortcuts({
+                KEYBOARD_SHORTCUTS: {
+                    Keybind1: { default: { key: "A" } },
+                    Keybind2: { default: {} },
+                    Keybind3: { default: { key: "" } },
+                },
+                MAC_ONLY_SHORTCUTS: [],
+                DESKTOP_SHORTCUTS: [],
+            });
+            mockPlatformPeg({ overrideBrowserShortcuts: jest.fn().mockReturnValue(false) });
+            expect((await getUtils()).getKeyboardShortcuts()).toEqual({ Keybind1: { default: { key: "A" } } });
+        });
+
+        it("falls back safely when platform shortcut overrides cannot be queried", async () => {
+            mockKeyboardShortcuts({
+                KEYBOARD_SHORTCUTS: {
+                    Keybind1: { default: { key: "A" } },
+                    Keybind2: { default: { key: "B" } },
+                },
+                MAC_ONLY_SHORTCUTS: [],
+                DESKTOP_SHORTCUTS: ["Keybind2"],
+            });
+            mockPlatformPeg({ overrideBrowserShortcuts: jest.fn().mockImplementation(() => {
+                throw new Error("unsupported context");
+            }) });
+            expect((await getUtils()).getKeyboardShortcuts()).toEqual({ Keybind1: { default: { key: "A" } } });
+        });
+
+        it("keeps manager shortcuts on collisions with UI-only shortcuts", async () => {
+            mockKeyboardShortcuts({
+                KeyBindingAction: {
+                    SendMessage: "SendMessage",
+                },
+                KEYBOARD_SHORTCUTS: {
+                    SendMessage: {
+                        default: { key: "M" },
+                        displayName: "manager",
+                    },
+                },
+                MAC_ONLY_SHORTCUTS: [],
+                DESKTOP_SHORTCUTS: [],
+            });
+            mockPlatformPeg({ overrideBrowserShortcuts: jest.fn().mockReturnValue(false) });
+
+            const shortcuts = (await getUtils()).getKeyboardShortcutsForUI();
+            expect(shortcuts.SendMessage).toEqual({
+                default: { key: "M" },
+                displayName: "manager",
+            });
+        });
     });
 });

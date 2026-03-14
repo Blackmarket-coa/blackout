@@ -56,21 +56,21 @@ Done when:
 - Tracker counts remain synchronized.
 ```
 
-## Prompt 3 — uc-008 (keyboard shortcut handling gaps)
+## Prompt 3 — uc-008 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-008` from `src/accessibility/KeyboardShortcuts.ts` marker set.
+Validate completed `blackout#uc-008` keyboard-shortcut hardening and maintain follow-up coverage.
 
 Tasks:
-- Close shortcut handling gaps called out in the tracked TODO/FIXME markers.
-- Add robust fallback behavior for unsupported contexts.
-- Add tests for expected shortcuts, collisions, and accessibility edge-cases.
-- Update docs/trackers/evidence with exact commands run.
+- Re-run regression tests for malformed shortcuts, unsupported platform override contexts, and collision handling.
+- Validate deterministic UI/runtime parity when shortcut definitions collide.
+- Add any additional accessibility edge-case tests found in triage.
+- Keep docs/trackers/evidence synchronized with latest command outputs.
 
 Done when:
-- Shortcut gap markers are closed.
-- Accessibility and behavior tests pass.
-- Priority plan and checklist counts are updated.
+- uc-008 closure remains stable under regression coverage.
+- Collision and unsupported-context fallback behavior remains deterministic.
+- Tracker metadata remains synchronized.
 ```
 
 ## Prompt 4 — uc-010 (MatrixChat burst-action state consistency)
@@ -208,17 +208,18 @@ Done when:
 ## Recommended execution order
 
 1. Prompt 1 (reconcile plan/checklist truth).
-2. Prompts 3, 4, 5 (unfinished marker burn-down).
+2. Prompts 4, 5 (unfinished marker burn-down).
 3. Prompt 2 (uc-006 regression hardening, optional UX follow-up).
-4. Prompts 6 and 7 (governance/reuse maintenance exceptions).
-5. Prompt 8 (authoritative CI replay).
-6. Prompt 9 (final sign-offs).
-7. Prompt 10 (prevent recurrence).
+4. Prompt 3 (uc-008 regression hardening).
+5. Prompts 6 and 7 (governance/reuse maintenance exceptions).
+6. Prompt 8 (authoritative CI replay).
+7. Prompt 9 (final sign-offs).
+8. Prompt 10 (prevent recurrence).
 
 ## Verification
 
 - Last verified date: 2026-03-14
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
-  - `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*3\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
+  - `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*4\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
   - `rg -n "Approved exception notes|Residual risk register|Sign-off blocks" docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/blackout_centralized_release_readiness_gate.md`
