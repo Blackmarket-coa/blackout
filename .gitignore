@@ -4,6 +4,10 @@
 /key.pem
 /lib
 /node_modules
+**/node_modules
+**/.yarn
+**/.yarn/cache
+**/.pnp.*
 /webapp
 /.npmrc
 /*.log
