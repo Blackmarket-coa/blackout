@@ -115,6 +115,16 @@ These items are not blockers for distributed self-healing readiness, but they ar
     - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
     - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
 
+
+## Normalized tracker schema coverage (Work Order 1)
+
+| Tracker | Status | Owner | Evidence | Remaining work | Next review date |
+| --- | --- | --- | --- | --- | --- |
+| `docs/project_completion_tracker.md` | Complete | Release Engineering | This tracker + `docs/operations/tracker_evidence_matrix.md` | None | 2026-03-21 |
+| `docs/blackout-governance-completion-tracker.md` | Complete | Governance Program Lead | Phase-completion table + audit artifact link | None | 2026-03-21 |
+| `docs/blackout-reuse-completion-tracker.md` | Complete | Platform Architecture | Reuse completion matrix + verification block | None | 2026-03-21 |
+| `docs/rollout-readiness-status.md` | Complete | Release Engineering | Work-order status grid + baseline command output | None | 2026-03-21 |
+
 ## Exit criterion
 
 A deployment is considered **distributed self-healing ready** when:
