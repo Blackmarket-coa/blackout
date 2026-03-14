@@ -27,6 +27,20 @@ interface NormalizedVotingPolicy {
     };
 }
 
+export interface VotingPolicyTuning {
+    defaults?: VotingPolicy;
+    bounds?: {
+        quorum?: {
+            min?: number;
+            max?: number;
+        };
+        supermajorityRatio?: {
+            min?: number;
+            max?: number;
+        };
+    };
+}
+
 export interface VotingPolicy {
     quorum?: number;
     threshold?: {
@@ -36,32 +50,75 @@ export interface VotingPolicy {
 }
 
 const DEFAULT_VOTING_POLICY: NormalizedVotingPolicy = {
-    quorum: 0,
+    quorum: 1,
     threshold: {
         type: "simple_majority",
         ratio: 0.5,
     },
 };
 
-function normalizePolicy(policy?: VotingPolicy): NormalizedVotingPolicy {
-    const quorum = Math.max(0, Math.floor(policy?.quorum ?? DEFAULT_VOTING_POLICY.quorum));
-    const thresholdType = policy?.threshold?.type ?? DEFAULT_VOTING_POLICY.threshold.type;
+const DEFAULT_POLICY_TUNING = {
+    defaults: {
+        quorum: DEFAULT_VOTING_POLICY.quorum,
+        threshold: {
+            type: DEFAULT_VOTING_POLICY.threshold.type,
+            ratio: DEFAULT_VOTING_POLICY.threshold.ratio,
+        },
+    },
+    bounds: {
+        quorum: {
+            min: 1,
+            max: 10_000,
+        },
+        supermajorityRatio: {
+            min: 0.55,
+            max: 0.9,
+        },
+    },
+};
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
+function normalizePolicy(policy: VotingPolicy | undefined, tuning: VotingPolicyTuning): NormalizedVotingPolicy {
+    const quorumMin = tuning.bounds?.quorum?.min ?? DEFAULT_POLICY_TUNING.bounds.quorum.min;
+    const quorumMax = tuning.bounds?.quorum?.max ?? DEFAULT_POLICY_TUNING.bounds.quorum.max;
+    const defaultQuorum = tuning.defaults?.quorum ?? DEFAULT_POLICY_TUNING.defaults.quorum;
+
+    const quorumRaw = policy?.quorum ?? defaultQuorum;
+    const quorum = clamp(Math.floor(Number.isFinite(quorumRaw) ? quorumRaw : defaultQuorum), quorumMin, quorumMax);
+
+    const thresholdType = policy?.threshold?.type ?? tuning.defaults?.threshold?.type ?? DEFAULT_VOTING_POLICY.threshold.type;
     const ratioRaw = policy?.threshold?.ratio;
-    const ratio = typeof ratioRaw === "number" ? ratioRaw : DEFAULT_VOTING_POLICY.threshold.ratio;
+    const ratio =
+        typeof ratioRaw === "number"
+            ? ratioRaw
+            : tuning.defaults?.threshold?.ratio ?? DEFAULT_POLICY_TUNING.defaults.threshold.ratio;
+
+    const ratioMin = tuning.bounds?.supermajorityRatio?.min ?? DEFAULT_POLICY_TUNING.bounds.supermajorityRatio.min;
+    const ratioMax = tuning.bounds?.supermajorityRatio?.max ?? DEFAULT_POLICY_TUNING.bounds.supermajorityRatio.max;
+    const normalizedSupermajorityRatio =
+        typeof ratio === "number" && Number.isFinite(ratio)
+            ? clamp(ratio, ratioMin, ratioMax)
+            : DEFAULT_POLICY_TUNING.defaults.threshold.ratio;
 
     return {
         quorum,
         threshold: {
             type: thresholdType,
-            ratio:
-                typeof ratio === "number" && Number.isFinite(ratio)
-                    ? Math.min(Math.max(ratio, 0), 1)
-                    : DEFAULT_VOTING_POLICY.threshold.ratio,
+            ratio: thresholdType === "supermajority" ? normalizedSupermajorityRatio : 0.5,
         },
     };
 }
 
 export class VotingEngine {
+    public constructor(private readonly tuning: VotingPolicyTuning = DEFAULT_POLICY_TUNING) {}
+
+    public getPolicyTuning(): VotingPolicyTuning {
+        return this.tuning;
+    }
+
     public open(proposalId: string, roomId: string, now: number = Date.now()): VoteDocument {
         return {
             schemaVersion: 1,
@@ -98,7 +155,7 @@ export class VotingEngine {
     }
 
     public tally(vote: VoteDocument, policy?: VotingPolicy): VoteTally {
-        const effectivePolicy = normalizePolicy(policy);
+        const effectivePolicy = normalizePolicy(policy, this.tuning);
         const summary: VoteTally = {
             approve: 0,
             reject: 0,

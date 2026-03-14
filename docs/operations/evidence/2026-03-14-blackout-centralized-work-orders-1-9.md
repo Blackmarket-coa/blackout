@@ -14,10 +14,11 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - `docs/blackout_centralized_build_work_order.md`
 - `docs/blackout_centralized_release_readiness_gate.md`
 - `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
+- `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
 
 ## Tests/commands run
 - `rg "Complete|In progress|Partial|Blocked" docs/project_completion_tracker.md docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/rollout-readiness-status.md docs/blackout_centralized_build_work_order.md`
-- `rg -n "Open items: \*\*114\*\*|Resolved items tracked in this checklist: \*\*2\*\*|Total files with tracked markers: \*\*87\*\*" docs/unfinished-code-checklist.md`
+- `rg -n "Open items: \*\*98\*\*|Resolved items tracked in this checklist: \*\*20\*\*|Total files with tracked markers: \*\*73\*\*" docs/unfinished-code-checklist.md`
 - `rg -n "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 - `git diff -- docs/project_completion_tracker.md docs/blackout_centralized_build_work_order.md docs/blackout_centralized_release_readiness_gate.md docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 
@@ -30,8 +31,8 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - WO-9 final gate artifact: `docs/blackout_centralized_release_readiness_gate.md`
 
 ## Risks/known follow-ups
-- Open TODO/FIXME marker backlog remains material (114 open) and continues under strict P0->P1 burn-down governance in `docs/unfinished-code-priority-plan.md`.
-- Environment-authoritative CI replay is still required for centralized-build release promotion even with repository-local evidence alignment.
+- Open TODO/FIXME marker backlog remains material (98 open) and continues under strict P0->P1 burn-down governance in `docs/unfinished-code-priority-plan.md`.
+- Hosted canonical CI artifact publication remains pending; local replay now provides bounded drift evidence and traceable command-level artifact IDs.
 
 ## Next review date
 2026-03-21
@@ -43,7 +44,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - Refreshed verification metadata references and command list for repeatability.
 
 ### WO-8 High-priority unfinished markers
-- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 114`, `Resolved items: 2`, `Files with markers: 87`) and retained P0->P1 execution ordering in the priority plan.
+- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 98`, `Resolved items: 20`, `Files with markers: 73`) and retained P0->P1 execution ordering in the priority plan.
 
 ### WO-2 Image stego integration path
 - Confirmed stego integration path evidence in release gate artifact and implementation references under `_port/src/steganography/*` with feature/tamper-handling validation references.
@@ -65,3 +66,8 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 
 ### WO-9 Release-readiness synthesis
 - Updated the centralized release gate artifact so it can be used directly as go/no-go documentation with explicit residual-risk ownership and next review dates.
+
+
+### Prompt 8 CI replay closure update
+- Added `docs/operations/evidence/2026-03-14-centralized-ci-replay.md` capturing canonical lint/test/build/security replay commands and artifact identifiers.
+- Updated release gate to link replay evidence, include local-vs-CI deltas, and bound remaining parity risk with owner/date.

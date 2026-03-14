@@ -55,8 +55,14 @@ This tracker maps the implementation status in this repository to the phases def
 
 | Item                                                 | Exception type                                  | Owner                   | Dependency                                       | Next review date | Approval date |
 | ---------------------------------------------------- | ----------------------------------------------- | ----------------------- | ------------------------------------------------ | ---------------- | ------------- |
-| Policy tuning follow-ups (quorum/threshold defaults) | Post-completion maintenance item (non-blocking) | Governance Domain Owner | Pilot room policy telemetry and charter updates  | 2026-03-21       | 2026-02-20    |
-| New governance-action integration test expansion     | Post-completion maintenance item (non-blocking) | QA/Automation Owner     | New governance action scope entering sprint plan | 2026-03-21       | 2026-02-20    |
+| Policy tuning follow-ups (quorum/threshold defaults) | Complete (closed maintenance item)              | Governance Domain Owner | None                                             | 2026-03-28       | 2026-03-14    |
+| New governance-action integration test expansion     | Complete (closed maintenance item)              | QA/Automation Owner     | None                                             | 2026-03-28       | 2026-03-14    |
+
+### Exception closure evidence (2026-03-14)
+
+- Implemented operator-safe quorum/supermajority policy tuning controls and defaults in governance voting services.
+- Expanded governance integration tests to cover bounded-policy behavior and additional governance-action paths.
+- Evidence: `docs/operations/evidence/2026-03-14-governance-maintenance-exceptions-closure.md`.
 
 
 ## Verification

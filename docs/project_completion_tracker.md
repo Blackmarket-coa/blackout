@@ -14,6 +14,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
 > Evidence matrix: `docs/operations/tracker_evidence_matrix.md` (validated by `scripts/operations/validate_tracker_evidence.sh`).
+> Monthly docs integrity guardrail: `node _port/scripts/operations/docs_integrity_check.cjs`.
 
 Status legend:
 
@@ -80,7 +81,7 @@ Status legend:
 
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
-- [x] **Unfinished code marker reduction (open marker inventory: 114)**
+- [x] **Unfinished code marker reduction (open marker inventory: 98)**
     - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
     - **Action steps:**
         1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.

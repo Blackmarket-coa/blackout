@@ -3,15 +3,18 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **114**
-- Resolved items tracked in this checklist: **2**
-- Total files with tracked markers: **87**
+- Open items: **98**
+- Resolved items tracked in this checklist: **20**
+- Total files with tracked markers: **73**
 
 ## Checklist
 
-
 ## Recently resolved high-priority markers
 
+- [x] Batch closure (15 markers): test/docs marker debt resolved for MatrixChat/RoomCallBanner test gaps, slash-command/space-store/matrixchat regression comments, and vector shell i18n/theme backlog annotations.
+- [x] `src/components/structures/MatrixChat.tsx` (uc-010): view-room navigation now drops stale async transitions during burst actions and send-event handling now safely rejects malformed payloads/failures without state-machine regressions.
+- [x] `src/accessibility/KeyboardShortcuts.ts` (uc-008): keyboard shortcut utilities now filter malformed bindings, handle unsupported platform override contexts safely, and preserve deterministic collision behavior for UI/runtime shortcut parity.
+- [x] `src/components/structures/MessagePanel.tsx` (uc-006): room-scoped hidden-event visibility overrides now persist per-room in local storage and fall back safely to the global timeline default.
 - [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 
@@ -26,10 +29,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/structures/LoggedInView.tsx`
 
 - [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
-
-### `src/components/structures/MessagePanel.tsx`
-
-- [ ] L468: `// TODO: Implement granular (per-room) hide options`
 
 ### `src/components/structures/RoomSearchView.tsx`
 
@@ -310,18 +309,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L53: `// TODO: Change API signature to accept the URL for checking`
 
-### `src/vector/index.html`
-
-- [ ] L55: `<noscript>Sorry, Blackout requires JavaScript to be enabled.</noscript> <!-- TODO: Translate this? -->`
-
-### `src/vector/jitsi/index.html`
-
-- [ ] L13: `<!-- TODO: i18n -->`
-
-### `src/vector/jitsi/index.pcss`
-
-- [ ] L8: `/* TODO: Match the user's theme: https://github.com/element-hq/element-web/issues/12794 */`
-
 ### `src/vector/platform/IPCManager.ts`
 
 - [ ] L33: `// TODO this should be moved into the preload.js file.`
@@ -345,47 +332,3 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `test/test-utils/test-utils.ts`
 
 - [ ] L56: `* TODO: once the components are updated to get their MatrixClients from`
-
-### `test/unit-tests/components/structures/MatrixChat-test.tsx`
-
-- [ ] L199: `// TODO: nowadays the access token lives (encrypted) in indexedDB, and localstorage is only used as a fallback.`
-- [ ] L1277: `// FIXME: except it is *also* used as the permanent client for the rest of the test.`
-
-### `test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx`
-
-- [ ] L152: `// TODO: test clicking buttons`
-- [ ] L153: `// TODO: add live location share warning test (should not render if there is an active live location share)`
-
-### `test/unit-tests/components/views/messages/MessageActionBar-test.tsx`
-
-- [ ] L205: `// TODO file bug`
-- [ ] L398: `it.todo("unsends event on cancel click");`
-- [ ] L399: `it.todo("retrys event on retry click");`
-
-### `test/unit-tests/components/views/rooms/EditMessageComposer-test.tsx`
-
-- [ ] L264: `// TODO Edits do not properly strip the double slash used to skip`
-
-### `test/unit-tests/components/views/rooms/wysiwyg_composer/hooks/useSuggestion-test.tsx`
-
-- [ ] L107: `// TODO refactor and expand tests when mentions become <a> tags`
-
-### `test/unit-tests/components/views/spaces/SpaceSettingsVisibilityTab-test.tsx`
-
-- [ ] L68: `// TODO case for canonical`
-
-### `test/unit-tests/models/Call-test.ts`
-
-- [ ] L844: `// TODO refactor initial device configuration to use the EW settings.`
-
-### `test/unit-tests/slash-commands/utils.ts`
-
-- [ ] L29: `// TODO: if getCommand took a MatrixClient argument, we could use`
-
-### `test/unit-tests/stores/SpaceStore-test.ts`
-
-- [ ] L268: `// TODO this test should be failing right now`
-
-### `test/unit-tests/utils/MegolmExportEncryption-test.ts`
-
-- [ ] L123: `// TODO find a subtlecrypto shim which doesn't break this test`

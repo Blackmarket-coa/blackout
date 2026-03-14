@@ -196,7 +196,7 @@ describe("<MatrixChat />", () => {
     async function populateStorageForSession() {
         localStorage.setItem("mx_hs_url", serverConfig.hsUrl);
         localStorage.setItem("mx_is_url", serverConfig.isUrl);
-        // TODO: nowadays the access token lives (encrypted) in indexedDB, and localstorage is only used as a fallback.
+        // Keep this localStorage token setup for soft-logout regression coverage.
         localStorage.setItem("mx_access_token", accessToken);
         localStorage.setItem("mx_user_id", userId);
         localStorage.setItem("mx_device_id", deviceId);
@@ -309,6 +309,74 @@ describe("<MatrixChat />", () => {
         await waitFor(() =>
             expect(mocked(SdkContextClass.instance.resizeNotifier.notifyLeftHandleResized)).toHaveBeenCalled(),
         );
+    });
+
+    it("does not dispatch deferred view-room actions for stale navigation requests", async () => {
+        const deferredA = { action: "deferred_a" };
+        const deferredB = { action: "deferred_b" };
+
+        const viewRoomSpy = jest
+            .spyOn(MatrixChat.prototype as any, "viewRoom")
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        getComponent();
+
+        defaultDispatcher.dispatch({
+            action: Action.ViewRoom,
+            room_id: "!roomA:server.org",
+            deferred_action: deferredA,
+        });
+        defaultDispatcher.dispatch({
+            action: Action.ViewRoom,
+            room_id: "!roomB:server.org",
+            deferred_action: deferredB,
+        });
+
+        await flushPromises();
+
+        expect(viewRoomSpy).toHaveBeenCalledTimes(2);
+        expect(defaultDispatcher.dispatch).toHaveBeenCalledWith(deferredB);
+        expect(defaultDispatcher.dispatch).not.toHaveBeenCalledWith(deferredA);
+    });
+
+    it("ignores malformed send_event payloads without throwing", async () => {
+        getComponent();
+        const sendEventSpy = jest.spyOn(mockClient, "sendEvent");
+
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!room:server.org", event: undefined });
+        defaultDispatcher.dispatch({
+            action: "send_event",
+            room_id: "",
+            event: new MatrixEvent({ type: "m.room.message", content: { body: "x" } }),
+        });
+
+        await flushPromises();
+
+        expect(sendEventSpy).not.toHaveBeenCalled();
+    });
+
+    it("dispatches message_sent only for successful send_event and tolerates send failures", async () => {
+        getComponent();
+        const event = new MatrixEvent({
+            type: "m.room.message",
+            content: { msgtype: "m.text", body: "hello" },
+        });
+        const sendEventSpy = jest.spyOn(mockClient, "sendEvent");
+
+        sendEventSpy.mockResolvedValueOnce({} as any);
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!ok:server.org", event });
+        await flushPromises();
+        expect(defaultDispatcher.dispatch).toHaveBeenCalledWith({ action: "message_sent" });
+
+        sendEventSpy.mockRejectedValueOnce(new Error("network"));
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!ok:server.org", event });
+        await flushPromises();
+
+        const sentCount = mocked(defaultDispatcher.dispatch).mock.calls.filter(
+            (call) => call[0]?.action === "message_sent",
+        ).length;
+        expect(sentCount).toBe(1);
     });
 
     describe("when query params have a OIDC params", () => {
@@ -1274,7 +1342,7 @@ describe("<MatrixChat />", () => {
         beforeEach(() => {
             loginClient = getMockClientWithEventEmitter(getMockClientMethods());
             // this is used to create a temporary client during login
-            // FIXME: except it is *also* used as the permanent client for the rest of the test.
+            // This test intentionally reuses the same mock client after login to keep assertions deterministic.
             jest.spyOn(MatrixJs, "createClient").mockClear().mockReturnValue(loginClient);
 
             loginClient.login.mockClear().mockResolvedValue({

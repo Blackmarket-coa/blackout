@@ -52,4 +52,43 @@ describe("VotingEngine", () => {
         expect(supermajority.quorumMet).toBe(true);
         expect(supermajority.passed).toBe(true);
     });
+
+    it("applies operator-safe policy bounds by default", () => {
+        let vote = engine.open("p1", "!room:example.org", 100);
+        vote = engine.cast(vote, "@alice:example.org", "approve");
+        vote = engine.cast(vote, "@bob:example.org", "reject");
+        vote = engine.cast(vote, "@carol:example.org", "approve");
+
+        const bounded = engine.tally(vote, {
+            quorum: -5,
+            threshold: { type: "supermajority", ratio: 0.2 },
+        });
+
+        expect(bounded.policy.quorum).toBe(1);
+        expect(bounded.policy.threshold.ratio).toBe(0.55);
+    });
+
+    it("supports operator tuning overrides for quorum and supermajority ratio", () => {
+        const tunedEngine = new VotingEngine({
+            defaults: { quorum: 2, threshold: { type: "supermajority", ratio: 0.66 } },
+            bounds: {
+                quorum: { min: 2, max: 4 },
+                supermajorityRatio: { min: 0.6, max: 0.75 },
+            },
+        });
+
+        let vote = tunedEngine.open("p2", "!room:example.org", 100);
+        vote = tunedEngine.cast(vote, "@alice:example.org", "approve");
+        vote = tunedEngine.cast(vote, "@bob:example.org", "approve");
+
+        const tally = tunedEngine.tally(vote, {
+            quorum: 100,
+            threshold: { type: "supermajority", ratio: 0.99 },
+        });
+
+        expect(tunedEngine.getPolicyTuning().bounds?.quorum?.max).toBe(4);
+        expect(tally.policy.quorum).toBe(4);
+        expect(tally.policy.threshold.ratio).toBe(0.75);
+        expect(tally.quorumMet).toBe(false);
+    });
 });

@@ -101,6 +101,7 @@ describe("MessagePanel", function () {
 
     beforeEach(function () {
         jest.clearAllMocks();
+        window.localStorage.clear();
         // HACK: We assume all settings want to be disabled
         jest.spyOn(SettingsStore, "getValue").mockImplementation((arg) => {
             return arg === "showDisplaynameChanges";
@@ -832,6 +833,58 @@ describe("MessagePanel", function () {
         expect(tiles.length).toEqual(2);
         expect(within(tiles[0] as HTMLElement).queryByRole("status")).not.toBeInTheDocument();
         expect(within(tiles[1] as HTMLElement).queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("persists per-room hidden event visibility preferences without affecting other rooms", () => {
+        const roomA = new Room("!roomA:server_name", client, userId);
+        const roomB = new Room("!roomB:server_name", client, userId);
+        const hiddenEvent = TestUtilsMatrix.mkEvent({
+            event: true,
+            type: "m.reaction",
+            room: roomA.roomId,
+            user: "@user:id",
+            content: {},
+        });
+
+        const roomContextA = { ...defaultRoomContext, room: roomA, roomId: roomA.roomId, showHiddenEvents: false };
+        const roomContextB = { ...defaultRoomContext, room: roomB, roomId: roomB.roomId, showHiddenEvents: false };
+
+        const panelRefA = React.createRef<MessagePanel>();
+        const panelRefANext = React.createRef<MessagePanel>();
+        const panelRefB = React.createRef<MessagePanel>();
+
+        const { unmount } = render(
+            <ScopedRoomContextProvider {...roomContextA}>
+                <MessagePanel {...defaultProps} room={roomA} ref={panelRefA} />
+            </ScopedRoomContextProvider>,
+            clientAndSDKContextRenderOptions(client, sdkContext),
+        );
+
+        expect(panelRefA.current?.showHiddenEvents).toBe(false);
+        expect(panelRefA.current?.shouldShowEvent(hiddenEvent)).toBe(false);
+
+        panelRefA.current?.setShowHiddenEventsForRoom(true);
+
+        unmount();
+
+        render(
+            <ScopedRoomContextProvider {...roomContextA}>
+                <MessagePanel {...defaultProps} room={roomA} ref={panelRefANext} />
+            </ScopedRoomContextProvider>,
+            clientAndSDKContextRenderOptions(client, sdkContext),
+        );
+
+        expect(panelRefANext.current?.showHiddenEvents).toBe(true);
+        expect(panelRefANext.current?.shouldShowEvent(hiddenEvent)).toBe(true);
+
+        render(
+            <ScopedRoomContextProvider {...roomContextB}>
+                <MessagePanel {...defaultProps} room={roomB} ref={panelRefB} />
+            </ScopedRoomContextProvider>,
+            clientAndSDKContextRenderOptions(client, sdkContext),
+        );
+
+        expect(panelRefB.current?.showHiddenEvents).toBe(false);
     });
 });
 

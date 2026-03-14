@@ -21,6 +21,18 @@ import {
     MAC_ONLY_SHORTCUTS,
 } from "./KeyboardShortcuts";
 
+const hasValidDefaultKey = (shortcut: KeyboardShortcutSetting | undefined): shortcut is KeyboardShortcutSetting => {
+    return typeof shortcut?.default?.key === "string" && shortcut.default.key.length > 0;
+};
+
+const shouldOverrideBrowserShortcuts = (): boolean => {
+    try {
+        return PlatformPeg.get()?.overrideBrowserShortcuts?.() ?? false;
+    } catch {
+        return false;
+    }
+};
+
 /**
  * This function gets the keyboard shortcuts that should be presented in the UI
  * but they shouldn't be consumed by KeyBindingDefaults. That means that these
@@ -65,7 +77,7 @@ const getUIOnlyShortcuts = (): IKeyboardShortcuts => {
         },
     };
 
-    if (PlatformPeg.get()?.overrideBrowserShortcuts()) {
+    if (shouldOverrideBrowserShortcuts()) {
         // XXX: This keyboard shortcut isn't manually added to
         // KeyBindingDefaults as it can't be easily handled by the
         // KeyBindingManager
@@ -85,13 +97,14 @@ const getUIOnlyShortcuts = (): IKeyboardShortcuts => {
  * This function gets keyboard shortcuts that can be consumed by the KeyBindingDefaults.
  */
 export const getKeyboardShortcuts = (): IKeyboardShortcuts => {
-    const overrideBrowserShortcuts = PlatformPeg.get()?.overrideBrowserShortcuts();
+    const overrideBrowserShortcuts = shouldOverrideBrowserShortcuts();
 
     return (Object.keys(KEYBOARD_SHORTCUTS) as KeyBindingAction[])
         .filter((k) => {
             if (KEYBOARD_SHORTCUTS[k]?.controller?.settingDisabled) return false;
             if (MAC_ONLY_SHORTCUTS.includes(k) && !IS_MAC) return false;
             if (DESKTOP_SHORTCUTS.includes(k) && !overrideBrowserShortcuts) return false;
+            if (!hasValidDefaultKey(KEYBOARD_SHORTCUTS[k])) return false;
 
             return true;
         })
@@ -105,12 +118,17 @@ export const getKeyboardShortcuts = (): IKeyboardShortcuts => {
  * Gets keyboard shortcuts that should be presented to the user in the UI.
  */
 export const getKeyboardShortcutsForUI = (): IKeyboardShortcuts => {
-    const entries = [...Object.entries(getUIOnlyShortcuts()), ...Object.entries(getKeyboardShortcuts())] as [
+    const uiOnlyShortcuts = getUIOnlyShortcuts();
+    const managerShortcuts = getKeyboardShortcuts();
+    const entries = [...Object.entries(uiOnlyShortcuts), ...Object.entries(managerShortcuts)] as [
         KeyBindingAction,
         KeyboardShortcutSetting,
     ][];
 
     return entries.reduce((acc, [key, value]) => {
+        // Keep deterministic collision behavior: manager-consumable shortcuts override UI-only shortcuts
+        // for duplicated actions so that UI and runtime behavior stay aligned.
+        if (!hasValidDefaultKey(value)) return acc;
         acc[key] = value;
         return acc;
     }, {} as IKeyboardShortcuts);

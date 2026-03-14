@@ -8,7 +8,7 @@ Please see LICENSE files in the repository root for full details.
 export interface DelegationResolution {
     effectiveVoter: string;
     path: string[];
-    reason: "direct_vote" | "delegation_chain";
+    reason: "direct_vote" | "delegation_chain" | "max_depth_exceeded";
 }
 
 export interface DelegationAuditEntry {
@@ -23,11 +23,15 @@ export interface DelegationAuditEntry {
 export interface DelegationPolicy {
     revocationWindowMs: number;
     maxDelegationsPerUserPerHour: number;
+    minDelegationChangeIntervalMs: number;
+    maxDelegationChainDepth: number;
 }
 
 const DEFAULT_POLICY: DelegationPolicy = {
     revocationWindowMs: 60_000,
     maxDelegationsPerUserPerHour: 30,
+    minDelegationChangeIntervalMs: 5_000,
+    maxDelegationChainDepth: 8,
 };
 
 export class DelegationGraph {
@@ -42,6 +46,13 @@ export class DelegationGraph {
     public setDelegation(topic: string, fromUserId: string, toUserId: string, now: number = Date.now()): void {
         if (fromUserId === toUserId) {
             throw new Error("Self-delegation is not allowed");
+        }
+
+        const recentUserChange = [...this.auditTrail]
+            .reverse()
+            .find((entry) => entry.fromUserId === fromUserId);
+        if (recentUserChange && now - recentUserChange.at < this.policy.minDelegationChangeIntervalMs) {
+            throw new Error("Delegation change cooldown is active");
         }
 
         const recentChanges = this.auditTrail.filter(
@@ -128,7 +139,17 @@ export class DelegationGraph {
         const path = [userId];
         const seen = new Set(path);
         let current = this.resolveNextDelegate(topic, userId);
+        let depth = 0;
         while (current) {
+            depth += 1;
+            if (depth > this.policy.maxDelegationChainDepth) {
+                return {
+                    effectiveVoter: userId,
+                    path,
+                    reason: "max_depth_exceeded",
+                };
+            }
+
             path.push(current);
             if (directVoterIds.has(current)) {
                 return {

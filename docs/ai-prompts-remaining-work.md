@@ -4,7 +4,7 @@ This document provides copy/paste AI prompts for all currently tracked **remaini
 
 ## Source trackers used
 
-- `docs/unfinished-code-checklist.md` (open marker inventory: 114).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 98).
 - `docs/unfinished-code-priority-plan.md` (P0/P1 ranked queue).
 - `docs/blackout-governance-completion-tracker.md` (maintenance exceptions).
 - `docs/blackout-reuse-completion-tracker.md` (maintenance exceptions).
@@ -39,55 +39,55 @@ Done when:
 - Remaining-item list is accurate and ordered P0 -> P1 -> P2.
 ```
 
-## Prompt 2 — uc-006 (MessagePanel per-room hide controls)
+## Prompt 2 — uc-006 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-006` from `src/components/structures/MessagePanel.tsx` TODO marker.
+Validate completed `blackout#uc-006` implementation from `src/components/structures/MessagePanel.tsx` and keep only post-merge hardening tasks.
 
 Tasks:
-- Add granular per-room hide controls with safe defaults and persisted room-scoped state.
-- Ensure controls do not alter global visibility behavior unintentionally.
-- Add unit/integration tests for room A/B isolation and setting persistence.
-- Update unfinished marker checklist + priority plan + evidence docs.
+- Re-run regression coverage for room-scoped hide settings (room A/B isolation + persistence).
+- Add a UI entry point for toggling the room-scoped preference if product scope requires user-facing controls.
+- Verify the global `showHiddenEventsInTimeline` behavior remains unchanged when no room override exists.
+- Keep checklist/priority plan/evidence docs synchronized for future closures.
 
 Done when:
-- Marker is removed or converted into explicit documented rationale.
-- Regression tests pass and prove per-room isolation semantics.
-- Tracker counts are synchronized.
+- Existing uc-006 closure remains stable under regression tests.
+- Optional UX follow-up is either implemented or explicitly deferred with owner/date.
+- Tracker counts remain synchronized.
 ```
 
-## Prompt 3 — uc-008 (keyboard shortcut handling gaps)
+## Prompt 3 — uc-008 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-008` from `src/accessibility/KeyboardShortcuts.ts` marker set.
+Validate completed `blackout#uc-008` keyboard-shortcut hardening and maintain follow-up coverage.
 
 Tasks:
-- Close shortcut handling gaps called out in the tracked TODO/FIXME markers.
-- Add robust fallback behavior for unsupported contexts.
-- Add tests for expected shortcuts, collisions, and accessibility edge-cases.
-- Update docs/trackers/evidence with exact commands run.
+- Re-run regression tests for malformed shortcuts, unsupported platform override contexts, and collision handling.
+- Validate deterministic UI/runtime parity when shortcut definitions collide.
+- Add any additional accessibility edge-case tests found in triage.
+- Keep docs/trackers/evidence synchronized with latest command outputs.
 
 Done when:
-- Shortcut gap markers are closed.
-- Accessibility and behavior tests pass.
-- Priority plan and checklist counts are updated.
+- uc-008 closure remains stable under regression coverage.
+- Collision and unsupported-context fallback behavior remains deterministic.
+- Tracker metadata remains synchronized.
 ```
 
-## Prompt 4 — uc-010 (MatrixChat burst-action state consistency)
+## Prompt 4 — uc-010 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-010` to improve MatrixChat state consistency under burst user actions.
+Validate completed `blackout#uc-010` burst-action state consistency hardening and keep negative-path coverage healthy.
 
 Tasks:
-- Harden state transitions to avoid race conditions during rapid navigation/sends.
-- Add deterministic tests for burst scenarios and async ordering.
-- Include negative tests for malformed/partial event flows.
-- Update docs evidence and unfinished-marker counts.
+- Re-run burst navigation ordering tests to confirm stale transitions are ignored.
+- Re-run malformed/partial send-event payload tests and send-failure handling coverage.
+- Add any additional race-regression tests discovered during triage.
+- Keep evidence and tracker counts synchronized.
 
 Done when:
-- Burst-action consistency issue is fixed with test coverage.
-- No regression in normal MatrixChat flows.
-- Tracker inventory is synchronized.
+- uc-010 closure remains stable under regression and negative-path coverage.
+- No regression is observed in baseline MatrixChat navigation/send flows.
+- Tracker inventory remains synchronized.
 ```
 
 ## Prompt 5 — Long-tail unfinished marker burn-down (batch executor)
@@ -208,16 +208,19 @@ Done when:
 ## Recommended execution order
 
 1. Prompt 1 (reconcile plan/checklist truth).
-2. Prompts 2, 3, 4, 5 (unfinished marker burn-down).
-3. Prompts 6 and 7 (governance/reuse maintenance exceptions).
-4. Prompt 8 (authoritative CI replay).
-5. Prompt 9 (final sign-offs).
-6. Prompt 10 (prevent recurrence).
+2. Prompt 5 (unfinished marker burn-down).
+3. Prompt 2 (uc-006 regression hardening, optional UX follow-up).
+4. Prompt 3 (uc-008 regression hardening).
+5. Prompt 4 (uc-010 regression hardening).
+6. Prompts 6 and 7 (governance/reuse maintenance exceptions).
+7. Prompt 8 (authoritative CI replay).
+8. Prompt 9 (final sign-offs).
+9. Prompt 10 (prevent recurrence).
 
 ## Verification
 
 - Last verified date: 2026-03-14
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
-  - `rg -n "Open items: \*\*114\*\*|Resolved items tracked in this checklist: \*\*2\*\*|Total files with tracked markers: \*\*87\*\*" docs/unfinished-code-checklist.md`
+  - `rg -n "Open items: \*\*98\*\*|Resolved items tracked in this checklist: \*\*20\*\*|Total files with tracked markers: \*\*73\*\*" docs/unfinished-code-checklist.md`
   - `rg -n "Approved exception notes|Residual risk register|Sign-off blocks" docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/blackout_centralized_release_readiness_gate.md`

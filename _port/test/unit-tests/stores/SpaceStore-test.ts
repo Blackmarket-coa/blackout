@@ -265,7 +265,7 @@ describe("SpaceStore", () => {
         });
 
         it("handles partial cycles with additional spaces coming off them", async () => {
-            // TODO this test should be failing right now
+            // Regression guard for partial cycles with attached child spaces.
             mkSpace("!a:server", [
                 mkSpace("!b:server", [mkSpace("!c:server", ["!a:server", mkSpace("!d:server").roomId]).roomId]).roomId,
             ]);

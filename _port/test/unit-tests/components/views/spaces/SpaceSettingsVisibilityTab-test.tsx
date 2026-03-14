@@ -65,7 +65,7 @@ describe("<SpaceSettingsVisibilityTab />", () => {
 
     const mockSpaceId = "mock-space";
 
-    // TODO case for canonical
+    // Add canonical alias-specific case when visibility resolution gains dedicated handling.
     const makeMockSpace = (
         client: MatrixClient,
         joinRule: JoinRule = JoinRule.Invite,
