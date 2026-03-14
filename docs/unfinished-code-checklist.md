@@ -4,10 +4,16 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
 - Open items: **114**
-- Resolved items tracked in this checklist: **0**
+- Resolved items tracked in this checklist: **2**
 - Total files with tracked markers: **87**
 
 ## Checklist
+
+
+## Recently resolved high-priority markers
+
+- [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.
+- [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 
 ### `src/autocomplete/UserProvider.tsx`
 

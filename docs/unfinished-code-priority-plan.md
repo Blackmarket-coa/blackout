@@ -30,11 +30,11 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 
 ## Status update for highest-impact items
 
-- **Notifier call lookup correctness (uc-001):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
-- **MatrixChat error-state handling continuity (uc-002):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
-- **TimelinePanel event scope guard (uc-003):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
-- **ScrollPanel search optimization (uc-007):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
-- **Import E2E keys feedback UX (uc-009):** resolved in code path and closed in checklist; follow-up PR reference: **this PR**.
+- **Notifier call lookup correctness (uc-001):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+- **MatrixChat error-state handling continuity (uc-002):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+- **TimelinePanel event scope guard (uc-003):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+- **ScrollPanel search optimization (uc-007):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+- **Import E2E keys feedback UX (uc-009):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
 
 ## Suggested delivery cadence
 

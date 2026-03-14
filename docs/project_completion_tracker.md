@@ -84,7 +84,7 @@ These items are not blockers for distributed self-healing readiness, but they ar
     - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
     - **Action steps:**
         1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
-        2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach PR links (`this PR`).
+        2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach evidence links (`docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`).
         3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
     - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
 
