@@ -14,6 +14,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - `docs/blackout_centralized_build_work_order.md`
 - `docs/blackout_centralized_release_readiness_gate.md`
 - `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
+- `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
 
 ## Tests/commands run
 - `rg "Complete|In progress|Partial|Blocked" docs/project_completion_tracker.md docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/rollout-readiness-status.md docs/blackout_centralized_build_work_order.md`
@@ -31,7 +32,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 
 ## Risks/known follow-ups
 - Open TODO/FIXME marker backlog remains material (98 open) and continues under strict P0->P1 burn-down governance in `docs/unfinished-code-priority-plan.md`.
-- Environment-authoritative CI replay is still required for centralized-build release promotion even with repository-local evidence alignment.
+- Hosted canonical CI artifact publication remains pending; local replay now provides bounded drift evidence and traceable command-level artifact IDs.
 
 ## Next review date
 2026-03-21
@@ -65,3 +66,8 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 
 ### WO-9 Release-readiness synthesis
 - Updated the centralized release gate artifact so it can be used directly as go/no-go documentation with explicit residual-risk ownership and next review dates.
+
+
+### Prompt 8 CI replay closure update
+- Added `docs/operations/evidence/2026-03-14-centralized-ci-replay.md` capturing canonical lint/test/build/security replay commands and artifact identifiers.
+- Updated release gate to link replay evidence, include local-vs-CI deltas, and bound remaining parity risk with owner/date.

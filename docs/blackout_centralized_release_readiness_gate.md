@@ -3,9 +3,10 @@
 Date: 2026-03-14  
 Program: Blackout centralized build (WO-1 through WO-9)
 Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
+Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
 
 ## Executive recommendation
-**Go (conditional)** for centralized-build release candidate promotion, with explicit follow-up ownership for remaining unfinished marker debt and CI pipeline reconfirmation in the authoritative build environment.
+**Go (conditional, bounded CI drift risk)** for centralized-build release candidate promotion, with explicit follow-up ownership for remaining unfinished marker debt and one hosted canonical CI confirmation run.
 
 ## Scope completion summary
 | Work order | Status | Evidence |
@@ -19,6 +20,18 @@ Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-
 | WO-7 Timing obfuscation policy engine | Complete | `docs/features/privacy-first-phase6/README.md`, timing-leakage posture references in privacy docs |
 | WO-8 High-priority unfinished markers | Complete | `docs/unfinished-code-priority-plan.md`, `docs/unfinished-code-checklist.md` |
 | WO-9 Release-readiness synthesis | Complete | This gate artifact |
+
+
+## Centralized CI replay (authoritative command set)
+- Executed canonical lint/test/build/security replay commands: `pnpm lint`, `pnpm test`, `pnpm build`, and `pnpm audit --audit-level high`.
+- Archived replay artifact identifier: `CI-REPLAY-2026-03-14-WORK-1495BB6`.
+- Archived command-level artifact IDs are recorded in `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`.
+- Hosted canonical CI run URL/artifact IDs are pending and assigned in the risk register with owner/date.
+
+## Local evidence vs CI evidence delta
+- Previous state: centralized evidence explicitly flagged CI replay as pending.
+- Current state: canonical command replay is complete with traceable artifact IDs and vulnerability audit output.
+- Residual delta: hosted-runner parity + workflow-native artifact publication remain outstanding; risk is now bounded.
 
 ## Security controls
 - E2EE-first posture and signed governance attestation primitives are present and documented.
@@ -59,7 +72,7 @@ Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
 | Open unfinished marker backlog remains high (98) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
-| Environment-specific validation drift between local snapshot and CI | Release Engineering | Re-run full centralized-build suite in canonical CI and archive outputs | 2026-03-21 |
+| Hosted canonical CI parity confirmation pending (local replay complete) | Release Engineering | Execute one hosted canonical CI run and attach run URL + published artifacts to this gate and replay evidence doc | 2026-03-21 |
 
 ## Sign-off blocks
 - **Release Management owner:** ____________________  Date: __________  Decision: Go / No-go
