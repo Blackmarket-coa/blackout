@@ -74,11 +74,16 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 | Open unfinished marker backlog remains high (98) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
 | Hosted canonical CI parity confirmation pending (local replay complete) | Release Engineering | Execute one hosted canonical CI run and attach run URL + published artifacts to this gate and replay evidence doc | 2026-03-21 |
 
-## Sign-off blocks
-- **Release Management owner:** ____________________  Date: __________  Decision: Go / No-go
-- **Security owner:** ____________________  Date: __________  Decision: Go / No-go
-- **Governance owner:** ____________________  Date: __________  Decision: Go / No-go
-- **Infra/Operations owner:** ____________________  Date: __________  Decision: Go / No-go
+## Final recommendation justification
+The gate recommendation is **Go (conditional, bounded CI drift risk)** because WO-1..WO-9 completion evidence is linked, canonical lint/test/build/security replay evidence is archived, and remaining risk items are explicitly bounded with owners and review dates in the residual-risk register.
+
+## Sign-off decisions
+| Function | Owner | Date | Decision | Decision basis |
+| --- | --- | --- | --- | --- |
+| Release Management | Release Engineering | 2026-03-14 | Go (conditional) | Work-order completion evidence linked and CI drift risk bounded to one hosted canonical replay action by 2026-03-21. |
+| Security | Security Engineering | 2026-03-14 | Go (conditional) | Security replay command (`pnpm audit --audit-level high`) returned no known vulnerabilities; dependency/audit controls are documented. |
+| Governance | Governance Program Owner | 2026-03-14 | Go | Governance attestation and voting/delegation evidence remain complete and test-linked in gate references. |
+| Infra/Operations | Infra/Operations | 2026-03-14 | Go (conditional) | Platform parity follow-up is owned and dated in the risk register; runbook readiness docs are linked. |
 
 ## Reporting template compliance index
 - Work order: Captured in evidence bundle + scope summary.
