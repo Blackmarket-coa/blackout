@@ -314,6 +314,7 @@ Add this block at the bottom of each major tracker:
 - Status: **Complete** (WO-1 through WO-9).
 - Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
 - Release gate artifact: `docs/blackout_centralized_release_readiness_gate.md`.
+- Remaining-work AI prompt pack: `docs/ai-prompts-remaining-work.md`.
 
 ## Verification
 - Last verified date: 2026-03-14
