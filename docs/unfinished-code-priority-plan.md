@@ -44,12 +44,14 @@ Status labels in this section are derived from `docs/unfinished-code-checklist.m
 | `blackout#uc-007` | Partial (specific marker resolved; file still has other open marker debt) | `src/components/structures/ScrollPanel.tsx` still appears with an open marker in checklist | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-008` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-009` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
-| `blackout#uc-010` | Partial (still planned; no resolved entry in current checklist snapshot) | Not present in current checklist resolved block; remains in ranked queue | `docs/unfinished-code-priority-plan.md` |
+| `blackout#uc-010` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 
 
 - `blackout#uc-006` closure evidence: `_port/src/components/structures/MessagePanel.tsx`, `_port/test/unit-tests/components/structures/MessagePanel-test.tsx`, `docs/operations/evidence/2026-03-14-uc-006-messagepanel-room-hide-controls.md`.
 
 - `blackout#uc-008` closure evidence: `_port/src/accessibility/KeyboardShortcutUtils.ts`, `_port/test/unit-tests/accessibility/KeyboardShortcutUtils-test.ts`, `docs/operations/evidence/2026-03-14-uc-008-keyboard-shortcuts-gap-closure.md`.
+
+- `blackout#uc-010` closure evidence: `_port/src/components/structures/MatrixChat.tsx`, `_port/test/unit-tests/components/structures/MatrixChat-test.tsx`, `docs/operations/evidence/2026-03-14-uc-010-matrixchat-burst-state-consistency.md`.
 
 ## Remaining unresolved queue (ordered P0 -> P1 -> P2)
 
@@ -59,7 +61,7 @@ No unresolved top-10 P0 items remain in the current ranked queue.
 
 ### P1
 
-1. `blackout#uc-010` — MatrixChat state consistency under burst actions.
+No unresolved top-10 P1 items remain in the current ranked queue.
 
 ### P2
 
@@ -67,9 +69,9 @@ No unresolved top-10 P0 items remain in the current ranked queue.
 
 ## Suggested delivery cadence (regenerated)
 
-- **Sprint A (P1 closure):** `uc-010` plus race/burst simulation tests and checklist recount.
-- **Sprint B (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
-- **Sprint C (P2 burn-down):** continue maintenance-window cleanup and deferred documentation debt.
+- **Sprint A (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
+- **Sprint B (P2 burn-down):** continue maintenance-window cleanup and deferred documentation debt.
+- **Sprint C (P2 burn-down):** refresh prioritized backlog ranking with owner/date confirmations.
 
 ## Verification
 

@@ -311,6 +311,74 @@ describe("<MatrixChat />", () => {
         );
     });
 
+    it("does not dispatch deferred view-room actions for stale navigation requests", async () => {
+        const deferredA = { action: "deferred_a" };
+        const deferredB = { action: "deferred_b" };
+
+        const viewRoomSpy = jest
+            .spyOn(MatrixChat.prototype as any, "viewRoom")
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        getComponent();
+
+        defaultDispatcher.dispatch({
+            action: Action.ViewRoom,
+            room_id: "!roomA:server.org",
+            deferred_action: deferredA,
+        });
+        defaultDispatcher.dispatch({
+            action: Action.ViewRoom,
+            room_id: "!roomB:server.org",
+            deferred_action: deferredB,
+        });
+
+        await flushPromises();
+
+        expect(viewRoomSpy).toHaveBeenCalledTimes(2);
+        expect(defaultDispatcher.dispatch).toHaveBeenCalledWith(deferredB);
+        expect(defaultDispatcher.dispatch).not.toHaveBeenCalledWith(deferredA);
+    });
+
+    it("ignores malformed send_event payloads without throwing", async () => {
+        getComponent();
+        const sendEventSpy = jest.spyOn(mockClient, "sendEvent");
+
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!room:server.org", event: undefined });
+        defaultDispatcher.dispatch({
+            action: "send_event",
+            room_id: "",
+            event: new MatrixEvent({ type: "m.room.message", content: { body: "x" } }),
+        });
+
+        await flushPromises();
+
+        expect(sendEventSpy).not.toHaveBeenCalled();
+    });
+
+    it("dispatches message_sent only for successful send_event and tolerates send failures", async () => {
+        getComponent();
+        const event = new MatrixEvent({
+            type: "m.room.message",
+            content: { msgtype: "m.text", body: "hello" },
+        });
+        const sendEventSpy = jest.spyOn(mockClient, "sendEvent");
+
+        sendEventSpy.mockResolvedValueOnce({} as any);
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!ok:server.org", event });
+        await flushPromises();
+        expect(defaultDispatcher.dispatch).toHaveBeenCalledWith({ action: "message_sent" });
+
+        sendEventSpy.mockRejectedValueOnce(new Error("network"));
+        defaultDispatcher.dispatch({ action: "send_event", room_id: "!ok:server.org", event });
+        await flushPromises();
+
+        const sentCount = mocked(defaultDispatcher.dispatch).mock.calls.filter(
+            (call) => call[0]?.action === "message_sent",
+        ).length;
+        expect(sentCount).toBe(1);
+    });
+
     describe("when query params have a OIDC params", () => {
         const issuer = "https://auth.com/";
         const homeserverUrl = "https://matrix.org";

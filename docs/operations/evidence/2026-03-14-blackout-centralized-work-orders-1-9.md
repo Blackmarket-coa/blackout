@@ -17,7 +17,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 
 ## Tests/commands run
 - `rg "Complete|In progress|Partial|Blocked" docs/project_completion_tracker.md docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/rollout-readiness-status.md docs/blackout_centralized_build_work_order.md`
-- `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*4\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
+- `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*5\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
 - `rg -n "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 - `git diff -- docs/project_completion_tracker.md docs/blackout_centralized_build_work_order.md docs/blackout_centralized_release_readiness_gate.md docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 
@@ -43,7 +43,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - Refreshed verification metadata references and command list for repeatability.
 
 ### WO-8 High-priority unfinished markers
-- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 113`, `Resolved items: 4`, `Files with markers: 86`) and retained P0->P1 execution ordering in the priority plan.
+- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 113`, `Resolved items: 5`, `Files with markers: 86`) and retained P0->P1 execution ordering in the priority plan.
 
 ### WO-2 Image stego integration path
 - Confirmed stego integration path evidence in release gate artifact and implementation references under `_port/src/steganography/*` with feature/tamper-handling validation references.

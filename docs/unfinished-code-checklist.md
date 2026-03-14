@@ -4,7 +4,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
 - Open items: **113**
-- Resolved items tracked in this checklist: **4**
+- Resolved items tracked in this checklist: **5**
 - Total files with tracked markers: **86**
 
 ## Checklist
@@ -12,6 +12,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ## Recently resolved high-priority markers
 
+- [x] `src/components/structures/MatrixChat.tsx` (uc-010): view-room navigation now drops stale async transitions during burst actions and send-event handling now safely rejects malformed payloads/failures without state-machine regressions.
 - [x] `src/accessibility/KeyboardShortcuts.ts` (uc-008): keyboard shortcut utilities now filter malformed bindings, handle unsupported platform override contexts safely, and preserve deterministic collision behavior for UI/runtime shortcut parity.
 - [x] `src/components/structures/MessagePanel.tsx` (uc-006): room-scoped hidden-event visibility overrides now persist per-room in local storage and fall back safely to the global timeline default.
 - [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.

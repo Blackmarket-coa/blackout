@@ -73,21 +73,21 @@ Done when:
 - Tracker metadata remains synchronized.
 ```
 
-## Prompt 4 — uc-010 (MatrixChat burst-action state consistency)
+## Prompt 4 — uc-010 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-010` to improve MatrixChat state consistency under burst user actions.
+Validate completed `blackout#uc-010` burst-action state consistency hardening and keep negative-path coverage healthy.
 
 Tasks:
-- Harden state transitions to avoid race conditions during rapid navigation/sends.
-- Add deterministic tests for burst scenarios and async ordering.
-- Include negative tests for malformed/partial event flows.
-- Update docs evidence and unfinished-marker counts.
+- Re-run burst navigation ordering tests to confirm stale transitions are ignored.
+- Re-run malformed/partial send-event payload tests and send-failure handling coverage.
+- Add any additional race-regression tests discovered during triage.
+- Keep evidence and tracker counts synchronized.
 
 Done when:
-- Burst-action consistency issue is fixed with test coverage.
-- No regression in normal MatrixChat flows.
-- Tracker inventory is synchronized.
+- uc-010 closure remains stable under regression and negative-path coverage.
+- No regression is observed in baseline MatrixChat navigation/send flows.
+- Tracker inventory remains synchronized.
 ```
 
 ## Prompt 5 — Long-tail unfinished marker burn-down (batch executor)
@@ -208,13 +208,14 @@ Done when:
 ## Recommended execution order
 
 1. Prompt 1 (reconcile plan/checklist truth).
-2. Prompts 4, 5 (unfinished marker burn-down).
+2. Prompt 5 (unfinished marker burn-down).
 3. Prompt 2 (uc-006 regression hardening, optional UX follow-up).
 4. Prompt 3 (uc-008 regression hardening).
-5. Prompts 6 and 7 (governance/reuse maintenance exceptions).
-6. Prompt 8 (authoritative CI replay).
-7. Prompt 9 (final sign-offs).
-8. Prompt 10 (prevent recurrence).
+5. Prompt 4 (uc-010 regression hardening).
+6. Prompts 6 and 7 (governance/reuse maintenance exceptions).
+7. Prompt 8 (authoritative CI replay).
+8. Prompt 9 (final sign-offs).
+9. Prompt 10 (prevent recurrence).
 
 ## Verification
 
