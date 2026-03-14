@@ -67,6 +67,7 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 | Tracker schemas/counts synchronized | Pass | Canonical status taxonomy applied; unresolved backlog explicitly tracked |
 | Tests/validation evidence linked | Pass (conditional) | Repo-local evidence recorded; authoritative CI rerun remains required |
 | Residual risks documented with owners/dates | Pass | See risk register below |
+| Monthly docs integrity guardrail passed | Pass | `node _port/scripts/operations/docs_integrity_check.cjs` validates status vocabulary, schema fields, unfinished-marker count synchronization, and evidence references |
 
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
@@ -94,3 +95,4 @@ The gate recommendation is **Go (conditional, bounded CI drift risk)** because W
 - Evidence links: Captured in table references.
 - Risks/known follow-ups: Captured in residual risk register.
 - Next review date: Captured in residual risk register.
+- Monthly integrity checks: `node _port/scripts/operations/docs_integrity_check.cjs`.

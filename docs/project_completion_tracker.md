@@ -14,6 +14,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
 > Evidence matrix: `docs/operations/tracker_evidence_matrix.md` (validated by `scripts/operations/validate_tracker_evidence.sh`).
+> Monthly docs integrity guardrail: `node _port/scripts/operations/docs_integrity_check.cjs`.
 
 Status legend:
 

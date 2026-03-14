@@ -133,6 +133,7 @@ Use this as the canonical execution checklist for the next completion push.
 - [x] Close remaining highest-priority unfinished marker issues (P0/P1 sequence).
 - [x] Ensure each completed item has linked tests and evidence docs.
 - [x] Run final release-readiness checklist with owner/date sign-off.
+- [x] Run monthly docs integrity check (`node _port/scripts/operations/docs_integrity_check.cjs`) and archive output in release evidence.
 
 ---
 
