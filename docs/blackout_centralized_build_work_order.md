@@ -267,3 +267,43 @@ Each prompt is designed for direct use with an AI coding/documentation agent.
 - **Risks/known follow-ups:**
 - **Next review date:**
 
+---
+
+## 8) Normalized Tracker Schema (Reference)
+
+Use this schema for all build/completion trackers under `docs/` to keep status and evidence consistent.
+
+### Required fields
+
+- **status:** `Complete` | `In progress` | `Partial` | `Blocked`
+- **evidence:** test output, checklist links, and/or docs proving completion
+- **remaining work:** explicit delta to reach `Complete`
+- **next review date:** ISO date (`YYYY-MM-DD`)
+- **owner:** team or individual accountable for closure
+
+### Optional fields
+
+- **risk level:** `Low` | `Medium` | `High`
+- **dependencies:** related work orders, RFCs, or external blockers
+- **last updated by:** handle/name of author performing the update
+
+### Canonical row format
+
+```md
+| item | status | owner | evidence | remaining work | next review date |
+| --- | --- | --- | --- | --- | --- |
+| Work Order 2 — Image stego integration path | In progress | Client Security + Messaging | tests pending in `apps/web/...` | complete corruption-handling tests and rollback runbook | 2026-03-21 |
+```
+
+### Verification metadata block
+
+Add this block at the bottom of each major tracker:
+
+```md
+## Verification
+- Last verified date: YYYY-MM-DD
+- Verified by: <name/handle>
+- Commands:
+  - `git status --short`
+  - `rg "Complete|In progress|Partial|Blocked" docs/<tracker>.md`
+```
