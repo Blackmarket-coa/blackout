@@ -646,21 +646,31 @@ export default class ScrollPanel extends React.Component<IProps> {
         const messages = itemlist.children;
         let node: HTMLElement | null = null;
 
-        // TODO: do a binary search here, as items are sorted by offsetTop
-        // loop backwards, from bottom-most message (as that is the most common case)
-        for (let i = messages.length - 1; i >= 0; --i) {
+        const viewportBottomOffset = scrollNode.scrollTop + scrollNode.clientHeight;
+
+        // item offsets are sorted, so find the final item whose top is still in/above the viewport.
+        let low = 0;
+        let high = messages.length - 1;
+        let candidateIndex = -1;
+        while (low <= high) {
+            const mid = low + Math.floor((high - low) / 2);
+            const htmlMessage = messages[mid] as HTMLElement;
+            if (htmlMessage.offsetTop < viewportBottomOffset) {
+                candidateIndex = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        // Walk backwards from the candidate until we find a token-bearing node.
+        for (let i = candidateIndex; i >= 0; --i) {
             const htmlMessage = messages[i] as HTMLElement;
             if (!htmlMessage.dataset?.scrollTokens) {
-                // dataset is only specified on HTMLElements
                 continue;
             }
             node = htmlMessage;
-            // break at the first message (coming from the bottom)
-            // that has it's offsetTop above the bottom of the viewport.
-            if (this.topFromBottom(node) > viewportBottom) {
-                // Use this node as the scrollToken
-                break;
-            }
+            break;
         }
 
         if (!node) {

@@ -11,11 +11,17 @@ import { fireEvent, render, waitFor } from "jest-matrix-react";
 import userEvent from "@testing-library/user-event";
 import { type CryptoApi } from "matrix-js-sdk/src/crypto-api";
 
+import ToastStore from "../../../../../../src/stores/ToastStore";
+import GenericToast from "../../../../../../src/components/views/toasts/GenericToast";
 import ImportE2eKeysDialog from "../../../../../../src/async-components/views/dialogs/security/ImportE2eKeysDialog";
 import * as MegolmExportEncryption from "../../../../../../src/utils/MegolmExportEncryption";
 import { createTestClient } from "../../../../../test-utils";
 
 describe("ImportE2eKeysDialog", () => {
+    beforeEach(() => {
+        ToastStore.sharedInstance().reset();
+    });
+
     it("renders", () => {
         const cli = createTestClient();
         const onFinished = jest.fn();
@@ -83,5 +89,33 @@ describe("ImportE2eKeysDialog", () => {
         fireEvent.click(container.querySelector("[type=submit]")!);
 
         await waitFor(() => expect(importRoomKeysAsJson).toHaveBeenCalled());
+    });
+
+    it("should show a success toast once keys are imported", async () => {
+        const cli = createTestClient();
+        const onFinished = jest.fn();
+        const file = new File(["test"], "file.txt", { type: "text/plain" });
+        const importRoomKeysAsJson = jest.fn();
+        cli.getCrypto = () => {
+            return {
+                importRoomKeysAsJson,
+            } as unknown as CryptoApi;
+        };
+
+        jest.spyOn(MegolmExportEncryption, "decryptMegolmKeyFile").mockResolvedValue("[]");
+
+        const { container } = render(<ImportE2eKeysDialog matrixClient={cli} onFinished={onFinished} />);
+        fireEvent.change(container.querySelector("[type=file]")!, {
+            target: { files: [file] },
+        });
+        await userEvent.click(container.querySelector("[type=password]")!);
+        await userEvent.paste("passphrase");
+        fireEvent.click(container.querySelector("[type=submit]")!);
+
+        await waitFor(() => expect(onFinished).toHaveBeenCalledWith(true));
+
+        const toast = ToastStore.sharedInstance().getToasts().find((t) => t.key === "mx_import_e2e_keys_success");
+        expect(toast?.component).toBe(GenericToast);
+        expect(toast?.props?.description).toBe("Room keys imported successfully");
     });
 });
