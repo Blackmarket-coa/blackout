@@ -212,6 +212,8 @@ interface IReadReceiptForUser {
 /* (almost) stateless UI component which builds the event tiles in the room timeline.
  */
 export default class MessagePanel extends React.Component<IProps, IState> {
+    private static readonly roomHiddenEventPreferenceKey = "mx_message_panel_show_hidden_events_by_room";
+
     public static contextType = RoomContext;
     declare public context: React.ContextType<typeof RoomContext>;
 
@@ -462,10 +464,69 @@ export default class MessagePanel extends React.Component<IProps, IState> {
     };
 
     public get showHiddenEvents(): boolean {
-        return this.context?.showHiddenEvents ?? this._showHiddenEvents;
+        const globalPreference = this.context?.showHiddenEvents ?? this._showHiddenEvents;
+        const roomId = this.props.room?.roomId;
+        if (!roomId) {
+            return globalPreference;
+        }
+
+        const scopedPreference = MessagePanel.getRoomScopedShowHiddenEvents(roomId);
+        return scopedPreference ?? globalPreference;
     }
 
-    // TODO: Implement granular (per-room) hide options
+    public setShowHiddenEventsForRoom(enabled: boolean | undefined): void {
+        const roomId = this.props.room?.roomId;
+        if (!roomId) {
+            return;
+        }
+
+        MessagePanel.setRoomScopedShowHiddenEvents(roomId, enabled);
+    }
+
+    public static getRoomScopedShowHiddenEvents(roomId: string): boolean | undefined {
+        const preferences = this.readRoomHiddenEventPreferences();
+        return preferences[roomId];
+    }
+
+    private static setRoomScopedShowHiddenEvents(roomId: string, enabled: boolean | undefined): void {
+        const preferences = this.readRoomHiddenEventPreferences();
+        if (enabled === undefined) {
+            delete preferences[roomId];
+        } else {
+            preferences[roomId] = enabled;
+        }
+
+        this.writeRoomHiddenEventPreferences(preferences);
+    }
+
+    private static readRoomHiddenEventPreferences(): Record<string, boolean> {
+        try {
+            const stored = window.localStorage.getItem(this.roomHiddenEventPreferenceKey);
+            if (!stored) {
+                return {};
+            }
+
+            const parsed = JSON.parse(stored) as Record<string, unknown>;
+            return Object.entries(parsed).reduce<Record<string, boolean>>((acc, [roomId, value]) => {
+                if (typeof value === "boolean") {
+                    acc[roomId] = value;
+                }
+
+                return acc;
+            }, {});
+        } catch {
+            return {};
+        }
+    }
+
+    private static writeRoomHiddenEventPreferences(preferences: Record<string, boolean>): void {
+        try {
+            window.localStorage.setItem(this.roomHiddenEventPreferenceKey, JSON.stringify(preferences));
+        } catch {
+            // Ignore storage write failures, and continue using global defaults.
+        }
+    }
+
     public shouldShowEvent(mxEv: MatrixEvent, forceHideEvents = false): boolean {
         if (this.props.hideThreadedMessages && this.props.room) {
             const { shouldLiveInRoom } = this.props.room.eventShouldLiveIn(mxEv, this.props.events);

@@ -58,7 +58,7 @@ Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (114) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
+| Open unfinished marker backlog remains high (113) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
 | Environment-specific validation drift between local snapshot and CI | Release Engineering | Re-run full centralized-build suite in canonical CI and archive outputs | 2026-03-21 |
 
 ## Sign-off blocks

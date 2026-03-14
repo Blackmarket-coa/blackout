@@ -40,11 +40,14 @@ Status labels in this section are derived from `docs/unfinished-code-checklist.m
 | `blackout#uc-003` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
 | `blackout#uc-004` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-005` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
-| `blackout#uc-006` | In progress | Open marker remains under `src/components/structures/MessagePanel.tsx` | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-006` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-007` | Partial (specific marker resolved; file still has other open marker debt) | `src/components/structures/ScrollPanel.tsx` still appears with an open marker in checklist | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-008` | Partial (still planned; no resolved entry in current checklist snapshot) | Not present in current checklist resolved block; remains in ranked queue | `docs/unfinished-code-priority-plan.md` |
 | `blackout#uc-009` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
 | `blackout#uc-010` | Partial (still planned; no resolved entry in current checklist snapshot) | Not present in current checklist resolved block; remains in ranked queue | `docs/unfinished-code-priority-plan.md` |
+
+
+- `blackout#uc-006` closure evidence: `_port/src/components/structures/MessagePanel.tsx`, `_port/test/unit-tests/components/structures/MessagePanel-test.tsx`, `docs/operations/evidence/2026-03-14-uc-006-messagepanel-room-hide-controls.md`.
 
 ## Remaining unresolved queue (ordered P0 -> P1 -> P2)
 
@@ -54,9 +57,8 @@ No unresolved top-10 P0 items remain in the current ranked queue.
 
 ### P1
 
-1. `blackout#uc-006` — Per-room hide controls in MessagePanel.
-2. `blackout#uc-008` — Keyboard shortcut handling gaps.
-3. `blackout#uc-010` — MatrixChat state consistency under burst actions.
+1. `blackout#uc-008` — Keyboard shortcut handling gaps.
+2. `blackout#uc-010` — MatrixChat state consistency under burst actions.
 
 ### P2
 
@@ -64,7 +66,7 @@ No unresolved top-10 P0 items remain in the current ranked queue.
 
 ## Suggested delivery cadence (regenerated)
 
-- **Sprint A (P1 closure):** `uc-006` and `uc-008` with regression tests and checklist recount.
+- **Sprint A (P1 closure):** `uc-008` with regression tests and checklist recount.
 - **Sprint B (P1 closure):** `uc-010` plus race/burst simulation tests and checklist recount.
 - **Sprint C (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
 

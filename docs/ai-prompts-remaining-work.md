@@ -4,7 +4,7 @@ This document provides copy/paste AI prompts for all currently tracked **remaini
 
 ## Source trackers used
 
-- `docs/unfinished-code-checklist.md` (open marker inventory: 114).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 113).
 - `docs/unfinished-code-priority-plan.md` (P0/P1 ranked queue).
 - `docs/blackout-governance-completion-tracker.md` (maintenance exceptions).
 - `docs/blackout-reuse-completion-tracker.md` (maintenance exceptions).
@@ -39,21 +39,21 @@ Done when:
 - Remaining-item list is accurate and ordered P0 -> P1 -> P2.
 ```
 
-## Prompt 2 — uc-006 (MessagePanel per-room hide controls)
+## Prompt 2 — uc-006 follow-up validation (completed)
 
 ```text
-Implement `blackout#uc-006` from `src/components/structures/MessagePanel.tsx` TODO marker.
+Validate completed `blackout#uc-006` implementation from `src/components/structures/MessagePanel.tsx` and keep only post-merge hardening tasks.
 
 Tasks:
-- Add granular per-room hide controls with safe defaults and persisted room-scoped state.
-- Ensure controls do not alter global visibility behavior unintentionally.
-- Add unit/integration tests for room A/B isolation and setting persistence.
-- Update unfinished marker checklist + priority plan + evidence docs.
+- Re-run regression coverage for room-scoped hide settings (room A/B isolation + persistence).
+- Add a UI entry point for toggling the room-scoped preference if product scope requires user-facing controls.
+- Verify the global `showHiddenEventsInTimeline` behavior remains unchanged when no room override exists.
+- Keep checklist/priority plan/evidence docs synchronized for future closures.
 
 Done when:
-- Marker is removed or converted into explicit documented rationale.
-- Regression tests pass and prove per-room isolation semantics.
-- Tracker counts are synchronized.
+- Existing uc-006 closure remains stable under regression tests.
+- Optional UX follow-up is either implemented or explicitly deferred with owner/date.
+- Tracker counts remain synchronized.
 ```
 
 ## Prompt 3 — uc-008 (keyboard shortcut handling gaps)
@@ -208,16 +208,17 @@ Done when:
 ## Recommended execution order
 
 1. Prompt 1 (reconcile plan/checklist truth).
-2. Prompts 2, 3, 4, 5 (unfinished marker burn-down).
-3. Prompts 6 and 7 (governance/reuse maintenance exceptions).
-4. Prompt 8 (authoritative CI replay).
-5. Prompt 9 (final sign-offs).
-6. Prompt 10 (prevent recurrence).
+2. Prompts 3, 4, 5 (unfinished marker burn-down).
+3. Prompt 2 (uc-006 regression hardening, optional UX follow-up).
+4. Prompts 6 and 7 (governance/reuse maintenance exceptions).
+5. Prompt 8 (authoritative CI replay).
+6. Prompt 9 (final sign-offs).
+7. Prompt 10 (prevent recurrence).
 
 ## Verification
 
 - Last verified date: 2026-03-14
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
-  - `rg -n "Open items: \*\*114\*\*|Resolved items tracked in this checklist: \*\*2\*\*|Total files with tracked markers: \*\*87\*\*" docs/unfinished-code-checklist.md`
+  - `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*3\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
   - `rg -n "Approved exception notes|Residual risk register|Sign-off blocks" docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/blackout_centralized_release_readiness_gate.md`

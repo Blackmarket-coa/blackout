@@ -17,7 +17,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 
 ## Tests/commands run
 - `rg "Complete|In progress|Partial|Blocked" docs/project_completion_tracker.md docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/rollout-readiness-status.md docs/blackout_centralized_build_work_order.md`
-- `rg -n "Open items: \*\*114\*\*|Resolved items tracked in this checklist: \*\*2\*\*|Total files with tracked markers: \*\*87\*\*" docs/unfinished-code-checklist.md`
+- `rg -n "Open items: \*\*113\*\*|Resolved items tracked in this checklist: \*\*3\*\*|Total files with tracked markers: \*\*86\*\*" docs/unfinished-code-checklist.md`
 - `rg -n "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 - `git diff -- docs/project_completion_tracker.md docs/blackout_centralized_build_work_order.md docs/blackout_centralized_release_readiness_gate.md docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 
@@ -30,7 +30,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - WO-9 final gate artifact: `docs/blackout_centralized_release_readiness_gate.md`
 
 ## Risks/known follow-ups
-- Open TODO/FIXME marker backlog remains material (114 open) and continues under strict P0->P1 burn-down governance in `docs/unfinished-code-priority-plan.md`.
+- Open TODO/FIXME marker backlog remains material (113 open) and continues under strict P0->P1 burn-down governance in `docs/unfinished-code-priority-plan.md`.
 - Environment-authoritative CI replay is still required for centralized-build release promotion even with repository-local evidence alignment.
 
 ## Next review date
@@ -43,7 +43,7 @@ Program/Release Engineering (cross-functional execution with Security, Messaging
 - Refreshed verification metadata references and command list for repeatability.
 
 ### WO-8 High-priority unfinished markers
-- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 114`, `Resolved items: 2`, `Files with markers: 87`) and retained P0->P1 execution ordering in the priority plan.
+- Confirmed synchronized unfinished-marker inventory counts across central tracker and checklist (`Open items: 113`, `Resolved items: 3`, `Files with markers: 86`) and retained P0->P1 execution ordering in the priority plan.
 
 ### WO-2 Image stego integration path
 - Confirmed stego integration path evidence in release gate artifact and implementation references under `_port/src/steganography/*` with feature/tamper-handling validation references.
