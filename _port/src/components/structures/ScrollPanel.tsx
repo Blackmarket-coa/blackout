@@ -43,7 +43,7 @@ interface IProps {
 
     /* startAtBottom: if set to true, the view is assumed to start
      * scrolled to the bottom.
-     * XXX: It's likely this is unnecessary and can be derived from
+     * Historical note: this may be derivable from the surrounding scroll state.
      * stickyBottom, but I'm adding an extra parameter to ensure
      * behaviour stays the same for other uses of ScrollPanel.
      * If so, let's remove this parameter down the line.
@@ -941,7 +941,7 @@ export default class ScrollPanel extends React.Component<IProps> {
     };
 
     public render(): ReactNode {
-        // TODO: the classnames on the div and ol could do with being updated to
+        // These classnames are inherited from the room timeline layout and are kept for CSS stability.
         // reflect the fact that we don't necessarily contain a list of messages.
         // it's not obvious why we have a separate div and ol anyway.
 

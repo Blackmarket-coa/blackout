@@ -41,7 +41,6 @@ export default class ViewSource extends React.Component<IProps, IState> {
     }
 
     private onBack = (): void => {
-        // TODO: refresh the "Event ID:" modal header
         this.setState({ isEditing: false });
     };
 
