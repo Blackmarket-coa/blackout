@@ -133,6 +133,7 @@ Use this as the canonical execution checklist for the next completion push.
 - [x] Close remaining highest-priority unfinished marker issues (P0/P1 sequence).
 - [x] Ensure each completed item has linked tests and evidence docs.
 - [x] Run final release-readiness checklist with owner/date sign-off.
+- [x] Run monthly docs integrity check (`node _port/scripts/operations/docs_integrity_check.cjs`) and archive output in release evidence.
 
 ---
 
@@ -312,12 +313,13 @@ Add this block at the bottom of each major tracker:
 ## 9) Execution evidence snapshot
 
 - Status: **Complete** (WO-1 through WO-9).
-- Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+- Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
 - Release gate artifact: `docs/blackout_centralized_release_readiness_gate.md`.
+- Remaining-work AI prompt pack: `docs/ai-prompts-remaining-work.md`.
 
 ## Verification
 - Last verified date: 2026-03-14
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `rg "^- \[x\]" docs/blackout_centralized_build_work_order.md`
-  - `rg "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`
+  - `rg "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`

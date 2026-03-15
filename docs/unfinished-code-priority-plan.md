@@ -6,6 +6,7 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 
 - Completion tracker baseline: `docs/blackout-reuse-completion-tracker.md` (all major reuse-strategy epics complete; current phase is maintenance).
 - Open marker inventory: `docs/unfinished-code-checklist.md` (repository-wide NOTE/issue-marker backlog).
+- Centralized execution evidence: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
 
 ## Prioritization model
 
@@ -28,16 +29,57 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 | 9    | Import E2E keys feedback UX                      | `src/async-components/views/dialogs/security/ImportE2eKeysDialog.tsx` L110 | P1       | Security UX    | 2026.05          | `blackout#uc-009` |
 | 10   | MatrixChat state consistency under burst actions | `src/components/structures/MatrixChat.tsx` L183                            | P1       | Web Platform   | 2026.06          | `blackout#uc-010` |
 
-## Status update for highest-impact items
+## Top-10 status reconciliation (checklist-aligned)
 
-- **Notifier call lookup correctness (uc-001):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
-- **MatrixChat error-state handling continuity (uc-002):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
-- **TimelinePanel event scope guard (uc-003):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
-- **ScrollPanel search optimization (uc-007):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
-- **Import E2E keys feedback UX (uc-009):** resolved in code path and closed in checklist; follow-up PR reference: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`.
+Status labels in this section are derived from `docs/unfinished-code-checklist.md` and indicate whether each tracked `uc-*` marker is currently represented as closed or still outstanding in the tracked backlog.
 
-## Suggested delivery cadence
+| Tracking issue | Current status | Checklist evidence | Current evidence link |
+| --- | --- | --- | --- |
+| `blackout#uc-001` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-002` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-003` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-004` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-005` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-006` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-007` | Partial (specific marker resolved; file still has other open marker debt) | `src/components/structures/ScrollPanel.tsx` still appears with an open marker in checklist | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-008` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-009` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-010` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 
-- **Sprint A (remaining P0):** items 4–5, plus regression tests for encoded-ID navigation and login/register gating.
-- **Sprint B (P1):** remaining items 6, 8, and 10, with keyboard shortcut handling tests and room-UX controls.
-- **Sprint C (P2):** maintenance-window cleanups and deferred naming/documentation debt.
+
+- `blackout#uc-006` closure evidence: `_port/src/components/structures/MessagePanel.tsx`, `_port/test/unit-tests/components/structures/MessagePanel-test.tsx`, `docs/operations/evidence/2026-03-14-uc-006-messagepanel-room-hide-controls.md`.
+
+- `blackout#uc-008` closure evidence: `_port/src/accessibility/KeyboardShortcutUtils.ts`, `_port/test/unit-tests/accessibility/KeyboardShortcutUtils-test.ts`, `docs/operations/evidence/2026-03-14-uc-008-keyboard-shortcuts-gap-closure.md`.
+
+- `blackout#uc-010` closure evidence: `_port/src/components/structures/MatrixChat.tsx`, `_port/test/unit-tests/components/structures/MatrixChat-test.tsx`, `docs/operations/evidence/2026-03-14-uc-010-matrixchat-burst-state-consistency.md`.
+
+- Batch closure evidence (15-marker sweep): `docs/operations/evidence/2026-03-14-batch-15-marker-closure.md`.
+
+## Remaining unresolved queue (ordered P0 -> P1 -> P2)
+
+### P0
+
+No unresolved top-10 P0 items remain in the current ranked queue.
+
+### P1
+
+No unresolved top-10 P1 items remain in the current ranked queue.
+
+### P2
+
+- Continue long-tail checklist burn-down from `docs/unfinished-code-checklist.md` after P1 closure.
+
+## Suggested delivery cadence (regenerated)
+
+- **Sprint A (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
+- **Sprint B (P2 burn-down):** continue maintenance-window cleanup and deferred documentation debt.
+- **Sprint C (P2 burn-down):** refresh prioritized backlog ranking with owner/date confirmations.
+
+## Verification
+
+- Last verified date: 2026-03-14
+- Verified by: Codex (GPT-5.2-Codex)
+- Commands:
+  - `rg -n "uc-00[1-9]|uc-010|Recently resolved high-priority markers|Open items" docs/unfinished-code-checklist.md docs/unfinished-code-priority-plan.md`
+  - `rg -n "test/unit-tests/components/structures/MatrixChat-test.tsx|test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx|src/vector/index.html" docs/unfinished-code-checklist.md`
+  - `rg -n "2026-03-14-blackout-centralized-work-orders-1-9|2026-03-14-batch-15-marker-closure" docs/unfinished-code-priority-plan.md`

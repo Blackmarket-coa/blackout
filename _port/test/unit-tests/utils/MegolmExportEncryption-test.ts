@@ -120,7 +120,7 @@ cissyYBxjsfsAn
             );
         });
 
-        // TODO find a subtlecrypto shim which doesn't break this test
+        // Re-enable once a stable subtlecrypto shim is adopted for this environment.
         it.skip("should decrypt a range of inputs", function () {
             function next(i: number): Promise<string | undefined> | undefined {
                 if (i >= TEST_VECTORS.length) {

@@ -238,6 +238,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
 
     private firstSyncComplete = false;
     private firstSyncPromise: PromiseWithResolvers<void>;
+    private viewRoomRequestId = 0;
 
     private screenAfterLogin?: IScreen;
 
@@ -793,7 +794,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
                 // to them, supply the room alias. If both are supplied, the room ID will be ignored.
                 const promise = this.viewRoom(payload as ViewRoomPayload);
                 if (payload.deferred_action) {
-                    promise.then(() => {
+                    promise.then((applied) => {
+                        if (!applied) return;
                         dis.dispatch(payload.deferred_action);
                     });
                 }
@@ -1030,7 +1032,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
     }
 
     // switch view to the given room
-    private async viewRoom(roomInfo: ViewRoomPayload): Promise<void> {
+    private async viewRoom(roomInfo: ViewRoomPayload): Promise<boolean> {
+        const requestId = ++this.viewRoomRequestId;
         this.focusNext = roomInfo.focusNext ?? "composer";
 
         if (roomInfo.room_alias) {
@@ -1043,6 +1046,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         // it would have been retrieved.
         if (!this.firstSyncComplete) {
             await this.firstSyncPromise.promise;
+            if (requestId !== this.viewRoomRequestId) return false;
         }
 
         let presentedId = roomInfo.room_alias || roomInfo.room_id!;
@@ -1085,6 +1089,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         if (roomInfo.event_id && roomInfo.highlighted) {
             presentedId += "/" + roomInfo.event_id;
         }
+        if (requestId !== this.viewRoomRequestId) return false;
+
         this.setState(
             {
                 view: Views.LOGGED_IN,
@@ -1100,6 +1106,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
                 this.notifyNewScreen("room/" + presentedId, replaceLast);
             },
         );
+
+        return true;
     }
 
     private viewSomethingBehindModal(): void {
@@ -2073,9 +2081,29 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         const cli = MatrixClientPeg.get();
         if (!cli) return;
 
-        cli.sendEvent(roomId, event.getType() as keyof TimelineEvents, event.getContent()).then(() => {
-            dis.dispatch({ action: "message_sent" });
-        });
+        if (!roomId || typeof roomId !== "string") {
+            logger.warn("Ignoring send_event action with invalid roomId", roomId);
+            return;
+        }
+
+        if (!event || typeof event.getType !== "function" || typeof event.getContent !== "function") {
+            logger.warn("Ignoring send_event action with malformed event payload");
+            return;
+        }
+
+        const eventType = event.getType();
+        if (!eventType) {
+            logger.warn("Ignoring send_event action with missing event type");
+            return;
+        }
+
+        cli.sendEvent(roomId, eventType as keyof TimelineEvents, event.getContent())
+            .then(() => {
+                dis.dispatch({ action: "message_sent" });
+            })
+            .catch((error) => {
+                logger.error("Failed to send event from MatrixChat send_event action", error);
+            });
     }
 
     private setPageSubtitle(subtitle = ""): void {

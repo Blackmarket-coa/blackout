@@ -33,6 +33,8 @@ import { ConnectionState } from "../../../../../src/models/Call";
 import { ScopedRoomContextProvider } from "../../../../../src/contexts/ScopedRoomContext";
 import RoomContext, { type RoomContextType } from "../../../../../src/contexts/RoomContext";
 import { type WidgetMessaging } from "../../../../../src/stores/widgets/WidgetMessaging";
+import defaultDispatcher from "../../../../../src/dispatcher/dispatcher";
+import { Action } from "../../../../../src/dispatcher/actions";
 
 describe("<RoomCallBanner />", () => {
     let client: Mocked<MatrixClient>;
@@ -134,6 +136,21 @@ describe("<RoomCallBanner />", () => {
             await screen.findByText("Join");
         });
 
+        it("dispatches room call view action when Join is clicked", async () => {
+            await renderBanner();
+            const dispatchSpy = jest.spyOn(defaultDispatcher, "dispatch").mockClear();
+
+            screen.getByRole("button", { name: "Join" }).click();
+
+            expect(dispatchSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    action: Action.ViewRoom,
+                    room_id: room.roomId,
+                    view_call: true,
+                }),
+            );
+        });
+
         it("doesn't show banner if the call is connected", async () => {
             call.setConnectionState(ConnectionState.Connected);
             await renderBanner();
@@ -147,8 +164,14 @@ describe("<RoomCallBanner />", () => {
             const banner = await screen.queryByText("Video call");
             expect(banner).toBeFalsy();
         });
-    });
 
-    // TODO: test clicking buttons
-    // TODO: add live location share warning test (should not render if there is an active live location share)
+        it("doesn't render banner when live location sharing is active", async () => {
+            jest.spyOn(OwnBeaconStore.instance, "isMonitoringLiveLocation", "get").mockReturnValue(true);
+            jest.spyOn(OwnBeaconStore.instance, "getLiveBeaconIds").mockReturnValue(["$beacon"]);
+
+            await renderBanner();
+
+            expect(screen.queryByText("Video call")).toBeFalsy();
+        });
+    });
 });

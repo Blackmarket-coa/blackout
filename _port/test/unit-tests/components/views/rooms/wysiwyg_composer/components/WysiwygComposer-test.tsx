@@ -431,14 +431,14 @@ describe("WysiwygComposer", () => {
             expect(screen.getByRole("link", { name: "@room" })).toBeInTheDocument();
         });
 
-        it("allows a community completion to pass through", async () => {
+        it("selecting a community completion inserts plain text", async () => {
             await insertMentionInput();
 
             // select the room suggestion
             await userEvent.click(screen.getByText("community"));
 
-            // check that it we still have the initial text
-            expect(screen.getByText(initialInput)).toBeInTheDocument();
+            // community completions are inserted as plain text in wysiwyg
+            expect(screen.getByText("community-completion")).toBeInTheDocument();
         });
 
         it("selecting an emoji suggestion inserts the emoji", async () => {

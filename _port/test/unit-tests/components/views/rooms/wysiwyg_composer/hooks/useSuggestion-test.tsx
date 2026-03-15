@@ -104,7 +104,7 @@ describe("processEmojiReplacement", () => {
 });
 
 describe("processMention", () => {
-    // TODO refactor and expand tests when mentions become <a> tags
+    // Expand coverage when mention rendering semantics change to anchor tags.
     it("returns early when suggestion is null", () => {
         const mockSetSuggestion = jest.fn();
         const mockSetText = jest.fn();

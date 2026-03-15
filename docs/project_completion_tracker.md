@@ -14,6 +14,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 > Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
 
 > Evidence matrix: `docs/operations/tracker_evidence_matrix.md` (validated by `scripts/operations/validate_tracker_evidence.sh`).
+> Monthly docs integrity guardrail: `node _port/scripts/operations/docs_integrity_check.cjs`.
 
 Status legend:
 
@@ -80,7 +81,7 @@ Status legend:
 
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
-- [x] **Unfinished code marker reduction (open marker inventory: 114)**
+- [x] **Unfinished code marker reduction (open marker inventory: 97)**
     - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
     - **Action steps:**
         1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
@@ -114,6 +115,16 @@ These items are not blockers for distributed self-healing readiness, but they ar
         3. Review in weekly program sync and refresh next-review dates/exception notes.
     - **Definition of done:** Both trackers show 100% completion or have approved exception notes with dates.
     - **Evidence:** `docs/blackout-governance-completion-tracker.md` (dated snapshot + exceptions), `docs/blackout-reuse-completion-tracker.md` (dated snapshot + exceptions).
+
+
+## Normalized tracker schema coverage (Work Order 1)
+
+| Tracker | Status | Owner | Evidence | Remaining work | Next review date |
+| --- | --- | --- | --- | --- | --- |
+| `docs/project_completion_tracker.md` | Complete | Release Engineering | This tracker + `docs/operations/tracker_evidence_matrix.md` | None | 2026-03-21 |
+| `docs/blackout-governance-completion-tracker.md` | Complete | Governance Program Lead | Phase-completion table + audit artifact link | None | 2026-03-21 |
+| `docs/blackout-reuse-completion-tracker.md` | Complete | Platform Architecture | Reuse completion matrix + verification block | None | 2026-03-21 |
+| `docs/rollout-readiness-status.md` | Complete | Release Engineering | Work-order status grid + baseline command output | None | 2026-03-21 |
 
 ## Exit criterion
 

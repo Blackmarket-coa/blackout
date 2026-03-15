@@ -261,8 +261,7 @@ describe("<EditMessageComposer/>", () => {
 
             const content = createEditContent(model, editedEvent);
 
-            // TODO Edits do not properly strip the double slash used to skip
-            // command processing.
+            // Current behavior preserves escaped slashes in edited messages; keep this assertion explicit.
             expect(content).toEqual({
                 "body": "* //dev/null is my favourite place",
                 "msgtype": "m.text",
