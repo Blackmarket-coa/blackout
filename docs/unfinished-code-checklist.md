@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **89**
-- Resolved items tracked in this checklist: **29**
-- Total files with tracked markers: **67**
+- Open items: **86**
+- Resolved items tracked in this checklist: **32**
+- Total files with tracked markers: **64**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] P2 behavior batch: merged multi-event overlap search timelines in RoomSearchView, added inline add-3pid email validation, and clear edit-draft localStorage state on end-edit for WYSIWYG composer (evidence: `docs/operations/evidence/2026-03-15-p2-burndown-batch-3.md`).
 - [x] P2 maintenance sweep: retired legacy TODO/FIXME markers in ViewSource, ScrollPanel, CaptchaForm, WidgetCapabilitiesPromptDialog, TextualBody, and EmojiButton by documenting stabilized behavior and compatibility constraints.
 - [x] Batch closure (15 markers): test/docs marker debt resolved for MatrixChat/RoomCallBanner test gaps, slash-command/space-store/matrixchat regression comments, and vector shell i18n/theme backlog annotations.
 - [x] `src/components/structures/MatrixChat.tsx` (uc-010): view-room navigation now drops stale async transitions during burst actions and send-event handling now safely rejects malformed payloads/failures without state-machine regressions.
@@ -31,10 +32,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/structures/LoggedInView.tsx`
 
 - [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
-
-### `src/components/structures/RoomSearchView.tsx`
-
-- [ ] L49: `// XXX: todo: merge overlapping results somehow?`
 
 ### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
 
@@ -136,14 +133,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [ ] L71: `// TODO markdown support`
 - [ ] L95: `// TODO Do we need to attach mentions here?`
 - [ ] L96: `// TODO Handle editing?`
-
-### `src/components/views/rooms/wysiwyg_composer/utils/editing.ts`
-
-- [ ] L17: `// todo local storage`
-
-### `src/components/views/settings/AddRemoveThreepids.tsx`
-
-- [ ] L375: `// TODO: Inline field validation`
 
 ### `src/components/views/settings/ChangePassword.tsx`
 

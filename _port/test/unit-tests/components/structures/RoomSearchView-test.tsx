@@ -439,6 +439,115 @@ describe("<RoomSearchView/>", () => {
         expect(foo2Node.compareDocumentPosition(afterNode) == Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it("should merge search result timelines when they overlap by multiple events", async () => {
+        const searchResults: ISearchResults = {
+            results: [
+                SearchResult.fromJson(
+                    {
+                        rank: 1,
+                        result: {
+                            room_id: room.roomId,
+                            event_id: "$4",
+                            sender: client.getUserId() ?? "",
+                            origin_server_ts: 1,
+                            content: { body: "Match B", msgtype: "m.text" },
+                            type: EventType.RoomMessage,
+                        },
+                        context: {
+                            profile_info: {},
+                            events_before: [
+                                {
+                                    room_id: room.roomId,
+                                    event_id: "$2",
+                                    sender: client.getUserId() ?? "",
+                                    origin_server_ts: 1,
+                                    content: { body: "Bridge A", msgtype: "m.text" },
+                                    type: EventType.RoomMessage,
+                                },
+                                {
+                                    room_id: room.roomId,
+                                    event_id: "$3",
+                                    sender: client.getUserId() ?? "",
+                                    origin_server_ts: 1,
+                                    content: { body: "Bridge B", msgtype: "m.text" },
+                                    type: EventType.RoomMessage,
+                                },
+                            ],
+                            events_after: [
+                                {
+                                    room_id: room.roomId,
+                                    event_id: "$5",
+                                    sender: client.getUserId() ?? "",
+                                    origin_server_ts: 1,
+                                    content: { body: "After B", msgtype: "m.text" },
+                                    type: EventType.RoomMessage,
+                                },
+                            ],
+                        },
+                    },
+                    eventMapper,
+                ),
+                SearchResult.fromJson(
+                    {
+                        rank: 1,
+                        result: {
+                            room_id: room.roomId,
+                            event_id: "$1",
+                            sender: client.getUserId() ?? "",
+                            origin_server_ts: 1,
+                            content: { body: "Match A", msgtype: "m.text" },
+                            type: EventType.RoomMessage,
+                        },
+                        context: {
+                            profile_info: {},
+                            events_before: [],
+                            events_after: [
+                                {
+                                    room_id: room.roomId,
+                                    event_id: "$2",
+                                    sender: client.getUserId() ?? "",
+                                    origin_server_ts: 1,
+                                    content: { body: "Bridge A", msgtype: "m.text" },
+                                    type: EventType.RoomMessage,
+                                },
+                                {
+                                    room_id: room.roomId,
+                                    event_id: "$3",
+                                    sender: client.getUserId() ?? "",
+                                    origin_server_ts: 1,
+                                    content: { body: "Bridge B", msgtype: "m.text" },
+                                    type: EventType.RoomMessage,
+                                },
+                            ],
+                        },
+                    },
+                    eventMapper,
+                ),
+            ],
+            highlights: [],
+            next_batch: "",
+            count: 1,
+        };
+
+        render(
+            <RoomSearchView
+                inProgress={false}
+                term="search term"
+                scope={SearchScope.All}
+                promise={Promise.resolve(searchResults)}
+                className="someClass"
+                onUpdate={jest.fn()}
+            />,
+            clientAndSDKContextRenderOptions(client, sdkContext),
+        );
+
+        expect((await screen.findAllByText("Bridge A")).length).toBe(1);
+        expect((await screen.findAllByText("Bridge B")).length).toBe(1);
+        expect(await screen.findByText("Match A")).toBeVisible();
+        expect(await screen.findByText("Match B")).toBeVisible();
+        expect(await screen.findByText("After B")).toBeVisible();
+    });
+
     it("should pass appropriate permalink creator for all rooms search", async () => {
         await SettingsStore.setValue("alwaysShowTimestamps", null, SettingLevel.DEVICE, true);
         const room2 = new Room("!room2:server", client, client.getSafeUserId());
