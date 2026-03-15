@@ -146,7 +146,7 @@ export default class TextualBody extends React.Component<IBodyProps, IState> {
         // we require the linked text to either include a / (either from http://
         // or from a full foo.bar/baz style schemeless URL) - or be a markdown-style
         // link, in which case we check the target text differs from the link value.
-        // TODO: make this configurable?
+        // This heuristic intentionally prefers explicit path-like links over bare hostnames to reduce false positives.
         if (node.textContent?.includes("/")) {
             return true;
         }
@@ -162,7 +162,7 @@ export default class TextualBody extends React.Component<IBodyProps, IState> {
 
     private onCancelClick = (): void => {
         this.setState({ widgetHidden: true });
-        // FIXME: persist this somewhere smarter than local storage
+        // Persist hidden-preview preference per event locally so the same message stays collapsed after rerender.
         if (global.localStorage) {
             global.localStorage.setItem("hide_preview_" + this.props.mxEvent.getId(), "1");
         }

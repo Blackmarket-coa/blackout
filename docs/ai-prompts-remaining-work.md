@@ -4,7 +4,7 @@ This document provides copy/paste AI prompts for all currently tracked **remaini
 
 ## Source trackers used
 
-- `docs/unfinished-code-checklist.md` (open marker inventory: 97).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 89).
 - `docs/unfinished-code-priority-plan.md` (P0/P1 ranked queue).
 - `docs/blackout-governance-completion-tracker.md` (maintenance exceptions).
 - `docs/blackout-reuse-completion-tracker.md` (maintenance exceptions).

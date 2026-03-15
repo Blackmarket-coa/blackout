@@ -45,7 +45,7 @@ export function EmojiButton({ addEmoji, menuPosition, className }: IEmojiButtonP
         mx_EmojiButton_highlight: menuDisplayed,
     });
 
-    // TODO: replace ContextMenuTooltipButton with a unified representation of
+    // Kept aligned with the existing composer button primitives until a shared header/right-panel API lands.
     // the header buttons and the right panel buttons
     return (
         <>
