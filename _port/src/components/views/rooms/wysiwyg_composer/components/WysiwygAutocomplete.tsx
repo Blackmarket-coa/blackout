@@ -95,9 +95,9 @@ const WysiwygAutocomplete = ({
                 }
                 return;
             }
-            // TODO - handle "community" type
             case "community": {
-                return; // no-op until we decide how to handle community in the wysiwyg composer
+                handleEmoji(completion.completion);
+                return;
             }
             default:
                 {

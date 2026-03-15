@@ -3,8 +3,8 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **98**
-- Resolved items tracked in this checklist: **20**
+- Open items: **97**
+- Resolved items tracked in this checklist: **21**
 - Total files with tracked markers: **73**
 
 ## Checklist
@@ -17,6 +17,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [x] `src/components/structures/MessagePanel.tsx` (uc-006): room-scoped hidden-event visibility overrides now persist per-room in local storage and fall back safely to the global timeline default.
 - [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
+- [x] `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`: community autocomplete selections now insert plain text into the composer instead of no-op behavior.
 
 ### `src/autocomplete/UserProvider.tsx`
 
@@ -138,7 +139,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`
 
 - [ ] L77: `// TODO determine if utils in SlashCommands.tsx are required.`
-- [ ] L98: `// TODO - handle "community" type`
 - [ ] L117: `// TODO - determine if we show all of the /command suggestions, there are some options in the`
 
 ### `src/components/views/rooms/wysiwyg_composer/hooks/useInitialContent.ts`

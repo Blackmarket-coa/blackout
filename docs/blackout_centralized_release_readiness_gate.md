@@ -72,7 +72,7 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (98) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
+| Open unfinished marker backlog remains high (97) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
 | Hosted canonical CI parity confirmation pending (local replay complete) | Release Engineering | Execute one hosted canonical CI run and attach run URL + published artifacts to this gate and replay evidence doc | 2026-03-21 |
 
 ## Final recommendation justification
