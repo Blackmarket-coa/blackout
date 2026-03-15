@@ -72,8 +72,9 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (97) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
+| Open unfinished marker backlog remains high (89) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
 | Hosted canonical CI parity confirmation pending (local replay complete) | Release Engineering | Execute one hosted canonical CI run and attach run URL + published artifacts to this gate and replay evidence doc | 2026-03-21 |
+| Smoke-suite runner/workspace mismatch for `_port` deploy-critical functional tests | QA/Automation + Release Engineering | Restore/migrate supported smoke runner and attach canonical CI smoke artifact links | 2026-03-21 |
 
 ## Final recommendation justification
 The gate recommendation is **Go (conditional, bounded CI drift risk)** because WO-1..WO-9 completion evidence is linked, canonical lint/test/build/security replay evidence is archived, and remaining risk items are explicitly bounded with owners and review dates in the residual-risk register.

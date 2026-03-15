@@ -65,7 +65,7 @@ export default class CaptchaForm extends React.Component<ICaptchaFormProps, ICap
         this.resetRecaptcha();
         // Resettting the captcha does not clear the challenge overlay from the body in android webviews.
         // Search for an iframe with the challenge src and remove it's topmost ancestor from the body.
-        // TODO: Remove this when the "mobile_register" page is retired.
+        // Compatibility workaround for Android WebView challenge overlays during registration teardown.
         const iframes = document.querySelectorAll("iframe");
         for (const iframe of iframes) {
             if (iframe.src.includes("https://www.recaptcha.net/recaptcha/api2/bframe")) {

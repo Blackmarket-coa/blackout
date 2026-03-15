@@ -50,14 +50,46 @@ yarn test test/unit-tests/components/structures/auth/Login-test.tsx \
 
 Result: pass (no failing smoke scenarios, no P0/P1 defects observed in the validated set).
 
+## Baseline evidence refresh (2026-03-15)
+
+```bash
+pnpm install --no-frozen-lockfile  # pass
+pnpm lint                          # pass
+pnpm test                          # pass
+pnpm audit --audit-level moderate  # pass
+```
+
+Evidence artifact: `docs/operations/evidence/2026-03-15-baseline-gate-replay.md`.
+
+## Build/artifact evidence refresh (2026-03-15)
+
+```bash
+pnpm build  # pass
+# pnpm dist is not applicable in current monorepo root (no dist script)
+```
+
+Evidence artifact: `docs/operations/evidence/2026-03-15-build-artifact-validation.md`.
+
+## Smoke evidence refresh (2026-03-15)
+
+```bash
+pnpm test  # pass (workspace test pipeline)
+pnpm exec jest --config _port/jest.config.ts ... --runInBand  # fail (jest command not found)
+yarn test ... --runInBand  # fail (lockfile/workspace mismatch)
+```
+
+Evidence artifact: `docs/operations/evidence/2026-03-15-smoke-validation-refresh.md`.
+
+Residual smoke risks are explicitly tracked in the evidence artifact with owners/mitigations/next-review dates.
+
 ## Go/No-Go status
 
-**Go (rollout-ready)** with accepted dependency risk controls.
+**Go (conditional, smoke harness risk bounded)** with accepted dependency risk controls.
 
 Conditions satisfied:
 
 - WO-01 through WO-05 complete.
-- No unresolved P0/P1 defects in executed smoke validation set.
+- No observed P0/P1 regressions in available workspace test gates; deploy-critical functional smoke runner gap is explicitly tracked as residual risk.
 - Residual dependency risk explicitly accepted by Security/Platform with compensating controls.
 
 
