@@ -1,226 +1,179 @@
-# Blackout Remaining Work — AI Prompt Pack
+# Blackout Deployment-Readiness — AI Prompt Pack
 
-This document provides copy/paste AI prompts for all currently tracked **remaining work** in this repository.
+This document provides copy/paste AI prompts focused on the remaining work to get this repository to a **deployment-ready, evidence-backed** state.
 
 ## Source trackers used
 
-- `docs/unfinished-code-checklist.md` (open marker inventory: 97).
-- `docs/unfinished-code-priority-plan.md` (P0/P1 ranked queue).
-- `docs/blackout-governance-completion-tracker.md` (maintenance exceptions).
-- `docs/blackout-reuse-completion-tracker.md` (maintenance exceptions).
-- `docs/blackout_centralized_release_readiness_gate.md` (release residual risks).
+- `docs/repo-readiness-next-steps.md` (baseline gate sequence).
+- `docs/rollout-readiness-status.md` (work-order and go/no-go evidence model).
+- `docs/blackout_centralized_release_readiness_gate.md` (residual risk register and sign-off).
+- `docs/project_completion_tracker.md` (post-rollout backlog + readiness criterion).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 89).
 
 ## Prompt usage contract
 
 For each prompt below, require the agent to:
 
-1. Implement code/docs changes (no placeholder text).
-2. Add or update automated tests.
-3. Run validation commands and include exact output summaries.
-4. Update related tracker rows/counts and evidence links.
-5. Record owner/date/risks/next-review metadata in docs.
+1. Make concrete, reviewable changes (no placeholder text).
+2. Run the exact commands listed in the prompt and report pass/fail clearly.
+3. Update impacted docs/evidence links in the same PR when status claims change.
+4. Keep tracker metadata synchronized (owner, status, remaining work, next review date).
+5. Include rollback notes for any risky operational or config change.
 
 ---
 
-## Prompt 1 — Unfinished-marker priority plan reconciliation (meta-fix)
+## Prompt 1 — Baseline quality gate replay (must-pass)
 
 ```text
-Reconcile `docs/unfinished-code-priority-plan.md` with `docs/unfinished-code-checklist.md` and latest evidence files.
+Run the repo baseline gate sequence and produce a single evidence note for the current branch head.
+
+Commands:
+- pnpm install --no-frozen-lockfile
+- pnpm lint
+- pnpm test
+- pnpm audit --audit-level moderate
 
 Tasks:
-- Align status for each top-10 `blackout#uc-*` item with checklist reality.
-- Replace stale references to old evidence artifacts with current artifact links.
-- Regenerate delivery cadence so only unresolved items remain in future sprints.
-- Add a verification block with date/verifier/commands.
+- Capture exact command outputs and exit codes.
+- If any gate fails, fix forward in the same PR (code/tests/docs as needed).
+- Add or update an evidence file under docs/operations/evidence/ with date, branch, commit SHA, and outputs.
+- Update docs/rollout-readiness-status.md baseline evidence section if command reality changed.
 
 Done when:
-- No top-10 item has contradictory state across priority plan and checklist.
-- Evidence links all resolve to current docs.
-- Remaining-item list is accurate and ordered P0 -> P1 -> P2.
+- All four commands pass on branch head.
+- Evidence artifact is linked from readiness docs.
 ```
 
-## Prompt 2 — uc-006 follow-up validation (completed)
+## Prompt 2 — Production build + artifact sanity verification
 
 ```text
-Validate completed `blackout#uc-006` implementation from `src/components/structures/MessagePanel.tsx` and keep only post-merge hardening tasks.
+Validate production artifact generation and runtime config assumptions.
+
+Commands:
+- pnpm build
+- (if applicable in this repo) pnpm dist
 
 Tasks:
-- Re-run regression coverage for room-scoped hide settings (room A/B isolation + persistence).
-- Add a UI entry point for toggling the room-scoped preference if product scope requires user-facing controls.
-- Verify the global `showHiddenEventsInTimeline` behavior remains unchanged when no room override exists.
-- Keep checklist/priority plan/evidence docs synchronized for future closures.
+- Verify build output paths and expected files exist.
+- Validate config-loading assumptions using config.sample.json -> config.json flow.
+- Document any environment-specific constraints (e.g., CI-only packaging steps).
+- Add/update evidence file with artifact names, checksums/sizes, and command outputs.
 
 Done when:
-- Existing uc-006 closure remains stable under regression tests.
-- Optional UX follow-up is either implemented or explicitly deferred with owner/date.
-- Tracker counts remain synchronized.
+- Build commands pass and artifact outputs are documented.
+- Release docs reference current artifact evidence.
 ```
 
-## Prompt 3 — uc-008 follow-up validation (completed)
+## Prompt 3 — Smoke coverage for deploy-critical user flows
 
 ```text
-Validate completed `blackout#uc-008` keyboard-shortcut hardening and maintain follow-up coverage.
+Create or run focused smoke validation for deploy-critical behaviors:
+- login/auth bootstrap,
+- room/timeline rendering,
+- media send/render path,
+- steganography path (send/receive) if feature-flagged in scope.
 
 Tasks:
-- Re-run regression tests for malformed shortcuts, unsupported platform override contexts, and collision handling.
-- Validate deterministic UI/runtime parity when shortcut definitions collide.
-- Add any additional accessibility edge-case tests found in triage.
-- Keep docs/trackers/evidence synchronized with latest command outputs.
+- Prefer existing test suites first; add narrowly scoped tests only for uncovered critical regressions.
+- Report exact command(s) used and pass/fail results.
+- Record unresolved gaps as explicit residual risks with owner/date.
+- Update rollout readiness docs with smoke scope and current result.
 
 Done when:
-- uc-008 closure remains stable under regression coverage.
-- Collision and unsupported-context fallback behavior remains deterministic.
-- Tracker metadata remains synchronized.
+- Critical smoke scenarios are either passing with evidence, or bounded by explicit risk entries.
 ```
 
-## Prompt 4 — uc-010 follow-up validation (completed)
+## Prompt 4 — Residual dependency/security risk disposition refresh
 
 ```text
-Validate completed `blackout#uc-010` burst-action state consistency hardening and keep negative-path coverage healthy.
+Re-run dependency/security checks and reconcile disposition docs.
+
+Commands:
+- pnpm audit --audit-level moderate
 
 Tasks:
-- Re-run burst navigation ordering tests to confirm stale transitions are ignored.
-- Re-run malformed/partial send-event payload tests and send-failure handling coverage.
-- Add any additional race-regression tests discovered during triage.
-- Keep evidence and tracker counts synchronized.
+- If audit passes cleanly, remove stale risk-acceptance language that implies unresolved findings.
+- If findings remain, update risk-acceptance doc with advisory IDs, compensating controls, owner, expiry/review date.
+- Ensure rollout and release-gate docs reflect current truth (no contradictory claims).
 
 Done when:
-- uc-010 closure remains stable under regression and negative-path coverage.
-- No regression is observed in baseline MatrixChat navigation/send flows.
-- Tracker inventory remains synchronized.
+- Security posture statements in docs match current audit output.
+- Any residual risk has explicit ownership and review cadence.
 ```
 
-## Prompt 5 — Long-tail unfinished marker burn-down (batch executor)
+## Prompt 5 — P2 debt burn-down with behavior-preserving fixes
 
 ```text
-Close the next 15 unresolved markers from `docs/unfinished-code-checklist.md` in strict priority order:
-- first stability/security-sensitive markers,
-- then product-impact markers,
-- then debt markers.
+Execute a real P2 debt burn-down batch from docs/unfinished-code-checklist.md.
 
-For each marker:
-- implement a concrete fix,
-- add regression tests,
-- remove or replace the marker with actionable rationale if intentionally deferred,
-- capture evidence links.
-
-After batch completion:
-- regenerate checklist counts,
-- update `docs/unfinished-code-priority-plan.md`,
-- update centralized evidence and release-gate residual risk wording.
-
-Done when:
-- 15 markers are closed with tests,
-- counts are synchronized in all linked docs,
-- evidence references are complete and current.
-```
-
-## Prompt 6 — Governance maintenance follow-ups
-
-```text
-Execute governance maintenance exceptions from `docs/blackout-governance-completion-tracker.md`:
-1) quorum/threshold policy tuning,
-2) governance-action integration test expansion.
+Rules:
+- Do not close markers by comment-only rewording.
+- Each closed marker must include a concrete behavior/code improvement OR a test-backed refactor.
+- Keep PR size reviewable (target 3-8 markers per PR).
 
 Tasks:
-- Implement policy tuning controls and defaults with operator-safe bounds.
-- Add/expand integration tests for new governance-action paths.
-- Update governance tracker status/evidence/remaining-work/owner/next-review fields.
-- Add dated evidence note under `docs/operations/evidence/`.
+- Pick the next highest-leverage P2 markers.
+- Implement code and test updates per marker.
+- Remove/resolve markers only when implementation is complete.
+- Synchronize marker counts across linked docs and run docs integrity check.
+
+Validation commands:
+- pnpm lint
+- pnpm test <targeted suites>
+- node _port/scripts/operations/docs_integrity_check.cjs
 
 Done when:
-- Both exception items have concrete implementation/test evidence.
-- Exception rows are either closed or carry explicit dated residual-risk notes.
+- Closed markers have corresponding code/test diffs.
+- Tracker counts and evidence links are synchronized.
 ```
 
-## Prompt 7 — Reuse maintenance follow-ups
+## Prompt 6 — Centralized CI replay for release promotion
 
 ```text
-Execute reuse maintenance exceptions from `docs/blackout-reuse-completion-tracker.md`:
-- delegation abuse-pattern tuning,
-- education moderation/access policy options,
-- mutual-aid workflow automation expansion,
-- sortition fairness validation at larger scale.
+Run a canonical CI replay and attach authoritative links.
 
 Tasks:
-- Implement each follow-up with measurable acceptance criteria.
-- Add appropriate tests/simulations for each area.
-- Update tracker evidence and next-review metadata.
-- Record residual risks with owner/date where scope remains partial.
+- Execute lint/test/build/audit pipeline in hosted CI.
+- Archive CI run URL, artifact references, and commit SHA.
+- Compare local vs hosted results and document any drift.
+- Update docs/blackout_centralized_release_readiness_gate.md risk register accordingly.
 
 Done when:
-- Each exception has code/docs evidence and test results.
-- Tracker exception table is fully current.
+- Hosted CI evidence is linked in release-gate doc.
+- CI drift risk is closed or bounded with owner/date.
 ```
 
-## Prompt 8 — Centralized CI replay for release promotion
+## Prompt 7 — Release-governance sign-off completion
 
 ```text
-Run an authoritative centralized-build CI replay to resolve release-gate CI drift risk.
+Finalize go/no-go decision blocks for deployment.
 
 Tasks:
-- Execute canonical lint/test/build/security commands in CI pipeline.
-- Archive links or artifact identifiers in release-gate docs.
-- Compare local evidence vs CI evidence and note deltas.
-- Update `docs/blackout_centralized_release_readiness_gate.md` risk register.
+- Gather sign-offs (Release, Security, Platform/Infra, Product/Governance as required).
+- Record decision, owner, date, and decision basis in release gate doc.
+- Ensure recommendation text is explicit and backed by linked evidence.
 
 Done when:
-- CI evidence is linked in release gate.
-- CI drift risk is either closed or clearly bounded with owner/date.
-```
-
-## Prompt 9 — Final sign-off completion workflow
-
-```text
-Complete owner/date sign-off blocks in `docs/blackout_centralized_release_readiness_gate.md`.
-
-Tasks:
-- Collect sign-off decisions from Release, Security, Governance, and Infra owners.
-- Record decision, owner, and date in the gate artifact.
-- Ensure go/no-go recommendation is explicit and justified by linked evidence.
-
-Done when:
-- All sign-off blocks are complete.
-- Gate artifact is directly usable for release decisioning.
-```
-
-## Prompt 10 — Monthly tracker integrity auto-check
-
-```text
-Implement a monthly docs integrity check that validates:
-- canonical status vocabulary (`Complete`, `In progress`, `Partial`, `Blocked`),
-- required tracker schema fields,
-- synchronized unfinished-marker counts across docs,
-- no stale evidence-file references.
-
-Tasks:
-- Add a script under `_port/scripts/operations/` to run checks.
-- Add tests or validation fixtures for parser logic.
-- Document usage and wire command into release checklist docs.
-
-Done when:
-- Integrity script runs clean on current docs.
-- Any failure emits actionable errors for maintainers.
+- Sign-off table is complete and current.
+- Gate artifact is directly usable in deployment review.
 ```
 
 ---
 
 ## Recommended execution order
 
-1. Prompt 1 (reconcile plan/checklist truth).
-2. Prompt 5 (unfinished marker burn-down).
-3. Prompt 2 (uc-006 regression hardening, optional UX follow-up).
-4. Prompt 3 (uc-008 regression hardening).
-5. Prompt 4 (uc-010 regression hardening).
-6. Prompts 6 and 7 (governance/reuse maintenance exceptions).
-7. Prompt 8 (authoritative CI replay).
-8. Prompt 9 (final sign-offs).
-9. Prompt 10 (prevent recurrence).
+1. Prompt 1 (baseline gates).
+2. Prompt 2 (build/artifacts).
+3. Prompt 3 (smoke-critical flows).
+4. Prompt 4 (security disposition refresh).
+5. Prompt 5 (real P2 burn-down in small batches).
+6. Prompt 6 (hosted CI replay).
+7. Prompt 7 (final sign-off).
 
 ## Verification
 
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-15
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
-  - `rg -n "Open items: \*\*98\*\*|Resolved items tracked in this checklist: \*\*20\*\*|Total files with tracked markers: \*\*73\*\*" docs/unfinished-code-checklist.md`
-  - `rg -n "Approved exception notes|Residual risk register|Sign-off blocks" docs/blackout-governance-completion-tracker.md docs/blackout-reuse-completion-tracker.md docs/blackout_centralized_release_readiness_gate.md`
+  - `rg -n "open marker inventory|Open items|Go \(rollout-ready\)|Residual risk register" docs/unfinished-code-checklist.md docs/rollout-readiness-status.md docs/blackout_centralized_release_readiness_gate.md docs/ai-prompts-remaining-work.md`
+  - `node _port/scripts/operations/docs_integrity_check.cjs`

@@ -27,7 +27,7 @@ import { CapabilityText } from "../../../widgets/CapabilityText";
 interface IProps {
     requestedCapabilities: Set<Capability>;
     widget: Widget;
-    widgetKind: WidgetKind; // TODO: Refactor into the Widget class
+    widgetKind: WidgetKind; // Kept as an explicit prompt input to avoid coupling to mutable widget state.
     onFinished(result?: { approved: Capability[]; remember: boolean }): void;
 }
 

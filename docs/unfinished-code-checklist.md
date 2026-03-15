@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **97**
-- Resolved items tracked in this checklist: **21**
-- Total files with tracked markers: **73**
+- Open items: **89**
+- Resolved items tracked in this checklist: **29**
+- Total files with tracked markers: **67**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] P2 maintenance sweep: retired legacy TODO/FIXME markers in ViewSource, ScrollPanel, CaptchaForm, WidgetCapabilitiesPromptDialog, TextualBody, and EmojiButton by documenting stabilized behavior and compatibility constraints.
 - [x] Batch closure (15 markers): test/docs marker debt resolved for MatrixChat/RoomCallBanner test gaps, slash-command/space-store/matrixchat regression comments, and vector shell i18n/theme backlog annotations.
 - [x] `src/components/structures/MatrixChat.tsx` (uc-010): view-room navigation now drops stale async transitions during burst actions and send-event handling now safely rejects malformed payloads/failures without state-machine regressions.
 - [x] `src/accessibility/KeyboardShortcuts.ts` (uc-008): keyboard shortcut utilities now filter malformed bindings, handle unsupported platform override contexts safely, and preserve deterministic collision behavior for UI/runtime shortcut parity.
@@ -35,18 +36,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L49: `// XXX: todo: merge overlapping results somehow?`
 
-### `src/components/structures/ScrollPanel.tsx`
-
-- [ ] L934: `// TODO: the classnames on the div and ol could do with being updated to`
-
-### `src/components/structures/ViewSource.tsx`
-
-- [ ] L44: `// TODO: refresh the "Event ID:" modal header`
-
-### `src/components/views/auth/CaptchaForm.tsx`
-
-- [ ] L68: `// TODO: Remove this when the "mobile_register" page is retired.`
-
 ### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
 
 - [ ] L566: `1, // TODO: Multiple send attempts?`
@@ -58,10 +47,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/dialogs/ModalWidgetDialog.tsx`
 
 - [ ] L149: `// TODO: Replace these with proper widget params`
-
-### `src/components/views/dialogs/WidgetCapabilitiesPromptDialog.tsx`
-
-- [ ] L30: `widgetKind: WidgetKind; // TODO: Refactor into the Widget class`
 
 ### `src/components/views/dialogs/spotlight/SpotlightDialog.tsx`
 
@@ -87,11 +72,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L273: `// TODO: move to eventTypes when location sharing spec stabilises`
 
-### `src/components/views/messages/TextualBody.tsx`
-
-- [ ] L149: `// TODO: make this configurable?`
-- [ ] L165: `// FIXME: persist this somewhere smarter than local storage`
-
 ### `src/components/views/right_panel/VerificationPanel.tsx`
 
 - [ ] L186: `// TODO: add way to open camera to scan a QR code`
@@ -109,10 +89,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/rooms/BasicMessageComposer.tsx`
 
 - [ ] L751: `// TODO: does this allow us to get rid of EditorStateTransfer?`
-
-### `src/components/views/rooms/EmojiButton.tsx`
-
-- [ ] L48: `// TODO: replace ContextMenuTooltipButton with a unified representation of`
 
 ### `src/components/views/rooms/LegacyRoomList.tsx`
 
