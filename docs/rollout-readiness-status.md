@@ -61,6 +61,15 @@ pnpm audit --audit-level moderate  # pass
 
 Evidence artifact: `docs/operations/evidence/2026-03-15-baseline-gate-replay.md`.
 
+## Build/artifact evidence refresh (2026-03-15)
+
+```bash
+pnpm build  # pass
+# pnpm dist is not applicable in current monorepo root (no dist script)
+```
+
+Evidence artifact: `docs/operations/evidence/2026-03-15-build-artifact-validation.md`.
+
 ## Go/No-Go status
 
 **Go (rollout-ready)** with accepted dependency risk controls.
