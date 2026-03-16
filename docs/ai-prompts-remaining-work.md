@@ -8,7 +8,7 @@ This document provides copy/paste AI prompts focused on the remaining work to ge
 - `docs/rollout-readiness-status.md` (work-order and go/no-go evidence model).
 - `docs/blackout_centralized_release_readiness_gate.md` (residual risk register and sign-off).
 - `docs/project_completion_tracker.md` (post-rollout backlog + readiness criterion).
-- `docs/unfinished-code-checklist.md` (open marker inventory: 86).
+- `docs/unfinished-code-checklist.md` (open marker inventory: 54).
 
 ## Prompt usage contract
 

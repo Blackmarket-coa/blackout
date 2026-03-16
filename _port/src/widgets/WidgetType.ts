@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-// TODO: Move to matrix-widget-api
+// Kept local until matrix-widget-api exposes stable cross-package widget-type exports.
 export class WidgetType {
     public static readonly JITSI = new WidgetType("m.jitsi", "jitsi");
     public static readonly STICKERPICKER = new WidgetType("m.stickerpicker", "m.stickerpicker");

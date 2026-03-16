@@ -10,7 +10,7 @@ Please see LICENSE files in the repository root for full details.
 export type DispatcherAction = Action | string;
 
 export enum Action {
-    // TODO: Populate with actual actions
+    // Actions are incrementally typed as touched to avoid high-risk dispatcher churn.
     // This is lazily generated as it also includes fixing a bunch of references. Work
     // that we don't really want to take on in a giant chunk. We should always define
     // new actions here, and ideally when we touch existing ones we take some time to

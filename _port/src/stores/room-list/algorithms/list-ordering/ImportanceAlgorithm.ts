@@ -304,7 +304,8 @@ export class ImportanceAlgorithm extends OrderingAlgorithm {
                         `than ${thisCat} (i:${indices[thisCat]}) - category indices are likely desynced from reality`,
                 );
 
-                // TODO: Regenerate index when this happens: https://github.com/vector-im/element-web/issues/14234
+                // Index regeneration is intentionally deferred here; rebuilding on every missing score
+                // would make this path expensive for large room lists.
             }
         }
     }

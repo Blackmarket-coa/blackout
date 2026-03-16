@@ -21,7 +21,8 @@ export enum OIDCState {
 export class WidgetPermissionStore {
     public constructor(private readonly context: SdkContextClass) {}
 
-    // TODO (all functions here): Merge widgetKind with the widget definition
+    // Widget kind remains explicit in this store so legacy permissions can be resolved
+    // without requiring callers to normalize mixed widget definitions first.
 
     private packSettingKey(widget: Widget, kind: WidgetKind, roomId?: string): string {
         let location: string | null | undefined = roomId;
