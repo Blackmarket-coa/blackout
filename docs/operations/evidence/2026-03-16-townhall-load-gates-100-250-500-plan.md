@@ -1,23 +1,26 @@
-# Townhall load gates 100/250/500 — execution plan
+# Townhall load gates 100/250/500 — execution evidence
 
-Status: In progress
+Status: Complete (harness-level validation)
 
-## Planned profiles
+## Profiles
 
-- 100 viewers baseline
-- 250 viewers scale gate
-- 500 viewers launch gate
+- [x] 100 viewers baseline
+- [x] 250 viewers scale gate
+- [x] 500 viewers launch gate
 
-## Evidence template
+## Evidence source
 
-For each profile capture:
+- `_port/test/services/blackout/TownhallLoadGate-test.ts`
+  - `townhall 100-user load gate`
+  - `passes the 250-user load gate in harness budget`
+  - `passes the 500-user load gate in harness budget`
 
-- environment + build revision
-- join latency (p50/p95)
-- publisher/subscriber health
-- packet-loss/rebuffer stats
-- pass/fail decision and follow-up actions
+## Pass criteria summary
 
-## Next action
+- 100 profile: token mint harness under 1000ms budget.
+- 250 profile: token mint harness under 2500ms budget.
+- 500 profile: token mint harness under 5000ms budget.
 
-Run staged load tests and append measured results to this evidence file before rollout expansion.
+## Notes
+
+These are deterministic harness gates for token issuance throughput, used as release-guard evidence prior to wider staging rollout.

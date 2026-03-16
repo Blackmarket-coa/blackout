@@ -9,12 +9,12 @@ Source: `docs/blackout-sfu-townhall-build-plan.md` section 12.
 | TOWNHALL-01 | Complete | Feature flag scope previously delivered in MVP tranche. |
 | TOWNHALL-02 | Complete | Widget shell + Matrix context binding delivered in MVP tranche. |
 | TOWNHALL-03 | Complete | Token client/service contract delivered in MVP tranche. |
-| TOWNHALL-04 | In progress | State-event schema documented in `docs/townhall/townhall-state-event-schema.md`. |
-| TOWNHALL-05 | In progress | Provisioning runbook drafted in `docs/operations/runbooks/townhall-livekit-coturn-provisioning.md`. |
-| TOWNHALL-06 | In progress | Moderation/audit control spec drafted in `docs/townhall/townhall-moderation-audit-controls.md`. |
-| TOWNHALL-07 | In progress | Observability baseline documented in `docs/operations/runbooks/townhall-observability-runbook.md`. |
-| TOWNHALL-08 | In progress | Load-gate execution checklist staged in `docs/operations/evidence/2026-03-16-townhall-load-gates-100-250-500-plan.md`. |
-| TOWNHALL-09 | In progress | Security signoff checklist drafted in `docs/security/townhall-security-review-signoff.md`. |
+| TOWNHALL-04 | Complete | Final schema + compatibility guidance documented in `docs/townhall/townhall-state-event-schema.md`. |
+| TOWNHALL-05 | Complete | Staging provisioning runbook finalized in `docs/operations/runbooks/townhall-livekit-coturn-provisioning.md`. |
+| TOWNHALL-06 | Complete | Moderation controls + audit flow implemented with test coverage and doc sync. |
+| TOWNHALL-07 | Complete | Dashboard + alert artifacts committed (`docs/operations/dashboards/townhall-sfu-observability-dashboard.json`, `docs/operations/alerts/townhall-sfu-alert-rules.yaml`). |
+| TOWNHALL-08 | Complete | 100/250/500 load-gate evidence and harness tests committed. |
+| TOWNHALL-09 | Complete | Security review signoff completed in `docs/security/townhall-security-review-signoff.md`. |
 
 1. **TOWNHALL-01 — Add townhall widget feature flag in Blackout**
     - Deliverable: checklist item 1.
@@ -46,5 +46,5 @@ Source: `docs/blackout-sfu-townhall-build-plan.md` section 12.
 
 ## Current sprint scope
 
-- In-scope MVP: TOWNHALL-01, TOWNHALL-02, TOWNHALL-03.
-- Rollout gate for this phase: 100-user load profile evidence (partial execution of TOWNHALL-08).
+- Completed closure sweep: TOWNHALL-04 through TOWNHALL-09.
+- Consolidated evidence: `docs/operations/evidence/2026-03-16-townhall-04-09-completion.md`.

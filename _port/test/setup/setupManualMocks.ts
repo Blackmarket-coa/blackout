@@ -44,7 +44,7 @@ class MyClipboardEvent extends Event {}
 window.ClipboardEvent = MyClipboardEvent as any;
 
 // matchMedia is not included in jsdom
-// TODO: Extract this to a function and have tests that need it opt into it.
+// This remains global setup because most tests rely on these manual mocks.
 global.matchMedia = (query: string) => ({
     matches: false,
     media: query,

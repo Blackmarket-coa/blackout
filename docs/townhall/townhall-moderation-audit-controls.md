@@ -22,3 +22,9 @@
 
 - Host and moderator roles can execute control actions.
 - Audit event emission is required for all privileged actions.
+
+## Implementation mapping
+
+- Moderation service: `_port/src/services/townhall/TownhallPolicyService.ts`
+- Widget controls + audit log rendering: `_port/src/modules/townhall/components/TownhallWidgetShell.tsx`
+- Unit coverage: `_port/test/unit-tests/modules/townhall/TownhallWidgetShell-test.tsx`

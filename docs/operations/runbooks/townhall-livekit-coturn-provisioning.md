@@ -7,6 +7,12 @@
 - coturn relay
 - Metrics/log exporters
 
+## Provisioning assets
+
+- `infra/townhall-staging/docker-compose.yml`
+- `infra/townhall-staging/livekit.yaml`
+- Validation evidence: `docs/operations/evidence/2026-03-16-townhall-provisioning-validation.md`
+
 ## Provisioning checklist
 
 1. Create DNS entries for `livekit` and `turn` endpoints.

@@ -26,3 +26,9 @@ Defines stable room-state events for Blackout townhall policy and role overrides
 
 - Legacy `im.vector.modular.widgets` is still honored by the client store for safe migration.
 - New deployments should prefer `m.widget` as canonical widget event.
+
+## Acceptance checklist
+
+- [x] Policy state schema includes publisher cap and publish lock controls.
+- [x] Role override schema includes actor/reason/timestamp fields.
+- [x] Compatibility guidance documents legacy and canonical widget event handling.

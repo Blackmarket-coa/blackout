@@ -8,11 +8,11 @@ First end-to-end implementation slice for the blueprint checklist:
 2. Ed25519 signature verification on ingest.
 3. Hash-chain tamper validation (`previousHash` continuity).
 
-## Proposed module boundaries
+## Implemented module boundaries
 
-- `core/events/EventLog.ts`
-- `crypto/signatures/Ed25519Verifier.ts`
-- `core/ingest/TamperGuard.ts`
+- `_port/src/services/self-healing/AppendOnlyEventLog.ts`
+- Signature verification hook via injected verifier function (`SignatureVerifier`).
+- Hash-chain + content-hash tamper checks in `ingest()`.
 
 ## Acceptance checks
 
@@ -24,3 +24,7 @@ First end-to-end implementation slice for the blueprint checklist:
 
 - Add integration tests for replay/duplication rejection.
 - Extend to encrypted payload envelopes (X25519 + AES-GCM).
+
+## Implementation evidence
+
+- `docs/operations/evidence/2026-03-16-self-healing-thin-slice-implementation.md`

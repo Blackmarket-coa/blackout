@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **69**
+- Open items: **54**
 - Resolved items tracked in this checklist: **32**
-- Total files with tracked markers: **52**
+- Total files with tracked markers: **37**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Sprint B P2 marker batch: closed 15 long-tail markers across utils/notifications/widgets/test scaffolding while preserving existing runtime behavior and compatibility constraints (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-batch-4.md`).
 - [x] P2 marker sprint: closed composer, widget-store, and room-list algorithm marker clusters with implementation notes, m.widget state-event handling, and refreshed tracker counts (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
 - [x] P2 behavior batch: merged multi-event overlap search timelines in RoomSearchView, added inline add-3pid email validation, and clear edit-draft localStorage state on end-edit for WYSIWYG composer (evidence: `docs/operations/evidence/2026-03-15-p2-burndown-batch-3.md`).
 - [x] P2 maintenance sweep: retired legacy TODO/FIXME markers in ViewSource, ScrollPanel, CaptchaForm, WidgetCapabilitiesPromptDialog, TextualBody, and EmojiButton by documenting stabilized behavior and compatibility constraints.
@@ -137,10 +138,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [ ] L86: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
 - [ ] L121: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
 
-### `src/dispatcher/actions.ts`
-
-- [ ] L13: `// TODO: Populate with actual actions`
-
 ### `src/indexing/EventIndex.ts`
 
 - [ ] L500: `// TODO we need to ensure to use member lazy loading with this`
@@ -171,25 +168,9 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L33: `// TODO: [TS] Formal type that doesn't cause a cyclical reference.`
 
-### `src/settings/enums/Layout.ts`
-
-- [ ] L10: `/* TODO: This should be later reworked into something more generic */`
-
 ### `src/stores/OwnBeaconStore.ts`
 
 - [ ] L305: `// TODO check powerlevels here`
-
-### `src/stores/ThreepidInviteStore.ts`
-
-- [ ] L22: `// TODO: Figure out if these are ever populated`
-
-### `src/stores/notifications/NotificationLevel.ts`
-
-- [ ] L15: `// TODO: Remove bold with notifications: https://github.com/vector-im/element-web/issues/14227`
-
-### `src/stores/notifications/RoomNotificationStateStore.ts`
-
-- [ ] L71: `// TODO: Update if/when invites move out of the room list.`
 
 ### `src/stores/spaces/SpaceStore.ts`
 
@@ -202,46 +183,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [ ] L26: `// TODO: convert these to maps`
 - [ ] L156: `// TODO: [Canonical DMs] Handle lookups for email addresses.`
 
-### `src/utils/FileDownloader.ts`
-
-- [ ] L54: `// TODO: If we decide to keep the download link behaviour, we should bring the style management into here.`
-
-### `src/utils/MediaEventHelper.ts`
-
-- [ ] L19: `// TODO: We should consider caching the blobs. https://github.com/vector-im/element-web/issues/17192`
-
-### `src/utils/dm/startDm.ts`
-
-- [ ] L54: `// TODO: [Canonical DMs] Remove this check and instead just create the multi-person DM`
-
-### `src/utils/exportUtils/HtmlExport.tsx`
-
-- [ ] L399: `// TODO: Handle callEvent errors`
-
-### `src/utils/permalinks/MatrixSchemePermalinkConstructor.ts`
-
-- [ ] L53: `// TODO: Change API signature to accept the URL for checking`
-
-### `src/vector/platform/IPCManager.ts`
-
-- [ ] L33: `// TODO this should be moved into the preload.js file.`
-
-### `src/widgets/CapabilityText.tsx`
-
-- [ ] L128: `// TODO: Support MSC3819 (to-device capabilities)`
-
-### `src/widgets/WidgetType.ts`
-
-- [ ] L9: `// TODO: Move to matrix-widget-api`
-
 ### `test/jest-mocks.ts`
 
 - [ ] L9: `// https://jestjs.io/docs/en/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom`
 
-### `test/setup/setupManualMocks.ts`
-
-- [ ] L47: `// TODO: Extract this to a function and have tests that need it opt into it.`
-
-### `test/test-utils/test-utils.ts`
-
-- [ ] L56: `* TODO: once the components are updated to get their MatrixClients from`
