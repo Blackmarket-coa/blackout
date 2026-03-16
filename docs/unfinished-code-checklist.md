@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **54**
+- Open items: **39**
 - Resolved items tracked in this checklist: **32**
-- Total files with tracked markers: **37**
+- Total files with tracked markers: **27**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Sprint C risk-queue closure: completed ranked risk items #1-#10 (MImageBody, AliasSettings, EventIndex, SpaceStore, VerificationPanel, LinkPreviewWidget, Stickerpicker, Notifications, WidgetStore, UserProvider) with code + tests + tracker synchronization (evidence: `docs/operations/evidence/2026-03-16-sprint-c-risk-queue-1-10-closure.md`).
 - [x] Sprint B P2 marker batch: closed 15 long-tail markers across utils/notifications/widgets/test scaffolding while preserving existing runtime behavior and compatibility constraints (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-batch-4.md`).
 - [x] P2 marker sprint: closed composer, widget-store, and room-list algorithm marker clusters with implementation notes, m.widget state-event handling, and refreshed tracker counts (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
 - [x] P2 behavior batch: merged multi-event overlap search timelines in RoomSearchView, added inline add-3pid email validation, and clear edit-draft localStorage state on end-edit for WYSIWYG composer (evidence: `docs/operations/evidence/2026-03-15-p2-burndown-batch-3.md`).
@@ -22,10 +23,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 - [x] `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`: community autocomplete selections now insert plain text into the composer instead of no-op behavior.
-
-### `src/autocomplete/UserProvider.tsx`
-
-- [ ] L87: `// TODO: lazyload if we have no ev.sender room member?`
 
 ### `src/components/structures/LegacyCallEventGrouper.ts`
 
@@ -67,22 +64,9 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L275: `TODO: Move iframe (and dummy link) into FileDownloader.`
 
-### `src/components/views/messages/MImageBody.tsx`
-
-- [ ] L215: `// FIXME: we let images grow as wide as you like, rather than capped to 800x600.`
-
 ### `src/components/views/messages/MessageEvent.tsx`
 
 - [ ] L273: `// TODO: move to eventTypes when location sharing spec stabilises`
-
-### `src/components/views/right_panel/VerificationPanel.tsx`
-
-- [ ] L186: `// TODO: add way to open camera to scan a QR code`
-
-### `src/components/views/room_settings/AliasSettings.tsx`
-
-- [ ] L217: `// TODO: Add error handling based upon server validation`
-- [ ] L261: `// TODO: In future, we should probably be making sure that the alias actually belongs`
 
 ### `src/components/views/room_settings/RoomProfileSettings.tsx`
 
@@ -96,10 +80,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/rooms/LegacyRoomList.tsx`
 
 - [ ] L433: `// TODO: Replace with archived view: https://github.com/vector-im/element-web/issues/14038`
-
-### `src/components/views/rooms/LinkPreviewWidget.tsx`
-
-- [ ] L70: `// FIXME: do we want to factor out all image displaying between this and MImageBody - especially for lightboxing?`
 
 ### `src/components/views/rooms/RoomSublist.tsx`
 
@@ -118,10 +98,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/components/views/settings/ChangePassword.tsx`
 
 - [ ] L241: `// TODO: We can remove this check (but should add some Playwright tests to`
-
-### `src/components/views/settings/Notifications.tsx`
-
-- [ ] L56: `// TODO: this "view" component still has far too much application logic in it,`
 
 ### `src/components/views/settings/tabs/room/BridgeSettingsTab.tsx`
 

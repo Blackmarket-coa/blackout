@@ -81,7 +81,7 @@ Status legend:
 
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
-- [x] **Unfinished code marker reduction (open marker inventory: 54)**
+- [x] **Unfinished code marker reduction (open marker inventory: 39)**
     - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
     - **Action steps:**
         1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.

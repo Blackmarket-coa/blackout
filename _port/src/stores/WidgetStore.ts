@@ -185,6 +185,18 @@ export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
         return roomInfo?.widgets || [];
     }
 
+    public getAllApps(): IApp[] {
+        return Array.from(this.widgetMap.values());
+    }
+
+    public setWidgetPersistence(widgetId: string, roomId: string | null, persistent: boolean): void {
+        ActiveWidgetStore.instance.setWidgetPersistence(widgetId, roomId, persistent);
+    }
+
+    public getWidgetPersistence(widgetId: string, roomId: string | null): boolean {
+        return ActiveWidgetStore.instance.getWidgetPersistence(widgetId, roomId);
+    }
+
     public addVirtualWidget(widget: IWidget, roomId: string): IApp {
         this.initRoom(roomId);
         const app = WidgetUtils.makeAppConfig(widget.id, widget, widget.creatorUserId, roomId, undefined);

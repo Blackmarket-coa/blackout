@@ -73,7 +73,7 @@ Hosted canonical CI replay attempt (2026-03-15): `docs/operations/evidence/2026-
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (54) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
+| Open unfinished marker backlog remains high (39) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
 | Hosted canonical CI parity confirmation pending (local replay complete; environment cannot dispatch hosted workflows) | Release Engineering | Execute one hosted canonical CI run from a connected repo environment and attach run URL + published artifacts to this gate and `docs/operations/evidence/2026-03-15-hosted-ci-replay-attempt.md` | 2026-03-21 |
 | Smoke-suite runner/workspace mismatch for `_port` deploy-critical functional tests | QA/Automation + Release Engineering | Restore/migrate supported smoke runner and attach canonical CI smoke artifact links | 2026-03-21 |
 
