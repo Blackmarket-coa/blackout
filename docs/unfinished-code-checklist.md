@@ -89,6 +89,12 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L298: `// TODO: [FTUE Notifications] Probably need to detect global mute state`
 
+### `src/components/views/rooms/Stickerpicker.tsx`
+
+- [ ] L78: `// TODO: Pick the right manager for the widget`
+- [ ] L242: `// TODO - Add support for Stickerpickers from multiple app stores.`
+- [ ] L257: `// FIXME: could this use the same code as other apps?`
+
 ### `src/components/views/settings/ChangePassword.tsx`
 
 - [ ] L241: `// TODO: We can remove this check (but should add some Playwright tests to`
@@ -107,6 +113,11 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L86: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
 - [ ] L121: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
+
+### `src/indexing/EventIndex.ts`
+
+- [ ] L500: `// TODO we need to ensure to use member lazy loading with this`
+- [ ] L580: `// TODO if there are no events at this point we're missing a lot`
 
 ### `src/integrations/IntegrationManagers.ts`
 
@@ -136,6 +147,12 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/stores/OwnBeaconStore.ts`
 
 - [ ] L305: `// TODO check powerlevels here`
+
+### `src/stores/spaces/SpaceStore.ts`
+
+- [ ] L582: `// TODO consider sorting by number of in-refs to favour nodes with fewer parents.`
+- [ ] L1054: `// TODO rebuild the space parent and not the room - check permissions?`
+- [ ] L1055: `// TODO confirm this after implementing parenting behaviour`
 
 ### `src/utils/DMRoomMap.ts`
 
