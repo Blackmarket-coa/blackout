@@ -1,5 +1,7 @@
 # Dependency Risk Acceptance Record (2026-03-06)
 
+> Update (2026-03-15): `pnpm audit --audit-level moderate` returns **No known vulnerabilities found** on current branch head. This record is retained for historical traceability of the 2026-03-06 audit state.
+
 ## Decision summary
 
 Security and Platform jointly accept two moderate transitive dependency advisories that remain in the current lockfile after baseline rollout checks.
@@ -41,5 +43,6 @@ Compensating controls:
 
 ## Evidence
 
-- Command evidence: `yarn audit --groups dependencies --level moderate` (2 moderate findings).
+- Historical command evidence (2026-03-06): `yarn audit --groups dependencies --level moderate` (2 moderate findings).
+- Current command evidence (2026-03-15): `pnpm audit --audit-level moderate` (no known vulnerabilities found).
 - Linked rollout tracker: `docs/rollout-readiness-status.md`.

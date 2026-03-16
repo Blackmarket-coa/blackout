@@ -12,11 +12,29 @@ import { type IRoomState } from "../../../../structures/RoomView";
 import dis from "../../../../../dispatcher/dispatcher";
 import { Action } from "../../../../../dispatcher/actions";
 import type EditorStateTransfer from "../../../../../utils/EditorStateTransfer";
+import { editorStateKey } from "../../../../../Editing";
 
 export function endEditing(roomContext: Pick<IRoomState, "timelineRenderingType">): void {
-    // todo local storage
-    // localStorage.removeItem(this.editorRoomKey);
-    // localStorage.removeItem(this.editorStateKey);
+    // Clear any persisted edit draft state for this timeline context.
+    const storage = globalThis.localStorage;
+    if (storage) {
+        const roomKeySuffix = `_${roomContext.timelineRenderingType}`;
+        const roomKeysToRemove: string[] = [];
+        for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key?.startsWith("mx_edit_room_") && key.endsWith(roomKeySuffix)) {
+                roomKeysToRemove.push(key);
+            }
+        }
+
+        for (const roomKey of roomKeysToRemove) {
+            const eventId = storage.getItem(roomKey);
+            if (eventId) {
+                storage.removeItem(editorStateKey(eventId));
+            }
+            storage.removeItem(roomKey);
+        }
+    }
 
     // close the event editing and focus composer
     dis.dispatch({

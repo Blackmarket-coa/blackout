@@ -4,6 +4,7 @@ Date: 2026-03-14
 Program: Blackout centralized build (WO-1 through WO-9)
 Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
 Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
+Hosted canonical CI replay attempt (2026-03-15): `docs/operations/evidence/2026-03-15-hosted-ci-replay-attempt.md`.
 
 ## Executive recommendation
 **Go (conditional, bounded CI drift risk)** for centralized-build release candidate promotion, with explicit follow-up ownership for remaining unfinished marker debt and one hosted canonical CI confirmation run.
@@ -26,12 +27,12 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 - Executed canonical lint/test/build/security replay commands: `pnpm lint`, `pnpm test`, `pnpm build`, and `pnpm audit --audit-level high`.
 - Archived replay artifact identifier: `CI-REPLAY-2026-03-14-WORK-1495BB6`.
 - Archived command-level artifact IDs are recorded in `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`.
-- Hosted canonical CI run URL/artifact IDs are pending and assigned in the risk register with owner/date.
+- Hosted canonical CI run URL/artifact IDs remain pending; blocked in this environment (no remote + no CI dispatch client). See `docs/operations/evidence/2026-03-15-hosted-ci-replay-attempt.md`.
 
 ## Local evidence vs CI evidence delta
 - Previous state: centralized evidence explicitly flagged CI replay as pending.
 - Current state: canonical command replay is complete with traceable artifact IDs and vulnerability audit output.
-- Residual delta: hosted-runner parity + workflow-native artifact publication remain outstanding; risk is now bounded.
+- Residual delta: hosted-runner parity + workflow-native artifact publication remain outstanding; risk remains bounded and explicitly owner-dated.
 
 ## Security controls
 - E2EE-first posture and signed governance attestation primitives are present and documented.
@@ -72,8 +73,9 @@ Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (89) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
-| Hosted canonical CI parity confirmation pending (local replay complete) | Release Engineering | Execute one hosted canonical CI run and attach run URL + published artifacts to this gate and replay evidence doc | 2026-03-21 |
+| Open unfinished marker backlog remains high (86) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch | 2026-03-21 |
+| Hosted canonical CI parity confirmation pending (local replay complete; environment cannot dispatch hosted workflows) | Release Engineering | Execute one hosted canonical CI run from a connected repo environment and attach run URL + published artifacts to this gate and `docs/operations/evidence/2026-03-15-hosted-ci-replay-attempt.md` | 2026-03-21 |
+| Smoke-suite runner/workspace mismatch for `_port` deploy-critical functional tests | QA/Automation + Release Engineering | Restore/migrate supported smoke runner and attach canonical CI smoke artifact links | 2026-03-21 |
 
 ## Final recommendation justification
 The gate recommendation is **Go (conditional, bounded CI drift risk)** because WO-1..WO-9 completion evidence is linked, canonical lint/test/build/security replay evidence is archived, and remaining risk items are explicitly bounded with owners and review dates in the residual-risk register.

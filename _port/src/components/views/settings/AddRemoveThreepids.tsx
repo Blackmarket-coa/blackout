@@ -291,6 +291,7 @@ const AddThreepidSection: React.FC<{ medium: "email" | "msisdn"; disabled?: bool
 }) => {
     const addTask = useRef<AddThreepid>(undefined);
     const [newThreepidInput, setNewThreepidInput] = useState("");
+    const [newThreepidError, setNewThreepidError] = useState<string | undefined>();
     const [phoneCountryInput, setPhoneCountryInput] = useState("");
     const [verificationCodeInput, setVerificationCodeInput] = useState("");
     const [isVerifying, setIsVerifying] = useState(false);
@@ -363,7 +364,10 @@ const AddThreepidSection: React.FC<{ medium: "email" | "msisdn"; disabled?: bool
 
     const onNewThreepidInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         setNewThreepidInput(e.target.value);
-    }, []);
+        if (newThreepidError) {
+            setNewThreepidError(undefined);
+        }
+    }, [newThreepidError]);
 
     const onAddClick = useCallback(
         (e: React.FormEvent) => {
@@ -372,15 +376,12 @@ const AddThreepidSection: React.FC<{ medium: "email" | "msisdn"; disabled?: bool
 
             if (!newThreepidInput) return;
 
-            // TODO: Inline field validation
             if (medium === "email" && !emailLooksValid(newThreepidInput)) {
-                Modal.createDialog(ErrorDialog, {
-                    title: _t("settings|general|error_invalid_email"),
-                    description: _t("settings|general|error_invalid_email_detail"),
-                });
+                setNewThreepidError(_t("settings|general|error_invalid_email_detail"));
                 return;
             }
 
+            setNewThreepidError(undefined);
             addTask.current = new AddThreepid(client);
             setIsVerifying(true);
             setContinueDisabled(true);
@@ -478,6 +479,9 @@ const AddThreepidSection: React.FC<{ medium: "email" | "msisdn"; disabled?: bool
                 value={newThreepidInput}
                 onChange={onNewThreepidInputChange}
                 prefixComponent={phoneCountry}
+                forceValidity={newThreepidError ? false : undefined}
+                tooltipContent={newThreepidError}
+                forceTooltipVisible={!!newThreepidError}
             />
             <AccessibleButton onClick={onAddClick} kind="primary" disabled={disabled}>
                 {_t("action|add")}

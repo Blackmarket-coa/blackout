@@ -46,7 +46,25 @@ interface Props {
     ref?: Ref<ScrollPanel>;
 }
 
-// XXX: todo: merge overlapping results somehow?
+function getOverlapSize(currentTimeline: MatrixEvent[], nextTimeline: MatrixEvent[]): number {
+    const maxOverlap = Math.min(currentTimeline.length, nextTimeline.length);
+    for (let overlap = maxOverlap; overlap > 0; overlap--) {
+        let isMatch = true;
+        for (let i = 0; i < overlap; i++) {
+            const currentEvent = currentTimeline[currentTimeline.length - overlap + i];
+            const nextEvent = nextTimeline[i];
+            if (currentEvent.getId() !== nextEvent.getId()) {
+                isMatch = false;
+                break;
+            }
+        }
+        if (isMatch) {
+            return overlap;
+        }
+    }
+    return 0;
+}
+
 // XXX: why doesn't searching on name work?
 export const RoomSearchView = ({
     term,
@@ -254,23 +272,23 @@ export const RoomSearchView = ({
         const currentTimeline = result.context.getTimeline();
         const nextTimeline = i > 0 ? results.results[i - 1].context.getTimeline() : [];
 
-        if (i > 0 && currentTimeline[currentTimeline.length - 1].getId() == nextTimeline[0].getId()) {
+        const overlapSize = i > 0 ? getOverlapSize(currentTimeline, nextTimeline) : 0;
+        if (overlapSize > 0) {
             // if this is the first searchResult we merge then add all values of the current searchResult
-            if (mergedTimeline.length == 0) {
-                for (let j = mergedTimeline.length == 0 ? 0 : 1; j < result.context.getTimeline().length; j++) {
-                    mergedTimeline.push(currentTimeline[j]);
-                }
+            if (mergedTimeline.length === 0) {
+                mergedTimeline = currentTimeline.slice();
                 ourEventsIndexes.push(result.context.getOurEventIndex());
             }
 
+            const mergedLengthBeforeAppend = mergedTimeline.length;
             // merge the events of the next searchResult
-            for (let j = 1; j < nextTimeline.length; j++) {
+            for (let j = overlapSize; j < nextTimeline.length; j++) {
                 mergedTimeline.push(nextTimeline[j]);
             }
 
             // add the index of the matching event of the next searchResult
             ourEventsIndexes.push(
-                ourEventsIndexes[ourEventsIndexes.length - 1] + results.results[i - 1].context.getOurEventIndex() + 1,
+                mergedLengthBeforeAppend - overlapSize + results.results[i - 1].context.getOurEventIndex(),
             );
 
             continue;

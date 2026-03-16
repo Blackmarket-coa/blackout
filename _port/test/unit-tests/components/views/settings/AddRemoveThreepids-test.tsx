@@ -70,6 +70,31 @@ describe("AddRemoveThreepids", () => {
         expect(container).toMatchSnapshot();
     });
 
+
+    it("should show inline validation for invalid email instead of opening a dialog", async () => {
+        const createDialogFn = jest.spyOn(Modal, "createDialog");
+
+        render(
+            <AddRemoveThreepids
+                mode="hs"
+                medium={ThreepidMedium.Email}
+                threepids={[]}
+                isLoading={false}
+                onChange={jest.fn()}
+            />,
+            {
+                wrapper: clientProviderWrapper,
+            },
+        );
+
+        const input = await screen.findByRole("textbox", { name: "Email Address" });
+        await userEvent.type(input, "invalid-email");
+        await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+        expect(createDialogFn).not.toHaveBeenCalled();
+        expect(client.requestAdd3pidEmailToken).not.toHaveBeenCalled();
+        await expect(screen.findByText("This doesn't look like a valid email address")).resolves.toBeVisible();
+    });
     it("should add an email address", async () => {
         const onChangeFn = jest.fn();
         mocked(client.requestAdd3pidEmailToken).mockResolvedValue({ sid: "1" });
