@@ -7,6 +7,7 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 - Completion tracker baseline: `docs/blackout-reuse-completion-tracker.md` (all major reuse-strategy epics complete; current phase is maintenance).
 - Open marker inventory: `docs/unfinished-code-checklist.md` (repository-wide NOTE/issue-marker backlog).
 - Centralized execution evidence: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
+- Revenue expansion roadmap: `docs/14-stream-revenue-implementation-plan.md` (cross-functional monetization backlog to schedule alongside unfinished-code burn-down).
 
 ## Prioritization model
 

@@ -33,6 +33,10 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
 
+### `src/components/structures/RoomSearchView.tsx`
+
+- [ ] L49: `// XXX: todo: merge overlapping results somehow?`
+
 ### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
 
 - [ ] L566: `1, // TODO: Multiple send attempts?`
