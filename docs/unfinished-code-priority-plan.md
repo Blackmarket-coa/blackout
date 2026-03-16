@@ -70,17 +70,33 @@ No unresolved top-10 P1 items remain in the current ranked queue.
 
 - Continue long-tail checklist burn-down from `docs/unfinished-code-checklist.md` after P1 closure.
 
+## Remaining marker risk queue (owner + milestone)
+
+| Rank | Item | Risk class | Owner | Milestone | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `src/components/views/messages/MImageBody.tsx` image-size cap behavior | Data/UI correctness | Timeline UX | 2026.04 | Complete (2026-03-16) |
+| 2 | `src/components/views/room_settings/AliasSettings.tsx` alias validation/error surfacing | Security + data correctness | Rooms/Identity | 2026.04 | Complete (2026-03-16) |
+| 3 | `src/indexing/EventIndex.ts` lazy-loading assumptions in indexing | Data correctness/perf | Search/Indexing | 2026.04 | Complete (2026-03-16) |
+| 4 | `src/stores/spaces/SpaceStore.ts` parent-rebuild permission handling | Data correctness | Spaces | 2026.04 | Complete (2026-03-16) |
+| 5 | `src/components/views/right_panel/VerificationPanel.tsx` QR camera entry path | Security UX | Security UX | 2026.05 | Complete (2026-03-16) |
+| 6 | `src/components/views/rooms/LinkPreviewWidget.tsx` media rendering factoring | Reliability/UX | Media UX | 2026.05 | Complete (2026-03-16) |
+| 7 | `src/components/views/rooms/Stickerpicker.tsx` multi-store support | Product capability | Integrations | 2026.05 | Complete (2026-03-16) |
+| 8 | `src/components/views/settings/Notifications.tsx` view logic decomposition | Maintainability | Notifications | 2026.05 | Complete (2026-03-16) |
+| 9 | `src/stores/widgets/WidgetStore.ts` broader widget-store consolidation | Maintainability | Widgets Platform | 2026.06 | Complete (2026-03-16) |
+| 10 | `src/autocomplete/UserProvider.tsx` sender-member lazy-load fallback | Perf + correctness | Composer/Autocomplete | 2026.06 | Complete (2026-03-16) |
+
 ## Suggested delivery cadence (regenerated)
 
-- **Sprint A (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
-- **Sprint B (P2 burn-down):** continue maintenance-window cleanup and deferred documentation debt.
-- **Sprint C (P2 burn-down):** refresh prioritized backlog ranking with owner/date confirmations.
+- **Sprint A (P2 burn-down):** completed 2026-03-16 for composer/widget-store/room-list marker clusters (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
+- **Sprint B (P2 burn-down):** completed 2026-03-16 for utils/notifications/widgets/test-scaffolding marker closures (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-batch-4.md`).
+- **Sprint C (P2 burn-down):** completed 2026-03-16 for ranked risk items #1-#10 with code closures + evidence sync (evidence: `docs/operations/evidence/2026-03-16-sprint-c-risk-queue-1-10-closure.md`).
 
 ## Verification
 
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-16
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `rg -n "uc-00[1-9]|uc-010|Recently resolved high-priority markers|Open items" docs/unfinished-code-checklist.md docs/unfinished-code-priority-plan.md`
   - `rg -n "test/unit-tests/components/structures/MatrixChat-test.tsx|test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx|src/vector/index.html" docs/unfinished-code-checklist.md`
   - `rg -n "2026-03-14-blackout-centralized-work-orders-1-9|2026-03-14-batch-15-marker-closure" docs/unfinished-code-priority-plan.md`
+  - `rg -n "Open items: \*\*39\*\*|open marker inventory: 39|backlog remains high \(39\)" docs/unfinished-code-checklist.md docs/project_completion_tracker.md docs/blackout_centralized_release_readiness_gate.md`

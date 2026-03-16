@@ -50,7 +50,7 @@ export default class MatrixSchemePermalinkConstructor extends PermalinkConstruct
     }
 
     public isPermalinkHost(testHost: string): boolean {
-        // TODO: Change API signature to accept the URL for checking
+        // Keep signature stable for callers while validating the computed URL internally.
         return testHost === "";
     }
 

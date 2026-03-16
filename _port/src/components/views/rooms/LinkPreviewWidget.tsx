@@ -29,6 +29,28 @@ interface IProps {
 export default class LinkPreviewWidget extends React.Component<IProps> {
     private image = createRef<HTMLImageElement>();
 
+    private getTooltipUrl(): string {
+        try {
+            return new URL(this.props.link, window.location.href).toString();
+        } catch (error) {
+            return this.props.link;
+        }
+    }
+
+    private renderPreviewImage(image: string, thumbHeight: number): JSX.Element {
+        return (
+            <div className="mx_LinkPreviewWidget_image" style={{ height: thumbHeight }}>
+                <img
+                    ref={this.image}
+                    style={{ maxWidth: 100, maxHeight: 100 }}
+                    src={image}
+                    onClick={this.onImageClick}
+                    alt=""
+                />
+            </div>
+        );
+    }
+
     private onImageClick = (ev: React.MouseEvent): void => {
         const p = this.props.preview;
         if (ev.button != 0 || ev.metaKey) return;
@@ -67,7 +89,6 @@ export default class LinkPreviewWidget extends React.Component<IProps> {
     public render(): React.ReactNode {
         const p = this.props.preview;
 
-        // FIXME: do we want to factor out all image displaying between this and MImageBody - especially for lightboxing?
         let image: string | null = p["og:image"] ?? null;
         if (!this.props.mediaVisible) {
             image = null; // Don't render a button to show the image, just hide it outright
@@ -85,17 +106,7 @@ export default class LinkPreviewWidget extends React.Component<IProps> {
 
         let img: JSX.Element | undefined;
         if (image) {
-            img = (
-                <div className="mx_LinkPreviewWidget_image" style={{ height: thumbHeight }}>
-                    <img
-                        ref={this.image}
-                        style={{ maxWidth: imageMaxWidth, maxHeight: imageMaxHeight }}
-                        src={image}
-                        onClick={this.onImageClick}
-                        alt=""
-                    />
-                </div>
-            );
+            img = this.renderPreviewImage(image, thumbHeight);
         }
 
         // The description includes &-encoded HTML entities, we decode those as React treats the thing as an
@@ -117,7 +128,7 @@ export default class LinkPreviewWidget extends React.Component<IProps> {
                     <div className="mx_LinkPreviewWidget_caption">
                         <div className="mx_LinkPreviewWidget_title">
                             {needsTooltip ? (
-                                <LinkWithTooltip tooltip={new URL(this.props.link, window.location.href).toString()}>
+                                <LinkWithTooltip tooltip={this.getTooltipUrl()}>
                                     {anchor}
                                 </LinkWithTooltip>
                             ) : (

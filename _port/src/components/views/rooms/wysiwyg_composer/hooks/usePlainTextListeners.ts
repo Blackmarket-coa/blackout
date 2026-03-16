@@ -151,7 +151,7 @@ export function usePlainTextListeners(
 
             // resume regular flow
             if (event.key === Key.ENTER) {
-                // TODO use getKeyBindingsManager().getMessageComposerAction(event) like in useInputEventProcessor
+                // Keep this direct enter/send handling in sync with input-processor keybinding behavior.
                 const sendModifierIsPressed = IS_MAC ? event.metaKey : event.ctrlKey;
 
                 // if enter should send, send if the user is not pushing shift

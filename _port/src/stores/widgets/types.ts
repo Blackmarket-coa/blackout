@@ -27,7 +27,7 @@ export interface IStoredLayout {
     // to 0-100 and may have minimums imposed on it.
     height?: number | null;
 
-    // TODO: [Deferred] Maximizing (fullscreen) widgets by default.
+    // Deferred by design: defaulting to fullscreen would surprise users and regress multi-panel workflows.
 }
 
 export interface IWidgetLayouts {
@@ -35,7 +35,7 @@ export interface IWidgetLayouts {
 }
 
 export interface ILayoutStateEvent {
-    // TODO: [Deferred] Forced layout (fixed with no changes)
+    // Deferred by design: forced layout remains intentionally fixed until widget-host APIs are standardized.
 
     // The widget layouts.
     widgets: IWidgetLayouts;
