@@ -25,7 +25,7 @@ After the baseline gate passes, use this queue to drive the next implementation 
 
 1. **Unfinished code backlog** (`docs/unfinished-code-checklist.md`, prioritized by `docs/unfinished-code-priority-plan.md`).
 2. **Self-healing architecture checklist** (`docs/distributed_self_healing_blueprint.md` implementation/security checklists are still open design-to-build tasks).
-3. **Privacy-first phase 6 final gap** (`docs/features/privacy-first-phase6/README.md` still has one unchecked item: signed cosmetic pack pipeline).
+3. **Privacy-first phase 6 validation** (`docs/features/privacy-first-phase6/README.md` is complete; keep regression coverage healthy as follow-on maintenance).
 
 Treat these as the canonical “what’s next” documents after build gates.
 

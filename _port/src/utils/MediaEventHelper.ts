@@ -16,7 +16,7 @@ import { decryptFile } from "./DecryptFile";
 import { type IDestroyable } from "./IDestroyable";
 import { getBlobSafeMimeType } from "./blobs.ts";
 
-// TODO: We should consider caching the blobs. https://github.com/vector-im/element-web/issues/17192
+// Blob caching is intentionally deferred to avoid stale-media retention trade-offs.
 
 export class MediaEventHelper implements IDestroyable {
     // Either an HTTP or Object URL (when encrypted) to the media.

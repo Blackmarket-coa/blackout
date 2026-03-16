@@ -1,0 +1,24 @@
+groups:
+  - name: townhall-sfu
+    rules:
+      - alert: TownhallJoinFailureRateHigh
+        expr: townhall_join_failure_rate > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Townhall join failure rate is above threshold.
+      - alert: TownhallJoinLatencyP95High
+        expr: townhall_join_latency_ms_p95 > 4000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Townhall join latency p95 breached budget.
+      - alert: TownhallPublishAuthErrorsSpike
+        expr: increase(townhall_publish_auth_errors_total[10m]) > 25
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Townhall publish authorization failures spiking.

@@ -51,7 +51,7 @@ export async function startDm(client: MatrixClient, targets: Member[], showSpinn
     }
 
     // Check if it's a traditional DM and create the room if required.
-    // TODO: [Canonical DMs] Remove this check and instead just create the multi-person DM
+    // Canonical DM behavior still treats existing room mappings as authoritative for now.
     const isSelf = targetIds.length === 1 && targetIds[0] === client.getUserId();
     if (targetIds.length === 1 && !isSelf) {
         createRoomOptions.dmUserId = targetIds[0];

@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor } from "jest-matrix-react";
 
 import TownhallWidgetShell from "../../../../src/modules/townhall/components/TownhallWidgetShell";
 import type { TownhallTokenService } from "../../../../src/services/townhall/TownhallTokenService";
+import type { TownhallModerationService } from "../../../../src/services/townhall/TownhallPolicyService";
 
 describe("TownhallWidgetShell", () => {
     const context = {
@@ -51,6 +52,47 @@ describe("TownhallWidgetShell", () => {
 
         await waitFor(() => {
             expect(screen.getByTestId("blackout-townhall-error")).toHaveTextContent("forbidden");
+        });
+    });
+
+    it("shows moderation controls for moderators and logs audit events", async () => {
+        const tokenService = {
+            requestToken: jest.fn(async () => ({
+                token: "signed-token",
+                livekitUrl: "wss://livekit.example.org",
+                role: "moderator",
+                canPublish: true,
+                expiresAt: new Date().toISOString(),
+            })),
+        } as unknown as TownhallTokenService;
+
+        const moderationService = {
+            applyAction: jest.fn(async (request: any) => ({
+                success: true,
+                auditEvent: {
+                    actor: request.actor,
+                    target: request.target,
+                    action: request.action,
+                    reason: request.reason,
+                    ts: Date.now(),
+                },
+            })),
+        } as unknown as TownhallModerationService;
+
+        render(
+            <TownhallWidgetShell context={context} tokenService={tokenService} moderationService={moderationService} />,
+        );
+
+        fireEvent.click(screen.getByTestId("blackout-townhall-connect"));
+
+        await waitFor(() => {
+            expect(screen.getByTestId("blackout-townhall-moderation-controls")).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Mute all" }));
+
+        await waitFor(() => {
+            expect(screen.getByTestId("blackout-townhall-audit-log")).toHaveTextContent("mute_all");
         });
     });
 });

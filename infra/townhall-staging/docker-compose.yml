@@ -1,0 +1,25 @@
+version: "3.9"
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+  coturn:
+    image: coturn/coturn:latest
+    command:
+      - -n
+      - --listening-port=3478
+      - --fingerprint
+      - --use-auth-secret
+      - --realm=townhall.blackout.local
+    ports:
+      - "3478:3478"
+      - "5349:5349"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

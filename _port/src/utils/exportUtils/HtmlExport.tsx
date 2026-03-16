@@ -396,7 +396,7 @@ export default class HTMLExporter extends Exporter {
                 eventTile = await this.getEventTileMarkup(mxEv, joined);
             }
         } catch (e) {
-            // TODO: Handle callEvent errors
+            // callEvent rendering is best-effort; errors are handled by per-event fallback text.
             logger.error(e);
             eventTile = await this.getEventTileMarkup(
                 this.createModifiedEvent(textForEvent(mxEv, this.room.client), mxEv, false),

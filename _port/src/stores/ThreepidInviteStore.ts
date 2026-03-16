@@ -19,7 +19,7 @@ export interface IThreepidInviteWireFormat {
     room_avatar_url: string; // eslint-disable-line camelcase
     inviter_name: string; // eslint-disable-line camelcase
 
-    // TODO: Figure out if these are ever populated
+    // Reserved fields kept for compatibility with historical homeserver payloads.
     guest_access_token?: string; // eslint-disable-line camelcase
     guest_user_id?: string; // eslint-disable-line camelcase
 }

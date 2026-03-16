@@ -2,7 +2,7 @@
   "name": "@blackout/root",
   "version": "0.0.0",
   "private": true,
-  "description": "Blackout monorepo – secure communication platform",
+  "description": "Blackout monorepo \u2013 secure communication platform",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -14,7 +14,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "dev": "turbo run dev",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "smoke:aligned": "node tools/ci/run-smoke-aligned-checks.mjs",
+    "ci:parity": "node tools/ci/run-centralized-parity.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
