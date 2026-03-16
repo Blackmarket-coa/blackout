@@ -4,6 +4,18 @@ Source: `docs/blackout-sfu-townhall-build-plan.md` section 12.
 
 ## Ticket backlog
 
+| Ticket | Status | Notes |
+| --- | --- | --- |
+| TOWNHALL-01 | Complete | Feature flag scope previously delivered in MVP tranche. |
+| TOWNHALL-02 | Complete | Widget shell + Matrix context binding delivered in MVP tranche. |
+| TOWNHALL-03 | Complete | Token client/service contract delivered in MVP tranche. |
+| TOWNHALL-04 | In progress | State-event schema documented in `docs/townhall/townhall-state-event-schema.md`. |
+| TOWNHALL-05 | In progress | Provisioning runbook drafted in `docs/operations/runbooks/townhall-livekit-coturn-provisioning.md`. |
+| TOWNHALL-06 | In progress | Moderation/audit control spec drafted in `docs/townhall/townhall-moderation-audit-controls.md`. |
+| TOWNHALL-07 | In progress | Observability baseline documented in `docs/operations/runbooks/townhall-observability-runbook.md`. |
+| TOWNHALL-08 | In progress | Load-gate execution checklist staged in `docs/operations/evidence/2026-03-16-townhall-load-gates-100-250-500-plan.md`. |
+| TOWNHALL-09 | In progress | Security signoff checklist drafted in `docs/security/townhall-security-review-signoff.md`. |
+
 1. **TOWNHALL-01 — Add townhall widget feature flag in Blackout**
     - Deliverable: checklist item 1.
     - Acceptance: `feature_blackout_townhall` with legacy alias support and test coverage.

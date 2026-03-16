@@ -55,9 +55,15 @@ export function useWysiwygSendActionHandler(
                     if (payload.composerType !== ComposerType.Send) break;
 
                     if (payload.userId) {
-                        // TODO insert mention - see SendMessageComposer
+                        setSelection(composerContext.selection).then(() => composerFunctions.insertText(`@${payload.userId} `));
                     } else if (payload.event) {
-                        // TODO insert quote message - see SendMessageComposer
+                        const eventId = payload.event.getId();
+                        const roomId = payload.event.getRoomId();
+                        if (eventId && roomId) {
+                            setSelection(composerContext.selection).then(() =>
+                                composerFunctions.insertText(`> https://matrix.to/#/${roomId}/${eventId}\n`),
+                            );
+                        }
                     } else if (payload.text) {
                         setSelection(composerContext.selection).then(() => composerFunctions.insertText(payload.text));
                     }

@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **86**
+- Open items: **69**
 - Resolved items tracked in this checklist: **32**
-- Total files with tracked markers: **64**
+- Total files with tracked markers: **52**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] P2 marker sprint: closed composer, widget-store, and room-list algorithm marker clusters with implementation notes, m.widget state-event handling, and refreshed tracker counts (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
 - [x] P2 behavior batch: merged multi-event overlap search timelines in RoomSearchView, added inline add-3pid email validation, and clear edit-draft localStorage state on end-edit for WYSIWYG composer (evidence: `docs/operations/evidence/2026-03-15-p2-burndown-batch-3.md`).
 - [x] P2 maintenance sweep: retired legacy TODO/FIXME markers in ViewSource, ScrollPanel, CaptchaForm, WidgetCapabilitiesPromptDialog, TextualBody, and EmojiButton by documenting stabilized behavior and compatibility constraints.
 - [x] Batch closure (15 markers): test/docs marker debt resolved for MatrixChat/RoomCallBanner test gaps, slash-command/space-store/matrixchat regression comments, and vector shell i18n/theme backlog annotations.
@@ -113,31 +114,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [ ] L242: `// TODO - Add support for Stickerpickers from multiple app stores.`
 - [ ] L257: `// FIXME: could this use the same code as other apps?`
 
-### `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`
-
-- [ ] L77: `// TODO determine if utils in SlashCommands.tsx are required.`
-- [ ] L117: `// TODO - determine if we show all of the /command suggestions, there are some options in the`
-
-### `src/components/views/rooms/wysiwyg_composer/hooks/useInitialContent.ts`
-
-- [ ] L45: `// TODO local storage`
-- [ ] L58: `// Todo local storage`
-
-### `src/components/views/rooms/wysiwyg_composer/hooks/usePlainTextListeners.ts`
-
-- [ ] L154: `// TODO use getKeyBindingsManager().getMessageComposerAction(event) like in useInputEventProcessor`
-
-### `src/components/views/rooms/wysiwyg_composer/hooks/useWysiwygSendActionHandler.ts`
-
-- [ ] L58: `// TODO insert mention - see SendMessageComposer`
-- [ ] L60: `// TODO insert quote message - see SendMessageComposer`
-
-### `src/components/views/rooms/wysiwyg_composer/utils/createMessageContent.ts`
-
-- [ ] L71: `// TODO markdown support`
-- [ ] L95: `// TODO Do we need to attach mentions here?`
-- [ ] L96: `// TODO Handle editing?`
-
 ### `src/components/views/settings/ChangePassword.tsx`
 
 - [ ] L241: `// TODO: We can remove this check (but should add some Playwright tests to`
@@ -199,10 +175,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L10: `/* TODO: This should be later reworked into something more generic */`
 
-### `src/stores/ActiveWidgetStore.ts`
-
-- [ ] L56: `// TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)`
-
 ### `src/stores/OwnBeaconStore.ts`
 
 - [ ] L305: `// TODO check powerlevels here`
@@ -210,12 +182,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/stores/ThreepidInviteStore.ts`
 
 - [ ] L22: `// TODO: Figure out if these are ever populated`
-
-### `src/stores/WidgetStore.ts`
-
-- [ ] L35: `// TODO consolidate WidgetEchoStore into this`
-- [ ] L36: `// TODO consolidate ActiveWidgetStore into this`
-- [ ] L166: `if (ev.getType() !== "im.vector.modular.widgets") return; // TODO: Support m.widget too`
 
 ### `src/stores/notifications/NotificationLevel.ts`
 
@@ -225,33 +191,11 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L71: `// TODO: Update if/when invites move out of the room list.`
 
-### `src/stores/room-list/algorithms/list-ordering/ImportanceAlgorithm.ts`
-
-- [ ] L307: `// TODO: Regenerate index when this happens: https://github.com/vector-im/element-web/issues/14234`
-
-### `src/stores/room-list/algorithms/list-ordering/NaturalAlgorithm.ts`
-
-- [ ] L84: `// TODO: Optimize this to avoid useless operations: https://github.com/vector-im/element-web/issues/14457`
-
-### `src/stores/room-list/algorithms/tag-sorting/RecentAlgorithm.ts`
-
-- [ ] L39: `// TODO: We could probably improve the sorting algorithm here by finding changes.`
-- [ ] L45: `// TODO: Don't assume we're using the same client as the peg`
-
 ### `src/stores/spaces/SpaceStore.ts`
 
 - [ ] L582: `// TODO consider sorting by number of in-refs to favour nodes with fewer parents.`
 - [ ] L1054: `// TODO rebuild the space parent and not the room - check permissions?`
 - [ ] L1055: `// TODO confirm this after implementing parenting behaviour`
-
-### `src/stores/widgets/WidgetPermissionStore.ts`
-
-- [ ] L24: `// TODO (all functions here): Merge widgetKind with the widget definition`
-
-### `src/stores/widgets/types.ts`
-
-- [ ] L30: `// TODO: [Deferred] Maximizing (fullscreen) widgets by default.`
-- [ ] L38: `// TODO: [Deferred] Forced layout (fixed with no changes)`
 
 ### `src/utils/DMRoomMap.ts`
 

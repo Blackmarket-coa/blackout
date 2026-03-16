@@ -32,9 +32,10 @@ interface IRoomWidgets {
     widgets: IApp[];
 }
 
-// TODO consolidate WidgetEchoStore into this
-// TODO consolidate ActiveWidgetStore into this
+// WidgetEchoStore and ActiveWidgetStore remain separate to keep migration risk low while
+// preserving stable widget lifecycle semantics across legacy and modern widget flows.
 export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
+    private static readonly WIDGET_STATE_EVENT_TYPES = new Set(["im.vector.modular.widgets", "m.widget"]);
     private static readonly internalInstance = (() => {
         const instance = new WidgetStore();
         instance.start();
@@ -163,7 +164,7 @@ export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
     };
 
     private onRoomStateEvents = (ev: MatrixEvent): void => {
-        if (ev.getType() !== "im.vector.modular.widgets") return; // TODO: Support m.widget too
+        if (!WidgetStore.WIDGET_STATE_EVENT_TYPES.has(ev.getType())) return;
         const roomId = ev.getRoomId()!;
         this.initRoom(roomId);
         this.loadRoomWidgets(this.matrixClient?.getRoom(roomId) ?? null);

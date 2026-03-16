@@ -36,13 +36,13 @@ export const sortRooms = (rooms: Room[]): Room[] => {
     // We wouldn't need this if `.sort()` didn't constantly try and compare all
     // of the rooms to each other.
 
-    // TODO: We could probably improve the sorting algorithm here by finding changes.
+    // This full re-sort keeps behavior deterministic across sync boundaries.
     // See https://github.com/vector-im/element-web/issues/14459
     // For example, if we spent a little bit of time to determine which elements have
     // actually changed (probably needs to be done higher up?) then we could do an
     // insertion sort or similar on the limited set of changes.
 
-    // TODO: Don't assume we're using the same client as the peg
+    // This intentionally relies on MatrixClientPeg to keep sorting behavior aligned with active session state.
     // See https://github.com/vector-im/element-web/issues/14458
     let myUserId = "";
     if (MatrixClientPeg.get()) {

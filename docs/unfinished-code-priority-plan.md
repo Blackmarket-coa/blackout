@@ -72,15 +72,16 @@ No unresolved top-10 P1 items remain in the current ranked queue.
 
 ## Suggested delivery cadence (regenerated)
 
-- **Sprint A (P2 burn-down):** next 15 long-tail markers with strict evidence + tracker synchronization.
+- **Sprint A (P2 burn-down):** completed 2026-03-16 for composer/widget-store/room-list marker clusters (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
 - **Sprint B (P2 burn-down):** continue maintenance-window cleanup and deferred documentation debt.
 - **Sprint C (P2 burn-down):** refresh prioritized backlog ranking with owner/date confirmations.
 
 ## Verification
 
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-16
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `rg -n "uc-00[1-9]|uc-010|Recently resolved high-priority markers|Open items" docs/unfinished-code-checklist.md docs/unfinished-code-priority-plan.md`
   - `rg -n "test/unit-tests/components/structures/MatrixChat-test.tsx|test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx|src/vector/index.html" docs/unfinished-code-checklist.md`
   - `rg -n "2026-03-14-blackout-centralized-work-orders-1-9|2026-03-14-batch-15-marker-closure" docs/unfinished-code-priority-plan.md`
+  - `rg -n "Open items: \*\*69\*\*|open marker inventory: 69|backlog remains high \(69\)" docs/unfinished-code-checklist.md docs/project_completion_tracker.md docs/blackout_centralized_release_readiness_gate.md`
