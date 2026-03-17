@@ -73,7 +73,7 @@ Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-0
 ## Residual risk register
 | Risk | Owner | Mitigation | Next review date |
 | --- | --- | --- | --- |
-| Open unfinished marker backlog remains high (29) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch and keep queue ordering refreshed each batch | 2026-03-21 |
+| Open unfinished marker backlog remains high (28) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch and keep queue ordering refreshed each batch | 2026-03-21 |
 
 ## Final recommendation justification
 The gate recommendation is **Go** because WO-1..WO-9 completion evidence is linked, canonical lint/test/build/security replay evidence is archived, parity/smoke automation is codified for hosted replay, and remaining risk items are explicitly bounded in the residual-risk register.
