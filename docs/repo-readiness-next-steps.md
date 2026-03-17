@@ -86,3 +86,27 @@ Once quality gates pass:
 ## 6) Operational recommendation
 
 Treat the repo as baseline-green for lint/test/audit. Prioritize the follow-on incomplete-work queue above for implementation progress.
+
+## Next 20 hardening steps (execution tracker)
+
+1. [x] Add dedicated `_port` guard workflow.
+2. [x] Ensure guard runs on `_port/**` changes.
+3. [x] Ensure guard runs on push to release branches.
+4. [x] Keep full fetch depth for PR range diffing.
+5. [x] Add CI step for local tree guard check.
+6. [x] Add CI step for PR-range guard check.
+7. [x] Add CI step validating guard script tests.
+8. [x] Add guard script support for `--base <ref>`.
+9. [x] Keep support for explicit `--range` checks.
+10. [x] Keep whitelist restricted to migration metadata docs.
+11. [x] Add guard script unit tests.
+12. [x] Add guard script unit test command in root scripts.
+13. [x] Add PR template checklist line for `_port` policy.
+14. [x] Add CONTRIBUTING guidance for `_port` guard usage.
+15. [x] Add release checklist items for `_port` guard checks.
+16. [x] Add CODEOWNERS ownership for `_port/**`.
+17. [x] Add CODEOWNERS ownership for guard script.
+18. [x] Add CODEOWNERS ownership for port-guard workflow.
+19. [x] Re-run lint baseline after hardening changes.
+20. [x] Re-run test baseline after hardening changes.
+

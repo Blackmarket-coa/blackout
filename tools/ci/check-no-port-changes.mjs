@@ -35,8 +35,15 @@ function listChangedFiles() {
 
   const staged = runGit(['diff', '--cached', '--name-only']);
   const unstaged = runGit(['diff', '--name-only']);
+  const untracked = runGit(['ls-files', '--others', '--exclude-standard']);
   return [
-    ...new Set([...(staged ? staged.split('\n') : []), ...(unstaged ? unstaged.split('\n') : [])].filter(Boolean)),
+    ...new Set(
+      [
+        ...(staged ? staged.split('\n') : []),
+        ...(unstaged ? unstaged.split('\n') : []),
+        ...(untracked ? untracked.split('\n') : []),
+      ].filter(Boolean),
+    ),
   ];
 }
 
