@@ -65,7 +65,6 @@ function getOverlapSize(currentTimeline: MatrixEvent[], nextTimeline: MatrixEven
     return 0;
 }
 
-// XXX: why doesn't searching on name work?
 export const RoomSearchView = ({
     term,
     scope,

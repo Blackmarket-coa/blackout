@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **39**
-- Resolved items tracked in this checklist: **32**
-- Total files with tracked markers: **27**
+- Open items: **29**
+- Resolved items tracked in this checklist: **42**
+- Total files with tracked markers: **17**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Sprint D P2 marker batch: closed next ranked top-10 queue (LegacyCallEventGrouper, LoggedInView, RoomSearchView, InteractiveAuthEntryComponents, RoomCallBanner, ModalWidgetDialog, SpotlightDialog, AppTile, RoomAliasField, MFileBody) and advanced self-healing + townhall mitigation validation (evidence: `docs/operations/evidence/2026-03-16-sprint-d-top10-selfhealing-townhall-closure.md`).
 - [x] Sprint C risk-queue closure: completed ranked risk items #1-#10 (MImageBody, AliasSettings, EventIndex, SpaceStore, VerificationPanel, LinkPreviewWidget, Stickerpicker, Notifications, WidgetStore, UserProvider) with code + tests + tracker synchronization (evidence: `docs/operations/evidence/2026-03-16-sprint-c-risk-queue-1-10-closure.md`).
 - [x] Sprint B P2 marker batch: closed 15 long-tail markers across utils/notifications/widgets/test scaffolding while preserving existing runtime behavior and compatibility constraints (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-batch-4.md`).
 - [x] P2 marker sprint: closed composer, widget-store, and room-list algorithm marker clusters with implementation notes, m.widget state-event handling, and refreshed tracker counts (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).
@@ -23,46 +24,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [x] `src/components/structures/MatrixChat.tsx` (uc-004): room/event ID fragment parsing now preserves v3 event IDs and safely decodes URL-encoded fragments with fallback logging for malformed encodings.
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 - [x] `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`: community autocomplete selections now insert plain text into the composer instead of no-op behavior.
-
-### `src/components/structures/LegacyCallEventGrouper.ts`
-
-- [ ] L95: `// FIXME: Find a better way to determine this from the event?`
-
-### `src/components/structures/LoggedInView.tsx`
-
-- [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
-
-### `src/components/structures/RoomSearchView.tsx`
-
-- [ ] L49: `// XXX: todo: merge overlapping results somehow?`
-
-### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
-
-- [ ] L566: `1, // TODO: Multiple send attempts?`
-
-### `src/components/views/beacon/RoomCallBanner.tsx`
-
-- [ ] L46: `// TODO matrix rtc`
-
-### `src/components/views/dialogs/ModalWidgetDialog.tsx`
-
-- [ ] L149: `// TODO: Replace these with proper widget params`
-
-### `src/components/views/dialogs/spotlight/SpotlightDialog.tsx`
-
-- [ ] L282: `// TODO we may want to put invites in their own list`
-
-### `src/components/views/elements/AppTile.tsx`
-
-- [ ] L608: `// TODO replace with full screen interactions`
-
-### `src/components/views/elements/RoomAliasField.tsx`
-
-- [ ] L152: `// XXX: FIXME https://github.com/matrix-org/matrix-doc/issues/668`
-
-### `src/components/views/messages/MFileBody.tsx`
-
-- [ ] L275: `TODO: Move iframe (and dummy link) into FileDownloader.`
 
 ### `src/components/views/messages/MessageEvent.tsx`
 

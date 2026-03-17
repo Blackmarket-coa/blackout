@@ -22,8 +22,8 @@ First end-to-end implementation slice for the blueprint checklist:
 
 ## Follow-on
 
-- Add integration tests for replay/duplication rejection.
-- Extend to encrypted payload envelopes (X25519 + AES-GCM).
+- [x] Added integration tests for replay/duplication rejection in `_port/test/services/self-healing/SelfHealingReplayIntegration-test.ts`.
+- [x] Added encrypted payload envelope support (AES-GCM with X25519-derived key material) in `_port/src/services/self-healing/EncryptedPayloadEnvelope.ts` and `_port/test/services/self-healing/EncryptedPayloadEnvelope-test.ts`.
 
 ## Implementation evidence
 

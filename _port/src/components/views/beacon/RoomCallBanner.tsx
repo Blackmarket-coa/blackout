@@ -8,7 +8,6 @@ Please see LICENSE files in the repository root for full details.
 
 import React, { useCallback } from "react";
 import { type Room } from "matrix-js-sdk/src/matrix";
-import { logger } from "matrix-js-sdk/src/logger";
 import { VideoCallSolidIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
 
 import { _t } from "../../../languageHandler";
@@ -43,29 +42,8 @@ const RoomCallBannerInner: React.FC<RoomCallBannerProps> = ({ roomId, call }) =>
         [roomId],
     );
 
-    // TODO matrix rtc
-    const onClick = useCallback(() => {
-        logger.log("clicking on the call banner is not supported anymore - there are no timeline events anymore.");
-        let messageLikeEventId: string | undefined;
-        if (!messageLikeEventId) {
-            // Until we have a timeline event for calls this will always be true.
-            // We will never jump to the non existing timeline event.
-            logger.error("Couldn't find a group call event to jump to");
-            return;
-        }
-
-        defaultDispatcher.dispatch<ViewRoomPayload>({
-            action: Action.ViewRoom,
-            room_id: roomId,
-            metricsTrigger: undefined,
-            event_id: messageLikeEventId,
-            scroll_into_view: true,
-            highlighted: true,
-        });
-    }, [roomId]);
-
     return (
-        <div className="mx_RoomCallBanner" onClick={onClick}>
+        <div className="mx_RoomCallBanner">
             <div className="mx_RoomCallBanner_text">
                 <span className="mx_RoomCallBanner_label">
                     <VideoCallSolidIcon />
