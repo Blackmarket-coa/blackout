@@ -25,6 +25,46 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 - [x] `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`: community autocomplete selections now insert plain text into the composer instead of no-op behavior.
 
+### `src/components/structures/LegacyCallEventGrouper.ts`
+
+- [ ] L95: `// FIXME: Find a better way to determine this from the event?`
+
+### `src/components/structures/LoggedInView.tsx`
+
+- [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
+
+### `src/components/structures/RoomSearchView.tsx`
+
+- [ ] L49: `// XXX: todo: merge overlapping results somehow?`
+
+### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
+
+- [ ] L566: `1, // TODO: Multiple send attempts?`
+
+### `src/components/views/beacon/RoomCallBanner.tsx`
+
+- [ ] L46: `// TODO matrix rtc`
+
+### `src/components/views/dialogs/ModalWidgetDialog.tsx`
+
+- [ ] L149: `// TODO: Replace these with proper widget params`
+
+### `src/components/views/dialogs/spotlight/SpotlightDialog.tsx`
+
+- [ ] L282: `// TODO we may want to put invites in their own list`
+
+### `src/components/views/elements/AppTile.tsx`
+
+- [ ] L608: `// TODO replace with full screen interactions`
+
+### `src/components/views/elements/RoomAliasField.tsx`
+
+- [ ] L152: `// XXX: FIXME https://github.com/matrix-org/matrix-doc/issues/668`
+
+### `src/components/views/messages/MFileBody.tsx`
+
+- [ ] L275: `TODO: Move iframe (and dummy link) into FileDownloader.`
+
 ### `src/components/views/messages/MessageEvent.tsx`
 
 - [ ] L273: `// TODO: move to eventTypes when location sharing spec stabilises`
@@ -50,6 +90,12 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L298: `// TODO: [FTUE Notifications] Probably need to detect global mute state`
 
+### `src/components/views/rooms/Stickerpicker.tsx`
+
+- [ ] L78: `// TODO: Pick the right manager for the widget`
+- [ ] L242: `// TODO - Add support for Stickerpickers from multiple app stores.`
+- [ ] L257: `// FIXME: could this use the same code as other apps?`
+
 ### `src/components/views/settings/ChangePassword.tsx`
 
 - [ ] L241: `// TODO: We can remove this check (but should add some Playwright tests to`
@@ -68,6 +114,11 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L86: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
 - [ ] L121: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
+
+### `src/indexing/EventIndex.ts`
+
+- [ ] L500: `// TODO we need to ensure to use member lazy loading with this`
+- [ ] L580: `// TODO if there are no events at this point we're missing a lot`
 
 ### `src/integrations/IntegrationManagers.ts`
 
@@ -97,6 +148,12 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 ### `src/stores/OwnBeaconStore.ts`
 
 - [ ] L305: `// TODO check powerlevels here`
+
+### `src/stores/spaces/SpaceStore.ts`
+
+- [ ] L582: `// TODO consider sorting by number of in-refs to favour nodes with fewer parents.`
+- [ ] L1054: `// TODO rebuild the space parent and not the room - check permissions?`
+- [ ] L1055: `// TODO confirm this after implementing parenting behaviour`
 
 ### `src/utils/DMRoomMap.ts`
 
