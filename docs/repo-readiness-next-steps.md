@@ -29,6 +29,20 @@ After the baseline gate passes, use this queue to drive the next implementation 
 
 Treat these as the canonical “what’s next” documents after build gates.
 
+
+## _port recovery: next 10 executable steps
+
+1. Revert the bad `_port` artifact commit (`38fdc64`) on a dedicated recovery branch.
+2. Confirm a clean tree immediately after revert with `git status -sb`.
+3. Add and keep a local/CI guardrail script (`pnpm guard:port`) that blocks `_port/**` edits except migration metadata docs.
+4. Run the guard locally before every baseline run.
+5. Wire guard execution into smoke-aligned CI replay (`tools/ci/run-smoke-aligned-checks.mjs`).
+6. Wire guard execution into centralized parity replay (`tools/ci/run-centralized-parity.mjs`).
+7. Add a PR-range guard step in `.github/workflows/centralized-ci-parity.yml` so PRs touching `_port/**` are evaluated against base branch diff.
+8. Keep `_port/**` in the parity workflow trigger paths so guardrails run when `_port` is touched.
+9. Re-run monorepo baseline from root (`pnpm lint`, `pnpm test`) after guardrail changes.
+10. Continue real migration work only in active workspaces (`packages/*`, `apps/*`) because `_port/` is read-only parked source material.
+
 ## 1) Environment and local setup
 
 - Confirm the required toolchain is present: Node `>=22.18`, `pnpm` (workspace uses `pnpm@9.x`), and Turbo.
