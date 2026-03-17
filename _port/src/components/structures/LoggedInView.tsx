@@ -216,7 +216,7 @@ class LoggedInView extends React.Component<IProps, IState> {
     }
 
     private onTimezoneUpdate = async (): Promise<void> => {
-        // TODO: In a future app release, remove support for legacy key.
+        // Keep both keys in sync while homeservers transition to MSC4175.
         if (!SettingsStore.getValue("userTimezonePublish")) {
             // Ensure it's deleted
             try {

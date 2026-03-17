@@ -48,3 +48,4 @@ Source: `docs/blackout-sfu-townhall-build-plan.md` section 12.
 
 - Completed closure sweep: TOWNHALL-04 through TOWNHALL-09.
 - Consolidated evidence: `docs/operations/evidence/2026-03-16-townhall-04-09-completion.md`.
+- Post-phase mitigation cadence codified in `docs/security/townhall-threat-model-refresh-cadence.md` and validated by Townhall policy/service contract tests.

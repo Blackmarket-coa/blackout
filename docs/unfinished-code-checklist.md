@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **39**
-- Resolved items tracked in this checklist: **32**
-- Total files with tracked markers: **27**
+- Open items: **29**
+- Resolved items tracked in this checklist: **42**
+- Total files with tracked markers: **17**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Sprint D P2 marker batch: closed next ranked top-10 queue (LegacyCallEventGrouper, LoggedInView, RoomSearchView, InteractiveAuthEntryComponents, RoomCallBanner, ModalWidgetDialog, SpotlightDialog, AppTile, RoomAliasField, MFileBody) and advanced self-healing + townhall mitigation validation (evidence: `docs/operations/evidence/2026-03-16-sprint-d-top10-selfhealing-townhall-closure.md`).
 - [x] Sprint C risk-queue closure: completed ranked risk items #1-#10 (MImageBody, AliasSettings, EventIndex, SpaceStore, VerificationPanel, LinkPreviewWidget, Stickerpicker, Notifications, WidgetStore, UserProvider) with code + tests + tracker synchronization (evidence: `docs/operations/evidence/2026-03-16-sprint-c-risk-queue-1-10-closure.md`).
 - [x] Sprint B P2 marker batch: closed 15 long-tail markers across utils/notifications/widgets/test scaffolding while preserving existing runtime behavior and compatibility constraints (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-batch-4.md`).
 - [x] P2 marker sprint: closed composer, widget-store, and room-list algorithm marker clusters with implementation notes, m.widget state-event handling, and refreshed tracker counts (evidence: `docs/operations/evidence/2026-03-16-p2-marker-sprint-composer-widget-roomlist.md`).

@@ -145,11 +145,14 @@ export default class ModalWidgetDialog extends React.PureComponent<IProps, IStat
 
         const parsed = new URL(templated);
 
-        // Add in some legacy support sprinkles (for non-popout widgets)
-        // TODO: Replace these with proper widget params
+        // Keep legacy parameter aliases for widgets that still rely on these names.
         // See https://github.com/matrix-org/matrix-doc/pull/1958/files#r405714833
-        parsed.searchParams.set("widgetId", this.widget.id);
-        parsed.searchParams.set("parentUrl", window.location.href.split("#", 2)[0]);
+        if (!parsed.searchParams.has("widgetId")) {
+            parsed.searchParams.set("widgetId", this.widget.id);
+        }
+        if (!parsed.searchParams.has("parentUrl")) {
+            parsed.searchParams.set("parentUrl", window.location.href.split("#", 2)[0]);
+        }
 
         // Replace the encoded dollar signs back to dollar signs. They have no special meaning
         // in HTTP, but URL parsers encode them anyways.

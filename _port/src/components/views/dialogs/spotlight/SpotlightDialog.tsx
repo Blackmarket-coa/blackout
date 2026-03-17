@@ -275,13 +275,17 @@ export const useWebSearchMetrics = (numResults: number, queryLength: number, via
 };
 
 const findVisibleRooms = (cli: MatrixClient, msc3946ProcessDynamicPredecessor: boolean): Room[] => {
-    return cli.getVisibleRooms(msc3946ProcessDynamicPredecessor).filter((room) => {
+    const visibleRooms = cli.getVisibleRooms(msc3946ProcessDynamicPredecessor).filter((room) => {
         // Do not show local rooms
         if (isLocalRoom(room)) return false;
 
-        // TODO we may want to put invites in their own list
         return room.getMyMembership() === KnownMembership.Join || room.getMyMembership() == KnownMembership.Invite;
     });
+
+    const joined = visibleRooms.filter((room) => room.getMyMembership() === KnownMembership.Join);
+    const invited = visibleRooms.filter((room) => room.getMyMembership() === KnownMembership.Invite);
+
+    return [...joined, ...invited];
 };
 
 const findVisibleRoomMembers = (visibleRooms: Room[], cli: MatrixClient, filterDMs = true): RoomMember[] => {

@@ -605,13 +605,23 @@ export default class AppTile extends React.Component<IProps, IState> {
         // iframeParent will now be re-mounted, at which point startMessaging will be called
     }
 
-    // TODO replace with full screen interactions
-    private onPopoutWidgetClick = (): void => {
+    private onPopoutWidgetClick = async (): Promise<void> => {
         // Ensure Jitsi conferences are closed on pop-out, to not confuse the user to join them
         // twice from the same computer, which Jitsi can have problems with (audio echo/gain-loop).
         if (WidgetType.JITSI.matches(this.props.app.type)) {
             this.reload();
         }
+
+        const iframe = this.iframeParent?.querySelector("iframe");
+        if (iframe?.requestFullscreen) {
+            try {
+                await iframe.requestFullscreen();
+                return;
+            } catch (error) {
+                logger.warn("Failed to enter widget fullscreen, falling back to pop-out", error);
+            }
+        }
+
         // Using Object.assign workaround as the following opens in a new window instead of a new tab.
         // window.open(this._getPopoutUrl(), '_blank', 'noopener=yes');
         Object.assign(document.createElement("a"), {
@@ -810,7 +820,7 @@ export default class AppTile extends React.Component<IProps, IState> {
                                     <AccessibleButton
                                         className="mx_AppTileMenuBar_widgets_button"
                                         title={_t("widget|popout")}
-                                        onClick={this.onPopoutWidgetClick}
+                        onClick={() => void this.onPopoutWidgetClick()}
                                     >
                                         <PopOutIcon className="mx_Icon mx_Icon_12" />
                                     </AccessibleButton>
