@@ -28,6 +28,9 @@ Date: 2026-03-02
 3. **Client still tracks post-rollout maintenance backlog.**
     - Project tracker is marked 100% for rollout gates, but explicitly retains a maintenance backlog stream in docs (unfinished-code marker management and follow-up epics).
 
+4. **Security/resilience plan still has open work in Phase 6 (UX hardening + compliance controls).**
+    - Phases 1/2/3/4/5 are documented complete or mapped to completion artifacts, while Phase 6 remains planned and not yet marked complete in the client build plan docs.
+
 ## Practical next checks to confirm full alignment
 
 1. Define a **shared contract doc** for townhall token request/response schema and auth semantics.
