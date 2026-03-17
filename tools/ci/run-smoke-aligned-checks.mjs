@@ -3,6 +3,11 @@ import { spawn } from 'node:child_process';
 
 const commands = [
   {
+    label: 'Guardrail: block unintended _port changes',
+    cmd: 'pnpm',
+    args: ['guard:port'],
+  },
+  {
     label: 'Workspace smoke-aligned test pipeline',
     cmd: 'pnpm',
     args: ['test'],

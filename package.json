@@ -16,7 +16,10 @@
     "dev": "turbo run dev",
     "clean": "turbo run clean",
     "smoke:aligned": "node tools/ci/run-smoke-aligned-checks.mjs",
-    "ci:parity": "node tools/ci/run-centralized-parity.mjs"
+    "ci:parity": "node tools/ci/run-centralized-parity.mjs",
+    "guard:port": "node tools/ci/check-no-port-changes.mjs",
+    "guard:port:range": "node tools/ci/check-no-port-changes.mjs",
+    "test:guard:port": "node --test tools/ci/check-no-port-changes.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

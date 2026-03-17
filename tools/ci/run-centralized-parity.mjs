@@ -2,6 +2,7 @@
 import { spawn } from 'node:child_process';
 
 const commands = [
+  ['pnpm', ['guard:port']],
   ['pnpm', ['lint']],
   ['pnpm', ['test']],
   ['pnpm', ['build']],
