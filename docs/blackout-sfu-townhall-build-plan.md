@@ -32,6 +32,13 @@ Matrix Room (E2EE)
 
 ### Responsibility split
 
+#### Backend implementation target
+
+- Backend token/policy implementation for townhall is owned by `Blackout_server`: `https://github.com/Blackmarket-coa/Blackout_server`.
+- This client repository owns widget integration, event/state schema usage, and evidence links for rollout gates.
+- Any API/role-policy changes should be coordinated via a shared contract and compatibility matrix between this repo and `Blackout_server`.
+
+
 - Matrix layer:
     - user identity, membership, power levels, moderation actions, chat history, governance process.
 - Video layer (LiveKit + coturn):
