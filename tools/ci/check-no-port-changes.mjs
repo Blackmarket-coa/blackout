@@ -14,17 +14,30 @@ function runGit(args) {
   return res.stdout.trim();
 }
 
+function getArg(name) {
+  const index = process.argv.indexOf(name);
+  return index !== -1 ? process.argv[index + 1] : undefined;
+}
+
 function listChangedFiles() {
-  const rangeArgIndex = process.argv.indexOf('--range');
-  if (rangeArgIndex !== -1 && process.argv[rangeArgIndex + 1]) {
-    const range = process.argv[rangeArgIndex + 1];
-    const output = runGit(['diff', '--name-only', range]);
+  const explicitRange = getArg('--range');
+  const baseRef = getArg('--base');
+
+  if (explicitRange) {
+    const output = runGit(['diff', '--name-only', explicitRange]);
+    return output ? output.split('\n').filter(Boolean) : [];
+  }
+
+  if (baseRef) {
+    const output = runGit(['diff', '--name-only', `${baseRef}...HEAD`]);
     return output ? output.split('\n').filter(Boolean) : [];
   }
 
   const staged = runGit(['diff', '--cached', '--name-only']);
   const unstaged = runGit(['diff', '--name-only']);
-  return [...new Set([...(staged ? staged.split('\n') : []), ...(unstaged ? unstaged.split('\n') : [])].filter(Boolean))];
+  return [
+    ...new Set([...(staged ? staged.split('\n') : []), ...(unstaged ? unstaged.split('\n') : [])].filter(Boolean)),
+  ];
 }
 
 const files = listChangedFiles();
