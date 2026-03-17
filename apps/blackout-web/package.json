@@ -1,0 +1,22 @@
+{
+  "name": "@blackout/blackout-web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Blackout daily chat client (Cinny fork migration shell)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "echo 'vite integration pending source import'",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@blackout/core": "workspace:*",
+    "@blackout/design": "workspace:*",
+    "@blackout/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
