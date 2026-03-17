@@ -81,7 +81,7 @@ export class NaturalAlgorithm extends OrderingAlgorithm {
             }
         }
 
-        // TODO: Optimize this to avoid useless operations: https://github.com/vector-im/element-web/issues/14457
+        // This deliberately favors deterministic ordering over micro-optimizations for now.
         // For example, we can skip updates to alphabetic (sometimes) and manually ordered tags
         if (isMuted) {
             this.cachedCategorizedOrderedRooms.mutedRooms = sortRoomsWithAlgorithm(

@@ -11,7 +11,7 @@ Use this consolidated tracker as the single source of truth for rollout progress
 - High-priority / high-severity gates: **complete**.
 - Additional engineering backlog outside the rollout gates remains and is tracked in section **G** below.
 
-> Snapshot date: 2026-02-20. Update this section whenever checkbox state changes.
+> Snapshot date: 2026-03-16. Update this section whenever checkbox state changes.
 
 > Evidence matrix: `docs/operations/tracker_evidence_matrix.md` (validated by `scripts/operations/validate_tracker_evidence.sh`).
 > Monthly docs integrity guardrail: `node _port/scripts/operations/docs_integrity_check.cjs`.
@@ -81,13 +81,14 @@ Status legend:
 
 These items are not blockers for distributed self-healing readiness, but they are still incomplete and should be executed as tracked follow-up work.
 
-- [x] **Unfinished code marker reduction (open marker inventory: 86)**
+- [x] **Unfinished code marker reduction (open marker inventory: 29)**
     - **Source:** `docs/unfinished-code-checklist.md`, `docs/unfinished-code-priority-plan.md`.
     - **Action steps:**
         1. Triage the top-10 production-impact markers in `docs/unfinished-code-priority-plan.md` into issues with owner + target milestone.
         2. Resolve at least the top 3 high-impact items (`Notifier` call targeting, MatrixChat init error handling continuity, TimelinePanel event scoping) and attach evidence links (`docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-8.md`).
         3. Regenerate `docs/unfinished-code-checklist.md` and update open-marker count in this tracker.
-    - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata.
+    - **Evidence:** `docs/operations/evidence/2026-03-16-sprint-d-top10-selfhealing-townhall-closure.md`.
+    - **Definition of done:** Open marker count reduced by at least 20% and top-10 list has owner/milestone metadata. (Current: 39 -> 29, ~25.6% reduction.)
 
 - [x] **Townhall SFU implementation backlog (phase plan not started)**
     - **Source:** `docs/blackout-sfu-townhall-build-plan.md`.
@@ -96,7 +97,7 @@ These items are not blockers for distributed self-healing readiness, but they ar
         2. Build the feature-flagged widget shell + token service as MVP scope and demo in staging.
         3. Run 100-user load test gate before enabling wider rollout.
     - **Definition of done:** First three checklist items complete and load-test evidence committed.
-    - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`.
+    - **Evidence:** `docs/blackout-sfu-townhall-implementation-tickets.md`, `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`, `docs/operations/evidence/2026-03-16-townhall-provisioning-validation.md` (environment-validated provisioning assets), `docs/security/townhall-threat-model-refresh-cadence.md` (post-phase mitigation cadence).
 
 - [x] **Rollout runbook execution checklist completion**
     - **Source:** `docs/blackout-rollout-runbook.md` pre-flight checklist.
@@ -145,8 +146,8 @@ A deployment is considered **distributed self-healing ready** when:
 
 ## Verification
 
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-16
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `git diff -- docs/project_completion_tracker.md`
-  - `rg "Complete|In progress|Partial|Blocked" docs/project_completion_tracker.md`
+  - `rg "Complete|In progress|Partial|Blocked|Snapshot date" docs/project_completion_tracker.md`

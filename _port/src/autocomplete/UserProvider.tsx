@@ -84,8 +84,8 @@ export default class UserProvider extends AutocompleteProvider {
         // updates from pagination will happen when the paginate completes.
         if (toStartOfTimeline || !data || !data.liveEvent) return;
 
-        // TODO: lazyload if we have no ev.sender room member?
-        this.onUserSpoke(ev.sender);
+        const sender = ev.sender ?? (ev.getSender() ? room.getMember(ev.getSender()!) : null);
+        this.onUserSpoke(sender);
     };
 
     private onRoomStateUpdate = (state: RoomState): void => {

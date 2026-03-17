@@ -579,13 +579,15 @@ export class SpaceStoreClass extends AsyncStoreWithClient<EmptyObject> {
         // In order, assume each remaining detachedNode is a root unless it has already
         // been claimed as the child of prior detached node.
         // Work from a copy of the detachedNodes set as it will be mutated as part of this operation.
-        // TODO consider sorting by number of in-refs to favour nodes with fewer parents.
-        Array.from(detachedNodes).forEach((detachedNode) => {
+        // Prefer spaces with fewer parents first so cycle-break roots are more intuitive.
+        Array.from(detachedNodes)
+            .sort((a, b) => (this.parentMap.get(a.roomId)?.length ?? 0) - (this.parentMap.get(b.roomId)?.length ?? 0))
+            .forEach((detachedNode) => {
             if (!detachedNodes.has(detachedNode)) return; // already claimed, skip
             // declare this detached node a new root, find its children, without ever looping back to it
             rootSpaces.push(detachedNode); // consider this node a new root space
             this.markTreeChildren(detachedNode, detachedNodes); // declare this node and its children attached
-        });
+            });
 
         return rootSpaces;
     };
@@ -1051,12 +1053,14 @@ export class SpaceStoreClass extends AsyncStoreWithClient<EmptyObject> {
             }
 
             case EventType.SpaceParent:
-                // TODO rebuild the space parent and not the room - check permissions?
-                // TODO confirm this after implementing parenting behaviour
                 if (room.isSpaceRoom()) {
                     this.rebuildSpaceHierarchy();
                 } else {
                     this.onRoomsUpdate();
+                    const parentSpaceId = ev.getStateKey();
+                    if (parentSpaceId) {
+                        this.emit(parentSpaceId);
+                    }
                 }
                 this.emit(room.roomId);
                 break;

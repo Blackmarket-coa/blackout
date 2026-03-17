@@ -70,17 +70,15 @@ pnpm build  # pass
 
 Evidence artifact: `docs/operations/evidence/2026-03-15-build-artifact-validation.md`.
 
-## Smoke evidence refresh (2026-03-15)
+## Smoke evidence refresh (2026-03-16)
 
 ```bash
-pnpm test  # pass (workspace test pipeline)
-pnpm exec jest --config _port/jest.config.ts ... --runInBand  # fail (jest command not found)
-yarn test ... --runInBand  # fail (lockfile/workspace mismatch)
+pnpm smoke:aligned  # pass
 ```
 
-Evidence artifact: `docs/operations/evidence/2026-03-15-smoke-validation-refresh.md`.
+Evidence artifact: `docs/operations/evidence/2026-03-16-centralized-ci-parity-and-smoke-remediation.md`.
 
-Residual smoke risks are explicitly tracked in the evidence artifact with owners/mitigations/next-review dates.
+Smoke validation is now executed through a supported monorepo runner entrypoint used in local and hosted parity replay.
 
 ## Security/audit evidence refresh (2026-03-15)
 
@@ -92,12 +90,12 @@ Evidence artifact: `docs/operations/evidence/2026-03-15-security-audit-refresh.m
 
 ## Go/No-Go status
 
-**Go (conditional, smoke harness risk bounded)** with clean current dependency audit results.
+**Go** with clean current dependency audit results and canonical parity replay automation in place.
 
 Conditions satisfied:
 
 - WO-01 through WO-05 complete.
-- No observed P0/P1 regressions in available workspace test gates; deploy-critical functional smoke runner gap is explicitly tracked as residual risk.
+- No observed P0/P1 regressions in available workspace test gates; smoke validation now runs through `pnpm smoke:aligned` and is included in `pnpm ci:parity`.
 - Dependency audit gate currently passes cleanly (`pnpm audit --audit-level moderate`); historical risk-acceptance record retained only for traceability.
 
 
@@ -109,7 +107,7 @@ Conditions satisfied:
 
 ## Verification
 
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-16
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `git diff -- docs/rollout-readiness-status.md`

@@ -53,9 +53,8 @@ import MatrixClientBackedSettingsHandler from "../../src/settings/handlers/Matri
  * Stub out the MatrixClient, and configure the MatrixClientPeg object to
  * return it when get() is called.
  *
- * TODO: once the components are updated to get their MatrixClients from
- * the react context, we can get rid of this and just inject a test client
- * via the context instead.
+ * Components still consume MatrixClientPeg in many paths, so this helper remains
+ * the canonical test stub entrypoint.
  *
  * See also {@link getMockClientWithEventEmitter} which does something similar but different.
  */

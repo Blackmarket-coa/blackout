@@ -28,6 +28,7 @@ export enum ActiveWidgetStoreEvent {
  *    by any components
  */
 export default class ActiveWidgetStore extends EventEmitter {
+    private static readonly WIDGET_STATE_EVENT_TYPES = new Set(["im.vector.modular.widgets", "m.widget"]);
     private static internalInstance: ActiveWidgetStore;
     private persistentWidgetId: string | null = null;
     private persistentRoomId: string | null = null;
@@ -53,8 +54,7 @@ export default class ActiveWidgetStore extends EventEmitter {
         // Everything else relies on views listening for events and calling setters
         // on this class which is terrible. This store should just listen for events
         // and keep itself up to date.
-        // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
-        if (ev.getType() === "im.vector.modular.widgets") {
+        if (ActiveWidgetStore.WIDGET_STATE_EVENT_TYPES.has(ev.getType())) {
             this.destroyPersistentWidget(ev.getStateKey()!, roomId);
         }
     };

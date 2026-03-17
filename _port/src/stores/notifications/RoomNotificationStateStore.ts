@@ -68,7 +68,7 @@ export class RoomNotificationStateStore extends AsyncStoreWithClient<EmptyObject
             return this.listMap.get(tagId)!;
         }
 
-        // TODO: Update if/when invites move out of the room list.
+        // Invite aggregation follows room-list placement by design in the current navigation model.
         const useTileCount = tagId === DefaultTagID.Invite;
         const getRoomFn: FetchRoomFn = (room: Room) => {
             return this.getRoomState(room);

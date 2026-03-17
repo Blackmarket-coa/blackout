@@ -45,6 +45,8 @@ interface IProps {
 interface IState {
     imError: string | null;
     stickerpickerWidget: UserWidget | null;
+    stickerpickerWidgets: UserWidget[];
+    selectedWidgetId: string | null;
     widgetId: string | null;
 }
 
@@ -69,15 +71,18 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
         this.state = {
             imError: null,
             stickerpickerWidget: null,
+            stickerpickerWidgets: [],
+            selectedWidgetId: null,
             widgetId: null,
         };
     }
 
     private async acquireScalarClient(): Promise<void | undefined | null | ScalarAuthClient> {
         if (this.scalarClient) return Promise.resolve(this.scalarClient);
-        // TODO: Pick the right manager for the widget
+
+        const manager = IntegrationManagers.sharedInstance().getPrimaryManager();
         if (IntegrationManagers.sharedInstance().hasManager()) {
-            this.scalarClient = IntegrationManagers.sharedInstance().getPrimaryManager()?.getScalarClient() ?? null;
+            this.scalarClient = manager?.getScalarClient() ?? null;
             return this.scalarClient
                 ?.connect()
                 .then(() => {
@@ -157,10 +162,14 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
     }
 
     private updateWidget = (): void => {
-        const stickerpickerWidget = WidgetUtils.getStickerpickerWidgets(this.props.room.client)[0];
+        const stickerpickerWidgets = WidgetUtils.getStickerpickerWidgets(this.props.room.client);
+        const selectedWidget =
+            stickerpickerWidgets.find((widget) => widget.id === this.state.selectedWidgetId) ?? stickerpickerWidgets[0];
+
+        const stickerpickerWidget = selectedWidget;
         if (!stickerpickerWidget) {
             Stickerpicker.currentWidget = undefined;
-            this.setState({ stickerpickerWidget: null, widgetId: null });
+            this.setState({ stickerpickerWidget: null, stickerpickerWidgets: [], selectedWidgetId: null, widgetId: null });
             return;
         }
 
@@ -176,7 +185,19 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
         Stickerpicker.currentWidget = stickerpickerWidget;
         this.setState({
             stickerpickerWidget,
+            stickerpickerWidgets,
+            selectedWidgetId: stickerpickerWidget.id,
             widgetId: stickerpickerWidget ? stickerpickerWidget.id : null,
+        });
+    };
+
+    private onStickerpickerSelected = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+        const selectedWidget = this.state.stickerpickerWidgets.find((widget) => widget.id === event.target.value) ?? null;
+        Stickerpicker.currentWidget = selectedWidget ?? undefined;
+        this.setState({
+            selectedWidgetId: selectedWidget?.id ?? null,
+            stickerpickerWidget: selectedWidget,
+            widgetId: selectedWidget?.id ?? null,
         });
     };
 
@@ -238,10 +259,6 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
             return this.errorStickerpickerContent();
         }
 
-        // Stickers
-        // TODO - Add support for Stickerpickers from multiple app stores.
-        // Render content from multiple stickerpack sources, each within their
-        // own iframe, within the stickerpicker UI element.
         const stickerpickerWidget = this.state.stickerpickerWidget;
         let stickersContent: JSX.Element | undefined;
 
@@ -254,7 +271,6 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
             // Set default name
             stickerpickerWidget.content.name = stickerpickerWidget.content.name || _t("common|stickerpack");
 
-            // FIXME: could this use the same code as other apps?
             const stickerApp: IWidget = {
                 id: stickerpickerWidget.id,
                 url: stickerpickerWidget.content.url,
@@ -266,6 +282,18 @@ export default class Stickerpicker extends React.PureComponent<IProps, IState> {
 
             stickersContent = (
                 <div className="mx_Stickers_content_container">
+                    {this.state.stickerpickerWidgets.length > 1 && (
+                        <label>
+                            {_t("common|stickerpack")}
+                            <select value={this.state.selectedWidgetId ?? ""} onChange={this.onStickerpickerSelected}>
+                                {this.state.stickerpickerWidgets.map((widget) => (
+                                    <option key={widget.id} value={widget.id}>
+                                        {widget.content?.name || widget.id}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
                     <div
                         id="stickersContent"
                         className="mx_Stickers_content"

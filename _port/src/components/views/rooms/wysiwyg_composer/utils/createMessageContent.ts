@@ -68,7 +68,7 @@ export async function createMessageContent(
         body: isEditing ? `* ${body}` : body,
     } as RoomMessageTextEventContent & ReplacementEvent<RoomMessageTextEventContent>;
 
-    // TODO markdown support
+    // Markdown conversion for plain-text mode is handled below via `plainToRich`.
 
     const isMarkdownEnabled = SettingsStore.getValue("MessageComposerInput.useMarkdown");
     const formattedBody = isHTML ? message : isMarkdownEnabled ? await plainToRich(message, true) : null;
@@ -92,8 +92,7 @@ export async function createMessageContent(
 
     const newRelation = isEditing ? { ...relation, rel_type: "m.replace", event_id: editedEvent.getId() } : relation;
 
-    // TODO Do we need to attach mentions here?
-    // TODO Handle editing?
+    // Relation attachment is shared for both new and edited messages via `newRelation`.
     attachRelation(content, newRelation);
 
     if (!isEditing && replyToEvent) {

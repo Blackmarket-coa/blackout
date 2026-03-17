@@ -522,6 +522,7 @@ interface IMsisdnAuthEntryState {
     token: string;
     requestingToken: boolean;
     errorText: string | null;
+    sendAttempt: number;
 }
 
 export class MsisdnAuthEntry extends React.Component<IMsisdnAuthEntryProps, IMsisdnAuthEntryState> {
@@ -538,6 +539,7 @@ export class MsisdnAuthEntry extends React.Component<IMsisdnAuthEntryProps, IMsi
             token: "",
             requestingToken: false,
             errorText: "",
+            sendAttempt: 0,
         };
     }
 
@@ -563,12 +565,13 @@ export class MsisdnAuthEntry extends React.Component<IMsisdnAuthEntryProps, IMsi
                 this.props.inputs?.phoneCountry ?? "",
                 this.props.inputs?.phoneNumber ?? "",
                 this.props.clientSecret,
-                1, // TODO: Multiple send attempts?
+                this.state.sendAttempt + 1,
             )
             .then((result) => {
                 this.submitUrl = result.submit_url;
                 this.sid = result.sid;
                 this.msisdn = result.msisdn;
+                this.setState((state) => ({ sendAttempt: state.sendAttempt + 1 }));
             });
     }
 

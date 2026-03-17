@@ -74,7 +74,7 @@ const WysiwygAutocomplete = ({
 
         switch (completion.type) {
             case "command": {
-                // TODO determine if utils in SlashCommands.tsx are required.
+                // Intentionally keep command insertion local to the WYSIWYG flow.
                 // Trim the completion as some include trailing spaces, but we always insert a
                 // trailing space in the rust model anyway
                 handleCommand(completion.completion.trim());
@@ -114,8 +114,8 @@ const WysiwygAutocomplete = ({
     // debug for https://github.com/vector-im/element-web/issues/26037
     logger.log(`## 26037 ## Rendering Autocomplete for WysiwygAutocomplete with query: "${autoCompleteQuery}"`);
 
-    // TODO - determine if we show all of the /command suggestions, there are some options in the
-    // list which don't seem to make sense in this context, specifically /html and /plain
+    // We currently expose the same command list as the legacy composer to preserve parity,
+    // including advanced commands such as /html and /plain.
     return (
         <div className="mx_WysiwygComposer_AutoCompleteWrapper" data-testid="autocomplete-wrapper">
             <Autocomplete

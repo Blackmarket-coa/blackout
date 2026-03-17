@@ -125,7 +125,7 @@ export class CapabilityText {
     }
 
     public static for(capability: Capability, kind: WidgetKind): TranslatedCapabilityText {
-        // TODO: Support MSC3819 (to-device capabilities)
+        // MSC3819 (to-device capabilities) is intentionally ignored until it is widely deployed.
 
         // First see if we have a super simple line of text to provide back
         if (CapabilityText.simpleCaps[capability]) {

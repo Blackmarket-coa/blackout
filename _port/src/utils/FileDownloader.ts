@@ -51,7 +51,7 @@ function getManagedIframe(): { iframe: HTMLIFrameElement; onLoadPromise: Promise
     return { iframe: managedIframe, onLoadPromise };
 }
 
-// TODO: If we decide to keep the download link behaviour, we should bring the style management into here.
+// Style ownership for the download-link fallback intentionally lives with the caller component.
 
 /**
  * Helper to handle safe file downloads. This operates off an iframe for reasons described
