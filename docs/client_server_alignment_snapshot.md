@@ -22,11 +22,14 @@ Date: 2026-03-02
     - Client contains a `TownhallTokenService` using `POST /api/townhall/token` and test coverage for that endpoint contract.
     - No obvious `townhall` or `/api/townhall/token` implementation was found in the sampled `Blackout_server` checkout.
 
-2. **Client townhall rollout checklist is still incomplete.**
-    - The client build plan still has unchecked items (Matrix state event policy schema, LiveKit/TURN provisioning, moderation/audit controls, observability, 250/500 load gates, security signoff).
+2. **Client townhall rollout checklist is now documented as complete in-repo.**
+    - The client build plan checklist now links completion artifacts for Matrix state-event policy schema, LiveKit/TURN/TLS provisioning, moderation + audit controls, observability dashboards/alerts/runbooks, 100/250/500 load gates, and security signoff.
 
 3. **Client still tracks post-rollout maintenance backlog.**
     - Project tracker is marked 100% for rollout gates, but explicitly retains a maintenance backlog stream in docs (unfinished-code marker management and follow-up epics).
+
+4. **Security/resilience plan still has open work in Phase 6 (UX hardening + compliance controls).**
+    - Phases 1/2/3/4/5 are documented complete or mapped to completion artifacts, while Phase 6 remains planned and not yet marked complete in the client build plan docs.
 
 ## Practical next checks to confirm full alignment
 

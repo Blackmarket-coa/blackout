@@ -7,6 +7,7 @@ This plan translates the strategy into an implementation roadmap for this reposi
 > Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
 > Phase 4 completion details are tracked in `docs/security-phase4-resilience-ha.md`.
 > Phase 5 implementation artifacts are tracked in `docs/security-phase5-cluster-platform-security.md`.
+> Phase 6 remains open in this plan and is not yet marked complete.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -94,7 +95,7 @@ jobs:
 
 ---
 
-## Phase 2 (Weeks 3-4): App-layer hardening
+## Phase 2 (Weeks 3-4): App-layer hardening ✅ Complete
 
 ### Deliverables
 
@@ -258,7 +259,7 @@ readinessProbe:
 
 ---
 
-## Phase 5 (Weeks 9-10): Cluster and platform security
+## Phase 5 (Weeks 9-10): Cluster and platform security ✅ Complete
 
 ### Deliverables
 
@@ -303,7 +304,7 @@ spec:
 
 ---
 
-## Phase 6 (Weeks 11-12): UX hardening and compliance controls
+## Phase 6 (Weeks 11-12): UX hardening and compliance controls 🚧 Planned / Not yet marked complete
 
 ### Deliverables
 
