@@ -41,9 +41,8 @@ export function parseEditorStateTransfer(
             parts = serializedParts.map((p) => partCreator.deserializePart(p));
         }
     } else {
-        // otherwise, either restore serialized parts from localStorage or parse the body of the event
-        // TODO local storage
-        // const restoredParts = this.restoreStoredEditorState(partCreator);
+        // Otherwise parse directly from the event payload. The WYSIWYG composer intentionally
+        // does not restore/send draft state from localStorage in this helper.
 
         if (editorStateTransfer.getEvent().getContent().format === "org.matrix.custom.html") {
             return getFormattedContent(editorStateTransfer);
@@ -55,8 +54,7 @@ export function parseEditorStateTransfer(
     }
 
     return parts.reduce((content, part) => content + part?.text, "");
-    // Todo local storage
-    // this.saveStoredEditorState();
+    // Draft persistence for this path is intentionally delegated to the composer-level state manager.
 }
 
 export function useInitialContent(editorStateTransfer: EditorStateTransfer): string | undefined {

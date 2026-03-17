@@ -214,11 +214,14 @@ export default class AliasSettings extends React.Component<IProps, IState> {
                 });
             })
             .catch((err) => {
-                // TODO: Add error handling based upon server validation
                 logger.error(err);
+                const description =
+                    err?.errcode === "M_INVALID_PARAM"
+                        ? _t("room_settings|general|error_creating_alias_description")
+                        : _t("room_settings|general|error_updating_alias_description");
                 Modal.createDialog(ErrorDialog, {
                     title: _t("room_settings|general|error_updating_canonical_alias_title"),
-                    description: _t("room_settings|general|error_updating_alias_description"),
+                    description,
                 });
             })
             .finally(() => {
@@ -258,22 +261,29 @@ export default class AliasSettings extends React.Component<IProps, IState> {
 
     private onLocalAliasDeleted = (index: number): void => {
         const alias = this.state.localAliases[index];
-        // TODO: In future, we should probably be making sure that the alias actually belongs
-        // to this room. See https://github.com/vector-im/element-web/issues/7353
         this.context
-            .deleteAlias(alias)
-            .then(() => {
-                const localAliases = this.state.localAliases.filter((a) => a !== alias);
-                this.setState({ localAliases });
-
-                if (this.state.canonicalAlias === alias) {
-                    this.changeCanonicalAlias(null);
+            .getRoomIdForAlias(alias)
+            .then((result) => {
+                if (result.room_id !== this.props.roomId) {
+                    throw new Error("Alias does not belong to this room");
                 }
             })
+            .then(() =>
+                this.context.deleteAlias(alias).then(() => {
+                    const localAliases = this.state.localAliases.filter((a) => a !== alias);
+                    this.setState({ localAliases });
+
+                    if (this.state.canonicalAlias === alias) {
+                        this.changeCanonicalAlias(null);
+                    }
+                }),
+            )
             .catch((err) => {
                 logger.error(err);
                 let description;
-                if (err.errcode === "M_FORBIDDEN") {
+                if (err.message === "Alias does not belong to this room") {
+                    description = _t("room_settings|general|error_deleting_alias_description");
+                } else if (err.errcode === "M_FORBIDDEN") {
                     description = _t("room_settings|general|error_deleting_alias_description_forbidden");
                 } else {
                     description = _t("room_settings|general|error_deleting_alias_description");

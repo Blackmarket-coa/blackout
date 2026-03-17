@@ -33,6 +33,12 @@ const isCallEventType = (eventType: string): boolean =>
 
 export const isCallEvent = (event: MatrixEvent): boolean => isCallEventType(event.getType());
 
+function inviteContainsVideoOffer(event: MatrixEvent): boolean {
+    const sdp = event.getContent()?.offer?.sdp;
+    if (typeof sdp !== "string") return false;
+    return /\bm=video\b/i.test(sdp);
+}
+
 export function buildLegacyCallEventGroupers(
     callEventGroupers: Map<string, LegacyCallEventGrouper>,
     events?: MatrixEvent[],
@@ -92,9 +98,7 @@ export default class LegacyCallEventGrouper extends EventEmitter {
         const invite = this.invite;
         if (!invite) return undefined;
 
-        // FIXME: Find a better way to determine this from the event?
-        if (invite.getContent()?.offer?.sdp?.indexOf("m=video") !== -1) return false;
-        return true;
+        return !inviteContainsVideoOffer(invite);
     }
 
     public get hangupReason(): string | null {

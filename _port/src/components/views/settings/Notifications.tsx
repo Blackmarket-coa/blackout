@@ -53,9 +53,6 @@ import { SettingsSubsection } from "./shared/SettingsSubsection";
 import { doesRoomHaveUnreadMessages } from "../../../Unread";
 import SettingsFlag from "../elements/SettingsFlag";
 
-// TODO: this "view" component still has far too much application logic in it,
-// which should be factored out to other files.
-
 enum Phase {
     Loading = "loading",
     Ready = "ready",
@@ -400,9 +397,16 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
         });
     }
 
+    private setPersisting(ruleId?: RuleId | string): void {
+        this.setState(({ ruleIdsWithError }) => ({
+            phase: Phase.Persisting,
+            ruleIdsWithError: ruleId ? { ...ruleIdsWithError, [ruleId]: false } : ruleIdsWithError,
+        }));
+    }
+
     private onMasterRuleChanged: ChangeEventHandler<HTMLInputElement> = async (evt): Promise<void> => {
         const { checked } = evt.target;
-        this.setState({ phase: Phase.Persisting });
+        this.setPersisting();
 
         const masterRule = this.state.masterPushRule!;
         try {
@@ -424,7 +428,7 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
 
     private onEmailNotificationsChanged = async (email: string, evt: ChangeEvent<HTMLInputElement>): Promise<void> => {
         const { checked } = evt.target;
-        this.setState({ phase: Phase.Persisting });
+        this.setPersisting();
 
         try {
             if (checked) {
@@ -459,10 +463,7 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
     };
 
     private onRadioChecked = async (rule: IVectorPushRule, checkedState: VectorState): Promise<void> => {
-        this.setState(({ ruleIdsWithError }) => ({
-            phase: Phase.Persisting,
-            ruleIdsWithError: { ...ruleIdsWithError, [rule.ruleId]: false },
-        }));
+        this.setPersisting(rule.ruleId);
 
         try {
             const cli = MatrixClientPeg.safeGet();

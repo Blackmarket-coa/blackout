@@ -60,6 +60,7 @@ interface IState {
      * `undefined` if there is not (yet) another device in the transaction, or if we do not know about it.
      */
     otherDeviceDetails?: Device;
+    cameraError?: string;
 }
 
 export default class VerificationPanel extends React.PureComponent<IProps, IState> {
@@ -76,6 +77,22 @@ export default class VerificationPanel extends React.PureComponent<IProps, IStat
         this.state = { qrCodeBytes: undefined, sasEvent: null, reciprocateQREvent: null };
         this.hasVerifier = false;
     }
+
+    private openCameraScanner = async (): Promise<void> => {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            this.setState({ cameraError: _t("encryption|verification|no_support_qr_emoji", { brand: SdkConfig.get().brand }) });
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            stream.getTracks().forEach((track) => track.stop());
+            this.setState({ cameraError: undefined });
+        } catch (error) {
+            logger.warn("Unable to access camera for QR scanning", error);
+            this.setState({ cameraError: _t("encryption|verification|no_support_qr_emoji", { brand: SdkConfig.get().brand }) });
+        }
+    };
 
     private renderQRPhase(): JSX.Element {
         const { member, request } = this.props;
@@ -183,10 +200,19 @@ export default class VerificationPanel extends React.PureComponent<IProps, IStat
             <div className="mx_UserInfo_container">{noCommonMethodError}</div>
         ) : null;
 
-        // TODO: add way to open camera to scan a QR code
+        const cameraBlock = showQR ? (
+            <div className="mx_UserInfo_container">
+                <AccessibleButton kind="secondary" className="mx_UserInfo_wideButton" onClick={this.openCameraScanner}>
+                    {_t("encryption|verification|scan_qr")}
+                </AccessibleButton>
+                {this.state.cameraError && <p>{this.state.cameraError}</p>}
+            </div>
+        ) : null;
+
         return (
             <React.Fragment>
                 {qrBlock}
+                {cameraBlock}
                 {sasBlock}
                 {noCommonMethodBlock}
             </React.Fragment>

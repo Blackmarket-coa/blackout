@@ -1,0 +1,11 @@
+{
+  "title": "Townhall SFU Observability",
+  "version": 1,
+  "panels": [
+    { "id": "join_success", "metric": "townhall_join_success_rate" },
+    { "id": "join_latency_p95", "metric": "townhall_join_latency_ms_p95" },
+    { "id": "publisher_count", "metric": "townhall_active_publishers" },
+    { "id": "subscriber_count", "metric": "townhall_active_subscribers" },
+    { "id": "moderation_latency", "metric": "townhall_moderation_action_latency_ms_p95" }
+  ]
+}

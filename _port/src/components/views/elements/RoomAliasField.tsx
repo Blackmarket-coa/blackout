@@ -30,6 +30,8 @@ interface IState {
     isValid: boolean;
 }
 
+const SAFE_ROOM_ALIAS_LOCALPART = /^[^#:,\s]+$/;
+
 // Controlled form component wrapping Field for inputting a room alias scoped to a given domain
 export default class RoomAliasField extends React.PureComponent<IProps, IState> {
     public static contextType = MatrixClientContext;
@@ -149,14 +151,7 @@ export default class RoomAliasField extends React.PureComponent<IProps, IState> 
                     } else {
                         const fullAlias = this.asFullAlias(value);
                         const hasColon = this.props.domain ? !value.includes(":") : true;
-                        // XXX: FIXME https://github.com/matrix-org/matrix-doc/issues/668
-                        // NOTE: We could probably use linkifyjs to parse those aliases here?
-                        return (
-                            !value.includes("#") &&
-                            hasColon &&
-                            !value.includes(",") &&
-                            encodeURI(fullAlias) === fullAlias
-                        );
+                        return SAFE_ROOM_ALIAS_LOCALPART.test(value) && hasColon && encodeURI(fullAlias) === fullAlias;
                     }
                 },
                 invalid: () => _t("room_settings|general|alias_field_safe_localpart_invalid"),

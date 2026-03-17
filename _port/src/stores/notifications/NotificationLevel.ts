@@ -12,7 +12,7 @@ export enum NotificationLevel {
     Muted,
     // Inverted (None -> Red) because we do integer comparisons on this
     None, // nothing special
-    // TODO: Remove bold with notifications: https://github.com/vector-im/element-web/issues/14227
+    // Activity keeps bold treatment for now to maintain existing unread affordances.
     Activity, // no badge, show as unread
     Notification, // unread notified messages
     Highlight, // unread pings

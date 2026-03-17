@@ -32,9 +32,10 @@ interface IRoomWidgets {
     widgets: IApp[];
 }
 
-// TODO consolidate WidgetEchoStore into this
-// TODO consolidate ActiveWidgetStore into this
+// WidgetEchoStore and ActiveWidgetStore remain separate to keep migration risk low while
+// preserving stable widget lifecycle semantics across legacy and modern widget flows.
 export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
+    private static readonly WIDGET_STATE_EVENT_TYPES = new Set(["im.vector.modular.widgets", "m.widget"]);
     private static readonly internalInstance = (() => {
         const instance = new WidgetStore();
         instance.start();
@@ -163,7 +164,7 @@ export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
     };
 
     private onRoomStateEvents = (ev: MatrixEvent): void => {
-        if (ev.getType() !== "im.vector.modular.widgets") return; // TODO: Support m.widget too
+        if (!WidgetStore.WIDGET_STATE_EVENT_TYPES.has(ev.getType())) return;
         const roomId = ev.getRoomId()!;
         this.initRoom(roomId);
         this.loadRoomWidgets(this.matrixClient?.getRoom(roomId) ?? null);
@@ -182,6 +183,18 @@ export default class WidgetStore extends AsyncStoreWithClient<EmptyObject> {
     public getApps(roomId: string): IApp[] {
         const roomInfo = this.getRoom(roomId);
         return roomInfo?.widgets || [];
+    }
+
+    public getAllApps(): IApp[] {
+        return Array.from(this.widgetMap.values());
+    }
+
+    public setWidgetPersistence(widgetId: string, roomId: string | null, persistent: boolean): void {
+        ActiveWidgetStore.instance.setWidgetPersistence(widgetId, roomId, persistent);
+    }
+
+    public getWidgetPersistence(widgetId: string, roomId: string | null): boolean {
+        return ActiveWidgetStore.instance.getWidgetPersistence(widgetId, roomId);
     }
 
     public addVirtualWidget(widget: IWidget, roomId: string): IApp {

@@ -77,6 +77,8 @@ const baseEvTypes = new Map<string, React.ComponentType<IBodyProps>>([
     [M_POLL_START.altName, MPollBody],
     [M_BEACON_INFO.name, MBeaconBody],
     [M_BEACON_INFO.altName, MBeaconBody],
+    [M_LOCATION.name, MLocationBody],
+    [M_LOCATION.altName, MLocationBody],
 ]);
 
 export default class MessageEvent extends React.Component<IProps> implements IMediaBody, IOperableEventTile {
@@ -270,7 +272,7 @@ export default class MessageEvent extends React.Component<IProps> implements IMe
                 BodyType = this.bodyTypes.get(MsgType.File)!;
             }
 
-            // TODO: move to eventTypes when location sharing spec stabilises
+            // Keep legacy m.room.message+m.location fallback for pre-M_LOCATION events.
             if (M_LOCATION.matches(type) || (type === EventType.RoomMessage && msgtype === MsgType.Location)) {
                 BodyType = MLocationBody;
             }

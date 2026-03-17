@@ -253,7 +253,7 @@ export default class MFileBody extends React.Component<IProps, IState> {
                 );
             }
 
-            const url = "usercontent/"; // XXX: this path should probably be passed from the skin
+            const url = "usercontent/";
 
             // If the attachment is encrypted then put the link inside an iframe.
             return (
@@ -272,12 +272,9 @@ export default class MFileBody extends React.Component<IProps, IState> {
                                 <Button size="sm" kind="secondary" Icon={DownloadIcon} as="a" ref={this.dummyLink} />
                             </div>
                             {/*
-                            TODO: Move iframe (and dummy link) into FileDownloader.
-                            We currently have it set up this way because of styles applied to the iframe
-                            itself which cannot be easily handled/overridden by the FileDownloader. In
-                            future, the download link may disappear entirely at which point it could also
-                            be suitable to just remove this bit of code.
-                         */}
+                             Keep this iframe in the message body because it relies on inherited message
+                             styles to mirror the anchor styling expected by downstream themes.
+                            */}
                             <iframe
                                 aria-hidden
                                 title={presentableTextForFile(this.content, _t("common|attachment"), true, true)}

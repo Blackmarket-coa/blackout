@@ -212,16 +212,23 @@ export class MImageBodyInner extends React.Component<IProps, IState> {
     }
 
     private getThumbUrl(): string | null {
-        // FIXME: we let images grow as wide as you like, rather than capped to 800x600.
-        // So either we need to support custom timeline widths here, or reimpose the cap, otherwise the
-        // thumbnail resolution will be unnecessarily reduced.
-        // custom timeline widths seems preferable.
-        const thumbWidth = 800;
-        const thumbHeight = 600;
-
         const content = this.props.mxEvent.getContent<ImageContent>();
-        const media = mediaFromContent(content);
         const info = content.info;
+
+        const displaySize = suggestedImageSize(
+            SettingsStore.getValue("Images.size") as ImageSize,
+            {
+                w: info?.w ?? 800,
+                h: info?.h ?? 600,
+            },
+            this.props.maxImageHeight,
+        );
+        // Request thumbnail dimensions that better match expected timeline rendering size.
+        // We still cap by Synapse's common thumbnail presets to avoid requesting excessive dimensions.
+        const thumbWidth = Math.min(Math.max(displaySize.w, 320), 800);
+        const thumbHeight = Math.min(Math.max(displaySize.h, 240), 600);
+
+        const media = mediaFromContent(content);
 
         if (info?.mimetype === "image/svg+xml" && media.hasThumbnail) {
             // Special-case to return clientside sender-generated thumbnails for SVGs, if any,

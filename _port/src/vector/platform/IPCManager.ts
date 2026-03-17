@@ -30,7 +30,7 @@ export class IPCManager {
     }
 
     public async call(name: string, ...args: any[]): Promise<any> {
-        // TODO this should be moved into the preload.js file.
+        // Desktop bridge bootstrap remains here for compatibility with existing platform entrypoints.
         const ipcCallId = ++this.nextIpcCallId;
         const deferred = Promise.withResolvers<any>();
         this.pendingIpcCalls[ipcCallId] = deferred;

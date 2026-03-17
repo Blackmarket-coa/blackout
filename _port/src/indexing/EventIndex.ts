@@ -74,6 +74,7 @@ export default class EventIndex extends EventEmitter {
      * The current checkpoint that the crawler is working on.
      */
     private currentCheckpoint: ICrawlerCheckpoint | null = null;
+    private checkpointRetryCounts = new Map<string, number>();
 
     /**
      * True if we need to add the initial checkpoints for encrypted rooms, once we've completed a sync.
@@ -82,6 +83,11 @@ export default class EventIndex extends EventEmitter {
     private needsInitialCheckpoints = false;
 
     private readonly logger;
+    private static readonly MAX_EMPTY_DECRYPTION_RETRIES = 2;
+
+    private checkpointKey(checkpoint: ICrawlerCheckpoint): string {
+        return `${checkpoint.roomId}|${checkpoint.direction}|${checkpoint.token}`;
+    }
 
     public constructor() {
         super();
@@ -497,8 +503,6 @@ export default class EventIndex extends EventEmitter {
             // We have a checkpoint, let us fetch some messages, again, very
             // conservatively to not bother our homeserver too much.
             const eventMapper = client.getEventMapper({ preventReEmit: true });
-            // TODO we need to ensure to use member lazy loading with this
-            // request so we get the correct profiles.
             let res: Awaited<ReturnType<MatrixClient["createMessagesRequest"]>>;
 
             try {
@@ -568,6 +572,18 @@ export default class EventIndex extends EventEmitter {
                 }
             });
 
+            // Ensure profile data remains available when timeline chunks are fetched with sparse state.
+            matrixEvents.forEach((ev) => {
+                const sender = ev.getSender();
+                if (!sender || profiles[sender]) return;
+                const member = client.getRoom(checkpoint.roomId)?.getMember(sender);
+                if (!member) return;
+                profiles[sender] = {
+                    displayname: member.name,
+                    avatar_url: member.events.member?.getContent()?.avatar_url,
+                };
+            });
+
             const decryptionPromises = matrixEvents
                 .filter((event) => event.isEncrypted())
                 .map((event) => {
@@ -577,10 +593,23 @@ export default class EventIndex extends EventEmitter {
             // Let us wait for all the events to get decrypted.
             await Promise.all(decryptionPromises);
 
-            // TODO if there are no events at this point we're missing a lot
-            // decryption keys, do we want to retry this checkpoint at a later
-            // stage?
             const filteredEvents = matrixEvents.filter(this.isValidEvent);
+            if (matrixEvents.length > 0 && filteredEvents.length === 0) {
+                const key = this.checkpointKey(checkpoint);
+                const retries = this.checkpointRetryCounts.get(key) ?? 0;
+                if (retries < EventIndex.MAX_EMPTY_DECRYPTION_RETRIES) {
+                    this.checkpointRetryCounts.set(key, retries + 1);
+                    this.crawlerCheckpoints.push(checkpoint);
+                    this.logger.debug("Retrying checkpoint with no indexable events after decryption", {
+                        checkpoint,
+                        retries: retries + 1,
+                    });
+                    continue;
+                }
+                this.checkpointRetryCounts.delete(key);
+            } else {
+                this.checkpointRetryCounts.delete(this.checkpointKey(checkpoint));
+            }
 
             // Collect the redaction events, so we can delete the redacted events from the index.
             const redactionEvents = matrixEvents.filter((ev) => ev.isRedaction());

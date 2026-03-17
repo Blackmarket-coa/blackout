@@ -15,6 +15,38 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  apps/blackout-gov:
+    dependencies:
+      '@blackout/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@blackout/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@blackout/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  apps/blackout-web:
+    dependencies:
+      '@blackout/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@blackout/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@blackout/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   apps/desktop:
     dependencies:
       '@blackout/core':
