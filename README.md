@@ -81,6 +81,24 @@ On Windows, use the same command:
 pnpm build
 ```
 
+### Run the placeholder frontend shell
+
+```bash
+pnpm start
+```
+
+Then open:
+
+- Frontend shell: `http://localhost:3000/`
+- Health endpoint: `http://localhost:3000/health`
+- Readiness endpoint: `http://localhost:3000/ready`
+
+If deployed on Railway, use your Railway domain instead of localhost:
+
+- Frontend shell: `https://$RAILWAY_PUBLIC_DOMAIN/`
+- Health endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/health`
+- Readiness endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/ready`
+
 ---
 
 ## Development workflow
