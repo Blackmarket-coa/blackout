@@ -2,7 +2,7 @@
   "name": "@blackout/root",
   "version": "0.0.0",
   "private": true,
-  "description": "Blackout monorepo \u2013 secure communication platform",
+  "description": "Blackout monorepo – secure communication platform",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -19,7 +19,8 @@
     "ci:parity": "node tools/ci/run-centralized-parity.mjs",
     "guard:port": "node tools/ci/check-no-port-changes.mjs",
     "guard:port:range": "node tools/ci/check-no-port-changes.mjs",
-    "test:guard:port": "node --test tools/ci/check-no-port-changes.test.mjs"
+    "test:guard:port": "node --test tools/ci/check-no-port-changes.test.mjs",
+    "start": "node index.js"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
