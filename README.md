@@ -56,14 +56,14 @@ Implementation status should be tracked in:
 ### Prerequisites
 
 - Node.js `>=22.18`
-- Yarn Classic (`yarn` 1.x)
+- pnpm `9.15.4` (or compatible 9.x)
 
 ### Local setup
 
 ```bash
-git clone https://github.com/element-hq/element-web.git
-cd element-web
-yarn install
+git clone https://github.com/Blackmarket-coa/blackout.git
+cd blackout
+pnpm install
 cp config.sample.json config.json
 ```
 
@@ -72,13 +72,13 @@ Then edit `config.json` as needed. See `docs/config.md` for configuration detail
 ### Build
 
 ```bash
-yarn dist
+pnpm build
 ```
 
-On Windows, use:
+On Windows, use the same command:
 
 ```bash
-yarn build
+pnpm build
 ```
 
 ---
@@ -88,16 +88,14 @@ yarn build
 Recommended baseline checks before opening a PR:
 
 ```bash
-yarn lint:types
-yarn lint:js
-yarn lint:style
-yarn test --runInBand
+pnpm lint
+pnpm test
 ```
 
 For steganography-specific changes, run targeted suites too:
 
 ```bash
-yarn test test/unit-tests/steganography --runInBand
+pnpm --filter <package-name> test
 ```
 
 Helpful docs:
@@ -125,9 +123,9 @@ Use this section when working with coding agents or AI copilots.
 Ask AI to run and report exact commands for the touched area, at minimum:
 
 ```bash
-yarn lint:types
-yarn lint:js
-yarn test <targeted-tests>
+pnpm lint
+pnpm test
+pnpm --filter <package-name> test
 ```
 
 If a command is skipped, require a reason (missing dependency, environment constraint, etc.).
