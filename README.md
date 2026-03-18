@@ -61,8 +61,8 @@ Implementation status should be tracked in:
 ### Local setup
 
 ```bash
-git clone https://github.com/element-hq/element-web.git
-cd element-web
+git clone https://github.com/Blackmarket-coa/blackout.git
+cd blackout
 pnpm install
 cp config.sample.json config.json
 ```
