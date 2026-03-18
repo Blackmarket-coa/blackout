@@ -57,7 +57,7 @@ function onTokenLoginCompleted(): void {
 }
 
 export async function loadApp(fragParams: QueryDict, matrixChatRef: React.Ref<MatrixChat>): Promise<ReactElement> {
-    // XXX: This lives here because certain components import so many things that importing it in a sensible place (eg.
+    // This remains here because heavy import graphs make earlier initialization brittle (for example
     // the builtins module or init.tsx) causes a circular dependency.
     ModuleApi.instance.builtins.setComponents({
         roomView: RoomView,
@@ -85,7 +85,7 @@ export async function loadApp(fragParams: QueryDict, matrixChatRef: React.Ref<Ma
     const isReturningFromSso = !!params.loginToken;
     const ssoRedirects = parseSsoRedirectOptions(config);
     let autoRedirect = ssoRedirects.immediate === true;
-    // XXX: This path matching is a bit brittle, but better to do it early instead of in the app code.
+    // Path matching here is intentionally early to avoid late app-level redirects.
     const isWelcomeOrLanding =
         window.location.hash === "#/welcome" || window.location.hash === "#" || window.location.hash === "";
     const isLoginPage = window.location.hash === "#/login";

@@ -323,7 +323,7 @@ export const MAC_ONLY_SHORTCUTS = [KeyBindingAction.OpenUserSettings];
 // This is very intentionally modelled after SETTINGS as it will make it easier
 // to implement customizable keyboard shortcuts
 // NOTE: TravisR will fix this nightmare when the new version of the SettingsStore becomes a thing
-// XXX: Exported for tests
+// Exported for tests.
 export const KEYBOARD_SHORTCUTS: IKeyboardShortcuts = {
     [KeyBindingAction.FormatBold]: {
         default: {

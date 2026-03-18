@@ -161,7 +161,7 @@ export interface IBaseSetting<T extends SettingValueType = SettingValueType> {
     // not use this for new settings.
     invertedSettingName?: string;
 
-    // XXX: Keep this around for re-use in future Betas
+    // Retained for planned reuse in future beta surfaces.
     betaInfo?: {
         title: TranslationKey;
         caption: () => ReactNode;

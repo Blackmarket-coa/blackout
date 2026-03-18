@@ -51,7 +51,7 @@ export function setupLogStorage(): Promise<void> {
 }
 
 export async function loadConfig(): Promise<void> {
-    // XXX: We call this twice, once here and once in MatrixChat as a prop. We call it here to ensure
+    // Called both here and in MatrixChat props; this early call ensures
     // granular settings are loaded correctly and to avoid duplicating the override logic for the theme.
     //
     // Note: this isn't called twice for some wrappers, like the Jitsi wrapper.

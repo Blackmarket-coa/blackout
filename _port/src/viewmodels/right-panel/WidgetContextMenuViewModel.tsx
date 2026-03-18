@@ -199,7 +199,7 @@ export class WidgetContextMenuViewModel
                 }
             } catch (err: any) {
                 logger.error("Failed to start livestream", err);
-                // XXX: won't i18n well, but looks like widget api only support 'message'?
+                // Not ideal for i18n, but widget API currently exposes only a free-form `message` field.
                 const message =
                     err instanceof Error ? err.message : _t("widget|error_unable_start_audio_stream_description");
                 Modal.createDialog(ErrorDialog, {

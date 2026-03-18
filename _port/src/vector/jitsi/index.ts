@@ -49,7 +49,7 @@ interface Config extends _Config {
 }
 
 interface InterfaceConfig extends _InterfaceConfig {
-    // XXX: It is unclear whether this is a typo of TOOLBAR_BUTTONS or if its just really undocumented,
+    // This parameter remains due to upstream/documentation ambiguity around TOOLBAR_BUTTONS naming,
     // either way it is missing in types, yet we try and use it
     MAIN_TOOLBAR_BUTTONS?: string[];
 }

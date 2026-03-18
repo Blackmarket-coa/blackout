@@ -112,6 +112,8 @@ No unresolved P2 marker items remain in the tracked queue after batch-2 closure.
 
 - **Sprint F (P2 batch-2 next-25 closure):** completed 2026-03-18 for remaining marker debt and checklist/priority-plan reconciliation to zero open tracked items (evidence: `docs/operations/evidence/2026-03-18-p2-batch-2-next-25-items-closure.md`).
 
+- **Sprint G (next-25 maintainability sweep):** completed 2026-03-18 for 25 selected XXX/hack marker closures across runtime/bootstrap/settings surfaces with no behavior change intent (evidence: `docs/operations/evidence/2026-03-18-p2-batch-3-next-25-xxx-closure.md`).
+
 ## Verification
 
 - Last verified date: 2026-03-16

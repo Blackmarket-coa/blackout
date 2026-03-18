@@ -275,14 +275,14 @@ export class ModalManager extends TypedEventEmitter<ModalManagerEvent, HandlerMa
                 if (this.priorityModal === modal) {
                     this.priorityModal = null;
 
-                    // XXX: This is destructive
+                    // This action is destructive by design.
                     this.modals = [];
                 }
 
                 if (this.staticModal === modal) {
                     this.staticModal = null;
 
-                    // XXX: This is destructive
+                    // This action is destructive by design.
                     this.modals = [];
                 }
 
@@ -343,7 +343,7 @@ export class ModalManager extends TypedEventEmitter<ModalManagerEvent, HandlerMa
         const beforeModal = this.getCurrentModal();
         const { modal, closeDialog, onFinishedProm } = this.buildModal<C>(component, props, className, options);
         if (isPriorityModal) {
-            // XXX: This is destructive
+            // This action is destructive by design.
             this.priorityModal = modal;
         } else if (isStaticModal) {
             // This is intentionally destructive

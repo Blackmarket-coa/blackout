@@ -41,7 +41,7 @@ export const canAffectPowerlevels = (cli: MatrixClient | null, roomId: string | 
     return !!room?.currentState.maySendStateEvent(EventType.RoomPowerLevels, cli.getSafeUserId()) && !isLocalRoom(room);
 };
 
-// XXX: workaround for https://github.com/microsoft/TypeScript/issues/31816
+// Compatibility workaround for https://github.com/microsoft/TypeScript/issues/31816
 interface HTMLInputEvent extends Event {
     target: HTMLInputElement & EventTarget;
 }

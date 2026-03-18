@@ -675,7 +675,7 @@ export class ElementCall extends Call {
         const isDM = !!DMRoomMap.shared().getUserIdForRoomId(room.roomId);
         const oldestCallMember = client.matrixRTC.getRoomSession(room).getOldestMembership();
         const hasCallStarted = !!oldestCallMember && oldestCallMember.sender !== client.getSafeUserId();
-        // XXX: @element-hq/element-call-embedded <= 0.15.0 sets the wrong parameter for
+        // @element-hq/element-call-embedded <= 0.15.0 sets a legacy parameter for
         // preload by default so we override here. This can be removed when that package
         // is released and upgraded.
         if (isDM) {
