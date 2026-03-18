@@ -18,27 +18,6 @@ import DMRoomMap from "../../../../../src/utils/DMRoomMap";
 const BASE64_GIF = "R0lGODlhAQABAAAAACw=";
 const AVATAR_FILE = new File([Uint8Array.from(atob(BASE64_GIF), (c) => c.charCodeAt(0))], "avatar.gif", {
     type: "image/gif",
-
-    it("keeps failed name changes dirty while saving other fields", async () => {
-        const user = userEvent.setup();
-        mocked(client.setRoomName).mockRejectedValue(new Error("boom"));
-
-        render(<RoomProfileSettings roomId={ROOM_ID} />);
-
-        const roomNameInput = screen.getByLabelText("Room Name");
-        const topicInput = screen.getByLabelText("Topic");
-
-        await user.type(roomNameInput, "Renamed room");
-        await user.type(topicInput, "topic");
-
-        const saveButton = screen.getByRole("button", { name: "Save" });
-        await user.click(saveButton);
-
-        await waitFor(() => expect(client.setRoomName).toHaveBeenCalled());
-        await waitFor(() => expect(client.setRoomTopic).toHaveBeenCalled());
-        await waitFor(() => expect(saveButton).not.toBeDisabled());
-    });
-
 });
 
 const ROOM_ID = "!floob:itty";
@@ -141,5 +120,4 @@ describe("RoomProfileSetting", () => {
         await waitFor(() => expect(client.setRoomTopic).toHaveBeenCalled());
         await waitFor(() => expect(saveButton).not.toBeDisabled());
     });
-
 });

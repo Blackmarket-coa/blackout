@@ -114,21 +114,20 @@ export default class DeactivateAccountDialog extends React.Component<IProps, ISt
         this.setState({ errStr: _t("settings|general|error_deactivate_communication") });
     };
 
-    private onUIAuthComplete = (auth: IAuthData | null): void => {
-        // XXX: this should be returning a promise to maintain the state inside the state machine correct
-        // but given that a deactivation is followed by a local logout and all object instances being thrown away
-        // this isn't done.
-        MatrixClientPeg.safeGet()
-            .deactivateAccount(auth ?? undefined, this.state.shouldErase)
-            .then((r) => {
-                // Deactivation worked - logout & close this dialog
-                defaultDispatcher.fire(Action.TriggerLogout);
-                this.props.onFinished(true);
-            })
-            .catch((e) => {
-                logger.error(e);
-                this.setState({ errStr: _t("settings|general|error_deactivate_communication") });
-            });
+    private onUIAuthComplete = async (
+        auth: IAuthData | null,
+    ): Promise<Awaited<ReturnType<MatrixClient["deactivateAccount"]>>> => {
+        try {
+            const result = await MatrixClientPeg.safeGet().deactivateAccount(auth ?? undefined, this.state.shouldErase);
+            // Deactivation worked - logout & close this dialog.
+            defaultDispatcher.fire(Action.TriggerLogout);
+            this.props.onFinished(true);
+            return result;
+        } catch (e) {
+            logger.error(e);
+            this.setState({ errStr: _t("settings|general|error_deactivate_communication") });
+            throw e;
+        }
     };
 
     private onEraseFieldChange = (ev: React.FormEvent<HTMLInputElement>): void => {
@@ -185,9 +184,7 @@ export default class DeactivateAccountDialog extends React.Component<IProps, ISt
                     <InteractiveAuth
                         matrixClient={MatrixClientPeg.safeGet()}
                         authData={this.state.authData}
-                        // XXX: onUIAuthComplete breaches the expected method contract, it gets away with it because it
-                        // knows the entire app is about to die as a result of the account deactivation.
-                        makeRequest={this.onUIAuthComplete as any}
+                        makeRequest={this.onUIAuthComplete}
                         onAuthFinished={this.onUIAuthFinished}
                         onStagePhaseChange={this.onStagePhaseChange}
                         continueText={this.state.continueText}

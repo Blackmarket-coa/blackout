@@ -65,6 +65,8 @@ describe("MessageContextMenu", () => {
         createMenuWithContent(eventContent, props);
         const copyLinkButton = document.querySelector('a[aria-label="Copy link"]');
         expect(copyLinkButton).toHaveAttribute("href", props.link);
+        expect(copyLinkButton).toHaveAttribute("target", "_blank");
+        expect(copyLinkButton).toHaveAttribute("rel", "noreferrer noopener");
     });
 
     it("does not show copy link button when not supplied a link", () => {

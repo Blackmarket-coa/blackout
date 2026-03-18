@@ -114,6 +114,8 @@ No unresolved P2 marker items remain in the tracked queue after batch-2 closure.
 
 - **Sprint G (next-25 maintainability sweep):** completed 2026-03-18 for 25 selected XXX/hack marker closures across runtime/bootstrap/settings surfaces with no behavior change intent (evidence: `docs/operations/evidence/2026-03-18-p2-batch-3-next-25-xxx-closure.md`).
 
+- **Sprint H (next-25 implementation execution):** completed 2026-03-18 for the requested MatrixChat/Notifier/Notifications/context-menu/timeline/dialog closure sequence including test + tracker sync (evidence: `docs/operations/evidence/2026-03-18-p2-batch-4-next-25-execution.md`).
+
 ## Verification
 
 - Last verified date: 2026-03-16

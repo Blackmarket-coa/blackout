@@ -334,8 +334,14 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
         if (defaultRules.master.length > 0) {
             preparedNewState.masterPushRule = defaultRules.master[0];
         } else {
-            // XXX: Can this even happen? How do we safely recover?
-            throw new Error("Failed to locate a master push rule");
+            logger.warn("Master push rule missing from server rule set; using disabled fallback rule.");
+            preparedNewState.masterPushRule = {
+                rule_id: RuleId.Master,
+                default: true,
+                enabled: false,
+                actions: [],
+                kind: PushRuleKind.Override,
+            } as IAnnotatedPushRule;
         }
 
         // Parse keyword rules
@@ -477,16 +483,14 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
                     let enabled: boolean | undefined;
                     let actions: PushRuleAction[] | undefined;
                     if (checkedState === VectorState.On) {
-                        if (rule.actions.length !== 1) {
-                            // XXX: Magic number
+                        if (rule.actions.length !== RULE_ACTIONS_DEFAULT) {
                             actions = PushRuleVectorState.actionsFor(checkedState);
                         }
                         if (this.state.vectorKeywordRuleInfo.vectorState === VectorState.Off) {
                             enabled = true;
                         }
                     } else if (checkedState === VectorState.Loud) {
-                        if (rule.actions.length !== 3) {
-                            // XXX: Magic number
+                        if (rule.actions.length !== RULE_ACTIONS_WITH_SOUND_AND_HIGHLIGHT) {
                             actions = PushRuleVectorState.actionsFor(checkedState);
                         }
                         if (this.state.vectorKeywordRuleInfo.vectorState === VectorState.Off) {
@@ -599,8 +603,11 @@ export default class Notifications extends React.PureComponent<EmptyObject, ISta
                     rules: [
                         ...this.state.vectorKeywordRuleInfo.rules,
 
-                        // XXX: Horrible assumption that we don't need the remaining fields
-                        { pattern: keyword } as IAnnotatedPushRule,
+                        {
+                            pattern: keyword,
+                            // Temporary local-echo placeholder: fields beyond `pattern` are
+                            // hydrated from server state during refreshFromServer().
+                        } as IAnnotatedPushRule,
                     ],
                 },
             },

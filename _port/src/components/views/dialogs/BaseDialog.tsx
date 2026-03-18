@@ -89,7 +89,7 @@ interface IProps {
  * dialog on escape.
  */
 export default class BaseDialog extends React.Component<IProps> {
-    private matrixClient: MatrixClient;
+    private matrixClient: MatrixClient | null;
 
     public static defaultProps: Partial<IProps> = {
         hasCancel: true,
@@ -99,11 +99,17 @@ export default class BaseDialog extends React.Component<IProps> {
     public constructor(props: IProps) {
         super(props);
 
-        // XXX: The contract on MatrixClientContext says it is only available within a LoggedInView subtree,
-        // given that modals function outside the MatrixChat React tree this simulates that. We don't want to
-        // use safeGet as it throwing would mean we cannot use modals whilst the user isn't logged in.
-        // The longer term solution is to move our ModalManager into the React tree to inherit contexts properly.
-        this.matrixClient = MatrixClientPeg.get()!;
+        // Modals can exist outside the LoggedInView subtree, so context injection here has to tolerate
+        // logged-out states where no MatrixClient is available yet.
+        this.matrixClient = MatrixClientPeg.get();
+    }
+
+    private getModuleI18n() {
+        const moduleApiI18n = window.mxModuleApi?.i18n;
+        if (!moduleApiI18n) {
+            throw new Error("BaseDialog requires window.mxModuleApi.i18n to be initialized");
+        }
+        return moduleApiI18n;
     }
 
     private onKeyDown = (e: KeyboardEvent | React.KeyboardEvent): void => {
@@ -167,10 +173,12 @@ export default class BaseDialog extends React.Component<IProps> {
             lockProps["aria-labelledby"] = "mx_BaseDialog_title";
         }
 
+        if (!this.matrixClient) {
+            throw new Error("BaseDialog rendered without an active MatrixClient");
+        }
+
         return (
-            // XXX: We can't import ModuleAPI here because it causes a dependency cycle - hack and
-            // use the copy on the window object :(
-            <I18nContext.Provider value={window.mxModuleApi.i18n}>
+            <I18nContext.Provider value={this.getModuleI18n()}>
                 <MatrixClientContext.Provider value={this.matrixClient}>
                     {this.props.screenName && <PosthogScreenTracker screenName={this.props.screenName} />}
                     <FocusLock

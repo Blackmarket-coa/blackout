@@ -11,6 +11,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ## Recently resolved high-priority markers
 
+- [x] Batch-4 next-25 execution (2026-03-18): closed the targeted MatrixChat/Notifier/Notifications/MessageContextMenu/TimelinePanel/BaseDialog/DeactivateAccountDialog marker set with helper refactors, guardrails, and test updates (evidence: `docs/operations/evidence/2026-03-18-p2-batch-4-next-25-execution.md`).
 - [x] Batch-3 next-25 maintainability sweep (2026-03-18): closed 25 selected XXX/hack debt markers across runtime, accessibility, settings, and bootstrap slices without behavior changes (evidence: `docs/operations/evidence/2026-03-18-p2-batch-3-next-25-xxx-closure.md`).
 - [x] Batch-2 next-25 closure (2026-03-18): closed remaining TODO/FIXME backlog items and reconciled stale checklist markers so tracked open item count is now zero (evidence: `docs/operations/evidence/2026-03-18-p2-batch-2-next-25-items-closure.md`).
 - [x] Batch-1 P2 queue closure (2026-03-18): closed RoomProfileSettings, BasicMessageComposer, LegacyRoomList, RoomSublist, RoomTile, ChangePassword, BridgeSettingsTab, AccountUserSettingsTab, DeviceListenerOtherDevices, and IntegrationManagers with targeted test coverage and evidence sync (evidence: `docs/operations/evidence/2026-03-18-p2-batch-1-debt-burndown.md`).

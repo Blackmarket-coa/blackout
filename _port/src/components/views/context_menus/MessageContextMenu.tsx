@@ -142,6 +142,18 @@ interface IState {
     reactionPickerDisplayed: boolean;
 }
 
+function externalAnchorProps(href: string): Pick<
+    React.ComponentProps<typeof IconizedContextMenuOption>,
+    "element" | "href" | "target" | "rel"
+> {
+    return {
+        element: "a",
+        href,
+        target: "_blank",
+        rel: "noreferrer noopener",
+    };
+}
+
 export default class MessageContextMenu extends React.Component<IProps, IState> {
     public static contextType = RoomContext;
     declare public context: React.ContextType<typeof RoomContext>;
@@ -524,15 +536,7 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
                     icon={<ShareIcon />}
                     onClick={this.onShareClick}
                     label={_t("action|share")}
-                    element="a"
-                    {
-                        // XXX: Typescript signature for AccessibleButton doesn't work properly for non-inputs like `a`
-                        ...{
-                            href: permalink,
-                            target: "_blank",
-                            rel: "noreferrer noopener",
-                        }
-                    }
+                    {...externalAnchorProps(permalink)}
                 />
             );
         }
@@ -559,15 +563,7 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
                     icon={<LinkIcon />}
                     onClick={this.closeMenu}
                     label={_t("timeline|context_menu|external_url")}
-                    element="a"
-                    {
-                        // XXX: Typescript signature for AccessibleButton doesn't work properly for non-inputs like `a`
-                        ...{
-                            target: "_blank",
-                            rel: "noreferrer noopener",
-                            href: mxEvent.getContent().external_url,
-                        }
-                    }
+                    {...externalAnchorProps(mxEvent.getContent().external_url)}
                 />
             );
         }
@@ -613,15 +609,7 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
                     icon={<CopyIcon />}
                     onClick={this.onCopyLinkClick}
                     label={_t("action|copy_link")}
-                    element="a"
-                    {
-                        // XXX: Typescript signature for AccessibleButton doesn't work properly for non-inputs like `a`
-                        ...{
-                            href: link,
-                            target: "_blank",
-                            rel: "noreferrer noopener",
-                        }
-                    }
+                    {...externalAnchorProps(link)}
                 />
             );
         }
