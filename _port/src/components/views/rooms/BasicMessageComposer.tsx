@@ -748,8 +748,8 @@ export default class BasicMessageEditor extends React.Component<IProps, IState> 
         const model = this.props.model;
         model.setUpdateCallback(this.updateEditorState);
         const partCreator = model.partCreator;
-        // TODO: does this allow us to get rid of EditorStateTransfer?
-        // not really, but we could not serialize the parts, and just change the autoCompleter
+        // We intentionally keep EditorStateTransfer for cross-composer draft handoff.
+        // The auto-completer wiring here can evolve independently without breaking that persistence path.
         partCreator.setAutoCompleteCreator(
             getAutoCompleteCreator(
                 () => this.autocompleteRef.current,

@@ -430,7 +430,8 @@ const TAG_AESTHETICS: TagAestheticsMap = {
         defaultHidden: false,
     },
 
-    // TODO: Replace with archived view: https://github.com/vector-im/element-web/issues/14038
+    // Keep legacy archived bucket as a hidden fallback until ArchivedView is fully rolled out
+    // across all room list layouts: https://github.com/vector-im/element-web/issues/14038
     [DefaultTagID.Archived]: {
         sectionLabel: _td("common|historical"),
         isInvite: false,

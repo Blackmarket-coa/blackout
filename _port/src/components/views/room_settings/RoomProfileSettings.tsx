@@ -7,6 +7,7 @@ Please see LICENSE files in the repository root for full details.
 
 import React, { createRef } from "react";
 import classNames from "classnames";
+import { logger } from "matrix-js-sdk/src/logger";
 import { ContentHelpers, EventType, type Room } from "matrix-js-sdk/src/matrix";
 
 import { _t } from "../../../languageHandler";
@@ -50,7 +51,8 @@ function idNameForRoom(room: Room): string {
     return room.roomId;
 }
 
-// TODO: Merge with ProfileSettings?
+// This room-specific editor intentionally remains separate from user ProfileSettings because
+// room profile permissions/state events differ from user-profile account data flows.
 export default class RoomProfileSettings extends React.Component<IProps, IState> {
     private avatarUpload = createRef<HTMLInputElement>();
 
@@ -138,31 +140,54 @@ export default class RoomProfileSettings extends React.Component<IProps, IState>
         const client = MatrixClientPeg.safeGet();
         const newState: Partial<IState> = {};
 
-        // TODO: What do we do about errors?
         const displayName = this.state.displayName.trim();
-        if (this.state.originalDisplayName !== this.state.displayName) {
-            await client.setRoomName(this.props.roomId, displayName);
-            newState.originalDisplayName = displayName;
-            newState.displayName = displayName;
+        try {
+            if (this.state.originalDisplayName !== this.state.displayName) {
+                await client.setRoomName(this.props.roomId, displayName);
+                newState.originalDisplayName = displayName;
+                newState.displayName = displayName;
+            }
+        } catch (error) {
+            logger.error("Failed to update room display name", error);
+            newState.profileFieldsTouched = {
+                ...newState.profileFieldsTouched,
+                name: true,
+            };
         }
 
-        if (this.state.avatarFile) {
-            const { content_uri: uri } = await client.uploadContent(this.state.avatarFile);
-            await client.sendStateEvent(this.props.roomId, EventType.RoomAvatar, { url: uri }, "");
-            newState.originalAvatarUrl = uri;
-            newState.avatarFile = null;
-        } else if (this.state.avatarRemovalPending) {
-            await client.sendStateEvent(this.props.roomId, EventType.RoomAvatar, {}, "");
-            newState.avatarRemovalPending = false;
-            newState.originalAvatarUrl = null;
+        try {
+            if (this.state.avatarFile) {
+                const { content_uri: uri } = await client.uploadContent(this.state.avatarFile);
+                await client.sendStateEvent(this.props.roomId, EventType.RoomAvatar, { url: uri }, "");
+                newState.originalAvatarUrl = uri;
+                newState.avatarFile = null;
+            } else if (this.state.avatarRemovalPending) {
+                await client.sendStateEvent(this.props.roomId, EventType.RoomAvatar, {}, "");
+                newState.avatarRemovalPending = false;
+                newState.originalAvatarUrl = null;
+            }
+        } catch (error) {
+            logger.error("Failed to update room avatar", error);
+            newState.profileFieldsTouched = {
+                ...newState.profileFieldsTouched,
+                avatar: true,
+            };
         }
 
-        if (this.state.originalTopic !== this.state.topic) {
-            const html = htmlSerializeFromMdIfNeeded(this.state.topic, { forceHTML: false });
-            // XXX: Note that we deliberately send an empty string on an empty topic rather
-            // than a clearer `undefined` value. Synapse still requires a string in a topic.
-            await client.setRoomTopic(this.props.roomId, this.state.topic, html);
-            newState.originalTopic = this.state.topic;
+        try {
+            if (this.state.originalTopic !== this.state.topic) {
+                const html = htmlSerializeFromMdIfNeeded(this.state.topic, { forceHTML: false });
+                // XXX: Note that we deliberately send an empty string on an empty topic rather
+                // than a clearer `undefined` value. Synapse still requires a string in a topic.
+                await client.setRoomTopic(this.props.roomId, this.state.topic, html);
+                newState.originalTopic = this.state.topic;
+            }
+        } catch (error) {
+            logger.error("Failed to update room topic", error);
+            newState.profileFieldsTouched = {
+                ...newState.profileFieldsTouched,
+                topic: true,
+            };
         }
 
         this.setState(newState as IState);

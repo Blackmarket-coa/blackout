@@ -157,6 +157,17 @@ describe("RoomTile", () => {
             expect(screen.queryByRole("button", { name: "Room options" })).toBeInTheDocument();
         });
 
+        it("shows notification button indicator when global notifications are disabled", () => {
+            mocked(shouldShowComponent).mockReturnValue(true);
+            jest.spyOn(SettingsStore, "getValue").mockImplementation((name) => {
+                if (name === "notificationsEnabled") return false;
+                return true;
+            });
+
+            const { container } = renderRoomTile();
+            expect(container.querySelector(".mx_RoomTile_notificationsButton_show")).toBeInTheDocument();
+        });
+
         it("does not render the room options context menu when knocked to the room", () => {
             jest.spyOn(SettingsStore, "getValue").mockImplementation((name) => {
                 return name === "feature_ask_to_join";

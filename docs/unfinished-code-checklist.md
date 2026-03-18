@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **28**
-- Resolved items tracked in this checklist: **43**
-- Total files with tracked markers: **16**
+- Open items: **18**
+- Resolved items tracked in this checklist: **53**
+- Total files with tracked markers: **11**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Batch-1 P2 queue closure (2026-03-18): closed RoomProfileSettings, BasicMessageComposer, LegacyRoomList, RoomSublist, RoomTile, ChangePassword, BridgeSettingsTab, AccountUserSettingsTab, DeviceListenerOtherDevices, and IntegrationManagers with targeted test coverage and evidence sync (evidence: `docs/operations/evidence/2026-03-18-p2-batch-1-debt-burndown.md`).
 - [x] MessageEvent location-routing cleanup: moved stable location body mapping into event-type registry and retained legacy `m.room.message` fallback for compatibility (evidence: `docs/operations/evidence/2026-03-17-messageevent-location-eventtype-closure.md`).
 - [x] Sprint D P2 marker batch: closed next ranked top-10 queue (LegacyCallEventGrouper, LoggedInView, RoomSearchView, InteractiveAuthEntryComponents, RoomCallBanner, ModalWidgetDialog, SpotlightDialog, AppTile, RoomAliasField, MFileBody) and advanced self-healing + townhall mitigation validation (evidence: `docs/operations/evidence/2026-03-16-sprint-d-top10-selfhealing-townhall-closure.md`).
 - [x] Sprint C risk-queue closure: completed ranked risk items #1-#10 (MImageBody, AliasSettings, EventIndex, SpaceStore, VerificationPanel, LinkPreviewWidget, Stickerpicker, Notifications, WidgetStore, UserProvider) with code + tests + tracker synchronization (evidence: `docs/operations/evidence/2026-03-16-sprint-c-risk-queue-1-10-closure.md`).
@@ -70,60 +71,16 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - [ ] L273: `// TODO: move to eventTypes when location sharing spec stabilises`
 
-### `src/components/views/room_settings/RoomProfileSettings.tsx`
-
-- [ ] L53: `// TODO: Merge with ProfileSettings?`
-- [ ] L141: `// TODO: What do we do about errors?`
-
-### `src/components/views/rooms/BasicMessageComposer.tsx`
-
-- [ ] L751: `// TODO: does this allow us to get rid of EditorStateTransfer?`
-
-### `src/components/views/rooms/LegacyRoomList.tsx`
-
-- [ ] L433: `// TODO: Replace with archived view: https://github.com/vector-im/element-web/issues/14038`
-
-### `src/components/views/rooms/RoomSublist.tsx`
-
-- [ ] L86: `// TODO: Use re-resizer's NumberSize when it is exposed as the type`
-
-### `src/components/views/rooms/RoomTile.tsx`
-
-- [ ] L298: `// TODO: [FTUE Notifications] Probably need to detect global mute state`
-
 ### `src/components/views/rooms/Stickerpicker.tsx`
 
 - [ ] L78: `// TODO: Pick the right manager for the widget`
 - [ ] L242: `// TODO - Add support for Stickerpickers from multiple app stores.`
 - [ ] L257: `// FIXME: could this use the same code as other apps?`
 
-### `src/components/views/settings/ChangePassword.tsx`
-
-- [ ] L241: `// TODO: We can remove this check (but should add some Playwright tests to`
-
-### `src/components/views/settings/tabs/room/BridgeSettingsTab.tsx`
-
-- [ ] L61: `// TODO: We don't have this link yet: this will prevent the translators`
-- [ ] L83: `// TODO: We don't have this link yet: this will prevent the translators`
-
-### `src/components/views/settings/tabs/user/AccountUserSettingsTab.tsx`
-
-- [ ] L151: `// TODO: Figure out a design that doesn't involve replacing the current dialog`
-- [ ] L160: `// TODO: Figure out a design that doesn't involve replacing the current dialog`
-
-### `src/device-listener/DeviceListenerOtherDevices.ts`
-
-- [ ] L86: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
-- [ ] L121: `// TODO: maybe we don't need a full DeviceListener check? (Maybe we only`
-
 ### `src/indexing/EventIndex.ts`
 
 - [ ] L500: `// TODO we need to ensure to use member lazy loading with this`
 - [ ] L580: `// TODO if there are no events at this point we're missing a lot`
-
-### `src/integrations/IntegrationManagers.ts`
-
-- [ ] L84: `// TODO: Log out of the scalar clients`
 
 ### `src/mjolnir/Mjolnir.ts`
 

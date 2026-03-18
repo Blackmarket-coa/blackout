@@ -133,21 +133,6 @@ export default class ChangePassword extends React.Component<IProps, IState> {
             });
     }
 
-    /**
-     * Checks the `newPass` and throws an error if it is unacceptable.
-     * @param oldPass The old password
-     * @param newPass The new password that the user is trying to be set
-     * @param confirmPass The confirmation password where the user types the `newPass`
-     * again for confirmation and should match the `newPass` before we accept their new
-     * password.
-     */
-    private checkPassword(oldPass: string, newPass: string, confirmPass: string): void {
-        if (newPass !== confirmPass) {
-            throw new UserFriendlyError("auth|change_password_mismatch");
-        } else if (!newPass || newPass.length === 0) {
-            throw new UserFriendlyError("auth|change_password_empty");
-        }
-    }
 
     private optionallySetEmail(): Promise<boolean> {
         // Ask for an email otherwise the user has no way to reset their password
@@ -236,26 +221,8 @@ export default class ChangePassword extends React.Component<IProps, IState> {
 
         const oldPassword = this.state.oldPassword;
         const newPassword = this.state.newPassword;
-        const confirmPassword = this.state.newPasswordConfirm;
-        try {
-            // TODO: We can remove this check (but should add some Playwright tests to
-            // sanity check this flow). This logic is redundant with the input field
-            // validation we do and `verifyFieldsBeforeSubmit()` above. See
-            // https://github.com/matrix-org/matrix-react-sdk/pull/10615#discussion_r1167364214
-            this.checkPassword(oldPassword, newPassword, confirmPassword);
-            return this.onChangePassword(oldPassword, newPassword);
-        } catch (err) {
-            if (err instanceof Error) {
-                this.props.onError(err);
-            } else {
-                this.props.onError(
-                    new UserFriendlyError("auth|change_password_error", {
-                        error: String(err),
-                        cause: undefined,
-                    }),
-                );
-            }
-        }
+        // Field-level and submit-time validation already guarantee required/matching passwords.
+        return this.onChangePassword(oldPassword, newPassword);
     };
 
     private async verifyFieldsBeforeSubmit(): Promise<boolean> {

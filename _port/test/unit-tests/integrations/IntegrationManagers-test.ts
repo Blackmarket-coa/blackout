@@ -59,4 +59,24 @@ describe("IntegrationManagers", () => {
             expect(orderedManagers[1].id).toBe("foo");
         });
     });
+
+    describe("setupHomeserverManagers", () => {
+        it("clears stale homeserver scalar tokens before replacing managers", async () => {
+            window.localStorage.setItem("mx_scalar_token_at_https://old.example/api", "stale");
+            const managersAny = intMgrs as unknown as {
+                managers: Array<{ kind: string; apiUrl: string }>;
+                setupHomeserverManagers: (discoveryResponse: unknown) => Promise<void>;
+            };
+            managersAny.managers = [{ kind: "homeserver", apiUrl: "https://old.example/api" }];
+
+            await managersAny.setupHomeserverManagers({
+                "m.integrations": {
+                    managers: [{ api_url: "https://new.example/api", ui_url: "https://new.example/ui" }],
+                },
+            });
+
+            expect(window.localStorage.getItem("mx_scalar_token_at_https://old.example/api")).toBeNull();
+        });
+    });
+
 });

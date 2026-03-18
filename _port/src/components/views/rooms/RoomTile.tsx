@@ -294,9 +294,9 @@ class RoomTile extends React.PureComponent<Props, State> {
         const state = this.roomProps.notificationVolume;
 
         const classes = classNames("mx_RoomTile_notificationsButton", {
-            // Only show the icon by default if the room is overridden to muted.
-            // TODO: [FTUE Notifications] Probably need to detect global mute state
-            mx_RoomTile_notificationsButton_show: state === RoomNotifState.Mute,
+            // Show when room is muted or global notifications are disabled.
+            mx_RoomTile_notificationsButton_show:
+                state === RoomNotifState.Mute || SettingsStore.getValue("notificationsEnabled") === false,
         });
 
         return (

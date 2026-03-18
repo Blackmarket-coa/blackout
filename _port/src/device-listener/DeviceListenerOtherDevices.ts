@@ -83,8 +83,7 @@ export default class DeviceListenerOtherDevices {
             this.dismissed.add(d);
         }
 
-        // TODO: maybe we don't need a full DeviceListener check? (Maybe we only
-        // need to call this.recheck().)
+        // Trigger DeviceListener recheck so verification state and toast suppression stay in sync.
         this.deviceListener.recheck();
     }
 
@@ -118,8 +117,7 @@ export default class DeviceListenerOtherDevices {
         const myUserId = this.client.getSafeUserId();
         if (users.includes(myUserId)) await this.ensureDeviceIdsAtStartPopulated();
 
-        // TODO: maybe we don't need a full DeviceListener check? (Maybe we only
-        // need to call this.recheck().)
+        // Trigger DeviceListener recheck so verification state and toast suppression stay in sync.
         this.deviceListener.recheck();
     };
 

@@ -10,7 +10,7 @@ Please see LICENSE files in the repository root for full details.
 
 import { type Room } from "matrix-js-sdk/src/matrix";
 import classNames from "classnames";
-import { type Enable, Resizable } from "re-resizable";
+import { type Enable, type NumberSize, Resizable } from "re-resizable";
 import { type Direction } from "re-resizable/lib/resizer";
 import React, { type JSX, type ComponentType, createRef, type ReactComponentElement, type ReactNode } from "react";
 import {
@@ -83,11 +83,7 @@ function getLabelId(tagId: TagID): string {
     return `mx_RoomSublist_label_${tagId}`;
 }
 
-// TODO: Use re-resizer's NumberSize when it is exposed as the type
-interface ResizeDelta {
-    width: number;
-    height: number;
-}
+type ResizeDelta = NumberSize;
 
 type PartialDOMRect = Pick<DOMRect, "left" | "top" | "height">;
 
