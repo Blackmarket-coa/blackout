@@ -29,12 +29,17 @@ export function isPushNotifyDisabled(): boolean {
     return masterRule.enabled && !masterRule.actions.includes(PushRuleActionName.Notify);
 }
 
-function getNotifier(): any {
-    // TODO: [TS] Formal type that doesn't cause a cyclical reference.
+type NotifierLike = {
+    isPossible(): boolean;
+    supportsDesktopNotifications(): boolean;
+    setEnabled(value: boolean): void;
+};
+
+function getNotifier(): NotifierLike {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     let Notifier = require("../../Notifier"); // avoids cyclical references
     if (Notifier.default) Notifier = Notifier.default; // correct for webpack require() weirdness
-    return Notifier;
+    return Notifier as NotifierLike;
 }
 
 export class NotificationsEnabledController extends SettingController {

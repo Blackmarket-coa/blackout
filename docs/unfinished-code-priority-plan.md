@@ -5,7 +5,7 @@ This plan prioritizes unresolved NOTE/issue markers from `docs/unfinished-code-c
 ## Inputs
 
 - Completion tracker baseline: `docs/blackout-reuse-completion-tracker.md` (all major reuse-strategy epics complete; current phase is maintenance).
-- Open marker inventory: `docs/unfinished-code-checklist.md` (repository-wide NOTE/issue-marker backlog, 18 open items).
+- Open marker inventory: `docs/unfinished-code-checklist.md` (repository-wide NOTE/issue-marker backlog, 0 open items).
 - Centralized execution evidence: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
 - Revenue expansion roadmap: `docs/14-stream-revenue-implementation-plan.md` (cross-functional monetization backlog to schedule alongside unfinished-code burn-down).
 
@@ -68,7 +68,7 @@ No unresolved top-10 P1 items remain in the current ranked queue.
 
 ### P2
 
-- Continue long-tail checklist burn-down from `docs/unfinished-code-checklist.md` after P1 closure.
+No unresolved P2 marker items remain in the tracked queue after batch-2 closure.
 
 ## Remaining marker risk queue (owner + milestone)
 
@@ -110,6 +110,8 @@ No unresolved top-10 P1 items remain in the current ranked queue.
 
 - **Sprint E (P2 batch-1 closure):** completed 2026-03-18 for the locked regenerated top-10 queue (RoomProfileSettings -> IntegrationManagers) with code/test/doc synchronization (evidence: `docs/operations/evidence/2026-03-18-p2-batch-1-debt-burndown.md`).
 
+- **Sprint F (P2 batch-2 next-25 closure):** completed 2026-03-18 for remaining marker debt and checklist/priority-plan reconciliation to zero open tracked items (evidence: `docs/operations/evidence/2026-03-18-p2-batch-2-next-25-items-closure.md`).
+
 ## Verification
 
 - Last verified date: 2026-03-16
@@ -118,4 +120,4 @@ No unresolved top-10 P1 items remain in the current ranked queue.
   - `rg -n "uc-00[1-9]|uc-010|Recently resolved high-priority markers|Open items" docs/unfinished-code-checklist.md docs/unfinished-code-priority-plan.md`
   - `rg -n "test/unit-tests/components/structures/MatrixChat-test.tsx|test/unit-tests/components/views/beacon/RoomCallBanner-test.tsx|src/vector/index.html" docs/unfinished-code-checklist.md`
   - `rg -n "2026-03-14-blackout-centralized-work-orders-1-9|2026-03-14-batch-15-marker-closure" docs/unfinished-code-priority-plan.md`
-  - `rg -n "Open items: \*\*18\*\*|open marker inventory: 18|backlog remains high \(18\)" docs/unfinished-code-checklist.md docs/project_completion_tracker.md docs/blackout_centralized_release_readiness_gate.md`
+  - `rg -n "Open items: \*\*0\*\*|open marker inventory: 0|backlog remains high \(0\)" docs/unfinished-code-checklist.md docs/project_completion_tracker.md docs/blackout_centralized_release_readiness_gate.md`

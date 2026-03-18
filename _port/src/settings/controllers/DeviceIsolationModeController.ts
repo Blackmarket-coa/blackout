@@ -33,8 +33,8 @@ export function setDeviceIsolationMode(client: MatrixClient, settingValue: boole
     client.getCrypto()?.setDeviceIsolationMode(
         settingValue
             ? new OnlySignedDevicesIsolationMode()
-            : // TODO: As part of https://github.com/element-hq/element-meta/issues/2492, we will change
-              //   `errorOnVerifiedUserProblems` to `true`, but we need to have better UI in place before we can do so.
+            : // Keep `errorOnVerifiedUserProblems` disabled until the UX work in
+              // https://github.com/element-hq/element-meta/issues/2492 is ready.
               new AllDevicesIsolationMode(false),
     );
 }

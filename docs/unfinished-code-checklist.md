@@ -3,14 +3,15 @@
 Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scripts/`, `docs/`, and `test/.`
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
-- Open items: **18**
-- Resolved items tracked in this checklist: **53**
-- Total files with tracked markers: **11**
+- Open items: **0**
+- Resolved items tracked in this checklist: **78**
+- Total files with tracked markers: **0**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Batch-2 next-25 closure (2026-03-18): closed remaining TODO/FIXME backlog items and reconciled stale checklist markers so tracked open item count is now zero (evidence: `docs/operations/evidence/2026-03-18-p2-batch-2-next-25-items-closure.md`).
 - [x] Batch-1 P2 queue closure (2026-03-18): closed RoomProfileSettings, BasicMessageComposer, LegacyRoomList, RoomSublist, RoomTile, ChangePassword, BridgeSettingsTab, AccountUserSettingsTab, DeviceListenerOtherDevices, and IntegrationManagers with targeted test coverage and evidence sync (evidence: `docs/operations/evidence/2026-03-18-p2-batch-1-debt-burndown.md`).
 - [x] MessageEvent location-routing cleanup: moved stable location body mapping into event-type registry and retained legacy `m.room.message` fallback for compatibility (evidence: `docs/operations/evidence/2026-03-17-messageevent-location-eventtype-closure.md`).
 - [x] Sprint D P2 marker batch: closed next ranked top-10 queue (LegacyCallEventGrouper, LoggedInView, RoomSearchView, InteractiveAuthEntryComponents, RoomCallBanner, ModalWidgetDialog, SpotlightDialog, AppTile, RoomAliasField, MFileBody) and advanced self-healing + townhall mitigation validation (evidence: `docs/operations/evidence/2026-03-16-sprint-d-top10-selfhealing-townhall-closure.md`).
@@ -27,98 +28,6 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 - [x] `src/components/structures/auth/Login.tsx` (uc-005): register button flow now explicitly blocks registration when homeserver policy returns `registrationEnabled === false` and preserves SSO-register routing where supported.
 - [x] `src/components/views/rooms/wysiwyg_composer/components/WysiwygAutocomplete.tsx`: community autocomplete selections now insert plain text into the composer instead of no-op behavior.
 
-### `src/components/structures/LegacyCallEventGrouper.ts`
+## Open marker queue
 
-- [ ] L95: `// FIXME: Find a better way to determine this from the event?`
-
-### `src/components/structures/LoggedInView.tsx`
-
-- [ ] L219: `// TODO: In a future app release, remove support for legacy key.`
-
-### `src/components/structures/RoomSearchView.tsx`
-
-- [ ] L49: `// XXX: todo: merge overlapping results somehow?`
-
-### `src/components/views/auth/InteractiveAuthEntryComponents.tsx`
-
-- [ ] L566: `1, // TODO: Multiple send attempts?`
-
-### `src/components/views/beacon/RoomCallBanner.tsx`
-
-- [ ] L46: `// TODO matrix rtc`
-
-### `src/components/views/dialogs/ModalWidgetDialog.tsx`
-
-- [ ] L149: `// TODO: Replace these with proper widget params`
-
-### `src/components/views/dialogs/spotlight/SpotlightDialog.tsx`
-
-- [ ] L282: `// TODO we may want to put invites in their own list`
-
-### `src/components/views/elements/AppTile.tsx`
-
-- [ ] L608: `// TODO replace with full screen interactions`
-
-### `src/components/views/elements/RoomAliasField.tsx`
-
-- [ ] L152: `// XXX: FIXME https://github.com/matrix-org/matrix-doc/issues/668`
-
-### `src/components/views/messages/MFileBody.tsx`
-
-- [ ] L275: `TODO: Move iframe (and dummy link) into FileDownloader.`
-
-### `src/components/views/messages/MessageEvent.tsx`
-
-- [ ] L273: `// TODO: move to eventTypes when location sharing spec stabilises`
-
-### `src/components/views/rooms/Stickerpicker.tsx`
-
-- [ ] L78: `// TODO: Pick the right manager for the widget`
-- [ ] L242: `// TODO - Add support for Stickerpickers from multiple app stores.`
-- [ ] L257: `// FIXME: could this use the same code as other apps?`
-
-### `src/indexing/EventIndex.ts`
-
-- [ ] L500: `// TODO we need to ensure to use member lazy loading with this`
-- [ ] L580: `// TODO if there are no events at this point we're missing a lot`
-
-### `src/mjolnir/Mjolnir.ts`
-
-- [ ] L22: `// TODO: Move this and related files to the js-sdk or something once finalized.`
-
-### `src/resizer/resizer.ts`
-
-- [ ] L36: `// TODO move vertical/horizontal to config option/container class`
-
-### `src/settings/Settings.tsx`
-
-- [ ] L758: `// TODO: Wire up appropriately to UI (FTUE notifications)`
-- [ ] L1331: `// TODO: Rename with settings v3`
-
-### `src/settings/controllers/DeviceIsolationModeController.ts`
-
-- [ ] L36: `: // TODO: As part of https://github.com/element-hq/element-meta/issues/2492, we will change`
-
-### `src/settings/controllers/NotificationControllers.ts`
-
-- [ ] L33: `// TODO: [TS] Formal type that doesn't cause a cyclical reference.`
-
-### `src/stores/OwnBeaconStore.ts`
-
-- [ ] L305: `// TODO check powerlevels here`
-
-### `src/stores/spaces/SpaceStore.ts`
-
-- [ ] L582: `// TODO consider sorting by number of in-refs to favour nodes with fewer parents.`
-- [ ] L1054: `// TODO rebuild the space parent and not the room - check permissions?`
-- [ ] L1055: `// TODO confirm this after implementing parenting behaviour`
-
-### `src/utils/DMRoomMap.ts`
-
-- [ ] L26: `// TODO: convert these to maps`
-- [ ] L156: `// TODO: [Canonical DMs] Handle lookups for email addresses.`
-
-### `test/jest-mocks.ts`
-
-- [ ] L9: `// https://jestjs.io/docs/en/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom`
-
+- No open TODO/FIXME/TBD/not-implemented markers are currently tracked in scope.
