@@ -81,6 +81,18 @@ On Windows, use the same command:
 pnpm build
 ```
 
+### Run the placeholder frontend shell
+
+```bash
+pnpm start
+```
+
+Then open:
+
+- Frontend shell: `http://localhost:3000/`
+- Health endpoint: `http://localhost:3000/health`
+- Readiness endpoint: `http://localhost:3000/ready`
+
 ---
 
 ## Development workflow
