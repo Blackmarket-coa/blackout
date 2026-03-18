@@ -17,6 +17,15 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function resolvePublicBaseUrl() {
+  const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (publicDomain) {
+    return `https://${publicDomain}`;
+  }
+
+  return `http://0.0.0.0:${port}`;
+}
+
 function serveFrontendFile(res, relativePath) {
   const safePath = path.normalize(relativePath).replace(/^([.][.][/\\])+/, "");
   const filePath = path.join(frontendRoot, safePath);
@@ -40,12 +49,21 @@ function serveFrontendFile(res, relativePath) {
 }
 
 const port = resolvePort(process.env.PORT);
+const publicBaseUrl = resolvePublicBaseUrl();
 
 const server = http.createServer((req, res) => {
   const { method = "GET", url = "/" } = req;
 
   if (method === "GET" && (url === "/health" || url === "/ready")) {
-    sendJson(res, 200, { ok: true, service: "blackout-monorepo" });
+    sendJson(res, 200, {
+      ok: true,
+      service: "blackout-monorepo",
+      deployment: {
+        provider: process.env.RAILWAY_PUBLIC_DOMAIN ? "railway" : "local",
+        environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
+        service: process.env.RAILWAY_SERVICE_NAME ?? null,
+      },
+    });
     return;
   }
 
@@ -64,7 +82,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`blackout service listening on http://0.0.0.0:${port}`);
-  console.log(`frontend available at http://0.0.0.0:${port}/`);
+  console.log(`frontend available at ${publicBaseUrl}/`);
+  console.log(`health endpoint available at ${publicBaseUrl}/health`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

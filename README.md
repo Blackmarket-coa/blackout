@@ -93,6 +93,12 @@ Then open:
 - Health endpoint: `http://localhost:3000/health`
 - Readiness endpoint: `http://localhost:3000/ready`
 
+If deployed on Railway, use your Railway domain instead of localhost:
+
+- Frontend shell: `https://$RAILWAY_PUBLIC_DOMAIN/`
+- Health endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/health`
+- Readiness endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/ready`
+
 ---
 
 ## Development workflow
