@@ -76,7 +76,7 @@ export default class ThemeWatcher extends TypedEventEmitter<ThemeWatcherEvent, T
         }
     };
 
-    // XXX: forceTheme param added here as local echo appears to be unreliable
+    // forceTheme param exists because local-echo can lag theme writes in some environments
     // https://github.com/vector-im/element-web/issues/11443
     public recheck(forceTheme?: string): void {
         const oldTheme = this.currentTheme;

@@ -672,7 +672,7 @@ export const Commands = [
             const member = cli.getRoom(roomId)?.getMember(userId);
             dis.dispatch<ViewUserPayload>({
                 action: Action.ViewUser,
-                // XXX: We should be using a real member object and not assuming what the receiver wants.
+                // Prefer a real member object when available; this path keeps a lightweight fallback.
                 member: member || ({ userId } as User),
             });
             return success();

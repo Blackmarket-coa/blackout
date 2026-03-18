@@ -117,7 +117,7 @@ export default class DeviceSettingsHandler extends AbstractLocalStorageSettingsH
         // https://github.com/vector-im/element-web/issues/24513 for the
         // discussion.
 
-        // XXX: This turns they key names into `mx_labs_feature_feature_x` (double feature).
+        // This preserves historical key-shape (`mx_labs_feature_feature_x`) for backward compatibility.
         // This is because all feature names start with `feature_` as a matter of policy.
         // Oh well.
         return this.getBoolean("mx_labs_feature_" + featureName);

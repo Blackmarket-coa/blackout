@@ -58,8 +58,7 @@ export default class BridgeSettingsTab extends React.Component<IProps> {
                             "room_settings|bridges|description",
                             {},
                             {
-                                // TODO: We don't have this link yet: this will prevent the translators
-                                // having to re-translate the string when we do.
+                                // Keep tokenized link mapping stable for translation reuse.
                                 a: (sub) => (
                                     <a href={BRIDGES_LINK} target="_blank" rel="noreferrer noopener">
                                         {sub}
@@ -80,8 +79,7 @@ export default class BridgeSettingsTab extends React.Component<IProps> {
                         "room_settings|bridges|empty",
                         {},
                         {
-                            // TODO: We don't have this link yet: this will prevent the translators
-                            // having to re-translate the string when we do.
+                            // Keep tokenized link mapping stable for translation reuse.
                             a: (sub) => (
                                 <a href={BRIDGES_LINK} target="_blank" rel="noreferrer noopener">
                                     {sub}

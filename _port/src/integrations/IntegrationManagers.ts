@@ -80,8 +80,8 @@ export class IntegrationManagers {
 
             logger.log(`Homeserver has ${managers.length} integration managers`);
 
-            // Clear out any known managers for the homeserver
-            // TODO: Log out of the scalar clients
+            // Clear out any known managers for the homeserver and remove stale scalar tokens.
+            this.logoutManagersByKind(Kind.Homeserver);
             this.managers = this.managers.filter((m) => m.kind !== Kind.Homeserver);
 
             // Now add all the managers the homeserver wants us to have
@@ -102,6 +102,14 @@ export class IntegrationManagers {
         }
     };
 
+
+
+    private logoutManagersByKind(kind: Kind): void {
+        const staleManagers = this.managers.filter((manager) => manager.kind === kind);
+        for (const manager of staleManagers) {
+            window.localStorage.removeItem(`mx_scalar_token_at_${manager.apiUrl}`);
+        }
+    }
     private setupAccountManagers(): void {
         if (!this.client || !this.client.getUserId()) return; // not logged in
         const widgets = WidgetUtils.getIntegrationManagerWidgets(this.client);

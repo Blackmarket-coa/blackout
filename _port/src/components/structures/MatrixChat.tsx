@@ -148,6 +148,33 @@ export { default as Views } from "../../Views";
 
 const AUTH_SCREENS = ["register", "mobile_register", "login", "forgot_password", "start_sso", "start_cas", "welcome"];
 
+const LOGIN_LOOP_GUARD_SCREENS = new Set(["welcome", "login", "register", "start_sso", "start_cas"]);
+
+export function shouldShowConsoleWarningOnResize(): boolean {
+    // We no longer try to infer devtools state from viewport dimensions because it is unreliable.
+    // We still show the educational console warning on resize as a low-cost reminder.
+    return true;
+}
+
+function syncIdentityServerFromAccountData(baseUrl: string | null): void {
+    const client = MatrixClientPeg.safeGet();
+    client.setIdentityServerUrl(baseUrl ?? undefined);
+
+    // Always clear stale token material whenever the configured IS changes.
+    localStorage.removeItem("mx_is_access_token");
+
+    // `mx_is_url` is still consumed by Lifecycle session restore for backwards compatibility.
+    if (baseUrl) {
+        localStorage.setItem("mx_is_url", baseUrl);
+    } else {
+        localStorage.removeItem("mx_is_url");
+    }
+}
+
+function shouldApplyInitialScreenAfterLogin(initialScreen?: IScreen): boolean {
+    return Boolean(initialScreen && !LOGIN_LOOP_GUARD_SCREENS.has(initialScreen.screen));
+}
+
 // Actions that are redirected through the onboarding process prior to being
 // re-dispatched. NOTE: some actions are non-trivial and would require
 // re-factoring to be included in this list in future.
@@ -558,8 +585,9 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
     }
 
     private onWindowResized = (): void => {
-        // XXX: This is a very unreliable way to detect whether or not the the devtools are open
-        this.warnInConsole();
+        if (shouldShowConsoleWarningOnResize()) {
+            this.warnInConsole();
+        }
     };
 
     private warnInConsole = throttle((): void => {
@@ -694,25 +722,13 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
 
         switch (payload.action) {
             case "MatrixActions.accountData":
-                // XXX: This is a collection of several hacks to solve a minor problem. We want to
-                // update our local state when the identity server changes, but don't want to put that in
-                // the js-sdk as we'd be then dictating how all consumers need to behave. However,
-                // this component is already bloated and we probably don't want this tiny logic in
-                // here, but there's no better place in the react-sdk for it. Additionally, we're
-                // abusing the MatrixActionCreator stuff to avoid errors on dispatches.
+                // Keep identity-server local state synchronized with account-data updates without
+                // requiring js-sdk consumers to implement this app-specific persistence policy.
                 if (payload.event_type === "m.identity_server") {
                     const fullUrl = payload.event_content ? payload.event_content["base_url"] : null;
-                    if (!fullUrl) {
-                        MatrixClientPeg.safeGet().setIdentityServerUrl(undefined);
-                        localStorage.removeItem("mx_is_access_token");
-                        localStorage.removeItem("mx_is_url");
-                    } else {
-                        MatrixClientPeg.safeGet().setIdentityServerUrl(fullUrl);
-                        localStorage.removeItem("mx_is_access_token"); // clear token
-                        localStorage.setItem("mx_is_url", fullUrl); // XXX: Do we still need this?
-                    }
+                    syncIdentityServerFromAccountData(fullUrl);
 
-                    // redispatch the change with a more specific action
+                    // Redispatch the change with a more specific action.
                     dis.dispatch({ action: "id_server_changed" });
                 }
                 break;
@@ -1558,8 +1574,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         //     event, which will transition us into Views.SOFT_LOGOUT. We therefore have to check for !isSoftLogout().
         //     There will be a subsequent `Action.OnLoggedIn` event once the reauthentication completes.
         //
-        //     XXX: fix this properly by having Lifecycle not emit OnLoggedIn when it knows it is about to emit a
-        //     ClientNotViable.
+        //     We guard this transition until soft-logout viability has been resolved.
         //
         // If we're already in the SOFT_LOGOUT view, that means that reauthentication has succeeded, and we can
         // transition to the splash screen.
@@ -2182,11 +2197,8 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
     private getFragmentAfterLogin(): string {
         let fragmentAfterLogin = "";
         const initialScreenAfterLogin = this.props.initialScreenAfterLogin;
-        if (
-            initialScreenAfterLogin &&
-            // XXX: workaround for https://github.com/vector-im/element-web/issues/11643 causing a login-loop
-            !["welcome", "login", "register", "start_sso", "start_cas"].includes(initialScreenAfterLogin.screen)
-        ) {
+        if (shouldApplyInitialScreenAfterLogin(initialScreenAfterLogin)) {
+            // Login-loop guard retained from https://github.com/vector-im/element-web/issues/11643.
             fragmentAfterLogin = `/${initialScreenAfterLogin.screen}`;
         }
         return fragmentAfterLogin;

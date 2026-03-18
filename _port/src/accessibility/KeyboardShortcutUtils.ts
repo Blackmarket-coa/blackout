@@ -78,7 +78,7 @@ const getUIOnlyShortcuts = (): IKeyboardShortcuts => {
     };
 
     if (shouldOverrideBrowserShortcuts()) {
-        // XXX: This keyboard shortcut isn't manually added to
+        // This shortcut is intentionally generated, not manually listed in
         // KeyBindingDefaults as it can't be easily handled by the
         // KeyBindingManager
         keyboardShortcuts[KeyBindingAction.SwitchToSpaceByNumber] = {

@@ -36,7 +36,7 @@ export function getMonthsArray(month: Intl.DateTimeFormatOptions["month"] = "sho
     return [...Array(12).keys()].map((m) => format(Date.UTC(2021, m)));
 }
 
-// XXX: Ideally we could just specify `hour12: boolean` but it has issues on Chrome in the `en` locale
+// Prefer explicit `hour12` eventually; current approach avoids known Chrome `en` locale issues.
 // https://support.google.com/chrome/thread/29828561?hl=en
 export function getTwelveHourOptions(showTwelveHour: boolean): Intl.DateTimeFormatOptions {
     return {

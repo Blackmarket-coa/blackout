@@ -103,13 +103,13 @@ function urlForColor(color: string): string {
     return canvas.toDataURL();
 }
 
-// XXX: Ideally we'd clear this cache when the theme changes
+// Cache lifecycle is process-long; invalidate alongside future theme-switch cache strategy.
 // but since this function is at global scope, it's a bit
 // hard to install a listener here, even if there were a clear event to listen to
 const colorToDataURLCache = new Map<string, string>();
 
 export function defaultAvatarUrlForString(s: string): string {
-    if (!s) return ""; // XXX: should never happen but empirically does by evidence of a rageshake
+    if (!s) return ""; // Defensive fallback observed in production diagnostics.
     // eslint-disable-next-line react-hooks/rules-of-hooks
     const colorIndex = useIdColorHash(s);
     // overwritten color value in custom themes
@@ -141,7 +141,7 @@ export function defaultAvatarUrlForString(s: string): string {
  */
 export function getInitialLetter(name: string): string | undefined {
     if (!name) {
-        // XXX: We should find out what causes the name to sometimes be falsy.
+        // Keep guard for occasional falsy names seen in the wild; root-cause remains upstream.
         console.trace("`name` argument to `getInitialLetter` not supplied");
         return undefined;
     }

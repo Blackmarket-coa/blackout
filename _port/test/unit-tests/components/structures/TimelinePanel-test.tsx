@@ -296,6 +296,27 @@ describe("TimelinePanel", () => {
                 });
             });
 
+
+
+            it("updates roomReadMarkerTsMap on fully_read account data", async () => {
+                await renderTimelinePanel();
+                timelineSet.addLiveEvent(ev1, { addToState: true });
+                await room.addLiveEvents([ev1], { addToState: true });
+                await flushPromises();
+
+                const fullyRead = new MatrixEvent({
+                    type: EventType.FullyRead,
+                    room_id: roomId,
+                    content: { event_id: ev1.getId() },
+                });
+
+                room.currentState.setStateEvents([fullyRead]);
+                room.emit(RoomEvent.AccountData, fullyRead, room);
+                await flushPromises();
+
+                expect(TimelinePanel.roomReadMarkerTsMap[roomId]).toBe(ev1.getTs());
+            });
+
             describe("and sending receipts is disabled", () => {
                 beforeEach(async () => {
                     // Ensure this setting is supported, otherwise it will use the default value.

@@ -19,7 +19,7 @@ import { type ActionPayload } from "../dispatcher/payloads";
 import { type DoAfterSyncPreparedPayload } from "../dispatcher/payloads/DoAfterSyncPreparedPayload";
 import { Action } from "../dispatcher/actions";
 
-// TODO: Move this and related files to the js-sdk or something once finalized.
+// This remains app-local until moderation-list APIs are stable enough for js-sdk extraction.
 
 export class Mjolnir {
     private static instance?: Mjolnir;

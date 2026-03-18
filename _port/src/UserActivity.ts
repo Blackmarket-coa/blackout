@@ -177,7 +177,7 @@ export default class UserActivity {
         this.activeRecentlyTimeout.abort();
     };
 
-    // XXX: exported for tests
+    // Exported for test harness usage.
     public onUserActivity = (event: Event): void => {
         // ignore anything if the window isn't focused
         if (!this.document.hasFocus()) return;

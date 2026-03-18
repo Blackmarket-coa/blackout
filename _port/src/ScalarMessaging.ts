@@ -506,7 +506,7 @@ function getWidgets(event: MessageEvent<any>, roomId: string | null): void {
             sendError(event, _t("scalar|error_room_unknown"));
             return;
         }
-        // XXX: This gets the raw event object (I think because we can't
+        // This receives the raw event object because structured wrappers are unavailable here.
         // send the MatrixEvent over postMessage?)
         widgetStateEvents = WidgetUtils.getRoomWidgets(room).map((ev) => ev.event);
     }

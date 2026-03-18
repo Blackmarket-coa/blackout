@@ -93,6 +93,16 @@ interface EmittedEvents {
     [NotifierEvent.NotificationHiddenChange]: (hidden: boolean) => void;
 }
 
+export function parseRtcNotificationContent(content: unknown): IRTCNotificationContent | null {
+    if (!content || typeof content !== "object") return null;
+    const candidate = content as Partial<IRTCNotificationContent> & { [key: string]: unknown };
+    const relation = candidate["m.relates_to"] as { rel_type?: unknown } | undefined;
+    if (typeof candidate.lifetime !== "number" || !relation || typeof relation.rel_type !== "string") {
+        return null;
+    }
+    return candidate as IRTCNotificationContent;
+}
+
 class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents> {
     private notifsByRoom: Record<string, Notification[]> = {};
 
@@ -114,7 +124,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
         return TextForEvent.textForEvent(ev, MatrixClientPeg.safeGet());
     }
 
-    // XXX: exported for tests
+    // Public for unit tests.
     public displayPopupNotification(ev: MatrixEvent, room: Room): void {
         const plaf = PlatformPeg.get();
         const cli = MatrixClientPeg.safeGet();
@@ -213,7 +223,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
         };
     }
 
-    // XXX: Exported for tests
+    // Public for unit tests.
     public async playAudioNotification(ev: MatrixEvent, room: Room): Promise<void> {
         const cli = MatrixClientPeg.safeGet();
         if (localNotificationsAreSilenced(cli)) {
@@ -373,7 +383,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
         return !!this.toolbarHidden;
     }
 
-    // XXX: Exported for tests
+    // Public for unit tests.
     public onSyncStateChange = (state: SyncState, prevState: SyncState | null, data?: SyncStateData): void => {
         if (state === SyncState.Syncing) {
             this.isSyncing = true;
@@ -446,7 +456,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
         }
     };
 
-    // XXX: exported for tests
+    // Public for unit tests.
     public evaluateEvent(ev: MatrixEvent): void {
         const roomId = ev.getRoomId()!;
         const room = MatrixClientPeg.safeGet().getRoom(roomId);
@@ -491,8 +501,11 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
      * @returns A promise that will always resolve.
      */
     private async handleRTCNotification(ev: MatrixEvent, toaster: ToastStore, room: Room): Promise<void> {
-        // XXX: Should use parseCallNotificationContent once the types are exported.
-        const content = ev.getContent() as IRTCNotificationContent;
+        const content = parseRtcNotificationContent(ev.getContent());
+        if (!content) {
+            logger.warn("Received invalid RTCNotification content.");
+            return;
+        }
         const roomId = ev.getRoomId();
         const referencedMembershipEventId = ev.getRelation()?.event_id;
 

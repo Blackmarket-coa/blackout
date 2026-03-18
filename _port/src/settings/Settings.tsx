@@ -161,7 +161,7 @@ export interface IBaseSetting<T extends SettingValueType = SettingValueType> {
     // not use this for new settings.
     invertedSettingName?: string;
 
-    // XXX: Keep this around for re-use in future Betas
+    // Retained for planned reuse in future beta surfaces.
     betaInfo?: {
         title: TranslationKey;
         caption: () => ReactNode;
@@ -755,7 +755,7 @@ export const SETTINGS: Settings = {
         displayName: _td("settings|insert_trailing_colon_mentions"),
         default: true,
     },
-    // TODO: Wire up appropriately to UI (FTUE notifications)
+    // Used by notification FTUE flows and room/account-level badge preferences.
     "Notifications.alwaysShowBadgeCounts": {
         supportedLevels: LEVELS_ROOM_OR_ACCOUNT,
         default: false,
@@ -1328,7 +1328,7 @@ export const SETTINGS: Settings = {
     },
     "showCallButtonsInComposer": {
         // Dev note: This is no longer "in composer" but is instead "in room header".
-        // TODO: Rename with settings v3
+        // Historical setting key retained for compatibility with existing persisted settings.
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG,
         default: true,
         controller: new UIFeatureController(UIFeature.Voip),

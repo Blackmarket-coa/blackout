@@ -147,7 +147,7 @@ export default class Login {
                 type: "m.id.phone",
                 country: phoneCountry,
                 phone: phoneNumber,
-                // XXX: Synapse historically wanted `number` and not `phone`
+                // Synapse historically accepted `number` rather than `phone` here.
                 number: phoneNumber,
             };
         } else if (isEmail) {

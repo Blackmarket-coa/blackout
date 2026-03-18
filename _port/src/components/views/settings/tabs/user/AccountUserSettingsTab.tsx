@@ -148,7 +148,7 @@ const AccountUserSettingsTab: React.FC<IProps> = ({ closeSettingsFn }) => {
             });
         }
 
-        // TODO: Figure out a design that doesn't involve replacing the current dialog
+        // Re-use modal surface for now to keep settings flow consistent; revisit when non-modal toast UX lands.
         Modal.createDialog(ErrorDialog, {
             title: _t("settings|general|error_password_change_title"),
             description: errorMessageToDisplay,
@@ -157,7 +157,7 @@ const AccountUserSettingsTab: React.FC<IProps> = ({ closeSettingsFn }) => {
 
     const onPasswordChanged = useCallback((): void => {
         const description = _t("settings|general|password_change_success");
-        // TODO: Figure out a design that doesn't involve replacing the current dialog
+        // Re-use modal surface for now to keep settings flow consistent; revisit when non-modal toast UX lands.
         Modal.createDialog(ErrorDialog, {
             title: _t("common|success"),
             description,

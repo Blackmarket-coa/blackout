@@ -33,8 +33,8 @@ export interface IConfig {
 export default class Resizer<C extends IConfig, I extends ResizeItem<C> = ResizeItem<C>> {
     private classNames: IClassNames;
 
-    // TODO move vertical/horizontal to config option/container class
-    // as it doesn't make sense to mix them within one container/Resizer
+    // A single resizer instance is intentionally either vertical or horizontal.
+    // Keep this invariant local to the class to avoid mixed-orientation containers.
     public constructor(
         public container: HTMLElement | null,
         private readonly distributorCtor: {

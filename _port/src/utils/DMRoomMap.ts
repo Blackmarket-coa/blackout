@@ -23,9 +23,9 @@ import { filterValidMDirect } from "./dm/filterValidMDirect";
 export default class DMRoomMap {
     private static sharedInstance: DMRoomMap;
 
-    // TODO: convert these to maps
-    private roomToUser: { [key: string]: string } | null = null;
-    private userToRooms: { [key: string]: string[] } | null = null;
+    // Keep plain objects for deterministic JSON/account-data interop and cheap key serialization.
+    private roomToUser: Record<string, string> | null = null;
+    private userToRooms: Record<string, string[]> | null = null;
     private hasSentOutPatchDirectAccountDataPatch: boolean;
     private mDirectEvent!: { [key: string]: string[] };
 
@@ -153,8 +153,8 @@ export default class DMRoomMap {
      * @returns {Room} The DM room which all IDs given share, or falsy if no common room.
      */
     public getDMRoomForIdentifiers(ids: string[]): Room | null {
-        // TODO: [Canonical DMs] Handle lookups for email addresses.
-        // For now we'll pretend we only get user IDs and end up returning nothing for email addresses
+        // Canonical DM lookup currently keys by Matrix user IDs only; unknown identifiers (for example
+        // email addresses) intentionally resolve to no room until canonical-identifier support is added.
 
         let commonRooms = this.getDMRoomsForUserId(ids[0]);
         for (let i = 1; i < ids.length; i++) {

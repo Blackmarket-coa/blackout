@@ -23,7 +23,8 @@ import { CallMembership, MatrixRTCSession, type SessionMembershipData } from "ma
 import { randomUUID } from "node:crypto";
 
 import type BasePlatform from "../../src/BasePlatform";
-import Notifier from "../../src/Notifier";
+import Notifier, { parseRtcNotificationContent } from "../../src/Notifier";
+import { displayPopupNotificationForTest, evaluateEventForTest } from "../../src/testing/notifierTestExports";
 import SettingsStore from "../../src/settings/SettingsStore";
 import ToastStore from "../../src/stores/ToastStore";
 import {
@@ -62,6 +63,25 @@ jest.mock("../../src/audio/compat", () => ({
 const settingsStoreGetValue = SettingsStore.getValue;
 
 describe("Notifier", () => {
+
+    describe("parseRtcNotificationContent", () => {
+        it("returns null for malformed notification payloads", () => {
+            expect(parseRtcNotificationContent({})).toBeNull();
+            expect(parseRtcNotificationContent({ lifetime: "10" })).toBeNull();
+        });
+
+        it("returns typed payload for valid notification content", () => {
+            const parsed = parseRtcNotificationContent({
+                lifetime: 1000,
+                "m.relates_to": { rel_type: "m.reference", event_id: "$abc" },
+            });
+            expect(parsed).toEqual({
+                lifetime: 1000,
+                "m.relates_to": { rel_type: "m.reference", event_id: "$abc" },
+            });
+        });
+    });
+
     const roomId = "!room1:server";
     const testEvent = mkEvent({
         event: true,
@@ -305,13 +325,13 @@ describe("Notifier", () => {
         ];
         it.each(testCases)("does not dispatch when notifications are silenced", ({ event, count }) => {
             mockClient.setAccountData(accountDataEventKey, event!);
-            Notifier.displayPopupNotification(testEvent, testRoom);
+            displayPopupNotificationForTest(testEvent, testRoom);
             expect(MockPlatform.displayNotification).toHaveBeenCalledTimes(count);
         });
 
         it("should display a notification for a voice message", () => {
             const audioEvent = mkAudioEvent();
-            Notifier.displayPopupNotification(audioEvent, testRoom);
+            displayPopupNotificationForTest(audioEvent, testRoom);
             expect(MockPlatform.displayNotification).toHaveBeenCalledWith(
                 "@user:example.com (!room1:server)",
                 "@user:example.com: test audio message",
@@ -335,7 +355,7 @@ describe("Notifier", () => {
                 room: testRoom.roomId,
             });
             addReplyToMessageContent(reply.getContent(), event);
-            Notifier.displayPopupNotification(reply, testRoom);
+            displayPopupNotificationForTest(reply, testRoom);
             expect(MockPlatform.displayNotification).toHaveBeenCalledWith(
                 "@bob:example.org (!room1:server)",
                 "This was a triumph",
@@ -626,7 +646,7 @@ describe("Notifier", () => {
 
         it("should show a pop-up", () => {
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(0);
-            Notifier.evaluateEvent(testEvent);
+            evaluateEventForTest(testEvent);
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(0);
 
             const eventFromOtherRoom = mkEvent({
@@ -637,7 +657,7 @@ describe("Notifier", () => {
                 content: {},
             });
 
-            Notifier.evaluateEvent(eventFromOtherRoom);
+            evaluateEventForTest(eventFromOtherRoom);
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(1);
         });
 
@@ -651,10 +671,10 @@ describe("Notifier", () => {
 
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(0);
 
-            Notifier.evaluateEvent(rootEvent);
+            evaluateEventForTest(rootEvent);
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(0);
 
-            Notifier.evaluateEvent(events[1]);
+            evaluateEventForTest(events[1]);
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(1);
 
             dis.dispatch<ThreadPayload>({
@@ -664,12 +684,12 @@ describe("Notifier", () => {
 
             await waitFor(() => expect(SdkContextClass.instance.roomViewStore.getThreadId()).toBe(rootEvent.getId()));
 
-            Notifier.evaluateEvent(events[1]);
+            evaluateEventForTest(events[1]);
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(1);
         });
 
         it("should show a pop-up for an audio message", () => {
-            Notifier.evaluateEvent(mkAudioEvent());
+            evaluateEventForTest(mkAudioEvent());
             expect(Notifier.displayPopupNotification).toHaveBeenCalledTimes(1);
         });
     });

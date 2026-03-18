@@ -257,8 +257,7 @@ class TimelinePanel extends React.Component<IProps, IState> {
 
         debuglog("mounting");
 
-        // XXX: we could track RM per TimelineSet rather than per Room.
-        // but for now we just do it per room for simplicity.
+        // Read-marker timestamps are tracked per-room for now to match server/account-data granularity.
         if (this.props.manageReadMarkers) {
             const readmarker = this.props.timelineSet.room?.getAccountData("m.fully_read");
             if (readmarker) {
@@ -868,12 +867,18 @@ class TimelinePanel extends React.Component<IProps, IState> {
 
         if (ev.getType() !== EventType.FullyRead) return;
 
-        // XXX: roomReadMarkerTsMap not updated here so it is now inconsistent. Replace
-        // this mechanism of determining where the RM is relative to the view-port with
-        // one supported by the server (the client needs more than an event ID).
+        const readMarkerEventId = ev.getContent().event_id;
+        const roomId = this.props.timelineSet.room?.roomId ?? "";
+        const markerEvent = readMarkerEventId ? this.props.timelineSet.findEventById(readMarkerEventId) : null;
+        if (markerEvent) {
+            TimelinePanel.roomReadMarkerTsMap[roomId] = markerEvent.getTs();
+        } else {
+            delete TimelinePanel.roomReadMarkerTsMap[roomId];
+        }
+
         this.setState(
             {
-                readMarkerEventId: ev.getContent().event_id,
+                readMarkerEventId,
             },
             this.props.onReadMarkerUpdated,
         );

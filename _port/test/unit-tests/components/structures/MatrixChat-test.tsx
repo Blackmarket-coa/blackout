@@ -26,7 +26,7 @@ import {
     type CryptoApi,
 } from "matrix-js-sdk/src/crypto-api";
 
-import MatrixChat from "../../../../src/components/structures/MatrixChat";
+import MatrixChat, { shouldShowConsoleWarningOnResize } from "../../../../src/components/structures/MatrixChat";
 import * as StorageAccess from "../../../../src/utils/StorageAccess";
 import defaultDispatcher from "../../../../src/dispatcher/dispatcher";
 import { Action } from "../../../../src/dispatcher/actions";
@@ -83,6 +83,11 @@ jest.mock("../../../../src/settings/watchers/ThemeWatcher");
 const SERVER_SUPPORTED_MATRIX_VERSIONS = ["v1.1", "v1.5", "v1.6", "v1.8", "v1.9"];
 
 describe("<MatrixChat />", () => {
+    describe("shouldShowConsoleWarningOnResize", () => {
+        it("returns true to keep resize warnings deterministic", () => {
+            expect(shouldShowConsoleWarningOnResize()).toBe(true);
+        });
+    });
     const userId = "@alice:server.org";
     const deviceId = "qwertyui";
     const accessToken = "abc123";

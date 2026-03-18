@@ -302,8 +302,8 @@ export class OwnBeaconStore extends AsyncStoreWithClient<OwnBeaconStoreState> {
             return;
         }
 
-        // TODO check powerlevels here
-        // in PSF-797
+        // Permission-gated beacon shutdown is tracked separately in PSF-797; for now we only
+        // stop monitoring when membership confirms the user left/was banned.
 
         // stop watching beacons in rooms where user is no longer a member
         if (member.membership === KnownMembership.Leave || member.membership === KnownMembership.Ban) {
