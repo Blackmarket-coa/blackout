@@ -1,250 +1,356 @@
-# Discord-Parity Build Plan for Blackout
+# Discord-Parity Blueprint for Blackout
 
-## Purpose
+## 1. Executive Summary
 
-This plan turns the provided Discord-parity blueprint into a **delivery plan focused on features that are still missing or not production-ready** in Blackout.
+This document provides a comprehensive blueprint for replicating Discord's user-facing features within Blackout, the BMC ecosystem's encrypted communication platform. Blackout is built as a custom client on `matrix-js-sdk`, running against a Synapse homeserver with end-to-end encryption as a non-negotiable baseline.
 
-It does three things:
+The approach leverages Matrix protocol's native capabilities wherever possible, identifies gaps requiring custom implementation, and provides a phased roadmap prioritized by user impact. Features are organized by category, with each entry mapping the Discord feature to its Matrix/Blackout equivalent, current implementation status, and technical guidance.
 
-1. Normalizes naming differences (Discord wording vs Matrix wording vs existing Blackout names).
-2. Defines a repeatable gap-assessment method so we do not rebuild what already exists under another name.
-3. Prioritizes execution by user impact, technical dependency, and security risk (E2EE-first).
+**Status Legend**
 
----
-
-## 1) Normalized feature taxonomy (to avoid duplicate work)
-
-Use this canonical naming map in tickets, acceptance criteria, and release notes.
-
-| Canonical Capability | Discord Term | Matrix/Protocol Term | Existing Blackout/Repo Signals | Action |
-|---|---|---|---|---|
-| Server container | Server | Space (`m.space.child`, `m.space.parent`) | Space-aware room list + migration docs | Keep “Space (Server)” wording in UI |
-| Channel permissions | Channel overrides | `m.room.power_levels` per room | Existing room roles/permissions UI path | Add explicit “Effective permissions” view |
-| Reactions | Reactions | `m.reaction` | Event support and tests are present | Treat as GA, focus polish/scale |
-| Pinned messages | Pins | `m.room.pinned_events` | Existing event handling + settings labels | Close UX gaps (pin panel discoverability) |
-| Threads | Threads | `m.thread` relations | Thread timeline structures present | Validate parity UX and inbox behavior |
-| Read/unread markers | Mark unread | `m.fully_read` + receipt state | Read marker support present | Add explicit “mark unread” affordance |
-| Voice/video group calls | Voice channels / Go Live | MatrixRTC + SFU (LiveKit) | MatrixRTC references exist | Build persistent voice-channel UX |
-| Custom community metadata | Roles, onboarding, banner, automod config | Custom state (`co.bmc.*`) | Legacy custom namespace mostly `im.blackout.*` | Standardize namespace migration plan |
+- **Native** = Matrix protocol supports natively.
+- **Partial** = Matrix supports core, Blackout needs UI.
+- **Custom** = Requires Blackout-specific code.
+- **Needs Build** = Significant development effort.
+- **3rd Party** = External service/integration.
 
 ---
 
-## 2) Gap-assessment workflow (Week 0, mandatory)
+## 2. Feature Mapping: Messaging & Emoji
 
-Before implementation, run a structured audit per feature:
+### 2.1 Core Messaging
 
-1. **Protocol support check**: Native Matrix vs custom needed.
-2. **Client support check**: SDK support exists but UI missing?
-3. **Discoverability check**: Feature exists but hidden/unclear?
-4. **Scale/resilience check**: Works in small rooms but fails in large spaces?
-5. **Security check**: E2EE impact, metadata leakage, permission bypass risk.
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Text channels | Matrix rooms (`m.room.message`) | Native | Rooms are the fundamental unit. Use room types to differentiate channel kinds. |
+| Direct messages | Direct rooms (`is_direct` flag) | Native | `matrix-js-sdk createRoom({ is_direct: true })`. Store DM mapping in account data. |
+| Group DMs | Private rooms (invite-only) | Native | `createRoom` with invite list, no space parent. Cap at ~10 members in UI. |
+| Threads | `m.thread` relation (MSC3440) | Native | Synapse supports threading. Render thread panel in sidebar. Thread root = original message. |
+| Reply to message | `m.relates_to` (`m.in_reply_to`) | Native | Standard reply relation. Render quoted parent above reply in timeline. |
+| Mention users (@) | Matrix user pill (`@user:server`) | Native | Render @-mention autocomplete from room members. Use `data-mx-pill` format in HTML body. |
+| Mention roles | Power level group mentions | Custom | Matrix has no roles. Build custom role system in room state, resolve `@role` to member list. |
+| Mention channels (#) | Room pill (`matrix.to` link) | Partial | Link to room via `matrix.to` URI. Build #-channel autocomplete from space children. |
+| Slash commands | Custom command parser | Custom | No native slash commands. Build client-side parser dispatching to bot or local actions. |
+| Message editing | `m.replace` relation | Native | Send replacement event with `m.new_content`. Show `(edited)` indicator. |
+| Message deletion | `m.room.redaction` | Native | Redaction removes content server-side. Show `[message deleted]` placeholder. |
+| Markdown formatting | `org.matrix.custom.html` | Native | Send both plain text (`body`) and HTML (`formatted_body`). Parse markdown client-side. |
+| Code blocks | HTML `<pre><code>` | Native | Render fenced code blocks with syntax highlighting (highlight.js or Prism). |
+| Spoiler tags | Spoiler span in HTML | Native | Use `<span data-mx-spoiler>` in `formatted_body`. Render with click-to-reveal UI. |
+| Message scheduling | Scheduled send queue | Custom | No protocol support. Build client-side queue with local storage, send at scheduled time. |
 
-### Definition of status
+### 2.2 Emoji, Reactions & Stickers
 
-- **Implemented**: End-to-end behavior works with tests and UX entry points.
-- **Partial**: Core event/API exists but UX and/or admin controls are incomplete.
-- **Missing**: No usable implementation.
-- **Rename/Unify**: Function exists under old naming and needs standardization.
-
----
-
-## 3) Prioritized missing-feature backlog
-
-> Priority is based on user-visible value and dependency ordering.
-
-## P0 — Core social/chat parity (ship first)
-
-### P0.1 Emoji and sticker ecosystem
-
-- Unicode picker parity (search, recents, skin tones, shortcode autocomplete).
-- Custom emoji and sticker packs with admin management and permission controls.
-- Animated emoji gating and reduced-motion compliance.
-
-**Why now:** Messaging delight + social identity; low protocol risk, high daily usage.
-
-**Acceptance criteria**
-
-- Picker opens <150ms on warm cache.
-- `:shortcode:` autocomplete resolves in composer and slash-style context.
-- Custom packs can be scoped at space or room level.
-- Permission checks block unauthorized pack edits.
-
-### P0.2 Mentions and inbox parity
-
-- Role mentions (`@role`) via custom role membership resolution.
-- Channel mentions (`#channel`) with space-aware autocomplete.
-- Unified inbox for mentions/replies/threads with jump-to-context.
-
-**Why now:** Navigation and attention management are core Discord expectations.
-
-### P0.3 Message productivity
-
-- Scheduled send queue (local + optional server-assisted retry).
-- Bookmark/saved messages with searchable panel.
-- Quick switcher (`Ctrl+K`) for rooms/users/commands.
-
-**Why now:** High daily workflow impact, moderate implementation complexity.
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Emoji picker | Unicode emoji picker | Custom | Build emoji picker component with search, skin tones, recents, and category tabs. |
+| Custom server emojis | Custom emoji via room state | Custom | Store custom emoji packs in room state events (MSC2545 image packs). Render in picker. |
+| Animated emojis | Animated image packs | Custom | Support GIF/APNG/Lottie in emoji packs. Gate animated renders behind a setting. |
+| Emoji search | Picker search filter | Custom | Index emoji by name, aliases, keywords. Fuzzy search with shortcode autocomplete (`:thumbsup:`). |
+| Reaction adding | `m.reaction` relation | Native | Send `m.reaction` event with key (emoji). Aggregate and render reaction bar below message. |
+| Super reactions | Custom reaction animation | Custom | Cosmetic upgrade. Animate reaction with particle effects. Optional paid/Nitro-equivalent gate. |
+| Sticker sending | `m.sticker` event type | Native | Matrix has native sticker support. Build sticker picker, store packs in account data. |
+| Custom stickers | MSC2545 sticker packs | Partial | Store sticker packs as state events. Allow space admins to add/manage community packs. |
+| Soundboard clips | Audio message snippets | Custom | No protocol support. Build soundboard UI, send short audio `m.room.message` with `msgtype: m.audio`. |
+| GIF picker | Tenor/Giphy integration | 3rd Party | Integrate Tenor API for GIF search. Send selected GIF as `m.image` with `image/gif` mimetype. |
 
 ---
 
-## P1 — Space governance and moderation
+## 3. Feature Mapping: Server/Space Structure & Permissions
 
-### P1.1 Role system completion
+### 3.1 Space & Channel Architecture
 
-- Named roles with color/icon/permission metadata.
-- Effective-permission inspector (room overrides + user overrides).
-- Safer role editing with preview and diff before apply.
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Servers | Matrix Spaces | Native | A Space is a room whose state contains child rooms. Top-level organizational unit. |
+| Categories | Sub-spaces (nested spaces) | Native | Spaces can contain child spaces. Render nested spaces as collapsible category headers. |
+| Text channels | Rooms within space | Native | Standard `m.room.message` rooms added as space children via `m.space.child` state events. |
+| Voice channels | Persistent voice rooms | Partial | Create rooms with a custom `voice_channel` type. Auto-join Jitsi/LiveKit widget on room entry. |
+| Stage channels | Broadcast voice rooms | Custom | Room with restricted speak permissions. Use power levels: hosts=50, speakers=25, audience=0. |
+| Forum channels | Thread-first rooms | Custom | Room configured to only show thread roots in timeline. Each post = thread starter. |
+| Announcement channels | Read-only broadcast rooms | Native | Room with `power_level` for `events.m.room.message` set to 50 (moderator+). |
+| Channel reordering | `m.space.child` `order` field | Native | The `order` field controls sort order. Build drag-drop UI. |
+| Channel follow | Room alias subscription | Custom | No protocol equivalent. Build a cross-space relay bot that bridges announcements. |
+| Server templates | Space snapshot export/import | Custom | Export space structure (rooms, power levels, settings) as JSON. Import to recreate. |
+| Welcome screen | Custom onboarding room state | Custom | Store welcome config in space state event. Show modal on first space join. |
+| Onboarding flow | Multi-step join wizard | Custom | Sequence of screens: rules acceptance, role selection, interest channels. Store progress in account data. |
+| Server discovery | Public space directory | Partial | Synapse room directory supports spaces. Build a curated discovery UI with categories. |
+| Vanity URL | Room alias customization | Native | Set canonical alias via `m.room.canonical_alias`. Example: `#my-community:blackout.coop`. |
+| Server icon | Space avatar (`m.room.avatar`) | Native | Set via `m.room.avatar` state event. Render in space list sidebar. |
+| Server banner | Custom space header image | Custom | Store banner URL in custom state event. Render as header in space overview panel. |
+| Invite splash | Custom invite page | Custom | Build invite link handler that shows branded splash with space info before joining. |
 
-### P1.2 Onboarding and discovery
+### 3.2 Roles & Permissions
 
-- Welcome screen + multi-step onboarding (`rules`, `role`, `channel opt-in`).
-- Server discovery UX with category curation and trust labels.
-- Invite splash with pre-join context and safety signals.
-
-### P1.3 Moderation automation (Blackout-Mod)
-
-- Keyword/regex filters, anti-spam heuristics, raid protection.
-- Timeout flow (temporary power-level restriction + auto restore).
-- Auditable enforcement log (immutable admin room + UI viewer).
-
-**Why now:** Required for community growth and abuse resistance.
-
----
-
-## P2 — Voice/video and rich media parity
-
-### P2.1 Persistent voice channel UX
-
-- Room types for voice channels.
-- One-click auto-join voice session on channel entry.
-- Speaking indicators, server mute/deafen, stage-like role gating.
-
-### P2.2 Group video + screen sharing hardening
-
-- LiveKit integration completion: auth token flow, reconnect behavior, metrics.
-- Screen share quality profiles (FPS/bitrate presets).
-- Viewer-centric controls for Go Live-style broadcast mode.
-
-### P2.3 Media experience
-
-- Gallery view for room media.
-- Rich file preview cards (PDF/docs thumbnails where possible).
-- Soundboard clip UX and governance (who can upload/play).
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Role hierarchy | Power levels + custom roles | Partial | Matrix uses numeric power levels (0-100). Map named roles to power level ranges. |
+| Role assignment | Power level setting per user | Native | Set via `m.room.power_levels` state event `users` map. Build role picker UI. |
+| Role colors | Custom role metadata | Custom | Store role color in custom state event or account data. Render colored name in member list. |
+| Role icons | Custom role metadata | Custom | Store role icon URL alongside color in custom role state event. |
+| Channel permissions | Per-room power levels | Native | Each room has independent `m.room.power_levels`. Override from space defaults per channel. |
+| Per-user overrides | User power level per room | Native | Set specific user power levels in individual rooms. Build permission override UI. |
+| Permission calculator | Power level inspector | Custom | Build UI showing effective permissions across power levels and room overrides. |
+| Admin permission | Power level 100 | Native | Power level 100 = room admin. Can set other power levels, change room state. |
 
 ---
 
-## P3 — Settings, privacy, and polish
+## 4. Feature Mapping: Media, Voice/Video & Screen Sharing
 
-- Per-space notification presets with room-level override explainers.
-- DM permission matrix (everyone / mutual spaces / approved contacts).
-- Theme engine + density + font scaling + reduced motion.
-- Streamer mode and developer mode refinement.
+### 4.1 Media & Files
 
----
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| File uploads | `m.room.message` (`m.file`) | Native | Upload via content repository (`/_matrix/media`). Send `m.file` msgtype with `mxc://` URI. |
+| Image embedding | `m.image` msgtype | Native | Upload image, send `m.image` with thumbnail info. Render inline with lightbox. |
+| Video embedding | `m.video` msgtype | Native | Upload video, send `m.video`. Build custom player with controls. Support HLS for large files. |
+| Image gallery | Media timeline filter | Custom | Filter room timeline for `m.image` events. Render gallery with lightbox navigation. |
+| File previews | Rich link/file preview | Custom | Generate thumbnails for PDFs/docs. Show file size, type icon. Preview in modal. |
+| Drag-and-drop upload | Client-side handler | Custom | HTML5 drag-drop. Upload to content repo, send appropriate message type. |
+| Clipboard paste | Paste event handler | Custom | Listen for paste events with image data. Upload and send as `m.image`. |
+| Voice messages | `m.audio` with voice flag | Native | Record audio, upload, send `m.audio` with `org.matrix.msc3245.voice` info. Render waveform. |
 
-## 4) Cross-cutting technical tracks
+### 4.2 Voice, Video & Streaming
 
-### Track A — Custom event namespace migration
-
-Current code and docs include legacy `im.blackout.*` event names and planned `co.bmc.*` extensions.
-
-**Plan**
-
-1. Introduce canonical event registry with dual-read, single-write policy.
-2. Emit new writes as `co.bmc.*` while still reading legacy events.
-3. Add migration utility for existing room/account data.
-4. Decommission legacy write paths after telemetry confirms adoption.
-
-### Track B — E2EE and security invariants
-
-Every feature ticket must include:
-
-- Encryption behavior impact statement.
-- Metadata exposure review (especially moderation/search/indexing).
-- Abuse-case checklist (mention spam, emoji/sticker abuse, invite abuse, media abuse).
-
-### Track C — Performance and scale
-
-Set SLOs now to avoid late regressions:
-
-- Room switch to first meaningful message: p95 < 900ms on warm sync.
-- Typing/composer latency: p95 < 50ms local interaction.
-- Reaction aggregation render: < 16ms for typical message tile updates.
-- Member list virtualized for large rooms (10k+ members).
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Voice calling | VoIP via MatrixRTC/LiveKit | Partial | Matrix supports 1:1 VoIP natively. Use MatrixRTC (MSC3401) + LiveKit SFU for group calls. |
+| Video calling | MatrixRTC group calls | Partial | LiveKit SFU handles multi-party video. Element Call reference implementation. |
+| Screen sharing | `getDisplayMedia` + LiveKit | Partial | Browser `getDisplayMedia()` captures screen. Route through LiveKit SFU as video track. |
+| Go Live streaming | LiveKit broadcast room | Custom | One-to-many stream via LiveKit. Presenter shares screen/camera, viewers receive-only. |
+| Media player controls | Custom player UI | Custom | Build play/pause/seek/volume controls for audio and video messages in timeline. |
+| Server mute/deafen | VoIP track control | Custom | Admin can force-mute via power levels. Client-side deafen stops incoming audio tracks. |
 
 ---
 
-## 5) Milestone timeline (16-week execution)
+## 5. Feature Mapping: Moderation & Safety
 
-## Milestone 0 (Week 0): Gap validation and sequencing
-
-- Complete canonical feature inventory with one owner per feature.
-- Mark each feature: Implemented / Partial / Missing / Rename-Unify.
-- Freeze MVP scope for Milestones 1–2.
-
-## Milestone 1 (Weeks 1–4): Messaging parity baseline
-
-- Emoji picker + custom emoji/sticker framework.
-- Mentions improvements (`@role`, `#channel`) + inbox baseline.
-- Quick switcher and bookmarks MVP.
-
-## Milestone 2 (Weeks 5–8): Governance and moderation baseline
-
-- Named role metadata + permission inspector.
-- Welcome/onboarding flow.
-- Blackout-Mod v1 (keyword, spam, timeout, audit log).
-
-## Milestone 3 (Weeks 9–12): Voice/media parity
-
-- Persistent voice room UX + stage controls.
-- Group video + screen share hardening.
-- Gallery + media preview + soundboard moderation controls.
-
-## Milestone 4 (Weeks 13–16): Privacy/settings/polish
-
-- Notifications depth, DM permissions, appearance/accessibility.
-- Streamer/developer mode improvements.
-- Stability hardening and parity bug burn-down.
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Kick | Room kick API | Native | `matrix-js-sdk kick(roomId, userId, reason)`. Requires power level for kick. |
+| Ban | Room ban API | Native | `ban(roomId, userId, reason)`. Bans prevent rejoin. Manage via ban list UI. |
+| Timeout | Temporary power level drop | Custom | Reduce user power level to -1 (cannot send). Restore after timeout via scheduled job/bot. |
+| Audit log | Room state history + bot logs | Partial | State changes are immutable. Build audit viewer for mod actions. Use appservice for richer logging. |
+| AutoMod keywords | Keyword filter bot/appservice | Custom | Build Blackout-Mod appservice: regex/keyword scanning on `m.room.message`, auto-redact. |
+| AutoMod spam | Rate limit + pattern detection | Custom | Client-side rate limiting + server-side appservice for duplicates/join floods/link spam. |
+| Raid protection | Join rate limiting | Custom | Monitor joins via appservice. Auto-enable invite-only if joins exceed threshold. |
+| Verification gate | `m.room.join_rules` knock/invite | Native | Set join_rules to knock or invite. Build verification form before approval. |
+| Slowmode | Custom rate limit per room | Custom | Track last message timestamp per user/room. Enforce cooldown client + appservice. |
+| NSFW toggle | Custom room tag/flag | Custom | Store NSFW flag in room state. Gate content behind age verification/content warning. |
+| Content filter | Server-side scanning | Custom | Moderation pipeline: image classification, text toxicity scoring via ML models. |
+| Member search/filter | Room member directory | Partial | `matrix-js-sdk getJoinedRoomMembers()`. Build searchable list with role/status filters. |
+| Invite tracking | Invite event monitoring | Custom | Track `m.room.member` invite events. Attribute joins to inviters for analytics. |
 
 ---
 
-## 6) Delivery model and ownership
+## 6. Feature Mapping: User Interface & Navigation
 
-Create 6 parallel streams with weekly integration points:
-
-1. **Messaging UX stream**
-2. **Space & roles stream**
-3. **Moderation appservice stream**
-4. **Voice/video infra stream**
-5. **Settings/privacy stream**
-6. **Platform quality stream** (perf, tests, telemetry)
-
-Each stream tracks:
-
-- PRD + technical design docs.
-- Security checklist completion.
-- Telemetry and success metrics.
-- Rollout plan (alpha → beta → general availability).
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Server list sidebar | Space list panel | Custom | Render joined spaces as icon column (left sidebar). Support drag reorder, folders. |
+| Channel list sidebar | Room list within space | Custom | Fetch space children, render categorized channel tree. Collapsible sub-spaces. |
+| Member list sidebar | Room members panel | Partial | Toggle right panel showing members grouped by role/power level with status. |
+| User panel (bottom-left) | Self-profile panel | Custom | Show avatar, display name, status. Buttons for settings, mute, deafen. |
+| User profile popup | Member info card | Custom | Click avatar to show card: avatar, name, roles, About Me, mutual spaces, DM button. |
+| User profile modal | Full profile view | Custom | Expanded profile: banner, bio, connections, activity. Uses custom profile state events. |
+| Status (online/idle/DND) | Presence API | Native | Matrix presence: online, offline, unavailable. DND = custom status + unavailable. |
+| Custom status | Custom status event | Partial | Store custom status text/emoji in `status_msg` or custom account data. |
+| Activity status | Rich presence data | Custom | No protocol equivalent. Build via custom events/presence extensions. |
+| About Me section | Profile bio field | Custom | Store in profile room or account data. Markdown-rendered bio on profile card. |
+| Profile banner | Custom profile media | Custom | Store banner `mxc://` URL in account data. Render on profile modal header. |
+| Avatar decorations | Avatar overlay system | Custom | Cosmetic client-side overlays from decoration assets. |
+| Quick switcher (Ctrl+K) | Room/command search | Custom | Spotlight-style fuzzy search for rooms, spaces, users, commands. |
+| Inbox (mentions) | Notification timeline | Partial | Filter sync highlights. Build unified inbox for mentions/replies. |
+| Server folders | Space grouping in sidebar | Custom | Group spaces into collapsible folders. Store folder config in account data. |
+| Favorites bar | Pinned rooms | Partial | Use `m.favourite` room tag. Render favorites in dedicated top section. |
+| Pin messages | `m.room.pinned_events` | Native | State event containing pinned event IDs. Build pinned messages panel. |
+| Bookmark messages | Saved messages collection | Custom | Store bookmarked event IDs in account data. Build bookmark panel with search. |
+| Mark as unread | `m.fully_read` marker | Partial | Move read marker back. Render unread in sidebar. Store in room account data. |
+| Copy message link | `matrix.to` permalink | Native | Generate `https://matrix.to/#/!room:server/$eventId`. |
+| Message search | Server-side search API | Native | `/search` endpoint supports full-text with filters. Build search UI. |
+| Jump to message | Event context API | Native | Fetch event context, scroll timeline to target, highlight message. |
 
 ---
 
-## 7) Release gates (must pass before GA)
+## 7. Feature Mapping: Notifications, Privacy & Settings
 
-- No regressions in E2EE message send/receive/edit/delete.
-- Moderator actions are fully auditable.
-- Voice/video reconnect and failover behavior validated under packet loss.
-- Accessibility checks pass for new UI (keyboard nav, labels, contrast).
-- All new custom event schemas versioned and documented.
+| Discord Feature | Blackout Equivalent | Status | Implementation Notes |
+|---|---|---|---|
+| Per-channel notifications | Push rules per room | Native | Matrix push rules support room-specific overrides. Build level picker per room. |
+| Per-server notifications | Push rules per space | Custom | Apply overrides to all rooms within a space. Batch update on change. |
+| @everyone suppression | Push rule for room notifications | Native | Override push rule for `@room` mention. Allow per-room toggle. |
+| Mute channel/server | Push rule: `dont_notify` | Native | Set room push-rule action to `dont_notify`; extend across space children. |
+| Do Not Disturb | Global push-rule override | Native | Disable notifications globally; set presence to unavailable. |
+| Blocked users | `m.ignored_user_list` | Native | Account data event listing ignored users. Client hides blocked-user messages. |
+| DM permissions | Direct room join rules | Custom | Settings: everyone, friends only, mutual spaces only, nobody. |
+| Friend requests | Custom friend system | Custom | No protocol friend system. Build via custom account data + DM invites. |
+| Connected accounts | Third-party identity | Partial | Matrix 3PID for email/phone; extend with custom OAuth (GitHub, etc.). |
+| Appearance (theme) | Client theme settings | Custom | Theme engine: dark, light, AMOLED, custom colors. Store in account data. |
+| Font scaling | Client display settings | Custom | CSS variable for base font size. Slider in accessibility settings. |
+| Chat density | Compact/cozy mode | Custom | Toggle message padding/avatar size. Store in local settings. |
+| Keybinds | Keyboard shortcut map | Custom | Configurable keybinds; Ctrl+K search, Ctrl+/ shortcuts panel. |
+| Streamer mode | Privacy overlay mode | Custom | Hide sensitive data (invite links, emails, notifications). Quick toggle. |
+| Developer mode | Debug tools toggle | Custom | Show event/room/user IDs, raw event viewer, network inspector. |
 
 ---
 
-## 8) Immediate next actions (next 7 days)
+## 8. Technical Architecture
 
-1. Create a parity board with one ticket per canonical capability.
-2. Run Week-0 feature audit and populate status labels.
-3. Finalize namespace migration RFC (`im.blackout.*` → `co.bmc.*`).
-4. Start Milestone 1 implementation with two pilot epics:
-   - Emoji/sticker system
-   - Mentions/inbox/switcher flow
+### 8.1 System Overview
 
-This yields visible user value quickly while de-risking deeper governance and real-time media work.
+Blackout is a custom Matrix client built directly on `matrix-js-sdk`, communicating with a Synapse homeserver. This provides full UI/UX control while leveraging Matrix's decentralized encrypted protocol.
+
+**Core Stack**
+
+- Client Framework: React (or React Native for mobile) with `matrix-js-sdk`.
+- Homeserver: Synapse (Python) or Dendrite (Go).
+- Voice/Video SFU: LiveKit via MatrixRTC (MSC3401).
+- Media Storage: Synapse content repository (`mxc://`) or S3-compatible backend.
+- Search: Synapse built-in search or dedicated index (e.g., Elasticsearch via appservice).
+- Bot/Automation Layer: Matrix appservice framework.
+- Push Notifications: Sygnal for iOS/Android.
+- Database: PostgreSQL (Synapse), Redis for session/presence caching.
+
+**Key Architecture Decisions**
+
+- **Spaces as Servers:** Spaces map directly to Discord server hierarchy.
+- **Custom Role System:** Add `co.bmc.roles` named roles over Matrix numeric power levels.
+- **E2EE by Default:** Megolm (`m.megolm.v1.aes-sha2`) in all rooms, with SSSS + cross-signing.
+- **Custom Events for Parity:** Use `co.bmc.*` state events for features absent in core Matrix.
+
+### 8.2 Custom State Events (`co.bmc.*`)
+
+| Event Type | Purpose | Example Schema |
+|---|---|---|
+| `co.bmc.roles` | Named role definitions | `{ roles: [{ name, powerLevel, color, icon, permissions }] }` |
+| `co.bmc.welcome` | Welcome screen config | `{ title, description, channels: [{ roomId, emoji, description }] }` |
+| `co.bmc.onboarding` | Join flow configuration | `{ steps: [{ type: rules\|roles\|channels, content }] }` |
+| `co.bmc.forum` | Forum channel config | `{ defaultSort, tags: [{ name, color, emoji }], guidelines }` |
+| `co.bmc.banner` | Space/profile banner | `{ mxcUrl, blurhash, crop }` |
+| `co.bmc.soundboard` | Soundboard clips | `{ clips: [{ name, mxcUrl, emoji, duration }] }` |
+| `co.bmc.automod` | AutoMod configuration | `{ keywords: [], spamThreshold, linkWhitelist, actions }` |
+| `co.bmc.template` | Space template snapshot | `{ rooms: [], roles: [], settings: {} }` |
+
+### 8.3 Voice/Video Architecture (LiveKit + MatrixRTC)
+
+Discord-equivalent voice channels require persistent, low-latency group AV with screen sharing.
+
+- Signaling: MatrixRTC (MSC3401) events for call membership and SDP.
+- Media transport: LiveKit SFU for routing/simulcast/bandwidth estimation.
+- Client integration: `livekit-client-sdk-js` in Blackout, authenticated via homeserver-issued JWT.
+- Screen share: browser `getDisplayMedia()` as an additional video track through LiveKit.
+- Stage channels: LiveKit publisher permissions gated by Blackout power levels.
+- Voice activity: speaking indicators rendered on avatars.
+
+Self-host LiveKit near Synapse. Share JWT signing key between Synapse appservice and LiveKit.
+
+### 8.4 Moderation Architecture
+
+**Blackout-Mod** (Matrix appservice):
+
+- Keyword filtering (regex/exact/fuzzy word lists)
+- Spam detection (rate, duplicates, join flood)
+- Auto actions (redact, warn DM, timeout, kick, ban)
+- Audit trail (private admin room + structured events)
+- Optional ML content scanning (image/text)
+- Raid protection with auto invite-only lock
+
+---
+
+## 9. Implementation Roadmap
+
+Phased rollout prioritizes messaging/emoji, space structure/permissions, and media/voice/video.
+
+### Phase 1: Foundation (Weeks 1–4)
+
+- Room timeline (send/receive/edit/delete)
+- Reply + thread support
+- Space list sidebar + room tree
+- Power level management UI
+- Custom role system (`co.bmc.roles`)
+- Member list panel
+- Emoji picker (unicode)
+- Reactions (`m.reaction`)
+- Message search
+- Pin messages
+
+### Phase 2: Rich Media & Voice (Weeks 5–8)
+
+- File upload (drag-drop + paste)
+- Inline image/video rendering
+- Voice messages + waveform
+- GIF picker (Tenor)
+- 1:1 VoIP calls
+- Group voice/video (LiveKit)
+- Screen sharing
+- Voice channel UX
+
+### Phase 3: Community & Governance (Weeks 9–12)
+
+- Custom emoji/sticker packs
+- Soundboard system
+- Welcome + onboarding
+- Forum channels
+- Blackout-Mod appservice
+- Raid protection
+- Timeout system
+- Audit log viewer
+- Server discovery directory
+- Space templates
+
+### Phase 4: Polish & Parity (Weeks 13–16)
+
+- Quick switcher (Ctrl+K)
+- Notification depth (room + space + @everyone suppression + DND)
+- Theme engine (dark/light/AMOLED + accents)
+- Profile system (banner, bio, decorations)
+- Bookmark system
+- DM permission controls
+- Streamer mode
+- Developer mode
+- Keyboard shortcuts + keybinds
+- Accessibility (font scale, density, reduced motion, screen reader labels)
+- Stage channels (LiveKit broadcast)
+
+---
+
+## 10. Appendix: Matrix Event Types Reference
+
+### Room Events (Timeline)
+
+| Event Type | Usage |
+|---|---|
+| `m.room.message` | Text/image/file/audio/video content (`msgtype`-driven rendering). |
+| `m.room.redaction` | Message deletion (content removed, shell retained). |
+| `m.reaction` | Emoji reactions via `m.annotation` relation. |
+| `m.sticker` | Sticker content event. |
+| `m.call.invite` | 1:1 VoIP call initiation with SDP offer. |
+
+### State Events (Room Configuration)
+
+| Event Type | Usage |
+|---|---|
+| `m.room.create` | Immutable room metadata (version, creator, type). |
+| `m.room.name` | Human-readable channel name. |
+| `m.room.topic` | Channel description/topic. |
+| `m.room.avatar` | Room icon (`mxc://`). |
+| `m.room.power_levels` | Permission matrix by user/event type. |
+| `m.room.join_rules` | Join policy (`public`, `invite`, `knock`, `restricted`). |
+| `m.room.member` | Membership state (`join`, `leave`, `invite`, `ban`, `knock`). |
+| `m.room.encryption` | E2EE configuration (Megolm). |
+| `m.room.pinned_events` | Pinned event ID list. |
+| `m.space.child` | Space hierarchy child link + order. |
+| `m.space.parent` | Parent space reference. |
+
+### Account Data Events
+
+| Event Type | Usage |
+|---|---|
+| `m.direct` | DM room mapping by user ID. |
+| `m.push_rules` | Notification rules and overrides. |
+| `m.ignored_user_list` | Blocked/ignored users. |
+| `m.tag` | Room tags (`m.favourite`, `m.lowpriority`, custom). |
+| `m.fully_read` | Per-room read marker event ID. |
+
+---
+
+Document prepared for the Black Market Coalition by Blackout development team. All features are designed to maintain end-to-end encryption as a non-negotiable baseline.
