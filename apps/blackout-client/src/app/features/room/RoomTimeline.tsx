@@ -22,6 +22,7 @@ import {
   StickerMessage as TimelineStickerMessage,
   VideoMessage as TimelineVideoMessage,
 } from '../../components/messages';
+import { Reactions } from './Reactions';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -416,14 +417,6 @@ const ThreadIndicator = ({ event }: { event: MatrixEvent }) => {
   return <div style={styles.pill}>🧵 {count} repl{count === 1 ? 'y' : 'ies'}</div>;
 };
 
-const ReactionBar = ({ event }: { event: MatrixEvent }) => {
-  const relation = getRelation(event);
-  if (relation?.rel_type !== 'm.annotation') return null;
-  const key = typeof relation.key === 'string' ? relation.key : '👍';
-  const count = typeof relation.count === 'number' ? relation.count : 1;
-  return <div style={styles.pill}>{key} {count}</div>;
-};
-
 const EditedIndicator = ({ event }: { event: MatrixEvent }) => {
   const relation = getRelation(event);
   if (relation?.rel_type !== 'm.replace') return null;
@@ -459,7 +452,8 @@ const MessageBubble = ({
   groupedWithPrevious = false,
   receipts = [],
   room,
-}: MessageBubbleProps & { room: Room | null }) => {
+  roomId,
+}: MessageBubbleProps & { room: Room | null; roomId: string }) => {
   const sender = getEventSender(event);
   const avatar = getAvatar(room, sender);
   const senderName = getDisplayName(room, sender);
@@ -491,8 +485,8 @@ const MessageBubble = ({
 
         <div style={styles.relationBar}>
           <ThreadIndicator event={event} />
-          <ReactionBar event={event} />
         </div>
+        {event.getId() ? <Reactions roomId={roomId} targetEventId={event.getId() ?? ''} /> : null}
 
         {receipts.length > 0 ? (
           <div style={styles.readReceipts}>
@@ -636,6 +630,7 @@ export const RoomTimeline = ({
                   event={item.event}
                   groupedWithPrevious={item.groupedWithPrevious}
                   room={room}
+                  roomId={roomId}
                   receipts={getReceipts(item.event)}
                 />
               </Fragment>
