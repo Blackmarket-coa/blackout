@@ -1,0 +1,176 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: blackout-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: blackout-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "PING"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: blackout-synapse
+    restart: unless-stopped
+    environment:
+      SYNAPSE_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      SYNAPSE_REPORT_STATS: ${SYNAPSE_REPORT_STATS}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - synapse_data:/data
+      - ./synapse/homeserver.yaml.template:/templates/homeserver.yaml.template:ro
+    command: >-
+      /bin/sh -c "envsubst < /templates/homeserver.yaml.template > /data/homeserver.yaml
+      && exec /start.py"
+    networks:
+      - blackout-backend
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: blackout-livekit
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    volumes:
+      - ./livekit/config.yaml:/etc/livekit/config.yaml:ro
+    command: >-
+      /bin/sh -c "envsubst '$$LIVEKIT_RTC_UDP_START $$LIVEKIT_RTC_UDP_END $$LIVEKIT_API_KEY $$LIVEKIT_API_SECRET $$REDIS_PASSWORD'
+      < /etc/livekit/config.yaml > /tmp/livekit.yaml
+      && exec /livekit-server --config /tmp/livekit.yaml"
+    environment:
+      LIVEKIT_RTC_UDP_START: ${LIVEKIT_RTC_UDP_START}
+      LIVEKIT_RTC_UDP_END: ${LIVEKIT_RTC_UDP_END}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "${LIVEKIT_WS_PORT}:7880/tcp"
+      - "${LIVEKIT_TCP_PORT}:7881/tcp"
+      - "${LIVEKIT_RTC_UDP_START}-${LIVEKIT_RTC_UDP_END}:${LIVEKIT_RTC_UDP_START}-${LIVEKIT_RTC_UDP_END}/udp"
+    networks:
+      - blackout-backend
+
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    container_name: blackout-lk-jwt
+    restart: unless-stopped
+    depends_on:
+      - livekit
+    environment:
+      PORT: 8080
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      LIVEKIT_URL: ${LIVEKIT_INTERNAL_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      JWT_SIGNING_KEY: ${LK_JWT_SIGNING_KEY}
+      TRUSTED_HOSTS: ${LK_JWT_TRUSTED_HOSTS}
+    networks:
+      - blackout-backend
+
+  draupnir:
+    image: the-draupnir-project/draupnir:latest
+    container_name: blackout-draupnir
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    environment:
+      DRAUPNIR_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      DRAUPNIR_ACCESS_TOKEN: ${DRAUPNIR_ACCESS_TOKEN}
+      DRAUPNIR_MANAGEMENT_ROOM: ${DRAUPNIR_MANAGEMENT_ROOM}
+      DRAUPNIR_PANTALAIMON_USE: ${DRAUPNIR_PANTALAIMON_USE}
+    volumes:
+      - draupnir_data:/data
+    networks:
+      - blackout-backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: blackout-nginx
+    restart: unless-stopped
+    depends_on:
+      - synapse
+      - livekit
+      - lk-jwt-service
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+      - ./well-known:/var/www/well-known:ro
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    command: >-
+      /bin/sh -c "mkdir -p /var/www/well-known-rendered/matrix
+      && envsubst '$$MATRIX_HOMESERVER_URL $$MATRIX_WELL_KNOWN_CLIENT_URL'
+      < /var/www/well-known/matrix/client > /var/www/well-known-rendered/matrix/client
+      && envsubst '$$MATRIX_SERVER_NAME'
+      < /var/www/well-known/matrix/server > /var/www/well-known-rendered/matrix/server
+      && envsubst '$$SERVER_NAME'
+      < /etc/nginx/templates/nginx.conf.template > /etc/nginx/nginx.conf
+      && exec nginx -g 'daemon off;'"
+    environment:
+      SERVER_NAME: ${SERVER_NAME}
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_WELL_KNOWN_CLIENT_URL: ${MATRIX_WELL_KNOWN_CLIENT_URL}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+    networks:
+      - blackout-backend
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: blackout-certbot
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: >-
+      /bin/sh -c "trap exit TERM;
+      while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h;
+      done"
+
+networks:
+  blackout-backend:
+    name: blackout-backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  synapse_data:
+  draupnir_data:
