@@ -31,6 +31,84 @@ This inventory groups features found by reviewing top-level and feature readmes 
 - Multi-platform Matrix client bootstrap (web/PWA/Electron platform selection) and plugin/module loading model.
 - Standard Element/Matrix feature surfaces reflected in docs such as keyboard shortcuts, custom homeserver landing page, and widget layouts.
 
+## Build plan: interactive presets + UI usability for all features
+
+Goal: every feature listed above has (1) a discoverable preset/toggle, (2) an interactive UI entry point, and (3) basic functional validation in automated UI checks.
+
+### Phase 1 — Feature inventory normalization
+
+1. Create a machine-readable feature registry (`docs/features/feature_registry.json`) with per-feature fields:
+   - `id`, `name`, `category` (`novel|discord_like|matrix_like`)
+   - `status` (`implemented|partial|planned`)
+   - `presetKey` (feature-flag or setting key)
+   - `uiEntry` (route/component/test id)
+   - `owner`, `testCoverage`, `notes`
+2. Link each registry row to source docs/code pointers.
+3. Add CI check that fails if duplicate `id` or missing required fields.
+
+### Phase 2 — Preset model and configuration plumbing
+
+1. Define three preset bundles in config/settings:
+   - `baseline_matrix`
+   - `community_plus` (discord-like UX on)
+   - `blackout_full` (all novel features enabled)
+2. Build a preset resolver that merges:
+   - deployment config defaults,
+   - tenant/org policy overrides,
+   - user overrides (where allowed).
+3. Surface active preset in app diagnostics/settings.
+
+### Phase 3 — UI entry-point completeness
+
+1. For each feature in the registry, map a primary UI entry point:
+   - settings toggle,
+   - composer action,
+   - room action,
+   - widget panel,
+   - admin/governance console.
+2. Add/standardize `data-testid` hooks for each entry point.
+3. Add “feature unavailable” empty states when policy or entitlement blocks access.
+
+### Phase 4 — Interactive preset UX
+
+1. Add a “Feature Presets” section in settings/admin UX:
+   - choose preset,
+   - preview included capabilities,
+   - apply/rollback with confirmation.
+2. For enterprise/self-hosted deploys, expose preset selection via config templates and startup docs.
+3. Add an in-app “What this preset enables” explainer panel.
+
+### Phase 5 — Automated usability gates
+
+1. Add UI integration tests per feature category:
+   - open entry point,
+   - perform one meaningful action,
+   - verify visible state/result.
+2. Add smoke matrix to CI:
+   - run at least one smoke flow per preset (`baseline_matrix`, `community_plus`, `blackout_full`).
+3. Add failure budget policy:
+   - any new feature without registry + UI test = CI failure.
+
+### Phase 6 — Rollout and operational guardrails
+
+1. Release by cohort:
+   - internal → beta → general.
+2. Instrument telemetry for:
+   - preset adoption,
+   - feature open/use success rates,
+   - entitlement/policy deny reasons.
+3. Maintain rollback playbook per preset and per high-risk feature (stego, paid-room keys, plugin sandbox, townhall moderation).
+
+### Phase 7 — Definition of done
+
+A feature is “preset-complete and UI-usable” only if all conditions are true:
+
+- Present in feature registry.
+- Included/excluded in at least one preset by explicit policy.
+- Has at least one interactive UI entry point with a stable `data-testid`.
+- Has at least one automated UI/integration test path.
+- Has documented fallback/disabled behavior.
+
 ## Notes
 
 - `_port/` contains the primary legacy implementation that is currently treated as read-only while migration into `packages/` and `apps/` progresses.
