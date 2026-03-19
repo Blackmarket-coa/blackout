@@ -354,3 +354,293 @@ Phased rollout prioritizes messaging/emoji, space structure/permissions, and med
 ---
 
 Document prepared for the Black Market Coalition by Blackout development team. All features are designed to maintain end-to-end encryption as a non-negotiable baseline.
+
+## 11. Work Prompts (Execution-Ready)
+
+Use these prompts directly in sprint planning, issue creation, and AI-assisted implementation workflows.
+
+### 11.1 Epic Prompt Template
+
+```text
+You are implementing EPIC: <epic_name> for Blackout (Matrix client on matrix-js-sdk + Synapse).
+
+Context:
+- Goal: <goal>
+- User value: <why_it_matters>
+- Dependencies: <deps>
+- Constraints: E2EE is non-negotiable, preserve Matrix protocol compatibility.
+
+Deliverables:
+1) Technical design note
+2) Data/event schema updates (if any)
+3) UI/UX implementation
+4) Tests (unit + integration)
+5) Telemetry and rollout plan
+
+Definition of Done:
+- Acceptance criteria are met
+- No E2EE regressions
+- Permission model is validated
+- Feature flag and migration notes are documented
+```
+
+### 11.2 Feature Implementation Prompt Template
+
+```text
+Implement feature: <feature_name>.
+
+Current status: <Native/Partial/Custom/3rd Party>
+Matrix primitives involved: <event_types/APIs>
+Custom events involved: <co.bmc.* or none>
+
+Tasks:
+- Add/modify client logic
+- Build/adjust UI states (loading/empty/error)
+- Add permission checks
+- Add analytics events
+- Add tests
+- Add docs
+
+Acceptance Criteria:
+- <criterion_1>
+- <criterion_2>
+- <criterion_3>
+
+Non-Functional:
+- p95 interaction latency target: <target>
+- Accessibility: keyboard, labels, contrast
+- Security: abuse checks and E2EE validation
+```
+
+### 11.3 QA Prompt Template
+
+```text
+Create a QA test plan for <feature_name> in Blackout.
+
+Include:
+1) Happy-path scenarios
+2) Permission boundary tests
+3) E2EE/device verification interactions
+4) Failure/retry paths (offline, reconnect, media upload errors)
+5) Large-room performance checks
+6) Accessibility checks
+
+Output:
+- Test matrix (scenario, steps, expected result)
+- Regression checklist
+- Release blocking criteria
+```
+
+### 11.4 Milestone Prompts
+
+#### Milestone 1 (Weeks 1–4): Messaging Foundation
+
+```text
+Generate implementation tickets for Milestone 1 from DISCORD_PARITY_BUILD_PLAN.md.
+
+Scope:
+- Room timeline, replies/threads, space list + room tree
+- Power level UI + role assignment
+- Emoji picker + reactions
+- Message search + pinned panel
+
+For each ticket include:
+- user story
+- technical scope
+- dependencies
+- acceptance criteria
+- test plan
+- estimate (S/M/L/XL)
+```
+
+#### Milestone 2 (Weeks 5–8): Rich Media & Voice
+
+```text
+Produce a delivery plan for Milestone 2.
+
+Scope:
+- File upload (drag-drop/paste)
+- Media rendering + waveform voice messages
+- GIF picker integration
+- 1:1 VoIP and group voice/video via LiveKit + MatrixRTC
+- Screen share and persistent voice channel UX
+
+Output:
+- architecture tasks
+- frontend tasks
+- backend/appservice tasks
+- risk register with mitigations
+- phased rollout sequence
+```
+
+#### Milestone 3 (Weeks 9–12): Governance & Safety
+
+```text
+Create an implementation plan for Milestone 3.
+
+Scope:
+- Custom emoji/sticker packs
+- Soundboard
+- Welcome/onboarding
+- Forum channels
+- Blackout-Mod appservice (keywords/spam/raid/timeout/audit)
+- Discovery directory + templates
+
+Output:
+- schema definitions
+- moderation policy defaults
+- admin UI requirements
+- observability and auditing requirements
+```
+
+#### Milestone 4 (Weeks 13–16): Polish & Parity
+
+```text
+Design execution tickets for Milestone 4.
+
+Scope:
+- Ctrl+K quick switcher
+- notification depth and DND
+- theme engine + profile system + bookmarks
+- DM permissions + streamer mode + developer mode
+- keybinds + accessibility + stage channels
+
+Output:
+- prioritized backlog
+- dependency graph
+- release gating checklist
+```
+
+### 11.5 Specialized Prompts by Workstream
+
+#### Messaging/Composer
+
+```text
+Implement message scheduling in Blackout as a client-side scheduled send queue.
+
+Requirements:
+- schedule/edit/cancel queued messages
+- persistence across reloads
+- retry policy for transient failures
+- clear UX state before/after send
+- encrypted-room compatibility
+
+Provide:
+- data model
+- queue processor design
+- UI state diagram
+- tests
+```
+
+#### Roles/Permissions
+
+```text
+Implement effective permission inspector for Matrix power levels + custom roles.
+
+Requirements:
+- compute effective permissions per user per room
+- include room overrides and user overrides
+- explain why permission is granted/denied
+- admin-safe editing workflow with preview diff
+
+Provide:
+- algorithm
+- UI design
+- validation tests
+```
+
+#### Voice/Video
+
+```text
+Implement persistent voice channels using MatrixRTC signaling and LiveKit media.
+
+Requirements:
+- one-click join/leave
+- speaking indicators
+- reconnect handling
+- force mute/deafen controls by moderators
+- stage-channel speaker permissions
+
+Provide:
+- signaling flow
+- token/auth model
+- error handling plan
+- load/perf test plan
+```
+
+#### Moderation
+
+```text
+Build Blackout-Mod appservice v1.
+
+Requirements:
+- keyword + regex filtering
+- spam and join-flood detection
+- actions: redact, warn, timeout, kick, ban
+- audit log events in admin room
+- configurable per-space policy
+
+Provide:
+- service architecture
+- event schemas
+- policy config format
+- operator runbook
+```
+
+#### Search/Discovery
+
+```text
+Implement server discovery for Matrix spaces.
+
+Requirements:
+- category browsing
+- ranking signals (activity, safety, growth)
+- moderation/trust badges
+- join funnel with invite splash
+
+Provide:
+- API/query design
+- ranking strategy
+- anti-abuse safeguards
+- analytics plan
+```
+
+### 11.6 Program Management Prompt
+
+```text
+Act as technical program manager for the Blackout Discord-parity roadmap.
+
+Using DISCORD_PARITY_BUILD_PLAN.md:
+- build a week-by-week execution calendar (Weeks 1–16)
+- assign stream ownership
+- identify critical path dependencies
+- define success metrics per milestone
+- define go/no-go criteria per release
+
+Output:
+- roadmap table
+- RAID log
+- staffing assumptions
+- weekly status template
+```
+
+### 11.7 “Definition of Complete Build Plan” Checklist Prompt
+
+```text
+Validate whether DISCORD_PARITY_BUILD_PLAN.md is complete and execution-ready.
+
+Check:
+1) every mapped feature has owner + status + acceptance criteria
+2) every custom event has schema + migration/versioning notes
+3) every milestone has scoped deliverables + dependencies
+4) security/E2EE/privacy requirements are explicit
+5) QA and release gates are defined
+6) observability and rollback plans are included
+
+Return:
+- PASS/FAIL by section
+- exact gaps
+- recommended edits
+```
+
+These prompts are intended to operationalize the full build plan into executable engineering work without additional framing.
