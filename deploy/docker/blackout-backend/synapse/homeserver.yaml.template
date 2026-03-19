@@ -1,0 +1,52 @@
+server_name: "${MATRIX_SERVER_NAME}"
+pid_file: /data/homeserver.pid
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
+macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
+form_secret: "${SYNAPSE_FORM_SECRET}"
+
+report_stats: ${SYNAPSE_REPORT_STATS}
+public_baseurl: "https://${SERVER_NAME}/"
+
+redis:
+  enabled: true
+  host: "${REDIS_HOST}"
+  port: ${REDIS_PORT}
+  password: "${REDIS_PASSWORD}"
+
+database:
+  name: psycopg2
+  args:
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+    database: "${POSTGRES_DB}"
+    host: "${POSTGRES_HOST}"
+    port: ${POSTGRES_PORT}
+    cp_min: 5
+    cp_max: 10
+
+media_store_path: /data/media_store
+signing_key_path: /data/${MATRIX_SERVER_NAME}.signing.key
+
+enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
+enable_registration_without_verification: false
+
+log_config: /data/${MATRIX_SERVER_NAME}.log.config
+
+max_upload_size: 100M
+url_preview_enabled: false
+
+federation_metrics_domains:
+  - "${MATRIX_SERVER_NAME}"
