@@ -39,6 +39,7 @@ const BASELINE_MATRIX: FeatureFlagMap = {
   "features.composer.typingIndicators": false,
   "features.widgets.layouts": false,
   "features.stego.enabled": false,
+  "features.stego.ephemeral": false,
   "features.governance.entitlements": false,
   "features.federationBoost.enabled": false,
   "features.townhall.enabled": false,
@@ -58,6 +59,7 @@ const BLACKOUT_FULL: FeatureFlagMap = {
   "features.federationBoost.enabled": true,
   "features.townhall.enabled": true,
   "features.platform.bootstrap": true,
+  "features.stego.ephemeral": true,
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {

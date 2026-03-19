@@ -13,7 +13,16 @@
       "docs/features/privacy_first_stego_roadmap.md",
       "docs/features/privacy_first_stego_completion_tracker.md",
       "docs/features/repo_feature_inventory.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "ephemeral_stego_lifecycle",
@@ -28,7 +37,16 @@
     "sourcePointers": [
       "docs/features/privacy_first_stego_roadmap.md",
       "docs/features/privacy_first_stego_completion_tracker.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "governance_entitlements",
@@ -44,7 +62,16 @@
       "docs/blackout-governance-build-plan.md",
       "docs/blackout-governance-migration.md",
       "docs/features/governance_features_analysis.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "federation_boost_policy",
@@ -59,7 +86,16 @@
     "sourcePointers": [
       "docs/14-stream-revenue-implementation-plan.md",
       "docs/features/repo_feature_inventory.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-admin-federation-boost"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "townhall_sfu",
@@ -75,7 +111,16 @@
       "docs/blackout-sfu-townhall-build-plan.md",
       "docs/operations/runbooks/townhall-observability-runbook.md",
       "deploy/kubernetes/phase4/element-ha.yaml"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-townhall-sfu"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "rich_composer",
@@ -91,7 +136,16 @@
       "docs/features/composer.md",
       "apps/blackout-web/src/components/MessageInput.ts",
       "apps/blackout-web/tests/integration/app.test.ts"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-composer-rich-editing"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "typing_indicators",
@@ -106,7 +160,16 @@
     "sourcePointers": [
       "docs/features/repo_feature_inventory.md",
       "apps/blackout-web/src/components/ChatWindow.ts"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-composer-typing-indicators"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "widget_shell_layouts",
@@ -121,7 +184,16 @@
     "sourcePointers": [
       "docs/widget-layouts.md",
       "docs/features/frontend-backend-contract.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-shell-layouts"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "matrix_client_arch",
@@ -137,7 +209,16 @@
       "apps/blackout-web/src/services/matrix-client.ts",
       "apps/blackout-web/src/app.ts",
       "apps/blackout-web/tests/unit/api-client.test.ts"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "homeserver_discovery",
@@ -153,7 +234,16 @@
       "docs/custom-home.md",
       "apps/blackout-web/src/config.ts",
       "docs/features/repo_feature_inventory.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-homeserver-discovery"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "e2ee_defaults",
@@ -168,7 +258,16 @@
     "sourcePointers": [
       "docs/e2ee.md",
       "docs/security-phase2-app-hardening.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-e2ee-defaults"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "oidc_delegated_auth",
@@ -184,7 +283,16 @@
       "docs/oidc.md",
       "apps/blackout-web/src/features/auth/auth-view.ts",
       "docs/security-phase3-auth-modernization.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-oidc-auth"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "matrix_widget_compat",
@@ -199,7 +307,16 @@
     "sourcePointers": [
       "docs/features/repo_feature_inventory.md",
       "docs/widget-layouts.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-matrix-compat"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   },
   {
     "id": "multiplatform_bootstrap",
@@ -214,6 +331,15 @@
     "sourcePointers": [
       "docs/install.md",
       "docs/features/repo_feature_inventory.md"
-    ]
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
   }
 ]

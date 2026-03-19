@@ -32,6 +32,9 @@ test('passes with valid rows', () => {
       testCoverage: 'unit',
       notes: 'ok',
       sourcePointers: ['docs/a.md'],
+      presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
+      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
+      fallbackBehavior: 'shows unavailable state',
     },
   ]);
 
@@ -53,6 +56,9 @@ test('fails with duplicate ids', () => {
       testCoverage: 'unit',
       notes: 'ok',
       sourcePointers: ['docs/a.md'],
+      presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
+      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
+      fallbackBehavior: 'shows unavailable state',
     },
     {
       id: 'dupe',
@@ -65,6 +71,9 @@ test('fails with duplicate ids', () => {
       testCoverage: 'integration',
       notes: 'ok',
       sourcePointers: ['docs/b.md'],
+      presetPolicy: { baseline_matrix: false, community_plus: true, blackout_full: true },
+      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-widget-b'],
+      fallbackBehavior: 'shows unavailable state',
     },
   ]);
 
@@ -101,6 +110,9 @@ test('fails with invalid uiEntry mapping', () => {
       testCoverage: 'none',
       notes: 'bad ui entry',
       sourcePointers: ['docs/d.md'],
+      presetPolicy: { baseline_matrix: false, community_plus: false, blackout_full: true },
+      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-d'],
+      fallbackBehavior: 'shows unavailable state',
     },
   ]);
 

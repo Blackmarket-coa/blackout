@@ -18,6 +18,11 @@ const commands = [
     args: ['guard:feature-budget'],
   },
   {
+    label: 'Preset-complete definition-of-done guard',
+    cmd: 'pnpm',
+    args: ['guard:preset-complete'],
+  },
+  {
     label: 'Preset smoke matrix',
     cmd: 'pnpm',
     args: ['ci:smoke:preset-matrix'],

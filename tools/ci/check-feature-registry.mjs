@@ -13,6 +13,9 @@ const REQUIRED_FIELDS = [
   'testCoverage',
   'notes',
   'sourcePointers',
+  'presetPolicy',
+  'uiTestRefs',
+  'fallbackBehavior',
 ];
 
 const VALID_CATEGORIES = new Set(['novel', 'discord_like', 'matrix_like']);
@@ -98,6 +101,22 @@ for (const [index, row] of registry.entries()) {
     if (!testId || testId.trim().length === 0) {
       errors.push(`${prefix}: uiEntry must include a data-testid suffix after ':'.`);
     }
+  }
+
+  if (!row.presetPolicy || typeof row.presetPolicy !== 'object') {
+    errors.push(`${prefix}: "presetPolicy" must be an object.`);
+  } else {
+    for (const preset of ['baseline_matrix', 'community_plus', 'blackout_full']) {
+      if (typeof row.presetPolicy[preset] !== 'boolean') {
+        errors.push(`${prefix}: presetPolicy.${preset} must be boolean.`);
+      }
+    }
+  }
+
+  if (!Array.isArray(row.uiTestRefs) || row.uiTestRefs.length === 0) {
+    errors.push(`${prefix}: "uiTestRefs" must be a non-empty array.`);
+  } else if (!row.uiTestRefs.every((ref) => typeof ref === 'string' && ref.includes('::'))) {
+    errors.push(`${prefix}: each uiTestRefs entry must be a \"path::token\" string.`);
   }
 
   if (!Array.isArray(row.sourcePointers) || row.sourcePointers.length === 0) {
