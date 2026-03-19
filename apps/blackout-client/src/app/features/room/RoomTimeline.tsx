@@ -15,6 +15,13 @@ import { sanitizeMatrixHtml } from '../../utils/markdown';
 import { useRoom } from '../../hooks/useRoom';
 import { useRoomTimeline, useTimelineScroll } from '../../hooks/useTimeline';
 import { useTypingIndicator } from '../../hooks/useTyping';
+import {
+  AudioMessage as TimelineAudioMessage,
+  FileMessage as TimelineFileMessage,
+  ImageMessage as TimelineImageMessage,
+  StickerMessage as TimelineStickerMessage,
+  VideoMessage as TimelineVideoMessage,
+} from '../../components/messages';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -428,17 +435,17 @@ const renderMessageType = (event: MatrixEvent): ReactNode => {
     return <div style={styles.notice}>[message deleted]</div>;
   }
 
-  if (event.getType() === 'm.sticker') return <StickerMessage event={event} />;
+  if (event.getType() === 'm.sticker') return <TimelineStickerMessage event={event} />;
 
   switch (getMsgType(event)) {
     case 'm.image':
-      return <ImageMessage event={event} />;
+      return <TimelineImageMessage event={event} />;
     case 'm.video':
-      return <VideoMessage event={event} />;
+      return <TimelineVideoMessage event={event} />;
     case 'm.audio':
-      return <AudioMessage event={event} />;
+      return <TimelineAudioMessage event={event} />;
     case 'm.file':
-      return <FileMessage event={event} />;
+      return <TimelineFileMessage event={event} />;
     case 'm.notice':
       return <NoticeMessage event={event} />;
     case 'm.text':
