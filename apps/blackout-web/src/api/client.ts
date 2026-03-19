@@ -1,4 +1,4 @@
-import type { ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
+import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -56,6 +56,21 @@ export class ApiClient {
     return { jwt: payload.token, user: payload.user };
   }
 
+
+  async register(username: string, password: string): Promise<Session> {
+    if (this.useMockApi) {
+      return this.login(username, password);
+    }
+
+    const payload = await this.fetchJson<{ token: string; user: { id: string; username: string } }>("/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+      headers: { "content-type": "application/json" },
+    });
+
+    return { jwt: payload.token, user: payload.user };
+  }
+
   async getServers(session: Session): Promise<ServerSummary[]> {
     if (this.useMockApi) {
       return [
@@ -83,6 +98,37 @@ export class ApiClient {
 
     return this.fetchJson<ServerDetails>(`/v1/servers/${encodeURIComponent(serverId)}`, {
       headers: { authorization: `Bearer ${session.jwt}` },
+    });
+  }
+
+
+  async createServer(session: Session, name: string): Promise<ServerSummary> {
+    if (this.useMockApi) {
+      return { id: `srv_${Date.now()}`, name, role: "owner" };
+    }
+
+    return this.fetchJson<ServerSummary>("/v1/servers", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${session.jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async createChannel(session: Session, serverId: string, name: string): Promise<ChannelSummary> {
+    if (this.useMockApi) {
+      return { id: `chn_${Date.now()}`, name };
+    }
+
+    return this.fetchJson<ChannelSummary>(`/v1/servers/${encodeURIComponent(serverId)}/channels`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${session.jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ name }),
     });
   }
 
