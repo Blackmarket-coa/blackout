@@ -9,7 +9,7 @@ export class SessionStore {
 
     try {
       const parsed = JSON.parse(raw) as Session;
-      if (!parsed.accessToken || !parsed.userId) return null;
+      if (!parsed.jwt || !parsed.user?.id || !parsed.user?.username) return null;
       return parsed;
     } catch {
       return null;
