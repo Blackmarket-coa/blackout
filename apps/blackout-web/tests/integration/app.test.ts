@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BlackoutWebApp } from "../../src/app";
 
 describe("BlackoutWebApp", () => {
-  it("lets a user sign in and load rooms using mock API", async () => {
+  it("lets a user sign in and shows server sidebar", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
@@ -21,7 +21,7 @@ describe("BlackoutWebApp", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Refresh rooms" })).toBeTruthy();
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
     });
   });
 });

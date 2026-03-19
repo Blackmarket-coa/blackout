@@ -1,4 +1,4 @@
-import type { RoomSummary, Session, TimelineEvent, UserSettings } from "../types";
+import type { ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -13,6 +13,12 @@ export class ApiError extends Error {
 export interface ApiClientOptions {
   baseUrl: string;
   useMockApi?: boolean;
+}
+
+export interface GatewayEvent {
+  type: string;
+  channelId?: string;
+  message?: ChatMessage;
 }
 
 async function parseJsonSafe(response: Response): Promise<unknown> {
@@ -35,74 +41,106 @@ export class ApiClient {
   async login(username: string, password: string): Promise<Session> {
     if (this.useMockApi) {
       if (!username || !password) throw new ApiError("Username and password are required.", 400);
-      return { accessToken: "mock-token", userId: `@${username}:blackout.local` };
+      return {
+        jwt: "mock-jwt-token",
+        user: { id: "usr_mock", username },
+      };
     }
 
-    const payload = await this.fetchJson<{ access_token: string; user_id: string }>("/_matrix/client/v3/login", {
+    const payload = await this.fetchJson<{ token: string; user: { id: string; username: string } }>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({
-        type: "m.login.password",
-        identifier: { type: "m.id.user", user: username },
-        password,
-      }),
+      body: JSON.stringify({ username, password }),
       headers: { "content-type": "application/json" },
     });
 
-    return { accessToken: payload.access_token, userId: payload.user_id };
+    return { jwt: payload.token, user: payload.user };
   }
 
-  async getRooms(session: Session): Promise<RoomSummary[]> {
+  async getServers(session: Session): Promise<ServerSummary[]> {
     if (this.useMockApi) {
       return [
-        { id: "!ops:blackout.local", name: "Ops" },
-        { id: "!governance:blackout.local", name: "Governance" },
+        { id: "srv_alpha", name: "Alpha Ops", role: "owner" },
+        { id: "srv_beta", name: "Beta Crew", role: "member" },
       ];
     }
 
-    const payload = await this.fetchJson<{ joined_rooms: string[] }>("/_matrix/client/v3/joined_rooms", {
-      headers: { authorization: `Bearer ${session.accessToken}` },
+    return this.fetchJson<ServerSummary[]>("/v1/servers", {
+      headers: { authorization: `Bearer ${session.jwt}` },
     });
-
-    return payload.joined_rooms.map((roomId) => ({ id: roomId, name: roomId }));
   }
 
-  async getTimeline(session: Session, roomId: string): Promise<TimelineEvent[]> {
+  async getServerDetails(session: Session, serverId: string): Promise<ServerDetails> {
+    if (this.useMockApi) {
+      return {
+        id: serverId,
+        name: serverId === "srv_alpha" ? "Alpha Ops" : "Beta Crew",
+        channels: [
+          { id: "chn_general", name: "general" },
+          { id: "chn_standup", name: "standup" },
+        ],
+      };
+    }
+
+    return this.fetchJson<ServerDetails>(`/v1/servers/${encodeURIComponent(serverId)}`, {
+      headers: { authorization: `Bearer ${session.jwt}` },
+    });
+  }
+
+  async getMessages(session: Session, channelId: string): Promise<ChatMessage[]> {
     if (this.useMockApi) {
       return [
         {
-          id: "$1",
-          sender: "@alice:blackout.local",
-          body: `Welcome to ${roomId}`,
+          id: "msg1",
+          sender: "alice",
+          body: `Welcome to ${channelId}`,
           timestamp: new Date().toISOString(),
         },
       ];
     }
 
-    const payload = await this.fetchJson<{ chunk: Array<{ event_id: string; sender: string; origin_server_ts: number; content?: { body?: string } }> }>(
-      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=20`,
-      { headers: { authorization: `Bearer ${session.accessToken}` } },
-    );
-
-    return payload.chunk.map((event) => ({
-      id: event.event_id,
-      sender: event.sender,
-      body: event.content?.body ?? "(non-text event)",
-      timestamp: new Date(event.origin_server_ts).toISOString(),
-    }));
-  }
-
-  async getSettings(_session: Session): Promise<UserSettings> {
-    if (this.useMockApi) return { theme: "dark", notifications: true };
-    return { theme: "dark", notifications: true };
-  }
-
-  async saveSettings(_session: Session, settings: UserSettings): Promise<void> {
-    if (this.useMockApi) return;
-    await this.fetchJson("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify(settings),
-      headers: { "content-type": "application/json" },
+    const payload = await this.fetchJson<{ data: ChatMessage[] }>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+      headers: { authorization: `Bearer ${session.jwt}` },
     });
+
+    return payload.data;
+  }
+
+  async sendMessage(session: Session, channelId: string, body: string): Promise<ChatMessage> {
+    if (this.useMockApi) {
+      return {
+        id: `msg_${Date.now()}`,
+        sender: session.user.username,
+        body,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    return this.fetchJson<ChatMessage>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${session.jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  connectGateway(session: Session, onEvent: (event: GatewayEvent) => void): WebSocket | null {
+    if (this.useMockApi || typeof WebSocket === "undefined") return null;
+
+    const gatewayUrl = this.baseUrl.replace(/^http/i, "ws") + "/gateway";
+    const socket = new WebSocket(gatewayUrl, ["blackout.jwt", session.jwt]);
+
+    socket.addEventListener("message", (event) => {
+      try {
+        const data = JSON.parse(String(event.data)) as GatewayEvent;
+        onEvent(data);
+      } catch {
+        // Ignore malformed gateway payloads.
+      }
+    });
+
+    return socket;
   }
 
   private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

@@ -1,15 +1,15 @@
-import { ApiClient, ApiError } from "./api/client";
+import { ApiClient, ApiError, type GatewayEvent } from "./api/client";
 import { blackoutWebConfig } from "./index";
 import { SessionStore } from "./session/store";
-import type { AppScreen, RoomSummary, Session, TimelineEvent, UserSettings } from "./types";
+import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "./types";
 
 interface AppState {
-  screen: AppScreen;
   session: Session | null;
-  rooms: RoomSummary[];
-  selectedRoomId: string | null;
-  timeline: TimelineEvent[];
-  settings: UserSettings | null;
+  servers: ServerSummary[];
+  activeServerId: string | null;
+  channels: ChannelSummary[];
+  activeChannelId: string | null;
+  messages: ChatMessage[];
   error: string | null;
   loading: boolean;
 }
@@ -18,6 +18,7 @@ export class BlackoutWebApp {
   private readonly root: HTMLElement;
   private readonly api: ApiClient;
   private readonly sessions: SessionStore;
+  private gatewaySocket: WebSocket | null = null;
   private state: AppState;
 
   constructor(root: HTMLElement) {
@@ -28,14 +29,13 @@ export class BlackoutWebApp {
       useMockApi: import.meta.env.VITE_USE_MOCK_API !== "false",
     });
 
-    const persistedSession = this.sessions.load();
     this.state = {
-      screen: persistedSession ? "rooms" : "auth",
-      session: persistedSession,
-      rooms: [],
-      selectedRoomId: null,
-      timeline: [],
-      settings: null,
+      session: this.sessions.load(),
+      servers: [],
+      activeServerId: null,
+      channels: [],
+      activeChannelId: null,
+      messages: [],
       error: null,
       loading: false,
     };
@@ -44,7 +44,8 @@ export class BlackoutWebApp {
   async mount(): Promise<void> {
     this.render();
     if (this.state.session) {
-      await this.loadRooms();
+      this.connectGateway();
+      await this.loadServers();
     }
   }
 
@@ -58,108 +59,96 @@ export class BlackoutWebApp {
       <main class="container">
         <header class="header">
           <h1>Blackout Frontend</h1>
-          <p class="meta">Homeserver: <code>${blackoutWebConfig.homeserverUrl}</code></p>
-          <nav class="tabs">
-            ${this.tabButton("auth", "Auth")}
-            ${this.tabButton("rooms", "Rooms")}
-            ${this.tabButton("timeline", "Timeline")}
-            ${this.tabButton("settings", "Settings")}
-          </nav>
+          <p class="meta">API: <code>${blackoutWebConfig.homeserverUrl}</code></p>
         </header>
         ${this.state.error ? `<p class="error" role="alert">${this.state.error}</p>` : ""}
         ${this.state.loading ? `<p class="loading">Loading…</p>` : ""}
-        <section class="screen">${this.renderScreen()}</section>
+        ${this.state.session ? this.renderWorkspace() : this.renderAuth()}
       </main>
     `;
 
     this.bindEvents();
   }
 
-  private tabButton(screen: AppScreen, label: string): string {
-    const active = this.state.screen === screen ? "is-active" : "";
-    return `<button data-action="switch-screen" data-screen="${screen}" class="tab ${active}" type="button">${label}</button>`;
+  private renderAuth(): string {
+    return `
+      <form id="auth-form" class="stack auth-card">
+        <h2>Sign in</h2>
+        <label>Username <input required name="username" autocomplete="username" /></label>
+        <label>Password <input required name="password" type="password" autocomplete="current-password" /></label>
+        <button type="submit">Sign in</button>
+      </form>
+    `;
   }
 
-  private renderScreen(): string {
-    switch (this.state.screen) {
-      case "auth":
-        return `
-          <form id="auth-form" class="stack">
-            <label>Username <input required name="username" autocomplete="username" /></label>
-            <label>Password <input required name="password" type="password" autocomplete="current-password" /></label>
-            <button type="submit">Sign in</button>
+  private renderWorkspace(): string {
+    const selectedServerName = this.state.servers.find((server) => server.id === this.state.activeServerId)?.name ?? "Select a server";
+
+    return `
+      <section class="workspace">
+        <aside class="server-sidebar">
+          <div class="sidebar-head">Servers</div>
+          <ul>
+            ${this.state.servers
+              .map(
+                (server) =>
+                  `<li><button type="button" class="sidebar-btn ${server.id === this.state.activeServerId ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}">${server.name}</button></li>`,
+              )
+              .join("")}
+          </ul>
+        </aside>
+
+        <aside class="channel-list">
+          <div class="sidebar-head">${selectedServerName}</div>
+          <ul>
+            ${this.state.channels
+              .map(
+                (channel) =>
+                  `<li><button type="button" class="sidebar-btn ${channel.id === this.state.activeChannelId ? "is-selected" : ""}" data-action="open-channel" data-channel-id="${channel.id}"># ${channel.name}</button></li>`,
+              )
+              .join("")}
+          </ul>
+        </aside>
+
+        <section class="chat-window">
+          <div class="chat-head">${this.state.activeChannelId ? `Channel: ${this.state.activeChannelId}` : "Pick a channel"}</div>
+          <ul class="message-list">
+            ${this.state.messages.map((message) => `<li><strong>${message.sender}</strong><p>${message.body}</p></li>`).join("")}
+          </ul>
+          <form id="message-form" class="chat-input">
+            <input name="message" placeholder="Send a message" ${this.state.activeChannelId ? "" : "disabled"} />
+            <button type="submit" ${this.state.activeChannelId ? "" : "disabled"}>Send</button>
           </form>
-        `;
-      case "rooms":
-        return `
-          <div class="stack">
-            <button data-action="refresh-rooms" type="button">Refresh rooms</button>
-            <ul>
-              ${this.state.rooms.map((room) => `<li><button type="button" data-action="open-room" data-room-id="${room.id}">${room.name}</button></li>`).join("")}
-            </ul>
-          </div>
-        `;
-      case "timeline":
-        return `
-          <div class="stack">
-            <p>Room: ${this.state.selectedRoomId ?? "(none selected)"}</p>
-            <ul>
-              ${this.state.timeline.map((event) => `<li><strong>${event.sender}</strong>: ${event.body}</li>`).join("")}
-            </ul>
-          </div>
-        `;
-      case "settings":
-        return `
-          <form id="settings-form" class="stack">
-            <label>
-              Theme
-              <select name="theme">
-                <option value="dark" ${this.state.settings?.theme === "dark" ? "selected" : ""}>Dark</option>
-                <option value="light" ${this.state.settings?.theme === "light" ? "selected" : ""}>Light</option>
-              </select>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" name="notifications" ${this.state.settings?.notifications ? "checked" : ""} />
-              Enable notifications
-            </label>
-            <button type="submit">Save settings</button>
-          </form>
-        `;
-      default:
-        return "<p>Unknown screen.</p>";
-    }
+        </section>
+      </section>
+    `;
   }
 
   private bindEvents(): void {
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='switch-screen']").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const screen = button.dataset.screen as AppScreen;
-        this.setState({ screen, error: null });
-        if (screen === "rooms") await this.loadRooms();
-        if (screen === "settings") await this.loadSettings();
-      });
-    });
-
     this.root.querySelector<HTMLFormElement>("#auth-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.handleLogin(event.currentTarget as HTMLFormElement);
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='refresh-rooms']")?.addEventListener("click", () => {
-      void this.loadRooms();
-    });
-
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-room']").forEach((button) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-server']").forEach((button) => {
       button.addEventListener("click", () => {
-        const roomId = button.dataset.roomId;
-        if (!roomId) return;
-        void this.openRoom(roomId);
+        const serverId = button.dataset.serverId;
+        if (!serverId) return;
+        void this.openServer(serverId);
       });
     });
 
-    this.root.querySelector<HTMLFormElement>("#settings-form")?.addEventListener("submit", (event) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-channel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const channelId = button.dataset.channelId;
+        if (!channelId) return;
+        void this.openChannel(channelId);
+      });
+    });
+
+    this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this.handleSaveSettings(event.currentTarget as HTMLFormElement);
+      void this.handleSendMessage(event.currentTarget as HTMLFormElement);
     });
   }
 
@@ -183,52 +172,70 @@ export class BlackoutWebApp {
     await this.runWithHandling(async () => {
       const session = await this.api.login(username, password);
       this.sessions.save(session);
-      this.setState({ session, screen: "rooms" });
-      await this.loadRooms();
+      this.setState({ session });
+      this.connectGateway();
+      await this.loadServers();
     });
   }
 
-  private async loadRooms(): Promise<void> {
-    if (!this.state.session) {
-      this.setState({ screen: "auth", rooms: [], timeline: [] });
-      return;
-    }
-
-    await this.runWithHandling(async () => {
-      const rooms = await this.api.getRooms(this.state.session!);
-      this.setState({ rooms, screen: "rooms" });
-    });
-  }
-
-  private async openRoom(roomId: string): Promise<void> {
+  private async loadServers(): Promise<void> {
     if (!this.state.session) return;
 
     await this.runWithHandling(async () => {
-      const timeline = await this.api.getTimeline(this.state.session!, roomId);
-      this.setState({ selectedRoomId: roomId, timeline, screen: "timeline" });
+      const servers = await this.api.getServers(this.state.session!);
+      const activeServerId = servers[0]?.id ?? null;
+      this.setState({ servers, activeServerId, channels: [], activeChannelId: null, messages: [] });
+      if (activeServerId) await this.openServer(activeServerId);
     });
   }
 
-  private async loadSettings(): Promise<void> {
+  private async openServer(serverId: string): Promise<void> {
     if (!this.state.session) return;
 
     await this.runWithHandling(async () => {
-      const settings = await this.api.getSettings(this.state.session!);
-      this.setState({ settings, screen: "settings" });
+      const details: ServerDetails = await this.api.getServerDetails(this.state.session!, serverId);
+      const activeChannelId = details.channels[0]?.id ?? null;
+      this.setState({
+        activeServerId: serverId,
+        channels: details.channels,
+        activeChannelId,
+        messages: [],
+      });
+      if (activeChannelId) await this.openChannel(activeChannelId);
     });
   }
 
-  private async handleSaveSettings(form: HTMLFormElement): Promise<void> {
+  private async openChannel(channelId: string): Promise<void> {
     if (!this.state.session) return;
+
+    await this.runWithHandling(async () => {
+      const messages = await this.api.getMessages(this.state.session!, channelId);
+      this.setState({ activeChannelId: channelId, messages });
+    });
+  }
+
+  private async handleSendMessage(form: HTMLFormElement): Promise<void> {
+    if (!this.state.session || !this.state.activeChannelId) return;
+
     const formData = new FormData(form);
-    const settings: UserSettings = {
-      theme: String(formData.get("theme")) === "light" ? "light" : "dark",
-      notifications: formData.get("notifications") === "on",
-    };
+    const body = String(formData.get("message") ?? "").trim();
+    if (!body) return;
 
     await this.runWithHandling(async () => {
-      await this.api.saveSettings(this.state.session!, settings);
-      this.setState({ settings });
+      const message = await this.api.sendMessage(this.state.session!, this.state.activeChannelId!, body);
+      this.setState({ messages: [...this.state.messages, message] });
+      form.reset();
     });
+  }
+
+  private connectGateway(): void {
+    if (!this.state.session) return;
+    this.gatewaySocket?.close();
+    this.gatewaySocket = this.api.connectGateway(this.state.session, (event) => this.handleGatewayEvent(event));
+  }
+
+  private handleGatewayEvent(event: GatewayEvent): void {
+    if (event.type !== "message.created" || !event.message || event.channelId !== this.state.activeChannelId) return;
+    this.setState({ messages: [...this.state.messages, event.message] });
   }
 }
