@@ -259,6 +259,59 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="feature-widget-townhall-sfu"]')).toBeFalsy();
   });
 
+  it("renders the EPIC delivery blueprint with E2EE and rollout guardrails", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "blackout_full",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "blackout_full",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    expect(root.querySelector('[data-testid="epic-delivery-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="epic-dod-e2ee"]')?.textContent).toContain("No E2EE regressions");
+    expect(root.querySelector('[data-testid="epic-dod-permissions"]')?.textContent).toContain("Permission model validated");
+    expect(root.querySelector('[data-testid="epic-dod-rollout"]')?.textContent).toContain("Feature flag + migration notes");
+  });
+
+  it("hides the EPIC delivery blueprint when feature flag is disabled", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="epic-delivery-panel"]')).toBeFalsy();
+  });
+
   it("supports messaging feature toolbar and typing indicator", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");

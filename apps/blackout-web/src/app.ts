@@ -90,7 +90,7 @@ export class BlackoutWebApp {
         <div class="header-actions">
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -197,6 +197,29 @@ export class BlackoutWebApp {
           <button type="button" data-action="apply-preset" data-testid="apply-preset-button" ${this.selectedPreset === this.appliedPreset ? "disabled" : ""}>Apply preset</button>
           <button type="button" class="ghost-btn" data-action="rollback-preset" data-testid="rollback-preset-button" ${this.appliedPreset === this.deploymentPreset ? "disabled" : ""}>Rollback to deployment preset</button>
         </div>
+      </section>
+    `;
+  }
+
+  private renderEpicDeliverySection(): string {
+    return `
+      <section class="stack panel-card" data-testid="epic-delivery-panel">
+        <h2>EPIC delivery blueprint</h2>
+        <p class="meta">Template for implementing <code>&lt;epic_name&gt;</code> while preserving E2EE and Matrix protocol compatibility.</p>
+        <ul class="stack">
+          <li data-testid="epic-deliverable-design"><strong>Technical design note:</strong> architecture, trust boundaries, and Matrix/Synapse integration points.</li>
+          <li data-testid="epic-deliverable-schema"><strong>Data + event schema:</strong> introduce additive room/account data shapes only; avoid wire-protocol breaking changes.</li>
+          <li data-testid="epic-deliverable-ui"><strong>UI/UX:</strong> ship behind feature flag with unavailable-state fallback copy.</li>
+          <li data-testid="epic-deliverable-tests"><strong>Tests:</strong> unit + integration coverage, including encrypted room workflows and permission denials.</li>
+          <li data-testid="epic-deliverable-rollout"><strong>Telemetry + rollout:</strong> cohort rollout plan with rollback trigger and migration notes.</li>
+        </ul>
+        <h3>Definition of done</h3>
+        <ul class="stack">
+          <li data-testid="epic-dod-acceptance">Acceptance criteria are met.</li>
+          <li data-testid="epic-dod-e2ee">No E2EE regressions.</li>
+          <li data-testid="epic-dod-permissions">Permission model validated for allow/deny paths.</li>
+          <li data-testid="epic-dod-rollout">Feature flag + migration notes documented.</li>
+        </ul>
       </section>
     `;
   }
@@ -359,17 +382,6 @@ export class BlackoutWebApp {
     if (!textarea) return;
     textarea.value = `${textarea.value}${snippet}`;
     textarea.focus();
-  }
-
-  private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
-    const dedupeKey = `${this.appliedPreset}:${featureId}`;
-    if (this.trackedDenials.has(dedupeKey)) return;
-    this.trackedDenials.add(dedupeKey);
-    this.telemetry.track("feature_open_denied", {
-      featureId,
-      entrypointKind: kind,
-      reason: "blocked_by_policy_or_entitlement",
-    });
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
