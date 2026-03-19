@@ -5,6 +5,7 @@ import {
   type TenantPresetPolicy,
   type UserPresetOverrides,
 } from "./settings/feature-presets";
+import type { ReleaseCohort } from "./services/telemetry";
 
 const DEFAULT_HOMESERVER_URL = "https://matrix.blackout.local";
 
@@ -44,7 +45,15 @@ export function resolveMatrixHomeserverUrl(env: Record<string, string | undefine
 export interface BlackoutRuntimeConfig {
   homeserverUrl: string;
   mode: "daily-chat";
+  rollout: {
+    cohort: ReleaseCohort;
+  };
   presets: ResolvedPresetConfig;
+}
+
+function resolveReleaseCohort(raw: string | undefined): ReleaseCohort {
+  if (raw === "internal" || raw === "beta" || raw === "general") return raw;
+  return "internal";
 }
 
 export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefined>): BlackoutRuntimeConfig {
@@ -55,6 +64,9 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
   return {
     homeserverUrl: resolveMatrixHomeserverUrl(env),
     mode: "daily-chat",
+    rollout: {
+      cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
+    },
     presets: resolveFeaturePreset(deployment, tenantPolicy, userOverrides),
   };
 }

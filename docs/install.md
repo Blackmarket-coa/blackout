@@ -112,6 +112,7 @@ docker build -t \
 
 Blackout runtime preset selection can be configured at startup with environment variables:
 
+- `VITE_RELEASE_COHORT` (`internal|beta|general`)
 - `VITE_FEATURE_DEPLOYMENT_DEFAULTS`
 - `VITE_FEATURE_TENANT_POLICY`
 - `VITE_FEATURE_USER_OVERRIDES`
@@ -119,10 +120,12 @@ Blackout runtime preset selection can be configured at startup with environment 
 Use `deploy/docker/feature-presets.env.template` as a starting point for enterprise/self-hosted environments. The template includes:
 
 1. deployment default preset selection,
-2. tenant/org policy overrides,
-3. user override payloads (honored only when tenant policy allows them).
+2. cohort-based staged release,
+3. tenant/org policy overrides,
+4. user override payloads (honored only when tenant policy allows them).
 
 When configured, the app's **Feature Presets** admin/settings UX supports choosing a preset, previewing included capabilities ("What this preset enables"), applying with confirmation, and rolling back to deployment defaults with confirmation.
+For operations guidance, see `docs/operations/runbooks/feature-preset-rollout-and-rollback.md`.
 
 ## Kubernetes
 

@@ -20,6 +20,7 @@ describe("Preset smoke flow", () => {
     const app = new BlackoutWebApp(root, {
       homeserverUrl: "https://matrix.blackout.local",
       mode: "daily-chat",
+      rollout: { cohort: "internal" },
       presets: {
         activePreset: preset,
         features: {},

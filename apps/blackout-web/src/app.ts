@@ -6,6 +6,7 @@ import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
+import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
@@ -28,10 +29,15 @@ export class BlackoutWebApp {
   private appliedPreset: FeaturePresetKey;
   private selectedPreset: FeaturePresetKey;
   private featureActionResult: string | null = null;
+  private readonly telemetry;
+  private readonly trackedDenials = new Set<string>();
 
   constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
     homeserverUrl: "https://matrix.blackout.local",
     mode: "daily-chat",
+    rollout: {
+      cohort: "internal",
+    },
     presets: {
       activePreset: "baseline_matrix",
       features: {},
@@ -44,12 +50,17 @@ export class BlackoutWebApp {
   }) {
     this.root = root;
     this.runtimeConfig = runtimeConfig;
+    this.telemetry = createTelemetryClient(this.runtimeConfig.rollout.cohort);
     this.deploymentPreset = runtimeConfig.presets.activePreset;
     this.appliedPreset = runtimeConfig.presets.activePreset;
     this.selectedPreset = runtimeConfig.presets.activePreset;
   }
 
   async mount(): Promise<void> {
+    this.telemetry.track("preset_adoption_seen", {
+      preset: this.appliedPreset,
+      cohort: this.runtimeConfig.rollout.cohort,
+    });
     this.render();
 
     const state = this.store.getState();
@@ -70,6 +81,7 @@ export class BlackoutWebApp {
           <h1>Blackout Core</h1>
           <p class="meta">Discord-like starter shell on top of Matrix-compatible APIs.</p>
           <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
+          <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
         ${this.renderPresetManagementSection()}
@@ -119,6 +131,9 @@ export class BlackoutWebApp {
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
         : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
+      if (!enabled) {
+        this.trackDeniedFeature(feature.id, kind);
+      }
       const row = `<li class="stack"><strong>${feature.id}</strong><span class="meta">${feature.uiEntry}</span>${content}</li>`;
       grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
     }
@@ -240,6 +255,7 @@ export class BlackoutWebApp {
       const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?`) ?? true;
       if (!approved) return;
       this.appliedPreset = this.selectedPreset;
+      this.telemetry.track("preset_applied", { preset: this.appliedPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
 
@@ -249,6 +265,7 @@ export class BlackoutWebApp {
       if (!approved) return;
       this.appliedPreset = this.deploymentPreset;
       this.selectedPreset = this.deploymentPreset;
+      this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
 
@@ -258,6 +275,7 @@ export class BlackoutWebApp {
         const kind = button.dataset.featureKind;
         if (!featureId || !kind) return;
         this.featureActionResult = `Opened ${featureId} via ${kind}.`;
+        this.telemetry.track("feature_open_success", { featureId, entrypointKind: kind });
         this.render();
       });
     });
@@ -281,6 +299,17 @@ export class BlackoutWebApp {
         const form = (event.currentTarget as HTMLTextAreaElement).form;
         form?.requestSubmit();
       }
+    });
+  }
+
+  private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
+    const dedupeKey = `${this.appliedPreset}:${featureId}`;
+    if (this.trackedDenials.has(dedupeKey)) return;
+    this.trackedDenials.add(dedupeKey);
+    this.telemetry.track("feature_open_denied", {
+      featureId,
+      entrypointKind: kind,
+      reason: "blocked_by_policy_or_entitlement",
     });
   }
 

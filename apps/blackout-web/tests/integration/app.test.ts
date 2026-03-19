@@ -84,6 +84,7 @@ describe("BlackoutWebApp integration", () => {
     const app = new BlackoutWebApp(root, {
       homeserverUrl: "https://matrix.blackout.local",
       mode: "daily-chat",
+      rollout: { cohort: "internal" },
       presets: {
         activePreset: "community_plus",
         features: {
@@ -115,6 +116,7 @@ describe("BlackoutWebApp integration", () => {
     const app = new BlackoutWebApp(root, {
       homeserverUrl: "https://matrix.blackout.local",
       mode: "daily-chat",
+      rollout: { cohort: "internal" },
       presets: {
         activePreset: "baseline_matrix",
         features: {},
@@ -148,6 +150,7 @@ describe("BlackoutWebApp integration", () => {
     const app = new BlackoutWebApp(root, {
       homeserverUrl: "https://matrix.blackout.local",
       mode: "daily-chat",
+      rollout: { cohort: "internal" },
       presets: {
         activePreset: "blackout_full",
         features: {},
@@ -182,6 +185,7 @@ describe("BlackoutWebApp integration", () => {
     const app = new BlackoutWebApp(root, {
       homeserverUrl: "https://matrix.blackout.local",
       mode: "daily-chat",
+      rollout: { cohort: "internal" },
       presets: {
         activePreset: "baseline_matrix",
         features: {},
