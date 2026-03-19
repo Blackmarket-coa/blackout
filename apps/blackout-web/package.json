@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "clean": "rimraf dist",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
-    "smoke:integration": "node scripts/smoke-integration.mjs"
+    "smoke:integration": "node scripts/smoke-integration.mjs",
+    "pretest:e2e": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@blackout/core": "workspace:*",
