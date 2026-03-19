@@ -14,7 +14,8 @@
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "clean": "rimraf dist",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "smoke:integration": "node scripts/smoke-integration.mjs"
   },
   "dependencies": {
     "@blackout/core": "workspace:*",

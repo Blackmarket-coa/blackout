@@ -1,10 +1,14 @@
 import { fireEvent, getByRole, waitFor } from "@testing-library/dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
-describe("BlackoutWebApp", () => {
-  it("lets a user sign in and shows server sidebar", async () => {
+describe("BlackoutWebApp integration", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("supports auth submit, server switching, and message send flow", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
@@ -22,6 +26,53 @@ describe("BlackoutWebApp", () => {
 
     await waitFor(() => {
       expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    fireEvent.click(getByRole(root, "button", { name: "Beta Crew" }));
+
+    await waitFor(() => {
+      expect(root.querySelector(".chat-head")?.textContent).toContain("general");
+    });
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing message composer");
+
+    fireEvent.input(composer, { target: { value: "hello from integration" } });
+    fireEvent.submit(document.querySelector("#message-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(root.textContent).toContain("hello from integration");
+    });
+  });
+
+  it("supports keyboard UX: Enter sends, Shift+Enter inserts newline", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root);
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing message composer");
+
+    fireEvent.input(composer, { target: { value: "line 1" } });
+    fireEvent.keyDown(composer, { key: "Enter", code: "Enter", shiftKey: true });
+    fireEvent.input(composer, { target: { value: "line 1\nline 2" } });
+    expect(composer.value).toContain("\n");
+
+    fireEvent.keyDown(composer, { key: "Enter", code: "Enter", shiftKey: false });
+
+    await waitFor(() => {
+      expect(root.textContent).toContain("line 1");
     });
   });
 });
