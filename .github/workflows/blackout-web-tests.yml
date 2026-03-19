@@ -1,0 +1,46 @@
+name: Blackout Web Tests
+
+on:
+  pull_request:
+    paths:
+      - "apps/blackout-web/**"
+      - ".github/workflows/blackout-web-tests.yml"
+  push:
+    branches: [develop, master]
+    paths:
+      - "apps/blackout-web/**"
+
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter @blackout/blackout-web lint
+
+      - name: Unit tests
+        run: pnpm --filter @blackout/blackout-web test:unit
+
+      - name: Integration tests
+        run: pnpm --filter @blackout/blackout-web test:integration
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @blackout/blackout-web exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: pnpm --filter @blackout/blackout-web test:e2e
