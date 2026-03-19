@@ -100,6 +100,7 @@ describe("BlackoutWebApp integration", () => {
     });
     await app.mount();
 
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
     expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("community_plus");
     expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
     expect(root.querySelector('[data-testid="feature-composer-rich-editing"]')).toBeTruthy();
@@ -128,6 +129,7 @@ describe("BlackoutWebApp integration", () => {
       },
     });
     await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
     const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-preset-select"]');
     if (!select) throw new Error("missing preset select");
@@ -162,6 +164,7 @@ describe("BlackoutWebApp integration", () => {
       },
     });
     await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
     const entrypointTestIds = [
       "feature-toggle-stego-toolkit",
@@ -197,6 +200,7 @@ describe("BlackoutWebApp integration", () => {
       },
     });
     await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
     const allFeatureTestIds = [
       "feature-toggle-stego-toolkit",
@@ -242,6 +246,7 @@ describe("BlackoutWebApp integration", () => {
       },
     });
     await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
     const meter = root.querySelector<HTMLProgressElement>('[data-testid="preset-capability-meter"]');
     expect(meter?.value).toBeGreaterThan(0);
@@ -252,6 +257,45 @@ describe("BlackoutWebApp integration", () => {
 
     expect(root.querySelector('[data-testid="feature-admin-governance-entitlements"]') || root.querySelector('[data-testid="feature-admin-governance-entitlements-unavailable"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-widget-townhall-sfu"]')).toBeFalsy();
+  });
+
+  it("supports messaging feature toolbar and typing indicator", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "community_plus",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "community_plus",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing composer");
+
+    fireEvent.click(root.querySelector("[data-action='composer-format-bold']") as HTMLButtonElement);
+    expect(composer.value).toContain("**bold**");
+
+    fireEvent.input(composer, { target: { value: `${composer.value} test` } });
+    expect(root.querySelector('[data-testid="typing-indicator"]')).toBeTruthy();
   });
 
 });

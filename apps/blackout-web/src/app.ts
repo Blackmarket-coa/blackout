@@ -30,6 +30,8 @@ export class BlackoutWebApp {
   private selectedPreset: FeaturePresetKey;
   private featureActionResult: string | null = null;
   private featureFilter = "";
+  private settingsOpen = false;
+  private composerIsTyping = false;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
 
@@ -85,10 +87,10 @@ export class BlackoutWebApp {
           <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
-        <section class="admin-grid">
-          ${this.renderPresetManagementSection()}
-          ${this.renderFeatureEntryPoints()}
-        </section>
+        <div class="header-actions">
+          <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
+        </div>
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -121,6 +123,9 @@ export class BlackoutWebApp {
           messages: state.messages,
           canSend: Boolean(state.activeChannelId),
           sendPending: state.loading.send,
+          richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
+          typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
+          showTypingIndicator: this.composerIsTyping,
         })}
       </section>
     `;
@@ -260,6 +265,11 @@ export class BlackoutWebApp {
       void this.submitCreateEntity(event.currentTarget as HTMLFormElement);
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='toggle-settings']")?.addEventListener("click", () => {
+      this.settingsOpen = !this.settingsOpen;
+      this.render();
+    });
+
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
       this.selectedPreset = value;
@@ -310,7 +320,20 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
+      this.composerIsTyping = false;
       void this.handleSendMessage(event.currentTarget as HTMLFormElement);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-format-bold']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("**bold**");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-format-italic']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("_italic_");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-emoji']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" 😊");
     });
 
 
@@ -320,6 +343,32 @@ export class BlackoutWebApp {
         const form = (event.currentTarget as HTMLTextAreaElement).form;
         form?.requestSubmit();
       }
+    });
+
+    this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']")?.addEventListener("input", (event) => {
+      const canShowTyping = this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false;
+      if (!canShowTyping) return;
+      const value = (event.currentTarget as HTMLTextAreaElement).value.trim();
+      this.composerIsTyping = value.length > 0;
+      this.render();
+    });
+  }
+
+  private applyComposerSnippet(snippet: string): void {
+    const textarea = this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']");
+    if (!textarea) return;
+    textarea.value = `${textarea.value}${snippet}`;
+    textarea.focus();
+  }
+
+  private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
+    const dedupeKey = `${this.appliedPreset}:${featureId}`;
+    if (this.trackedDenials.has(dedupeKey)) return;
+    this.trackedDenials.add(dedupeKey);
+    this.telemetry.track("feature_open_denied", {
+      featureId,
+      entrypointKind: kind,
+      reason: "blocked_by_policy_or_entitlement",
     });
   }
 

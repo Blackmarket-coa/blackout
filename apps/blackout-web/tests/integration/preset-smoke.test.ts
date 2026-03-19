@@ -33,6 +33,7 @@ describe("Preset smoke flow", () => {
     });
 
     await app.mount();
+    (root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement)?.click();
 
     const testId = smokeActionByPreset[preset];
     const button = root.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement | null;

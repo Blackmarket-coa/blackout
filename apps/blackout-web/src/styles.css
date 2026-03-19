@@ -41,6 +41,11 @@ body {
   font-size: 0.9rem;
 }
 
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .workspace {
   flex: 1;
   min-height: 0;
@@ -152,8 +157,17 @@ body {
 
 .chat-input {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.6rem;
+}
+
+.composer-toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.composer-toolbar button {
+  width: auto;
 }
 
 input,
