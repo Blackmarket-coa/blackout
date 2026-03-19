@@ -372,6 +372,17 @@ export class BlackoutWebApp {
     });
   }
 
+  private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
+    const dedupeKey = `${this.appliedPreset}:${featureId}`;
+    if (this.trackedDenials.has(dedupeKey)) return;
+    this.trackedDenials.add(dedupeKey);
+    this.telemetry.track("feature_open_denied", {
+      featureId,
+      entrypointKind: kind,
+      reason: "blocked_by_policy_or_entitlement",
+    });
+  }
+
   private async withLoading<T extends keyof ReturnType<AppStore["getState"]>["loading"]>(
     key: T,
     work: () => Promise<void>,
