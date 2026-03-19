@@ -63,7 +63,7 @@ export class BlackoutWebApp {
     const selectedServer = state.servers.find((server) => server.id === state.activeServerId);
 
     return `
-      <section class="workspace">
+      <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""}">
         ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId })}
         ${renderChannelSidebar({
           serverName: selectedServer?.name ?? "Channels",
@@ -106,6 +106,8 @@ export class BlackoutWebApp {
         const channelId = button.dataset.channelId;
         if (!channelId) return;
         void this.openChannel(channelId);
+        this.store.patch({ channelDrawerOpen: false });
+        this.render();
       });
     });
 
@@ -126,9 +128,25 @@ export class BlackoutWebApp {
       void this.submitCreateEntity(event.currentTarget as HTMLFormElement);
     });
 
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='toggle-channel-drawer']")?.addEventListener("click", () => {
+      const current = this.store.getState().channelDrawerOpen;
+      this.store.patch({ channelDrawerOpen: !current });
+      this.render();
+    });
+
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.handleSendMessage(event.currentTarget as HTMLFormElement);
+    });
+
+
+    this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const form = (event.currentTarget as HTMLTextAreaElement).form;
+        form?.requestSubmit();
+      }
     });
   }
 
@@ -218,11 +236,12 @@ export class BlackoutWebApp {
 
     await this.withLoading("messages", async () => {
       const messages = this.sortMessages(await this.api.getMessages(state.session!, channelId));
+      const current = this.store.getState();
       this.store.patch({
         activeChannelId: channelId,
         messages,
         unreadByChannel: {
-          ...state.unreadByChannel,
+          ...current.unreadByChannel,
           [channelId]: 0,
         },
       });

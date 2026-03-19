@@ -26,6 +26,7 @@ export interface AppState {
   createError: string | null;
   error: string | null;
   unreadByChannel: Record<string, number>;
+  channelDrawerOpen: boolean;
 }
 
 interface PersistedNavigation {
@@ -58,6 +59,7 @@ export class AppStore {
       createError: null,
       error: null,
       unreadByChannel: {},
+      channelDrawerOpen: false,
     };
   }
 

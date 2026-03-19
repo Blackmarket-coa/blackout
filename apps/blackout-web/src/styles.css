@@ -61,6 +61,11 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.chat-head {
+  display: flex;
+  align-items: center;
+}
+
 .server-sidebar ul,
 .channel-list ul,
 .message-list {
@@ -127,19 +132,36 @@ body {
   margin: 0.35rem 0 0;
 }
 
+.message-item--compact {
+  border: 0;
+  background: transparent;
+  padding-top: 0.2rem;
+}
+
+.message-item--compact p {
+  margin: 0;
+  padding-left: 0.1rem;
+}
+
 .chat-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.6rem;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border-radius: 8px;
   border: 1px solid #35373c;
   background: #111214;
   color: #f2f3f5;
   padding: 0.6rem;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 2.75rem;
 }
 
 .stack {
@@ -192,10 +214,28 @@ label {
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 64px minmax(0, 1fr);
+    position: relative;
+  }
+
+  .mobile-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .channel-list {
     display: none;
+  }
+
+  .workspace.show-channel-drawer .channel-list {
+    display: block;
+    position: absolute;
+    left: 72px;
+    top: 0;
+    bottom: 0;
+    width: min(75vw, 320px);
+    z-index: 3;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
   }
 }
 
@@ -243,4 +283,16 @@ label {
 
 .ghost-btn {
   background: transparent;
+}
+
+
+.mobile-toggle {
+  display: none;
+  width: auto;
+  padding: 0.25rem 0.5rem;
+  margin-right: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #35373c;
+  background: #2b2d31;
+  color: #f2f3f5;
 }
