@@ -43,6 +43,7 @@ const BASELINE_MATRIX: FeatureFlagMap = {
   "features.governance.entitlements": false,
   "features.federationBoost.enabled": false,
   "features.townhall.enabled": false,
+  "features.epic.deliveryBlueprint": false,
 };
 
 const COMMUNITY_PLUS: FeatureFlagMap = {
@@ -60,6 +61,7 @@ const BLACKOUT_FULL: FeatureFlagMap = {
   "features.townhall.enabled": true,
   "features.platform.bootstrap": true,
   "features.stego.ephemeral": true,
+  "features.epic.deliveryBlueprint": true,
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {

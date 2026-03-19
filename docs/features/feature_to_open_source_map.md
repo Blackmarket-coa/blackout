@@ -18,6 +18,7 @@ This maps Blackout feature IDs to practical open-source implementations we can a
 | `oidc_delegated_auth` | OIDC delegated authentication | Matrix Authentication Service (MAS) + OIDC providers | Keep auth delegated while preserving Matrix token/session semantics. |
 | `matrix_widget_compat` | Matrix widget state-event compatibility | Matrix Widget APIs + Element widget conventions | Validate widget capability negotiation and fallback rendering for non-entitled users. |
 | `multiplatform_bootstrap` | Multi-platform Matrix bootstrap | `matrix-js-sdk` + shared config/bootstrap tooling | Standardize bootstrap contracts and reuse feature-flag providers across clients. |
+| `epic_delivery_blueprint` | EPIC delivery blueprint panel | `Unleash`/`Flipt`/`Flagsmith` feature flags | Keep this planning UI behind `features.epic.deliveryBlueprint` to support staged rollout and instant disable. |
 
 ## Recommended implementation order
 
