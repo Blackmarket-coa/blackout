@@ -1,2 +1,52 @@
-node_modules/
-apps/blackout-web/dist/
+/build
+/cert.pem
+/dist
+/key.pem
+/lib
+/node_modules
+**/node_modules
+**/.yarn
+**/.yarn/cache
+**/.pnp.*
+/webapp
+/.npmrc
+/*.log
+package-lock.json
+.DS_Store
+electron/dist
+electron/pub
+**/.idea
+/config.json
+/config.json.*
+/config.local*.json
+# Legacy skinning file that some people might still have
+/src/component-index.js
+/.tmp
+/webpack-stats.json
+.vscode
+.vscode/
+.env
+/coverage
+# Auto-generated file
+/src/modules.js
+/build_config.yaml
+/book
+/index.html
+# version file and tarball created by `npm pack` / `yarn pack`
+/git-revision.txt
+jest-sonar.xml
+
+*storybook.log
+storybook-static
+
+/packages/shared-components/node_modules
+/packages/shared-components/dist
+/packages/shared-components/src/i18nKeys.d.ts
+
+# blackout-web vite output
+/apps/blackout-web/dist
+/apps/blackout-web/test-results
+/apps/blackout-web/playwright-report
+
+# TSC incremental compilation information
+*.tsbuildinfo

@@ -9,7 +9,10 @@
     "build:web": "vite build",
     "dev": "vite",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
     "clean": "rimraf dist",
     "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
@@ -19,7 +22,11 @@
     "@blackout/ui": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@testing-library/dom": "^10.4.1",
+    "jsdom": "^26.1.0",
     "typescript": "5.9.3",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
   }
 }

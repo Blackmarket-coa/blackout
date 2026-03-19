@@ -1,3 +1,4 @@
+import { BlackoutWebApp } from "./app";
 import { blackoutWebConfig } from "./index";
 import "./styles.css";
 
@@ -7,6 +8,7 @@ if (!app) {
   throw new Error("Missing #app root");
 }
 
+void new BlackoutWebApp(app).mount();
 app.innerHTML = `
   <main class="container">
     <h1>Blackout Frontend</h1>
