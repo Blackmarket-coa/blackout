@@ -1,3 +1,12 @@
+import {
+  resolveFeaturePreset,
+  type DeploymentPresetConfig,
+  type ResolvedPresetConfig,
+  type TenantPresetPolicy,
+  type UserPresetOverrides,
+} from "./settings/feature-presets";
+import type { ReleaseCohort } from "./services/telemetry";
+
 const DEFAULT_HOMESERVER_URL = "https://matrix.blackout.local";
 
 function normalizeRailwayReference(value: string): string {
@@ -12,6 +21,16 @@ function normalizeRailwayReference(value: string): string {
   return trimmed;
 }
 
+function parseJsonEnv<T>(value: string | undefined, fallback: T): T {
+  if (!value) return fallback;
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export function resolveMatrixHomeserverUrl(env: Record<string, string | undefined>): string {
   const candidate = env.VITE_MATRIX_HOMESERVER_URL ?? env.BLACKOUT_SERVER_URL;
   if (!candidate) return DEFAULT_HOMESERVER_URL;
@@ -21,4 +40,33 @@ export function resolveMatrixHomeserverUrl(env: Record<string, string | undefine
     return `https://${normalized}`;
   }
   return normalized;
+}
+
+export interface BlackoutRuntimeConfig {
+  homeserverUrl: string;
+  mode: "daily-chat";
+  rollout: {
+    cohort: ReleaseCohort;
+  };
+  presets: ResolvedPresetConfig;
+}
+
+function resolveReleaseCohort(raw: string | undefined): ReleaseCohort {
+  if (raw === "internal" || raw === "beta" || raw === "general") return raw;
+  return "internal";
+}
+
+export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefined>): BlackoutRuntimeConfig {
+  const deployment = parseJsonEnv<DeploymentPresetConfig>(env.VITE_FEATURE_DEPLOYMENT_DEFAULTS, {});
+  const tenantPolicy = parseJsonEnv<TenantPresetPolicy | undefined>(env.VITE_FEATURE_TENANT_POLICY, undefined);
+  const userOverrides = parseJsonEnv<UserPresetOverrides | undefined>(env.VITE_FEATURE_USER_OVERRIDES, undefined);
+
+  return {
+    homeserverUrl: resolveMatrixHomeserverUrl(env),
+    mode: "daily-chat",
+    rollout: {
+      cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
+    },
+    presets: resolveFeaturePreset(deployment, tenantPolicy, userOverrides),
+  };
 }
