@@ -140,4 +140,82 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("baseline_matrix");
   });
 
+  it("supports one meaningful entrypoint action per feature category", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      presets: {
+        activePreset: "blackout_full",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "blackout_full",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    const entrypointTestIds = [
+      "feature-toggle-stego-toolkit",
+      "feature-composer-rich-editing",
+      "feature-room-ephemeral-stego",
+      "feature-widget-townhall-sfu",
+      "feature-admin-governance-entitlements",
+    ];
+
+    for (const testId of entrypointTestIds) {
+      fireEvent.click(root.querySelector(`[data-testid=\"${testId}\"]`) as HTMLButtonElement);
+      expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened");
+    }
+  });
+
+  it("renders a ui entrypoint hook for every feature registry row", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    const allFeatureTestIds = [
+      "feature-toggle-stego-toolkit",
+      "feature-room-ephemeral-stego",
+      "feature-admin-governance-entitlements",
+      "feature-admin-federation-boost",
+      "feature-widget-townhall-sfu",
+      "feature-composer-rich-editing",
+      "feature-composer-typing-indicators",
+      "feature-widget-shell-layouts",
+      "feature-toggle-matrix-client",
+      "feature-toggle-homeserver-discovery",
+      "feature-toggle-e2ee-defaults",
+      "feature-toggle-oidc-auth",
+      "feature-widget-matrix-compat",
+      "feature-room-multiplatform-bootstrap",
+    ];
+
+    for (const testId of allFeatureTestIds) {
+      const primary = root.querySelector(`[data-testid=\"${testId}\"]`);
+      const unavailable = root.querySelector(`[data-testid=\"${testId}-unavailable\"]`);
+      expect(primary || unavailable).toBeTruthy();
+    }
+  });
+
 });

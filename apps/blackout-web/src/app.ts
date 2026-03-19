@@ -27,6 +27,7 @@ export class BlackoutWebApp {
   private readonly deploymentPreset: FeaturePresetKey;
   private appliedPreset: FeaturePresetKey;
   private selectedPreset: FeaturePresetKey;
+  private featureActionResult: string | null = null;
 
   constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
     homeserverUrl: "https://matrix.blackout.local",
@@ -73,6 +74,7 @@ export class BlackoutWebApp {
         </header>
         ${this.renderPresetManagementSection()}
         ${this.renderFeatureEntryPoints()}
+        ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
         ${loading.servers || loading.channels || loading.messages ? '<p class="loading">Syncing workspace…</p>' : ""}
@@ -115,7 +117,7 @@ export class BlackoutWebApp {
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
       const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
-        ? `<button type="button" class="ghost-btn" data-testid="${testId}">${feature.name}</button>`
+        ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
         : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
       const row = `<li class="stack"><strong>${feature.id}</strong><span class="meta">${feature.uiEntry}</span>${content}</li>`;
       grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
@@ -248,6 +250,16 @@ export class BlackoutWebApp {
       this.appliedPreset = this.deploymentPreset;
       this.selectedPreset = this.deploymentPreset;
       this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const featureId = button.dataset.featureId;
+        const kind = button.dataset.featureKind;
+        if (!featureId || !kind) return;
+        this.featureActionResult = `Opened ${featureId} via ${kind}.`;
+        this.render();
+      });
     });
 
 
