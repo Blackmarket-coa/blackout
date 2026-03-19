@@ -20,7 +20,9 @@
     "guard:port": "node tools/ci/check-no-port-changes.mjs",
     "guard:port:range": "node tools/ci/check-no-port-changes.mjs",
     "test:guard:port": "node --test tools/ci/check-no-port-changes.test.mjs",
-    "start": "node index.js"
+    "start": "node index.js",
+    "guard:feature-registry": "node tools/ci/check-feature-registry.mjs",
+    "test:guard:feature-registry": "node --test tools/ci/check-feature-registry.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

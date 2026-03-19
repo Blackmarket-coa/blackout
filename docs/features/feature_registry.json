@@ -1,0 +1,219 @@
+[
+  {
+    "id": "stego_toolkit",
+    "name": "Steganographic messaging toolkit",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.stego.enabled",
+    "uiEntry": "route:/settings/privacy-stego",
+    "owner": "privacy-eng",
+    "testCoverage": "doc-only",
+    "notes": "Core roadmap is documented but migration into blackout-web is incomplete.",
+    "sourcePointers": [
+      "docs/features/privacy_first_stego_roadmap.md",
+      "docs/features/privacy_first_stego_completion_tracker.md",
+      "docs/features/repo_feature_inventory.md"
+    ]
+  },
+  {
+    "id": "ephemeral_stego_lifecycle",
+    "name": "Ephemeral stego lifecycle management",
+    "category": "novel",
+    "status": "planned",
+    "presetKey": "features.stego.ephemeral",
+    "uiEntry": "component:CreateEntityModal",
+    "owner": "privacy-eng",
+    "testCoverage": "none",
+    "notes": "Lifecycle and self-destruct semantics are in phase plans and still pending implementation in app flows.",
+    "sourcePointers": [
+      "docs/features/privacy_first_stego_roadmap.md",
+      "docs/features/privacy_first_stego_completion_tracker.md"
+    ]
+  },
+  {
+    "id": "governance_entitlements",
+    "name": "Governance and entitlement policy layer",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.governance.entitlements",
+    "uiEntry": "route:/settings/governance",
+    "owner": "governance-platform",
+    "testCoverage": "doc-only",
+    "notes": "Policy controls and audits are tracked in governance migration/build plans.",
+    "sourcePointers": [
+      "docs/blackout-governance-build-plan.md",
+      "docs/blackout-governance-migration.md",
+      "docs/features/governance_features_analysis.md"
+    ]
+  },
+  {
+    "id": "federation_boost_policy",
+    "name": "Federation boost policy engine",
+    "category": "novel",
+    "status": "planned",
+    "presetKey": "features.federationBoost.enabled",
+    "uiEntry": "route:/settings/federation-boost",
+    "owner": "federation-eng",
+    "testCoverage": "none",
+    "notes": "Revenue-share and abuse-throttle policy remains roadmap work.",
+    "sourcePointers": [
+      "docs/14-stream-revenue-implementation-plan.md",
+      "docs/features/repo_feature_inventory.md"
+    ]
+  },
+  {
+    "id": "townhall_sfu",
+    "name": "Townhall SFU sessions and moderation",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.townhall.enabled",
+    "uiEntry": "route:/widgets/townhall",
+    "owner": "rtc-platform",
+    "testCoverage": "runbook-and-manifest",
+    "notes": "Infrastructure and runbooks are present, with blackout-web UI still converging.",
+    "sourcePointers": [
+      "docs/blackout-sfu-townhall-build-plan.md",
+      "docs/operations/runbooks/townhall-observability-runbook.md",
+      "deploy/kubernetes/phase4/element-ha.yaml"
+    ]
+  },
+  {
+    "id": "rich_composer",
+    "name": "Rich composer ergonomics",
+    "category": "discord_like",
+    "status": "implemented",
+    "presetKey": "features.composer.richEditing",
+    "uiEntry": "component:MessageInput",
+    "owner": "blackout-web",
+    "testCoverage": "integration",
+    "notes": "Composer component and feature docs are established in the web app.",
+    "sourcePointers": [
+      "docs/features/composer.md",
+      "apps/blackout-web/src/components/MessageInput.ts",
+      "apps/blackout-web/tests/integration/app.test.ts"
+    ]
+  },
+  {
+    "id": "typing_indicators",
+    "name": "Typing indicators",
+    "category": "discord_like",
+    "status": "partial",
+    "presetKey": "features.composer.typingIndicators",
+    "uiEntry": "component:ChatWindow",
+    "owner": "blackout-web",
+    "testCoverage": "partial-integration",
+    "notes": "Behavior is inventoried, but dedicated UI test IDs are still being standardized.",
+    "sourcePointers": [
+      "docs/features/repo_feature_inventory.md",
+      "apps/blackout-web/src/components/ChatWindow.ts"
+    ]
+  },
+  {
+    "id": "widget_shell_layouts",
+    "name": "Widget shell layouts",
+    "category": "discord_like",
+    "status": "partial",
+    "presetKey": "features.widgets.layouts",
+    "uiEntry": "route:/room/:id/widgets",
+    "owner": "matrix-ui",
+    "testCoverage": "doc-only",
+    "notes": "Widget placement and layout conventions are documented; app-level test wiring is pending.",
+    "sourcePointers": [
+      "docs/widget-layouts.md",
+      "docs/features/frontend-backend-contract.md"
+    ]
+  },
+  {
+    "id": "matrix_client_arch",
+    "name": "Matrix-native client architecture",
+    "category": "matrix_like",
+    "status": "implemented",
+    "presetKey": "features.matrix.client",
+    "uiEntry": "service:matrix-client",
+    "owner": "matrix-platform",
+    "testCoverage": "unit",
+    "notes": "Matrix client service is in blackout-web and covered by unit tests.",
+    "sourcePointers": [
+      "apps/blackout-web/src/services/matrix-client.ts",
+      "apps/blackout-web/src/app.ts",
+      "apps/blackout-web/tests/unit/api-client.test.ts"
+    ]
+  },
+  {
+    "id": "homeserver_discovery",
+    "name": "Homeserver discovery and validation",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.matrix.homeserverDiscovery",
+    "uiEntry": "route:/login/custom-home",
+    "owner": "matrix-platform",
+    "testCoverage": "doc-and-config",
+    "notes": "Discovery and custom homeserver behavior is captured in docs and config wiring.",
+    "sourcePointers": [
+      "docs/custom-home.md",
+      "apps/blackout-web/src/config.ts",
+      "docs/features/repo_feature_inventory.md"
+    ]
+  },
+  {
+    "id": "e2ee_defaults",
+    "name": "E2EE defaults and policy controls",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.security.e2eeDefaults",
+    "uiEntry": "route:/settings/security/e2ee",
+    "owner": "security-platform",
+    "testCoverage": "doc-only",
+    "notes": "Encrypted room expectations are documented; automated UI checks are still planned.",
+    "sourcePointers": [
+      "docs/e2ee.md",
+      "docs/security-phase2-app-hardening.md"
+    ]
+  },
+  {
+    "id": "oidc_delegated_auth",
+    "name": "OIDC delegated authentication",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.auth.oidc",
+    "uiEntry": "component:auth-view",
+    "owner": "identity-platform",
+    "testCoverage": "unit",
+    "notes": "OIDC flow is documented with auth feature scaffold in app source.",
+    "sourcePointers": [
+      "docs/oidc.md",
+      "apps/blackout-web/src/features/auth/auth-view.ts",
+      "docs/security-phase3-auth-modernization.md"
+    ]
+  },
+  {
+    "id": "matrix_widget_compat",
+    "name": "Matrix widget state-event compatibility",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.matrix.widgetCompat",
+    "uiEntry": "component:ChatWindow",
+    "owner": "matrix-ui",
+    "testCoverage": "doc-only",
+    "notes": "Compatibility expectations are tracked in feature inventory and widget docs.",
+    "sourcePointers": [
+      "docs/features/repo_feature_inventory.md",
+      "docs/widget-layouts.md"
+    ]
+  },
+  {
+    "id": "multiplatform_bootstrap",
+    "name": "Multi-platform Matrix bootstrap",
+    "category": "matrix_like",
+    "status": "planned",
+    "presetKey": "features.platform.bootstrap",
+    "uiEntry": "route:/bootstrap",
+    "owner": "platform-foundation",
+    "testCoverage": "none",
+    "notes": "Platform selection and module bootstrap model remains largely in planning docs.",
+    "sourcePointers": [
+      "docs/install.md",
+      "docs/features/repo_feature_inventory.md"
+    ]
+  }
+]
