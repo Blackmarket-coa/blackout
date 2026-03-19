@@ -3,6 +3,11 @@ import type { ThemePreference } from '../styles/theme.css';
 
 export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
 
+export interface LayoutSettings {
+  spaceColumnWidth: number;
+  roomColumnWidth: number;
+}
+
 export interface AppSettings {
   theme: ThemePreference;
   pageZoom: number;
@@ -12,6 +17,7 @@ export interface AppSettings {
   chatDensity: ChatDensity;
   devMode: boolean;
   streamerMode: boolean;
+  layout: LayoutSettings;
 }
 
 const defaultSettings: AppSettings = {
@@ -23,6 +29,10 @@ const defaultSettings: AppSettings = {
   chatDensity: 'comfortable',
   devMode: false,
   streamerMode: false,
+  layout: {
+    spaceColumnWidth: 64,
+    roomColumnWidth: 260,
+  },
 };
 
 /**
