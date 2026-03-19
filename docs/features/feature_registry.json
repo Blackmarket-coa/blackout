@@ -1,0 +1,345 @@
+[
+  {
+    "id": "stego_toolkit",
+    "name": "Steganographic messaging toolkit",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.stego.enabled",
+    "uiEntry": "settings_toggle:feature-toggle-stego-toolkit",
+    "owner": "privacy-eng",
+    "testCoverage": "doc-only",
+    "notes": "Core roadmap is documented but migration into blackout-web is incomplete.",
+    "sourcePointers": [
+      "docs/features/privacy_first_stego_roadmap.md",
+      "docs/features/privacy_first_stego_completion_tracker.md",
+      "docs/features/repo_feature_inventory.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "ephemeral_stego_lifecycle",
+    "name": "Ephemeral stego lifecycle management",
+    "category": "novel",
+    "status": "planned",
+    "presetKey": "features.stego.ephemeral",
+    "uiEntry": "room_action:feature-room-ephemeral-stego",
+    "owner": "privacy-eng",
+    "testCoverage": "none",
+    "notes": "Lifecycle and self-destruct semantics are in phase plans and still pending implementation in app flows.",
+    "sourcePointers": [
+      "docs/features/privacy_first_stego_roadmap.md",
+      "docs/features/privacy_first_stego_completion_tracker.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "governance_entitlements",
+    "name": "Governance and entitlement policy layer",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.governance.entitlements",
+    "uiEntry": "admin_console:feature-admin-governance-entitlements",
+    "owner": "governance-platform",
+    "testCoverage": "doc-only",
+    "notes": "Policy controls and audits are tracked in governance migration/build plans.",
+    "sourcePointers": [
+      "docs/blackout-governance-build-plan.md",
+      "docs/blackout-governance-migration.md",
+      "docs/features/governance_features_analysis.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "federation_boost_policy",
+    "name": "Federation boost policy engine",
+    "category": "novel",
+    "status": "planned",
+    "presetKey": "features.federationBoost.enabled",
+    "uiEntry": "admin_console:feature-admin-federation-boost",
+    "owner": "federation-eng",
+    "testCoverage": "none",
+    "notes": "Revenue-share and abuse-throttle policy remains roadmap work.",
+    "sourcePointers": [
+      "docs/14-stream-revenue-implementation-plan.md",
+      "docs/features/repo_feature_inventory.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-admin-federation-boost"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "townhall_sfu",
+    "name": "Townhall SFU sessions and moderation",
+    "category": "novel",
+    "status": "partial",
+    "presetKey": "features.townhall.enabled",
+    "uiEntry": "widget_panel:feature-widget-townhall-sfu",
+    "owner": "rtc-platform",
+    "testCoverage": "runbook-and-manifest",
+    "notes": "Infrastructure and runbooks are present, with blackout-web UI still converging.",
+    "sourcePointers": [
+      "docs/blackout-sfu-townhall-build-plan.md",
+      "docs/operations/runbooks/townhall-observability-runbook.md",
+      "deploy/kubernetes/phase4/element-ha.yaml"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-townhall-sfu"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "rich_composer",
+    "name": "Rich composer ergonomics",
+    "category": "discord_like",
+    "status": "implemented",
+    "presetKey": "features.composer.richEditing",
+    "uiEntry": "composer_action:feature-composer-rich-editing",
+    "owner": "blackout-web",
+    "testCoverage": "integration",
+    "notes": "Composer component and feature docs are established in the web app.",
+    "sourcePointers": [
+      "docs/features/composer.md",
+      "apps/blackout-web/src/components/MessageInput.ts",
+      "apps/blackout-web/tests/integration/app.test.ts"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-composer-rich-editing"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "typing_indicators",
+    "name": "Typing indicators",
+    "category": "discord_like",
+    "status": "partial",
+    "presetKey": "features.composer.typingIndicators",
+    "uiEntry": "composer_action:feature-composer-typing-indicators",
+    "owner": "blackout-web",
+    "testCoverage": "partial-integration",
+    "notes": "Behavior is inventoried, but dedicated UI test IDs are still being standardized.",
+    "sourcePointers": [
+      "docs/features/repo_feature_inventory.md",
+      "apps/blackout-web/src/components/ChatWindow.ts"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-composer-typing-indicators"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "widget_shell_layouts",
+    "name": "Widget shell layouts",
+    "category": "discord_like",
+    "status": "partial",
+    "presetKey": "features.widgets.layouts",
+    "uiEntry": "widget_panel:feature-widget-shell-layouts",
+    "owner": "matrix-ui",
+    "testCoverage": "doc-only",
+    "notes": "Widget placement and layout conventions are documented; app-level test wiring is pending.",
+    "sourcePointers": [
+      "docs/widget-layouts.md",
+      "docs/features/frontend-backend-contract.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-shell-layouts"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "matrix_client_arch",
+    "name": "Matrix-native client architecture",
+    "category": "matrix_like",
+    "status": "implemented",
+    "presetKey": "features.matrix.client",
+    "uiEntry": "settings_toggle:feature-toggle-matrix-client",
+    "owner": "matrix-platform",
+    "testCoverage": "unit",
+    "notes": "Matrix client service is in blackout-web and covered by unit tests.",
+    "sourcePointers": [
+      "apps/blackout-web/src/services/matrix-client.ts",
+      "apps/blackout-web/src/app.ts",
+      "apps/blackout-web/tests/unit/api-client.test.ts"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "homeserver_discovery",
+    "name": "Homeserver discovery and validation",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.matrix.homeserverDiscovery",
+    "uiEntry": "settings_toggle:feature-toggle-homeserver-discovery",
+    "owner": "matrix-platform",
+    "testCoverage": "doc-and-config",
+    "notes": "Discovery and custom homeserver behavior is captured in docs and config wiring.",
+    "sourcePointers": [
+      "docs/custom-home.md",
+      "apps/blackout-web/src/config.ts",
+      "docs/features/repo_feature_inventory.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-homeserver-discovery"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "e2ee_defaults",
+    "name": "E2EE defaults and policy controls",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.security.e2eeDefaults",
+    "uiEntry": "settings_toggle:feature-toggle-e2ee-defaults",
+    "owner": "security-platform",
+    "testCoverage": "doc-only",
+    "notes": "Encrypted room expectations are documented; automated UI checks are still planned.",
+    "sourcePointers": [
+      "docs/e2ee.md",
+      "docs/security-phase2-app-hardening.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-e2ee-defaults"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "oidc_delegated_auth",
+    "name": "OIDC delegated authentication",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.auth.oidc",
+    "uiEntry": "settings_toggle:feature-toggle-oidc-auth",
+    "owner": "identity-platform",
+    "testCoverage": "unit",
+    "notes": "OIDC flow is documented with auth feature scaffold in app source.",
+    "sourcePointers": [
+      "docs/oidc.md",
+      "apps/blackout-web/src/features/auth/auth-view.ts",
+      "docs/security-phase3-auth-modernization.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-oidc-auth"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "matrix_widget_compat",
+    "name": "Matrix widget state-event compatibility",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.matrix.widgetCompat",
+    "uiEntry": "widget_panel:feature-widget-matrix-compat",
+    "owner": "matrix-ui",
+    "testCoverage": "doc-only",
+    "notes": "Compatibility expectations are tracked in feature inventory and widget docs.",
+    "sourcePointers": [
+      "docs/features/repo_feature_inventory.md",
+      "docs/widget-layouts.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-widget-matrix-compat"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "multiplatform_bootstrap",
+    "name": "Multi-platform Matrix bootstrap",
+    "category": "matrix_like",
+    "status": "planned",
+    "presetKey": "features.platform.bootstrap",
+    "uiEntry": "room_action:feature-room-multiplatform-bootstrap",
+    "owner": "platform-foundation",
+    "testCoverage": "none",
+    "notes": "Platform selection and module bootstrap model remains largely in planning docs.",
+    "sourcePointers": [
+      "docs/install.md",
+      "docs/features/repo_feature_inventory.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  }
+]

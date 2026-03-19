@@ -13,9 +13,24 @@ const commands = [
     args: ['test'],
   },
   {
+    label: 'Feature failure-budget guard',
+    cmd: 'pnpm',
+    args: ['guard:feature-budget'],
+  },
+  {
+    label: 'Preset-complete definition-of-done guard',
+    cmd: 'pnpm',
+    args: ['guard:preset-complete'],
+  },
+  {
+    label: 'Preset smoke matrix',
+    cmd: 'pnpm',
+    args: ['ci:smoke:preset-matrix'],
+  },
+  {
     label: 'Web shell build smoke gate',
     cmd: 'pnpm',
-    args: ['--filter', '@blackout/web', 'build'],
+    args: ['--filter', '@blackout/blackout-web', 'build'],
   },
 ];
 
