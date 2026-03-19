@@ -20,7 +20,14 @@
     "guard:port": "node tools/ci/check-no-port-changes.mjs",
     "guard:port:range": "node tools/ci/check-no-port-changes.mjs",
     "test:guard:port": "node --test tools/ci/check-no-port-changes.test.mjs",
-    "start": "node index.js"
+    "start": "node index.js",
+    "guard:feature-registry": "node tools/ci/check-feature-registry.mjs",
+    "test:guard:feature-registry": "node --test tools/ci/check-feature-registry.test.mjs",
+    "ci:smoke:preset-matrix": "node tools/ci/run-preset-smoke-matrix.mjs",
+    "guard:feature-budget": "node tools/ci/check-feature-ui-test-coverage.mjs",
+    "test:guard:feature-budget": "node --test tools/ci/check-feature-ui-test-coverage.test.mjs",
+    "guard:preset-complete": "node tools/ci/check-preset-complete-features.mjs",
+    "test:guard:preset-complete": "node --test tools/ci/check-preset-complete-features.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

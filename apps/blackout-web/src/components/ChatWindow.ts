@@ -7,11 +7,22 @@ interface ChatWindowProps {
   messages: ChatMessage[];
   canSend: boolean;
   sendPending: boolean;
+  richEditingEnabled: boolean;
+  typingIndicatorsEnabled: boolean;
+  showTypingIndicator: boolean;
 }
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
-export function renderChatWindow({ channelLabel, messages, canSend, sendPending }: ChatWindowProps): string {
+export function renderChatWindow({
+  channelLabel,
+  messages,
+  canSend,
+  sendPending,
+  richEditingEnabled,
+  typingIndicatorsEnabled,
+  showTypingIndicator,
+}: ChatWindowProps): string {
   const renderedMessages = renderGroupedMessages(messages);
 
   return `
@@ -21,7 +32,12 @@ export function renderChatWindow({ channelLabel, messages, canSend, sendPending 
         <span>${channelLabel}</span>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet</li>'}</ul>
-      ${renderMessageInput(!canSend || sendPending)}
+      ${renderMessageInput({
+        disabled: !canSend || sendPending,
+        richEditingEnabled,
+        typingIndicatorsEnabled,
+        showTypingIndicator,
+      })}
     </section>
   `;
 }
