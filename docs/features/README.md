@@ -29,5 +29,6 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 - `privacy-first-phase5/`: Phase 5 paid encrypted room creator-key lifecycle artifacts (payment-gated grants, device binding, rotation/revocation, private discovery defaults).
 - `privacy-first-phase6/`: Phase 6 plugin sandbox and cosmetic marketplace safety artifacts (capability manifests, explicit/revocable permissions, network/exfiltration conformance tests).
 - `epic_name_delivery_blueprint.md`: EPIC implementation scaffold covering technical design, schema evolution, UI/UX, testing, telemetry, feature flags, and migration notes.
+- `epic_open_source_options.md`: vetted open-source implementation options for EPIC feature flags, policy enforcement, telemetry, schema validation, and Matrix compatibility testing.
 
 - `../blackout-rollout-runbook.md`: rollout hardening checklist for operations, localization readiness, and policy tuning.
