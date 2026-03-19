@@ -85,7 +85,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       presets: {
         activePreset: "community_plus",
-        features: {},
+        features: {
+          "features.composer.richEditing": true,
+          "features.governance.entitlements": false,
+        },
         diagnostics: {
           deploymentPreset: "baseline_matrix",
           tenantPreset: "community_plus",
@@ -97,6 +100,8 @@ describe("BlackoutWebApp integration", () => {
 
     expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("community_plus");
     expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
+    expect(root.querySelector('[data-testid="feature-composer-rich-editing"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="feature-admin-governance-entitlements-unavailable"]')).toBeTruthy();
   });
 
 });

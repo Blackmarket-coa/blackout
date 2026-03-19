@@ -34,6 +34,7 @@ const BASELINE_MATRIX: FeatureFlagMap = {
   "features.security.e2eeDefaults": true,
   "features.auth.oidc": true,
   "features.matrix.widgetCompat": true,
+  "features.platform.bootstrap": false,
   "features.composer.richEditing": false,
   "features.composer.typingIndicators": false,
   "features.widgets.layouts": false,
@@ -56,6 +57,7 @@ const BLACKOUT_FULL: FeatureFlagMap = {
   "features.governance.entitlements": true,
   "features.federationBoost.enabled": true,
   "features.townhall.enabled": true,
+  "features.platform.bootstrap": true,
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {

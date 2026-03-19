@@ -27,7 +27,7 @@ test('passes with valid rows', () => {
       category: 'novel',
       status: 'implemented',
       presetKey: 'features.a',
-      uiEntry: 'component:A',
+      uiEntry: 'settings_toggle:feature-toggle-a',
       owner: 'team-a',
       testCoverage: 'unit',
       notes: 'ok',
@@ -48,7 +48,7 @@ test('fails with duplicate ids', () => {
       category: 'novel',
       status: 'implemented',
       presetKey: 'features.a',
-      uiEntry: 'component:A',
+      uiEntry: 'settings_toggle:feature-toggle-a',
       owner: 'team-a',
       testCoverage: 'unit',
       notes: 'ok',
@@ -60,7 +60,7 @@ test('fails with duplicate ids', () => {
       category: 'matrix_like',
       status: 'partial',
       presetKey: 'features.b',
-      uiEntry: 'component:B',
+      uiEntry: 'widget_panel:feature-widget-b',
       owner: 'team-b',
       testCoverage: 'integration',
       notes: 'ok',
@@ -86,4 +86,25 @@ test('fails with missing required fields', () => {
   const res = runScript(file);
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /missing required field/);
+});
+
+test('fails with invalid uiEntry mapping', () => {
+  const file = writeFixture([
+    {
+      id: 'bad_ui_entry',
+      name: 'Feature D',
+      category: 'novel',
+      status: 'partial',
+      presetKey: 'features.d',
+      uiEntry: 'component:legacy',
+      owner: 'team-d',
+      testCoverage: 'none',
+      notes: 'bad ui entry',
+      sourcePointers: ['docs/d.md'],
+    },
+  ]);
+
+  const res = runScript(file);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /uiEntry must start with one of/);
 });

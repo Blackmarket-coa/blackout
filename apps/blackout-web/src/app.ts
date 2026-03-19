@@ -7,6 +7,7 @@ import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
 import { SessionStore } from "./session/store";
+import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChatMessage, ServerDetails } from "./types";
@@ -63,6 +64,7 @@ export class BlackoutWebApp {
           <p class="meta" data-testid="active-preset">Active preset: <strong>${this.runtimeConfig.presets.activePreset}</strong></p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
+        ${this.renderFeatureEntryPoints()}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
         ${loading.servers || loading.channels || loading.messages ? '<p class="loading">Syncing workspace…</p>' : ""}
@@ -95,6 +97,39 @@ export class BlackoutWebApp {
           canSend: Boolean(state.activeChannelId),
           sendPending: state.loading.send,
         })}
+      </section>
+    `;
+  }
+
+  private renderFeatureEntryPoints(): string {
+    const grouped = new Map<UiEntryKind, string[]>();
+    for (const feature of FEATURE_UI_ENTRIES) {
+      const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      const enabled = this.runtimeConfig.presets.features[feature.presetKey] ?? false;
+      const content = enabled
+        ? `<button type="button" class="ghost-btn" data-testid="${testId}">${feature.name}</button>`
+        : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
+      const row = `<li class="stack"><strong>${feature.id}</strong><span class="meta">${feature.uiEntry}</span>${content}</li>`;
+      grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
+    }
+
+    return `
+      <section class="stack" data-testid="feature-entrypoint-registry">
+        <h2>Feature entry points</h2>
+        ${this.renderFeatureGroup("settings toggle", grouped.get("settings_toggle") ?? [])}
+        ${this.renderFeatureGroup("composer action", grouped.get("composer_action") ?? [])}
+        ${this.renderFeatureGroup("room action", grouped.get("room_action") ?? [])}
+        ${this.renderFeatureGroup("widget panel", grouped.get("widget_panel") ?? [])}
+        ${this.renderFeatureGroup("admin/governance console", grouped.get("admin_console") ?? [])}
+      </section>
+    `;
+  }
+
+  private renderFeatureGroup(label: string, items: string[]): string {
+    return `
+      <section class="stack">
+        <h3>${label}</h3>
+        <ul class="stack">${items.join("")}</ul>
       </section>
     `;
   }

@@ -17,6 +17,13 @@ const REQUIRED_FIELDS = [
 
 const VALID_CATEGORIES = new Set(['novel', 'discord_like', 'matrix_like']);
 const VALID_STATUSES = new Set(['implemented', 'partial', 'planned']);
+const VALID_UI_ENTRY_PREFIXES = new Set([
+  'settings_toggle',
+  'composer_action',
+  'room_action',
+  'widget_panel',
+  'admin_console',
+]);
 
 function getArg(name) {
   const index = process.argv.indexOf(name);
@@ -81,6 +88,16 @@ for (const [index, row] of registry.entries()) {
 
   if (typeof row.status === 'string' && !VALID_STATUSES.has(row.status)) {
     errors.push(`${prefix}: invalid status "${row.status}".`);
+  }
+
+  if (typeof row.uiEntry === 'string') {
+    const [uiPrefix, testId] = row.uiEntry.split(':');
+    if (!VALID_UI_ENTRY_PREFIXES.has(uiPrefix)) {
+      errors.push(`${prefix}: uiEntry must start with one of ${Array.from(VALID_UI_ENTRY_PREFIXES).join(', ')}.`);
+    }
+    if (!testId || testId.trim().length === 0) {
+      errors.push(`${prefix}: uiEntry must include a data-testid suffix after ':'.`);
+    }
   }
 
   if (!Array.isArray(row.sourcePointers) || row.sourcePointers.length === 0) {
