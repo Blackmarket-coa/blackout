@@ -29,6 +29,7 @@ export class BlackoutWebApp {
   private appliedPreset: FeaturePresetKey;
   private selectedPreset: FeaturePresetKey;
   private featureActionResult: string | null = null;
+  private featureFilter = "";
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
 
@@ -84,8 +85,10 @@ export class BlackoutWebApp {
           <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
-        ${this.renderPresetManagementSection()}
-        ${this.renderFeatureEntryPoints()}
+        <section class="admin-grid">
+          ${this.renderPresetManagementSection()}
+          ${this.renderFeatureEntryPoints()}
+        </section>
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -124,8 +127,15 @@ export class BlackoutWebApp {
   }
 
   private renderFeatureEntryPoints(): string {
+    const filterQuery = this.featureFilter.trim().toLowerCase();
     const grouped = new Map<UiEntryKind, string[]>();
     for (const feature of FEATURE_UI_ENTRIES) {
+      if (
+        filterQuery &&
+        !`${feature.id} ${feature.name} ${feature.uiEntry}`.toLowerCase().includes(filterQuery)
+      ) {
+        continue;
+      }
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
       const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
@@ -137,10 +147,14 @@ export class BlackoutWebApp {
       const row = `<li class="stack"><strong>${feature.id}</strong><span class="meta">${feature.uiEntry}</span>${content}</li>`;
       grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
     }
+    const totalEntries = Array.from(grouped.values()).reduce((total, entries) => total + entries.length, 0);
+    const enabledCount = FEATURE_UI_ENTRIES.filter((feature) => this.getActivePresetFeatures()[feature.presetKey] ?? false).length;
 
     return `
-      <section class="stack" data-testid="feature-entrypoint-registry">
+      <section class="stack panel-card" data-testid="feature-entrypoint-registry">
         <h2>Feature entry points</h2>
+        <p class="meta">Visible entries: ${totalEntries}. Enabled in current preset: ${enabledCount}.</p>
+        <input type="search" data-action="filter-features" data-testid="feature-filter-input" value="${this.featureFilter}" placeholder="Filter by id, name, or entrypoint" />
         ${this.renderFeatureGroup("settings toggle", grouped.get("settings_toggle") ?? [])}
         ${this.renderFeatureGroup("composer action", grouped.get("composer_action") ?? [])}
         ${this.renderFeatureGroup("room action", grouped.get("room_action") ?? [])}
@@ -155,7 +169,7 @@ export class BlackoutWebApp {
     const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
 
     return `
-      <section class="stack" data-testid="feature-presets-panel">
+      <section class="stack panel-card" data-testid="feature-presets-panel">
         <h2>Feature Presets</h2>
         <p class="meta">Choose a preset, preview capabilities, and apply or rollback with confirmation.</p>
         <label class="stack">
@@ -168,6 +182,8 @@ export class BlackoutWebApp {
         </label>
         <div class="stack" data-testid="preset-explainer-panel">
           <h3>What this preset enables</h3>
+          <progress max="${previewFeatures.length}" value="${enabledFeatures.length}" data-testid="preset-capability-meter"></progress>
+          <p class="meta">${enabledFeatures.length}/${previewFeatures.length} capabilities enabled.</p>
           <ul class="stack">
             ${enabledFeatures.map((key) => `<li class="meta" data-testid="preset-capability-${key.replaceAll(".", "-")}">${key}</li>`).join("")}
           </ul>
@@ -190,10 +206,10 @@ export class BlackoutWebApp {
 
   private renderFeatureGroup(label: string, items: string[]): string {
     return `
-      <section class="stack">
-        <h3>${label}</h3>
-        <ul class="stack">${items.join("")}</ul>
-      </section>
+      <details class="stack" open>
+        <summary><strong>${label}</strong> <span class="meta">(${items.length})</span></summary>
+        <ul class="stack">${items.join("") || '<li class="empty">No matching entries.</li>'}</ul>
+      </details>
     `;
   }
 
@@ -247,6 +263,11 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
       this.selectedPreset = value;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='filter-features']")?.addEventListener("input", (event) => {
+      this.featureFilter = (event.currentTarget as HTMLInputElement).value;
       this.render();
     });
 

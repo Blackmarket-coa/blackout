@@ -28,6 +28,13 @@ body {
   font-size: 1.2rem;
 }
 
+.header {
+  padding: 1rem;
+  border: 1px solid #2a2c31;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1c2431, #161b24);
+}
+
 .meta {
   margin: 0.25rem 0 0;
   color: #b5bac1;
@@ -170,6 +177,34 @@ textarea {
   gap: 0.75rem;
 }
 
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.75rem;
+}
+
+.panel-card {
+  border: 1px solid #2a2c31;
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: #1a1d24;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.panel-card summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.panel-card summary::-webkit-details-marker {
+  display: none;
+}
+
+progress {
+  width: 100%;
+  height: 0.6rem;
+}
+
 .auth-shell {
   display: grid;
   gap: 0.75rem;
@@ -215,6 +250,10 @@ label {
   .workspace {
     grid-template-columns: 64px minmax(0, 1fr);
     position: relative;
+  }
+
+  .admin-grid {
+    grid-template-columns: 1fr;
   }
 
   .mobile-toggle {
