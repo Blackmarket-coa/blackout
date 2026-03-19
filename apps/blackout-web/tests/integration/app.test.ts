@@ -1,11 +1,12 @@
 import { fireEvent, getByRole, waitFor } from "@testing-library/dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
 describe("BlackoutWebApp integration", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it("supports auth submit, server switching, and message send flow", async () => {
@@ -102,6 +103,41 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
     expect(root.querySelector('[data-testid="feature-composer-rich-editing"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-admin-governance-entitlements-unavailable"]')).toBeTruthy();
+  });
+
+  it("supports preset choose, preview, apply, and rollback with confirmation", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-preset-select"]');
+    if (!select) throw new Error("missing preset select");
+
+    fireEvent.change(select, { target: { value: "blackout_full" } });
+    expect(root.querySelector('[data-testid="preset-capability-features-stego-enabled"]')).toBeTruthy();
+
+    fireEvent.click(root.querySelector('[data-testid="apply-preset-button"]') as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("blackout_full");
+
+    fireEvent.click(root.querySelector('[data-testid="rollback-preset-button"]') as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("baseline_matrix");
   });
 
 });

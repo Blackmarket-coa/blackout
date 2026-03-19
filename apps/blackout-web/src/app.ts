@@ -8,6 +8,7 @@ import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
 import { SessionStore } from "./session/store";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChatMessage, ServerDetails } from "./types";
@@ -23,6 +24,9 @@ export class BlackoutWebApp {
   private readonly seenEventIds = new Set<string>();
 
   private readonly runtimeConfig: BlackoutRuntimeConfig;
+  private readonly deploymentPreset: FeaturePresetKey;
+  private appliedPreset: FeaturePresetKey;
+  private selectedPreset: FeaturePresetKey;
 
   constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
     homeserverUrl: "https://matrix.blackout.local",
@@ -39,6 +43,9 @@ export class BlackoutWebApp {
   }) {
     this.root = root;
     this.runtimeConfig = runtimeConfig;
+    this.deploymentPreset = runtimeConfig.presets.activePreset;
+    this.appliedPreset = runtimeConfig.presets.activePreset;
+    this.selectedPreset = runtimeConfig.presets.activePreset;
   }
 
   async mount(): Promise<void> {
@@ -61,9 +68,10 @@ export class BlackoutWebApp {
         <header class="header">
           <h1>Blackout Core</h1>
           <p class="meta">Discord-like starter shell on top of Matrix-compatible APIs.</p>
-          <p class="meta" data-testid="active-preset">Active preset: <strong>${this.runtimeConfig.presets.activePreset}</strong></p>
+          <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
+        ${this.renderPresetManagementSection()}
         ${this.renderFeatureEntryPoints()}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -105,7 +113,7 @@ export class BlackoutWebApp {
     const grouped = new Map<UiEntryKind, string[]>();
     for (const feature of FEATURE_UI_ENTRIES) {
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
-      const enabled = this.runtimeConfig.presets.features[feature.presetKey] ?? false;
+      const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-testid="${testId}">${feature.name}</button>`
         : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
@@ -123,6 +131,44 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("admin/governance console", grouped.get("admin_console") ?? [])}
       </section>
     `;
+  }
+
+  private renderPresetManagementSection(): string {
+    const previewFeatures = Object.entries(FEATURE_PRESET_BUNDLES[this.selectedPreset]);
+    const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
+
+    return `
+      <section class="stack" data-testid="feature-presets-panel">
+        <h2>Feature Presets</h2>
+        <p class="meta">Choose a preset, preview capabilities, and apply or rollback with confirmation.</p>
+        <label class="stack">
+          Preset
+          <select data-testid="feature-preset-select" data-action="select-preset">
+            ${this.renderPresetOption("baseline_matrix")}
+            ${this.renderPresetOption("community_plus")}
+            ${this.renderPresetOption("blackout_full")}
+          </select>
+        </label>
+        <div class="stack" data-testid="preset-explainer-panel">
+          <h3>What this preset enables</h3>
+          <ul class="stack">
+            ${enabledFeatures.map((key) => `<li class="meta" data-testid="preset-capability-${key.replaceAll(".", "-")}">${key}</li>`).join("")}
+          </ul>
+        </div>
+        <div class="modal-actions">
+          <button type="button" data-action="apply-preset" data-testid="apply-preset-button" ${this.selectedPreset === this.appliedPreset ? "disabled" : ""}>Apply preset</button>
+          <button type="button" class="ghost-btn" data-action="rollback-preset" data-testid="rollback-preset-button" ${this.appliedPreset === this.deploymentPreset ? "disabled" : ""}>Rollback to deployment preset</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderPresetOption(preset: FeaturePresetKey): string {
+    return `<option value="${preset}" ${this.selectedPreset === preset ? "selected" : ""}>${preset}</option>`;
+  }
+
+  private getActivePresetFeatures(): Record<string, boolean> {
+    return FEATURE_PRESET_BUNDLES[this.appliedPreset];
   }
 
   private renderFeatureGroup(label: string, items: string[]): string {
@@ -179,6 +225,29 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLFormElement>("#create-entity-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.submitCreateEntity(event.currentTarget as HTMLFormElement);
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
+      this.selectedPreset = value;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='apply-preset']")?.addEventListener("click", () => {
+      if (this.selectedPreset === this.appliedPreset) return;
+      const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?`) ?? true;
+      if (!approved) return;
+      this.appliedPreset = this.selectedPreset;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='rollback-preset']")?.addEventListener("click", () => {
+      if (this.appliedPreset === this.deploymentPreset) return;
+      const approved = globalThis.confirm?.(`Rollback preset to ${this.deploymentPreset}?`) ?? true;
+      if (!approved) return;
+      this.appliedPreset = this.deploymentPreset;
+      this.selectedPreset = this.deploymentPreset;
+      this.render();
     });
 
 
