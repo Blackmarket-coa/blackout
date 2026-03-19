@@ -20,9 +20,32 @@ body {
   background: rgb(13 22 35 / 88%);
 }
 
-.status {
-  color: #7bf1ae;
-  font-weight: 600;
+.header {
+  margin-bottom: 1rem;
+}
+
+.meta {
+  color: #c6d6f3;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tab {
+  border: 1px solid #2f4b73;
+  border-radius: 8px;
+  background: #101a2a;
+  color: #d7e6ff;
+  padding: 0.4rem 0.7rem;
+}
+
+.tab.is-active {
+  border-color: #75a5ff;
+  background: #1a2e4f;
 }
 
 dl {
@@ -41,5 +64,58 @@ dd {
 }
 
 a {
+  color: #9ec3ff;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  border: 1px solid #2f4b73;
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #0f1724;
+  color: #f4f8ff;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid #2f4b73;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  background: #1b2e4c;
+  color: #f4f8ff;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.error {
+  border: 1px solid #8d2f3a;
+  background: #43131c;
+  color: #ffafbd;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+
+.loading {
   color: #9ec3ff;
 }

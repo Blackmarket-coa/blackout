@@ -45,6 +45,8 @@ storybook-static
 
 # blackout-web vite output
 /apps/blackout-web/dist
+/apps/blackout-web/test-results
+/apps/blackout-web/playwright-report
 
 # TSC incremental compilation information
 *.tsbuildinfo

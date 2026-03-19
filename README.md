@@ -112,6 +112,14 @@ If deployed on Railway, use your Railway domain instead of localhost:
    - `/` returns the built frontend app.
    - `/health` and `/ready` return 200 JSON.
 
+### Frontend quality checks (`apps/blackout-web`)
+
+```bash
+pnpm --filter @blackout/blackout-web test:unit
+pnpm --filter @blackout/blackout-web test:integration
+pnpm --filter @blackout/blackout-web test:e2e
+```
+
 ---
 
 ## Development workflow
