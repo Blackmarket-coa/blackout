@@ -43,5 +43,8 @@ storybook-static
 /packages/shared-components/dist
 /packages/shared-components/src/i18nKeys.d.ts
 
+# blackout-web vite output
+/apps/blackout-web/dist
+
 # TSC incremental compilation information
 *.tsbuildinfo

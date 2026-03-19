@@ -81,23 +81,36 @@ On Windows, use the same command:
 pnpm build
 ```
 
-### Run the placeholder frontend shell
+### Build and run the frontend
 
 ```bash
+pnpm --filter @blackout/blackout-web build:web
 pnpm start
 ```
 
 Then open:
 
-- Frontend shell: `http://localhost:3000/`
+- Frontend app: `http://localhost:3000/`
 - Health endpoint: `http://localhost:3000/health`
 - Readiness endpoint: `http://localhost:3000/ready`
 
 If deployed on Railway, use your Railway domain instead of localhost:
 
-- Frontend shell: `https://$RAILWAY_PUBLIC_DOMAIN/`
+- Frontend app: `https://$RAILWAY_PUBLIC_DOMAIN/`
 - Health endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/health`
 - Readiness endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/ready`
+
+### Deploy to Railway
+
+1. Create a new Railway project and connect this GitHub repo.
+2. Use Node.js 22+ and pnpm 9.x.
+3. Set commands:
+   - Build: `pnpm install --frozen-lockfile && pnpm --filter @blackout/blackout-web build:web`
+   - Start: `pnpm start`
+4. Expose `PORT` (Railway sets this automatically).
+5. Verify:
+   - `/` returns the built frontend app.
+   - `/health` and `/ready` return 200 JSON.
 
 ---
 

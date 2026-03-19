@@ -1,0 +1,45 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #090d12;
+  color: #f4f8ff;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #142238 0%, #090d12 55%);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 720px;
+  margin: 4rem auto;
+  padding: 2rem;
+  border-radius: 16px;
+  border: 1px solid #2a3f5d;
+  background: rgb(13 22 35 / 88%);
+}
+
+.status {
+  color: #7bf1ae;
+  font-weight: 600;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.5rem 1rem;
+}
+
+dt {
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: #9ec3ff;
+}

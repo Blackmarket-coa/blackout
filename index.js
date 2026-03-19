@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const frontendRoot = path.join(__dirname, "apps", "blackout-web", "public");
+const frontendBuildRoot = path.join(__dirname, "apps", "blackout-web", "dist");
+const frontendFallbackRoot = path.join(__dirname, "apps", "blackout-web", "public");
 
 function resolvePort(value) {
   const parsed = Number.parseInt(value ?? "3000", 10);
@@ -26,7 +27,25 @@ function resolvePublicBaseUrl() {
   return `http://0.0.0.0:${port}`;
 }
 
+function resolveFrontendRoot() {
+  if (fs.existsSync(frontendBuildRoot) && fs.statSync(frontendBuildRoot).isDirectory()) {
+    return frontendBuildRoot;
+  }
+  return frontendFallbackRoot;
+}
+
+function contentTypeFor(filePath) {
+  if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
+  if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
+  if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".ico")) return "image/x-icon";
+  return "text/plain; charset=utf-8";
+}
+
 function serveFrontendFile(res, relativePath) {
+  const frontendRoot = resolveFrontendRoot();
   const safePath = path.normalize(relativePath).replace(/^([.][.][/\\])+/, "");
   const filePath = path.join(frontendRoot, safePath);
 
@@ -36,15 +55,18 @@ function serveFrontendFile(res, relativePath) {
   }
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    const fallbackFile = path.join(frontendRoot, "index.html");
+    if (fs.existsSync(fallbackFile) && fs.statSync(fallbackFile).isFile()) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      fs.createReadStream(fallbackFile).pipe(res);
+      return;
+    }
+
     sendJson(res, 404, { error: "not_found" });
     return;
   }
 
-  const contentType = filePath.endsWith(".html")
-    ? "text/html; charset=utf-8"
-    : "text/plain; charset=utf-8";
-
-  res.writeHead(200, { "content-type": contentType });
+  res.writeHead(200, { "content-type": contentTypeFor(filePath) });
   fs.createReadStream(filePath).pipe(res);
 }
 
@@ -77,7 +99,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  sendJson(res, 404, { error: "not_found" });
+  const [pathOnly] = url.split("?");
+  const requestedPath = pathOnly.startsWith("/") ? pathOnly.slice(1) : pathOnly;
+  serveFrontendFile(res, requestedPath);
 });
 
 server.listen(port, "0.0.0.0", () => {
