@@ -22,7 +22,9 @@
     "react-i18next": "^16.2.4",
     "react-router-dom": "^6.30.1",
     "slate": "0.112.0",
-    "@vanilla-extract/css": "^1.17.4"
+    "@vanilla-extract/css": "^1.17.4",
+    "slate-history": "^0.113.1",
+    "slate-react": "^0.113.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

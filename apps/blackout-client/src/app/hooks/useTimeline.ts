@@ -140,6 +140,23 @@ export const useSendMessage = (roomId: string) => {
     [roomId, sendEvent],
   );
 
+
+  const sendRichText = useCallback(
+    async (content: Record<string, unknown>) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await sendEvent(roomId, 'm.room.message', content);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Failed to send rich message.'));
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [roomId, sendEvent],
+  );
+
   const sendMedia = useCallback(
     async (file: File) => {
       setLoading(true);
@@ -192,7 +209,7 @@ export const useSendMessage = (roomId: string) => {
     [roomId, sendEvent],
   );
 
-  return { sendText, sendMedia, sendReply, sendThread, loading, error };
+  return { sendText, sendRichText, sendMedia, sendReply, sendThread, loading, error };
 };
 
 /** Provides m.replace edit action for existing messages. */
