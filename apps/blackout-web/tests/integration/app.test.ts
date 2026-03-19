@@ -75,4 +75,28 @@ describe("BlackoutWebApp integration", () => {
       expect(root.textContent).toContain("line 1");
     });
   });
+  it("shows active preset diagnostics in header", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      presets: {
+        activePreset: "community_plus",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: "community_plus",
+          userOverrideCount: 2,
+        },
+      },
+    });
+    await app.mount();
+
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("community_plus");
+    expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
+  });
+
 });

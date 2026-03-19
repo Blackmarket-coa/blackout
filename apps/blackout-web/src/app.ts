@@ -8,6 +8,7 @@ import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
 import { SessionStore } from "./session/store";
 import { AppStore, type PendingCreate } from "./store/app-store";
+import type { BlackoutRuntimeConfig } from "./config";
 import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
@@ -20,8 +21,23 @@ export class BlackoutWebApp {
   private readonly store = new AppStore(this.sessions.load());
   private readonly seenEventIds = new Set<string>();
 
-  constructor(root: HTMLElement) {
+  private readonly runtimeConfig: BlackoutRuntimeConfig;
+
+  constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
+    homeserverUrl: "https://matrix.blackout.local",
+    mode: "daily-chat",
+    presets: {
+      activePreset: "baseline_matrix",
+      features: {},
+      diagnostics: {
+        deploymentPreset: "baseline_matrix",
+        tenantPreset: null,
+        userOverrideCount: 0,
+      },
+    },
+  }) {
     this.root = root;
+    this.runtimeConfig = runtimeConfig;
   }
 
   async mount(): Promise<void> {
@@ -44,6 +60,8 @@ export class BlackoutWebApp {
         <header class="header">
           <h1>Blackout Core</h1>
           <p class="meta">Discord-like starter shell on top of Matrix-compatible APIs.</p>
+          <p class="meta" data-testid="active-preset">Active preset: <strong>${this.runtimeConfig.presets.activePreset}</strong></p>
+          <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
