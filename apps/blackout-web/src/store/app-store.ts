@@ -2,6 +2,16 @@ import type { ChannelSummary, ChatMessage, ServerSummary, Session } from "../typ
 
 const NAV_STORAGE_KEY = "blackout.web.navigation";
 
+export type PendingCreate = "none" | "server" | "channel";
+
+export interface LoadingState {
+  auth: boolean;
+  servers: boolean;
+  channels: boolean;
+  messages: boolean;
+  send: boolean;
+}
+
 export interface AppState {
   session: Session | null;
   servers: ServerSummary[];
@@ -9,10 +19,13 @@ export interface AppState {
   channels: ChannelSummary[];
   activeChannelId: string | null;
   messages: ChatMessage[];
-  pendingAuth: boolean;
-  loadingWorkspace: boolean;
+  loading: LoadingState;
   authMode: "login" | "register";
+  pendingCreate: PendingCreate;
+  createName: string;
+  createError: string | null;
   error: string | null;
+  unreadByChannel: Record<string, number>;
 }
 
 interface PersistedNavigation {
@@ -32,10 +45,19 @@ export class AppStore {
       channels: [],
       activeChannelId: persisted.activeChannelId,
       messages: [],
-      pendingAuth: false,
-      loadingWorkspace: false,
+      loading: {
+        auth: false,
+        servers: false,
+        channels: false,
+        messages: false,
+        send: false,
+      },
       authMode: "login",
+      pendingCreate: "none",
+      createName: "",
+      createError: null,
       error: null,
+      unreadByChannel: {},
     };
   }
 
@@ -49,18 +71,14 @@ export class AppStore {
     return this.state;
   }
 
-  resetWorkspace(): Readonly<AppState> {
+  patchLoading(next: Partial<LoadingState>): Readonly<AppState> {
     this.state = {
       ...this.state,
-      servers: [],
-      channels: [],
-      messages: [],
-      activeServerId: null,
-      activeChannelId: null,
-      loadingWorkspace: false,
-      error: null,
+      loading: {
+        ...this.state.loading,
+        ...next,
+      },
     };
-    this.persistNavigation();
     return this.state;
   }
 

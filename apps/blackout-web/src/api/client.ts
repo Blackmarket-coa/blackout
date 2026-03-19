@@ -1,12 +1,31 @@
+import type {
+  ApiErrorEnvelope,
+  AuthRequest,
+  AuthResponse,
+  CreateChannelRequest,
+  CreateChannelResponse,
+  CreateServerRequest,
+  CreateServerResponse,
+  MessageListResponse,
+  RealtimeGatewayEvent,
+  SendMessageRequest,
+  SendMessageResponse,
+  ServerDetailsResponse,
+  ServerListResponse,
+} from "../contracts/api-contract";
 import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string;
+  readonly details?: Record<string, string | number | boolean | null>;
 
-  constructor(message: string, status = 500) {
+  constructor(message: string, status = 500, code = "UNKNOWN", details?: Record<string, string | number | boolean | null>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -15,11 +34,7 @@ export interface ApiClientOptions {
   useMockApi?: boolean;
 }
 
-export interface GatewayEvent {
-  type: string;
-  channelId?: string;
-  message?: ChatMessage;
-}
+export type GatewayEvent = RealtimeGatewayEvent;
 
 async function parseJsonSafe(response: Response): Promise<unknown> {
   try {
@@ -40,31 +55,30 @@ export class ApiClient {
 
   async login(username: string, password: string): Promise<Session> {
     if (this.useMockApi) {
-      if (!username || !password) throw new ApiError("Username and password are required.", 400);
+      if (!username || !password) throw new ApiError("Username and password are required.", 400, "VALIDATION_ERROR");
       return {
         jwt: "mock-jwt-token",
         user: { id: "usr_mock", username },
       };
     }
 
-    const payload = await this.fetchJson<{ token: string; user: { id: string; username: string } }>("/v1/auth/login", {
+    const payload = await this.fetchJson<AuthResponse>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password } satisfies AuthRequest),
       headers: { "content-type": "application/json" },
     });
 
     return { jwt: payload.token, user: payload.user };
   }
 
-
   async register(username: string, password: string): Promise<Session> {
     if (this.useMockApi) {
       return this.login(username, password);
     }
 
-    const payload = await this.fetchJson<{ token: string; user: { id: string; username: string } }>("/v1/auth/register", {
+    const payload = await this.fetchJson<AuthResponse>("/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password } satisfies AuthRequest),
       headers: { "content-type": "application/json" },
     });
 
@@ -79,7 +93,7 @@ export class ApiClient {
       ];
     }
 
-    return this.fetchJson<ServerSummary[]>("/v1/servers", {
+    return this.fetchJson<ServerListResponse>("/v1/servers", {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
   }
@@ -96,24 +110,23 @@ export class ApiClient {
       };
     }
 
-    return this.fetchJson<ServerDetails>(`/v1/servers/${encodeURIComponent(serverId)}`, {
+    return this.fetchJson<ServerDetailsResponse>(`/v1/servers/${encodeURIComponent(serverId)}`, {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
   }
-
 
   async createServer(session: Session, name: string): Promise<ServerSummary> {
     if (this.useMockApi) {
       return { id: `srv_${Date.now()}`, name, role: "owner" };
     }
 
-    return this.fetchJson<ServerSummary>("/v1/servers", {
+    return this.fetchJson<CreateServerResponse>("/v1/servers", {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name } satisfies CreateServerRequest),
     });
   }
 
@@ -122,13 +135,13 @@ export class ApiClient {
       return { id: `chn_${Date.now()}`, name };
     }
 
-    return this.fetchJson<ChannelSummary>(`/v1/servers/${encodeURIComponent(serverId)}/channels`, {
+    return this.fetchJson<CreateChannelResponse>(`/v1/servers/${encodeURIComponent(serverId)}/channels`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name } satisfies CreateChannelRequest),
     });
   }
 
@@ -144,7 +157,7 @@ export class ApiClient {
       ];
     }
 
-    const payload = await this.fetchJson<{ data: ChatMessage[] }>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+    const payload = await this.fetchJson<MessageListResponse>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
 
@@ -161,13 +174,13 @@ export class ApiClient {
       };
     }
 
-    return this.fetchJson<ChatMessage>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+    return this.fetchJson<SendMessageResponse>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body } satisfies SendMessageRequest),
     });
   }
 
@@ -193,13 +206,28 @@ export class ApiClient {
     const response = await fetch(`${this.baseUrl}${path}`, init);
     if (!response.ok) {
       const body = await parseJsonSafe(response);
-      const message =
-        (body && typeof body === "object" && "error" in body && typeof body.error === "string"
-          ? body.error
-          : undefined) ?? `Request failed (${response.status})`;
-      throw new ApiError(message, response.status);
+      const envelope = this.readErrorEnvelope(body);
+      throw new ApiError(
+        envelope?.message ?? `Request failed (${response.status})`,
+        response.status,
+        envelope?.code ?? "HTTP_ERROR",
+        envelope?.details,
+      );
     }
 
     return (await parseJsonSafe(response)) as T;
+  }
+
+  private readErrorEnvelope(payload: unknown): ApiErrorEnvelope | null {
+    if (!payload || typeof payload !== "object") return null;
+
+    const maybe = payload as Partial<ApiErrorEnvelope>;
+    if (typeof maybe.message !== "string") return null;
+
+    return {
+      code: typeof maybe.code === "string" ? maybe.code : "HTTP_ERROR",
+      message: maybe.message,
+      details: maybe.details,
+    };
   }
 }
