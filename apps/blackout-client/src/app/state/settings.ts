@@ -1,0 +1,31 @@
+import { atomWithStorage } from 'jotai/utils';
+import type { ThemePreference } from '../styles/theme.css';
+
+export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
+
+export interface AppSettings {
+  theme: ThemePreference;
+  pageZoom: number;
+  twitterEmoji: boolean;
+  showNotifications: boolean;
+  isNotificationSounds: boolean;
+  chatDensity: ChatDensity;
+  devMode: boolean;
+  streamerMode: boolean;
+}
+
+const defaultSettings: AppSettings = {
+  theme: 'dark',
+  pageZoom: 1,
+  twitterEmoji: true,
+  showNotifications: true,
+  isNotificationSounds: true,
+  chatDensity: 'comfortable',
+  devMode: false,
+  streamerMode: false,
+};
+
+/**
+ * Persisted client settings for appearance, notifications, and developer toggles.
+ */
+export const settingsAtom = atomWithStorage<AppSettings>('blackout.settings.v1', defaultSettings);
