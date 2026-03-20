@@ -1,0 +1,70 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-web-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_PROVIDER: ${{ vars.WEB_DEPLOY_PROVIDER || 'vercel' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build production bundle
+        run: pnpm --filter @blackout/blackout-web run build:web
+
+      - name: Deploy to Railway
+        if: env.DEPLOY_PROVIDER == 'railway'
+        run: npx -y @railway/cli up --service "$RAILWAY_SERVICE"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+
+      - name: Deploy to Vercel
+        if: env.DEPLOY_PROVIDER == 'vercel'
+        run: |
+          npx -y vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx -y vercel deploy --prod --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Netlify
+        if: env.DEPLOY_PROVIDER == 'netlify'
+        run: npx -y netlify-cli deploy --prod --dir=apps/blackout-web/dist --site "$NETLIFY_SITE_ID"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Invalidate CDN cache
+        if: vars.CLOUDFLARE_ZONE_ID != ''
+        run: |
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+
+      - name: Smoke test deployed URL
+        run: |
+          DEPLOYED_URL="${{ vars.WEB_DEPLOYED_URL }}"
+          test -n "$DEPLOYED_URL"
+          curl --fail --show-error --retry 10 --retry-delay 5 "$DEPLOYED_URL"
