@@ -332,13 +332,13 @@ Add this block at the bottom of each major tracker:
 ## 9) Execution evidence snapshot
 
 - Status: **Complete** (WO-1 through WO-9).
-- Evidence bundle: `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`.
+- Evidence bundle: `docs/operations/evidence/2026-03-20-blackout-centralized-work-orders-1-9-refresh.md`.
 - Release gate artifact: `docs/blackout_centralized_release_readiness_gate.md`.
 - Remaining-work AI prompt pack: `docs/ai-prompts-remaining-work.md`.
 
 ## Verification
-- Last verified date: 2026-03-14
+- Last verified date: 2026-03-20
 - Verified by: Codex (GPT-5.2-Codex)
 - Commands:
   - `rg "^- \[x\]" docs/blackout_centralized_build_work_order.md`
-  - `rg "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md`
+  - `rg "Work order|Owner|Date completed|Files changed|Tests/commands run|Evidence links|Risks/known follow-ups|Next review date" docs/operations/evidence/2026-03-20-blackout-centralized-work-orders-1-9-refresh.md`
