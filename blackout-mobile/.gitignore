@@ -1,0 +1,5 @@
+node_modules
+android/.gradle
+android/.idea
+ios/App/Pods
+ios/App/build

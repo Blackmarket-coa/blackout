@@ -1,0 +1,32 @@
+{
+  "name": "blackout-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blackout mobile shell built with Capacitor",
+  "scripts": {
+    "build:web": "cd .. && pnpm --filter @blackout/web build",
+    "copy": "pnpm build:web && cap copy",
+    "sync": "pnpm build:web && cap sync",
+    "add:ios": "cap add ios",
+    "add:android": "cap add android",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android",
+    "setup": "./scripts/setup-mobile.sh"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/camera": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/push-notifications": "^7.0.0",
+    "@capacitor/share": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.10.1"
+  }
+}
