@@ -351,4 +351,82 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="typing-indicator"]')).toBeTruthy();
   });
 
+  it("shows stego and advanced composer actions in the message box when features are enabled", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "blackout_full",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "blackout_full",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing composer");
+
+    const stegoButton = root.querySelector('[data-testid="composer-stego-button"]') as HTMLButtonElement | null;
+    expect(stegoButton).toBeTruthy();
+    fireEvent.click(stegoButton as HTMLButtonElement);
+    expect(composer.value).toContain("[stego::hidden-message]");
+
+    const moreActions = root.querySelector<HTMLSelectElement>('[data-testid="composer-more-actions"]');
+    expect(moreActions).toBeTruthy();
+    fireEvent.change(moreActions as HTMLSelectElement, { target: { value: "code" } });
+    expect(composer.value).toContain("```text");
+  });
+
+  it("provides quick-access dropdown + button for blackout features", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-quick-access-select"]');
+    const openButton = root.querySelector<HTMLButtonElement>('[data-testid="feature-quick-access-button"]');
+    expect(select).toBeTruthy();
+    expect(openButton).toBeTruthy();
+
+    fireEvent.change(select as HTMLSelectElement, { target: { value: "matrix_client_arch" } });
+    fireEvent.click(openButton as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened matrix_client_arch");
+
+    fireEvent.change(select as HTMLSelectElement, { target: { value: "governance_entitlements" } });
+    fireEvent.click(openButton as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
+  });
+
 });

@@ -44,6 +44,22 @@ body {
 .header-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feature-quick-access {
+  width: min(560px, 100%);
+}
+
+.quick-access-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.quick-access-controls select {
+  min-width: 300px;
 }
 
 .workspace {
@@ -164,10 +180,22 @@ body {
 .composer-toolbar {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .composer-toolbar button {
   width: auto;
+}
+
+.composer-overflow-label {
+  width: auto;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.composer-overflow-label select {
+  min-width: 150px;
 }
 
 input,
