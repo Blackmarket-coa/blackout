@@ -33,6 +33,11 @@ describe("ProposalEngine", () => {
         expect(proposal.schemaVersion).toBe(2);
         expect(proposal.createdAt).toBe(100);
         expect(proposal.auditTimeline).toHaveLength(1);
+        expect(proposal.cadence).toEqual({
+            digestMode: "daily",
+            decisionWindowHours: 48,
+            engagementLoopProtection: true,
+        });
     });
 
     it("enforces lifecycle transitions", () => {

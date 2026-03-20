@@ -69,7 +69,15 @@ export default function GovernanceHome(): React.JSX.Element {
         });
     }, [selectedVote]);
 
-    const handleCreate = ({ title, body }: { title: string; body: string }): void => {
+    const handleCreate = ({
+        title,
+        body,
+        cadence,
+    }: {
+        title: string;
+        body: string;
+        cadence: ProposalDocument["cadence"];
+    }): void => {
         const proposal = proposalEngine.create(
             {
                 id: `proposal-${Date.now()}`,
@@ -77,6 +85,7 @@ export default function GovernanceHome(): React.JSX.Element {
                 title,
                 body,
                 authorUserId: CURRENT_USER_ID,
+                cadence,
             },
             PERMISSION_CONTEXT,
         );

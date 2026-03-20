@@ -3,6 +3,7 @@
 Date: 2026-03-20
 Program: Blackout centralized build (WO-1 through WO-9)
 Evidence bundle: `docs/operations/evidence/2026-03-20-wo2-wo4-hardening-and-evidence-normalization.md`
+Day-2 governance UX + secure-ops evidence: `docs/operations/evidence/2026-03-20-day2-governance-ux-secure-ops.md`
 Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
 Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-03-16-centralized-ci-parity-and-smoke-remediation.md`.
 
@@ -14,11 +15,11 @@ Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-0
 | --- | --- | --- |
 | WO-1 Tracker normalization and evidence refresh | Complete | `docs/tracker-normalization-audit-2026-03-14.md`, `docs/blackout_centralized_build_work_order.md` |
 | WO-2 Image stego integration path | In progress | `_port/src/steganography/StegoCodec.ts`, `_port/test/unit-tests/steganography/StegoCodecHardening-test.ts`, `docs/operations/evidence/2026-03-20-wo2-wo4-hardening-and-evidence-normalization.md` |
-| WO-3 Dead-drop room profile | Complete | `docs/repository_audit.md`, `_port/src/steganography/ephemeral/EphemeralManager.ts`, `_port/src/components/views/stego/StegoMessageView.tsx` |
+| WO-3 Dead-drop room profile | In progress | `_port/src/steganography/ephemeral/EphemeralManager.ts`, `_port/src/components/views/stego/StegoMessageView.tsx`, `docs/operations/runbooks/governance-secure-operations-template.md` |
 | WO-4 Governance payload attestation | In progress | `_port/src/services/attestations/GovernancePayloadAttestation.ts`, `_port/test/services/attestations/GovernancePayloadAttestation-test.ts`, `docs/operations/evidence/2026-03-20-wo2-wo4-hardening-and-evidence-normalization.md` |
-| WO-5 Cell-structured access enforcement | Complete | `docs/impossible-to-take-down-plan.md`, space policy docs under `docs/` |
+| WO-5 Cell-structured access enforcement | In progress | `docs/impossible-to-take-down-plan.md`, `docs/operations/runbooks/governance-secure-operations-template.md`, `docs/operations/evidence/2026-03-20-day2-governance-ux-secure-ops.md` |
 | WO-6 Mesh/off-grid relay baseline | Complete | `docs/architecture/p2p-data-plane.md`, `docs/distributed_self_healing_blueprint.md` |
-| WO-7 Timing obfuscation policy engine | Complete | `docs/features/privacy-first-phase6/README.md`, timing-leakage posture references in privacy docs |
+| WO-7 Timing obfuscation policy engine | In progress | `docs/features/privacy-first-phase6/README.md`, `docs/operations/runbooks/governance-secure-operations-template.md`, `docs/operations/evidence/2026-03-20-day2-governance-ux-secure-ops.md` |
 | WO-8 High-priority unfinished markers | Complete | `docs/unfinished-code-priority-plan.md`, `docs/unfinished-code-checklist.md` |
 | WO-9 Release-readiness synthesis | Complete | This gate artifact |
 
