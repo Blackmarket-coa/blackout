@@ -96,6 +96,7 @@ export class BlackoutWebApp {
           ${this.renderFeatureQuickAccess()}
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
+        ${state.session ? this.renderFeatureToolbar() : ""}
         ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
@@ -198,6 +199,36 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="open-feature-quick-access" data-testid="feature-quick-access-button">Open</button>
         </div>
       </label>
+    `;
+  }
+
+  private renderFeatureToolbar(): string {
+    const activeFeatures = this.getActivePresetFeatures();
+    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => activeFeatures[feature.presetKey] ?? false);
+
+    if (!enabledFeatures.length) {
+      return `
+        <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
+          <p class="meta">No feature shortcuts are available in this preset.</p>
+        </section>
+      `;
+    }
+
+    const toolbarButtons = enabledFeatures
+      .map((feature) => {
+        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+        return `<button type="button" class="feature-chip" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">${feature.name}</button>`;
+      })
+      .join("");
+
+    return `
+      <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
+        <div class="feature-toolbar-head">
+          <h2>Top feature shortcuts</h2>
+          <p class="meta">Quick access to enabled features, similar to a messaging app action bar.</p>
+        </div>
+        <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+      </section>
     `;
   }
 
