@@ -394,7 +394,7 @@ describe("BlackoutWebApp integration", () => {
     expect(composer.value).toContain("```text");
   });
 
-  it("provides quick-access dropdown + button for blackout features", async () => {
+  it("opens features via command palette and supports Ctrl+K shortcut", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
@@ -415,17 +415,17 @@ describe("BlackoutWebApp integration", () => {
     });
     await app.mount();
 
-    const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-quick-access-select"]');
-    const openButton = root.querySelector<HTMLButtonElement>('[data-testid="feature-quick-access-button"]');
-    expect(select).toBeTruthy();
-    expect(openButton).toBeTruthy();
-
-    fireEvent.change(select as HTMLSelectElement, { target: { value: "matrix_client_arch" } });
-    fireEvent.click(openButton as HTMLButtonElement);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const paletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
+    expect(paletteInput).toBeTruthy();
+    fireEvent.input(paletteInput as HTMLInputElement, { target: { value: "matrix-native" } });
+    fireEvent.click(getByRole(root, "button", { name: /Matrix-native client architecture/i }));
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened matrix_client_arch");
 
-    fireEvent.change(select as HTMLSelectElement, { target: { value: "governance_entitlements" } });
-    fireEvent.click(openButton as HTMLButtonElement);
+    fireEvent.click(root.querySelector('[data-testid="open-command-palette"]') as HTMLButtonElement);
+    const secondPaletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
+    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "governance and entitlement" } });
+    fireEvent.click(getByRole(root, "button", { name: /Governance and entitlement policy layer/i }));
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
   });
 
