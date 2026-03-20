@@ -31,6 +31,7 @@ export class BlackoutWebApp {
   private appliedFeatures: Record<string, boolean>;
   private featureActionResult: string | null = null;
   private featureFilter = "";
+  private quickAccessFeatureId = FEATURE_UI_ENTRIES[0]?.id ?? "";
   private settingsOpen = false;
   private composerIsTyping = false;
   private readonly telemetry;
@@ -92,6 +93,7 @@ export class BlackoutWebApp {
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
         <div class="header-actions">
+          ${this.renderFeatureQuickAccess()}
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
         ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
@@ -128,6 +130,12 @@ export class BlackoutWebApp {
           canSend: Boolean(state.activeChannelId),
           sendPending: state.loading.send,
           richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
+          stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
+          composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
+          composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
+          composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
+          mediaCodeBlocksEnabled: this.getActivePresetFeatures()["features.media.codeBlocks"] ?? false,
+          mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
           typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
           showTypingIndicator: this.composerIsTyping,
         })}
@@ -170,6 +178,26 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("widget panel", grouped.get("widget_panel") ?? [])}
         ${this.renderFeatureGroup("admin/governance console", grouped.get("admin_console") ?? [])}
       </section>
+    `;
+  }
+
+  private renderFeatureQuickAccess(): string {
+    const activeFeatures = this.getActivePresetFeatures();
+    const options = FEATURE_UI_ENTRIES.map((feature) => {
+      const enabled = activeFeatures[feature.presetKey] ?? false;
+      const suffix = enabled ? "" : " (unavailable)";
+      const selected = this.quickAccessFeatureId === feature.id ? "selected" : "";
+      return `<option value="${feature.id}" ${selected}>${feature.name}${suffix}</option>`;
+    }).join("");
+
+    return `
+      <label class="stack feature-quick-access">
+        Feature quick access
+        <div class="quick-access-controls">
+          <select data-action="select-feature-quick-access" data-testid="feature-quick-access-select">${options}</select>
+          <button type="button" class="ghost-btn" data-action="open-feature-quick-access" data-testid="feature-quick-access-button">Open feature</button>
+        </div>
+      </label>
     `;
   }
 
@@ -308,6 +336,14 @@ export class BlackoutWebApp {
       this.render();
     });
 
+    this.root.querySelector<HTMLSelectElement>("[data-action='select-feature-quick-access']")?.addEventListener("change", (event) => {
+      this.quickAccessFeatureId = (event.currentTarget as HTMLSelectElement).value;
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='open-feature-quick-access']")?.addEventListener("click", () => {
+      this.openFeatureById(this.quickAccessFeatureId);
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='apply-preset']")?.addEventListener("click", () => {
       if (this.selectedPreset === this.appliedPreset) return;
       const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?`) ?? true;
@@ -331,12 +367,7 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
-        const featureId = button.dataset.featureId;
-        const kind = button.dataset.featureKind;
-        if (!featureId || !kind) return;
-        this.featureActionResult = `Opened ${featureId} via ${kind}.`;
-        this.telemetry.track("feature_open_success", { featureId, entrypointKind: kind });
-        this.render();
+        this.openFeatureById(button.dataset.featureId);
       });
     });
 
@@ -365,6 +396,28 @@ export class BlackoutWebApp {
       this.applyComposerSnippet(" 😊");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" [stego::hidden-message]");
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='composer-more-actions']")?.addEventListener("change", (event) => {
+      const select = event.currentTarget as HTMLSelectElement;
+      const action = select.value;
+      if (!action) return;
+      const snippetMap: Record<string, string> = {
+        reply: " > reply context\n",
+        edit: " [edit::message-id]",
+        redact: " [redact::message-id]",
+        code: "\n```text\ncode snippet\n```\n",
+        spoiler: " ||spoiler||",
+      };
+      const snippet = snippetMap[action];
+      if (snippet) {
+        this.applyComposerSnippet(snippet);
+      }
+      select.value = "";
+    });
+
 
     this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -388,6 +441,24 @@ export class BlackoutWebApp {
     if (!textarea) return;
     textarea.value = `${textarea.value}${snippet}`;
     textarea.focus();
+  }
+
+  private openFeatureById(featureId?: string): void {
+    if (!featureId) return;
+    const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
+    if (!entry) return;
+    const [kind] = entry.uiEntry.split(":") as [UiEntryKind, string];
+    const enabled = this.getActivePresetFeatures()[entry.presetKey] ?? false;
+    if (!enabled) {
+      this.featureActionResult = `${entry.id} is unavailable: blocked by policy or entitlement.`;
+      this.trackDeniedFeature(entry.id, kind);
+      this.render();
+      return;
+    }
+    this.featureActionResult = `Opened ${entry.id} via ${kind}.`;
+    this.quickAccessFeatureId = entry.id;
+    this.telemetry.track("feature_open_success", { featureId: entry.id, entrypointKind: kind });
+    this.render();
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {

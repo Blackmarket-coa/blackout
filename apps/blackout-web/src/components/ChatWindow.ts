@@ -8,6 +8,12 @@ interface ChatWindowProps {
   canSend: boolean;
   sendPending: boolean;
   richEditingEnabled: boolean;
+  stegoEnabled: boolean;
+  composerRepliesEnabled: boolean;
+  composerEditsEnabled: boolean;
+  composerRedactionsEnabled: boolean;
+  mediaCodeBlocksEnabled: boolean;
+  mediaSpoilersEnabled: boolean;
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
 }
@@ -20,6 +26,12 @@ export function renderChatWindow({
   canSend,
   sendPending,
   richEditingEnabled,
+  stegoEnabled,
+  composerRepliesEnabled,
+  composerEditsEnabled,
+  composerRedactionsEnabled,
+  mediaCodeBlocksEnabled,
+  mediaSpoilersEnabled,
   typingIndicatorsEnabled,
   showTypingIndicator,
 }: ChatWindowProps): string {
@@ -35,6 +47,12 @@ export function renderChatWindow({
       ${renderMessageInput({
         disabled: !canSend || sendPending,
         richEditingEnabled,
+        stegoEnabled,
+        composerRepliesEnabled,
+        composerEditsEnabled,
+        composerRedactionsEnabled,
+        mediaCodeBlocksEnabled,
+        mediaSpoilersEnabled,
         typingIndicatorsEnabled,
         showTypingIndicator,
       })}
