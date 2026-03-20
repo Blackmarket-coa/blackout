@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Blackout",
+  "version": "0.1.0",
+  "identifier": "co.bmc.blackout",
+  "build": {
+    "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/web dev",
+    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/web build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../apps/blackout-web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Blackout",
+        "label": "main",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "minWidth": 900,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "msi", "nsis", "deb", "rpm", "appimage"],
+    "category": "Network",
+    "shortDescription": "Blackout secure messaging desktop client",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "signingIdentity": "Developer ID Application: Blackout",
+      "entitlements": "entitlements.plist"
+    },
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "certificateThumbprint": "${WINDOWS_CERTIFICATE_THUMBPRINT}",
+      "timestampUrl": "http://timestamp.digicert.com"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/bmc/blackout/releases/latest/download/latest.json"
+      ],
+      "pubkey": "${TAURI_UPDATER_PUBKEY}"
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["matrix"]
+      }
+    }
+  }
+}
