@@ -28,6 +28,7 @@ export class BlackoutWebApp {
   private readonly deploymentPreset: FeaturePresetKey;
   private appliedPreset: FeaturePresetKey;
   private selectedPreset: FeaturePresetKey;
+  private appliedFeatures: Record<string, boolean>;
   private featureActionResult: string | null = null;
   private featureFilter = "";
   private settingsOpen = false;
@@ -54,9 +55,12 @@ export class BlackoutWebApp {
     this.root = root;
     this.runtimeConfig = runtimeConfig;
     this.telemetry = createTelemetryClient(this.runtimeConfig.rollout.cohort);
-    this.deploymentPreset = runtimeConfig.presets.activePreset;
+    this.deploymentPreset = runtimeConfig.presets.diagnostics.deploymentPreset;
     this.appliedPreset = runtimeConfig.presets.activePreset;
     this.selectedPreset = runtimeConfig.presets.activePreset;
+    this.appliedFeatures = Object.keys(runtimeConfig.presets.features).length
+      ? { ...runtimeConfig.presets.features }
+      : { ...FEATURE_PRESET_BUNDLES[runtimeConfig.presets.activePreset] };
   }
 
   async mount(): Promise<void> {
@@ -229,7 +233,7 @@ export class BlackoutWebApp {
   }
 
   private getActivePresetFeatures(): Record<string, boolean> {
-    return FEATURE_PRESET_BUNDLES[this.appliedPreset];
+    return this.appliedFeatures;
   }
 
   private renderFeatureGroup(label: string, items: string[]): string {
@@ -309,6 +313,7 @@ export class BlackoutWebApp {
       const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?`) ?? true;
       if (!approved) return;
       this.appliedPreset = this.selectedPreset;
+      this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.selectedPreset] };
       this.telemetry.track("preset_applied", { preset: this.appliedPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
@@ -319,6 +324,7 @@ export class BlackoutWebApp {
       if (!approved) return;
       this.appliedPreset = this.deploymentPreset;
       this.selectedPreset = this.deploymentPreset;
+      this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.deploymentPreset] };
       this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
