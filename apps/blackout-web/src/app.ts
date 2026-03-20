@@ -264,23 +264,51 @@ export class BlackoutWebApp {
       `;
     }
 
+    const railButtons = enabledFeatures
+      .slice(0, 8)
+      .map((feature) => {
+        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
+        const glyph = this.getFeatureGlyph(feature.name);
+        return `<button type="button" class="feature-rail-btn ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-rail-${feature.id}" title="${feature.name}">${glyph}</button>`;
+      })
+      .join("");
+
     const toolbarButtons = enabledFeatures
       .map((feature) => {
         const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
         const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
-        return `<button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">${feature.name}</button>`;
+        const categoryLabel = this.featureKindUi[kind].label;
+        return `
+          <button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">
+            <span>${feature.name}</span>
+            <small>${categoryLabel}</small>
+          </button>
+        `;
       })
       .join("");
 
     return `
       <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
         <div class="feature-toolbar-head">
-          <h2>Top feature shortcuts</h2>
-          <p class="meta">Quick access to enabled features, similar to a messaging app action bar.</p>
+          <h2>Quick actions</h2>
+          <p class="meta">Discord-style dock: icon rail for frequent actions, detailed list for discovery.</p>
         </div>
-        <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+        <div class="feature-dock-layout">
+          <div class="feature-rail" aria-label="Frequent feature actions">${railButtons}</div>
+          <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+        </div>
       </section>
     `;
+  }
+
+  private getFeatureGlyph(name: string): string {
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
   }
 
   private renderFeatureCommandPalette(): string {
