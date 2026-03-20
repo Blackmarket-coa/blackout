@@ -69,7 +69,7 @@ export const PrivacySettings = () => {
           checked={settings.showReadReceipts}
           onChange={(event) => setSettings((prev) => ({ ...prev, showReadReceipts: event.target.checked }))}
         />
-        Show read receipts
+        Read receipt visibility
       </label>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -78,7 +78,7 @@ export const PrivacySettings = () => {
           checked={settings.showTypingIndicators}
           onChange={(event) => setSettings((prev) => ({ ...prev, showTypingIndicators: event.target.checked }))}
         />
-        Show typing indicators
+        Typing indicator visibility
       </label>
     </div>
   );

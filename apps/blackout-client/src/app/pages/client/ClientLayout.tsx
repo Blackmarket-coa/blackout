@@ -6,6 +6,8 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { selectedRoomIdAtom, selectedSpaceIdAtom, rightPanelAtom, type RightPanelType } from '../../state/navigation';
 import { settingsAtom } from '../../state/settings';
+import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } from '../../features/deaddrop';
+import MessageComposer from '../../features/room/MessageComposer';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
 
@@ -121,6 +123,8 @@ export const ClientLayout = () => {
     return homeRooms.filter((room) => room.roomId.includes(selectedSpaceId.slice(1, 5)) || room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase()));
   }, [homeRooms, selectedSpaceId]);
 
+  const deadDrop = useDeadDrop(selectedRoomId ?? '');
+
   const groups = useMemo(() => {
     const bucket = new Map<string, Room[]>();
     selectedSpaceRooms.forEach((room) => {
@@ -136,7 +140,25 @@ export const ClientLayout = () => {
   };
 
   const renderRoomContent = () => {
-    if (selectedRoomId) return <div style={{ padding: 16 }}>Room timeline: {selectedRoomId}</div>;
+    if (selectedRoomId) {
+      return (
+        <div style={{ padding: 16, display: 'grid', gap: 12 }}>
+          <header style={{ display: 'grid', gap: 8 }}>
+            <strong>{rooms.find((room) => room.roomId === selectedRoomId)?.name ?? selectedRoomId}</strong>
+            <DeadDropIndicator config={deadDrop.data} queueCount={deadDrop.queueCount} />
+          </header>
+
+          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 12 }}>
+            <p style={{ marginTop: 0, opacity: 0.85 }}>Room timeline: {selectedRoomId}</p>
+            <small>Timeline UI is elided in this shell build.</small>
+          </section>
+
+          {deadDrop.data.enabled ? <DeadDropComposer roomId={selectedRoomId} /> : <MessageComposer roomId={selectedRoomId} />}
+
+          <DeadDropSettings roomId={selectedRoomId} />
+        </div>
+      );
+    }
     if (selectedSpaceId) return <div style={{ padding: 16 }}>Space overview: {selectedSpaceId}</div>;
     return <div style={{ padding: 16 }}>Welcome to Blackout.</div>;
   };

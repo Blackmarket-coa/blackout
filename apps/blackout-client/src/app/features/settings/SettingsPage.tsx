@@ -1,4 +1,6 @@
-import { Suspense, lazy, useMemo, useState, type ComponentType, type LazyExoticComponent } from 'react';
+import { Suspense, lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { useAtom } from 'jotai';
+import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
 
 const AccountSettings = lazy(() => import('./AccountSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
@@ -10,42 +12,36 @@ const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
 const DeveloperSettings = lazy(() => import('./DeveloperSettings'));
 const AboutSettings = lazy(() => import('./AboutSettings'));
 
-type SettingsSectionId =
-  | 'account'
-  | 'appearance'
-  | 'notifications'
-  | 'privacy'
-  | 'voice-video'
-  | 'accessibility'
-  | 'keybinds'
-  | 'developer'
-  | 'about';
+interface SettingsSection {
+  id: SettingsSectionId;
+  label: string;
+  summary: string;
+  component: LazyExoticComponent<ComponentType>;
+}
 
-const sections: Array<{ id: SettingsSectionId; label: string; component: LazyExoticComponent<ComponentType> }> = [
-  { id: 'account', label: 'Account', component: AccountSettings },
-  { id: 'appearance', label: 'Appearance', component: AppearanceSettings },
-  { id: 'notifications', label: 'Notifications', component: NotificationSettings },
-  { id: 'privacy', label: 'Privacy', component: PrivacySettings },
-  { id: 'voice-video', label: 'Voice & Video', component: VoiceVideoSettings },
-  { id: 'accessibility', label: 'Accessibility', component: AccessibilitySettings },
-  { id: 'keybinds', label: 'Keybinds', component: KeybindsSettings },
-  { id: 'developer', label: 'Developer', component: DeveloperSettings },
-  { id: 'about', label: 'About', component: AboutSettings },
+const sections: SettingsSection[] = [
+  { id: 'account', label: 'Account', summary: 'Display name, avatar, email, password, sessions', component: AccountSettings },
+  { id: 'appearance', label: 'Appearance', summary: 'Theme, font scale, density, emoji style', component: AppearanceSettings },
+  { id: 'notifications', label: 'Notifications', summary: 'Global rules, per-room overrides, sounds', component: NotificationSettings },
+  { id: 'privacy', label: 'Privacy', summary: 'Blocked users, DM permissions, read receipts', component: PrivacySettings },
+  { id: 'voice-video', label: 'Voice & Video', summary: 'Devices and noise suppression', component: VoiceVideoSettings },
+  { id: 'accessibility', label: 'Accessibility', summary: 'Reduced motion, screen reader, high contrast', component: AccessibilitySettings },
+  { id: 'keybinds', label: 'Keybinds', summary: 'Keyboard shortcut customization', component: KeybindsSettings },
+  { id: 'developer', label: 'Developer', summary: 'Developer mode, event inspector, raw state viewer', component: DeveloperSettings },
+  { id: 'about', label: 'About', summary: 'Version, links, credits, BMC info', component: AboutSettings },
 ];
 
 export const SettingsPage = () => {
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance');
+  const [activeSection, setActiveSection] = useAtom(settingsPageAtom);
 
-  const ActiveSection = useMemo(
-    () => sections.find((section) => section.id === activeSection)?.component ?? AppearanceSettings,
-    [activeSection],
-  );
+  const active = sections.find((section) => section.id === activeSection) ?? sections[1];
+  const ActiveSection = active.component;
 
   return (
     <section
       style={{
         display: 'grid',
-        gridTemplateColumns: '260px 1fr',
+        gridTemplateColumns: '300px minmax(0, 1fr)',
         minHeight: '100%',
         border: '1px solid var(--border-default)',
         borderRadius: 12,
@@ -54,8 +50,8 @@ export const SettingsPage = () => {
         color: 'var(--text-primary)',
       }}
     >
-      <aside style={{ borderRight: '1px solid var(--border-default)', padding: 12 }}>
-        <h2 style={{ marginTop: 0 }}>Settings</h2>
+      <aside style={{ borderRight: '1px solid var(--border-default)', padding: 12, background: 'var(--bg-input)' }}>
+        <h2 style={{ marginTop: 0, marginBottom: 10 }}>Settings</h2>
         <nav style={{ display: 'grid', gap: 6 }}>
           {sections.map((section) => (
             <button
@@ -67,18 +63,21 @@ export const SettingsPage = () => {
                 border: activeSection === section.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                 borderRadius: 8,
                 padding: '8px 10px',
-                background: activeSection === section.id ? 'var(--bg-surface-hover)' : 'var(--bg-input)',
+                background: activeSection === section.id ? 'var(--bg-surface)' : 'var(--bg-input)',
                 color: 'var(--text-primary)',
+                display: 'grid',
+                gap: 2,
               }}
             >
-              {section.label}
+              <strong>{section.label}</strong>
+              <small style={{ opacity: 0.8 }}>{section.summary}</small>
             </button>
           ))}
         </nav>
       </aside>
 
       <main style={{ padding: 16 }}>
-        <Suspense fallback={<p>Loading settings section…</p>}>
+        <Suspense fallback={<p>Loading {active.label} settings…</p>}>
           <ActiveSection />
         </Suspense>
       </main>
