@@ -46,11 +46,15 @@ export function renderChatWindow({
       <div class="chat-head">
         <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer">☰</button>
         <div class="chat-head-copy">
-          <span>${channelLabel}</span>
+          <span># ${channelLabel}</span>
           <small>
-            Stay on topic, react quickly, and keep conversations moving.
+            Team updates and fast decisions happen here.
             ${compactMode ? " Compact mode is active for this high-density stream." : compactRecommended ? " Compact mode is recommended for message-heavy channels." : ""}
           </small>
+        </div>
+        <div class="chat-head-actions">
+          <button type="button" class="ghost-btn chat-head-action">Threads</button>
+          <button type="button" class="ghost-btn chat-head-action">Search</button>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>
