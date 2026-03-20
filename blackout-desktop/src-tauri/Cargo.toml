@@ -1,0 +1,27 @@
+[package]
+name = "blackout-desktop"
+version = "0.1.0"
+description = "Blackout desktop wrapper powered by Tauri"
+authors = ["Blackout Contributors"]
+license = "AGPL-3.0"
+repository = "https://github.com/bmc/blackout"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.0", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-global-shortcut = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
