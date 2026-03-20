@@ -2,10 +2,15 @@ import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode
 import { BaseEditor, Editor, Element as SlateElement, Node, Range, Text, Transforms, createEditor } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
+import { useAtomValue } from 'jotai';
 import { useRoomMembers } from '../../hooks/useRoom';
 import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
 import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
 import { useSendTyping } from '../../hooks/useTyping';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { uploadMedia } from '../../utils/media';
+import { HideMessageDialog } from '../steganography';
+import { stegoSettingsAtom } from '../steganography';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -333,6 +338,9 @@ export const MessageComposer = ({
   const [triggerType, setTriggerType] = useState<MentionKind | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [hideDialogOpen, setHideDialogOpen] = useState(false);
+  const [stegoAttachment, setStegoAttachment] = useState<File | null>(null);
+  const [stegoSubscription, setStegoSubscription] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
@@ -342,6 +350,18 @@ export const MessageComposer = ({
   const sendTyping = useSendTyping(roomId);
   const { sendRichText, sendMedia } = useSendMessage(roomId);
   const editMessage = useEditMessage(roomId);
+  const matrixClient = useMatrixClient();
+  const stegoSettings = useAtomValue(stegoSettingsAtom);
+
+  useEffect(() => {
+    const accountData = (matrixClient as unknown as { getAccountData: (type: string) => { getContent: <T>() => T } | null }).getAccountData(
+      'co.bmc.subscription',
+    );
+    const content = accountData?.getContent<Record<string, unknown>>() ?? {};
+    const tier = typeof content.tier === 'string' ? content.tier.toLowerCase() : '';
+    const active = content.active === true || tier.includes('stego') || tier.includes('pro') || tier.includes('paid');
+    setStegoSubscription(active);
+  }, [matrixClient]);
 
   useEffect(() => {
     if (!initialMarkdown) return;
@@ -490,14 +510,36 @@ export const MessageComposer = ({
         await sendMedia(file);
       }
 
+      if (stegoAttachment) {
+        const mxcUrl = await uploadMedia(matrixClient, stegoAttachment);
+        const image = await createImageBitmap(stegoAttachment);
+        await (matrixClient as unknown as { sendEvent: (rid: string, type: string, content: Record<string, unknown>) => Promise<unknown> }).sendEvent(roomId, 'm.room.message', {
+          msgtype: 'm.image',
+          body: stegoAttachment.name,
+          url: mxcUrl,
+          info: {
+            mimetype: stegoAttachment.type,
+            size: stegoAttachment.size,
+            w: image.width,
+            h: image.height,
+          },
+          'co.blackout.stego': {
+            hidden: true,
+            algorithm: 'lsb-aes-256-cbc',
+            version: 1,
+          },
+        });
+      }
+
       setValue(initialValue);
       setAttachments([]);
+      setStegoAttachment(null);
       onSent?.();
       await sendTyping(false);
     } finally {
       setSending(false);
     }
-  }, [attachments, editMessage, onSent, sendMedia, sendRichText, sendTyping, target, value]);
+  }, [attachments, editMessage, matrixClient, onSent, roomId, sendMedia, sendRichText, sendTyping, stegoAttachment, target, value]);
 
   const handleKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLDivElement>) => {
@@ -568,6 +610,7 @@ export const MessageComposer = ({
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDropFiles}
     >
+      <HideMessageDialog open={hideDialogOpen} onClose={() => setHideDialogOpen(false)} onEncoded={(file) => setStegoAttachment(file)} />
       {target?.mode && target.mode !== 'new' ? (
         <div style={{ marginBottom: 8, borderLeft: '2px solid var(--accent-primary)', paddingLeft: 8, color: 'var(--text-secondary)' }}>
           <strong>{target.mode === 'edit' ? 'Editing message' : 'Replying'}</strong>
@@ -601,6 +644,15 @@ export const MessageComposer = ({
             />
             <span style={{ cursor: 'pointer', border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}>Attach</span>
           </label>
+          <button
+            type="button"
+            style={{ border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}
+            onClick={() => setHideDialogOpen(true)}
+            disabled={!stegoSubscription || !stegoSettings.enabled}
+            title={!stegoSubscription ? 'Requires active Blackout subscription (co.bmc.subscription)' : stegoSettings.enabled ? 'Hide a secret message inside an image' : 'Enable steganography in settings first'}
+          >
+            Hide Message
+          </button>
         </div>
 
         <div ref={editableRef} style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: '8px 10px', minHeight: 76 }}>
@@ -622,6 +674,13 @@ export const MessageComposer = ({
                 {file.name}
               </span>
             ))}
+          </div>
+        ) : null}
+        {stegoAttachment ? (
+          <div style={{ marginTop: 8 }}>
+            <span style={{ border: '1px solid var(--accent-primary)', borderRadius: 999, padding: '2px 8px', fontSize: 12 }}>
+              🔐 Hidden image ready: {stegoAttachment.name}
+            </span>
           </div>
         ) : null}
 
