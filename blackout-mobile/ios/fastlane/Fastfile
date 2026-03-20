@@ -1,0 +1,16 @@
+default_platform(:ios)
+
+platform :ios do
+  desc 'Build and upload to TestFlight'
+  lane :beta do
+    increment_build_number(xcodeproj: 'App/App.xcodeproj')
+    build_app(scheme: 'App')
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+
+  desc 'Build App Store release'
+  lane :release do
+    build_app(scheme: 'App')
+    upload_to_app_store
+  end
+end
