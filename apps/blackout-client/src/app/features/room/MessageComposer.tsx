@@ -1,7 +1,7 @@
 import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BaseEditor, Editor, Element as SlateElement, Node, Range, Text, Transforms, createEditor } from 'slate';
 import { withHistory } from 'slate-history';
-import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
+import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
 import { useRoomMembers } from '../../hooks/useRoom';
 import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
 import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
@@ -12,7 +12,6 @@ import { HideMessageDialog } from '../steganography';
 
 const MAX_SUGGESTIONS = 8;
 
-type Mark = 'bold' | 'italic' | 'strike' | 'code';
 type MentionKind = 'user' | 'room' | 'emoji';
 
 type CustomText = {
@@ -159,7 +158,7 @@ const withMarkdown = (editor: Editor): Editor => {
       return;
     }
 
-    const shortcuts: Array<[string, Mark]> = [
+    const shortcuts: Array<[string, 'bold' | 'italic' | 'strike' | 'code']> = [
       ['**', 'bold'],
       ['*', 'italic'],
       ['~~', 'strike'],
@@ -291,33 +290,6 @@ const LeafRenderer = ({ attributes, children, leaf }: { attributes: Record<strin
   return <span {...attributes}>{content}</span>;
 };
 
-const ToolbarButton = ({ mark, label }: { mark: Mark; label: string }) => {
-  const editor = useSlate();
-  return (
-    <button
-      type="button"
-      onMouseDown={(event) => {
-        event.preventDefault();
-        const active = Editor.marks(editor)?.[mark] === true;
-        if (active) {
-          Editor.removeMark(editor, mark);
-        } else {
-          Editor.addMark(editor, mark, true);
-        }
-      }}
-      style={{
-        border: '1px solid var(--border-default)',
-        background: 'var(--bg-input)',
-        color: 'var(--text-primary)',
-        borderRadius: 6,
-        padding: '2px 8px',
-      }}
-    >
-      {label}
-    </button>
-  );
-};
-
 export const MessageComposer = ({
   roomId,
   target,
@@ -339,8 +311,17 @@ export const MessageComposer = ({
   const [hideDialogOpen, setHideDialogOpen] = useState(false);
   const [stegoAttachment, setStegoAttachment] = useState<File | null>(null);
   const [stegoSubscription, setStegoSubscription] = useState(false);
+  const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
+  const [voteEnabled, setVoteEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [signatureEnabled, setSignatureEnabled] = useState(false);
+  const [commandEnabled, setCommandEnabled] = useState(false);
+  const [scheduledEnabled, setScheduledEnabled] = useState(false);
+  const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const featureMenuRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
 
   const { data: members } = useRoomMembers(roomId);
@@ -364,6 +345,18 @@ export const MessageComposer = ({
     if (!initialMarkdown) return;
     setValue([{ type: 'paragraph', children: [{ text: initialMarkdown }] }]);
   }, [initialMarkdown]);
+
+  useEffect(() => {
+    if (!featureMenuOpen) return;
+    const onWindowClick = (event: MouseEvent) => {
+      const targetNode = event.target as globalThis.Node | null;
+      if (!targetNode) return;
+      if (featureMenuRef.current?.contains(targetNode)) return;
+      setFeatureMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onWindowClick);
+    return () => window.removeEventListener('mousedown', onWindowClick);
+  }, [featureMenuOpen]);
 
   const roomSuggestions = useMemo(() => {
     const flattened: Suggestion[] = [];
@@ -623,37 +616,88 @@ export const MessageComposer = ({
           runAutocomplete();
         }}
       >
-        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-          <ToolbarButton mark="bold" label="B" />
-          <ToolbarButton mark="italic" label="I" />
-          <ToolbarButton mark="strike" label="S" />
-          <ToolbarButton mark="code" label="Code" />
-          <label style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: 12 }}>
-            <input
-              type="file"
-              multiple
-              style={{ display: 'none' }}
-              onChange={(event) => {
-                const files = event.currentTarget.files;
-                if (!files) return;
-                setAttachments((prev) => [...prev, ...Array.from(files)]);
-              }}
-            />
-            <span style={{ cursor: 'pointer', border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}>Attach</span>
-          </label>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 6, position: 'relative' }}>
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(event) => {
+              const files = event.currentTarget.files;
+              if (!files) return;
+              setAttachments((prev) => [...prev, ...Array.from(files)]);
+              event.currentTarget.value = '';
+            }}
+          />
           <button
             type="button"
-            style={{ border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}
-            onClick={() => setHideDialogOpen(true)}
-            disabled={!stegoSubscription}
-            title={
-              !stegoSubscription
-                ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
-                : 'Hide a secret message inside an image'
-            }
+            onClick={() => setFeatureMenuOpen((open) => !open)}
+            aria-label="Open composer features"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              border: '1px solid var(--border-default)',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              fontSize: 18,
+              lineHeight: 1,
+            }}
           >
-            Hide Message
+            +
           </button>
+          {featureMenuOpen ? (
+            <div
+              ref={featureMenuRef}
+              style={{
+                position: 'absolute',
+                top: 38,
+                left: 0,
+                width: 280,
+                border: '1px solid var(--border-default)',
+                borderRadius: 10,
+                background: 'var(--bg-input)',
+                zIndex: 10,
+                padding: 10,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 1 • Common</strong>
+                <button type="button" onClick={() => attachmentInputRef.current?.click()}>Attach file</button>
+                <button type="button" onClick={() => attachmentInputRef.current?.click()}>Upload media</button>
+                <button type="button" onClick={() => setVoiceEnabled((active) => !active)}>Quick voice note (placeholder)</button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 2 • Secondary</strong>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!stegoSubscription) return;
+                    setHideDialogOpen(true);
+                    setFeatureMenuOpen(false);
+                  }}
+                  disabled={!stegoSubscription}
+                  title={
+                    !stegoSubscription
+                      ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
+                      : 'Hide a secret message inside an image'
+                  }
+                >
+                  Steganography
+                </button>
+                <button type="button" onClick={() => setVoteEnabled((active) => !active)}>Poll / vote</button>
+                <button type="button" onClick={() => setCommandEnabled((active) => !active)}>Slash command</button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 3 • Advanced</strong>
+                <button type="button" onClick={() => setSignatureEnabled((active) => !active)}>Signed message preset</button>
+                <button type="button" onClick={() => setScheduledEnabled((active) => !active)}>Scheduled send preset</button>
+                <button type="button" onClick={() => setEncryptionPresetEnabled((active) => !active)}>Encryption preset</button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div ref={editableRef} style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: '8px 10px', minHeight: 76 }}>
@@ -668,20 +712,63 @@ export const MessageComposer = ({
           />
         </div>
 
-        {attachments.length > 0 ? (
+        {(attachments.length > 0 || stegoAttachment || voteEnabled || voiceEnabled || signatureEnabled || commandEnabled || scheduledEnabled || encryptionPresetEnabled) ? (
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {attachments.map((file, idx) => (
-              <span key={`${file.name}-${idx}`} style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12 }}>
-                {file.name}
+              <span key={`${file.name}-${idx}`} style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Attach: {file.name}
+                <button
+                  type="button"
+                  aria-label={`Remove ${file.name}`}
+                  onClick={() => setAttachments((current) => current.filter((_, currentIdx) => currentIdx !== idx))}
+                  style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
               </span>
             ))}
-          </div>
-        ) : null}
-        {stegoAttachment ? (
-          <div style={{ marginTop: 8 }}>
-            <span style={{ border: '1px solid var(--accent-primary)', borderRadius: 999, padding: '2px 8px', fontSize: 12 }}>
-              🔐 Hidden image ready: {stegoAttachment.name}
-            </span>
+            {stegoAttachment ? (
+              <span style={{ border: '1px solid var(--accent-primary)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Stego: image ready
+                <button type="button" onClick={() => setStegoAttachment(null)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {voteEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Vote: 2 options • 24h
+                <button type="button" onClick={() => setVoteEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {voiceEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Voice: attached
+                <button type="button" onClick={() => setVoiceEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {commandEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Command: enabled
+                <button type="button" onClick={() => setCommandEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {signatureEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Signature: enabled
+                <button type="button" onClick={() => setSignatureEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {scheduledEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Schedule: preset
+                <button type="button" onClick={() => setScheduledEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {encryptionPresetEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Encryption: preset
+                <button type="button" onClick={() => setEncryptionPresetEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
           </div>
         ) : null}
 
