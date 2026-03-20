@@ -13,6 +13,48 @@ import {
 } from "../../../src/steganography/types";
 
 describe("StegoCodec hardening", () => {
+    it("enforces payload limit hard caps with deterministic failures", async () => {
+        const codec = new StegoCodec({ maxPayloadBytes: 8 });
+        const payload = new TextEncoder().encode("payload-too-large");
+
+        await expect(codec.encode(payload, { strategy: StegoStrategy.EmojiString })).rejects.toThrow(
+            "exceeds hard cap",
+        );
+    });
+
+    it("runs fixture-based encode/decode regression corpus", async () => {
+        const codec = new StegoCodec();
+        const fixtures = [
+            { payload: "a", strategy: StegoStrategy.Emoji },
+            { payload: "governance-vote-v1", strategy: StegoStrategy.EmojiString },
+            { payload: "🗳️ coop integrity ✅", strategy: StegoStrategy.EmojiString },
+        ];
+
+        for (const fixture of fixtures) {
+            const encoded = await codec.encode(new TextEncoder().encode(fixture.payload), {
+                strategy: fixture.strategy,
+            });
+            const decoded = await codec.decodeDiagnostic(encoded.carrier);
+            expect(decoded.ok).toBe(true);
+            if (decoded.ok) {
+                expect(new TextDecoder().decode(decoded.payload)).toEqual(fixture.payload);
+            }
+        }
+    });
+
+    it("rolls back from image strategy to emoji strategy when enabled", async () => {
+        const codec = new StegoCodec();
+        const payload = new TextEncoder().encode("fallback-to-emoji");
+
+        const result = await codec.encodeWithRollback(payload, {
+            strategy: StegoStrategy.Image,
+            enableRollback: true,
+        });
+
+        expect(result.strategy).toBe(StegoStrategy.EmojiString);
+        expect(result.rolledBackFrom).toBe(StegoStrategy.Image);
+    });
+
     it("emits privacy-preserving decode failure telemetry", async () => {
         const telemetry: StegoDecodeFailureTelemetryEvent[] = [];
         const codec = new StegoCodec({
