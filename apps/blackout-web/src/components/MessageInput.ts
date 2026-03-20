@@ -24,11 +24,11 @@ export function renderMessageInput({
   showTypingIndicator,
 }: MessageInputOptions): string {
   const advancedActions = [
-    composerRepliesEnabled ? '<option value="reply">Reply snippet</option>' : "",
-    composerEditsEnabled ? '<option value="edit">Edit marker</option>' : "",
-    composerRedactionsEnabled ? '<option value="redact">Redaction marker</option>' : "",
-    mediaCodeBlocksEnabled ? '<option value="code">Code block</option>' : "",
-    mediaSpoilersEnabled ? '<option value="spoiler">Spoiler block</option>' : "",
+    composerRepliesEnabled ? '<option value="reply">Reply template</option>' : "",
+    composerEditsEnabled ? '<option value="edit">Edit note</option>' : "",
+    composerRedactionsEnabled ? '<option value="redact">Redact placeholder</option>' : "",
+    mediaCodeBlocksEnabled ? '<option value="code">Code snippet</option>' : "",
+    mediaSpoilersEnabled ? '<option value="spoiler">Spoiler wrapper</option>' : "",
   ]
     .filter(Boolean)
     .join("");
@@ -41,7 +41,7 @@ export function renderMessageInput({
         <div class="composer-toolbar" data-testid="composer-toolbar">
           <button type="button" data-action="composer-format-bold" ${disabled ? "disabled" : ""}>Bold</button>
           <button type="button" data-action="composer-format-italic" ${disabled ? "disabled" : ""}>Italic</button>
-          <button type="button" data-action="composer-insert-emoji" ${disabled ? "disabled" : ""}>😊</button>
+          <button type="button" data-action="composer-insert-emoji" ${disabled ? "disabled" : ""}>Emoji</button>
           ${stegoEnabled ? `<button type="button" data-action="composer-insert-stego" data-testid="composer-stego-button" ${disabled ? "disabled" : ""}>Stego</button>` : ""}
           ${
             advancedActions
@@ -57,9 +57,9 @@ export function renderMessageInput({
       `
           : ""
       }
-      <textarea name="message" rows="2" placeholder="Message #channel (Enter to send, Shift+Enter for newline)" ${disabled ? "disabled" : ""}></textarea>
-      ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" data-testid="typing-indicator">Typing…</p>' : ""}
-      <button type="submit" ${disabled ? "disabled" : ""}>Send</button>
+      <textarea name="message" rows="2" placeholder="Write a message… (Enter to send, Shift+Enter for a new line)" ${disabled ? "disabled" : ""}></textarea>
+      ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" data-testid="typing-indicator">You are typing…</p>' : ""}
+      <button type="submit" ${disabled ? "disabled" : ""}>Send message</button>
     </form>
   `;
 }
