@@ -86,16 +86,21 @@ export class BlackoutWebApp {
     this.root.innerHTML = `
       <main class="container">
         <header class="header">
-          <h1>Blackout Core</h1>
-          <p class="meta">Discord-like starter shell on top of Matrix-compatible APIs.</p>
+          <h1>Blackout Chat</h1>
+          <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
           <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
           <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
         <div class="header-actions">
+          <div class="header-actions-copy">
+            <strong>Workspace controls</strong>
+            <span class="meta">Use shortcuts for speed, or open settings for full feature management.</span>
+          </div>
           ${this.renderFeatureQuickAccess()}
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
+        ${state.session ? this.renderFeatureToolbar() : ""}
         ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
@@ -169,14 +174,14 @@ export class BlackoutWebApp {
 
     return `
       <section class="stack panel-card" data-testid="feature-entrypoint-registry">
-        <h2>Feature entry points</h2>
-        <p class="meta">Visible entries: ${totalEntries}. Enabled in current preset: ${enabledCount}.</p>
-        <input type="search" data-action="filter-features" data-testid="feature-filter-input" value="${this.featureFilter}" placeholder="Filter by id, name, or entrypoint" />
-        ${this.renderFeatureGroup("settings toggle", grouped.get("settings_toggle") ?? [])}
-        ${this.renderFeatureGroup("composer action", grouped.get("composer_action") ?? [])}
-        ${this.renderFeatureGroup("room action", grouped.get("room_action") ?? [])}
-        ${this.renderFeatureGroup("widget panel", grouped.get("widget_panel") ?? [])}
-        ${this.renderFeatureGroup("admin/governance console", grouped.get("admin_console") ?? [])}
+        <h2>Feature library</h2>
+        <p class="meta">${enabledCount} of ${totalEntries} feature entry points are active for this workspace.</p>
+        <input type="search" data-action="filter-features" data-testid="feature-filter-input" value="${this.featureFilter}" placeholder="Search features by name, id, or placement" />
+        ${this.renderFeatureGroup("⚙️ Settings toggles", grouped.get("settings_toggle") ?? [])}
+        ${this.renderFeatureGroup("✍️ Composer actions", grouped.get("composer_action") ?? [])}
+        ${this.renderFeatureGroup("💬 Room actions", grouped.get("room_action") ?? [])}
+        ${this.renderFeatureGroup("🧩 Widget panels", grouped.get("widget_panel") ?? [])}
+        ${this.renderFeatureGroup("🛡️ Admin & governance", grouped.get("admin_console") ?? [])}
       </section>
     `;
   }
@@ -192,12 +197,43 @@ export class BlackoutWebApp {
 
     return `
       <label class="stack feature-quick-access">
-        Feature quick access
+        Jump to a feature
         <div class="quick-access-controls">
           <select data-action="select-feature-quick-access" data-testid="feature-quick-access-select">${options}</select>
-          <button type="button" class="ghost-btn" data-action="open-feature-quick-access" data-testid="feature-quick-access-button">Open feature</button>
+          <button type="button" class="ghost-btn" data-action="open-feature-quick-access" data-testid="feature-quick-access-button">Open</button>
         </div>
       </label>
+    `;
+  }
+
+  private renderFeatureToolbar(): string {
+    const activeFeatures = this.getActivePresetFeatures();
+    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => activeFeatures[feature.presetKey] ?? false);
+
+    if (!enabledFeatures.length) {
+      return `
+        <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
+          <p class="meta">No feature shortcuts are available in this preset.</p>
+        </section>
+      `;
+    }
+
+    const toolbarButtons = enabledFeatures
+      .map((feature) => {
+        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
+        return `<button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">${feature.name}</button>`;
+      })
+      .join("");
+
+    return `
+      <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
+        <div class="feature-toolbar-head">
+          <h2>Top feature shortcuts</h2>
+          <p class="meta">Quick access to enabled features, similar to a messaging app action bar.</p>
+        </div>
+        <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+      </section>
     `;
   }
 
@@ -207,8 +243,8 @@ export class BlackoutWebApp {
 
     return `
       <section class="stack panel-card" data-testid="feature-presets-panel">
-        <h2>Feature Presets</h2>
-        <p class="meta">Choose a preset, preview capabilities, and apply or rollback with confirmation.</p>
+        <h2>Workspace layout presets</h2>
+        <p class="meta">Pick the experience level that best matches your team, preview changes, then apply instantly.</p>
         <label class="stack">
           Preset
           <select data-testid="feature-preset-select" data-action="select-preset">
@@ -218,7 +254,7 @@ export class BlackoutWebApp {
           </select>
         </label>
         <div class="stack" data-testid="preset-explainer-panel">
-          <h3>What this preset enables</h3>
+          <h3>What changes with this preset</h3>
           <progress max="${previewFeatures.length}" value="${enabledFeatures.length}" data-testid="preset-capability-meter"></progress>
           <p class="meta">${enabledFeatures.length}/${previewFeatures.length} capabilities enabled.</p>
           <ul class="stack">
@@ -227,7 +263,7 @@ export class BlackoutWebApp {
         </div>
         <div class="modal-actions">
           <button type="button" data-action="apply-preset" data-testid="apply-preset-button" ${this.selectedPreset === this.appliedPreset ? "disabled" : ""}>Apply preset</button>
-          <button type="button" class="ghost-btn" data-action="rollback-preset" data-testid="rollback-preset-button" ${this.appliedPreset === this.deploymentPreset ? "disabled" : ""}>Rollback to deployment preset</button>
+          <button type="button" class="ghost-btn" data-action="rollback-preset" data-testid="rollback-preset-button" ${this.appliedPreset === this.deploymentPreset ? "disabled" : ""}>Reset to default preset</button>
         </div>
       </section>
     `;

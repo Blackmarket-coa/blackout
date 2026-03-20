@@ -17,9 +17,9 @@ export function renderChannelSidebar({ serverName, channels, activeChannelId, un
 
   return `
     <aside class="channel-list">
-      <div class="sidebar-head">${serverName}</div>
-      <ul>${channelItems || '<li class="empty">No channels yet</li>'}</ul>
-      <button type="button" class="add-btn" data-action="create-channel">+ Create Channel</button>
+      <div class="sidebar-head">${serverName} channels</div>
+      <ul>${channelItems || '<li class="empty">No channels yet — create your first topic channel.</li>'}</ul>
+      <button type="button" class="add-btn" data-action="create-channel">+ New channel</button>
     </aside>
   `;
 }
