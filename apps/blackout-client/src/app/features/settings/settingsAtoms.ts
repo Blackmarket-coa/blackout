@@ -1,5 +1,16 @@
 import { atomWithStorage } from 'jotai/utils';
 
+export type SettingsSectionId =
+  | 'account'
+  | 'appearance'
+  | 'notifications'
+  | 'privacy'
+  | 'voice-video'
+  | 'accessibility'
+  | 'keybinds'
+  | 'developer'
+  | 'about';
+
 export type ThemeOption = 'dark' | 'light' | 'amoled';
 export type ChatDensityOption = 'compact' | 'cozy';
 export type EmojiStyleOption = 'system' | 'twemoji';
@@ -42,6 +53,8 @@ export interface PrivacySettingsState {
   showReadReceipts: boolean;
   showTypingIndicators: boolean;
 }
+
+export const settingsPageAtom = atomWithStorage<SettingsSectionId>('blackout.settings.active-section.v1', 'appearance');
 
 export const appearanceSettingsAtom = atomWithStorage<AppearanceSettingsState>('blackout.settings.appearance.v1', {
   theme: 'dark',

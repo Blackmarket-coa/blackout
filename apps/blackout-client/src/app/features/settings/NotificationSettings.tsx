@@ -35,7 +35,7 @@ export const NotificationSettings = () => {
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <section>
-        <h3>Global notification mode</h3>
+        <h3>Global notification rules</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           {modeOptions.map((option) => (
             <button
@@ -57,7 +57,7 @@ export const NotificationSettings = () => {
       </section>
 
       <section>
-        <h3>Per-room overrides</h3>
+        <h3>Per-room override list</h3>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <input
             value={roomInput}
