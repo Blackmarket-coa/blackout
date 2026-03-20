@@ -57,4 +57,15 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.diagnostics.userOverrideCount).toBe(1);
     expect(config.rollout.cohort).toBe("beta");
   });
+
+  it("accepts shorthand preset strings for deployment and tenant env vars", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_DEPLOYMENT_DEFAULTS: "community_plus",
+      VITE_FEATURE_TENANT_POLICY: "blackout_full",
+    });
+
+    expect(config.presets.activePreset).toBe("blackout_full");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("community_plus");
+    expect(config.presets.features["features.bmc.roles"]).toBe(true);
+  });
 });
