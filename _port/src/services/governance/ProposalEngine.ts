@@ -51,8 +51,10 @@ export class ProposalEngine {
     public create(
         proposal: Omit<
             ProposalDocument,
-            "schemaVersion" | "state" | "amendments" | "auditTimeline" | "createdAt" | "updatedAt"
-        >,
+            "schemaVersion" | "state" | "amendments" | "auditTimeline" | "createdAt" | "updatedAt" | "cadence"
+        > & {
+            cadence?: ProposalDocument["cadence"];
+        },
         permissionContext: GovernancePermissionContext,
         now: number = Date.now(),
     ): ProposalDocument {
@@ -60,6 +62,11 @@ export class ProposalEngine {
 
         return {
             ...proposal,
+            cadence: proposal.cadence ?? {
+                digestMode: "daily",
+                decisionWindowHours: 48,
+                engagementLoopProtection: true,
+            },
             schemaVersion: GOVERNANCE_SCHEMA_VERSION,
             state: "draft",
             amendments: [],
@@ -160,7 +167,11 @@ export class ProposalEngine {
         };
     }
 
-    public migrate(input: ProposalDocument): ProposalDocument {
+    public migrate(
+        input: Omit<ProposalDocument, "cadence"> & {
+            cadence?: ProposalDocument["cadence"];
+        },
+    ): ProposalDocument {
         if ((input.schemaVersion ?? 1) >= GOVERNANCE_SCHEMA_VERSION) {
             return input;
         }
@@ -168,6 +179,11 @@ export class ProposalEngine {
         return {
             ...input,
             schemaVersion: GOVERNANCE_SCHEMA_VERSION,
+            cadence: input.cadence ?? {
+                digestMode: "daily",
+                decisionWindowHours: 48,
+                engagementLoopProtection: true,
+            },
             amendments: input.amendments ?? [],
             auditTimeline: input.auditTimeline ?? [],
         };

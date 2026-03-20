@@ -10,6 +10,25 @@ Blackout is a secure communication and governance platform on Matrix/Synapse wit
 - Resilient community coordination under adverse conditions.
 - Governance-grade integrity, auditability, and compartmentalization.
 
+## 1.1) Strategic posture (product + market)
+
+Blackout execution should maintain the following strategic posture across all work orders:
+
+- **Value-first UX (Slack lesson):** governance participation and coordination must stay frictionless for everyday users.
+- **Privacy + decentralization credibility (Telegram/Rocket.Chat lesson):** maintain robust self-host and federation pathways as first-class capabilities.
+- **Category focus (anti-Teams sprawl):** keep Blackout anchored as the cooperative governance + secure communication layer.
+- **Compounding moat sequence:** accelerate in this order: steganography adoption -> governance trust -> federation network effects -> inter-community voting.
+
+### Roadmap alignment anchors
+
+This work order is intentionally aligned with the program artifacts that already define execution sequence and architecture:
+
+- Centralized work-order structure and release gate flow: `docs/blackout_centralized_build_work_order.md`, `docs/blackout_all_phases_one_shot_prompt.md`.
+- Governance architecture and phased delivery: `docs/blackout-governance-build-plan.md`.
+- Security/privacy hardening trajectory: `docs/security-phase1-foundation.md` through `docs/security-phase5-cluster-platform-security.md`.
+
+---
+
 ## 2) Technique-to-Architecture Mapping
 
 ### 2.1 Image steganography

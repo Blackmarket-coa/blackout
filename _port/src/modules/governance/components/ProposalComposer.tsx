@@ -8,12 +8,22 @@ Please see LICENSE files in the repository root for full details.
 import React, { useState } from "react";
 
 interface Props {
-    onCreate: (input: { title: string; body: string }) => void;
+    onCreate: (input: {
+        title: string;
+        body: string;
+        cadence: {
+            digestMode: "daily" | "twice_daily" | "manual";
+            decisionWindowHours: number;
+            engagementLoopProtection: true;
+        };
+    }) => void;
 }
 
 export default function ProposalComposer({ onCreate }: Props): React.JSX.Element {
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
+    const [digestMode, setDigestMode] = useState<"daily" | "twice_daily" | "manual">("daily");
+    const [decisionWindowHours, setDecisionWindowHours] = useState(48);
     const canSubmit = Boolean(title.trim() && body.trim());
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
@@ -28,10 +38,17 @@ export default function ProposalComposer({ onCreate }: Props): React.JSX.Element
         onCreate({
             title: trimmedTitle,
             body: trimmedBody,
+            cadence: {
+                digestMode,
+                decisionWindowHours,
+                engagementLoopProtection: true,
+            },
         });
 
         setTitle("");
         setBody("");
+        setDigestMode("daily");
+        setDecisionWindowHours(48);
     };
 
     return (
@@ -56,6 +73,30 @@ export default function ProposalComposer({ onCreate }: Props): React.JSX.Element
                 />
             </label>
             <p>{body.length} characters</p>
+            <label>
+                Digest cadence
+                <select
+                    value={digestMode}
+                    onChange={(event) => setDigestMode(event.target.value as "daily" | "twice_daily" | "manual")}
+                    data-testid="blackout-proposal-digest-mode"
+                >
+                    <option value="daily">Daily digest (default)</option>
+                    <option value="twice_daily">Twice daily digest</option>
+                    <option value="manual">Manual digests only</option>
+                </select>
+            </label>
+            <label>
+                Decision window
+                <select
+                    value={decisionWindowHours}
+                    onChange={(event) => setDecisionWindowHours(Number(event.target.value))}
+                    data-testid="blackout-proposal-decision-window"
+                >
+                    <option value={24}>24 hours</option>
+                    <option value={48}>48 hours (default)</option>
+                    <option value={72}>72 hours</option>
+                </select>
+            </label>
             <button type="submit" disabled={!canSubmit} data-testid="blackout-proposal-create">
                 Create
             </button>

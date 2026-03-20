@@ -38,8 +38,15 @@ export default function ProposalDetail({
         <section data-testid="blackout-proposal-detail">
             <h3>{proposal.title}</h3>
             <p>{proposal.body}</p>
+            <p data-testid="blackout-proposal-thread-clarity">
+                <strong>Thread summary:</strong> {proposal.body.split("\n")[0]}
+            </p>
             <p>
                 <strong>State:</strong> {proposal.state}
+            </p>
+            <p data-testid="blackout-proposal-cadence">
+                <strong>Civic cadence:</strong> {proposal.cadence.digestMode} digest · {proposal.cadence.decisionWindowHours}
+                h decision window · engagement-loop protections on
             </p>
             <div>
                 <button type="button" onClick={onAdvanceState} data-testid="blackout-proposal-advance">

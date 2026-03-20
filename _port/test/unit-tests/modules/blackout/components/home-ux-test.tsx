@@ -6,9 +6,10 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import React from "react";
-import { render, screen } from "jest-matrix-react";
+import { fireEvent, render, screen } from "jest-matrix-react";
 
 import ProposalComposer from "../../../../../src/modules/governance/components/ProposalComposer";
+import ProposalList from "../../../../../src/modules/governance/components/ProposalList";
 import EducationHome from "../../../../../src/modules/education/components/EducationHome";
 import MutualAidHome from "../../../../../src/modules/mutualAid/components/MutualAidHome";
 
@@ -30,6 +31,53 @@ describe("blackout home ux", () => {
 
         expect(screen.getByTestId("blackout-proposal-create")).toBeDisabled();
         expect(screen.getByText("0 characters")).toBeInTheDocument();
+        expect(screen.getByTestId("blackout-proposal-digest-mode")).toHaveValue("daily");
+        expect(screen.getByTestId("blackout-proposal-decision-window")).toHaveValue("48");
+    });
+
+    it("supports governance searchability and state visibility filtering", () => {
+        render(
+            <ProposalList
+                proposals={[
+                    {
+                        schemaVersion: 2,
+                        id: "p1",
+                        roomId: "!gov:example.org",
+                        title: "Budget Ratification",
+                        body: "Thread about annual budget",
+                        authorUserId: "@mod:example.org",
+                        cadence: { digestMode: "daily", decisionWindowHours: 48, engagementLoopProtection: true },
+                        state: "draft",
+                        amendments: [],
+                        auditTimeline: [],
+                        createdAt: 100,
+                        updatedAt: 100,
+                    },
+                    {
+                        schemaVersion: 2,
+                        id: "p2",
+                        roomId: "!gov:example.org",
+                        title: "Safety Policy",
+                        body: "Thread about anti-abuse policy",
+                        authorUserId: "@mod:example.org",
+                        cadence: { digestMode: "manual", decisionWindowHours: 72, engagementLoopProtection: true },
+                        state: "close",
+                        amendments: [],
+                        auditTimeline: [],
+                        createdAt: 101,
+                        updatedAt: 101,
+                    },
+                ]}
+                onSelect={jest.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByTestId("blackout-governance-search"), { target: { value: "budget" } });
+        expect(screen.getByTestId("blackout-governance-visible-count")).toHaveTextContent("Visible proposals: 1 / 2");
+
+        fireEvent.change(screen.getByTestId("blackout-governance-state-filter"), { target: { value: "close" } });
+        expect(screen.getByTestId("blackout-governance-visible-count")).toHaveTextContent("Visible proposals: 0 / 2");
+        expect(screen.getByTestId("blackout-governance-filter-empty")).toBeInTheDocument();
     });
 
     it("shows empty state and disabled actions in education", () => {

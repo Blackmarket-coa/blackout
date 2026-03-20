@@ -87,6 +87,12 @@ Package Blackout as both a movement-grade and enterprise-credible platform.
 - Clear go/no-go recommendation with owner/date sign-off.
 - Sales/onboarding collateral maps directly to completed technical scope.
 
+### 2026-03-20 execution artifacts
+- Federation onboarding runbook: `docs/operations/runbooks/independent-org-to-coalition-onboarding.md`.
+- Deployment matrix (self-host vs managed): `docs/operations/deployment_matrix_cloud_selfhost.md`.
+- Differentiation brief: `docs/blackout-differentiation-brief.md`.
+- Day-3 evidence + sign-off: `docs/operations/evidence/2026-03-20-day3-federation-commercial-readiness.md`.
+
 ## Priority adjustments for this push
 
 For a 3-day push, priorities should be:

@@ -30,6 +30,11 @@ export interface ProposalDocument {
     title: string;
     body: string;
     authorUserId: string;
+    cadence: {
+        digestMode: "daily" | "twice_daily" | "manual";
+        decisionWindowHours: number;
+        engagementLoopProtection: true;
+    };
     jurySelection?: JurySelectionRecord;
     state: GovernanceLifecycleState;
     amendments: ProposalAmendment[];

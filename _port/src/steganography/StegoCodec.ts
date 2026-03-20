@@ -41,6 +41,14 @@ export type DecodeOutcome =
     | { ok: true; payload: Uint8Array; header: StegoDecodeResult }
     | { ok: false; error: StegoDecodeError };
 
+export interface EncodeWithRollbackOptions extends StegoEncodeOptions {
+    enableRollback?: boolean;
+}
+
+export interface EncodeWithRollbackResult extends StegoMessage {
+    rolledBackFrom?: StegoStrategy;
+}
+
 /**
  * The main steganography codec.
  *
@@ -165,6 +173,38 @@ export class StegoCodec {
     }
 
     /**
+     * Encode with optional strategy rollback for resilience.
+     */
+    public async encodeWithRollback(
+        encryptedPayload: Uint8Array,
+        options: EncodeWithRollbackOptions = {},
+    ): Promise<EncodeWithRollbackResult> {
+        const initialStrategy = options.strategy ?? this.selectStrategy(encryptedPayload.length);
+
+        try {
+            return await this.encode(encryptedPayload, { ...options, strategy: initialStrategy });
+        } catch (error) {
+            if (!options.enableRollback) {
+                throw error;
+            }
+        }
+
+        for (const fallbackStrategy of this.getFallbackOrder(initialStrategy)) {
+            try {
+                const encoded = await this.encode(encryptedPayload, { ...options, strategy: fallbackStrategy });
+                return {
+                    ...encoded,
+                    rolledBackFrom: initialStrategy,
+                };
+            } catch {
+                // try next deterministic fallback strategy
+            }
+        }
+
+        throw new Error(`Unable to encode payload with rollback from strategy ${initialStrategy}`);
+    }
+
+    /**
      * Decode a steganographic carrier back into an encrypted payload.
      *
      * This method auto-detects the strategy:
@@ -269,6 +309,18 @@ export class StegoCodec {
      */
     public looksLikeEmojiStego(content: string): boolean {
         return hasStegoMarker(content) || looksLikeStegoEmoji(content);
+    }
+
+    private getFallbackOrder(initialStrategy: StegoStrategy): StegoStrategy[] {
+        switch (initialStrategy) {
+            case StegoStrategy.Image:
+                return [StegoStrategy.EmojiString, StegoStrategy.Emoji];
+            case StegoStrategy.EmojiString:
+                return [StegoStrategy.Emoji];
+            case StegoStrategy.Emoji:
+            default:
+                return [];
+        }
     }
 
     /**
