@@ -58,7 +58,7 @@ const deriveKey = async (passphrase: string, salt: Uint8Array): Promise<CryptoKe
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt as BufferSource,
+      salt: salt as globalThis.BufferSource,
       iterations: MIN_PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },

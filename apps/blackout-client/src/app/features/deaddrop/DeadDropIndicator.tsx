@@ -20,7 +20,10 @@ export const DeadDropIndicator = ({ config, queueCount }: { config: DeadDropConf
     return () => window.clearInterval(timer);
   }, []);
 
-  const nextDelivery = useMemo(() => getNextDeliveryDate(config), [config, now]);
+  const nextDelivery = useMemo(() => {
+    void now;
+    return getNextDeliveryDate(config);
+  }, [config, now]);
   const summary = useMemo(() => describeDeadDropSchedule(config), [config]);
 
   if (!config.enabled) return null;

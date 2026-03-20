@@ -1,4 +1,4 @@
-import { type DragEvent, type MouseEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, type MouseEvent, useEffect, useState } from 'react';
 import { atom, useAtom, useAtomValue } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import type { Room } from 'matrix-js-sdk';
@@ -25,8 +25,8 @@ interface CategoryNode {
   subspaces: CategoryNode[];
 }
 
-const hierarchyCacheAtom = atomFamily((spaceId: string) => atom<CategoryNode[] | null>(null));
-const hierarchyLoadingAtom = atomFamily((spaceId: string) => atom<boolean>(false));
+const hierarchyCacheAtom = atomFamily(() => atom<CategoryNode[] | null>(null));
+const hierarchyLoadingAtom = atomFamily(() => atom<boolean>(false));
 const collapseStateAtom = atom<Record<string, boolean>>({});
 
 const iconForRoom = (room: HierarchyRoom | Room): string => {

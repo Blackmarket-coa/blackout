@@ -103,7 +103,7 @@ export const useRoles = (roomId: string) => {
       error: roomState.error,
       source: rolesFromEvent ? 'co.bmc.roles' : 'derived',
     };
-  }, [roomId, roomState.data, roomState.error, roomState.loading]);
+  }, [roomState.data, roomState.error, roomState.loading]);
 };
 
 export const useUserRoles = (roomId: string, userId: string) => {

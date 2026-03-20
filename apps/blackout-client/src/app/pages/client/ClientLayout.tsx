@@ -1,4 +1,4 @@
-import { type DragEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';

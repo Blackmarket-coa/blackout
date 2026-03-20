@@ -142,7 +142,6 @@ export const AutoModPanel = ({ roomId }: { roomId: string }) => {
       setSaveState('saved');
     } catch (error) {
       setSaveState('error');
-      // eslint-disable-next-line no-console
       console.error('Failed to save AutoMod settings', error);
     }
   };
