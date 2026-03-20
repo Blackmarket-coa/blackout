@@ -9,6 +9,12 @@ Use this one-shot prompt with an AI coding/documentation agent to complete **all
 > ### Primary objective
 > Complete Work Orders 1 through 9 with production-grade implementation, tests, and documentation evidence, then produce a final release-readiness gate artifact.
 >
+> ### Strategic posture guardrails (must hold across all phases)
+> - Keep governance participation and coordination UX friction low (“value-first UX”).
+> - Preserve privacy/decentralization credibility via self-host and federation pathways.
+> - Protect category focus: cooperative governance + secure communication, without productivity-suite sprawl.
+> - Sequence moat-building deliverables as: stego adoption -> governance trust -> federation network effects -> inter-community voting.
+>
 > ### Mandatory execution order
 > 1. Work Orders **1 + 8** (tracker normalization + high-priority unfinished markers).
 > 2. Work Orders **2 + 3 + 4** (image stego integration, dead-drop profile, governance payload attestation).
