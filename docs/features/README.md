@@ -31,5 +31,6 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 - `epic_name_delivery_blueprint.md`: EPIC implementation scaffold covering technical design, schema evolution, UI/UX, testing, telemetry, feature flags, and migration notes.
 - `epic_open_source_options.md`: vetted open-source implementation options for EPIC feature flags, policy enforcement, telemetry, schema validation, and Matrix compatibility testing.
 - `feature_to_open_source_map.md`: direct mapping from `feature_registry.json` feature IDs to suggested open-source equivalents and adoption guidance.
+- `composer_rich_feature_ui_guide.md`: UI/UX guidance for scaling rich composer capabilities with a progressive-disclosure `[+]` pattern, active feature chips, and phased rollout strategy.
 
 - `../blackout-rollout-runbook.md`: rollout hardening checklist for operations, localization readiness, and policy tuning.
