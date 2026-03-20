@@ -16,6 +16,8 @@ interface ChatWindowProps {
   mediaSpoilersEnabled: boolean;
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
+  compactMode: boolean;
+  compactRecommended: boolean;
 }
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -34,8 +36,10 @@ export function renderChatWindow({
   mediaSpoilersEnabled,
   typingIndicatorsEnabled,
   showTypingIndicator,
+  compactMode,
+  compactRecommended,
 }: ChatWindowProps): string {
-  const renderedMessages = renderGroupedMessages(messages);
+  const renderedMessages = renderGroupedMessages(messages, compactMode);
 
   return `
     <section class="chat-window">
@@ -43,7 +47,10 @@ export function renderChatWindow({
         <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer">☰</button>
         <div class="chat-head-copy">
           <span>${channelLabel}</span>
-          <small>Stay on topic, react quickly, and keep conversations moving.</small>
+          <small>
+            Stay on topic, react quickly, and keep conversations moving.
+            ${compactMode ? " Compact mode is active for this high-density stream." : compactRecommended ? " Compact mode is recommended for message-heavy channels." : ""}
+          </small>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>
@@ -63,11 +70,11 @@ export function renderChatWindow({
   `;
 }
 
-function renderGroupedMessages(messages: ChatMessage[]): string {
+function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean): string {
   return messages
     .map((message, index) => {
       const previous = messages[index - 1];
-      const compact = shouldCompact(previous, message);
+      const compact = forceCompact || shouldCompact(previous, message);
       return renderMessageItem(message, { compact });
     })
     .join("");

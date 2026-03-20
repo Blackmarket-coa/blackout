@@ -32,10 +32,42 @@ export class BlackoutWebApp {
   private featureActionResult: string | null = null;
   private featureFilter = "";
   private quickAccessFeatureId = FEATURE_UI_ENTRIES[0]?.id ?? "";
+  private commandPaletteQuery = "";
+  private commandPaletteOpen = false;
+  private compactModeEnabled = false;
   private settingsOpen = false;
   private composerIsTyping = false;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
+  private readonly hasSeenFeatureTooltips: boolean;
+
+  private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
+    settings_toggle: {
+      icon: "⚙️",
+      label: "Settings toggles",
+      firstUseTooltip: "Use these to tune workspace behavior and personal defaults.",
+    },
+    composer_action: {
+      icon: "✍️",
+      label: "Composer actions",
+      firstUseTooltip: "Quick inserts and send-flow helpers for faster authoring.",
+    },
+    room_action: {
+      icon: "💬",
+      label: "Room actions",
+      firstUseTooltip: "Context actions for channels, threads, and room workflows.",
+    },
+    widget_panel: {
+      icon: "🧩",
+      label: "Widget panels",
+      firstUseTooltip: "Open feature surfaces embedded alongside chat.",
+    },
+    admin_console: {
+      icon: "🛡️",
+      label: "Admin & governance",
+      firstUseTooltip: "Operational controls for moderation, policy, and access.",
+    },
+  };
 
   constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
     homeserverUrl: "https://matrix.blackout.local",
@@ -59,6 +91,7 @@ export class BlackoutWebApp {
     this.deploymentPreset = runtimeConfig.presets.diagnostics.deploymentPreset;
     this.appliedPreset = runtimeConfig.presets.activePreset;
     this.selectedPreset = runtimeConfig.presets.activePreset;
+    this.hasSeenFeatureTooltips = globalThis.localStorage.getItem("blackout.featureTipsSeen") === "true";
     this.appliedFeatures = Object.keys(runtimeConfig.presets.features).length
       ? { ...runtimeConfig.presets.features }
       : { ...FEATURE_PRESET_BUNDLES[runtimeConfig.presets.activePreset] };
@@ -69,6 +102,7 @@ export class BlackoutWebApp {
       preset: this.appliedPreset,
       cohort: this.runtimeConfig.rollout.cohort,
     });
+    globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
     this.render();
 
     const state = this.store.getState();
@@ -95,9 +129,10 @@ export class BlackoutWebApp {
         <div class="header-actions">
           <div class="header-actions-copy">
             <strong>Workspace controls</strong>
-            <span class="meta">Use shortcuts for speed, or open settings for full feature management.</span>
+            <span class="meta">Use ⌘K / Ctrl+K for the command palette, or open settings for full feature management.</span>
           </div>
-          ${this.renderFeatureQuickAccess()}
+          ${this.renderFeatureCommandPaletteTrigger()}
+          <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
         ${state.session ? this.renderFeatureToolbar() : ""}
@@ -110,6 +145,7 @@ export class BlackoutWebApp {
         ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth })}
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
+      ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
     `;
 
     this.bindEvents();
@@ -121,7 +157,7 @@ export class BlackoutWebApp {
     const selectedServer = state.servers.find((server) => server.id === state.activeServerId);
 
     return `
-      <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""}">
+      <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""} ${this.getCompactModeActive() ? "workspace--compact" : ""}">
         ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId })}
         ${renderChannelSidebar({
           serverName: selectedServer?.name ?? "Channels",
@@ -143,6 +179,8 @@ export class BlackoutWebApp {
           mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
           typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
           showTypingIndicator: this.composerIsTyping,
+          compactMode: this.getCompactModeActive(),
+          compactRecommended: this.isMessageHeavySession(),
         })}
       </section>
     `;
@@ -177,32 +215,21 @@ export class BlackoutWebApp {
         <h2>Feature library</h2>
         <p class="meta">${enabledCount} of ${totalEntries} feature entry points are active for this workspace.</p>
         <input type="search" data-action="filter-features" data-testid="feature-filter-input" value="${this.featureFilter}" placeholder="Search features by name, id, or placement" />
-        ${this.renderFeatureGroup("⚙️ Settings toggles", grouped.get("settings_toggle") ?? [])}
-        ${this.renderFeatureGroup("✍️ Composer actions", grouped.get("composer_action") ?? [])}
-        ${this.renderFeatureGroup("💬 Room actions", grouped.get("room_action") ?? [])}
-        ${this.renderFeatureGroup("🧩 Widget panels", grouped.get("widget_panel") ?? [])}
-        ${this.renderFeatureGroup("🛡️ Admin & governance", grouped.get("admin_console") ?? [])}
+        ${this.renderFeatureGroup("settings_toggle", grouped.get("settings_toggle") ?? [])}
+        ${this.renderFeatureGroup("composer_action", grouped.get("composer_action") ?? [])}
+        ${this.renderFeatureGroup("room_action", grouped.get("room_action") ?? [])}
+        ${this.renderFeatureGroup("widget_panel", grouped.get("widget_panel") ?? [])}
+        ${this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? [])}
       </section>
     `;
   }
 
-  private renderFeatureQuickAccess(): string {
-    const activeFeatures = this.getActivePresetFeatures();
-    const options = FEATURE_UI_ENTRIES.map((feature) => {
-      const enabled = activeFeatures[feature.presetKey] ?? false;
-      const suffix = enabled ? "" : " (unavailable)";
-      const selected = this.quickAccessFeatureId === feature.id ? "selected" : "";
-      return `<option value="${feature.id}" ${selected}>${feature.name}${suffix}</option>`;
-    }).join("");
-
+  private renderFeatureCommandPaletteTrigger(): string {
     return `
-      <label class="stack feature-quick-access">
-        Jump to a feature
-        <div class="quick-access-controls">
-          <select data-action="select-feature-quick-access" data-testid="feature-quick-access-select">${options}</select>
-          <button type="button" class="ghost-btn" data-action="open-feature-quick-access" data-testid="feature-quick-access-button">Open</button>
-        </div>
-      </label>
+      <button type="button" class="ghost-btn command-palette-trigger" data-action="open-command-palette" data-testid="open-command-palette">
+        <span>Open command palette</span>
+        <kbd>⌘K / Ctrl+K</kbd>
+      </button>
     `;
   }
 
@@ -234,6 +261,42 @@ export class BlackoutWebApp {
         </div>
         <div class="feature-toolbar-scroll">${toolbarButtons}</div>
       </section>
+    `;
+  }
+
+  private renderFeatureCommandPalette(): string {
+    const query = this.commandPaletteQuery.trim().toLowerCase();
+    const activeFeatures = this.getActivePresetFeatures();
+    const rows = FEATURE_UI_ENTRIES.filter((feature) => {
+      if (!query) return true;
+      return `${feature.id} ${feature.name} ${feature.uiEntry}`.toLowerCase().includes(query);
+    })
+      .slice(0, 14)
+      .map((feature) => {
+        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+        const enabled = activeFeatures[feature.presetKey] ?? false;
+        const category = this.featureKindUi[kind];
+        const tooltip = this.hasSeenFeatureTooltips ? "" : `title="${category.firstUseTooltip}"`;
+        return `
+          <button type="button" class="command-palette-item ${enabled ? "" : "command-palette-item--unavailable"}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-action-origin="palette" aria-disabled="${enabled ? "false" : "true"}" ${tooltip}>
+            <span class="command-palette-item-main">${category.icon} ${feature.name}</span>
+            <span class="meta">${category.label}${enabled ? "" : " · unavailable"}</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="command-palette-backdrop" data-action="close-command-palette">
+        <section class="command-palette" data-testid="feature-command-palette" role="dialog" aria-modal="true" aria-label="Feature command palette">
+          <div class="command-palette-header">
+            <strong>Feature command palette</strong>
+            <button type="button" class="ghost-btn" data-action="close-command-palette">Close</button>
+          </div>
+          <input type="search" autofocus data-action="filter-command-palette" data-testid="feature-command-palette-input" placeholder="Type a feature, category, or id…" value="${this.commandPaletteQuery}" />
+          <div class="command-palette-list">${rows || '<p class="empty">No matching features.</p>'}</div>
+        </section>
+      </div>
     `;
   }
 
@@ -296,20 +359,66 @@ export class BlackoutWebApp {
     return `<option value="${preset}" ${this.selectedPreset === preset ? "selected" : ""}>${preset}</option>`;
   }
 
+  private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      this.commandPaletteOpen = true;
+      this.commandPaletteQuery = "";
+      this.render();
+      return;
+    }
+
+    if (event.key === "Escape" && this.commandPaletteOpen) {
+      this.commandPaletteOpen = false;
+      this.render();
+    }
+  };
+
+  private isMessageHeavySession(): boolean {
+    return this.store.getState().messages.length >= 30;
+  }
+
+  private getCompactModeActive(): boolean {
+    return this.compactModeEnabled || this.isMessageHeavySession();
+  }
+
   private getActivePresetFeatures(): Record<string, boolean> {
     return this.appliedFeatures;
   }
 
-  private renderFeatureGroup(label: string, items: string[]): string {
+  private renderFeatureGroup(kind: UiEntryKind, items: string[]): string {
+    const category = this.featureKindUi[kind];
+    const tooltip = this.hasSeenFeatureTooltips ? "" : `title="${category.firstUseTooltip}"`;
     return `
       <details class="stack" open>
-        <summary><strong>${label}</strong> <span class="meta">(${items.length})</span></summary>
+        <summary ${tooltip}><strong>${category.icon} ${category.label}</strong> <span class="meta">(${items.length})</span></summary>
         <ul class="stack">${items.join("") || '<li class="empty">No matching entries.</li>'}</ul>
       </details>
     `;
   }
 
   private bindEvents(): void {
+    this.root.querySelector<HTMLButtonElement>("[data-action='open-command-palette']")?.addEventListener("click", () => {
+      this.commandPaletteOpen = true;
+      this.commandPaletteQuery = "";
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-command-palette']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (element.classList.contains("command-palette") || element.closest(".command-palette")) {
+          event.stopPropagation();
+        }
+        this.commandPaletteOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='filter-command-palette']")?.addEventListener("input", (event) => {
+      this.commandPaletteQuery = (event.currentTarget as HTMLInputElement).value;
+      this.render();
+    });
+
     this.root.querySelector<HTMLFormElement>("#auth-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       void this.handleAuthSubmit(event.currentTarget as HTMLFormElement);
@@ -361,6 +470,11 @@ export class BlackoutWebApp {
       this.render();
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='toggle-compact-mode']")?.addEventListener("click", () => {
+      this.compactModeEnabled = !this.compactModeEnabled;
+      this.render();
+    });
+
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
       this.selectedPreset = value;
@@ -370,14 +484,6 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLInputElement>("[data-action='filter-features']")?.addEventListener("input", (event) => {
       this.featureFilter = (event.currentTarget as HTMLInputElement).value;
       this.render();
-    });
-
-    this.root.querySelector<HTMLSelectElement>("[data-action='select-feature-quick-access']")?.addEventListener("change", (event) => {
-      this.quickAccessFeatureId = (event.currentTarget as HTMLSelectElement).value;
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='open-feature-quick-access']")?.addEventListener("click", () => {
-      this.openFeatureById(this.quickAccessFeatureId);
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='apply-preset']")?.addEventListener("click", () => {
@@ -403,6 +509,12 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
+        if (button.dataset.actionOrigin === "palette") {
+          this.commandPaletteOpen = false;
+          if (!this.hasSeenFeatureTooltips) {
+            globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
+          }
+        }
         this.openFeatureById(button.dataset.featureId);
       });
     });

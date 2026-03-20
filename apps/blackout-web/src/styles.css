@@ -101,17 +101,19 @@ body {
   border-color: #4f8ef7;
 }
 
-.feature-quick-access {
-  width: min(520px, 100%);
-}
-
-.quick-access-controls {
-  display: flex;
+.command-palette-trigger {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.quick-access-controls select {
-  min-width: 300px;
+.command-palette-trigger kbd {
+  border: 1px solid #3a3f49;
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  color: #c8ced6;
 }
 
 .workspace {
@@ -120,6 +122,24 @@ body {
   display: grid;
   grid-template-columns: 76px 280px minmax(0, 1fr);
   gap: 0.75rem;
+}
+
+.workspace--compact {
+  gap: 0.45rem;
+}
+
+.workspace--compact .chat-window,
+.workspace--compact .channel-list,
+.workspace--compact .server-sidebar {
+  padding: 0.55rem;
+}
+
+.workspace--compact .message-item {
+  padding: 0.35rem 0.4rem;
+}
+
+.workspace--compact .message-meta {
+  gap: 0.3rem;
 }
 
 .server-sidebar,
@@ -451,6 +471,59 @@ label {
 
 .ghost-btn {
   background: transparent;
+}
+
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgb(0 0 0 / 45%);
+  display: grid;
+  place-items: start center;
+  padding: 12vh 1rem 1rem;
+}
+
+.command-palette {
+  width: min(720px, 100%);
+  border: 1px solid #35373c;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #202530, #171b24);
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.command-palette-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.command-palette-list {
+  max-height: min(55vh, 420px);
+  overflow: auto;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.command-palette-item {
+  border: 1px solid #383e49;
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  background: #222733;
+  color: #f2f3f5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-palette-item-main {
+  display: block;
+  font-weight: 600;
+}
+
+.command-palette-item--unavailable {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 
