@@ -12,6 +12,6 @@ export interface StegoSettingsState {
 }
 
 export const stegoSettingsAtom = atomWithStorage<StegoSettingsState>('blackout.settings.steganography.v1', {
-  enabled: false,
+  enabled: true,
   savedPassphrases: [],
 });

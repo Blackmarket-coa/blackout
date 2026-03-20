@@ -2,7 +2,6 @@ import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode
 import { BaseEditor, Editor, Element as SlateElement, Node, Range, Text, Transforms, createEditor } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
-import { useAtomValue } from 'jotai';
 import { useRoomMembers } from '../../hooks/useRoom';
 import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
 import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
@@ -10,7 +9,6 @@ import { useSendTyping } from '../../hooks/useTyping';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { uploadMedia } from '../../utils/media';
 import { HideMessageDialog } from '../steganography';
-import { stegoSettingsAtom } from '../steganography';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -351,7 +349,6 @@ export const MessageComposer = ({
   const { sendRichText, sendMedia } = useSendMessage(roomId);
   const editMessage = useEditMessage(roomId);
   const matrixClient = useMatrixClient();
-  const stegoSettings = useAtomValue(stegoSettingsAtom);
 
   useEffect(() => {
     const accountData = (matrixClient as unknown as { getAccountData: (type: string) => { getContent: <T>() => T } | null }).getAccountData(
@@ -648,8 +645,12 @@ export const MessageComposer = ({
             type="button"
             style={{ border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}
             onClick={() => setHideDialogOpen(true)}
-            disabled={!stegoSubscription || !stegoSettings.enabled}
-            title={!stegoSubscription ? 'Requires active Blackout subscription (co.bmc.subscription)' : stegoSettings.enabled ? 'Hide a secret message inside an image' : 'Enable steganography in settings first'}
+            disabled={!stegoSubscription}
+            title={
+              !stegoSubscription
+                ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
+                : 'Hide a secret message inside an image'
+            }
           >
             Hide Message
           </button>
