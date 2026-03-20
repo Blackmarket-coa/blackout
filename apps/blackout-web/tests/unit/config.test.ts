@@ -68,4 +68,29 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.diagnostics.deploymentPreset).toBe("community_plus");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
   });
+  it("resolves engagement policy and notification rules from env", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_ENGAGEMENT_POLICY_SERVER: JSON.stringify({
+        notifications: { mode: "aggressive" },
+        wellbeing: { maxNudgesPerDay: 4 },
+      }),
+      VITE_ENGAGEMENT_POLICY_USER: JSON.stringify({
+        notifications: { mode: "minimal" },
+      }),
+      VITE_NOTIFICATION_RULES: JSON.stringify([
+        {
+          feature: "presence_digest",
+          category: "presence",
+          hardCapPerDay: 3,
+          cooldownMinutes: 120,
+          quietHours: { startUtc: "22:00", endUtc: "07:00" },
+        },
+      ]),
+    });
+
+    expect(config.engagement.policy.notifications.mode).toBe("minimal");
+    expect(config.engagement.policy.wellbeing.maxNudgesPerDay).toBe(4);
+    expect(config.engagement.notificationRules).toHaveLength(1);
+  });
+
 });

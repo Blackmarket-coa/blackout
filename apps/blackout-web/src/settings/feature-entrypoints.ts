@@ -1,4 +1,4 @@
-export type UiEntryKind = "settings_toggle" | "composer_action" | "room_action" | "widget_panel" | "admin_console";
+export type UiEntryKind = "settings_toggle" | "composer_action" | "room_action" | "widget_panel" | "admin_console" | "command_palette";
 
 export interface FeatureUiEntry {
   id: string;
@@ -9,6 +9,15 @@ export interface FeatureUiEntry {
 
 export const FEATURE_UI_ENTRIES: FeatureUiEntry[] = [
   // Existing rollout entries.
+  // Engagement roadmap entries.
+  { id: "discover_panel", name: "Discover command (bounded top 10)", presetKey: "features.engagement.discover", uiEntry: "command_palette:feature-command-discover" },
+  { id: "soft_streaks", name: "Opt-in soft streaks", presetKey: "features.engagement.streaks", uiEntry: "settings_toggle:feature-toggle-soft-streaks" },
+  { id: "community_leaderboards", name: "Optional leaderboards", presetKey: "features.engagement.leaderboards", uiEntry: "widget_panel:feature-widget-leaderboards" },
+  { id: "presence_digest", name: "Presence digest notifications", presetKey: "features.engagement.presenceDigest", uiEntry: "command_palette:feature-command-presence-digest" },
+  { id: "recommendation_model", name: "Meaningful interaction recommendations", presetKey: "features.engagement.recommendations", uiEntry: "admin_console:feature-admin-recommendations" },
+  { id: "engagement_experiments", name: "Experiment holdout and ramp controls", presetKey: "features.engagement.experiments", uiEntry: "admin_console:feature-admin-engagement-experiments" },
+  { id: "wellbeing_hard_stops", name: "Wellbeing hard-stops and weekly summary", presetKey: "features.engagement.wellbeing", uiEntry: "settings_toggle:feature-toggle-wellbeing-hard-stops" },
+
   { id: "stego_toolkit", name: "Steganographic messaging toolkit", presetKey: "features.stego.enabled", uiEntry: "settings_toggle:feature-toggle-stego-toolkit" },
   { id: "ephemeral_stego_lifecycle", name: "Ephemeral stego lifecycle management", presetKey: "features.stego.ephemeral", uiEntry: "room_action:feature-room-ephemeral-stego" },
   { id: "governance_entitlements", name: "Governance and entitlement policy layer", presetKey: "features.governance.entitlements", uiEntry: "admin_console:feature-admin-governance-entitlements" },
