@@ -52,7 +52,7 @@ export const TimeoutBadge = ({ userId, roomId }: { userId: string; roomId: strin
     const entries = parseTimeouts(event?.getContent<Record<string, unknown>>());
     const now = Date.now();
     return entries.find((entry) => entry.userId === userId && entry.expiresAt > now) ?? null;
-  }, [room.data, roomId, userId]);
+  }, [room.data, userId]);
 
   if (!activeTimeout) return null;
 

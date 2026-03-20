@@ -594,7 +594,7 @@ export const MessageComposer = ({
     } catch {
       return null;
     }
-  }, [editor, triggerRange, value]);
+  }, [editor, triggerRange]);
 
   return (
     <section

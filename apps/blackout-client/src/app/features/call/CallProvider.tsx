@@ -219,6 +219,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useCall = (): CallContextValue => {
   const context = useContext(CallContext);
   if (!context) {

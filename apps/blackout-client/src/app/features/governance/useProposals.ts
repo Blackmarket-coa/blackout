@@ -1,5 +1,4 @@
 import { useCallback, useMemo } from 'react';
-import type { MatrixEvent } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoom } from '../../hooks/useRoom';
 import { useRoomTimeline } from '../../hooks/useTimeline';
