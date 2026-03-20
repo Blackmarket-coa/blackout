@@ -495,12 +495,16 @@ export class BlackoutWebApp {
       });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='create-server']")?.addEventListener("click", () => {
-      this.openCreateModal("server");
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='create-server']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.openCreateModal("server");
+      });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='create-channel']")?.addEventListener("click", () => {
-      this.openCreateModal("channel");
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='create-channel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.openCreateModal("channel");
+      });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='cancel-create']")?.addEventListener("click", () => {

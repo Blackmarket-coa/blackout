@@ -164,8 +164,12 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 76px 280px minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: 72px 300px minmax(0, 1fr);
+  gap: 0.2rem;
+  border: 1px solid #2a2d35;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #171a21;
 }
 
 .workspace--compact {
@@ -189,14 +193,16 @@ body {
 .server-sidebar,
 .channel-list,
 .chat-window {
-  border-radius: 12px;
-  border: 1px solid #25262b;
-  background: linear-gradient(180deg, #1f2125, #1b1c20);
+  border-radius: 0;
+  border: 0;
   padding: 0.75rem;
 }
 
 .server-sidebar {
-  background: #111214;
+  background: #1a1d24;
+  border-right: 1px solid #2a2d35;
+  padding: 0.85rem 0.45rem;
+  align-items: center;
 }
 
 .sidebar-head,
@@ -209,6 +215,9 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  justify-content: space-between;
+  border-bottom: 1px solid #2a2d35;
+  padding-bottom: 0.7rem;
 }
 
 .chat-head-copy {
@@ -263,10 +272,87 @@ body {
   border-color: #4f8ef7;
 }
 
+.server-sidebar .sidebar-head {
+  text-transform: uppercase;
+  color: #9aa2b1;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.workspace-chip {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  text-align: center;
+  padding: 0;
+  font-weight: 700;
+}
+
+.workspace-add-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  text-align: center;
+  padding: 0;
+}
+
+.channel-list {
+  background: #1f2229;
+  border-right: 1px solid #2a2d35;
+}
+
+.sidebar-workspace-name {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid #2a2d35;
+}
+
+.sidebar-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #a8b0be;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+
+.section-icon-btn {
+  width: auto;
+  border: 1px solid #3c4250;
+  color: #c4cbda;
+  padding: 0.05rem 0.35rem;
+  border-radius: 7px;
+}
+
+.channel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.channel-btn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-browse-btn {
+  margin-top: 0.55rem;
+  background: transparent;
+  color: #aeb7c7;
+}
+
 .chat-window {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  background: #191c23;
+  padding: 0.8rem 1rem;
 }
 
 .message-list {
@@ -277,10 +363,10 @@ body {
 }
 
 .message-item {
-  border: 1px solid #2a2c31;
+  border: 1px solid #2c313b;
   border-radius: 10px;
   padding: 0.55rem;
-  background: #202328;
+  background: #222630;
 }
 
 .message-meta {
@@ -302,6 +388,21 @@ body {
   border: 0;
   background: transparent;
   padding-top: 0.2rem;
+}
+
+.chat-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.chat-head-action {
+  width: auto;
+  border-radius: 8px;
+  border: 1px solid #3a3f49;
+  padding: 0.25rem 0.55rem;
+  color: #c6cedd;
 }
 
 .message-item--compact p {
@@ -439,6 +540,7 @@ label {
   .workspace {
     grid-template-columns: 64px minmax(0, 1fr);
     position: relative;
+    border-radius: 12px;
   }
 
   .admin-grid {
@@ -458,7 +560,7 @@ label {
   .workspace.show-channel-drawer .channel-list {
     display: block;
     position: absolute;
-    left: 72px;
+    left: 64px;
     top: 0;
     bottom: 0;
     width: min(75vw, 320px);
