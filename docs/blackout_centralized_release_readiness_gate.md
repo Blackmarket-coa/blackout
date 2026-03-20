@@ -4,6 +4,7 @@ Date: 2026-03-20
 Program: Blackout centralized build (WO-1 through WO-9)
 Evidence bundle: `docs/operations/evidence/2026-03-20-wo2-wo4-hardening-and-evidence-normalization.md`
 Day-2 governance UX + secure-ops evidence: `docs/operations/evidence/2026-03-20-day2-governance-ux-secure-ops.md`
+Day-3 federation + commercial readiness evidence: `docs/operations/evidence/2026-03-20-day3-federation-commercial-readiness.md`
 Centralized CI replay evidence: `docs/operations/evidence/2026-03-14-centralized-ci-replay.md`
 Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-03-16-centralized-ci-parity-and-smoke-remediation.md`.
 
@@ -58,6 +59,11 @@ Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-0
 - Offline/degraded operation and federation recovery semantics are documented in p2p/self-healing architecture artifacts.
 - Operational acceptance still requires environment-authoritative simulation replay in CI/staging for release sign-off.
 
+## Federation + commercial readiness packaging
+- Independent-org to coalition onboarding flow is documented with broadcast failure handling and operator actions.
+- Deployment matrix now distinguishes self-host movement networks vs managed enterprise teams with explicit custody boundaries.
+- Differentiation collateral maps shipped capabilities directly to stego tiers, governance broadcasts, federation, and bridge roadmap.
+
 ## Timing-obfuscation tradeoffs
 - Privacy-first documentation captures randomized-delay/batching intent and operator tradeoff framing.
 - Guardrails: enforce bounded delays, abuse controls, and telemetry-safe leakage comparisons during rollout.
@@ -76,6 +82,7 @@ Hosted parity + smoke remediation (2026-03-16): `docs/operations/evidence/2026-0
 | --- | --- | --- | --- |
 | Open unfinished marker backlog remains high (28) | Core App Teams | Continue strict P0->P1 closure cadence with regression tests each batch and keep queue ordering refreshed each batch | 2026-03-21 |
 | WO-2/WO-4 targeted hardening suites not yet replayed in CI/staging | Privacy + Governance Engineering | Execute targeted stego and governance attestation suites in CI/staging and append artifact IDs to this gate | 2026-03-21 |
+| Federation failure-drill replay artifacts not yet attached for day-3 gate | Operations + Governance | Execute onboarding failure drill in staging and append replay artifact IDs to day-3 evidence + gate artifact | 2026-03-21 |
 
 ## Final recommendation justification
 The gate recommendation is **Conditional Go** because WO-2/WO-4 hardening code and evidence are now linked with explicit remaining-work controls, and the only blocking delta is CI/staging replay artifact capture for the new targeted suites.
@@ -87,6 +94,7 @@ The gate recommendation is **Conditional Go** because WO-2/WO-4 hardening code a
 | Security | Security Engineering | 2026-03-20 | Conditional Go | Security controls remain in place; stego hardening regression replay is required before final release cut. |
 | Governance | Governance Program Owner | 2026-03-20 | Conditional Go | Deterministic payload attestation verifier + operator audit summary log are implemented and tested; CI replay artifact still required. |
 | Infra/Operations | Infra/Operations | 2026-03-20 | Conditional Go | Hosted parity workflow remains codified; must append targeted WO-2/WO-4 replay IDs for final go decision. |
+| Product/GTM | Product Lead | 2026-03-20 | Conditional Go | Deployment matrix + differentiation brief are publish-ready; federation drill artifacts are pending. |
 
 ## Reporting template compliance index
 - Work order: Captured in evidence bundle + scope summary.
