@@ -1,6 +1,8 @@
 import {
+  FEATURE_PRESET_BUNDLES,
   resolveFeaturePreset,
   type DeploymentPresetConfig,
+  type FeaturePresetKey,
   type ResolvedPresetConfig,
   type TenantPresetPolicy,
   type UserPresetOverrides,
@@ -31,6 +33,21 @@ function parseJsonEnv<T>(value: string | undefined, fallback: T): T {
   }
 }
 
+function isFeaturePresetKey(value: string): value is FeaturePresetKey {
+  return value in FEATURE_PRESET_BUNDLES;
+}
+
+function parsePresetEnv(value: string | undefined): { preset?: FeaturePresetKey } | undefined {
+  if (!value) return undefined;
+
+  const trimmed = value.trim();
+  if (isFeaturePresetKey(trimmed)) {
+    return { preset: trimmed };
+  }
+
+  return parseJsonEnv<{ preset?: FeaturePresetKey } | undefined>(value, undefined);
+}
+
 export function resolveMatrixHomeserverUrl(env: Record<string, string | undefined>): string {
   const candidate = env.VITE_MATRIX_HOMESERVER_URL ?? env.BLACKOUT_SERVER_URL;
   if (!candidate) return DEFAULT_HOMESERVER_URL;
@@ -57,8 +74,8 @@ function resolveReleaseCohort(raw: string | undefined): ReleaseCohort {
 }
 
 export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefined>): BlackoutRuntimeConfig {
-  const deployment = parseJsonEnv<DeploymentPresetConfig>(env.VITE_FEATURE_DEPLOYMENT_DEFAULTS, {});
-  const tenantPolicy = parseJsonEnv<TenantPresetPolicy | undefined>(env.VITE_FEATURE_TENANT_POLICY, undefined);
+  const deployment = parsePresetEnv(env.VITE_FEATURE_DEPLOYMENT_DEFAULTS) as DeploymentPresetConfig | undefined;
+  const tenantPolicy = parsePresetEnv(env.VITE_FEATURE_TENANT_POLICY) as TenantPresetPolicy | undefined;
   const userOverrides = parseJsonEnv<UserPresetOverrides | undefined>(env.VITE_FEATURE_USER_OVERRIDES, undefined);
 
   return {
@@ -67,6 +84,6 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
     rollout: {
       cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
     },
-    presets: resolveFeaturePreset(deployment, tenantPolicy, userOverrides),
+    presets: resolveFeaturePreset(deployment ?? {}, tenantPolicy, userOverrides),
   };
 }
