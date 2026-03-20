@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useAtomValue } from 'jotai';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { baseStyles, getInfo, useInViewport, useResolvedMediaSource } from './mediaShared';
+import { stegoSettingsAtom, RevealMessagePanel } from '../../features/steganography';
 
 interface ImageMessageProps {
   event: MatrixEvent;
@@ -12,7 +14,14 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
   const [loaded, setLoaded] = useState(false);
   const { ref, inView } = useInViewport<HTMLDivElement>();
   const { src, loading, error, encrypted } = useResolvedMediaSource(event);
+  const stegoSettings = useAtomValue(stegoSettingsAtom);
   const info = getInfo(event);
+  const content = event.getContent<Record<string, unknown>>();
+  const body = typeof content.body === 'string' ? content.body : 'Image';
+  const stegoMeta = event.getContent<Record<string, unknown>>()['co.blackout.stego'] as
+    | { hidden?: boolean }
+    | undefined;
+  const hasHiddenContent = stegoSettings.enabled && stegoMeta?.hidden === true;
 
   const dimensions = useMemo(() => {
     const width = typeof info.w === 'number' ? info.w : 320;
@@ -53,9 +62,9 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
             cursor: 'zoom-in',
           }}
         >
-          <img
-            src={src}
-            alt={typeof event.getContent<Record<string, unknown>>().body === 'string' ? event.getContent<Record<string, unknown>>().body : 'Image'}
+            <img
+              src={src}
+              alt={body}
             loading="lazy"
             onLoad={() => setLoaded(true)}
             style={{
@@ -80,6 +89,7 @@ export const ImageMessage = ({ event }: ImageMessageProps) => {
           </div>
         </dialog>
       ) : null}
+      {hasHiddenContent && src ? <RevealMessagePanel imageUrl={src} /> : null}
     </div>
   );
 };
