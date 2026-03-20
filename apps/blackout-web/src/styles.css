@@ -29,10 +29,11 @@ body {
 }
 
 .header {
-  padding: 1rem;
+  padding: 1.1rem 1.2rem;
   border: 1px solid #2a2c31;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #1c2431, #161b24);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #233149, #161b24 65%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
 }
 
 .meta {
@@ -47,6 +48,47 @@ body {
   align-items: flex-end;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.feature-toolbar {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.feature-toolbar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feature-toolbar-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.feature-toolbar-scroll {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.feature-chip {
+  border: 1px solid #3a3f49;
+  background: #2a2f39;
+  color: #f2f3f5;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.feature-chip:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
 }
 
 .feature-quick-access {
@@ -75,7 +117,7 @@ body {
 .chat-window {
   border-radius: 12px;
   border: 1px solid #25262b;
-  background: #1e1f22;
+  background: linear-gradient(180deg, #1f2125, #1b1c20);
   padding: 0.75rem;
 }
 
@@ -86,12 +128,24 @@ body {
 .sidebar-head,
 .chat-head {
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.65rem;
 }
 
 .chat-head {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.chat-head-copy small {
+  color: #aeb4bc;
+  font-weight: 500;
 }
 
 .server-sidebar ul,
@@ -118,11 +172,21 @@ body {
   padding: 0.5rem;
   text-align: left;
   cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.sidebar-btn:hover,
+.add-btn:hover,
+.chat-input button:hover,
+#auth-form button:hover,
+.link-btn:hover {
+  background: #353944;
+  border-color: #4b4f58;
 }
 
 .sidebar-btn.is-selected {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: linear-gradient(135deg, #4f8ef7, #2563eb);
+  border-color: #4f8ef7;
 }
 
 .chat-window {
@@ -140,9 +204,9 @@ body {
 
 .message-item {
   border: 1px solid #2a2c31;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.55rem;
-  background: #202225;
+  background: #202328;
 }
 
 .message-meta {
@@ -229,8 +293,17 @@ textarea {
   border: 1px solid #2a2c31;
   border-radius: 14px;
   padding: 0.9rem;
-  background: #1a1d24;
+  background: linear-gradient(180deg, #1c2028, #171a21);
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.badge {
+  margin-left: 0.35rem;
+  background: #3b82f6;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
 }
 
 .panel-card summary {

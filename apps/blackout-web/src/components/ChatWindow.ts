@@ -41,9 +41,12 @@ export function renderChatWindow({
     <section class="chat-window">
       <div class="chat-head">
         <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer">☰</button>
-        <span>${channelLabel}</span>
+        <div class="chat-head-copy">
+          <span>${channelLabel}</span>
+          <small>Stay on topic, react quickly, and keep conversations moving.</small>
+        </div>
       </div>
-      <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet</li>'}</ul>
+      <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>
       ${renderMessageInput({
         disabled: !canSend || sendPending,
         richEditingEnabled,

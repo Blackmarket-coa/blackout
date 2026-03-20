@@ -15,9 +15,9 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
 
   return `
     <aside class="server-sidebar">
-      <div class="sidebar-head">Servers</div>
-      <ul>${items || '<li class="empty">No servers yet</li>'}</ul>
-      <button type="button" class="add-btn" data-action="create-server">+ Create Server</button>
+      <div class="sidebar-head">Workspaces</div>
+      <ul>${items || '<li class="empty">No workspaces yet</li>'}</ul>
+      <button type="button" class="add-btn" data-action="create-server">+ New workspace</button>
     </aside>
   `;
 }
