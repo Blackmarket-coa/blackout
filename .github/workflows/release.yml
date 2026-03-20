@@ -1,70 +1,135 @@
-name: Release Process
+name: Release
+
 on:
-    workflow_dispatch:
-        inputs:
-            mode:
-                description: What type of release
-                required: true
-                default: rc
-                type: choice
-                options:
-                    - rc
-                    - final
-concurrency: ${{ github.workflow }}
-permissions: {}
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
 jobs:
-    release:
-        uses: matrix-org/matrix-js-sdk/.github/workflows/release-make.yml@develop
-        permissions:
-            contents: write
-            issues: write
-            pull-requests: read
-            id-token: write
-        secrets:
-            ELEMENT_BOT_TOKEN: ${{ secrets.ELEMENT_BOT_TOKEN }}
-            GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-            GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+  build-web:
+    name: Build web artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-            final: ${{ inputs.mode == 'final' }}
-            gpg-fingerprint: ${{ vars.GPG_FINGERPRINT }}
-            asset-path: dist/*.tar.gz
-            expected-asset-count: 3
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @blackout/blackout-web run build:web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blackout-web-${{ github.ref_name }}
+          path: apps/blackout-web/dist
 
-    notify-downstream:
-        name: Trigger release drafter downstream
-        needs: release
-        runs-on: ubuntu-24.04
-        steps:
-            - name: Notify element-desktop repo that element-web release has completed to re-trigger release-drafter
-              uses: benc-uk/workflow-dispatch@e2e5e9a103e331dad343f381a29e654aea3cf8fc # v1
-              with:
-                  workflow: release-drafter.yml
-                  repo: element-hq/element-desktop
-                  ref: staging
-                  # Required when using the `repo` option. Either a PAT or a token generated from the GitHub app or CLI
-                  token: "${{ secrets.ELEMENT_BOT_TOKEN }}"
+  build-desktop:
+    name: Build desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build desktop app
+        working-directory: blackout-desktop
+        run: pnpm build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blackout-desktop-${{ matrix.os }}-${{ github.ref_name }}
+          path: blackout-desktop/src-tauri/target/release/bundle
+          if-no-files-found: warn
 
-    check:
-        name: Post release checks
-        needs: release
-        runs-on: ubuntu-24.04
-        permissions:
-            checks: read
-        steps:
-            - name: Wait for docker build
-              uses: t3chguy/wait-on-check-action@18541021811b56544d90e0f073401c2b99e249d6 # fork
-              with:
-                  ref: master
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
-                  wait-interval: 10
-                  check-name: "Docker Buildx"
-                  allowed-conclusions: success
+  build-mobile:
+    name: Build mobile artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @blackout/mobile run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blackout-mobile-${{ github.ref_name }}
+          path: apps/mobile/dist
+          if-no-files-found: warn
 
-            - name: Wait for debian package
-              uses: t3chguy/wait-on-check-action@18541021811b56544d90e0f073401c2b99e249d6 # fork
-              with:
-                  ref: master
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
-                  wait-interval: 10
-                  check-name: Build package
-                  allowed-conclusions: success
+  release:
+    name: Create GitHub release + deploy
+    needs: [build-web, build-desktop, build-mobile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release with all artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker image build + push to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/blackmarket-coa/blackout:latest
+            ghcr.io/blackmarket-coa/blackout:${{ github.ref_name }}
+
+      - name: Deploy to production
+        run: |
+          curl --fail --show-error -X POST "$PRODUCTION_DEPLOY_WEBHOOK"
+        env:
+          PRODUCTION_DEPLOY_WEBHOOK: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK }}
+
+      - name: Notify Matrix room of new release
+        run: |
+          MESSAGE="🚀 Blackout release ${{ github.ref_name }} is live."
+          curl --fail --show-error -X POST \
+            -H "Authorization: Bearer $MATRIX_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$MATRIX_HOMESERVER/_matrix/client/v3/rooms/$MATRIX_ROOM_ID/send/m.room.message/$(date +%s)" \
+            -d "{\"msgtype\":\"m.text\",\"body\":\"${MESSAGE}\"}"
+        env:
+          MATRIX_HOMESERVER: ${{ secrets.MATRIX_HOMESERVER }}
+          MATRIX_ACCESS_TOKEN: ${{ secrets.MATRIX_ACCESS_TOKEN }}
+          MATRIX_ROOM_ID: ${{ secrets.MATRIX_ROOM_ID }}
