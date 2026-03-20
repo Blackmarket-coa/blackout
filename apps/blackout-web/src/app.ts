@@ -93,6 +93,10 @@ export class BlackoutWebApp {
           <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         </header>
         <div class="header-actions">
+          <div class="header-actions-copy">
+            <strong>Workspace controls</strong>
+            <span class="meta">Use shortcuts for speed, or open settings for full feature management.</span>
+          </div>
           ${this.renderFeatureQuickAccess()}
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
@@ -217,7 +221,8 @@ export class BlackoutWebApp {
     const toolbarButtons = enabledFeatures
       .map((feature) => {
         const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        return `<button type="button" class="feature-chip" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">${feature.name}</button>`;
+        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
+        return `<button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">${feature.name}</button>`;
       })
       .join("");
 

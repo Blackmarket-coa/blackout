@@ -44,10 +44,15 @@ body {
 
 .header-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: flex-end;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.header-actions-copy {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .feature-toolbar {
@@ -91,8 +96,13 @@ body {
   border-color: #3b82f6;
 }
 
+.feature-chip.is-selected {
+  background: linear-gradient(135deg, #4f8ef7, #2563eb);
+  border-color: #4f8ef7;
+}
+
 .feature-quick-access {
-  width: min(560px, 100%);
+  width: min(520px, 100%);
 }
 
 .quick-access-controls {
@@ -390,6 +400,10 @@ label {
     width: min(75vw, 320px);
     z-index: 3;
     box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
+  }
+
+  .header-actions {
+    align-items: stretch;
   }
 }
 
