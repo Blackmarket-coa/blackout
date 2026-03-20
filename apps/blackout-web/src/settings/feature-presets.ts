@@ -102,6 +102,13 @@ const BASELINE_MATRIX: FeatureFlagMap = {
   "features.federationBoost.enabled": false,
   "features.townhall.enabled": false,
   "features.epic.deliveryBlueprint": false,
+  "features.engagement.discover": false,
+  "features.engagement.streaks": false,
+  "features.engagement.leaderboards": false,
+  "features.engagement.presenceDigest": false,
+  "features.engagement.recommendations": false,
+  "features.engagement.experiments": false,
+  "features.engagement.wellbeing": true,
 };
 
 const COMMUNITY_PLUS: FeatureFlagMap = {
@@ -174,6 +181,13 @@ const BLACKOUT_FULL: FeatureFlagMap = {
   "features.federationBoost.enabled": true,
   "features.townhall.enabled": true,
   "features.epic.deliveryBlueprint": true,
+  "features.engagement.discover": true,
+  "features.engagement.streaks": true,
+  "features.engagement.leaderboards": true,
+  "features.engagement.presenceDigest": true,
+  "features.engagement.recommendations": true,
+  "features.engagement.experiments": true,
+  "features.engagement.wellbeing": true,
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {

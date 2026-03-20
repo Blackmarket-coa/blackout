@@ -7,7 +7,9 @@ import {
   type TenantPresetPolicy,
   type UserPresetOverrides,
 } from "./settings/feature-presets";
+import { resolveEngagementPolicy } from "./settings/engagement-policy";
 import type { ReleaseCohort } from "./services/telemetry";
+import type { EngagementPolicy, NotificationRule } from "./types";
 
 const DEFAULT_HOMESERVER_URL = "https://matrix.blackout.local";
 
@@ -66,6 +68,10 @@ export interface BlackoutRuntimeConfig {
     cohort: ReleaseCohort;
   };
   presets: ResolvedPresetConfig;
+  engagement: {
+    policy: EngagementPolicy;
+    notificationRules: NotificationRule[];
+  };
 }
 
 function resolveReleaseCohort(raw: string | undefined): ReleaseCohort {
@@ -78,6 +84,10 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
   const tenantPolicy = parsePresetEnv(env.VITE_FEATURE_TENANT_POLICY) as TenantPresetPolicy | undefined;
   const userOverrides = parseJsonEnv<UserPresetOverrides | undefined>(env.VITE_FEATURE_USER_OVERRIDES, undefined);
 
+  const serverEngagement = parseJsonEnv<Partial<EngagementPolicy> | undefined>(env.VITE_ENGAGEMENT_POLICY_SERVER, undefined);
+  const userEngagement = parseJsonEnv<Partial<EngagementPolicy> | undefined>(env.VITE_ENGAGEMENT_POLICY_USER, undefined);
+  const notificationRules = parseJsonEnv<NotificationRule[] | undefined>(env.VITE_NOTIFICATION_RULES, undefined) ?? [];
+
   return {
     homeserverUrl: resolveMatrixHomeserverUrl(env),
     mode: "daily-chat",
@@ -85,5 +95,12 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
       cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
     },
     presets: resolveFeaturePreset(deployment ?? {}, tenantPolicy, userOverrides),
+    engagement: {
+      policy: resolveEngagementPolicy({
+        server: serverEngagement,
+        user: userEngagement,
+      }),
+      notificationRules,
+    },
   };
 }

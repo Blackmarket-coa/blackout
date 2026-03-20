@@ -29,3 +29,62 @@ export interface ChatMessage {
   body: string;
   timestamp: string;
 }
+
+export type NotificationMode = "minimal" | "balanced" | "aggressive";
+
+export interface EngagementPolicy {
+  notifications: {
+    mode: NotificationMode;
+  };
+  discover: {
+    enabled: boolean;
+  };
+  streaks: {
+    enabled: boolean;
+  };
+  leaderboards: {
+    enabled: boolean;
+  };
+  wellbeing: {
+    breakPrompts: {
+      enabled: boolean;
+    };
+    maxNudgesPerDay: number;
+  };
+}
+
+export interface NotificationRule {
+  feature: string;
+  category: string;
+  hardCapPerDay: number;
+  cooldownMinutes: number;
+  quietHours?: {
+    startUtc: string;
+    endUtc: string;
+  };
+}
+
+export interface DiscoverCandidate {
+  id: string;
+  serverId: string;
+  channelId: string;
+  reason: "relevance" | "recency" | "social_proximity";
+  score: number;
+}
+
+export interface ReputationSnapshot {
+  userId: string;
+  serverId: string;
+  streakDays: number;
+  reputationScore: number;
+  graceDaysRemaining: number;
+  lastUpdatedAt: string;
+}
+
+export interface WellbeingState {
+  userId: string;
+  breakPromptsShownToday: number;
+  breakPromptsAcceptedToday: number;
+  breakPromptsDismissedToday: number;
+  lastBreakPromptAt: string | null;
+}

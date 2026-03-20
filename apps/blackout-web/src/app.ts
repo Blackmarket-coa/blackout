@@ -67,6 +67,11 @@ export class BlackoutWebApp {
       label: "Admin & governance",
       firstUseTooltip: "Operational controls for moderation, policy, and access.",
     },
+    command_palette: {
+      icon: "⌘",
+      label: "Command palette",
+      firstUseTooltip: "Run quick commands from a bounded list without feed mechanics.",
+    },
   };
 
   constructor(root: HTMLElement, runtimeConfig: BlackoutRuntimeConfig = {
@@ -83,6 +88,19 @@ export class BlackoutWebApp {
         tenantPreset: null,
         userOverrideCount: 0,
       },
+    },
+    engagement: {
+      policy: {
+        notifications: { mode: "balanced" },
+        discover: { enabled: true },
+        streaks: { enabled: false },
+        leaderboards: { enabled: false },
+        wellbeing: {
+          breakPrompts: { enabled: true },
+          maxNudgesPerDay: 3,
+        },
+      },
+      notificationRules: [],
     },
   }) {
     this.root = root;
@@ -220,6 +238,7 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("room_action", grouped.get("room_action") ?? [])}
         ${this.renderFeatureGroup("widget_panel", grouped.get("widget_panel") ?? [])}
         ${this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? [])}
+        ${this.renderFeatureGroup("command_palette", grouped.get("command_palette") ?? [])}
       </section>
     `;
   }
