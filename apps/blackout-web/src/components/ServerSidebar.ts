@@ -19,7 +19,7 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
   const items = servers
     .map((server) => {
       const initials = getInitials(server.name);
-      return `<li><button type="button" class="sidebar-btn workspace-chip ${server.id === activeServerId ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}" title="${server.name}" aria-label="Open ${server.name}"><span>${initials}</span></button></li>`;
+      return `<li><button type="button" class="sidebar-btn workspace-chip ${server.id === activeServerId ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}" title="${server.name}" aria-label="${server.name}"><span aria-hidden="true">${initials}</span></button></li>`;
     })
     .join("");
 
