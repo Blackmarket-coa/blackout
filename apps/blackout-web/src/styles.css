@@ -521,7 +521,7 @@ label {
   font-weight: 600;
 }
 
-.command-palette-item:disabled {
+.command-palette-item--unavailable {
   cursor: not-allowed;
   opacity: 0.55;
 }

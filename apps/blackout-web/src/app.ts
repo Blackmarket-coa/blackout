@@ -278,7 +278,7 @@ export class BlackoutWebApp {
         const category = this.featureKindUi[kind];
         const tooltip = this.hasSeenFeatureTooltips ? "" : `title="${category.firstUseTooltip}"`;
         return `
-          <button type="button" class="command-palette-item" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-action-origin="palette" ${enabled ? "" : "disabled"} ${tooltip}>
+          <button type="button" class="command-palette-item ${enabled ? "" : "command-palette-item--unavailable"}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-action-origin="palette" aria-disabled="${enabled ? "false" : "true"}" ${tooltip}>
             <span class="command-palette-item-main">${category.icon} ${feature.name}</span>
             <span class="meta">${category.label}${enabled ? "" : " · unavailable"}</span>
           </button>
@@ -509,6 +509,12 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
+        if (button.dataset.actionOrigin === "palette") {
+          this.commandPaletteOpen = false;
+          if (!this.hasSeenFeatureTooltips) {
+            globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
+          }
+        }
         this.openFeatureById(button.dataset.featureId);
         if (button.dataset.actionOrigin === "palette") {
           this.commandPaletteOpen = false;
