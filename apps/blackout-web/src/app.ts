@@ -516,6 +516,12 @@ export class BlackoutWebApp {
           }
         }
         this.openFeatureById(button.dataset.featureId);
+        if (button.dataset.actionOrigin === "palette") {
+          this.commandPaletteOpen = false;
+          if (!this.hasSeenFeatureTooltips) {
+            globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
+          }
+        }
       });
     });
 
