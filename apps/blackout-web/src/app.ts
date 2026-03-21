@@ -35,6 +35,7 @@ export class BlackoutWebApp {
   private commandPaletteQuery = "";
   private commandPaletteOpen = false;
   private commandPalettePreviouslyFocused: HTMLElement | null = null;
+  private commandPalettePreviouslyFocusedSelector: string | null = null;
   private compactModeEnabled = false;
   private settingsOpen = false;
   private composerIsTyping = false;
@@ -507,7 +508,8 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='browse-channels']").forEach((button) => {
       button.addEventListener("click", () => {
-        this.featureActionResult = "Channel browser is not yet available in this build. Use Create channel to add a new topic.";
+        this.store.patch({ channelDrawerOpen: true });
+        this.featureActionResult = "Browse available channels from the channel list, then pick one to jump into the conversation.";
         this.render();
       });
     });
@@ -566,7 +568,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.actionOrigin === "palette") {
-          this.closeCommandPalette();
+          this.closeCommandPalette({ restoreFocus: false });
           if (!this.hasSeenFeatureTooltips) {
             globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
           }
@@ -650,15 +652,28 @@ export class BlackoutWebApp {
   private openCommandPalette(): void {
     const active = globalThis.document.activeElement;
     this.commandPalettePreviouslyFocused = active instanceof HTMLElement ? active : null;
+    const testId = this.commandPalettePreviouslyFocused?.dataset.testid;
+    if (testId) {
+      this.commandPalettePreviouslyFocusedSelector = `[data-testid="${testId}"]`;
+    } else if (this.commandPalettePreviouslyFocused?.id) {
+      this.commandPalettePreviouslyFocusedSelector = `#${this.commandPalettePreviouslyFocused.id}`;
+    } else {
+      this.commandPalettePreviouslyFocusedSelector = null;
+    }
     this.commandPaletteOpen = true;
     this.commandPaletteQuery = "";
     this.render();
   }
 
-  private closeCommandPalette(): void {
+  private closeCommandPalette(options: { restoreFocus: boolean } = { restoreFocus: true }): void {
     this.commandPaletteOpen = false;
     this.render();
-    this.commandPalettePreviouslyFocused?.focus();
+    if (options.restoreFocus) {
+      const fallbackElement = this.commandPalettePreviouslyFocused;
+      const selector = this.commandPalettePreviouslyFocusedSelector;
+      const restoredElement = selector ? this.root.querySelector<HTMLElement>(selector) : null;
+      (restoredElement ?? fallbackElement)?.focus();
+    }
   }
 
   private bindCommandPaletteFocusTrap(): void {
