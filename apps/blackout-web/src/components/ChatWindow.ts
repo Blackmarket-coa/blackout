@@ -45,16 +45,21 @@ export function renderChatWindow({
     <section class="chat-window">
       <div class="chat-head">
         <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer" aria-label="Toggle channel drawer">☰</button>
-        <div class="chat-head-copy">
-          <span># ${channelLabel}</span>
-          <small>
-            Team updates and fast decisions happen here.
-            ${compactMode ? " Compact mode is active for this high-density stream." : compactRecommended ? " Compact mode is recommended for message-heavy channels." : ""}
-          </small>
+        <div class="chat-head-identity">
+          <span class="chat-head-hash">#</span>
+          <span class="chat-head-name">${channelLabel}</span>
         </div>
+        <div class="chat-head-divider" aria-hidden="true"></div>
+        <p class="chat-head-topic">${compactMode ? "Compact mode active." : "Team updates and fast decisions happen here."}</p>
         <div class="chat-head-actions">
-          <button type="button" class="ghost-btn chat-head-action" aria-label="Open threads">Threads</button>
-          <button type="button" class="ghost-btn chat-head-action" aria-label="Search channel">Search</button>
+          <button type="button" class="ghost-btn chat-head-action" aria-label="Open threads" title="Threads">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Threads</span>
+          </button>
+          <button type="button" class="ghost-btn chat-head-action" aria-label="Search channel" title="Search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search</span>
+          </button>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>

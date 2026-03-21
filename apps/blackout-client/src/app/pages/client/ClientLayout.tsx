@@ -141,21 +141,61 @@ export const ClientLayout = () => {
 
   const renderRoomContent = () => {
     if (selectedRoomId) {
+      const room = rooms.find((r) => r.roomId === selectedRoomId);
+      const roomName = room?.name ?? selectedRoomId;
       return (
-        <div style={{ padding: 16, display: 'grid', gap: 12 }}>
-          <header style={{ display: 'grid', gap: 8 }}>
-            <strong>{rooms.find((room) => room.roomId === selectedRoomId)?.name ?? selectedRoomId}</strong>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <header style={{
+            height: 48,
+            minHeight: 48,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '0 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 1px 0 rgba(4,4,5,0.2)',
+            flexShrink: 0,
+          }}>
+            <span style={{ color: '#6d717a', fontSize: '1.25rem', fontWeight: 600, lineHeight: 1 }}>#</span>
+            <strong style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{roomName}</strong>
+            <div style={{ width: 1, height: 20, background: '#3a3d45', flexShrink: 0, margin: '0 2px' }} />
             <DeadDropIndicator config={deadDrop.data} queueCount={deadDrop.queueCount} />
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+              {RIGHT_PANELS.map((panel) => (
+                <button
+                  key={panel}
+                  type="button"
+                  onClick={() => setRightPanel(panel === rightPanel ? null : panel)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    border: 'none',
+                    background: rightPanel === panel ? 'rgba(255,255,255,0.1)' : 'transparent',
+                    color: rightPanel === panel ? 'var(--text-primary)' : '#949ba4',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {panel}
+                </button>
+              ))}
+            </div>
           </header>
 
-          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 12 }}>
-            <p style={{ marginTop: 0, opacity: 0.85 }}>Room timeline: {selectedRoomId}</p>
+          <section style={{ flex: 1, minHeight: 0, padding: '12px 16px', overflowY: 'auto', opacity: 0.7 }}>
+            <p style={{ marginTop: 0, fontSize: '0.85rem' }}>Room timeline: {selectedRoomId}</p>
             <small>Timeline UI is elided in this shell build.</small>
           </section>
 
-          {deadDrop.data.enabled ? <DeadDropComposer roomId={selectedRoomId} /> : <MessageComposer roomId={selectedRoomId} />}
-
-          <DeadDropSettings roomId={selectedRoomId} />
+          <div style={{ padding: '0 16px 16px' }}>
+            {deadDrop.data.enabled ? <DeadDropComposer roomId={selectedRoomId} /> : <MessageComposer roomId={selectedRoomId} />}
+            <DeadDropSettings roomId={selectedRoomId} />
+          </div>
         </div>
       );
     }
@@ -179,9 +219,14 @@ export const ClientLayout = () => {
       />
 
       {(desktop || (!mobile && !selectedRoomId)) ? (
-        <aside style={{ borderRight: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 8, background: 'var(--bg-nav)' }}>
-          <button type="button" onClick={() => { setSelectedSpaceId(null); setSelectedRoomId(null); }} style={{ width: 40, height: 40, borderRadius: 10, border: '1px solid var(--border-default)', background: 'var(--bg-input)' }}>🏠</button>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
+        <aside style={{ borderRight: '1px solid rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0', gap: 8, background: 'var(--bg-nav)' }}>
+          <button
+            type="button"
+            onClick={() => { setSelectedSpaceId(null); setSelectedRoomId(null); }}
+            style={{ width: 48, height: 48, borderRadius: selectedSpaceId ? '50%' : '30%', border: 'none', background: selectedSpaceId ? 'var(--bg-input)' : 'var(--accent-primary)', color: 'var(--text-primary)', fontSize: '1.2rem', transition: 'border-radius 200ms ease, background 200ms ease' }}
+          >🏠</button>
+          <div style={{ width: 32, height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1, margin: '0 auto' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', alignItems: 'center' }}>
             {orderedSpaces.map((space, idx) => (
               <button
                 key={space.roomId}
@@ -197,53 +242,60 @@ export const ClientLayout = () => {
                   void persistSpaceOrder(next);
                 }}
                 onClick={() => { setSelectedSpaceId(space.roomId); setSelectedRoomId(null); }}
-                style={{ width: 40, height: 40, borderRadius: 12, border: selectedSpaceId === space.roomId ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)', background: 'var(--bg-input)', position: 'relative' }}
+                style={{ width: 48, height: 48, borderRadius: selectedSpaceId === space.roomId ? '30%' : '50%', border: 'none', background: selectedSpaceId === space.roomId ? 'var(--accent-primary)' : 'var(--bg-input)', color: 'var(--text-primary)', position: 'relative', fontWeight: 700, fontSize: '0.85rem', transition: 'border-radius 200ms ease, background 200ms ease' }}
                 title={space.name}
               >
-                {space.name.charAt(0)}
-                {roomUnread(space) > 0 ? <span style={{ position: 'absolute', top: -4, right: -4, background: 'var(--danger)', color: '#fff', borderRadius: 999, minWidth: 16, fontSize: 10 }}>{roomUnread(space)}</span> : null}
+                {space.name.charAt(0).toUpperCase()}
+                {roomUnread(space) > 0 ? <span style={{ position: 'absolute', bottom: -2, right: -2, background: 'var(--danger)', color: '#fff', borderRadius: 999, minWidth: 16, fontSize: 10, lineHeight: '16px', textAlign: 'center' }}>{roomUnread(space)}</span> : null}
               </button>
             ))}
           </div>
-          <button type="button" style={{ width: 40, height: 40, borderRadius: 10, border: '1px dashed var(--border-default)', background: 'var(--bg-input)' }}>＋</button>
+          <button type="button" style={{ width: 48, height: 48, borderRadius: '50%', border: 'none', background: 'rgba(59,165,92,0.15)', color: '#3ba55c', fontSize: '1.4rem', fontWeight: 300, transition: 'border-radius 200ms ease, background 200ms ease' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderRadius = '30%'; (e.currentTarget as HTMLButtonElement).style.background = '#3ba55c'; (e.currentTarget as HTMLButtonElement).style.color = '#fff'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderRadius = '50%'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(59,165,92,0.15)'; (e.currentTarget as HTMLButtonElement).style.color = '#3ba55c'; }}
+          >＋</button>
         </aside>
       ) : null}
 
       {(desktop || !mobile) ? (
         <aside style={{ borderRight: '1px solid var(--border-default)', background: 'var(--bg-surface)', display: mobile && selectedRoomId ? 'none' : 'block' }}>
-          <header style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-default)', padding: '0 10px' }}>
-            <strong>{selectedSpaceId ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ?? 'Space' : 'Home'}</strong>
-            <button type="button" onClick={() => setQuickOpen(true)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>Ctrl+K</button>
+          <header style={{ height: 48, minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 1px 0 rgba(4,4,5,0.2)', padding: '0 12px', flexShrink: 0 }}>
+            <strong style={{ fontSize: '0.95rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedSpaceId ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ?? 'Space' : 'Home'}</strong>
+            <button type="button" onClick={() => setQuickOpen(true)} style={{ border: 'none', borderRadius: 6, background: 'transparent', color: '#949ba4', padding: '4px', cursor: 'pointer', flexShrink: 0 }} title="Quick switcher (Ctrl+K)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
           </header>
 
-          <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+          <div style={{ padding: '8px 0', overflowY: 'auto', height: 'calc(100vh - 48px)' }}>
             {groups.map(([category, categoryRooms]) => {
               const collapsed = collapsedFolders[category] ?? false;
               return (
-                <section key={category} style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <button type="button" onClick={() => setCollapsedFolders((prev) => ({ ...prev, [category]: !collapsed }))} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>
+                <section key={category} style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 8px 0 12px', marginBottom: 2 }}>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedFolders((prev) => ({ ...prev, [category]: !collapsed }))}
+                      style={{ border: 'none', background: 'transparent', color: '#6d717a', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer' }}
+                    >
                       {collapsed ? '▶' : '▼'} {category}
                     </button>
-                    <button type="button" style={{ border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)' }}>+</button>
+                    <button type="button" style={{ border: 'none', background: 'transparent', color: '#6d717a', fontSize: '1rem', lineHeight: 1, cursor: 'pointer', padding: '0 4px' }}>+</button>
                   </div>
 
                   {!collapsed ? (
-                    <div style={{ marginTop: 4 }}>
+                    <div>
                       {categoryRooms.map((room) => (
                         <button
                           key={room.roomId}
                           type="button"
                           onClick={() => setSelectedRoomId(room.roomId)}
-                          style={{ width: '100%', textAlign: 'left', border: 'none', background: selectedRoomId === room.roomId ? 'var(--bg-surface-hover)' : 'transparent', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8 }}
+                          style={{ width: '100%', textAlign: 'left', border: 'none', background: selectedRoomId === room.roomId ? 'rgba(255,255,255,0.1)' : 'transparent', color: selectedRoomId === room.roomId ? 'var(--text-primary)' : '#949ba4', borderRadius: 6, margin: '0 8px', width: 'calc(100% - 16px)', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem' }}
                         >
-                          <span>{roomKindIcon(room)}</span>
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{room.name}</span>
+                          <span style={{ color: '#6d717a', fontSize: '1rem', fontWeight: 600, flexShrink: 0 }}>#</span>
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{room.name}</span>
                           {roomUnread(room) > 0 ? (
-                            <span style={{ background: 'var(--accent-primary)', color: 'var(--bg-surface)', borderRadius: 999, minWidth: 18, textAlign: 'center', fontSize: 11 }}>{roomUnread(room)}</span>
-                          ) : (
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-muted)' }} />
-                          )}
+                            <span style={{ background: 'var(--danger)', color: '#fff', borderRadius: 999, minWidth: 18, textAlign: 'center', fontSize: 11, lineHeight: '18px', padding: '0 4px', flexShrink: 0 }}>{roomUnread(room)}</span>
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -273,13 +325,6 @@ export const ClientLayout = () => {
           </aside>
         ) : null}
 
-        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
-          {RIGHT_PANELS.map((panel) => (
-            <button key={panel} type="button" onClick={() => setRightPanel(panel)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
-              {panel}
-            </button>
-          ))}
-        </div>
       </main>
 
       {desktop ? (
