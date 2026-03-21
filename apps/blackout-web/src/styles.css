@@ -16,11 +16,14 @@ body {
 }
 
 .container {
+  min-height: 100vh;
   height: 100vh;
   display: flex;
   flex-direction: column;
   padding: 1rem;
   gap: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .header h1 {
@@ -34,6 +37,16 @@ body {
   border-radius: 16px;
   background: linear-gradient(135deg, #233149, #161b24 65%);
   box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+
+.header-environment {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.header-environment summary {
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .meta {
@@ -425,6 +438,13 @@ body {
 
 .composer-toolbar button {
   width: auto;
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.composer-toolbar--compact button span:last-child {
+  display: none;
 }
 
 .composer-overflow-label {
@@ -435,6 +455,15 @@ body {
 
 .composer-overflow-label select {
   min-width: 150px;
+}
+
+.composer-help-btn {
+  width: auto;
+  margin-left: auto;
+}
+
+.composer-hint {
+  margin-top: -0.35rem;
 }
 
 input,
@@ -519,6 +548,17 @@ label {
   flex-direction: column;
   gap: 0.35rem;
   color: #c5cad1;
+}
+
+.channel-footer-actions {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.channel-create-btn {
+  background: #2f3d5d;
+  border-color: #3b82f6;
 }
 
 .link-btn {
@@ -692,4 +732,14 @@ label {
   border: 1px solid #35373c;
   background: #2b2d31;
   color: #f2f3f5;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[role="dialog"]:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
 }

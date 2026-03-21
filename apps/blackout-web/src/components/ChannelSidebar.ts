@@ -23,7 +23,10 @@ export function renderChannelSidebar({ serverName, channels, activeChannelId, un
         <button type="button" class="ghost-btn section-icon-btn" data-action="create-channel" aria-label="Create channel">+</button>
       </div>
       <ul>${channelItems || '<li class="empty">No channels yet — create your first topic channel.</li>'}</ul>
-      <button type="button" class="add-btn channel-browse-btn" data-action="create-channel">Browse or create channels</button>
+      <div class="channel-footer-actions">
+        <button type="button" class="add-btn channel-browse-btn" data-action="browse-channels">Browse channels</button>
+        <button type="button" class="add-btn channel-create-btn" data-action="create-channel">Create channel</button>
+      </div>
     </aside>
   `;
 }
