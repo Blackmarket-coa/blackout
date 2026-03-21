@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord Classic - Chat Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', sans-serif;
+            background: #36393f;
+            color: #dcddde;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* ═══ SIDEBAR ═══ */
+        .server-list {
+            width: 72px;
+            background: #2f3136;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+            gap: 12px;
+            border-right: 1px solid #202225;
+            overflow-y: auto;
+        }
+
+        .server-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #7289da 0%, #5b7fc7 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .server-icon:hover {
+            border-radius: 30%;
+            transform: scale(1.05);
+            background: linear-gradient(135deg, #7289da 0%, #4f6ab8 100%);
+        }
+
+        .server-icon.active {
+            border-radius: 30%;
+            background: linear-gradient(135deg, #7289da 0%, #5b7fc7 100%);
+            box-shadow: 0 0 0 3px #7289da;
+        }
+
+        .separator {
+            width: 32px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 1px;
+        }
+
+        /* ═══ CHANNEL LIST ═══ */
+        .channel-panel {
+            width: 240px;
+            background: #2f3136;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #202225;
+        }
+
+        .server-header {
+            padding: 16px;
+            border-bottom: 1px solid #202225;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .server-header:hover {
+            background: rgba(79, 84, 92, 0.2);
+        }
+
+        .server-name {
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .server-name .dropdown {
+            color: #b9bbbe;
+            font-size: 12px;
+        }
+
+        .channel-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .channel {
+            padding: 8px 8px;
+            margin: 0 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #72767d;
+            font-size: 14px;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .channel:hover {
+            background: rgba(79, 84, 92, 0.3);
+            color: #dcddde;
+        }
+
+        .channel.active {
+            background: #2f3136;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .channel::before {
+            content: '#';
+            font-weight: bold;
+            opacity: 0.5;
+        }
+
+        .channel.voice::before {
+            content: '🔊';
+            opacity: 0.7;
+        }
+
+        .channel-category {
+            padding: 8px 16px;
+            color: #72767d;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            margin-top: 8px;
+        }
+
+        .channel-category:hover {
+            color: #b9bbbe;
+        }
+
+        /* ═══ MAIN CHAT AREA ═══ */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #36393f;
+        }
+
+        .chat-header {
+            height: 48px;
+            background: #36393f;
+            border-bottom: 1px solid #202225;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .chat-header-title::before {
+            content: '#';
+            color: #72767d;
+            font-weight: bold;
+        }
+
+        .chat-header-icons {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            background: transparent;
+            border: none;
+            color: #b9bbbe;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.15s ease;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #dcddde;
+        }
+
+        /* ═══ MESSAGE LIST ═══ */
+        .message-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message-group {
+            display: flex;
+            gap: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #7289da 0%, #5b7fc7 100%);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .message-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .username {
+            font-weight: 500;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #72767d;
+        }
+
+        .message-text {
+            color: #dcddde;
+            font-size: 14px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        /* ═══ INPUT AREA ═══ */
+        .input-area {
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            border-top: 1px solid #202225;
+            background: #36393f;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-buttons {
+            display: flex;
+            gap: 8px;
+            padding: 0 12px;
+            opacity: 0.7;
+            transition: opacity 0.2s ease;
+        }
+
+        .input-area:focus-within .input-buttons {
+            opacity: 1;
+        }
+
+        .input-btn {
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: none;
+            color: #b9bbbe;
+            cursor: pointer;
+            font-size: 18px;
+            transition: color 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-btn:hover {
+            color: #dcddde;
+        }
+
+        .message-input {
+            background: #40444b;
+            border: 1px solid #202225;
+            border-radius: 8px;
+            color: #dcddde;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            max-height: 120px;
+            min-height: 40px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .message-input:focus {
+            border-color: #7289da;
+            background: #40444b;
+            box-shadow: 0 0 0 1px rgba(114, 137, 218, 0.3);
+        }
+
+        .message-input::placeholder {
+            color: #72767d;
+        }
+
+        /* ═══ SCROLLBAR ═══ */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #202225;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2c2f33;
+        }
+
+        /* ═══ ANIMATIONS ═══ */
+        .message-group {
+            opacity: 0;
+            animation: slideIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .message-group:nth-child(1) { animation-delay: 0ms; }
+        .message-group:nth-child(2) { animation-delay: 50ms; }
+        .message-group:nth-child(3) { animation-delay: 100ms; }
+        .message-group:nth-child(4) { animation-delay: 150ms; }
+        .message-group:nth-child(5) { animation-delay: 200ms; }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 4px 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #72767d;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%,
+            60%,
+            100% {
+                opacity: 0.5;
+                transform: translateY(0);
+            }
+
+            30% {
+                opacity: 1;
+                transform: translateY(-8px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="server-list">
+            <div class="server-icon active">D</div>
+            <div class="separator"></div>
+            <div class="server-icon">B</div>
+            <div class="server-icon">A</div>
+            <div class="server-icon">C</div>
+        </div>
+
+        <div class="channel-panel">
+            <div class="server-header">
+                <div class="server-name">
+                    Discord Classic
+                    <span class="dropdown">▼</span>
+                </div>
+            </div>
+
+            <div class="channel-list">
+                <div class="channel-category">Text Channels</div>
+                <div class="channel active">general</div>
+                <div class="channel">announcements</div>
+                <div class="channel">random</div>
+                <div class="channel">introductions</div>
+
+                <div class="channel-category">Voice Channels</div>
+                <div class="channel voice">General Voice</div>
+                <div class="channel voice">Gaming</div>
+
+                <div class="channel-category">More</div>
+                <div class="channel">rules</div>
+                <div class="channel">resources</div>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="chat-header-title">general</div>
+                <div class="chat-header-icons">
+                    <button class="icon-btn" title="Pin Messages">📌</button>
+                    <button class="icon-btn" title="Search">🔍</button>
+                    <button class="icon-btn" title="Members">👥</button>
+                    <button class="icon-btn" title="Settings">⚙️</button>
+                </div>
+            </div>
+
+            <div class="message-list">
+                <div class="message-group">
+                    <div class="avatar">A</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Alice</span>
+                            <span class="timestamp">Today at 2:34 PM</span>
+                        </div>
+                        <div class="message-text">Hey everyone! Welcome to the server. Feel free to introduce yourselves in #introductions</div>
+                    </div>
+                </div>
+
+                <div class="message-group">
+                    <div class="avatar" style="background: linear-gradient(135deg, #43b581 0%, #3fa473 100%);">B</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Bob</span>
+                            <span class="timestamp">Today at 2:45 PM</span>
+                        </div>
+                        <div class="message-text">Thanks for the invite! Great to be here 😊</div>
+                    </div>
+                </div>
+
+                <div class="message-group">
+                    <div class="avatar" style="background: linear-gradient(135deg, #faa61a 0%, #f08c0f 100%);">C</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Charlie</span>
+                            <span class="timestamp">Today at 2:51 PM</span>
+                        </div>
+                        <div class="message-text">Is anyone playing games tonight?</div>
+                    </div>
+                </div>
+
+                <div class="message-group">
+                    <div class="avatar" style="background: linear-gradient(135deg, #f04747 0%, #d13f3f 100%);">D</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Diana</span>
+                            <span class="timestamp">Today at 3:02 PM</span>
+                        </div>
+                        <div class="message-text">I'm down for some gaming! What are we playing?</div>
+                    </div>
+                </div>
+
+                <div class="message-group">
+                    <div class="avatar" style="background: linear-gradient(135deg, #7289da 0%, #5b7fc7 100%);">B</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Bob</span>
+                            <span class="timestamp">Today at 3:08 PM</span>
+                        </div>
+                        <div class="message-text">Either Valorant or CS:GO, I'm flexible</div>
+                    </div>
+                </div>
+
+                <div class="message-group">
+                    <div class="avatar" style="background: linear-gradient(135deg, #43b581 0%, #3fa473 100%);">T</div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="username">Typing...</span>
+                        </div>
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <div class="input-buttons">
+                        <button class="input-btn" title="Upload File">➕</button>
+                        <button class="input-btn" title="Emoji">😊</button>
+                        <button class="input-btn" title="GIF">🎬</button>
+                    </div>
+                    <input type="text" class="message-input" placeholder="Message #general" onkeypress="handleSend(event)" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const messageList = document.querySelector('.message-list');
+        messageList.scrollTop = messageList.scrollHeight;
+
+        function handleSend(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                const input = event.target;
+                const text = input.value.trim();
+
+                if (text) {
+                    addMessage('You', text, 'blue');
+                    input.value = '';
+                    input.style.height = 'auto';
+                }
+            }
+        }
+
+        function addMessage(username, text, color = 'blue') {
+            const messageGroup = document.createElement('div');
+            messageGroup.className = 'message-group';
+
+            const colors = {
+                blue: 'linear-gradient(135deg, #7289da 0%, #5b7fc7 100%)',
+                green: 'linear-gradient(135deg, #43b581 0%, #3fa473 100%)',
+                orange: 'linear-gradient(135deg, #faa61a 0%, #f08c0f 100%)',
+                red: 'linear-gradient(135deg, #f04747 0%, #d13f3f 100%)'
+            };
+
+            const time = new Date().toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+
+            messageGroup.innerHTML = `
+                <div class="avatar" style="background: ${colors[color]}">${username[0]}</div>
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="username">${username}</span>
+                        <span class="timestamp">Today at ${time}</span>
+                    </div>
+                    <div class="message-text">${escapeHtml(text)}</div>
+                </div>
+            `;
+
+            const typingGroup = document.querySelector('.message-group:last-child .typing-indicator');
+            if (typingGroup) {
+                document.querySelector('.message-group:last-child').remove();
+            }
+
+            messageList.appendChild(messageGroup);
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.querySelectorAll('.channel').forEach((channel) => {
+            channel.addEventListener('click', function () {
+                document.querySelectorAll('.channel').forEach((c) => c.classList.remove('active'));
+                this.classList.add('active');
+
+                const channelName = this.textContent.trim();
+                document.querySelector('.chat-header-title').textContent = '# ' + channelName;
+                document.querySelector('.message-input').placeholder = `Message #${channelName}`;
+            });
+        });
+
+        const input = document.querySelector('.message-input');
+        input.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+    </script>
+</body>
+</html>
