@@ -259,6 +259,32 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="feature-widget-townhall-sfu"]')).toBeFalsy();
   });
 
+  it("progressively reveals advanced feature library by cohort", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "general" },
+      presets: {
+        activePreset: "community_plus",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "community_plus",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    const disclosure = root.querySelector<HTMLDetailsElement>('[data-testid="feature-library-disclosure"]');
+    expect(disclosure).toBeTruthy();
+    expect(disclosure?.open).toBe(false);
+  });
+
   it("renders the EPIC delivery blueprint with E2EE and rollout guardrails", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
@@ -427,6 +453,52 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "governance and entitlement" } });
     fireEvent.click(getByRole(root, "button", { name: /Governance and entitlement policy layer/i }));
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
+  });
+
+  it("restores focus to the opener when command palette closes via Escape", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root);
+    await app.mount();
+
+    const trigger = root.querySelector<HTMLButtonElement>('[data-testid="open-command-palette"]');
+    if (!trigger) throw new Error("missing command palette trigger");
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(root.querySelector('[data-testid="feature-command-palette"]')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(root.querySelector('[data-testid="feature-command-palette"]')).toBeFalsy();
+    const restoredTrigger = root.querySelector<HTMLButtonElement>('[data-testid="open-command-palette"]');
+    expect(document.activeElement).toBe(restoredTrigger);
+  });
+
+  it("separates browse and create channel actions", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root);
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    const browseButton = getByRole(root, "button", { name: "Browse channels" });
+    fireEvent.click(browseButton);
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Browse available channels");
+
+    const createButton = root.querySelector<HTMLButtonElement>(".channel-create-btn");
+    if (!createButton) throw new Error("missing create channel footer button");
+    fireEvent.click(createButton);
+    expect(root.querySelector("#create-entity-form")).toBeTruthy();
   });
 
 });

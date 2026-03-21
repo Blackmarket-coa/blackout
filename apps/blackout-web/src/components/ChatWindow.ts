@@ -44,7 +44,7 @@ export function renderChatWindow({
   return `
     <section class="chat-window">
       <div class="chat-head">
-        <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer">☰</button>
+        <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer" aria-label="Toggle channel drawer">☰</button>
         <div class="chat-head-copy">
           <span># ${channelLabel}</span>
           <small>
@@ -53,13 +53,14 @@ export function renderChatWindow({
           </small>
         </div>
         <div class="chat-head-actions">
-          <button type="button" class="ghost-btn chat-head-action">Threads</button>
-          <button type="button" class="ghost-btn chat-head-action">Search</button>
+          <button type="button" class="ghost-btn chat-head-action" aria-label="Open threads">Threads</button>
+          <button type="button" class="ghost-btn chat-head-action" aria-label="Search channel">Search</button>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>
       ${renderMessageInput({
         disabled: !canSend || sendPending,
+        compactMode,
         richEditingEnabled,
         stegoEnabled,
         composerRepliesEnabled,

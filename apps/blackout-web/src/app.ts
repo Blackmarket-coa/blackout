@@ -34,6 +34,8 @@ export class BlackoutWebApp {
   private quickAccessFeatureId = FEATURE_UI_ENTRIES[0]?.id ?? "";
   private commandPaletteQuery = "";
   private commandPaletteOpen = false;
+  private commandPalettePreviouslyFocused: HTMLElement | null = null;
+  private commandPalettePreviouslyFocusedSelector: string | null = null;
   private compactModeEnabled = false;
   private settingsOpen = false;
   private composerIsTyping = false;
@@ -140,9 +142,12 @@ export class BlackoutWebApp {
         <header class="header">
           <h1>Blackout Chat</h1>
           <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
-          <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
-          <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
-          <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
+          <details class="header-environment panel-card" data-testid="environment-details">
+            <summary>Environment details</summary>
+            <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
+            <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
+            <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
+          </details>
         </header>
         <div class="header-actions">
           <div class="header-actions-copy">
@@ -154,7 +159,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
         ${state.session ? this.renderFeatureToolbar() : ""}
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -243,6 +248,16 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderFeatureLibraryDisclosure(): string {
+    const openByDefault = this.isAdvancedCohort();
+    return `
+      <details class="stack panel-card" data-testid="feature-library-disclosure" ${openByDefault ? "open" : ""}>
+        <summary><strong>Advanced feature library</strong> <span class="meta">Role-based progressive reveal for power workflows.</span></summary>
+        ${this.renderFeatureEntryPoints()}
+      </details>
+    `;
+  }
+
   private renderFeatureCommandPaletteTrigger(): string {
     return `
       <button type="button" class="ghost-btn command-palette-trigger" data-action="open-command-palette" data-testid="open-command-palette">
@@ -270,7 +285,7 @@ export class BlackoutWebApp {
         const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
         const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
         const glyph = this.getFeatureGlyph(feature.name);
-        return `<button type="button" class="feature-rail-btn ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-rail-${feature.id}" title="${feature.name}">${glyph}</button>`;
+        return `<button type="button" class="feature-rail-btn ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-rail-${feature.id}" title="${feature.name}" aria-label="${feature.name}">${glyph}</button>`;
       })
       .join("");
 
@@ -409,20 +424,22 @@ export class BlackoutWebApp {
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      this.commandPaletteOpen = true;
-      this.commandPaletteQuery = "";
-      this.render();
+      this.openCommandPalette();
       return;
     }
 
     if (event.key === "Escape" && this.commandPaletteOpen) {
-      this.commandPaletteOpen = false;
-      this.render();
+      this.closeCommandPalette();
     }
   };
 
   private isMessageHeavySession(): boolean {
     return this.store.getState().messages.length >= 30;
+  }
+
+  private isAdvancedCohort(): boolean {
+    const cohort = this.runtimeConfig.rollout.cohort.toLowerCase();
+    return cohort.includes("internal") || cohort.includes("operator") || cohort.includes("admin");
   }
 
   private getCompactModeActive(): boolean {
@@ -446,9 +463,7 @@ export class BlackoutWebApp {
 
   private bindEvents(): void {
     this.root.querySelector<HTMLButtonElement>("[data-action='open-command-palette']")?.addEventListener("click", () => {
-      this.commandPaletteOpen = true;
-      this.commandPaletteQuery = "";
-      this.render();
+      this.openCommandPalette();
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='close-command-palette']").forEach((element) => {
@@ -456,8 +471,7 @@ export class BlackoutWebApp {
         if (element.classList.contains("command-palette") || element.closest(".command-palette")) {
           event.stopPropagation();
         }
-        this.commandPaletteOpen = false;
-        this.render();
+        this.closeCommandPalette();
       });
     });
 
@@ -504,6 +518,14 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='create-channel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.openCreateModal("channel");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='browse-channels']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.store.patch({ channelDrawerOpen: true });
+        this.featureActionResult = "Browse available channels from the channel list, then pick one to jump into the conversation.";
+        this.render();
       });
     });
 
@@ -561,18 +583,12 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
         if (button.dataset.actionOrigin === "palette") {
-          this.commandPaletteOpen = false;
+          this.closeCommandPalette({ restoreFocus: false });
           if (!this.hasSeenFeatureTooltips) {
             globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
           }
         }
         this.openFeatureById(button.dataset.featureId);
-        if (button.dataset.actionOrigin === "palette") {
-          this.commandPaletteOpen = false;
-          if (!this.hasSeenFeatureTooltips) {
-            globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
-          }
-        }
       });
     });
 
@@ -603,6 +619,11 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
       this.applyComposerSnippet(" [stego::hidden-message]");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-help']")?.addEventListener("click", () => {
+      this.featureActionResult = "Composer tips: Enter sends, Shift+Enter adds a line break, and formatting tools insert snippets at the cursor.";
+      this.render();
     });
 
     this.root.querySelector<HTMLSelectElement>("[data-action='composer-more-actions']")?.addEventListener("change", (event) => {
@@ -638,6 +659,59 @@ export class BlackoutWebApp {
       const value = (event.currentTarget as HTMLTextAreaElement).value.trim();
       this.composerIsTyping = value.length > 0;
       this.render();
+    });
+
+    this.bindCommandPaletteFocusTrap();
+  }
+
+  private openCommandPalette(): void {
+    const active = globalThis.document.activeElement;
+    this.commandPalettePreviouslyFocused = active instanceof HTMLElement ? active : null;
+    const testId = this.commandPalettePreviouslyFocused?.dataset.testid;
+    if (testId) {
+      this.commandPalettePreviouslyFocusedSelector = `[data-testid="${testId}"]`;
+    } else if (this.commandPalettePreviouslyFocused?.id) {
+      this.commandPalettePreviouslyFocusedSelector = `#${this.commandPalettePreviouslyFocused.id}`;
+    } else {
+      this.commandPalettePreviouslyFocusedSelector = null;
+    }
+    this.commandPaletteOpen = true;
+    this.commandPaletteQuery = "";
+    this.render();
+  }
+
+  private closeCommandPalette(options: { restoreFocus: boolean } = { restoreFocus: true }): void {
+    this.commandPaletteOpen = false;
+    this.render();
+    if (options.restoreFocus) {
+      const fallbackElement = this.commandPalettePreviouslyFocused;
+      const selector = this.commandPalettePreviouslyFocusedSelector;
+      const restoredElement = selector ? this.root.querySelector<HTMLElement>(selector) : null;
+      (restoredElement ?? fallbackElement)?.focus();
+    }
+  }
+
+  private bindCommandPaletteFocusTrap(): void {
+    const palette = this.root.querySelector<HTMLElement>("[data-testid='feature-command-palette']");
+    if (!palette) return;
+    palette.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = palette.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = globalThis.document.activeElement;
+
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+
+      if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      }
     });
   }
 
