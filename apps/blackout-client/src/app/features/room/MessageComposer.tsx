@@ -820,7 +820,7 @@ export const MessageComposer = ({
 
       <Slate
         editor={editor}
-        value={value}
+        initialValue={value}
         onChange={(nextValue) => {
           setValue(nextValue as CustomElement[]);
           runAutocomplete();
