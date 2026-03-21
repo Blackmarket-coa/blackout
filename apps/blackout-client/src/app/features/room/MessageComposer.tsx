@@ -64,6 +64,12 @@ interface Suggestion {
   kind: MentionKind;
 }
 
+interface CommandPreset {
+  id: string;
+  label: string;
+  template: string;
+}
+
 const initialValue: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }];
 
 const EMOJI: Array<{ shortcode: string; emoji: string }> = [
@@ -75,6 +81,12 @@ const EMOJI: Array<{ shortcode: string; emoji: string }> = [
   { shortcode: 'wave', emoji: '👋' },
   { shortcode: 'thinking', emoji: '🤔' },
   { shortcode: 'eyes', emoji: '👀' },
+];
+
+const COMMAND_PRESETS: CommandPreset[] = [
+  { id: 'shrug', label: '/shrug', template: '/shrug' },
+  { id: 'tableflip', label: '/tableflip', template: '/tableflip' },
+  { id: 'topic', label: '/topic <new-topic>', template: '/topic ' },
 ];
 
 const fuzzyMatch = (term: string, query: string): boolean => {
@@ -315,15 +327,19 @@ export const MessageComposer = ({
   const [isMobileMenu, setIsMobileMenu] = useState(false);
   const [recentActions, setRecentActions] = useState<string[]>([]);
   const [voteEnabled, setVoteEnabled] = useState(false);
+  const [voteDurationHours, setVoteDurationHours] = useState(24);
+  const [voiceAttachment, setVoiceAttachment] = useState<File | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [signatureEnabled, setSignatureEnabled] = useState(false);
   const [commandEnabled, setCommandEnabled] = useState(false);
+  const [selectedCommand, setSelectedCommand] = useState<CommandPreset | null>(null);
   const [scheduledEnabled, setScheduledEnabled] = useState(false);
   const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const featureMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceInputRef = useRef<HTMLInputElement | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
 
   const { data: members } = useRoomMembers(roomId);
@@ -382,6 +398,21 @@ export const MessageComposer = ({
   const recordRecentAction = useCallback((actionLabel: string) => {
     setRecentActions((current) => [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3));
   }, []);
+
+  const roomIsGovernance = useMemo(() => /gov|vote|proposal|council|dao/i.test(roomId), [roomId]);
+  const primaryTier2Actions = useMemo(
+    () => (roomIsGovernance ? ['Poll / vote', 'Steganography', 'Slash command'] : ['Steganography', 'Poll / vote', 'Slash command']),
+    [roomIsGovernance],
+  );
+  const intentSuggestions = useMemo(() => {
+    const text = toPlainText(value).toLowerCase();
+    const suggestionsSet: string[] = [];
+    if (text.includes('vote') || text.includes('poll')) suggestionsSet.push('Poll / vote');
+    if (text.includes('secret') || text.includes('hide')) suggestionsSet.push('Steganography');
+    if (text.startsWith('/')) suggestionsSet.push('Slash command');
+    if (text.includes('sign')) suggestionsSet.push('Signed message preset');
+    return suggestionsSet;
+  }, [value]);
 
   const roomSuggestions = useMemo(() => {
     const flattened: Suggestion[] = [];
@@ -487,12 +518,14 @@ export const MessageComposer = ({
 
   const sendCurrentMessage = useCallback(async () => {
     const plainBody = toPlainText(value);
-    if (!plainBody && attachments.length === 0) return;
+    if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
 
     setSending(true);
     try {
       const htmlBody = toHtml(value);
-      const bodyToSend = plainBody;
+      const commandPrefix = commandEnabled && selectedCommand ? `${selectedCommand.template}` : '';
+      const signatureSuffix = signatureEnabled ? '\n— signed via Blackout' : '';
+      const bodyToSend = `${commandPrefix ? `${commandPrefix}\n` : ''}${plainBody}${signatureSuffix}`.trim();
       const formattedBody = htmlBody;
 
       if (target?.mode === 'edit' && target.eventId) {
@@ -504,6 +537,25 @@ export const MessageComposer = ({
           format: 'org.matrix.custom.html',
           formatted_body: formattedBody,
         };
+        if (voteEnabled) {
+          content['co.blackout.poll'] = {
+            question: plainBody || 'Untitled poll',
+            options: ['Yes', 'No'],
+            duration_hours: voteDurationHours,
+          };
+        }
+        if (signatureEnabled) {
+          content['co.blackout.signature'] = { enabled: true };
+        }
+        if (scheduledEnabled) {
+          content['co.blackout.schedule'] = { deliver_at: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+        }
+        if (encryptionPresetEnabled) {
+          content['co.blackout.encryption'] = { preset: 'enhanced' };
+        }
+        if (commandEnabled && selectedCommand) {
+          content['co.blackout.command'] = { id: selectedCommand.id, template: selectedCommand.template };
+        }
 
         if (target?.mode === 'reply' && target.eventId) {
           content['m.relates_to'] = {
@@ -523,6 +575,9 @@ export const MessageComposer = ({
 
       for (const file of attachments) {
         await sendMedia(file);
+      }
+      if (voiceAttachment) {
+        await sendMedia(voiceAttachment);
       }
 
       if (stegoAttachment) {
@@ -548,13 +603,52 @@ export const MessageComposer = ({
 
       setValue(initialValue);
       setAttachments([]);
+      setVoiceAttachment(null);
       setStegoAttachment(null);
       onSent?.();
       await sendTyping(false);
     } finally {
       setSending(false);
     }
-  }, [attachments, editMessage, matrixClient, onSent, roomId, sendMedia, sendRichText, sendTyping, stegoAttachment, target, value]);
+  }, [attachments, commandEnabled, editMessage, encryptionPresetEnabled, matrixClient, onSent, roomId, scheduledEnabled, selectedCommand, sendMedia, sendRichText, sendTyping, signatureEnabled, stegoAttachment, target, value, voiceAttachment, voteDurationHours, voteEnabled]);
+
+  const applyFeatureAction = useCallback((actionLabel: string) => {
+    recordRecentAction(actionLabel);
+    if (actionLabel === 'Attach file' || actionLabel === 'Upload media') {
+      attachmentInputRef.current?.click();
+      return;
+    }
+    if (actionLabel === 'Quick voice note') {
+      voiceInputRef.current?.click();
+      return;
+    }
+    if (actionLabel === 'Steganography') {
+      if (!stegoSubscription) return;
+      setHideDialogOpen(true);
+      setFeatureMenuOpen(false);
+      return;
+    }
+    if (actionLabel === 'Poll / vote') {
+      setVoteEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Slash command') {
+      setCommandEnabled(true);
+      if (!selectedCommand) setSelectedCommand(COMMAND_PRESETS[0]);
+      return;
+    }
+    if (actionLabel === 'Signed message preset') {
+      setSignatureEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Scheduled send preset') {
+      setScheduledEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Encryption preset') {
+      setEncryptionPresetEnabled((active) => !active);
+    }
+  }, [recordRecentAction, selectedCommand, stegoSubscription]);
 
   const handleKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLDivElement>) => {
@@ -654,6 +748,19 @@ export const MessageComposer = ({
               event.currentTarget.value = '';
             }}
           />
+          <input
+            ref={voiceInputRef}
+            type="file"
+            accept="audio/*"
+            style={{ display: 'none' }}
+            onChange={(event) => {
+              const voiceFile = event.currentTarget.files?.[0];
+              if (!voiceFile) return;
+              setVoiceAttachment(voiceFile);
+              setVoiceEnabled(true);
+              event.currentTarget.value = '';
+            }}
+          />
           <button
             type="button"
             onClick={() => setFeatureMenuOpen((open) => !open)}
@@ -693,85 +800,35 @@ export const MessageComposer = ({
             >
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 1 • Common</strong>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Attach file');
-                  attachmentInputRef.current?.click();
-                }}
-                >
-                  Attach file
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Upload media');
-                  attachmentInputRef.current?.click();
-                }}
-                >
-                  Upload media
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Quick voice note');
-                  setVoiceEnabled((active) => !active);
-                }}
-                >
-                  Quick voice note (placeholder)
-                </button>
+                <button type="button" onClick={() => applyFeatureAction('Attach file')}>Attach file</button>
+                <button type="button" onClick={() => applyFeatureAction('Upload media')}>Upload media</button>
+                <button type="button" onClick={() => applyFeatureAction('Quick voice note')}>Quick voice note</button>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 2 • Secondary</strong>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!stegoSubscription) return;
-                    recordRecentAction('Steganography');
-                    setHideDialogOpen(true);
-                    setFeatureMenuOpen(false);
-                  }}
-                  disabled={!stegoSubscription}
-                  title={
-                    !stegoSubscription
-                      ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
-                      : 'Hide a secret message inside an image'
-                  }
-                >
-                  Steganography
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Poll / vote');
-                  setVoteEnabled((active) => !active);
-                }}
-                >
-                  Poll / vote
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Slash command');
-                  setCommandEnabled((active) => !active);
-                }}
-                >
-                  Slash command
-                </button>
+                {primaryTier2Actions.map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    onClick={() => applyFeatureAction(action)}
+                    disabled={action === 'Steganography' && !stegoSubscription}
+                    title={
+                      action !== 'Steganography'
+                        ? undefined
+                        : !stegoSubscription
+                          ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
+                          : 'Hide a secret message inside an image'
+                    }
+                  >
+                    {action}
+                  </button>
+                ))}
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 3 • Advanced</strong>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Signed message preset');
-                  setSignatureEnabled((active) => !active);
-                }}
-                >
-                  Signed message preset
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Scheduled send preset');
-                  setScheduledEnabled((active) => !active);
-                }}
-                >
-                  Scheduled send preset
-                </button>
-                <button type="button" onClick={() => {
-                  recordRecentAction('Encryption preset');
-                  setEncryptionPresetEnabled((active) => !active);
-                }}
-                >
-                  Encryption preset
-                </button>
+                <button type="button" onClick={() => applyFeatureAction('Signed message preset')}>Signed message preset</button>
+                <button type="button" onClick={() => applyFeatureAction('Scheduled send preset')}>Scheduled send preset</button>
+                <button type="button" onClick={() => applyFeatureAction('Encryption preset')}>Encryption preset</button>
               </div>
               {recentActions.length > 0 ? (
                 <div style={{ display: 'grid', gap: 4 }}>
@@ -794,6 +851,34 @@ export const MessageComposer = ({
             autoFocus
           />
         </div>
+        {intentSuggestions.length > 0 ? (
+          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {intentSuggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => applyFeatureAction(suggestion)}
+                style={{ border: '1px dashed var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, background: 'transparent' }}
+              >
+                Suggestion: {suggestion}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {commandEnabled ? (
+          <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Slash command</label>
+            <select
+              value={selectedCommand?.id ?? ''}
+              onChange={(event) => setSelectedCommand(COMMAND_PRESETS.find((preset) => preset.id === event.currentTarget.value) ?? null)}
+              style={{ border: '1px solid var(--border-default)', borderRadius: 8, padding: '4px 8px', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            >
+              {COMMAND_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.label}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         {(attachments.length > 0 || stegoAttachment || voteEnabled || voiceEnabled || signatureEnabled || commandEnabled || scheduledEnabled || encryptionPresetEnabled) ? (
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -818,19 +903,28 @@ export const MessageComposer = ({
             ) : null}
             {voteEnabled ? (
               <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                Vote: 2 options • 24h
+                Vote: 2 options • {voteDurationHours}h
+                <button type="button" onClick={() => setVoteDurationHours((current) => (current === 24 ? 48 : 24))} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Edit</button>
                 <button type="button" onClick={() => setVoteEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
               </span>
             ) : null}
             {voiceEnabled ? (
               <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                Voice: attached
-                <button type="button" onClick={() => setVoiceEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+                Voice: {voiceAttachment?.name ?? 'attached'}
+                <button type="button" onClick={() => voiceInputRef.current?.click()} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Replace</button>
+                <button type="button" onClick={() => {
+                  setVoiceEnabled(false);
+                  setVoiceAttachment(null);
+                }}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
               </span>
             ) : null}
             {commandEnabled ? (
               <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                Command: enabled
+                Command: {selectedCommand?.label ?? 'enabled'}
                 <button type="button" onClick={() => setCommandEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
               </span>
             ) : null}
