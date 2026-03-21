@@ -716,20 +716,20 @@ export default class MessageContextMenu extends React.Component<IProps, IState> 
         }
 
         let quickItemsList: JSX.Element | undefined;
-        if (editButton || replyButton || reactButton || pinButton) {
+        if (replyButton || reactButton || replyInThreadButton) {
             quickItemsList = (
                 <IconizedContextMenuOptionList>
                     {reactButton}
                     {replyButton}
                     {replyInThreadButton}
-                    {editButton}
-                    {pinButton}
                 </IconizedContextMenuOptionList>
             );
         }
 
         const commonItemsList = (
             <IconizedContextMenuOptionList>
+                {editButton}
+                {pinButton}
                 {viewInRoomButton}
                 {openInMapSiteButton}
                 {endPollButton}
