@@ -312,6 +312,8 @@ export const MessageComposer = ({
   const [stegoAttachment, setStegoAttachment] = useState<File | null>(null);
   const [stegoSubscription, setStegoSubscription] = useState(false);
   const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
+  const [isMobileMenu, setIsMobileMenu] = useState(false);
+  const [recentActions, setRecentActions] = useState<string[]>([]);
   const [voteEnabled, setVoteEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [signatureEnabled, setSignatureEnabled] = useState(false);
@@ -357,6 +359,29 @@ export const MessageComposer = ({
     window.addEventListener('mousedown', onWindowClick);
     return () => window.removeEventListener('mousedown', onWindowClick);
   }, [featureMenuOpen]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 768px)');
+    const sync = () => setIsMobileMenu(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    const onShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setFeatureMenuOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
+
+  const recordRecentAction = useCallback((actionLabel: string) => {
+    setRecentActions((current) => [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3));
+  }, []);
 
   const roomSuggestions = useMemo(() => {
     const flattened: Suggestion[] = [];
@@ -650,24 +675,45 @@ export const MessageComposer = ({
             <div
               ref={featureMenuRef}
               style={{
-                position: 'absolute',
-                top: 38,
-                left: 0,
-                width: 280,
+                position: isMobileMenu ? 'fixed' : 'absolute',
+                top: isMobileMenu ? 'auto' : 38,
+                bottom: isMobileMenu ? 0 : 'auto',
+                left: isMobileMenu ? 0 : 0,
+                width: isMobileMenu ? '100%' : 280,
                 border: '1px solid var(--border-default)',
-                borderRadius: 10,
+                borderRadius: isMobileMenu ? '12px 12px 0 0' : 10,
                 background: 'var(--bg-input)',
                 zIndex: 10,
                 padding: 10,
                 display: 'grid',
                 gap: 10,
+                maxHeight: isMobileMenu ? '65vh' : 'none',
+                overflowY: isMobileMenu ? 'auto' : 'visible',
               }}
             >
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 1 • Common</strong>
-                <button type="button" onClick={() => attachmentInputRef.current?.click()}>Attach file</button>
-                <button type="button" onClick={() => attachmentInputRef.current?.click()}>Upload media</button>
-                <button type="button" onClick={() => setVoiceEnabled((active) => !active)}>Quick voice note (placeholder)</button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Attach file');
+                  attachmentInputRef.current?.click();
+                }}
+                >
+                  Attach file
+                </button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Upload media');
+                  attachmentInputRef.current?.click();
+                }}
+                >
+                  Upload media
+                </button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Quick voice note');
+                  setVoiceEnabled((active) => !active);
+                }}
+                >
+                  Quick voice note (placeholder)
+                </button>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 2 • Secondary</strong>
@@ -675,6 +721,7 @@ export const MessageComposer = ({
                   type="button"
                   onClick={() => {
                     if (!stegoSubscription) return;
+                    recordRecentAction('Steganography');
                     setHideDialogOpen(true);
                     setFeatureMenuOpen(false);
                   }}
@@ -687,15 +734,51 @@ export const MessageComposer = ({
                 >
                   Steganography
                 </button>
-                <button type="button" onClick={() => setVoteEnabled((active) => !active)}>Poll / vote</button>
-                <button type="button" onClick={() => setCommandEnabled((active) => !active)}>Slash command</button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Poll / vote');
+                  setVoteEnabled((active) => !active);
+                }}
+                >
+                  Poll / vote
+                </button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Slash command');
+                  setCommandEnabled((active) => !active);
+                }}
+                >
+                  Slash command
+                </button>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 3 • Advanced</strong>
-                <button type="button" onClick={() => setSignatureEnabled((active) => !active)}>Signed message preset</button>
-                <button type="button" onClick={() => setScheduledEnabled((active) => !active)}>Scheduled send preset</button>
-                <button type="button" onClick={() => setEncryptionPresetEnabled((active) => !active)}>Encryption preset</button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Signed message preset');
+                  setSignatureEnabled((active) => !active);
+                }}
+                >
+                  Signed message preset
+                </button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Scheduled send preset');
+                  setScheduledEnabled((active) => !active);
+                }}
+                >
+                  Scheduled send preset
+                </button>
+                <button type="button" onClick={() => {
+                  recordRecentAction('Encryption preset');
+                  setEncryptionPresetEnabled((active) => !active);
+                }}
+                >
+                  Encryption preset
+                </button>
               </div>
+              {recentActions.length > 0 ? (
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Recent</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{recentActions.join(' • ')}</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
