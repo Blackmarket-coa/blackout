@@ -20,17 +20,22 @@ const getInitials = (displayName: string): string =>
 export const AvatarDecoration = ({ avatarUrl, displayName, decorationId, size = 88 }: AvatarDecorationProps) => {
   const decoration = availableDecorations.find((item) => item.id === decorationId && item.id !== 'none');
 
+  // Old Discord default avatar colors (blurple shades)
+  const discordAvatarColors = ['#7289DA', '#5865F2', '#57F287', '#FEE75C', '#EB459E'];
+  const colorIndex = displayName.charCodeAt(0) % discordAvatarColors.length;
+
   const avatarStyle: CSSProperties = {
     width: size,
     height: size,
     borderRadius: '50%',
     objectFit: 'cover',
-    background: 'var(--bg-input)',
+    background: discordAvatarColors[colorIndex],
     display: 'grid',
     placeItems: 'center',
     fontWeight: 700,
     fontSize: Math.max(14, Math.floor(size / 3.3)),
-    color: 'var(--text-primary)',
+    color: '#FFFFFF',
+    userSelect: 'none',
   };
 
   return (
