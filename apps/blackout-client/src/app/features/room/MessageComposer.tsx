@@ -70,6 +70,14 @@ interface CommandPreset {
   template: string;
 }
 
+interface ScheduledComposerMessage {
+  roomId: string;
+  body: string;
+  formattedBody: string;
+  deliverAt: string;
+  createdAt: string;
+}
+
 const initialValue: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }];
 
 const EMOJI: Array<{ shortcode: string; emoji: string }> = [
@@ -88,6 +96,20 @@ const COMMAND_PRESETS: CommandPreset[] = [
   { id: 'tableflip', label: '/tableflip', template: '/tableflip' },
   { id: 'topic', label: '/topic <new-topic>', template: '/topic ' },
 ];
+
+const executeCommandTemplate = (command: CommandPreset, body: string): string => {
+  if (command.id === 'shrug') return `${body} ¯\\_(ツ)_/¯`.trim();
+  if (command.id === 'tableflip') return `${body}\n(╯°□°）╯︵ ┻━┻`.trim();
+  if (command.id === 'topic') return `Topic update request: ${body}`.trim();
+  return `${command.template}\n${body}`.trim();
+};
+
+const enqueueScheduledMessage = (message: ScheduledComposerMessage): void => {
+  const key = 'blackout.scheduled_messages';
+  const existing = window.localStorage.getItem(key);
+  const current = existing ? (JSON.parse(existing) as ScheduledComposerMessage[]) : [];
+  window.localStorage.setItem(key, JSON.stringify([...current, message]));
+};
 
 const fuzzyMatch = (term: string, query: string): boolean => {
   if (!query) return true;
@@ -329,17 +351,23 @@ export const MessageComposer = ({
   const [voteEnabled, setVoteEnabled] = useState(false);
   const [voteDurationHours, setVoteDurationHours] = useState(24);
   const [voiceAttachment, setVoiceAttachment] = useState<File | null>(null);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceRecordingSupported, setVoiceRecordingSupported] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [signatureEnabled, setSignatureEnabled] = useState(false);
   const [commandEnabled, setCommandEnabled] = useState(false);
   const [selectedCommand, setSelectedCommand] = useState<CommandPreset | null>(null);
   const [scheduledEnabled, setScheduledEnabled] = useState(false);
+  const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
   const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const featureMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const voiceInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
 
   const { data: members } = useRoomMembers(roomId);
@@ -395,9 +423,47 @@ export const MessageComposer = ({
     return () => window.removeEventListener('keydown', onShortcut);
   }, []);
 
+  useEffect(() => {
+    setVoiceRecordingSupported(typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined');
+    return () => {
+      recorderRef.current?.stop();
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
   const recordRecentAction = useCallback((actionLabel: string) => {
     setRecentActions((current) => [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3));
   }, []);
+
+  const startVoiceRecording = useCallback(async () => {
+    if (!voiceRecordingSupported || voiceRecording) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    recorderChunksRef.current = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recorderChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const voiceBlob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      const extension = voiceBlob.type.includes('ogg') ? 'ogg' : voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
+      const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, { type: voiceBlob.type });
+      setVoiceAttachment(voiceFile);
+      setVoiceEnabled(true);
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderStreamRef.current = null;
+      recorderRef.current = null;
+      setVoiceRecording(false);
+    };
+    recorderRef.current = recorder;
+    recorderStreamRef.current = stream;
+    recorder.start();
+    setVoiceRecording(true);
+  }, [voiceRecording, voiceRecordingSupported]);
+
+  const stopVoiceRecording = useCallback(() => {
+    if (!voiceRecording) return;
+    recorderRef.current?.stop();
+  }, [voiceRecording]);
 
   const roomIsGovernance = useMemo(() => /gov|vote|proposal|council|dao/i.test(roomId), [roomId]);
   const primaryTier2Actions = useMemo(
@@ -523,9 +589,9 @@ export const MessageComposer = ({
     setSending(true);
     try {
       const htmlBody = toHtml(value);
-      const commandPrefix = commandEnabled && selectedCommand ? `${selectedCommand.template}` : '';
       const signatureSuffix = signatureEnabled ? '\n— signed via Blackout' : '';
-      const bodyToSend = `${commandPrefix ? `${commandPrefix}\n` : ''}${plainBody}${signatureSuffix}`.trim();
+      const commandProcessedBody = commandEnabled && selectedCommand ? executeCommandTemplate(selectedCommand, plainBody) : plainBody;
+      const bodyToSend = `${commandProcessedBody}${signatureSuffix}`.trim();
       const formattedBody = htmlBody;
 
       if (target?.mode === 'edit' && target.eventId) {
@@ -548,13 +614,30 @@ export const MessageComposer = ({
           content['co.blackout.signature'] = { enabled: true };
         }
         if (scheduledEnabled) {
-          content['co.blackout.schedule'] = { deliver_at: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+          const deliverAt = new Date(Date.now() + scheduleDelayHours * 60 * 60 * 1000).toISOString();
+          content['co.blackout.schedule'] = { deliver_at: deliverAt };
+          if (attachments.length === 0 && !voiceAttachment && !stegoAttachment) {
+            enqueueScheduledMessage({
+              roomId,
+              body: bodyToSend,
+              formattedBody,
+              deliverAt,
+              createdAt: new Date().toISOString(),
+            });
+            setValue(initialValue);
+            setAttachments([]);
+            setVoiceAttachment(null);
+            setStegoAttachment(null);
+            onSent?.();
+            await sendTyping(false);
+            return;
+          }
         }
         if (encryptionPresetEnabled) {
           content['co.blackout.encryption'] = { preset: 'enhanced' };
         }
         if (commandEnabled && selectedCommand) {
-          content['co.blackout.command'] = { id: selectedCommand.id, template: selectedCommand.template };
+          content['co.blackout.command'] = { id: selectedCommand.id, template: selectedCommand.template, executed: true };
         }
 
         if (target?.mode === 'reply' && target.eventId) {
@@ -610,7 +693,7 @@ export const MessageComposer = ({
     } finally {
       setSending(false);
     }
-  }, [attachments, commandEnabled, editMessage, encryptionPresetEnabled, matrixClient, onSent, roomId, scheduledEnabled, selectedCommand, sendMedia, sendRichText, sendTyping, signatureEnabled, stegoAttachment, target, value, voiceAttachment, voteDurationHours, voteEnabled]);
+  }, [attachments, commandEnabled, editMessage, encryptionPresetEnabled, matrixClient, onSent, roomId, scheduleDelayHours, scheduledEnabled, selectedCommand, sendMedia, sendRichText, sendTyping, signatureEnabled, stegoAttachment, target, value, voiceAttachment, voteDurationHours, voteEnabled]);
 
   const applyFeatureAction = useCallback((actionLabel: string) => {
     recordRecentAction(actionLabel);
@@ -619,7 +702,15 @@ export const MessageComposer = ({
       return;
     }
     if (actionLabel === 'Quick voice note') {
-      voiceInputRef.current?.click();
+      if (voiceRecordingSupported) {
+        if (voiceRecording) {
+          stopVoiceRecording();
+        } else {
+          void startVoiceRecording();
+        }
+      } else {
+        voiceInputRef.current?.click();
+      }
       return;
     }
     if (actionLabel === 'Steganography') {
@@ -648,7 +739,7 @@ export const MessageComposer = ({
     if (actionLabel === 'Encryption preset') {
       setEncryptionPresetEnabled((active) => !active);
     }
-  }, [recordRecentAction, selectedCommand, stegoSubscription]);
+  }, [recordRecentAction, selectedCommand, startVoiceRecording, stegoSubscription, stopVoiceRecording, voiceRecording, voiceRecordingSupported]);
 
   const handleKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLDivElement>) => {
@@ -802,7 +893,9 @@ export const MessageComposer = ({
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 1 • Common</strong>
                 <button type="button" onClick={() => applyFeatureAction('Attach file')}>Attach file</button>
                 <button type="button" onClick={() => applyFeatureAction('Upload media')}>Upload media</button>
-                <button type="button" onClick={() => applyFeatureAction('Quick voice note')}>Quick voice note</button>
+                <button type="button" onClick={() => applyFeatureAction('Quick voice note')}>
+                  {voiceRecordingSupported ? (voiceRecording ? 'Stop voice recording' : 'Record voice note') : 'Quick voice note'}
+                </button>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 2 • Secondary</strong>
@@ -936,7 +1029,8 @@ export const MessageComposer = ({
             ) : null}
             {scheduledEnabled ? (
               <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                Schedule: preset
+                Schedule: +{scheduleDelayHours}h
+                <button type="button" onClick={() => setScheduleDelayHours((hours) => (hours === 1 ? 4 : 1))} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Edit</button>
                 <button type="button" onClick={() => setScheduledEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
               </span>
             ) : null}
