@@ -1,7 +1,7 @@
 import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BaseEditor, Editor, Element as SlateElement, Node, Range, Text, Transforms, createEditor } from 'slate';
 import { withHistory } from 'slate-history';
-import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
+import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
 import { useRoomMembers } from '../../hooks/useRoom';
 import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
 import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
@@ -12,7 +12,6 @@ import { HideMessageDialog } from '../steganography';
 
 const MAX_SUGGESTIONS = 8;
 
-type Mark = 'bold' | 'italic' | 'strike' | 'code';
 type MentionKind = 'user' | 'room' | 'emoji';
 
 type CustomText = {
@@ -65,6 +64,20 @@ interface Suggestion {
   kind: MentionKind;
 }
 
+interface CommandPreset {
+  id: string;
+  label: string;
+  template: string;
+}
+
+interface ScheduledComposerMessage {
+  roomId: string;
+  body: string;
+  formattedBody: string;
+  deliverAt: string;
+  createdAt: string;
+}
+
 const initialValue: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }];
 
 const EMOJI: Array<{ shortcode: string; emoji: string }> = [
@@ -77,6 +90,26 @@ const EMOJI: Array<{ shortcode: string; emoji: string }> = [
   { shortcode: 'thinking', emoji: '🤔' },
   { shortcode: 'eyes', emoji: '👀' },
 ];
+
+const COMMAND_PRESETS: CommandPreset[] = [
+  { id: 'shrug', label: '/shrug', template: '/shrug' },
+  { id: 'tableflip', label: '/tableflip', template: '/tableflip' },
+  { id: 'topic', label: '/topic <new-topic>', template: '/topic ' },
+];
+
+const executeCommandTemplate = (command: CommandPreset, body: string): string => {
+  if (command.id === 'shrug') return `${body} ¯\\_(ツ)_/¯`.trim();
+  if (command.id === 'tableflip') return `${body}\n(╯°□°）╯︵ ┻━┻`.trim();
+  if (command.id === 'topic') return `Topic update request: ${body}`.trim();
+  return `${command.template}\n${body}`.trim();
+};
+
+const enqueueScheduledMessage = (message: ScheduledComposerMessage): void => {
+  const key = 'blackout.scheduled_messages';
+  const existing = window.localStorage.getItem(key);
+  const current = existing ? (JSON.parse(existing) as ScheduledComposerMessage[]) : [];
+  window.localStorage.setItem(key, JSON.stringify([...current, message]));
+};
 
 const fuzzyMatch = (term: string, query: string): boolean => {
   if (!query) return true;
@@ -159,7 +192,7 @@ const withMarkdown = (editor: Editor): Editor => {
       return;
     }
 
-    const shortcuts: Array<[string, Mark]> = [
+    const shortcuts: Array<[string, 'bold' | 'italic' | 'strike' | 'code']> = [
       ['**', 'bold'],
       ['*', 'italic'],
       ['~~', 'strike'],
@@ -291,33 +324,6 @@ const LeafRenderer = ({ attributes, children, leaf }: { attributes: Record<strin
   return <span {...attributes}>{content}</span>;
 };
 
-const ToolbarButton = ({ mark, label }: { mark: Mark; label: string }) => {
-  const editor = useSlate();
-  return (
-    <button
-      type="button"
-      onMouseDown={(event) => {
-        event.preventDefault();
-        const active = Editor.marks(editor)?.[mark] === true;
-        if (active) {
-          Editor.removeMark(editor, mark);
-        } else {
-          Editor.addMark(editor, mark, true);
-        }
-      }}
-      style={{
-        border: '1px solid var(--border-default)',
-        background: 'var(--bg-input)',
-        color: 'var(--text-primary)',
-        borderRadius: 6,
-        padding: '2px 8px',
-      }}
-    >
-      {label}
-    </button>
-  );
-};
-
 export const MessageComposer = ({
   roomId,
   target,
@@ -339,8 +345,29 @@ export const MessageComposer = ({
   const [hideDialogOpen, setHideDialogOpen] = useState(false);
   const [stegoAttachment, setStegoAttachment] = useState<File | null>(null);
   const [stegoSubscription, setStegoSubscription] = useState(false);
+  const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
+  const [isMobileMenu, setIsMobileMenu] = useState(false);
+  const [recentActions, setRecentActions] = useState<string[]>([]);
+  const [voteEnabled, setVoteEnabled] = useState(false);
+  const [voteDurationHours, setVoteDurationHours] = useState(24);
+  const [voiceAttachment, setVoiceAttachment] = useState<File | null>(null);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceRecordingSupported, setVoiceRecordingSupported] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [signatureEnabled, setSignatureEnabled] = useState(false);
+  const [commandEnabled, setCommandEnabled] = useState(false);
+  const [selectedCommand, setSelectedCommand] = useState<CommandPreset | null>(null);
+  const [scheduledEnabled, setScheduledEnabled] = useState(false);
+  const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
+  const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const featureMenuRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceInputRef = useRef<HTMLInputElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
   const editableRef = useRef<HTMLDivElement | null>(null);
 
   const { data: members } = useRoomMembers(roomId);
@@ -364,6 +391,94 @@ export const MessageComposer = ({
     if (!initialMarkdown) return;
     setValue([{ type: 'paragraph', children: [{ text: initialMarkdown }] }]);
   }, [initialMarkdown]);
+
+  useEffect(() => {
+    if (!featureMenuOpen) return;
+    const onWindowClick = (event: MouseEvent) => {
+      const targetNode = event.target as globalThis.Node | null;
+      if (!targetNode) return;
+      if (featureMenuRef.current?.contains(targetNode)) return;
+      setFeatureMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onWindowClick);
+    return () => window.removeEventListener('mousedown', onWindowClick);
+  }, [featureMenuOpen]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 768px)');
+    const sync = () => setIsMobileMenu(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    const onShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setFeatureMenuOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
+
+  useEffect(() => {
+    setVoiceRecordingSupported(typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined');
+    return () => {
+      recorderRef.current?.stop();
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const recordRecentAction = useCallback((actionLabel: string) => {
+    setRecentActions((current) => [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3));
+  }, []);
+
+  const startVoiceRecording = useCallback(async () => {
+    if (!voiceRecordingSupported || voiceRecording) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    recorderChunksRef.current = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recorderChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const voiceBlob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      const extension = voiceBlob.type.includes('ogg') ? 'ogg' : voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
+      const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, { type: voiceBlob.type });
+      setVoiceAttachment(voiceFile);
+      setVoiceEnabled(true);
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderStreamRef.current = null;
+      recorderRef.current = null;
+      setVoiceRecording(false);
+    };
+    recorderRef.current = recorder;
+    recorderStreamRef.current = stream;
+    recorder.start();
+    setVoiceRecording(true);
+  }, [voiceRecording, voiceRecordingSupported]);
+
+  const stopVoiceRecording = useCallback(() => {
+    if (!voiceRecording) return;
+    recorderRef.current?.stop();
+  }, [voiceRecording]);
+
+  const roomIsGovernance = useMemo(() => /gov|vote|proposal|council|dao/i.test(roomId), [roomId]);
+  const primaryTier2Actions = useMemo(
+    () => (roomIsGovernance ? ['Poll / vote', 'Steganography', 'Slash command'] : ['Steganography', 'Poll / vote', 'Slash command']),
+    [roomIsGovernance],
+  );
+  const intentSuggestions = useMemo(() => {
+    const text = toPlainText(value).toLowerCase();
+    const suggestionsSet: string[] = [];
+    if (text.includes('vote') || text.includes('poll')) suggestionsSet.push('Poll / vote');
+    if (text.includes('secret') || text.includes('hide')) suggestionsSet.push('Steganography');
+    if (text.startsWith('/')) suggestionsSet.push('Slash command');
+    if (text.includes('sign')) suggestionsSet.push('Signed message preset');
+    return suggestionsSet;
+  }, [value]);
 
   const roomSuggestions = useMemo(() => {
     const flattened: Suggestion[] = [];
@@ -469,12 +584,14 @@ export const MessageComposer = ({
 
   const sendCurrentMessage = useCallback(async () => {
     const plainBody = toPlainText(value);
-    if (!plainBody && attachments.length === 0) return;
+    if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
 
     setSending(true);
     try {
       const htmlBody = toHtml(value);
-      const bodyToSend = plainBody;
+      const signatureSuffix = signatureEnabled ? '\n— signed via Blackout' : '';
+      const commandProcessedBody = commandEnabled && selectedCommand ? executeCommandTemplate(selectedCommand, plainBody) : plainBody;
+      const bodyToSend = `${commandProcessedBody}${signatureSuffix}`.trim();
       const formattedBody = htmlBody;
 
       if (target?.mode === 'edit' && target.eventId) {
@@ -486,6 +603,42 @@ export const MessageComposer = ({
           format: 'org.matrix.custom.html',
           formatted_body: formattedBody,
         };
+        if (voteEnabled) {
+          content['co.blackout.poll'] = {
+            question: plainBody || 'Untitled poll',
+            options: ['Yes', 'No'],
+            duration_hours: voteDurationHours,
+          };
+        }
+        if (signatureEnabled) {
+          content['co.blackout.signature'] = { enabled: true };
+        }
+        if (scheduledEnabled) {
+          const deliverAt = new Date(Date.now() + scheduleDelayHours * 60 * 60 * 1000).toISOString();
+          content['co.blackout.schedule'] = { deliver_at: deliverAt };
+          if (attachments.length === 0 && !voiceAttachment && !stegoAttachment) {
+            enqueueScheduledMessage({
+              roomId,
+              body: bodyToSend,
+              formattedBody,
+              deliverAt,
+              createdAt: new Date().toISOString(),
+            });
+            setValue(initialValue);
+            setAttachments([]);
+            setVoiceAttachment(null);
+            setStegoAttachment(null);
+            onSent?.();
+            await sendTyping(false);
+            return;
+          }
+        }
+        if (encryptionPresetEnabled) {
+          content['co.blackout.encryption'] = { preset: 'enhanced' };
+        }
+        if (commandEnabled && selectedCommand) {
+          content['co.blackout.command'] = { id: selectedCommand.id, template: selectedCommand.template, executed: true };
+        }
 
         if (target?.mode === 'reply' && target.eventId) {
           content['m.relates_to'] = {
@@ -505,6 +658,9 @@ export const MessageComposer = ({
 
       for (const file of attachments) {
         await sendMedia(file);
+      }
+      if (voiceAttachment) {
+        await sendMedia(voiceAttachment);
       }
 
       if (stegoAttachment) {
@@ -530,13 +686,60 @@ export const MessageComposer = ({
 
       setValue(initialValue);
       setAttachments([]);
+      setVoiceAttachment(null);
       setStegoAttachment(null);
       onSent?.();
       await sendTyping(false);
     } finally {
       setSending(false);
     }
-  }, [attachments, editMessage, matrixClient, onSent, roomId, sendMedia, sendRichText, sendTyping, stegoAttachment, target, value]);
+  }, [attachments, commandEnabled, editMessage, encryptionPresetEnabled, matrixClient, onSent, roomId, scheduleDelayHours, scheduledEnabled, selectedCommand, sendMedia, sendRichText, sendTyping, signatureEnabled, stegoAttachment, target, value, voiceAttachment, voteDurationHours, voteEnabled]);
+
+  const applyFeatureAction = useCallback((actionLabel: string) => {
+    recordRecentAction(actionLabel);
+    if (actionLabel === 'Attach file' || actionLabel === 'Upload media') {
+      attachmentInputRef.current?.click();
+      return;
+    }
+    if (actionLabel === 'Quick voice note') {
+      if (voiceRecordingSupported) {
+        if (voiceRecording) {
+          stopVoiceRecording();
+        } else {
+          void startVoiceRecording();
+        }
+      } else {
+        voiceInputRef.current?.click();
+      }
+      return;
+    }
+    if (actionLabel === 'Steganography') {
+      if (!stegoSubscription) return;
+      setHideDialogOpen(true);
+      setFeatureMenuOpen(false);
+      return;
+    }
+    if (actionLabel === 'Poll / vote') {
+      setVoteEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Slash command') {
+      setCommandEnabled(true);
+      if (!selectedCommand) setSelectedCommand(COMMAND_PRESETS[0]);
+      return;
+    }
+    if (actionLabel === 'Signed message preset') {
+      setSignatureEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Scheduled send preset') {
+      setScheduledEnabled((active) => !active);
+      return;
+    }
+    if (actionLabel === 'Encryption preset') {
+      setEncryptionPresetEnabled((active) => !active);
+    }
+  }, [recordRecentAction, selectedCommand, startVoiceRecording, stegoSubscription, stopVoiceRecording, voiceRecording, voiceRecordingSupported]);
 
   const handleKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLDivElement>) => {
@@ -617,43 +820,117 @@ export const MessageComposer = ({
 
       <Slate
         editor={editor}
-        value={value}
+        initialValue={value}
         onChange={(nextValue) => {
           setValue(nextValue as CustomElement[]);
           runAutocomplete();
         }}
       >
-        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-          <ToolbarButton mark="bold" label="B" />
-          <ToolbarButton mark="italic" label="I" />
-          <ToolbarButton mark="strike" label="S" />
-          <ToolbarButton mark="code" label="Code" />
-          <label style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: 12 }}>
-            <input
-              type="file"
-              multiple
-              style={{ display: 'none' }}
-              onChange={(event) => {
-                const files = event.currentTarget.files;
-                if (!files) return;
-                setAttachments((prev) => [...prev, ...Array.from(files)]);
-              }}
-            />
-            <span style={{ cursor: 'pointer', border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}>Attach</span>
-          </label>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 6, position: 'relative' }}>
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(event) => {
+              const files = event.currentTarget.files;
+              if (!files) return;
+              setAttachments((prev) => [...prev, ...Array.from(files)]);
+              event.currentTarget.value = '';
+            }}
+          />
+          <input
+            ref={voiceInputRef}
+            type="file"
+            accept="audio/*"
+            style={{ display: 'none' }}
+            onChange={(event) => {
+              const voiceFile = event.currentTarget.files?.[0];
+              if (!voiceFile) return;
+              setVoiceAttachment(voiceFile);
+              setVoiceEnabled(true);
+              event.currentTarget.value = '';
+            }}
+          />
           <button
             type="button"
-            style={{ border: '1px solid var(--border-default)', borderRadius: 6, padding: '2px 8px' }}
-            onClick={() => setHideDialogOpen(true)}
-            disabled={!stegoSubscription}
-            title={
-              !stegoSubscription
-                ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
-                : 'Hide a secret message inside an image'
-            }
+            onClick={() => setFeatureMenuOpen((open) => !open)}
+            aria-label="Open composer features"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              border: '1px solid var(--border-default)',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              fontSize: 18,
+              lineHeight: 1,
+            }}
           >
-            Hide Message
+            +
           </button>
+          {featureMenuOpen ? (
+            <div
+              ref={featureMenuRef}
+              style={{
+                position: isMobileMenu ? 'fixed' : 'absolute',
+                top: isMobileMenu ? 'auto' : 38,
+                bottom: isMobileMenu ? 0 : 'auto',
+                left: isMobileMenu ? 0 : 0,
+                width: isMobileMenu ? '100%' : 280,
+                border: '1px solid var(--border-default)',
+                borderRadius: isMobileMenu ? '12px 12px 0 0' : 10,
+                background: 'var(--bg-input)',
+                zIndex: 10,
+                padding: 10,
+                display: 'grid',
+                gap: 10,
+                maxHeight: isMobileMenu ? '65vh' : 'none',
+                overflowY: isMobileMenu ? 'auto' : 'visible',
+              }}
+            >
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 1 • Common</strong>
+                <button type="button" onClick={() => applyFeatureAction('Attach file')}>Attach file</button>
+                <button type="button" onClick={() => applyFeatureAction('Upload media')}>Upload media</button>
+                <button type="button" onClick={() => applyFeatureAction('Quick voice note')}>
+                  {voiceRecordingSupported ? (voiceRecording ? 'Stop voice recording' : 'Record voice note') : 'Quick voice note'}
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 2 • Secondary</strong>
+                {primaryTier2Actions.map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    onClick={() => applyFeatureAction(action)}
+                    disabled={action === 'Steganography' && !stegoSubscription}
+                    title={
+                      action !== 'Steganography'
+                        ? undefined
+                        : !stegoSubscription
+                          ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
+                          : 'Hide a secret message inside an image'
+                    }
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Tier 3 • Advanced</strong>
+                <button type="button" onClick={() => applyFeatureAction('Signed message preset')}>Signed message preset</button>
+                <button type="button" onClick={() => applyFeatureAction('Scheduled send preset')}>Scheduled send preset</button>
+                <button type="button" onClick={() => applyFeatureAction('Encryption preset')}>Encryption preset</button>
+              </div>
+              {recentActions.length > 0 ? (
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Recent</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{recentActions.join(' • ')}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div ref={editableRef} style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: '8px 10px', minHeight: 76 }}>
@@ -667,21 +944,102 @@ export const MessageComposer = ({
             autoFocus
           />
         </div>
-
-        {attachments.length > 0 ? (
-          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {attachments.map((file, idx) => (
-              <span key={`${file.name}-${idx}`} style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12 }}>
-                {file.name}
-              </span>
+        {intentSuggestions.length > 0 ? (
+          <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {intentSuggestions.map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => applyFeatureAction(suggestion)}
+                style={{ border: '1px dashed var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, background: 'transparent' }}
+              >
+                Suggestion: {suggestion}
+              </button>
             ))}
           </div>
         ) : null}
-        {stegoAttachment ? (
-          <div style={{ marginTop: 8 }}>
-            <span style={{ border: '1px solid var(--accent-primary)', borderRadius: 999, padding: '2px 8px', fontSize: 12 }}>
-              🔐 Hidden image ready: {stegoAttachment.name}
-            </span>
+        {commandEnabled ? (
+          <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Slash command</label>
+            <select
+              value={selectedCommand?.id ?? ''}
+              onChange={(event) => setSelectedCommand(COMMAND_PRESETS.find((preset) => preset.id === event.currentTarget.value) ?? null)}
+              style={{ border: '1px solid var(--border-default)', borderRadius: 8, padding: '4px 8px', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            >
+              {COMMAND_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.label}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        {(attachments.length > 0 || stegoAttachment || voteEnabled || voiceEnabled || signatureEnabled || commandEnabled || scheduledEnabled || encryptionPresetEnabled) ? (
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {attachments.map((file, idx) => (
+              <span key={`${file.name}-${idx}`} style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Attach: {file.name}
+                <button
+                  type="button"
+                  aria-label={`Remove ${file.name}`}
+                  onClick={() => setAttachments((current) => current.filter((_, currentIdx) => currentIdx !== idx))}
+                  style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {stegoAttachment ? (
+              <span style={{ border: '1px solid var(--accent-primary)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Stego: image ready
+                <button type="button" onClick={() => setStegoAttachment(null)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {voteEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Vote: 2 options • {voteDurationHours}h
+                <button type="button" onClick={() => setVoteDurationHours((current) => (current === 24 ? 48 : 24))} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Edit</button>
+                <button type="button" onClick={() => setVoteEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {voiceEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Voice: {voiceAttachment?.name ?? 'attached'}
+                <button type="button" onClick={() => voiceInputRef.current?.click()} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Replace</button>
+                <button type="button" onClick={() => {
+                  setVoiceEnabled(false);
+                  setVoiceAttachment(null);
+                }}
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </span>
+            ) : null}
+            {commandEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Command: {selectedCommand?.label ?? 'enabled'}
+                <button type="button" onClick={() => setCommandEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {signatureEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Signature: enabled
+                <button type="button" onClick={() => setSignatureEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {scheduledEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Schedule: +{scheduleDelayHours}h
+                <button type="button" onClick={() => setScheduleDelayHours((hours) => (hours === 1 ? 4 : 1))} style={{ border: 'none', background: 'transparent', color: 'var(--accent-primary)', cursor: 'pointer' }}>Edit</button>
+                <button type="button" onClick={() => setScheduledEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
+            {encryptionPresetEnabled ? (
+              <span style={{ border: '1px solid var(--border-default)', borderRadius: 999, padding: '2px 8px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                Encryption: preset
+                <button type="button" onClick={() => setEncryptionPresetEnabled(false)} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>×</button>
+              </span>
+            ) : null}
           </div>
         ) : null}
 
