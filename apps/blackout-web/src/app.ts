@@ -158,7 +158,6 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${state.session ? this.renderFeatureToolbar() : ""}
         ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
@@ -166,6 +165,7 @@ export class BlackoutWebApp {
         ${loading.servers || loading.channels || loading.messages ? '<p class="loading">Syncing workspace…</p>' : ""}
 
         ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth })}
+        ${state.session ? this.renderFeatureToolbar() : ""}
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
