@@ -159,7 +159,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
         ${state.session ? this.renderFeatureToolbar() : ""}
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureEntryPoints()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -245,6 +245,16 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? [])}
         ${this.renderFeatureGroup("command_palette", grouped.get("command_palette") ?? [])}
       </section>
+    `;
+  }
+
+  private renderFeatureLibraryDisclosure(): string {
+    const openByDefault = this.isAdvancedCohort();
+    return `
+      <details class="stack panel-card" data-testid="feature-library-disclosure" ${openByDefault ? "open" : ""}>
+        <summary><strong>Advanced feature library</strong> <span class="meta">Role-based progressive reveal for power workflows.</span></summary>
+        ${this.renderFeatureEntryPoints()}
+      </details>
     `;
   }
 
@@ -425,6 +435,11 @@ export class BlackoutWebApp {
 
   private isMessageHeavySession(): boolean {
     return this.store.getState().messages.length >= 30;
+  }
+
+  private isAdvancedCohort(): boolean {
+    const cohort = this.runtimeConfig.rollout.cohort.toLowerCase();
+    return cohort.includes("internal") || cohort.includes("operator") || cohort.includes("admin");
   }
 
   private getCompactModeActive(): boolean {

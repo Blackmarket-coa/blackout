@@ -259,6 +259,32 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="feature-widget-townhall-sfu"]')).toBeFalsy();
   });
 
+  it("progressively reveals advanced feature library by cohort", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "general" },
+      presets: {
+        activePreset: "community_plus",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "community_plus",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    const disclosure = root.querySelector<HTMLDetailsElement>('[data-testid="feature-library-disclosure"]');
+    expect(disclosure).toBeTruthy();
+    expect(disclosure?.open).toBe(false);
+  });
+
   it("renders the EPIC delivery blueprint with E2EE and rollout guardrails", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
