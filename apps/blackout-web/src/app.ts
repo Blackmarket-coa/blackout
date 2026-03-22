@@ -462,8 +462,10 @@ export class BlackoutWebApp {
   }
 
   private bindEvents(): void {
-    this.root.querySelector<HTMLButtonElement>("[data-action='open-command-palette']")?.addEventListener("click", () => {
-      this.openCommandPalette();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-command-palette']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.openCommandPalette();
+      });
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='close-command-palette']").forEach((element) => {
@@ -538,14 +540,18 @@ export class BlackoutWebApp {
       void this.submitCreateEntity(event.currentTarget as HTMLFormElement);
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='toggle-settings']")?.addEventListener("click", () => {
-      this.settingsOpen = !this.settingsOpen;
-      this.render();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='toggle-settings']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.settingsOpen = !this.settingsOpen;
+        this.render();
+      });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='toggle-compact-mode']")?.addEventListener("click", () => {
-      this.compactModeEnabled = !this.compactModeEnabled;
-      this.render();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='toggle-compact-mode']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.compactModeEnabled = !this.compactModeEnabled;
+        this.render();
+      });
     });
 
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
