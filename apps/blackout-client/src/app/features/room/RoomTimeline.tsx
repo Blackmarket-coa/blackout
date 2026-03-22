@@ -413,8 +413,8 @@ const ReplyPreview = ({ event }: { event: MatrixEvent }) => {
 const ThreadIndicator = ({ event }: { event: MatrixEvent }) => {
   const relation = getRelation(event);
   if (relation?.rel_type !== 'm.thread') return null;
-  const count = typeof relation.count === 'number' ? relation.count : 1;
-  return <div style={styles.pill}>🧵 {count} repl{count === 1 ? 'y' : 'ies'}</div>;
+  const threadRoot = typeof relation.event_id === 'string' ? relation.event_id : null;
+  return <div style={styles.pill}>🧵 Thread reply{threadRoot ? ` · ${threadRoot.slice(0, 10)}…` : ''}</div>;
 };
 
 const EditedIndicator = ({ event }: { event: MatrixEvent }) => {
