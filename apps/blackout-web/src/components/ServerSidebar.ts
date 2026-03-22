@@ -27,7 +27,7 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
         <span class="window-dot window-dot--green"></span>
       </div>
 
-      <button type="button" class="sidebar-brand" aria-label="Blackout home">🐦</button>
+      <button type="button" class="sidebar-brand" data-action="open-command-palette" aria-label="Open command palette">🐦</button>
 
       <ul class="server-nav-list">
         <li>
@@ -37,31 +37,31 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" aria-label="Direct messages">
+          <button type="button" class="sidebar-nav-btn" data-action="browse-channels" aria-label="Direct messages">
             <span class="sidebar-nav-glyph">💬</span>
             <span class="sidebar-nav-label">DMs</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" aria-label="Activity">
+          <button type="button" class="sidebar-nav-btn" data-action="open-command-palette" aria-label="Activity">
             <span class="sidebar-nav-glyph">🔔</span>
             <span class="sidebar-nav-label">Activity</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" aria-label="Files">
+          <button type="button" class="sidebar-nav-btn" data-action="browse-channels" aria-label="Files">
             <span class="sidebar-nav-glyph">📁</span>
             <span class="sidebar-nav-label">Files</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" aria-label="Tools">
+          <button type="button" class="sidebar-nav-btn" data-action="toggle-settings" aria-label="Tools">
             <span class="sidebar-nav-glyph">🛠️</span>
             <span class="sidebar-nav-label">Tools</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" aria-label="More">
+          <button type="button" class="sidebar-nav-btn" data-action="toggle-compact-mode" aria-label="More options">
             <span class="sidebar-nav-glyph">•••</span>
             <span class="sidebar-nav-label">More</span>
           </button>
@@ -70,7 +70,7 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
 
       <button type="button" class="sidebar-compose-btn" data-action="create-server" aria-label="Create workspace">+</button>
 
-      <button type="button" class="sidebar-profile" aria-label="Profile and status">
+      <button type="button" class="sidebar-profile" data-action="toggle-settings" aria-label="Profile and status">
         <span class="sidebar-profile-avatar">🙂</span>
         <span class="sidebar-profile-status" aria-hidden="true"></span>
       </button>
