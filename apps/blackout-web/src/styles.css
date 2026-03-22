@@ -209,13 +209,15 @@ body {
 }
 
 .server-sidebar {
-  background: #1a1d24;
-  border-right: 1px solid #2a2d35;
-  padding: 0.85rem 0.45rem;
+  background: linear-gradient(180deg, #44125f 0%, #5a1f74 48%, #6b2a7d 100%);
+  border-right: 1px solid rgb(255 255 255 / 12%);
+  padding: 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 0.7rem;
 }
 
-.sidebar-head,
 .chat-head {
   font-weight: 700;
   margin-bottom: 0.65rem;
@@ -241,7 +243,7 @@ body {
   font-weight: 500;
 }
 
-.server-sidebar ul,
+.server-nav-list,
 .channel-list ul,
 .message-list {
   list-style: none;
@@ -250,6 +252,43 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.repo-tools-page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.repo-tools-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.repo-tools-item {
+  border: 1px solid #333747;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #1f2430;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.repo-tools-item code {
+  display: inline-block;
+  width: fit-content;
+  background: #10151f;
+  border: 1px solid #2f3c57;
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+  color: #c8defe;
+}
+
+.server-nav-list {
+  width: 100%;
 }
 
 .sidebar-btn,
@@ -282,29 +321,119 @@ body {
   border-color: #4f8ef7;
 }
 
-.server-sidebar .sidebar-head {
-  text-transform: uppercase;
-  color: #9aa2b1;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-align: center;
+
+.sidebar-window-controls {
+  display: flex;
+  gap: 0.42rem;
 }
 
-.workspace-chip {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+.window-dot {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+}
+
+.window-dot--red {
+  background: #ff6b6b;
+}
+
+.window-dot--yellow {
+  background: #ffc857;
+}
+
+.window-dot--green {
+  background: #5ecb7a;
+}
+
+.sidebar-brand {
+  width: 3.25rem;
+  height: 3.25rem;
+  border: 0;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #25d5ff, #1f7fd8);
+  display: grid;
+  place-items: center;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.sidebar-nav-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 1rem;
+  color: #f7ebff;
+  background: transparent;
+  padding: 0.5rem 0.45rem;
   text-align: center;
-  padding: 0;
+  cursor: pointer;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.sidebar-nav-btn:hover {
+  background: rgb(255 255 255 / 10%);
+}
+
+.sidebar-nav-btn.is-selected {
+  background: rgb(255 255 255 / 16%);
+}
+
+.sidebar-nav-glyph {
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 0.9rem;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  background: rgb(255 255 255 / 12%);
   font-weight: 700;
 }
 
-.workspace-add-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  text-align: center;
-  padding: 0;
+.sidebar-nav-btn.is-selected .sidebar-nav-glyph {
+  background: rgb(255 255 255 / 22%);
+}
+
+.sidebar-nav-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.sidebar-compose-btn {
+  margin-top: auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  border: 0;
+  background: rgb(255 255 255 / 16%);
+  color: #fff;
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-profile {
+  width: 3.1rem;
+  height: 3.1rem;
+  border: 0;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #f6aa83, #8e4ec6);
+  position: relative;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.sidebar-profile-status {
+  position: absolute;
+  right: 0.2rem;
+  bottom: 0.2rem;
+  width: 0.74rem;
+  height: 0.74rem;
+  border-radius: 999px;
+  background: #0ea5a1;
+  border: 2px solid #6b2a7d;
 }
 
 .channel-list {
