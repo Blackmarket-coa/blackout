@@ -1846,7 +1846,6 @@ export class BlackoutWebApp {
     }
   }
 
-  private openFeatureById(featureId?: string, requestedKind?: UiEntryKind): void {
   private persistAttachmentLibrary(): void {
     globalThis.localStorage.setItem(ATTACHMENT_LIBRARY_STORAGE_KEY, JSON.stringify(this.attachmentLibrary));
   }
@@ -1887,7 +1886,7 @@ export class BlackoutWebApp {
     }
   }
 
-  private openFeatureById(featureId?: string): void {
+  private openFeatureById(featureId?: string, requestedKind?: UiEntryKind): void {
     if (!featureId) return;
     const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
     if (!entry) return;
