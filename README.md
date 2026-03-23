@@ -88,6 +88,9 @@ pnpm --filter @blackout/blackout-web build:web
 pnpm start
 ```
 
+> Canonical frontend package: `@blackout/blackout-web` (`apps/blackout-web`).  
+> `@blackout/web` and `@blackout/web-ui` are legacy/scaffold paths and are not the deploy target.
+
 Then open:
 
 - Frontend app: `http://localhost:3000/`
@@ -134,7 +137,7 @@ pnpm test
 For steganography-specific changes, run targeted suites too:
 
 ```bash
-pnpm --filter @blackout/web test
+pnpm --filter @blackout/blackout-web test
 ```
 
 Helpful docs:

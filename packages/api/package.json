@@ -1,0 +1,15 @@
+{
+  "name": "@blackout/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Blackout Hono API scaffold",
+  "scripts": {
+    "build": "node -e \"console.log('api build scaffold ok')\"",
+    "lint": "node -e \"console.log('api lint scaffold ok')\"",
+    "test": "node -e \"console.log('api test scaffold ok')\""
+  },
+  "dependencies": {
+    "@blackout/core": "workspace:*"
+  }
+}
