@@ -87,12 +87,21 @@ pnpm desktop:dev
 pnpm mobile:dev
 ```
 
+> `mobile:*` root scripts use the Capacitor shell in `blackout-mobile/` (the current runnable mobile app path).
+
 Build individual apps:
 
 ```bash
 pnpm web:build
 pnpm desktop:build
 pnpm mobile:build
+```
+
+Open native projects:
+
+```bash
+pnpm mobile:open:ios
+pnpm mobile:open:android
 ```
 
 On Windows, use the same command:
@@ -167,6 +176,7 @@ Helpful docs:
 3. `CONTRIBUTING.md`
 4. `docs/qa-triage-start.md`
 5. `docs/repo-readiness-next-steps.md`
+6. `mobile-application-build-guide.md`
 
 ---
 

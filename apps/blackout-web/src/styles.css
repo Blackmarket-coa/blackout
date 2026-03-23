@@ -1803,3 +1803,75 @@ summary:focus-visible,
   outline: 2px solid #60a5fa;
   outline-offset: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════
+   CAPACITOR MOBILE OVERRIDES
+   Applied when running inside the native app shell.
+   The .blackout-mobile class is added by main.ts.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --keyboard-height: 0px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+.blackout-mobile {
+  /* Respect notch / dynamic island on iOS */
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
+
+  /* Prevent text selection on long-press (feels more native) */
+  -webkit-user-select: none;
+  user-select: none;
+
+  /* Disable tap highlight */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Allow text selection in message content and inputs */
+.blackout-mobile input,
+.blackout-mobile textarea,
+.blackout-mobile [contenteditable],
+.blackout-mobile .message-body,
+.blackout-mobile .timeline-event-content {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Adjust for keyboard */
+.blackout-mobile.keyboard-visible #app {
+  padding-bottom: var(--keyboard-height);
+  transition: padding-bottom 0.25s ease-out;
+}
+
+/* Larger touch targets on mobile */
+.blackout-mobile button,
+.blackout-mobile [role="button"],
+.blackout-mobile a {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* iOS-specific: status bar gap */
+.blackout-platform-ios {
+  padding-top: max(var(--safe-area-top), 20px);
+}
+
+/* Android-specific: navigation bar gap */
+.blackout-platform-android {
+  padding-bottom: max(var(--safe-area-bottom), 0px);
+}
+
+/* Hide scrollbars on mobile (native feel) */
+.blackout-mobile ::-webkit-scrollbar {
+  display: none;
+}
+
+.blackout-mobile * {
+  scrollbar-width: none;
+}
