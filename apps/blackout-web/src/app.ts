@@ -3,6 +3,7 @@ import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
 import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
+import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderAuthView } from "./features/auth/auth-view";
@@ -70,6 +71,7 @@ export class BlackoutWebApp {
   private activeGovernanceTab: GovernanceRoomTab = "feed";
   private governanceProposalModalOpen = false;
   private activeEconomicsTab: EconomicsTab = "boosts";
+  private activeFederationTab: FederationTab = "health";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -256,6 +258,7 @@ export class BlackoutWebApp {
     const activeChannelName = state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "";
     const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
     const isEconomicsRoom = /\b(boost|subscription|quest|market|wallet|monetization)\b/i.test(activeChannelName);
+    const isFederationRoom = /\b(federation|mesh|replication|recovery|self-healing)\b/i.test(activeChannelName);
 
     if (isGovernanceRoom) {
       return renderGovernanceRoomPanel({
@@ -269,6 +272,13 @@ export class BlackoutWebApp {
       return renderEconomicsPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeEconomicsTab,
+      });
+    }
+
+    if (isFederationRoom) {
+      return renderFederationPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeFederationTab,
       });
     }
 
@@ -1135,6 +1145,15 @@ export class BlackoutWebApp {
         const tab = button.dataset.tab as EconomicsTab | undefined;
         if (!tab) return;
         this.activeEconomicsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='federation-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as FederationTab | undefined;
+        if (!tab) return;
+        this.activeFederationTab = tab;
         this.render();
       });
     });
