@@ -450,6 +450,14 @@ describe("BlackoutWebApp integration", () => {
     expect((root.querySelector("[data-action='composer-attachment-import-json']") as HTMLTextAreaElement).value).toContain("Launch recap");
     fireEvent.click(root.querySelector("[data-action='composer-attachment-stego']") as HTMLButtonElement);
     expect(composer.value).toContain("[stego-attachment");
+    fireEvent.click(root.querySelector("[data-action='composer-open-governance']") as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-governance-title']") as HTMLInputElement, { target: { value: "Approve release train" } });
+    fireEvent.input(root.querySelector("[data-action='composer-governance-options']") as HTMLInputElement, { target: { value: "Approve,Block,Delay" } });
+    fireEvent.click(root.querySelector("[data-action='composer-governance-save-template']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-governance-export-templates']") as HTMLButtonElement);
+    expect((root.querySelector("[data-action='composer-governance-import-json']") as HTMLTextAreaElement).value).toContain("Approve release train");
+    fireEvent.click(root.querySelector("[data-action='composer-governance-insert-proposal']") as HTMLButtonElement);
+    expect(composer.value).toContain("/proposal");
 
     const gifTrigger = root.querySelector('[data-testid="composer-gif-trigger"]') as HTMLButtonElement | null;
     expect(gifTrigger).toBeTruthy();
