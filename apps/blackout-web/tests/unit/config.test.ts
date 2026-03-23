@@ -15,10 +15,10 @@ describe("resolveMatrixHomeserverUrl", () => {
 });
 
 describe("resolveBlackoutRuntimeConfig", () => {
-  it("defaults to blackout_full preset bundle", () => {
+  it("defaults to tier_enterprise preset bundle", () => {
     const config = resolveBlackoutRuntimeConfig({});
 
-    expect(config.presets.activePreset).toBe("blackout_full");
+    expect(config.presets.activePreset).toBe("tier_enterprise");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
     expect(config.presets.features["features.stego.enabled"]).toBe(true);
@@ -27,13 +27,13 @@ describe("resolveBlackoutRuntimeConfig", () => {
   it("merges deployment, tenant, and user overrides when allowed", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: JSON.stringify({
-        preset: "community_plus",
+        preset: "tier_pro",
         defaults: {
           "features.matrix.widgetCompat": false,
         },
       }),
       VITE_FEATURE_TENANT_POLICY: JSON.stringify({
-        preset: "blackout_full",
+        preset: "tier_enterprise",
         overrides: {
           "features.townhall.enabled": false,
         },
@@ -49,7 +49,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
       VITE_RELEASE_COHORT: "beta",
     });
 
-    expect(config.presets.activePreset).toBe("blackout_full");
+    expect(config.presets.activePreset).toBe("tier_enterprise");
     expect(config.presets.features["features.matrix.widgetCompat"]).toBe(false);
     expect(config.presets.features["features.townhall.enabled"]).toBe(false);
     expect(config.presets.features["features.composer.typingIndicators"]).toBe(false);
@@ -60,12 +60,12 @@ describe("resolveBlackoutRuntimeConfig", () => {
 
   it("accepts shorthand preset strings for deployment and tenant env vars", () => {
     const config = resolveBlackoutRuntimeConfig({
-      VITE_FEATURE_DEPLOYMENT_DEFAULTS: "community_plus",
-      VITE_FEATURE_TENANT_POLICY: "blackout_full",
+      VITE_FEATURE_DEPLOYMENT_DEFAULTS: "tier_pro",
+      VITE_FEATURE_TENANT_POLICY: "tier_enterprise",
     });
 
-    expect(config.presets.activePreset).toBe("blackout_full");
-    expect(config.presets.diagnostics.deploymentPreset).toBe("community_plus");
+    expect(config.presets.activePreset).toBe("tier_enterprise");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("tier_pro");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
   });
   it("resolves engagement policy and notification rules from env", () => {

@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
-const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "blackout_full") as "baseline_matrix" | "community_plus" | "blackout_full";
+const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "tier_enterprise") as "tier_free" | "tier_pro" | "tier_enterprise";
 
 const smokeActionByPreset = {
-  baseline_matrix: "feature-toggle-matrix-client",
-  community_plus: "feature-composer-rich-editing",
-  blackout_full: "feature-admin-governance-entitlements",
+  tier_free: "feature-toggle-matrix-client",
+  tier_pro: "feature-composer-rich-editing",
+  tier_enterprise: "feature-admin-governance-entitlements",
 } as const;
 
 describe("Preset smoke flow", () => {
