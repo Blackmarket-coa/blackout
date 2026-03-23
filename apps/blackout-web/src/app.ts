@@ -28,6 +28,7 @@ type StegoChannel = {
 };
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
+type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
 
 const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
 const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
@@ -65,6 +66,7 @@ export class BlackoutWebApp {
   private stegoChannels: StegoChannel[] = [];
   private gifLibrary: GifLibraryItem[] = [];
   private emojiLibrary: EmojiLibraryItem[] = [];
+  private quickActionPopup: QuickActionPopup | null = null;
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -198,6 +200,7 @@ export class BlackoutWebApp {
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
+      ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
     `;
 
     this.bindEvents();
@@ -456,26 +459,37 @@ export class BlackoutWebApp {
       `;
     }
 
-    const railButtons = enabledFeatures
-      .slice(0, 8)
-      .map((feature) => {
-        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
-        const glyph = this.getFeatureGlyph(feature.name);
-        return `<button type="button" class="feature-rail-btn ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-rail-${feature.id}" title="${feature.name}" aria-label="${feature.name}">${glyph}</button>`;
-      })
-      .join("");
+    const optionsFor = (features: typeof FEATURE_UI_ENTRIES) =>
+      features
+        .map((feature) => {
+          const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+          const selected = this.quickAccessFeatureId === feature.id ? "selected" : "";
+          return `<option value="${kind}|${feature.id}" ${selected}>${feature.name}</option>`;
+        })
+        .join("");
 
-    const toolbarButtons = enabledFeatures
-      .map((feature) => {
-        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
-        const categoryLabel = this.featureKindUi[kind].label;
+    const frequentOptions = optionsFor(enabledFeatures.slice(0, 8));
+    const groupedByKind = enabledFeatures.reduce<Map<UiEntryKind, typeof FEATURE_UI_ENTRIES>>((acc, feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      const existing = acc.get(kind) ?? [];
+      existing.push(feature);
+      acc.set(kind, existing);
+      return acc;
+    }, new Map());
+
+    const groupedDropdowns = (Object.keys(this.featureKindUi) as UiEntryKind[])
+      .map((kind) => {
+        const features = groupedByKind.get(kind) ?? [];
+        if (!features.length) return "";
+        const category = this.featureKindUi[kind];
         return `
-          <button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">
-            <span>${feature.name}</span>
-            <small>${categoryLabel}</small>
-          </button>
+          <label class="quick-action-select">
+            <span>${category.icon} ${category.label}</span>
+            <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-${kind}">
+              <option value="">Choose action…</option>
+              ${optionsFor(features)}
+            </select>
+          </label>
         `;
       })
       .join("");
@@ -484,23 +498,20 @@ export class BlackoutWebApp {
       <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
         <div class="feature-toolbar-head">
           <h2>Quick actions</h2>
-          <p class="meta">Discord-style dock: icon rail for frequent actions, detailed list for discovery.</p>
+          <p class="meta">Organized dropdowns by category plus a frequent-actions picker.</p>
         </div>
-        <div class="feature-dock-layout">
-          <div class="feature-rail" aria-label="Frequent feature actions">${railButtons}</div>
-          <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+        <div class="quick-actions-grid">
+          <label class="quick-action-select">
+            <span>⚡ Frequent</span>
+            <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-frequent">
+              <option value="">Choose quick action…</option>
+              ${frequentOptions}
+            </select>
+          </label>
+          ${groupedDropdowns}
         </div>
       </section>
     `;
-  }
-
-  private getFeatureGlyph(name: string): string {
-    return name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("");
   }
 
   private renderFeatureCommandPalette(): string {
@@ -534,6 +545,26 @@ export class BlackoutWebApp {
           </div>
           <input type="search" autofocus data-action="filter-command-palette" data-testid="feature-command-palette-input" placeholder="Type a feature, category, or id…" value="${this.commandPaletteQuery}" />
           <div class="command-palette-list">${rows || '<p class="empty">No matching features.</p>'}</div>
+        </section>
+      </div>
+    `;
+  }
+
+  private renderQuickActionPopup(): string {
+    if (!this.quickActionPopup) return "";
+    const { featureId, kind, name } = this.quickActionPopup;
+    const category = this.featureKindUi[kind];
+    return `
+      <div class="modal-backdrop" data-action="close-quick-action-popup">
+        <section class="modal" role="dialog" aria-modal="true" aria-label="Quick action feature popup">
+          <h3>Quick action</h3>
+          <p class="meta"><strong>${name}</strong></p>
+          <p class="meta">Category: ${category.label}</p>
+          <p class="meta">Feature id: ${featureId}</p>
+          <div class="modal-actions">
+            <button type="button" data-action="confirm-quick-action-popup" data-feature-id="${featureId}" data-feature-kind="${kind}">Open feature</button>
+            <button type="button" class="ghost-btn" data-action="close-quick-action-popup">Cancel</button>
+          </div>
         </section>
       </div>
     `;
@@ -863,6 +894,34 @@ export class BlackoutWebApp {
         }
         this.openFeatureById(button.dataset.featureId);
       });
+    });
+
+    this.root.querySelectorAll<HTMLSelectElement>("[data-action='open-feature-dropdown']").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        if (!value) return;
+        const [kind, featureId] = value.split("|") as [UiEntryKind, string];
+        this.showQuickActionPopup(featureId, kind);
+        (event.currentTarget as HTMLSelectElement).value = "";
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-quick-action-popup']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (element.classList.contains("modal") || element.closest(".modal")) {
+          if ((event.target as HTMLElement).closest("[data-action='confirm-quick-action-popup']")) return;
+        }
+        this.quickActionPopup = null;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='confirm-quick-action-popup']")?.addEventListener("click", (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const featureId = button.dataset.featureId;
+      const kind = button.dataset.featureKind as UiEntryKind | undefined;
+      this.quickActionPopup = null;
+      this.openFeatureById(featureId, kind);
     });
 
 
@@ -1580,11 +1639,16 @@ export class BlackoutWebApp {
     }
   }
 
-  private openFeatureById(featureId?: string): void {
+  private openFeatureById(featureId?: string, requestedKind?: UiEntryKind): void {
     if (!featureId) return;
     const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
     if (!entry) return;
     const [kind] = entry.uiEntry.split(":") as [UiEntryKind, string];
+    if (requestedKind && requestedKind !== kind) {
+      this.featureActionResult = `Could not open ${entry.id}: invalid route mapping.`;
+      this.render();
+      return;
+    }
     const enabled = this.getActivePresetFeatures()[entry.presetKey] ?? false;
     if (!enabled) {
       this.featureActionResult = `${entry.id} is unavailable: blocked by policy or entitlement.`;
@@ -1592,9 +1656,60 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
-    this.featureActionResult = `Opened ${entry.id} via ${kind}.`;
+    const destination = this.routeFeatureToWorkflow(entry.id, kind);
+    this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
     this.telemetry.track("feature_open_success", { featureId: entry.id, entrypointKind: kind });
+    this.render();
+  }
+
+  private routeFeatureToWorkflow(featureId: string, kind: UiEntryKind): string {
+    switch (kind) {
+      case "settings_toggle":
+        this.settingsOpen = true;
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "settings panel";
+      case "composer_action":
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "chat composer";
+      case "room_action":
+        if (featureId === "dm_list") {
+          this.activeWorkspacePanel = "dms";
+          return "direct messages panel";
+        }
+        if (featureId === "room_invites") {
+          this.activeWorkspacePanel = "activity";
+          return "activity inbox";
+        }
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "room workflow";
+      case "widget_panel":
+        this.activeWorkspacePanel = "files";
+        this.repoToolsOpen = false;
+        return "files/widget panel";
+      case "admin_console":
+        this.settingsOpen = true;
+        this.activeWorkspacePanel = "repo-tools";
+        this.repoToolsOpen = true;
+        return "admin console tools";
+      case "command_palette":
+        this.openCommandPalette();
+        this.commandPaletteQuery = featureId.replaceAll("_", " ");
+        return "command palette";
+      default:
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "chat";
+    }
+  }
+
+  private showQuickActionPopup(featureId: string, kind: UiEntryKind): void {
+    const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
+    if (!entry) return;
+    this.quickActionPopup = { featureId, kind, name: entry.name };
     this.render();
   }
 
