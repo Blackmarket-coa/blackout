@@ -866,12 +866,66 @@ export class BlackoutWebApp {
       this.applyComposerSnippet("_italic_");
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-emoji']")?.addEventListener("click", () => {
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-attachments']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("attachments", "[data-action='composer-toggle-attachments']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-gif-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("gif", "[data-action='composer-toggle-gif-picker']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-sticker-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("sticker", "[data-action='composer-toggle-sticker-picker']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-gif']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-quick-emoji']")?.addEventListener("click", () => {
       this.applyComposerSnippet(" 😊");
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-file']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" [file:quarterly-plan.pdf](https://files.examplecdn.com/quarterly-plan.pdf)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
+      this.closeComposerPanels();
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [stego::hidden-message]");
+      const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+      const coverInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']");
+      const hidden = hiddenInput?.value.trim() || "hidden-message";
+      const cover = coverInput?.value.trim() || "let's sync after standup";
+      this.applyComposerSnippet(` [stego hidden=\"${hidden}\"]${cover}[/stego]`);
+      this.closeComposerPanels();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-gif']")?.addEventListener("click", () => {
@@ -989,6 +1043,29 @@ export class BlackoutWebApp {
     if (!textarea) return;
     textarea.value = `${textarea.value}${snippet}`;
     textarea.focus();
+  }
+
+  private toggleComposerPanel(panelName: "attachments" | "gif" | "sticker" | "stego", triggerSelector: string): void {
+    const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
+    const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
+    if (!panel || !trigger) return;
+    const shouldOpen = !panel.classList.contains("is-open");
+    this.closeComposerPanels();
+    if (shouldOpen) {
+      panel.classList.add("is-open");
+      panel.setAttribute("aria-hidden", "false");
+      trigger.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  private closeComposerPanels(): void {
+    this.root.querySelectorAll<HTMLElement>(".composer-popover").forEach((panel) => {
+      panel.classList.remove("is-open");
+      panel.setAttribute("aria-hidden", "true");
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
   }
 
   private openFeatureById(featureId?: string): void {

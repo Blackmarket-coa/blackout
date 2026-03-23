@@ -665,17 +665,17 @@ body {
 .chat-input {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.6rem;
-  padding: 0.75rem;
-  border-radius: 14px;
-  border: 1px solid #23464c;
-  background: linear-gradient(170deg, rgb(28 33 44 / 88%), rgb(14 19 30 / 88%));
+  gap: 0.52rem;
+  padding: 0.72rem;
+  border-radius: 16px;
+  border: 1px solid #294056;
+  background: linear-gradient(170deg, rgb(26 33 47 / 92%), rgb(12 17 28 / 92%));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
 .composer-toolbar {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -685,10 +685,10 @@ body {
   display: inline-flex;
   gap: 0.35rem;
   align-items: center;
-  border-radius: 10px;
+  border-radius: 9px;
   border-color: #3a3f49;
-  background: linear-gradient(180deg, #2a2f39, #1f232c);
-  padding: 0.45rem 0.7rem;
+  background: linear-gradient(180deg, #292f3c, #1d222d);
+  padding: 0.41rem 0.64rem;
 }
 
 .composer-toolbar--compact button span:last-child {
@@ -717,15 +717,15 @@ body {
 }
 
 .composer-shell {
-  border: 1px solid #2b3f5f;
-  background: #090c13;
-  border-radius: 12px;
-  padding: 0.4rem 0.55rem;
+  border: 1px solid #304364;
+  background: #0a1018;
+  border-radius: 14px;
+  padding: 0.36rem 0.48rem;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.45rem;
-  box-shadow: 0 0 0 1px rgb(67 145 255 / 45%), 0 0 0 4px rgb(52 120 216 / 16%);
+  gap: 0.38rem;
+  box-shadow: 0 0 0 1px rgb(76 152 255 / 45%), 0 0 0 3px rgb(52 120 216 / 14%);
 }
 
 .composer-shell--disabled {
@@ -733,9 +733,9 @@ body {
 }
 
 .composer-shell .composer-shell-icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 10px;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 9px;
   border: 1px solid #394055;
   background: #1b1f2b;
   color: #d0d8e7;
@@ -754,24 +754,24 @@ body {
   border: 0;
   outline: 0;
   resize: none;
-  min-height: 2.3rem;
-  padding: 0.45rem 0.35rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.3rem;
   background: transparent;
 }
 
 .composer-shell-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.28rem;
   color: #c4cada;
 }
 
 .composer-shell-glyph {
   font-size: 0.8rem;
-  border: 1px solid #3b4253;
+  border: 1px solid #3c4356;
   border-radius: 999px;
-  padding: 0.18rem 0.42rem;
-  background: #161a24;
+  padding: 0.16rem 0.4rem;
+  background: #151b27;
   font-weight: 600;
   color: #c4cada;
   cursor: pointer;
@@ -780,6 +780,65 @@ body {
 .composer-shell-glyph:hover {
   border-color: #4f8ef7;
   background: #20283a;
+}
+
+.composer-popovers {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.composer-popover {
+  display: none;
+  border: 1px solid #354763;
+  background: #101827;
+  border-radius: 11px;
+  padding: 0.52rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+}
+
+.composer-popover.is-open {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.composer-popover-title {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9faad0;
+}
+
+.composer-popover-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.composer-popover-actions button,
+.composer-popover > button {
+  width: auto;
+  border-radius: 8px;
+  border: 1px solid #435172;
+  background: #202b40;
+  color: #d5ddf1;
+  padding: 0.26rem 0.56rem;
+}
+
+.composer-popover-field {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+  color: #b4bfd8;
+}
+
+.composer-popover-field input {
+  border-radius: 8px;
+  border: 1px solid #3d4e6c;
+  background: #0d1522;
+  color: #edf2ff;
+  padding: 0.38rem 0.45rem;
 }
 
 input,
