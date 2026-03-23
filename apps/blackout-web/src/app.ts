@@ -2,6 +2,7 @@ import { ApiError, type GatewayEvent } from "./api/client";
 import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
+import { renderDeepDivePanel } from "./components/DeepDivePanel";
 import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
 import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
@@ -21,7 +22,7 @@ import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
-type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
+type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance";
 type StegoChannel = {
@@ -76,6 +77,8 @@ export class BlackoutWebApp {
   private activeFederationTab: FederationTab = "health";
   private activeTownhallMode: TownhallMode = "standard";
   private activeMobileTab: MobileTab = "spaces";
+  private deepDiveCardIndex = 0;
+  private deepDiveBookmarked = 0;
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -257,6 +260,13 @@ export class BlackoutWebApp {
 
     if (this.activeWorkspacePanel === "files") {
       return this.renderFilesPanel();
+    }
+
+    if (this.activeWorkspacePanel === "discover") {
+      return renderDeepDivePanel({
+        cardIndex: this.deepDiveCardIndex,
+        bookmarked: this.deepDiveBookmarked,
+      });
     }
 
     const state = this.store.getState();
@@ -990,6 +1000,14 @@ export class BlackoutWebApp {
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-discover-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "discover";
+        this.activeMobileTab = "home";
+        this.render();
+      });
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;
@@ -1187,7 +1205,7 @@ export class BlackoutWebApp {
         this.activeMobileTab = tab;
         switch (tab) {
           case "home":
-            this.activeWorkspacePanel = "dms";
+            this.activeWorkspacePanel = "discover";
             break;
           case "spaces":
             this.activeWorkspacePanel = "chat";
@@ -1204,6 +1222,25 @@ export class BlackoutWebApp {
         }
         this.render();
       });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-dismiss']")?.addEventListener("click", () => {
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Dismissed room card.";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-join']")?.addEventListener("click", () => {
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Joined room from DeepDive.";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-bookmark']")?.addEventListener("click", () => {
+      this.deepDiveBookmarked += 1;
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Bookmarked room for later.";
+      this.render();
     });
 
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {

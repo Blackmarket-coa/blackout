@@ -3,7 +3,7 @@ import type { ServerSummary } from "../types";
 interface ServerSidebarProps {
   servers: ServerSummary[];
   activeServerId: string | null;
-  activeView: "chat" | "dms" | "activity" | "files" | "repo-tools";
+  activeView: "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
 }
 
 function getInitials(name: string): string {
@@ -73,6 +73,12 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
           <button type="button" class="sidebar-nav-btn ${activeView === "repo-tools" ? "is-selected" : ""}" data-action="open-repo-tools" aria-label="Tools">
             <span class="sidebar-nav-glyph">🛠️</span>
             <span class="sidebar-nav-label">Tools</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="sidebar-nav-btn ${activeView === "discover" ? "is-selected" : ""}" data-action="open-discover-panel" aria-label="DeepDive discovery">
+            <span class="sidebar-nav-glyph">🧭</span>
+            <span class="sidebar-nav-label">DeepDive</span>
           </button>
         </li>
         <li>

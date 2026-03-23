@@ -612,6 +612,31 @@ body {
   display: none;
 }
 
+.deepdive-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  background: linear-gradient(160deg, var(--panel-bg-alt) 0%, var(--workspace-bg) 70%);
+}
+
+.deepdive-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--panel-bg) 82%, black 18%);
+  min-height: 180px;
+}
+
+.deepdive-card h3 {
+  margin-top: 0;
+}
+
+.deepdive-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
