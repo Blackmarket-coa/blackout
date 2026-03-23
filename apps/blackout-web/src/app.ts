@@ -998,6 +998,10 @@ export class BlackoutWebApp {
       this.switchStegoView("decrypt");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-sticker']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" :sticker:");
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-help']")?.addEventListener("click", () => {
       this.featureActionResult = "Composer tips: Enter sends, Shift+Enter adds a line break, and formatting tools insert snippets at the cursor.";
       this.render();
