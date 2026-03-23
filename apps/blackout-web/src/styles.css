@@ -311,6 +311,128 @@ body {
   margin-top: 0.35rem;
 }
 
+.governance-room {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: linear-gradient(160deg, var(--panel-bg-alt) 0%, var(--workspace-bg) 70%);
+}
+
+.governance-room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.governance-room-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.governance-tabs {
+  display: inline-flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.55rem;
+}
+
+.governance-tabs button {
+  width: auto;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.governance-tabs button.is-active {
+  color: var(--text-strong);
+  border-color: var(--room-governance);
+  background: color-mix(in srgb, var(--room-governance) 22%, transparent);
+}
+
+.governance-feed,
+.governance-proposals,
+.governance-taskboard {
+  min-height: 0;
+}
+
+.governance-proposal-pinned {
+  border: 1px solid var(--room-governance);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: color-mix(in srgb, var(--panel-bg) 80%, black 20%);
+}
+
+.governance-tally {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.governance-tally span {
+  display: block;
+  height: 0.45rem;
+  border-radius: 999px;
+}
+
+.governance-tally .for {
+  background: #2ea043;
+}
+
+.governance-tally .against {
+  background: var(--accent-danger);
+}
+
+.governance-tally .abstain {
+  background: #7f8c9a;
+}
+
+.governance-proposals {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.governance-proposal-card,
+.governance-task-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: color-mix(in srgb, var(--panel-bg) 78%, black 22%);
+}
+
+.governance-proposal-card h3,
+.governance-column h3 {
+  margin: 0 0 0.35rem;
+}
+
+.governance-taskboard {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+}
+
+.governance-column {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.55rem;
+  background: color-mix(in srgb, var(--panel-bg-alt) 82%, black 18%);
+}
+
+.governance-modal-card {
+  width: min(760px, 96vw);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.governance-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
@@ -1164,6 +1286,10 @@ label {
   .right-panel-overlay {
     width: min(380px, 76vw);
   }
+
+  .governance-taskboard {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
@@ -1188,6 +1314,14 @@ label {
     width: 100%;
     border-left: 0;
     box-shadow: none;
+  }
+
+  .governance-room-header {
+    flex-direction: column;
+  }
+
+  .governance-taskboard {
+    grid-template-columns: 1fr;
   }
 }
 

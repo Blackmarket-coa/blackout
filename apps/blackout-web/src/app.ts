@@ -2,6 +2,7 @@ import { ApiError, type GatewayEvent } from "./api/client";
 import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
+import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
@@ -65,6 +66,8 @@ export class BlackoutWebApp {
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
   private activeRightPanel: RightPanelView | null = null;
+  private activeGovernanceTab: GovernanceRoomTab = "feed";
+  private governanceProposalModalOpen = false;
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -248,6 +251,17 @@ export class BlackoutWebApp {
     }
 
     const state = this.store.getState();
+    const activeChannelName = state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "";
+    const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
+
+    if (isGovernanceRoom) {
+      return renderGovernanceRoomPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeGovernanceTab,
+        showProposalModal: this.governanceProposalModalOpen,
+      });
+    }
+
     const chatView = renderChatWindow({
       channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
       messages: state.messages,
@@ -1017,6 +1031,31 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='close-right-panel']")?.addEventListener("click", () => {
       this.activeRightPanel = null;
       this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as GovernanceRoomTab | undefined;
+        if (!tab) return;
+        this.activeGovernanceTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='governance-open-proposal']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.governanceProposalModalOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='governance-close-proposal']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (element.classList.contains("modal") && target.closest(".modal-content")) return;
+        this.governanceProposalModalOpen = false;
+        this.render();
+      });
     });
 
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {
