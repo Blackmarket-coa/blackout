@@ -82,7 +82,6 @@ import { RoomUpdateCause } from "../../stores/room-list/models";
 import { ModuleRunner } from "../../modules/ModuleRunner";
 import Spinner from "../views/elements/Spinner";
 import QuestionDialog from "../views/dialogs/QuestionDialog";
-import UserSettingsDialog from "../views/dialogs/UserSettingsDialog";
 import CreateRoomDialog from "../views/dialogs/CreateRoomDialog";
 import IncomingSasDialog from "../views/dialogs/IncomingSasDialog";
 import CompleteSecurity from "./auth/CompleteSecurity";
@@ -251,6 +250,7 @@ interface IState {
     justRegistered?: boolean;
     roomJustCreatedOpts?: IOpts;
     forceTimeline?: boolean; // see props
+    initialSettingsTabId?: UserTab;
 }
 
 export default class MatrixChat extends React.PureComponent<IProps, IState> {
@@ -823,16 +823,7 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
             }
             case Action.ViewUserSettings: {
                 const tabPayload = payload as OpenToTabPayload;
-                Modal.createDialog(
-                    UserSettingsDialog,
-                    { ...payload.props, initialTabId: tabPayload.initialTabId as UserTab, sdkContext: this.stores },
-                    /*className=*/ undefined,
-                    /*isPriority=*/ false,
-                    /*isStatic=*/ true,
-                );
-
-                // View the welcome or home page if we need something to look at
-                this.viewSomethingBehindModal();
+                this.viewSettings(tabPayload.initialTabId as UserTab | undefined);
                 break;
             }
             case Action.CreateRoom:
@@ -1164,6 +1155,16 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
         });
         this.setPage(PageType.HomePage);
         this.notifyNewScreen("home");
+    }
+
+    private viewSettings(initialTabId?: UserTab): void {
+        this.setStateForNewView({
+            view: Views.LOGGED_IN,
+            currentRoomId: null,
+            initialSettingsTabId: initialTabId,
+        });
+        this.setPage(PageType.SettingsPage);
+        this.notifyNewScreen("settings");
     }
 
     private viewUser(userId: string, subAction: string): void {

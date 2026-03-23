@@ -1,11 +1,12 @@
 import { createTheme, createThemeContract, globalStyle } from '@vanilla-extract/css';
 
 export const bmcPalette = {
-  forest: '#2D5A27',
-  darkGreen: '#1E3D1A',
-  teal: '#4ECDC4',
-  black: '#1A1A1A',
-  lightGreen: '#E8F5E2',
+  seafoam: '#9FE2BF',
+  forest: '#2B5D34',
+  darkForest: '#163520',
+  fallLeaves: '#8D3A2F',
+  black: '#0A0A0A',
+  lightGreen: '#E6F4EA',
   white: '#FAFAFA',
   danger: '#CC4444',
   warning: '#D4830A',
@@ -62,23 +63,23 @@ const exposeSemanticCustomProperties = (selector: string) => {
 export const darkThemeClass = createTheme(themeVars, {
   bg: {
     surface: bmcPalette.black,
-    surfaceHover: '#242424',
-    nav: bmcPalette.darkGreen,
-    input: '#262626',
+    surfaceHover: '#111111',
+    nav: bmcPalette.darkForest,
+    input: '#1A1A1A',
   },
   text: {
     primary: bmcPalette.white,
-    secondary: '#D8E7D3',
-    muted: '#A8B4A3',
+    secondary: '#D3E8DA',
+    muted: '#9EB5A6',
   },
   accent: {
-    primary: bmcPalette.teal,
-    hover: '#63DBD3',
-    muted: '#317E79',
+    primary: bmcPalette.seafoam,
+    hover: '#B7EED2',
+    muted: '#2C5D46',
   },
   border: {
-    default: '#365132',
-    active: bmcPalette.teal,
+    default: '#30573D',
+    active: bmcPalette.fallLeaves,
   },
   status: {
     danger: bmcPalette.danger,
@@ -100,13 +101,13 @@ export const lightThemeClass = createTheme(themeVars, {
     muted: '#5E6E5B',
   },
   accent: {
-    primary: '#2AAEA6',
-    hover: '#208F88',
-    muted: '#9DD7D2',
+    primary: bmcPalette.forest,
+    hover: '#1E4625',
+    muted: '#B6D8C0',
   },
   border: {
     default: '#BDD5B8',
-    active: bmcPalette.teal,
+    active: bmcPalette.fallLeaves,
   },
   status: {
     danger: bmcPalette.danger,
@@ -128,13 +129,13 @@ export const amoledThemeClass = createTheme(themeVars, {
     muted: '#8E8E8E',
   },
   accent: {
-    primary: bmcPalette.teal,
-    hover: '#6DE0D9',
-    muted: '#2E6D69',
+    primary: bmcPalette.seafoam,
+    hover: '#BFEFD8',
+    muted: '#244D3A',
   },
   border: {
     default: '#1F1F1F',
-    active: bmcPalette.teal,
+    active: bmcPalette.fallLeaves,
   },
   status: {
     danger: bmcPalette.danger,
