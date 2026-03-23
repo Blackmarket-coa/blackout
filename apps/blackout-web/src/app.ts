@@ -2,7 +2,6 @@ import { ApiError, type GatewayEvent } from "./api/client";
 import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
-import { renderDeepDivePanel } from "./components/DeepDivePanel";
 import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
 import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
@@ -79,8 +78,6 @@ export class BlackoutWebApp {
   private activeFederationTab: FederationTab = "health";
   private activeTownhallMode: TownhallMode = "standard";
   private activeMobileTab: MobileTab = "spaces";
-  private deepDiveCardIndex = 0;
-  private deepDiveBookmarked = 0;
   private swipeRightGesture: "reply" | "quote" = "reply";
   private swipeLeftGesture: "thread" | "react" = "thread";
   private activeRevenueOpsTab: RevenueOpsTab = "monetization";
@@ -278,10 +275,7 @@ export class BlackoutWebApp {
     }
 
     if (this.activeWorkspacePanel === "discover") {
-      return renderDeepDivePanel({
-        cardIndex: this.deepDiveCardIndex,
-        bookmarked: this.deepDiveBookmarked,
-      });
+      return this.renderDiscoverRolloutNotice();
     }
 
     const state = this.store.getState();
@@ -396,6 +390,22 @@ export class BlackoutWebApp {
         <p class="meta">Plan-aligned contextual overlay for room collaboration workflows.</p>
         ${panelBody[panel]}
       </aside>
+    `;
+  }
+
+  private renderDiscoverRolloutNotice(): string {
+    return `
+      <section class="deepdive-panel" data-testid="deepdive-rollout-notice">
+        <header>
+          <h2>DeepDive Discovery</h2>
+          <p class="meta">DeepDive is saved for a later rollout while we prioritize core workspace stability.</p>
+        </header>
+        <article class="deepdive-card">
+          <h3>Rollout status</h3>
+          <p>Room swipe discovery is temporarily paused for this release.</p>
+          <p class="meta">Use channels, DMs, and activity to navigate the workspace in the meantime.</p>
+        </article>
+      </section>
     `;
   }
 
@@ -1070,6 +1080,15 @@ export class BlackoutWebApp {
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-deepdive-rollout-note']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "discover";
+        this.activeMobileTab = "home";
+        this.featureActionResult = "DeepDive is queued for a later rollout.";
+        this.render();
+      });
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;
@@ -1398,25 +1417,6 @@ export class BlackoutWebApp {
         }
         this.render();
       });
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-dismiss']")?.addEventListener("click", () => {
-      this.deepDiveCardIndex += 1;
-      this.featureActionResult = "Dismissed room card.";
-      this.render();
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-join']")?.addEventListener("click", () => {
-      this.deepDiveCardIndex += 1;
-      this.featureActionResult = "Joined room from DeepDive.";
-      this.render();
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-bookmark']")?.addEventListener("click", () => {
-      this.deepDiveBookmarked += 1;
-      this.deepDiveCardIndex += 1;
-      this.featureActionResult = "Bookmarked room for later.";
-      this.render();
     });
 
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {

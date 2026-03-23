@@ -76,9 +76,9 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "discover" ? "is-selected" : ""}" data-action="open-discover-panel" aria-label="DeepDive discovery">
+          <button type="button" class="sidebar-nav-btn" data-action="open-deepdive-rollout-note" aria-label="DeepDive discovery coming later">
             <span class="sidebar-nav-glyph">🧭</span>
-            <span class="sidebar-nav-label">DeepDive</span>
+            <span class="sidebar-nav-label">DeepDive (Soon)</span>
           </button>
         </li>
         <li>
