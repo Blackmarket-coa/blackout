@@ -18,6 +18,22 @@ const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
 type ThemeKey = "blackout_modern" | "legacy_matrix_classic" | "legacy_terminal";
+type StegoChannel = {
+  id: string;
+  name: string;
+  audience: string;
+  passphrase: string;
+  rotationDays: number;
+  updatedAt: string;
+};
+type GifLibraryItem = { id: string; label: string; url: string };
+type EmojiLibraryItem = { id: string; symbol: string; label: string };
+type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
+
+const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
+const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
+const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
+const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -48,6 +64,10 @@ export class BlackoutWebApp {
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
   private readonly hasSeenFeatureTooltips: boolean;
+  private stegoChannels: StegoChannel[] = [];
+  private gifLibrary: GifLibraryItem[] = [];
+  private emojiLibrary: EmojiLibraryItem[] = [];
+  private attachmentLibrary: AttachmentLibraryItem[] = [];
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -89,10 +109,10 @@ export class BlackoutWebApp {
       cohort: "internal",
     },
     presets: {
-      activePreset: "baseline_matrix",
+      activePreset: "blackout_full",
       features: {},
       diagnostics: {
-        deploymentPreset: "baseline_matrix",
+        deploymentPreset: "blackout_full",
         tenantPreset: null,
         userOverrideCount: 0,
       },
@@ -123,6 +143,10 @@ export class BlackoutWebApp {
       : { ...FEATURE_PRESET_BUNDLES[runtimeConfig.presets.activePreset] };
     const storedTheme = globalThis.localStorage.getItem("blackout.theme");
     this.selectedTheme = this.parseTheme(storedTheme);
+    this.stegoChannels = this.loadStegoChannels();
+    this.gifLibrary = this.loadGifLibrary();
+    this.emojiLibrary = this.loadEmojiLibrary();
+    this.attachmentLibrary = this.loadAttachmentLibrary();
   }
 
   async mount(): Promise<void> {
@@ -866,12 +890,329 @@ export class BlackoutWebApp {
       this.applyComposerSnippet("_italic_");
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-emoji']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" 😊");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-attachments']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("attachments", "[data-action='composer-toggle-attachments']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-gif-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("gif", "[data-action='composer-toggle-gif-picker']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-emoji-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("emoji", "[data-action='composer-toggle-emoji-picker']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-sticker-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("sticker", "[data-action='composer-toggle-sticker-picker']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-encode']")?.addEventListener("click", () => {
+      this.switchStegoView("encode");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-decrypt']")?.addEventListener("click", () => {
+      this.switchStegoView("decrypt");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-password']")?.addEventListener("click", () => {
+      this.switchStegoView("password");
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-gif']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-emoji']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-file']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" [file:quarterly-plan.pdf](https://files.examplecdn.com/quarterly-plan.pdf)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
+      this.closeComposerPanels();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [stego::hidden-message]");
+      const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+      const coverInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      const algorithmSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-algorithm']");
+      const channelSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-channel-select']");
+      const ephemeralCheckbox = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-ephemeral']");
+      const ttlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-ttl']");
+      const hidden = hiddenInput?.value.trim() || "hidden-message";
+      const cover = coverInput?.value.trim() || "let's sync after standup";
+      const passphrase = passphraseInput?.value.trim() || "";
+      const algorithm = algorithmSelect?.value || "lsb-aes-256-cbc";
+      const ephemeral = ephemeralCheckbox?.checked ?? false;
+      const ttl = Math.max(1, Number.parseInt(ttlInput?.value ?? "24", 10) || 24);
+      const keyHint = passphrase ? `${passphrase.slice(0, 2)}***${passphrase.slice(-2)}` : "none";
+      const channelId = channelSelect?.value || "";
+      const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
+      const channelAttr = channelId ? ` channel="${channelId}"` : "";
+      this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-decrypt-stego']")?.addEventListener("click", () => {
+      const payloadInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-stego-decrypt-payload']");
+      const payload = payloadInput?.value.trim() ?? "";
+      const match = payload.match(/\[stego ([^\]]+) hidden="([^"]+)"\]([\s\S]*?)\[\/stego\]/i);
+      if (!match) {
+        this.updateStegoDecryptResult("No stego payload found. Paste a [stego ...][/stego] packet.", true);
+        return;
+      }
+      const attrs = match[1];
+      const hidden = match[2];
+      const cover = match[3];
+      const algorithm = attrs.match(/algo="([^"]+)"/)?.[1] ?? "unknown";
+      const keyHint = attrs.match(/keyHint="([^"]+)"/)?.[1] ?? "none";
+      const lifecycle = attrs.match(/lifecycle="([^"]+)"/)?.[1] ?? "persistent";
+      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-generate-passphrase']")?.addEventListener("click", () => {
+      const generated = this.generateStegoPassphrase();
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      if (generatedInput) generatedInput.value = generated;
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-copy-passphrase']")?.addEventListener("click", async () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || generated === "auto-generate to begin") return;
+      await globalThis.navigator.clipboard?.writeText?.(generated);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-use-passphrase-hide']")?.addEventListener("click", () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || !passphraseInput || generated === "auto-generate to begin") return;
+      passphraseInput.value = generated;
+      this.switchStegoView("encode");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-use-passphrase-decrypt']")?.addEventListener("click", () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-decrypt-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || !passphraseInput || generated === "auto-generate to begin") return;
+      passphraseInput.value = generated;
+      this.switchStegoView("decrypt");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-add']")?.addEventListener("click", () => {
+      const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-gif-label']");
+      const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-gif-url']");
+      const label = labelInput?.value.trim() ?? "";
+      const url = urlInput?.value.trim() ?? "";
+      if (!label || !url) return;
+      const id = this.normalizeStegoChannelId(label);
+      const item: GifLibraryItem = { id, label, url };
+      const existing = this.gifLibrary.find((gif) => gif.id === id);
+      this.gifLibrary = existing ? this.gifLibrary.map((gif) => (gif.id === id ? item : gif)) : [...this.gifLibrary, item];
+      this.persistGifLibrary();
+      this.refreshGifLibraryUi();
+      if (labelInput) labelInput.value = "";
+      if (urlInput) urlInput.value = "";
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-export']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-gif-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.gifLibrary, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-import']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-gif-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Array<{ label?: string; url?: string }>;
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => typeof item.label === "string" && typeof item.url === "string")
+          .map((item) => ({
+            id: this.normalizeStegoChannelId(item.label as string),
+            label: item.label as string,
+            url: item.url as string,
+          }));
+        this.gifLibrary = [...this.gifLibrary.filter((gif) => !imported.some((entry) => entry.id === gif.id)), ...imported];
+        this.persistGifLibrary();
+        this.refreshGifLibraryUi();
+      } catch {
+        return;
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-add']")?.addEventListener("click", () => {
+      const symbolInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-emoji-symbol']");
+      const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-emoji-label']");
+      const symbol = symbolInput?.value.trim() ?? "";
+      const label = labelInput?.value.trim() ?? symbol;
+      if (!symbol) return;
+      const id = this.normalizeStegoChannelId(label || symbol);
+      const item: EmojiLibraryItem = { id, symbol, label: label || symbol };
+      const existing = this.emojiLibrary.find((emoji) => emoji.id === id);
+      this.emojiLibrary = existing ? this.emojiLibrary.map((emoji) => (emoji.id === id ? item : emoji)) : [...this.emojiLibrary, item];
+      this.persistEmojiLibrary();
+      this.refreshEmojiLibraryUi();
+      if (symbolInput) symbolInput.value = "";
+      if (labelInput) labelInput.value = "";
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-export']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-emoji-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.emojiLibrary, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-import']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-emoji-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Array<{ symbol?: string; label?: string }>;
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => typeof item.symbol === "string")
+          .map((item) => ({
+            id: this.normalizeStegoChannelId((item.label as string) || (item.symbol as string)),
+            symbol: item.symbol as string,
+            label: (item.label as string) || (item.symbol as string),
+          }));
+        this.emojiLibrary = [...this.emojiLibrary.filter((emoji) => !imported.some((entry) => entry.id === emoji.id)), ...imported];
+        this.persistEmojiLibrary();
+        this.refreshEmojiLibraryUi();
+      } catch {
+        return;
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
+      const typeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
+      const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
+      const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
+      const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const label = labelInput?.value.trim() ?? "";
+      const url = urlInput?.value.trim() ?? "";
+      if (!label || !url) return;
+      const id = this.normalizeStegoChannelId(`${type}-${label}`);
+      const item: AttachmentLibraryItem = { id, type, label, url };
+      const existing = this.attachmentLibrary.find((entry) => entry.id === id);
+      this.attachmentLibrary = existing
+        ? this.attachmentLibrary.map((entry) => (entry.id === id ? item : entry))
+        : [...this.attachmentLibrary, item];
+      this.persistAttachmentLibrary();
+      this.refreshAttachmentLibraryUi();
+      if (labelInput) labelInput.value = "";
+      if (urlInput) urlInput.value = "";
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-export']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.attachmentLibrary, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Array<{ type?: string; label?: string; url?: string }>;
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio") && typeof item.label === "string" && typeof item.url === "string")
+          .map((item) => ({
+            id: this.normalizeStegoChannelId(`${item.type}-${item.label as string}`),
+            type: item.type as AttachmentLibraryItem["type"],
+            label: item.label as string,
+            url: item.url as string,
+          }));
+        this.attachmentLibrary = [...this.attachmentLibrary.filter((entry) => !imported.some((item) => item.id === entry.id)), ...imported];
+        this.persistAttachmentLibrary();
+        this.refreshAttachmentLibraryUi();
+      } catch {
+        return;
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-save-channel']")?.addEventListener("click", () => {
+      const nameInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-name']");
+      const audienceInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-audience']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-passphrase']");
+      const rotationInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-rotation-days']");
+      const name = nameInput?.value.trim() ?? "";
+      const audience = audienceInput?.value.trim() ?? "General audience";
+      const passphrase = passphraseInput?.value.trim() ?? "";
+      if (!name || !passphrase) return;
+      const rotationDays = Math.max(1, Number.parseInt(rotationInput?.value ?? "14", 10) || 14);
+      const id = this.normalizeStegoChannelId(name);
+      const now = new Date().toISOString();
+      const existing = this.stegoChannels.find((channel) => channel.id === id);
+      const channel: StegoChannel = {
+        id,
+        name,
+        audience,
+        passphrase,
+        rotationDays,
+        updatedAt: now,
+      };
+      this.stegoChannels = existing
+        ? this.stegoChannels.map((item) => (item.id === id ? channel : item))
+        : [...this.stegoChannels, channel];
+      this.persistStegoChannels();
+      this.refreshStegoChannelUi();
+      const encodePassphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      if (encodePassphrase) encodePassphrase.value = passphrase;
+      if (nameInput) nameInput.value = "";
+      if (audienceInput) audienceInput.value = "";
+      if (passphraseInput) passphraseInput.value = "";
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-channel-select']")?.addEventListener("change", (event) => {
+      const select = event.currentTarget as HTMLSelectElement;
+      const selectedId = select.value;
+      const channel = this.stegoChannels.find((item) => item.id === selectedId);
+      if (!channel) return;
+      const encodePassphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      const decryptPassphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-decrypt-passphrase']");
+      if (encodePassphrase) encodePassphrase.value = channel.passphrase;
+      if (decryptPassphrase) decryptPassphrase.value = channel.passphrase;
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-help']")?.addEventListener("click", () => {
@@ -914,6 +1255,10 @@ export class BlackoutWebApp {
       this.render();
     });
 
+    this.refreshStegoChannelUi();
+    this.refreshGifLibraryUi();
+    this.refreshEmojiLibraryUi();
+    this.refreshAttachmentLibraryUi();
     this.bindCommandPaletteFocusTrap();
   }
 
@@ -973,6 +1318,367 @@ export class BlackoutWebApp {
     if (!textarea) return;
     textarea.value = `${textarea.value}${snippet}`;
     textarea.focus();
+  }
+
+  private toggleComposerPanel(panelName: "attachments" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
+    const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
+    const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
+    if (!panel || !trigger) return;
+    const shouldOpen = !panel.classList.contains("is-open");
+    this.closeComposerPanels();
+    if (shouldOpen) {
+      panel.classList.add("is-open");
+      panel.setAttribute("aria-hidden", "false");
+      trigger.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  private closeComposerPanels(): void {
+    this.root.querySelectorAll<HTMLElement>(".composer-popover").forEach((panel) => {
+      panel.classList.remove("is-open");
+      panel.setAttribute("aria-hidden", "true");
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  private switchStegoView(view: "encode" | "decrypt" | "password"): void {
+    this.root.querySelectorAll<HTMLElement>(".composer-stego-view").forEach((panel) => {
+      const isActive = panel.dataset.stegoView === view;
+      panel.classList.toggle("is-active", isActive);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-tab-encode'], [data-action='composer-stego-tab-decrypt'], [data-action='composer-stego-tab-password']").forEach((button) => {
+      const isActive = button.dataset.action === `composer-stego-tab-${view}`;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  }
+
+  private generateStegoPassphrase(length = 24): string {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*+-?";
+    const randomValues = globalThis.crypto.getRandomValues(new Uint32Array(length));
+    return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join("");
+  }
+
+  private updateStegoDecryptResult(message: string, isError = false): void {
+    const result = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-decrypt-result']");
+    if (!result) return;
+    result.textContent = message;
+    result.classList.toggle("composer-stego-result--error", isError);
+  }
+
+  private refreshStegoChannelUi(): void {
+    const select = this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-channel-select']");
+    if (select) {
+      const selected = select.value;
+      const optionRows = this.stegoChannels
+        .map((channel) => `<option value="${channel.id}">${channel.name} · ${channel.audience}</option>`)
+        .join("");
+      select.innerHTML = `<option value="">No saved channel</option>${optionRows}`;
+      if (selected && this.stegoChannels.some((channel) => channel.id === selected)) {
+        select.value = selected;
+      }
+    }
+
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-channel-list']");
+    if (!list) return;
+    if (!this.stegoChannels.length) {
+      list.innerHTML = '<li class="meta">No saved channels yet.</li>';
+      return;
+    }
+    list.innerHTML = this.stegoChannels
+      .map((channel) => {
+        return `
+          <li class="composer-channel-row">
+            <div>
+              <strong>${channel.name}</strong>
+              <p class="meta">${channel.audience} · rotate every ${channel.rotationDays}d</p>
+            </div>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-stego-channel-apply" data-channel-id="${channel.id}">Use</button>
+              <button type="button" data-action="composer-stego-channel-rotate" data-channel-id="${channel.id}">Rotate</button>
+              <button type="button" data-action="composer-stego-channel-delete" data-channel-id="${channel.id}">Delete</button>
+            </div>
+          </li>
+        `;
+      })
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-apply']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const channel = this.stegoChannels.find((item) => item.id === button.dataset.channelId);
+        if (!channel) return;
+        const channelSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-channel-select']");
+        const encodePassphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+        const decryptPassphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-decrypt-passphrase']");
+        if (channelSelect) channelSelect.value = channel.id;
+        if (encodePassphrase) encodePassphrase.value = channel.passphrase;
+        if (decryptPassphrase) decryptPassphrase.value = channel.passphrase;
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-rotate']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const channelId = button.dataset.channelId;
+        if (!channelId) return;
+        const nextPassphrase = this.generateStegoPassphrase();
+        this.stegoChannels = this.stegoChannels.map((channel) =>
+          channel.id === channelId ? { ...channel, passphrase: nextPassphrase, updatedAt: new Date().toISOString() } : channel,
+        );
+        this.persistStegoChannels();
+        this.refreshStegoChannelUi();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const channelId = button.dataset.channelId;
+        if (!channelId) return;
+        this.stegoChannels = this.stegoChannels.filter((channel) => channel.id !== channelId);
+        this.persistStegoChannels();
+        this.refreshStegoChannelUi();
+      });
+    });
+  }
+
+  private refreshGifLibraryUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-gif-library-list']");
+    if (!list) return;
+    if (!this.gifLibrary.length) {
+      list.innerHTML = '<li class="meta">No custom GIFs yet.</li>';
+      return;
+    }
+    list.innerHTML = this.gifLibrary
+      .map((gif) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${gif.label}</strong>
+            <p class="meta">${gif.url}</p>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-gif-use" data-gif-id="${gif.id}">Use</button>
+            <button type="button" data-action="composer-gif-stego" data-gif-id="${gif.id}">Add stego</button>
+            <button type="button" data-action="composer-gif-delete" data-gif-id="${gif.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gif = this.gifLibrary.find((item) => item.id === button.dataset.gifId);
+        if (!gif) return;
+        this.applyComposerSnippet(` ![${gif.label}](${gif.url})`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gif = this.gifLibrary.find((item) => item.id === button.dataset.gifId);
+        if (!gif) return;
+        const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+        const hidden = hiddenInput?.value.trim() || "hidden-message";
+        this.applyComposerSnippet(` [stego-media kind="gif" hidden="${hidden}"]![${gif.label}](${gif.url})[/stego-media]`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gifId = button.dataset.gifId;
+        if (!gifId) return;
+        this.gifLibrary = this.gifLibrary.filter((gif) => gif.id !== gifId);
+        this.persistGifLibrary();
+        this.refreshGifLibraryUi();
+      });
+    });
+  }
+
+  private refreshEmojiLibraryUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-emoji-library-list']");
+    if (!list) return;
+    if (!this.emojiLibrary.length) {
+      list.innerHTML = '<li class="meta">No custom emoji yet.</li>';
+      return;
+    }
+    list.innerHTML = this.emojiLibrary
+      .map((emoji) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${emoji.symbol} ${emoji.label}</strong>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-emoji-use" data-emoji-id="${emoji.id}">Use</button>
+            <button type="button" data-action="composer-emoji-stego" data-emoji-id="${emoji.id}">Add stego</button>
+            <button type="button" data-action="composer-emoji-delete" data-emoji-id="${emoji.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emoji = this.emojiLibrary.find((item) => item.id === button.dataset.emojiId);
+        if (!emoji) return;
+        this.applyComposerSnippet(` ${emoji.symbol}`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emoji = this.emojiLibrary.find((item) => item.id === button.dataset.emojiId);
+        if (!emoji) return;
+        const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+        const hidden = hiddenInput?.value.trim() || "hidden-message";
+        this.applyComposerSnippet(` [stego-emoji hidden="${hidden}"]${emoji.symbol}[/stego-emoji]`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emojiId = button.dataset.emojiId;
+        if (!emojiId) return;
+        this.emojiLibrary = this.emojiLibrary.filter((emoji) => emoji.id !== emojiId);
+        this.persistEmojiLibrary();
+        this.refreshEmojiLibraryUi();
+      });
+    });
+  }
+
+  private refreshAttachmentLibraryUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-library-list']");
+    if (!list) return;
+    if (!this.attachmentLibrary.length) {
+      list.innerHTML = '<li class="meta">No custom attachments yet.</li>';
+      return;
+    }
+    list.innerHTML = this.attachmentLibrary
+      .map((entry) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${entry.label}</strong>
+            <p class="meta">${entry.type} · ${entry.url}</p>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-attachment-use" data-attachment-id="${entry.id}">Use</button>
+            <button type="button" data-action="composer-attachment-stego" data-attachment-id="${entry.id}">Add stego</button>
+            <button type="button" data-action="composer-attachment-delete" data-attachment-id="${entry.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const entry = this.attachmentLibrary.find((item) => item.id === button.dataset.attachmentId);
+        if (!entry) return;
+        const prefix = entry.type === "audio" ? " 🎧" : entry.type === "video" ? " 🎬" : entry.type === "meme" ? " 😂" : " 🖼️";
+        this.applyComposerSnippet(` ${prefix} [${entry.type}:${entry.label}](${entry.url})`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const entry = this.attachmentLibrary.find((item) => item.id === button.dataset.attachmentId);
+        if (!entry) return;
+        const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+        const hidden = hiddenInput?.value.trim() || "hidden-message";
+        this.applyComposerSnippet(` [stego-attachment type="${entry.type}" hidden="${hidden}"][${entry.label}](${entry.url})[/stego-attachment]`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.dataset.attachmentId;
+        if (!id) return;
+        this.attachmentLibrary = this.attachmentLibrary.filter((entry) => entry.id !== id);
+        this.persistAttachmentLibrary();
+        this.refreshAttachmentLibraryUi();
+      });
+    });
+  }
+
+  private normalizeStegoChannelId(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "channel";
+  }
+
+  private persistStegoChannels(): void {
+    globalThis.localStorage.setItem(STEGO_CHANNEL_STORAGE_KEY, JSON.stringify(this.stegoChannels));
+  }
+
+  private loadStegoChannels(): StegoChannel[] {
+    const raw = globalThis.localStorage.getItem(STEGO_CHANNEL_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as StegoChannel[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item) => item && typeof item.id === "string" && typeof item.name === "string" && typeof item.passphrase === "string")
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          audience: item.audience ?? "General audience",
+          passphrase: item.passphrase,
+          rotationDays: Number.isFinite(item.rotationDays) ? Math.max(1, item.rotationDays) : 14,
+          updatedAt: item.updatedAt ?? new Date().toISOString(),
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  private persistGifLibrary(): void {
+    globalThis.localStorage.setItem(GIF_LIBRARY_STORAGE_KEY, JSON.stringify(this.gifLibrary));
+  }
+
+  private loadGifLibrary(): GifLibraryItem[] {
+    const raw = globalThis.localStorage.getItem(GIF_LIBRARY_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as GifLibraryItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  private persistEmojiLibrary(): void {
+    globalThis.localStorage.setItem(EMOJI_LIBRARY_STORAGE_KEY, JSON.stringify(this.emojiLibrary));
+  }
+
+  private loadEmojiLibrary(): EmojiLibraryItem[] {
+    const raw = globalThis.localStorage.getItem(EMOJI_LIBRARY_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as EmojiLibraryItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.symbol === "string" && typeof item.label === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  private persistAttachmentLibrary(): void {
+    globalThis.localStorage.setItem(ATTACHMENT_LIBRARY_STORAGE_KEY, JSON.stringify(this.attachmentLibrary));
+  }
+
+  private loadAttachmentLibrary(): AttachmentLibraryItem[] {
+    const raw = globalThis.localStorage.getItem(ATTACHMENT_LIBRARY_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as AttachmentLibraryItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string" && (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio"));
+    } catch {
+      return [];
+    }
   }
 
   private openFeatureById(featureId?: string): void {
