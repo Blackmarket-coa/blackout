@@ -68,4 +68,50 @@ describe("ApiClient", () => {
       message: "Request failed (500)",
     } satisfies Partial<ApiError>);
   });
+
+  it("uses expected v1 api paths across core endpoints", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const client = new ApiClient({ baseUrl: "https://api.example/", useMockApi: false });
+    const session = { jwt: "token", user: { id: "u1", username: "alice" } };
+
+    await client.getServers(session);
+    await client.getServerDetails(session, "srv_alpha");
+    await client.createChannel(session, "srv_alpha", "launch");
+    await client.getMessages(session, "chn_general");
+    await client.sendMessage(session, "chn_general", "hello");
+
+    expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.example/v1/servers",
+      "https://api.example/v1/servers/srv_alpha",
+      "https://api.example/v1/servers/srv_alpha/channels",
+      "https://api.example/v1/channels/chn_general/messages",
+      "https://api.example/v1/channels/chn_general/messages",
+    ]);
+  });
+
+  it("url-encodes dynamic path segments for server and channel routes", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const client = new ApiClient({ baseUrl: "https://api.example", useMockApi: false });
+    const session = { jwt: "token", user: { id: "u1", username: "alice" } };
+
+    await client.getServerDetails(session, "srv/team alpha");
+    await client.getMessages(session, "chn/general room");
+
+    expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
+      "https://api.example/v1/servers/srv%2Fteam%20alpha",
+      "https://api.example/v1/channels/chn%2Fgeneral%20room/messages",
+    ]);
+  });
 });
