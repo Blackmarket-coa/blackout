@@ -140,6 +140,20 @@ For steganography-specific changes, run targeted suites too:
 pnpm --filter @blackout/blackout-web test
 ```
 
+### Tools
+
+Use these local tools to speed up debugging and verification while iterating:
+
+| Tool | Purpose | Command |
+| --- | --- | --- |
+| Turbo task graph | Run only affected workspace tasks | `pnpm turbo run lint test --filter=@blackout/blackout-web` |
+| Frontend unit/integration | Validate web behavior in isolation | `pnpm --filter @blackout/blackout-web test:unit && pnpm --filter @blackout/blackout-web test:integration` |
+| End-to-end checks | Verify user flows against a running app | `pnpm --filter @blackout/blackout-web test:e2e` |
+| CI parity scripts | Reproduce centralized CI checks locally | `pnpm ci:parity` |
+| Smoke-aligned checks | Run the supported smoke check bundle | `pnpm smoke:aligned` |
+
+Tip: start with package-scoped checks, then run parity/smoke commands before opening a PR.
+
 Helpful docs:
 
 1. `developer_guide.md`
