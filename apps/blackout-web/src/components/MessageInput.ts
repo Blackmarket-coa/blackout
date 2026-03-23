@@ -28,7 +28,7 @@ export function renderMessageInput({
   const advancedActions = [
     composerRepliesEnabled ? '<option value="reply">Reply template</option>' : "",
     composerEditsEnabled ? '<option value="edit">Edit note</option>' : "",
-    composerRedactionsEnabled ? '<option value="redact">Redact placeholder</option>' : "",
+    composerRedactionsEnabled ? '<option value="redact">Redact message</option>' : "",
     mediaCodeBlocksEnabled ? '<option value="code">Code snippet</option>' : "",
     mediaSpoilersEnabled ? '<option value="spoiler">Spoiler wrapper</option>' : "",
   ]
