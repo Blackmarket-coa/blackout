@@ -960,6 +960,30 @@ export class BlackoutWebApp {
       this.closeComposerPanels();
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-file']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" [file:quarterly-plan.pdf](https://files.examplecdn.com/quarterly-plan.pdf)");
+      this.closeComposerPanels();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
+      this.closeComposerPanels();
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
       const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
       const coverInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']");
