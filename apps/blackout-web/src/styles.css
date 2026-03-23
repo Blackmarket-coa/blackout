@@ -760,6 +760,71 @@ body {
   grid-template-rows: auto 1fr;
 }
 
+.dm-hub-card {
+  border: 1px solid #2a2d34;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #101116;
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.dm-hub-shell {
+  list-style: none;
+}
+
+.dm-hub-search {
+  width: 100%;
+  border: 1px solid #2c2f37;
+  border-radius: 10px;
+  background: #181b23;
+  color: #eceff6;
+  font-size: 0.94rem;
+  padding: 0.62rem 0.72rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dm-hub-search:hover {
+  background: #222634;
+  border-color: #404759;
+}
+
+.dm-hub-list {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.dm-hub-item {
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #d8dde7;
+  padding: 0.48rem 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+}
+
+.dm-hub-item:hover {
+  background: #1d2028;
+  border-color: #303545;
+}
+
+.dm-hub-item--active {
+  background: #2c2f39;
+  border-color: #3a3f4e;
+  color: #f6f7fb;
+}
+
+.dm-hub-icon {
+  width: 1.1rem;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
 .repo-tools-list {
   list-style: none;
   margin: 0;
