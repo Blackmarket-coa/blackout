@@ -196,7 +196,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -733,6 +733,68 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderSubscriptionPanelSection(): string {
+    const plans = [
+      { name: "Free", price: "$0", highlights: "Core chat, basic steg, community rooms" },
+      { name: "Signal", price: "$4.99/mo", highlights: "Advanced steg codecs + media vault" },
+      { name: "Coalition", price: "$9/mo org", highlights: "Governance rooms, quests, monetization" },
+      { name: "Sovereign", price: "$29/mo org", highlights: "Townhall SFU + federation controls" },
+    ];
+
+    return `
+      <section class="stack panel-card subscription-panel" data-testid="subscription-panel">
+        <h2>Subscription panel</h2>
+        <p class="meta">Plan comparison and add-ons from the Blackout UI plan.</p>
+        <div class="subscription-grid">
+          ${plans
+            .map(
+              (plan) => `
+                <article class="subscription-card">
+                  <h3>${plan.name}</h3>
+                  <strong>${plan.price}</strong>
+                  <p class="meta">${plan.highlights}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+        <div class="subscription-addons">
+          <span class="meta">Add-ons:</span>
+          <span>Self-Healing ($19/mo)</span>
+          <span>Steg Voting Compliance ($49/mo)</span>
+          <span>Bounty Payroll ($9/mo)</span>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderUpgradePromptSection(): string {
+    const prompts = [
+      { trigger: "Select advanced steg codec", location: "Stego panel dropdown", plan: "Signal" },
+      { trigger: "Open Governance room tab", location: "Room header tabs", plan: "Coalition" },
+      { trigger: "Start Townhall mode", location: "Call modal", plan: "Sovereign" },
+      { trigger: "Enable federation dashboard", location: "Admin federation tab", plan: "Sovereign + add-on" },
+    ];
+
+    return `
+      <section class="stack panel-card upgrade-prompts-panel" data-testid="upgrade-prompts-panel">
+        <h2>Contextual upgrade prompts</h2>
+        <p class="meta">Inline triggers should appear at point-of-need, not as generic banner spam.</p>
+        <div class="upgrade-prompt-table">
+          ${prompts
+            .map(
+              (prompt) => `
+                <div><strong>${prompt.trigger}</strong></div>
+                <div class="meta">${prompt.location}</div>
+                <div>${prompt.plan}</div>
+              `,
+            )
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
   private parseTheme(theme: string | null): ThemeKey {
     if (theme === "light_grove" || theme === "amoled_night") {
       return theme;
@@ -1090,6 +1152,13 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
+      this.settingsOpen = true;
+      this.featureActionResult = "Opened Subscription panel. Upgrade to Signal to unlock advanced codecs and batch mode.";
+      this.closeComposerPanels();
+      this.render();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-encode']")?.addEventListener("click", () => {

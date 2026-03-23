@@ -433,6 +433,37 @@ body {
   gap: 0.5rem;
 }
 
+.subscription-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+}
+
+.subscription-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: color-mix(in srgb, var(--panel-bg) 80%, black 20%);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.subscription-card h3 {
+  margin: 0;
+}
+
+.subscription-addons {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.upgrade-prompt-table {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  gap: 0.35rem 0.8rem;
+  align-items: center;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);

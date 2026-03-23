@@ -225,12 +225,16 @@ export function renderMessageInput({
                   <label class="composer-popover-field">Passphrase
                     <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
                   </label>
-                  <label class="composer-popover-field">Algorithm
+                  <label class="composer-popover-field">Codec
                     <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
-                      <option value="lsb-aes-256-cbc">LSB + AES-256-CBC</option>
-                      <option value="lsb-aes-256-gcm">LSB + AES-256-GCM</option>
+                      <option value="basic-lsb-image">Basic LSB (Image)</option>
+                      <option value="dct-image" disabled>DCT Image (Signal lock)</option>
+                      <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
+                      <option value="audio-phase" disabled>Audio Phase (Signal lock)</option>
+                      <option value="batch-mode" disabled>Batch Mode (Signal lock)</option>
                     </select>
                   </label>
+                  <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
                   <label class="composer-popover-field">Stego channel
                     <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
                       <option value="">No saved channel</option>
