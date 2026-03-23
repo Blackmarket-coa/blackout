@@ -17,6 +17,7 @@ import type { ChatMessage, ServerDetails } from "./types";
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
+type ThemeKey = "blackout_modern" | "legacy_matrix_classic" | "legacy_terminal";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -43,6 +44,7 @@ export class BlackoutWebApp {
   private composerIsTyping = false;
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
+  private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
   private readonly hasSeenFeatureTooltips: boolean;
@@ -119,6 +121,8 @@ export class BlackoutWebApp {
     this.appliedFeatures = Object.keys(runtimeConfig.presets.features).length
       ? { ...runtimeConfig.presets.features }
       : { ...FEATURE_PRESET_BUNDLES[runtimeConfig.presets.activePreset] };
+    const storedTheme = globalThis.localStorage.getItem("blackout.theme");
+    this.selectedTheme = this.parseTheme(storedTheme);
   }
 
   async mount(): Promise<void> {
@@ -127,6 +131,7 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
+    this.applyTheme(this.selectedTheme);
     this.render();
 
     const state = this.store.getState();
@@ -162,7 +167,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -573,6 +578,43 @@ export class BlackoutWebApp {
     return `<option value="${preset}" ${this.selectedPreset === preset ? "selected" : ""}>${preset}</option>`;
   }
 
+  private renderThemeManagementSection(): string {
+    const themes: Array<{ id: ThemeKey; label: string; description: string }> = [
+      { id: "blackout_modern", label: "Blackout modern", description: "Current default styling optimized for daily chat." },
+      { id: "legacy_matrix_classic", label: "Legacy Matrix classic", description: "Classic pre-refresh palette and panel contrast." },
+      { id: "legacy_terminal", label: "Legacy terminal", description: "Green-on-dark high-contrast operations theme." },
+    ];
+
+    return `
+      <section class="stack panel-card theme-panel" data-testid="theme-panel">
+        <h2>Theme selection</h2>
+        <p class="meta">Legacy themes are now selectable for teams that prefer older visual styles.</p>
+        <label class="theme-select">
+          <span>Active theme</span>
+          <select data-action="select-theme" data-testid="theme-select">
+            ${themes.map((theme) => `<option value="${theme.id}" ${theme.id === this.selectedTheme ? "selected" : ""}>${theme.label}</option>`).join("")}
+          </select>
+        </label>
+        <ul class="theme-list">
+          ${themes.map((theme) => `<li class="meta"><strong>${theme.label}</strong>: ${theme.description}</li>`).join("")}
+        </ul>
+      </section>
+    `;
+  }
+
+  private parseTheme(theme: string | null): ThemeKey {
+    if (theme === "legacy_matrix_classic" || theme === "legacy_terminal") {
+      return theme;
+    }
+    return "blackout_modern";
+  }
+
+  private applyTheme(theme: ThemeKey): void {
+    this.selectedTheme = theme;
+    globalThis.document.documentElement.dataset.theme = theme;
+    globalThis.localStorage.setItem("blackout.theme", theme);
+  }
+
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
@@ -756,6 +798,12 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
       this.selectedPreset = value;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='select-theme']")?.addEventListener("change", (event) => {
+      const value = this.parseTheme((event.currentTarget as HTMLSelectElement).value);
+      this.applyTheme(value);
       this.render();
     });
 

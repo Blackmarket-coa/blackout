@@ -3,6 +3,45 @@
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background: #101114;
   color: #f2f3f5;
+  --app-bg: #15171b;
+  --header-border: #2a2c31;
+  --header-bg: linear-gradient(135deg, #233149, #161b24 65%);
+  --workspace-bg: #171a21;
+  --workspace-border: #2a2d35;
+  --sidebar-bg: linear-gradient(180deg, #44125f 0%, #5a1f74 48%, #6b2a7d 100%);
+  --panel-bg: #23272f;
+  --panel-bg-alt: #262b33;
+  --panel-border: #3a3f49;
+  --text-strong: #f2f3f5;
+  --text-muted: #b5bac1;
+}
+
+:root[data-theme="legacy_matrix_classic"] {
+  --app-bg: #0f1116;
+  --header-border: #3b4558;
+  --header-bg: linear-gradient(135deg, #1d2a42, #111722 68%);
+  --workspace-bg: #111722;
+  --workspace-border: #374357;
+  --sidebar-bg: linear-gradient(180deg, #24334b 0%, #2c3f61 55%, #355077 100%);
+  --panel-bg: #1f2838;
+  --panel-bg-alt: #253145;
+  --panel-border: #445674;
+  --text-strong: #e7ecf7;
+  --text-muted: #b4c0d7;
+}
+
+:root[data-theme="legacy_terminal"] {
+  --app-bg: #050907;
+  --header-border: #1f6b3f;
+  --header-bg: linear-gradient(135deg, #0f281c, #09140f 66%);
+  --workspace-bg: #07110b;
+  --workspace-border: #1f6b3f;
+  --sidebar-bg: linear-gradient(180deg, #0b2f1d 0%, #0d3a24 55%, #11552f 100%);
+  --panel-bg: #0d1f16;
+  --panel-bg-alt: #10281b;
+  --panel-border: #2a8a55;
+  --text-strong: #d6ffe8;
+  --text-muted: #91c9ab;
 }
 
 * {
@@ -12,7 +51,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: #15171b;
+  background: var(--app-bg);
+  color: var(--text-strong);
 }
 
 .container {
@@ -30,9 +70,9 @@ body {
 
 .header {
   padding: 1.1rem 1.2rem;
-  border: 1px solid #2a2c31;
+  border: 1px solid var(--header-border);
   border-radius: 16px;
-  background: linear-gradient(135deg, #233149, #161b24 65%);
+  background: var(--header-bg);
   box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
 }
 
@@ -48,7 +88,7 @@ body {
 
 .meta {
   margin: 0.25rem 0 0;
-  color: #b5bac1;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -99,9 +139,9 @@ body {
 }
 
 .feature-rail-btn {
-  border: 1px solid #3a3f49;
-  background: #23272f;
-  color: #f2f3f5;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text-strong);
   border-radius: 14px;
   width: 44px;
   height: 44px;
@@ -129,9 +169,9 @@ body {
 }
 
 .feature-chip {
-  border: 1px solid #3a3f49;
-  background: #262b33;
-  color: #f2f3f5;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg-alt);
+  color: var(--text-strong);
   border-radius: 10px;
   padding: 0.5rem 0.7rem;
   cursor: pointer;
@@ -176,10 +216,10 @@ body {
   display: grid;
   grid-template-columns: 72px 300px minmax(0, 1fr);
   gap: 0.2rem;
-  border: 1px solid #2a2d35;
+  border: 1px solid var(--workspace-border);
   border-radius: 16px;
   overflow: hidden;
-  background: #171a21;
+  background: var(--workspace-bg);
 }
 
 .workspace--compact {
@@ -209,13 +249,33 @@ body {
 }
 
 .server-sidebar {
-  background: linear-gradient(180deg, #44125f 0%, #5a1f74 48%, #6b2a7d 100%);
+  background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
   padding: 0.75rem 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.7rem;
+}
+
+.theme-panel {
+  gap: 0.6rem;
+}
+
+.theme-select {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.theme-select select {
+  max-width: 340px;
+}
+
+.theme-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .chat-head {
