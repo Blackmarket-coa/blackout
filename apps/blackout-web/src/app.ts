@@ -2,6 +2,7 @@ import { ApiError, type GatewayEvent } from "./api/client";
 import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
+import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderAuthView } from "./features/auth/auth-view";
@@ -68,6 +69,7 @@ export class BlackoutWebApp {
   private activeRightPanel: RightPanelView | null = null;
   private activeGovernanceTab: GovernanceRoomTab = "feed";
   private governanceProposalModalOpen = false;
+  private activeEconomicsTab: EconomicsTab = "boosts";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -253,12 +255,20 @@ export class BlackoutWebApp {
     const state = this.store.getState();
     const activeChannelName = state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "";
     const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
+    const isEconomicsRoom = /\b(boost|subscription|quest|market|wallet|monetization)\b/i.test(activeChannelName);
 
     if (isGovernanceRoom) {
       return renderGovernanceRoomPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeGovernanceTab,
         showProposalModal: this.governanceProposalModalOpen,
+      });
+    }
+
+    if (isEconomicsRoom) {
+      return renderEconomicsPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeEconomicsTab,
       });
     }
 
@@ -1116,6 +1126,15 @@ export class BlackoutWebApp {
         const target = event.target as HTMLElement;
         if (element.classList.contains("modal") && target.closest(".modal-content")) return;
         this.governanceProposalModalOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='economics-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as EconomicsTab | undefined;
+        if (!tab) return;
+        this.activeEconomicsTab = tab;
         this.render();
       });
     });

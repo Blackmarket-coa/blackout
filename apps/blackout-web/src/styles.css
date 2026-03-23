@@ -464,6 +464,54 @@ body {
   align-items: center;
 }
 
+.economics-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: linear-gradient(160deg, var(--panel-bg-alt) 0%, var(--workspace-bg) 70%);
+}
+
+.economics-panel-header h2 {
+  margin: 0;
+}
+
+.economics-tabs {
+  display: inline-flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.55rem;
+}
+
+.economics-tabs button {
+  width: auto;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.economics-tabs button.is-active {
+  color: var(--text-strong);
+  border-color: var(--accent-teal);
+  background: color-mix(in srgb, var(--accent-teal) 18%, transparent);
+}
+
+.economics-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.economics-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: color-mix(in srgb, var(--panel-bg) 80%, black 20%);
+}
+
+.economics-card h3 {
+  margin: 0 0 0.35rem;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
