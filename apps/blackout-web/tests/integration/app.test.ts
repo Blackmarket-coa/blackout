@@ -421,6 +421,25 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(gifTrigger as HTMLButtonElement);
     fireEvent.click(root.querySelector("[data-action='composer-select-gif']") as HTMLButtonElement);
     expect(composer.value).toContain("giphy.gif");
+    fireEvent.click(gifTrigger as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-gif-label']") as HTMLInputElement, { target: { value: "Ship it" } });
+    fireEvent.input(root.querySelector("[data-action='composer-gif-url']") as HTMLInputElement, { target: { value: "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif" } });
+    fireEvent.click(root.querySelector("[data-action='composer-gif-add']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-gif-export']") as HTMLButtonElement);
+    expect((root.querySelector("[data-action='composer-gif-import-json']") as HTMLTextAreaElement).value).toContain("Ship it");
+    fireEvent.click(root.querySelector("[data-action='composer-gif-stego']") as HTMLButtonElement);
+    expect(composer.value).toContain("[stego-media");
+
+    const emojiTrigger = root.querySelector('[data-testid="composer-emoji-trigger"]') as HTMLButtonElement | null;
+    expect(emojiTrigger).toBeTruthy();
+    fireEvent.click(emojiTrigger as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-emoji-symbol']") as HTMLInputElement, { target: { value: "🛰️" } });
+    fireEvent.input(root.querySelector("[data-action='composer-emoji-label']") as HTMLInputElement, { target: { value: "Satellite" } });
+    fireEvent.click(root.querySelector("[data-action='composer-emoji-add']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-emoji-export']") as HTMLButtonElement);
+    expect((root.querySelector("[data-action='composer-emoji-import-json']") as HTMLTextAreaElement).value).toContain("Satellite");
+    fireEvent.click(root.querySelector("[data-action='composer-emoji-stego']") as HTMLButtonElement);
+    expect(composer.value).toContain("[stego-emoji");
 
     const stickerTrigger = root.querySelector('[data-testid="composer-sticker-trigger"]') as HTMLButtonElement | null;
     expect(stickerTrigger).toBeTruthy();

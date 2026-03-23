@@ -26,8 +26,12 @@ type StegoChannel = {
   rotationDays: number;
   updatedAt: string;
 };
+type GifLibraryItem = { id: string; label: string; url: string };
+type EmojiLibraryItem = { id: string; symbol: string; label: string };
 
 const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
+const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
+const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -59,6 +63,8 @@ export class BlackoutWebApp {
   private readonly trackedDenials = new Set<string>();
   private readonly hasSeenFeatureTooltips: boolean;
   private stegoChannels: StegoChannel[] = [];
+  private gifLibrary: GifLibraryItem[] = [];
+  private emojiLibrary: EmojiLibraryItem[] = [];
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -135,6 +141,8 @@ export class BlackoutWebApp {
     const storedTheme = globalThis.localStorage.getItem("blackout.theme");
     this.selectedTheme = this.parseTheme(storedTheme);
     this.stegoChannels = this.loadStegoChannels();
+    this.gifLibrary = this.loadGifLibrary();
+    this.emojiLibrary = this.loadEmojiLibrary();
   }
 
   async mount(): Promise<void> {
@@ -886,6 +894,10 @@ export class BlackoutWebApp {
       this.toggleComposerPanel("gif", "[data-action='composer-toggle-gif-picker']");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-emoji-picker']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("emoji", "[data-action='composer-toggle-emoji-picker']");
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-sticker-picker']")?.addEventListener("click", () => {
       this.toggleComposerPanel("sticker", "[data-action='composer-toggle-sticker-picker']");
     });
@@ -915,8 +927,13 @@ export class BlackoutWebApp {
       });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-quick-emoji']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" 😊");
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-emoji']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const snippet = button.dataset.snippet;
+        if (!snippet) return;
+        this.applyComposerSnippet(snippet);
+        this.closeComposerPanels();
+      });
     });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
@@ -1013,6 +1030,94 @@ export class BlackoutWebApp {
       this.switchStegoView("decrypt");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-add']")?.addEventListener("click", () => {
+      const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-gif-label']");
+      const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-gif-url']");
+      const label = labelInput?.value.trim() ?? "";
+      const url = urlInput?.value.trim() ?? "";
+      if (!label || !url) return;
+      const id = this.normalizeStegoChannelId(label);
+      const item: GifLibraryItem = { id, label, url };
+      const existing = this.gifLibrary.find((gif) => gif.id === id);
+      this.gifLibrary = existing ? this.gifLibrary.map((gif) => (gif.id === id ? item : gif)) : [...this.gifLibrary, item];
+      this.persistGifLibrary();
+      this.refreshGifLibraryUi();
+      if (labelInput) labelInput.value = "";
+      if (urlInput) urlInput.value = "";
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-export']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-gif-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.gifLibrary, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-gif-import']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-gif-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Array<{ label?: string; url?: string }>;
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => typeof item.label === "string" && typeof item.url === "string")
+          .map((item) => ({
+            id: this.normalizeStegoChannelId(item.label as string),
+            label: item.label as string,
+            url: item.url as string,
+          }));
+        this.gifLibrary = [...this.gifLibrary.filter((gif) => !imported.some((entry) => entry.id === gif.id)), ...imported];
+        this.persistGifLibrary();
+        this.refreshGifLibraryUi();
+      } catch {
+        return;
+      }
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-add']")?.addEventListener("click", () => {
+      const symbolInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-emoji-symbol']");
+      const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-emoji-label']");
+      const symbol = symbolInput?.value.trim() ?? "";
+      const label = labelInput?.value.trim() ?? symbol;
+      if (!symbol) return;
+      const id = this.normalizeStegoChannelId(label || symbol);
+      const item: EmojiLibraryItem = { id, symbol, label: label || symbol };
+      const existing = this.emojiLibrary.find((emoji) => emoji.id === id);
+      this.emojiLibrary = existing ? this.emojiLibrary.map((emoji) => (emoji.id === id ? item : emoji)) : [...this.emojiLibrary, item];
+      this.persistEmojiLibrary();
+      this.refreshEmojiLibraryUi();
+      if (symbolInput) symbolInput.value = "";
+      if (labelInput) labelInput.value = "";
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-export']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-emoji-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.emojiLibrary, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-emoji-import']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-emoji-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as Array<{ symbol?: string; label?: string }>;
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => typeof item.symbol === "string")
+          .map((item) => ({
+            id: this.normalizeStegoChannelId((item.label as string) || (item.symbol as string)),
+            symbol: item.symbol as string,
+            label: (item.label as string) || (item.symbol as string),
+          }));
+        this.emojiLibrary = [...this.emojiLibrary.filter((emoji) => !imported.some((entry) => entry.id === emoji.id)), ...imported];
+        this.persistEmojiLibrary();
+        this.refreshEmojiLibraryUi();
+      } catch {
+        return;
+      }
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-save-channel']")?.addEventListener("click", () => {
       const nameInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-name']");
       const audienceInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-audience']");
@@ -1098,6 +1203,8 @@ export class BlackoutWebApp {
     });
 
     this.refreshStegoChannelUi();
+    this.refreshGifLibraryUi();
+    this.refreshEmojiLibraryUi();
     this.bindCommandPaletteFocusTrap();
   }
 
@@ -1159,7 +1266,7 @@ export class BlackoutWebApp {
     textarea.focus();
   }
 
-  private toggleComposerPanel(panelName: "attachments" | "gif" | "sticker" | "stego", triggerSelector: string): void {
+  private toggleComposerPanel(panelName: "attachments" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
     const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
     if (!panel || !trigger) return;
@@ -1177,7 +1284,7 @@ export class BlackoutWebApp {
       panel.classList.remove("is-open");
       panel.setAttribute("aria-hidden", "true");
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
     });
   }
@@ -1281,6 +1388,113 @@ export class BlackoutWebApp {
     });
   }
 
+  private refreshGifLibraryUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-gif-library-list']");
+    if (!list) return;
+    if (!this.gifLibrary.length) {
+      list.innerHTML = '<li class="meta">No custom GIFs yet.</li>';
+      return;
+    }
+    list.innerHTML = this.gifLibrary
+      .map((gif) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${gif.label}</strong>
+            <p class="meta">${gif.url}</p>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-gif-use" data-gif-id="${gif.id}">Use</button>
+            <button type="button" data-action="composer-gif-stego" data-gif-id="${gif.id}">Add stego</button>
+            <button type="button" data-action="composer-gif-delete" data-gif-id="${gif.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gif = this.gifLibrary.find((item) => item.id === button.dataset.gifId);
+        if (!gif) return;
+        this.applyComposerSnippet(` ![${gif.label}](${gif.url})`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gif = this.gifLibrary.find((item) => item.id === button.dataset.gifId);
+        if (!gif) return;
+        const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+        const hidden = hiddenInput?.value.trim() || "hidden-message";
+        this.applyComposerSnippet(` [stego-media kind="gif" hidden="${hidden}"]![${gif.label}](${gif.url})[/stego-media]`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-gif-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const gifId = button.dataset.gifId;
+        if (!gifId) return;
+        this.gifLibrary = this.gifLibrary.filter((gif) => gif.id !== gifId);
+        this.persistGifLibrary();
+        this.refreshGifLibraryUi();
+      });
+    });
+  }
+
+  private refreshEmojiLibraryUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-emoji-library-list']");
+    if (!list) return;
+    if (!this.emojiLibrary.length) {
+      list.innerHTML = '<li class="meta">No custom emoji yet.</li>';
+      return;
+    }
+    list.innerHTML = this.emojiLibrary
+      .map((emoji) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${emoji.symbol} ${emoji.label}</strong>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-emoji-use" data-emoji-id="${emoji.id}">Use</button>
+            <button type="button" data-action="composer-emoji-stego" data-emoji-id="${emoji.id}">Add stego</button>
+            <button type="button" data-action="composer-emoji-delete" data-emoji-id="${emoji.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emoji = this.emojiLibrary.find((item) => item.id === button.dataset.emojiId);
+        if (!emoji) return;
+        this.applyComposerSnippet(` ${emoji.symbol}`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emoji = this.emojiLibrary.find((item) => item.id === button.dataset.emojiId);
+        if (!emoji) return;
+        const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
+        const hidden = hiddenInput?.value.trim() || "hidden-message";
+        this.applyComposerSnippet(` [stego-emoji hidden="${hidden}"]${emoji.symbol}[/stego-emoji]`);
+        this.closeComposerPanels();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const emojiId = button.dataset.emojiId;
+        if (!emojiId) return;
+        this.emojiLibrary = this.emojiLibrary.filter((emoji) => emoji.id !== emojiId);
+        this.persistEmojiLibrary();
+        this.refreshEmojiLibraryUi();
+      });
+    });
+  }
+
   private normalizeStegoChannelId(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "channel";
   }
@@ -1305,6 +1519,38 @@ export class BlackoutWebApp {
           rotationDays: Number.isFinite(item.rotationDays) ? Math.max(1, item.rotationDays) : 14,
           updatedAt: item.updatedAt ?? new Date().toISOString(),
         }));
+    } catch {
+      return [];
+    }
+  }
+
+  private persistGifLibrary(): void {
+    globalThis.localStorage.setItem(GIF_LIBRARY_STORAGE_KEY, JSON.stringify(this.gifLibrary));
+  }
+
+  private loadGifLibrary(): GifLibraryItem[] {
+    const raw = globalThis.localStorage.getItem(GIF_LIBRARY_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as GifLibraryItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  private persistEmojiLibrary(): void {
+    globalThis.localStorage.setItem(EMOJI_LIBRARY_STORAGE_KEY, JSON.stringify(this.emojiLibrary));
+  }
+
+  private loadEmojiLibrary(): EmojiLibraryItem[] {
+    const raw = globalThis.localStorage.getItem(EMOJI_LIBRARY_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as EmojiLibraryItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.symbol === "string" && typeof item.label === "string");
     } catch {
       return [];
     }

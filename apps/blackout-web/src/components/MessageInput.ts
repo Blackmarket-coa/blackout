@@ -63,7 +63,7 @@ export function renderMessageInput({
         <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Message #channel" ${disabled ? "disabled" : ""}></textarea>
         <div class="composer-shell-actions">
           <button type="button" class="composer-shell-glyph" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="Open GIF picker" aria-expanded="false" ${disabled ? "disabled" : ""}>GIF</button>
-          <button type="button" class="composer-shell-glyph" data-action="composer-quick-emoji" aria-label="Insert emoji" title="Insert emoji" ${disabled ? "disabled" : ""}>😊</button>
+          <button type="button" class="composer-shell-glyph" data-action="composer-toggle-emoji-picker" data-testid="composer-emoji-trigger" aria-label="Open emoji picker" title="Open emoji picker" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
           ${stegoEnabled ? `<button type="button" class="composer-shell-glyph" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Open stego composer" aria-expanded="false" ${disabled ? "disabled" : ""}>🕶️</button>` : ""}
           <button type="button" class="composer-shell-glyph" data-action="composer-toggle-sticker-picker" data-testid="composer-sticker-trigger" aria-label="Open sticker picker" title="Open sticker picker" aria-expanded="false" ${disabled ? "disabled" : ""}>◌</button>
         </div>
@@ -83,6 +83,54 @@ export function renderMessageInput({
             <button type="button" data-action="composer-select-gif" data-snippet=" ![celebration gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW43bDFxa2V0NGRoMHY2MGp3aHJ2eGlpM3BsNmdreXVqZm45MG11dCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o6fJ1BM7R2EBRDnxK/giphy.gif)" ${disabled ? "disabled" : ""}>Celebration</button>
             <button type="button" data-action="composer-select-gif" data-snippet=" ![thumbs up gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdnVybmZwY2VjN2NkcjM2MHZxN3VxZXNnZXJpc3UxaDF0a2pxdGQ5NyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0HlBO7eyXzSZkJri/giphy.gif)" ${disabled ? "disabled" : ""}>Thumbs up</button>
             <button type="button" data-action="composer-select-gif" data-snippet=" ![mind blown gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbXdrb3B2OWFyMzcxMGl4cmQxNHNudTRsOGQzMHh6Y2xrNGVxcjJ4biZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26ufdipQqU2lhNA4g/giphy.gif)" ${disabled ? "disabled" : ""}>Mind blown</button>
+          </div>
+          <div class="composer-channel-editor">
+            <p class="composer-popover-title">GIF library tools</p>
+            <label class="composer-popover-field">Label
+              <input type="text" data-action="composer-gif-label" placeholder="Release dance" ${disabled ? "disabled" : ""} />
+            </label>
+            <label class="composer-popover-field">GIF URL
+              <input type="url" data-action="composer-gif-url" placeholder="https://media.giphy.com/.../giphy.gif" ${disabled ? "disabled" : ""} />
+            </label>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-gif-add" ${disabled ? "disabled" : ""}>Add GIF</button>
+              <button type="button" data-action="composer-gif-export" ${disabled ? "disabled" : ""}>Export GIFs</button>
+            </div>
+            <label class="composer-popover-field">Import GIF JSON
+              <textarea rows="2" data-action="composer-gif-import-json" placeholder='[{"label":"Wave","url":"https://...gif"}]' ${disabled ? "disabled" : ""}></textarea>
+            </label>
+            <button type="button" data-action="composer-gif-import" ${disabled ? "disabled" : ""}>Import GIFs</button>
+            <ul class="composer-channel-list" data-testid="composer-gif-library-list">
+              <li class="meta">No custom GIFs yet.</li>
+            </ul>
+          </div>
+        </section>
+        <section class="composer-popover" data-panel="emoji" data-testid="composer-emoji-panel" aria-hidden="true">
+          <p class="composer-popover-title">Emoji picker</p>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-select-emoji" data-snippet=" 😊" ${disabled ? "disabled" : ""}>😊</button>
+            <button type="button" data-action="composer-select-emoji" data-snippet=" 🔥" ${disabled ? "disabled" : ""}>🔥</button>
+            <button type="button" data-action="composer-select-emoji" data-snippet=" ✅" ${disabled ? "disabled" : ""}>✅</button>
+          </div>
+          <div class="composer-channel-editor">
+            <p class="composer-popover-title">Emoji pack tools</p>
+            <label class="composer-popover-field">Emoji
+              <input type="text" data-action="composer-emoji-symbol" placeholder="🛰️" ${disabled ? "disabled" : ""} />
+            </label>
+            <label class="composer-popover-field">Label
+              <input type="text" data-action="composer-emoji-label" placeholder="Satellite" ${disabled ? "disabled" : ""} />
+            </label>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-emoji-add" ${disabled ? "disabled" : ""}>Add emoji</button>
+              <button type="button" data-action="composer-emoji-export" ${disabled ? "disabled" : ""}>Export emoji</button>
+            </div>
+            <label class="composer-popover-field">Import emoji JSON
+              <textarea rows="2" data-action="composer-emoji-import-json" placeholder='[{"symbol":"🛰️","label":"Satellite"}]' ${disabled ? "disabled" : ""}></textarea>
+            </label>
+            <button type="button" data-action="composer-emoji-import" ${disabled ? "disabled" : ""}>Import emoji</button>
+            <ul class="composer-channel-list" data-testid="composer-emoji-library-list">
+              <li class="meta">No custom emoji yet.</li>
+            </ul>
           </div>
         </section>
         <section class="composer-popover" data-panel="sticker" data-testid="composer-sticker-panel" aria-hidden="true">
