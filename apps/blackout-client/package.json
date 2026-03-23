@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "test": "vitest run",
+    "test": "pnpm exec vitest run",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"
   },
