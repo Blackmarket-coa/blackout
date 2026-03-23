@@ -608,6 +608,10 @@ body {
   margin: 0 0 0.35rem;
 }
 
+.mobile-tabbar {
+  display: none;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
@@ -1489,6 +1493,43 @@ label {
     width: 100%;
     border-left: 0;
     box-shadow: none;
+  }
+
+  .mobile-tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.3rem;
+    padding: 0.45rem;
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--panel-bg) 88%, black 12%);
+    position: sticky;
+    bottom: 0.35rem;
+    z-index: 5;
+  }
+
+  .mobile-tab {
+    width: 100%;
+    border: 1px solid var(--panel-border);
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 10px;
+    padding: 0.35rem 0.2rem;
+    display: grid;
+    gap: 0.1rem;
+    place-items: center;
+    font-size: 0.72rem;
+  }
+
+  .mobile-tab small {
+    color: var(--accent-teal);
+    font-size: 0.65rem;
+  }
+
+  .mobile-tab.is-active {
+    color: var(--text-strong);
+    border-color: var(--accent-teal);
+    background: color-mix(in srgb, var(--accent-teal) 16%, transparent);
   }
 
   .governance-room-header {

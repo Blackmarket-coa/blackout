@@ -5,6 +5,7 @@ import { renderCreateEntityModal } from "./components/CreateEntityModal";
 import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
 import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
+import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderAuthView } from "./features/auth/auth-view";
@@ -74,6 +75,7 @@ export class BlackoutWebApp {
   private activeEconomicsTab: EconomicsTab = "boosts";
   private activeFederationTab: FederationTab = "health";
   private activeTownhallMode: TownhallMode = "standard";
+  private activeMobileTab: MobileTab = "spaces";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -210,6 +212,7 @@ export class BlackoutWebApp {
 
         ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth })}
         ${state.session ? this.renderFeatureToolbar() : ""}
+        ${state.session ? renderMobileTabBar({ activeTab: this.activeMobileTab }) : ""}
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
@@ -1173,6 +1176,32 @@ export class BlackoutWebApp {
         const mode = button.dataset.mode as TownhallMode | undefined;
         if (!mode) return;
         this.activeTownhallMode = mode;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='mobile-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as MobileTab | undefined;
+        if (!tab) return;
+        this.activeMobileTab = tab;
+        switch (tab) {
+          case "home":
+            this.activeWorkspacePanel = "dms";
+            break;
+          case "spaces":
+            this.activeWorkspacePanel = "chat";
+            break;
+          case "search":
+            this.activeWorkspacePanel = "activity";
+            break;
+          case "governance":
+            this.activeWorkspacePanel = "chat";
+            break;
+          case "profile":
+            this.settingsOpen = true;
+            break;
+        }
         this.render();
       });
     });
