@@ -344,7 +344,6 @@ export const MessageComposer = ({
   const [sending, setSending] = useState(false);
   const [hideDialogOpen, setHideDialogOpen] = useState(false);
   const [stegoAttachment, setStegoAttachment] = useState<File | null>(null);
-  const [stegoSubscription, setStegoSubscription] = useState(false);
   const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
   const [isMobileMenu, setIsMobileMenu] = useState(false);
   const [recentActions, setRecentActions] = useState<string[]>([]);
@@ -377,15 +376,6 @@ export const MessageComposer = ({
   const editMessage = useEditMessage(roomId);
   const matrixClient = useMatrixClient();
 
-  useEffect(() => {
-    const accountData = (matrixClient as unknown as { getAccountData: (type: string) => { getContent: <T>() => T } | null }).getAccountData(
-      'co.bmc.subscription',
-    );
-    const content = accountData?.getContent<Record<string, unknown>>() ?? {};
-    const tier = typeof content.tier === 'string' ? content.tier.toLowerCase() : '';
-    const active = content.active === true || tier.includes('stego') || tier.includes('pro') || tier.includes('paid');
-    setStegoSubscription(active);
-  }, [matrixClient]);
 
   useEffect(() => {
     if (!initialMarkdown) return;
@@ -718,7 +708,6 @@ export const MessageComposer = ({
       return;
     }
     if (actionLabel === 'Steganography') {
-      if (!stegoSubscription) return;
       setHideDialogOpen(true);
       setFeatureMenuOpen(false);
       return;
@@ -743,7 +732,7 @@ export const MessageComposer = ({
     if (actionLabel === 'Encryption preset') {
       setEncryptionPresetEnabled((active) => !active);
     }
-  }, [recordRecentAction, selectedCommand, startVoiceRecording, stegoSubscription, stopVoiceRecording, voiceRecording, voiceRecordingSupported]);
+  }, [recordRecentAction, selectedCommand, startVoiceRecording, stopVoiceRecording, voiceRecording, voiceRecordingSupported]);
 
   const handleKeyDown = useCallback(
     async (event: KeyboardEvent<HTMLDivElement>) => {
@@ -873,6 +862,27 @@ export const MessageComposer = ({
           >
             +
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setHideDialogOpen(true);
+              setFeatureMenuOpen(false);
+            }}
+            aria-label="Open steganography toolbox"
+            style={{
+              marginLeft: 8,
+              height: 32,
+              borderRadius: 999,
+              border: '1px solid var(--border-default)',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '0 12px',
+            }}
+          >
+            Stego
+          </button>
           {featureMenuOpen ? (
             <div
               ref={featureMenuRef}
@@ -908,14 +918,6 @@ export const MessageComposer = ({
                     key={action}
                     type="button"
                     onClick={() => applyFeatureAction(action)}
-                    disabled={action === 'Steganography' && !stegoSubscription}
-                    title={
-                      action !== 'Steganography'
-                        ? undefined
-                        : !stegoSubscription
-                          ? 'Encoding requires active Blackout paid subscription (co.bmc.subscription)'
-                          : 'Hide a secret message inside an image'
-                    }
                   >
                     {action}
                   </button>
