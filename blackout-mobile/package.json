@@ -2,16 +2,24 @@
   "name": "blackout-mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "Blackout mobile shell built with Capacitor",
+  "description": "Blackout mobile app - Capacitor wrapper around blackout-web",
   "scripts": {
+    "preflight": "node -e \"const [major]=process.versions.node.split('.').map(Number); if(major<22){console.error('Node.js 22+ is required for blackout-mobile'); process.exit(1)}; console.log('Node', process.versions.node, 'ok')\"",
+    "build": "pnpm build:web",
     "build:web": "cd .. && pnpm --filter @blackout/blackout-web build:web",
     "copy": "pnpm build:web && cap copy",
     "sync": "pnpm build:web && cap sync",
+    "sync:android": "pnpm build:web && cap sync android",
+    "sync:ios": "pnpm build:web && cap sync ios",
+    "dev": "pnpm preflight && pnpm build:web && echo 'Web bundle built. Run: pnpm sync:android or pnpm sync:ios (after platform setup)'",
+    "dev:live": "cap run",
     "add:ios": "cap add ios",
     "add:android": "cap add android",
     "open:ios": "cap open ios",
     "open:android": "cap open android",
-    "setup": "./scripts/setup-mobile.sh"
+    "setup": "./scripts/setup-mobile.sh",
+    "build:ios": "cap sync ios && cd ios/App && xcodebuild -workspace App.xcworkspace -scheme App -configuration Release archive",
+    "build:android": "cap sync android && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
@@ -21,8 +29,11 @@
     "@capacitor/filesystem": "^7.0.0",
     "@capacitor/haptics": "^7.0.0",
     "@capacitor/ios": "^7.0.0",
+    "@capacitor/keyboard": "^7.0.0",
     "@capacitor/push-notifications": "^7.0.0",
-    "@capacitor/share": "^7.0.0"
+    "@capacitor/share": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",

@@ -102,6 +102,8 @@ export class BlackoutWebApp {
   private quickActionPopup: QuickActionPopup | null = null;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
   private governanceTemplates: GovernanceTemplateItem[] = [];
+  private mobileBridgeEventsBound = false;
+  private pendingMobileRoomId: string | null = null;
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -190,6 +192,7 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
+    this.bindMobileBridgeEvents();
     this.applyTheme(this.selectedTheme);
     this.render();
 
@@ -2573,7 +2576,82 @@ export class BlackoutWebApp {
       this.store.patch({ session, error: null });
       this.connectGateway();
       await this.loadServers();
+      if (this.pendingMobileRoomId) {
+        await this.navigateToMobileRoom(this.pendingMobileRoomId);
+        this.pendingMobileRoomId = null;
+      }
     });
+  }
+
+  private bindMobileBridgeEvents(): void {
+    if (this.mobileBridgeEventsBound) return;
+    this.mobileBridgeEventsBound = true;
+
+    globalThis.addEventListener("blackout:deep-link", (event) => {
+      const detail = (event as CustomEvent<{ url?: string }>).detail;
+      const roomId = this.extractRoomIdFromUrl(detail?.url);
+      if (!roomId) return;
+      void this.navigateToMobileRoom(roomId);
+    });
+
+    globalThis.addEventListener("blackout:push-action", (event) => {
+      const detail = (event as CustomEvent<{ notification?: { data?: { room_id?: string } } }>).detail;
+      const roomId = detail?.notification?.data?.room_id;
+      if (!roomId) return;
+      void this.navigateToMobileRoom(roomId);
+    });
+
+    globalThis.addEventListener("blackout:resume-sync", () => {
+      this.featureActionResult = "Mobile resume detected. Sync recovery started.";
+      this.render();
+      void this.recoverAfterReconnect();
+    });
+
+    globalThis.addEventListener("blackout:push-token", (event) => {
+      const detail = (event as CustomEvent<{ token?: string }>).detail;
+      if (!detail?.token) return;
+      globalThis.localStorage.setItem("blackout.mobile.pushToken", detail.token);
+      this.featureActionResult = "Mobile push token captured. Ready for gateway registration.";
+      this.render();
+    });
+  }
+
+  private extractRoomIdFromUrl(url?: string): string | null {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (!["matrix:", "blackout:"].includes(parsed.protocol)) return null;
+      if (parsed.hostname === "room" && parsed.pathname.length > 1) {
+        return decodeURIComponent(parsed.pathname.slice(1));
+      }
+      const queryRoom = parsed.searchParams.get("room_id") ?? parsed.searchParams.get("roomId");
+      return queryRoom?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async navigateToMobileRoom(roomId: string): Promise<void> {
+    const state = this.store.getState();
+    if (!state.session) {
+      this.pendingMobileRoomId = roomId;
+      this.store.patch({ error: "Sign in to open the mobile deep link target room." });
+      this.render();
+      return;
+    }
+
+    const targetChannel = state.channels.find((channel) => channel.id === roomId);
+    if (!targetChannel) {
+      this.featureActionResult = `Mobile room ${roomId} was received but is not available in the active server.`;
+      this.render();
+      return;
+    }
+
+    this.activeWorkspacePanel = "chat";
+    this.repoToolsOpen = false;
+    await this.openChannel(targetChannel.id);
+    this.featureActionResult = `Opened mobile-linked room ${targetChannel.id}.`;
+    this.render();
   }
 
   private async loadServers(): Promise<void> {

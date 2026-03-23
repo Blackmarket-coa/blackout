@@ -67,12 +67,17 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/mobile run build
+      - run: pnpm --filter blackout-mobile run sync:android
+      - run: cd blackout-mobile/android && ./gradlew assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: blackout-mobile-${{ github.ref_name }}
-          path: apps/mobile/dist
+          path: blackout-mobile/android/app/build/outputs/**/*.apk
           if-no-files-found: warn
 
   release:
