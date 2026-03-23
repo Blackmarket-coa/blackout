@@ -773,6 +773,13 @@ body {
   padding: 0.18rem 0.42rem;
   background: #161a24;
   font-weight: 600;
+  color: #c4cada;
+  cursor: pointer;
+}
+
+.composer-shell-glyph:hover {
+  border-color: #4f8ef7;
+  background: #20283a;
 }
 
 input,
