@@ -6,6 +6,7 @@ import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsP
 import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
+import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
@@ -72,6 +73,7 @@ export class BlackoutWebApp {
   private governanceProposalModalOpen = false;
   private activeEconomicsTab: EconomicsTab = "boosts";
   private activeFederationTab: FederationTab = "health";
+  private activeTownhallMode: TownhallMode = "standard";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -259,6 +261,7 @@ export class BlackoutWebApp {
     const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
     const isEconomicsRoom = /\b(boost|subscription|quest|market|wallet|monetization)\b/i.test(activeChannelName);
     const isFederationRoom = /\b(federation|mesh|replication|recovery|self-healing)\b/i.test(activeChannelName);
+    const isTownhallRoom = /\b(townhall|assembly|stage|all-hands)\b/i.test(activeChannelName);
 
     if (isGovernanceRoom) {
       return renderGovernanceRoomPanel({
@@ -279,6 +282,13 @@ export class BlackoutWebApp {
       return renderFederationPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeFederationTab,
+      });
+    }
+
+    if (isTownhallRoom) {
+      return renderTownhallPanel({
+        channelLabel: activeChannelName,
+        mode: this.activeTownhallMode,
       });
     }
 
@@ -1154,6 +1164,15 @@ export class BlackoutWebApp {
         const tab = button.dataset.tab as FederationTab | undefined;
         if (!tab) return;
         this.activeFederationTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='townhall-set-mode']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode as TownhallMode | undefined;
+        if (!mode) return;
+        this.activeTownhallMode = mode;
         this.render();
       });
     });
