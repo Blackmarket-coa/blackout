@@ -882,6 +882,18 @@ export class BlackoutWebApp {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-encode']")?.addEventListener("click", () => {
+      this.switchStegoView("encode");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-decrypt']")?.addEventListener("click", () => {
+      this.switchStegoView("decrypt");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-password']")?.addEventListener("click", () => {
+      this.switchStegoView("password");
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-gif']").forEach((button) => {
       button.addEventListener("click", () => {
         const snippet = button.dataset.snippet;
@@ -922,22 +934,68 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
       const hiddenInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']");
       const coverInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      const algorithmSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-stego-algorithm']");
+      const ephemeralCheckbox = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-ephemeral']");
+      const ttlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-ttl']");
       const hidden = hiddenInput?.value.trim() || "hidden-message";
       const cover = coverInput?.value.trim() || "let's sync after standup";
-      this.applyComposerSnippet(` [stego hidden=\"${hidden}\"]${cover}[/stego]`);
+      const passphrase = passphraseInput?.value.trim() || "";
+      const algorithm = algorithmSelect?.value || "lsb-aes-256-cbc";
+      const ephemeral = ephemeralCheckbox?.checked ?? false;
+      const ttl = Math.max(1, Number.parseInt(ttlInput?.value ?? "24", 10) || 24);
+      const keyHint = passphrase ? `${passphrase.slice(0, 2)}***${passphrase.slice(-2)}` : "none";
+      const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
+      this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-gif']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [gif:https://media.example.com/reaction.gif]");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-decrypt-stego']")?.addEventListener("click", () => {
+      const payloadInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-stego-decrypt-payload']");
+      const payload = payloadInput?.value.trim() ?? "";
+      const match = payload.match(/\[stego ([^\]]+) hidden="([^"]+)"\]([\s\S]*?)\[\/stego\]/i);
+      if (!match) {
+        this.updateStegoDecryptResult("No stego payload found. Paste a [stego ...][/stego] packet.", true);
+        return;
+      }
+      const attrs = match[1];
+      const hidden = match[2];
+      const cover = match[3];
+      const algorithm = attrs.match(/algo="([^"]+)"/)?.[1] ?? "unknown";
+      const keyHint = attrs.match(/keyHint="([^"]+)"/)?.[1] ?? "none";
+      const lifecycle = attrs.match(/lifecycle="([^"]+)"/)?.[1] ?? "persistent";
+      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-quick-emoji']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" 😊");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-generate-passphrase']")?.addEventListener("click", () => {
+      const generated = this.generateStegoPassphrase();
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      if (generatedInput) generatedInput.value = generated;
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-quick-stego']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [stego::hidden-message]");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-copy-passphrase']")?.addEventListener("click", async () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || generated === "auto-generate to begin") return;
+      await globalThis.navigator.clipboard?.writeText?.(generated);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-use-passphrase-hide']")?.addEventListener("click", () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || !passphraseInput || generated === "auto-generate to begin") return;
+      passphraseInput.value = generated;
+      this.switchStegoView("encode");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-use-passphrase-decrypt']")?.addEventListener("click", () => {
+      const generatedInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-generated-passphrase']");
+      const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-decrypt-passphrase']");
+      const generated = generatedInput?.value?.trim();
+      if (!generated || !passphraseInput || generated === "auto-generate to begin") return;
+      passphraseInput.value = generated;
+      this.switchStegoView("decrypt");
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-sticker']")?.addEventListener("click", () => {
@@ -1066,6 +1124,31 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
     });
+  }
+
+  private switchStegoView(view: "encode" | "decrypt" | "password"): void {
+    this.root.querySelectorAll<HTMLElement>(".composer-stego-view").forEach((panel) => {
+      const isActive = panel.dataset.stegoView === view;
+      panel.classList.toggle("is-active", isActive);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-tab-encode'], [data-action='composer-stego-tab-decrypt'], [data-action='composer-stego-tab-password']").forEach((button) => {
+      const isActive = button.dataset.action === `composer-stego-tab-${view}`;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  }
+
+  private generateStegoPassphrase(length = 24): string {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*+-?";
+    const randomValues = globalThis.crypto.getRandomValues(new Uint32Array(length));
+    return Array.from(randomValues, (value) => alphabet[value % alphabet.length]).join("");
+  }
+
+  private updateStegoDecryptResult(message: string, isError = false): void {
+    const result = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-decrypt-result']");
+    if (!result) return;
+    result.textContent = message;
+    result.classList.toggle("composer-stego-result--error", isError);
   }
 
   private openFeatureById(featureId?: string): void {

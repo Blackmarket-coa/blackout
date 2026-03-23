@@ -97,13 +97,57 @@ export function renderMessageInput({
           stegoEnabled
             ? `<section class="composer-popover" data-panel="stego" data-testid="composer-stego-panel" aria-hidden="true">
                 <p class="composer-popover-title">Stego composer</p>
-                <label class="composer-popover-field">Hidden text
-                  <input type="text" data-action="composer-stego-hidden" value="hidden-message" ${disabled ? "disabled" : ""} />
-                </label>
-                <label class="composer-popover-field">Cover text
-                  <input type="text" data-action="composer-stego-cover" value="let's sync after standup" ${disabled ? "disabled" : ""} />
-                </label>
-                <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Insert stego payload</button>
+                <div class="composer-stego-tabs" role="tablist" aria-label="Stego tools">
+                  <button type="button" data-action="composer-stego-tab-encode" data-testid="composer-stego-tab-encode" class="is-active" role="tab" aria-selected="true" ${disabled ? "disabled" : ""}>Hide</button>
+                  <button type="button" data-action="composer-stego-tab-decrypt" data-testid="composer-stego-tab-decrypt" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Decrypt</button>
+                  <button type="button" data-action="composer-stego-tab-password" data-testid="composer-stego-tab-password" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Password</button>
+                </div>
+                <div class="composer-stego-view is-active" data-stego-view="encode">
+                  <label class="composer-popover-field">Hidden text
+                    <input type="text" data-action="composer-stego-hidden" value="hidden-message" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <label class="composer-popover-field">Cover text
+                    <input type="text" data-action="composer-stego-cover" value="let's sync after standup" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <label class="composer-popover-field">Passphrase
+                    <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <label class="composer-popover-field">Algorithm
+                    <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
+                      <option value="lsb-aes-256-cbc">LSB + AES-256-CBC</option>
+                      <option value="lsb-aes-256-gcm">LSB + AES-256-GCM</option>
+                    </select>
+                  </label>
+                  <label class="composer-popover-inline">
+                    <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
+                    Ephemeral message
+                  </label>
+                  <label class="composer-popover-field">TTL (hours)
+                    <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
+                </div>
+                <div class="composer-stego-view" data-stego-view="decrypt">
+                  <label class="composer-popover-field">Encoded payload
+                    <textarea rows="3" data-action="composer-stego-decrypt-payload" placeholder="Paste [stego ...]...[/stego] payload" ${disabled ? "disabled" : ""}></textarea>
+                  </label>
+                  <label class="composer-popover-field">Passphrase
+                    <input type="password" data-action="composer-stego-decrypt-passphrase" value="" placeholder="Passphrase used for hide step" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <button type="button" data-action="composer-decrypt-stego" ${disabled ? "disabled" : ""}>Decrypt payload</button>
+                  <p class="meta composer-stego-result" data-testid="composer-stego-decrypt-result">Decrypt a payload to inspect hidden content.</p>
+                </div>
+                <div class="composer-stego-view" data-stego-view="password">
+                  <label class="composer-popover-field">Suggested passphrase
+                    <input type="text" readonly data-action="composer-stego-generated-passphrase" value="auto-generate to begin" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <div class="composer-popover-actions">
+                    <button type="button" data-action="composer-stego-generate-passphrase" ${disabled ? "disabled" : ""}>Generate</button>
+                    <button type="button" data-action="composer-stego-copy-passphrase" ${disabled ? "disabled" : ""}>Copy</button>
+                    <button type="button" data-action="composer-stego-use-passphrase-hide" ${disabled ? "disabled" : ""}>Use for hide</button>
+                    <button type="button" data-action="composer-stego-use-passphrase-decrypt" ${disabled ? "disabled" : ""}>Use for decrypt</button>
+                  </div>
+                </div>
               </section>`
             : ""
         }

@@ -431,10 +431,22 @@ describe("BlackoutWebApp integration", () => {
     const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement | null;
     expect(stegoTrigger).toBeTruthy();
     fireEvent.click(stegoTrigger as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-stego-tab-password']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-stego-generate-passphrase']") as HTMLButtonElement);
+    const generatedPassphrase = (root.querySelector("[data-action='composer-stego-generated-passphrase']") as HTMLInputElement).value;
+    expect(generatedPassphrase).not.toBe("auto-generate to begin");
+    fireEvent.click(root.querySelector("[data-action='composer-stego-use-passphrase-hide']") as HTMLButtonElement);
     fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "drop at 5" } });
     fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all green for launch" } });
     fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
-    expect(composer.value).toContain('[stego hidden="drop at 5"]all green for launch[/stego]');
+    expect(composer.value).toContain('hidden="drop at 5"');
+    expect(composer.value).toContain("algo=");
+
+    fireEvent.click(stegoTrigger as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-stego-tab-decrypt']") as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-stego-decrypt-payload']") as HTMLTextAreaElement, { target: { value: '[stego algo="lsb-aes-256-cbc" keyHint="AA***ZZ" hidden="secret"]cover text[/stego]' } });
+    fireEvent.click(root.querySelector("[data-action='composer-decrypt-stego']") as HTMLButtonElement);
+    expect((root.querySelector('[data-testid="composer-stego-decrypt-result"]') as HTMLElement).textContent).toContain('Hidden: "secret"');
 
     const moreActions = root.querySelector<HTMLSelectElement>('[data-testid="composer-more-actions"]');
     expect(moreActions).toBeTruthy();

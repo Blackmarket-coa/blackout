@@ -841,6 +841,60 @@ body {
   padding: 0.38rem 0.45rem;
 }
 
+.composer-popover-field textarea,
+.composer-popover-field select {
+  border-radius: 8px;
+  border: 1px solid #3d4e6c;
+  background: #0d1522;
+  color: #edf2ff;
+  padding: 0.38rem 0.45rem;
+}
+
+.composer-stego-tabs {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.composer-stego-tabs button {
+  width: auto;
+  border-radius: 999px;
+  border: 1px solid #435172;
+  background: #1a2436;
+  color: #d5ddf1;
+  padding: 0.2rem 0.6rem;
+}
+
+.composer-stego-tabs button.is-active {
+  border-color: #4f8ef7;
+  background: #22385f;
+}
+
+.composer-stego-view {
+  display: none;
+  gap: 0.42rem;
+}
+
+.composer-stego-view.is-active {
+  display: grid;
+}
+
+.composer-popover-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #b4bfd8;
+  font-size: 0.82rem;
+}
+
+.composer-stego-result {
+  margin: 0;
+}
+
+.composer-stego-result--error {
+  color: #fca5a5;
+}
+
 input,
 textarea {
   width: 100%;
