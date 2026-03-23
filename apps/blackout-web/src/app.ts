@@ -28,6 +28,7 @@ type StegoChannel = {
 };
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
+type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
 type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
 type GovernanceTemplateItem = { id: string; title: string; type: "binary" | "multiple_choice" | "ranked"; options: string[]; durationHours: number };
 
@@ -69,6 +70,7 @@ export class BlackoutWebApp {
   private stegoChannels: StegoChannel[] = [];
   private gifLibrary: GifLibraryItem[] = [];
   private emojiLibrary: EmojiLibraryItem[] = [];
+  private quickActionPopup: QuickActionPopup | null = null;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
   private governanceTemplates: GovernanceTemplateItem[] = [];
 
@@ -200,6 +202,7 @@ export class BlackoutWebApp {
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
+      ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
     `;
 
     this.bindEvents();
@@ -549,6 +552,26 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderQuickActionPopup(): string {
+    if (!this.quickActionPopup) return "";
+    const { featureId, kind, name } = this.quickActionPopup;
+    const category = this.featureKindUi[kind];
+    return `
+      <div class="modal-backdrop" data-action="close-quick-action-popup">
+        <section class="modal" role="dialog" aria-modal="true" aria-label="Quick action feature popup">
+          <h3>Quick action</h3>
+          <p class="meta"><strong>${name}</strong></p>
+          <p class="meta">Category: ${category.label}</p>
+          <p class="meta">Feature id: ${featureId}</p>
+          <div class="modal-actions">
+            <button type="button" data-action="confirm-quick-action-popup" data-feature-id="${featureId}" data-feature-kind="${kind}">Open feature</button>
+            <button type="button" class="ghost-btn" data-action="close-quick-action-popup">Cancel</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
   private renderPresetManagementSection(): string {
     const previewFeatures = Object.entries(FEATURE_PRESET_BUNDLES[this.selectedPreset]);
     const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
@@ -882,9 +905,28 @@ export class BlackoutWebApp {
         const value = (event.currentTarget as HTMLSelectElement).value;
         if (!value) return;
         const [kind, featureId] = value.split("|") as [UiEntryKind, string];
+        this.showQuickActionPopup(featureId, kind);
         this.openFeatureById(featureId, kind);
         (event.currentTarget as HTMLSelectElement).value = "";
       });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-quick-action-popup']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (element.classList.contains("modal") || element.closest(".modal")) {
+          if ((event.target as HTMLElement).closest("[data-action='confirm-quick-action-popup']")) return;
+        }
+        this.quickActionPopup = null;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='confirm-quick-action-popup']")?.addEventListener("click", (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const featureId = button.dataset.featureId;
+      const kind = button.dataset.featureKind as UiEntryKind | undefined;
+      this.quickActionPopup = null;
+      this.openFeatureById(featureId, kind);
     });
 
 
@@ -1804,6 +1846,7 @@ export class BlackoutWebApp {
     }
   }
 
+  private openFeatureById(featureId?: string, requestedKind?: UiEntryKind): void {
   private persistAttachmentLibrary(): void {
     globalThis.localStorage.setItem(ATTACHMENT_LIBRARY_STORAGE_KEY, JSON.stringify(this.attachmentLibrary));
   }
@@ -1909,6 +1952,13 @@ export class BlackoutWebApp {
         this.repoToolsOpen = false;
         return "chat";
     }
+  }
+
+  private showQuickActionPopup(featureId: string, kind: UiEntryKind): void {
+    const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
+    if (!entry) return;
+    this.quickActionPopup = { featureId, kind, name: entry.name };
+    this.render();
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
