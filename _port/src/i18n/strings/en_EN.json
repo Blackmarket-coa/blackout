@@ -3071,7 +3071,14 @@
             "voice_section": "Voice settings"
         },
         "warn_quit": "Warn before quitting",
-        "warning": "<w>WARNING:</w> <description/>"
+        "warning": "<w>WARNING:</w> <description/>",
+        "page": {
+            "title": "Settings",
+            "section_user_settings": "User Settings",
+            "section_privacy_security": "Privacy & Security",
+            "section_advanced": "Advanced",
+            "close_settings": "Close Settings"
+        }
     },
     "share": {
         "link_copied": "Link copied",
