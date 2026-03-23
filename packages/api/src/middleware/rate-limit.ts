@@ -18,4 +18,8 @@ export async function rateLimit(c: Context, next: Next) {
   requests.set(key, history);
 
   await next();
+export function rateLimit() {
+  return async (_c: unknown, next: () => Promise<void>) => {
+    await next();
+  };
 }
