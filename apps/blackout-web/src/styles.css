@@ -895,6 +895,33 @@ body {
   color: #fca5a5;
 }
 
+.composer-channel-editor {
+  display: grid;
+  gap: 0.42rem;
+  padding-top: 0.2rem;
+  border-top: 1px solid #2e3d58;
+}
+
+.composer-channel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.composer-channel-row {
+  border: 1px solid #354763;
+  border-radius: 8px;
+  padding: 0.45rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.composer-channel-row strong {
+  font-size: 0.86rem;
+}
+
 input,
 textarea {
   width: 100%;
