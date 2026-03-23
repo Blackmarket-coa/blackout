@@ -7,7 +7,7 @@ import {
   type MatrixError,
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/auth';
+import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
 import { restoreActiveSession, type StoredSession } from './sessionManager';
 
 type AtomStore = ReturnType<typeof createStore>;
@@ -73,7 +73,7 @@ const ensureValidHomeserver = (baseUrl: string): void => {
 const applyAuthAtoms = (
   store: AtomStore,
   client: MatrixClient | null,
-  authState: 'loading' | 'logged_out' | 'logged_in',
+  authState: AuthState,
 ) => {
   store.set(matrixClientAtom, client);
   store.set(authStateAtom, authState);
