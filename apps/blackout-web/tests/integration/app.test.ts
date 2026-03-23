@@ -377,7 +377,7 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="typing-indicator"]')).toBeTruthy();
   });
 
-  it("shows stego and advanced composer actions in the message box when features are enabled", async () => {
+  it("supports attachment, GIF, sticker, and stego composer actions when features are enabled", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
@@ -409,10 +409,32 @@ describe("BlackoutWebApp integration", () => {
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
     if (!composer) throw new Error("missing composer");
 
-    const stegoButton = root.querySelector('[data-testid="composer-stego-button"]') as HTMLButtonElement | null;
-    expect(stegoButton).toBeTruthy();
-    fireEvent.click(stegoButton as HTMLButtonElement);
-    expect(composer.value).toContain("[stego::hidden-message]");
+    const attachmentTrigger = root.querySelector('[data-testid="composer-attachment-trigger"]') as HTMLButtonElement | null;
+    expect(attachmentTrigger).toBeTruthy();
+    fireEvent.click(attachmentTrigger as HTMLButtonElement);
+    expect((root.querySelector('[data-testid="composer-attachment-panel"]') as HTMLElement).classList.contains("is-open")).toBe(true);
+    fireEvent.click(root.querySelector("[data-action='composer-attach-image']") as HTMLButtonElement);
+    expect(composer.value).toContain("![uploaded image]");
+
+    const gifTrigger = root.querySelector('[data-testid="composer-gif-trigger"]') as HTMLButtonElement | null;
+    expect(gifTrigger).toBeTruthy();
+    fireEvent.click(gifTrigger as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-select-gif']") as HTMLButtonElement);
+    expect(composer.value).toContain("giphy.gif");
+
+    const stickerTrigger = root.querySelector('[data-testid="composer-sticker-trigger"]') as HTMLButtonElement | null;
+    expect(stickerTrigger).toBeTruthy();
+    fireEvent.click(stickerTrigger as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-select-sticker']") as HTMLButtonElement);
+    expect(composer.value).toContain("🐦✨");
+
+    const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement | null;
+    expect(stegoTrigger).toBeTruthy();
+    fireEvent.click(stegoTrigger as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "drop at 5" } });
+    fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all green for launch" } });
+    fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
+    expect(composer.value).toContain('[stego hidden="drop at 5"]all green for launch[/stego]');
 
     const moreActions = root.querySelector<HTMLSelectElement>('[data-testid="composer-more-actions"]');
     expect(moreActions).toBeTruthy();
