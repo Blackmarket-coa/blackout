@@ -17,6 +17,7 @@ import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import { isDirectMessageChannelName } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
@@ -402,7 +403,7 @@ export class BlackoutWebApp {
   private renderDmsPanel(): string {
     const state = this.store.getState();
     const items = state.channels
-      .filter((channel) => /^dm[\s-]/i.test(channel.name) || /\bdirect\b/i.test(channel.name))
+      .filter((channel) => isDirectMessageChannelName(channel.name))
       .map(
         (channel) => `
           <li class="repo-tools-item">
@@ -416,7 +417,7 @@ export class BlackoutWebApp {
       )
       .join("");
 
-    const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM-named channel (for example: "dm-alex") to populate this panel.</p></div></li>';
+    const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM-named channel (for example: "dm-alex" or "pm-sam") to populate this panel.</p></div></li>';
     return this.renderWorkspaceUtilityPage("Direct messages", "A focused panel for quick DM access.", items || fallback);
   }
 
