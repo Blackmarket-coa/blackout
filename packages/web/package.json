@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Scaffold-only web UI package (non-deploy); canonical frontend is @blackout/blackout-web",
+  "description": "Blackout web UI scaffold",
   "scripts": {
     "build": "node -e \"console.log('web build scaffold ok')\"",
     "lint": "node -e \"console.log('web lint scaffold ok')\"",

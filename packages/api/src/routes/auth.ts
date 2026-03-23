@@ -37,6 +37,10 @@ auth.post('/register', async (c) => {
     token,
     userId: user.id,
     matrix,
+  const body = await c.req.json();
+  return c.json({
+    token: `stub-token-${body.username ?? 'user'}`,
+    userId: crypto.randomUUID(),
   }, 201);
 });
 
@@ -54,6 +58,11 @@ auth.post('/login', async (c) => {
 
   const token = signJwt(user.id, user.username);
   return c.json({ token, userId: user.id });
+  const body = await c.req.json();
+  return c.json({
+    token: `stub-token-${body.email ?? 'user@example.com'}`,
+    userId: crypto.randomUUID(),
+  });
 });
 
 export default auth;
