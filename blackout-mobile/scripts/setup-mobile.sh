@@ -1,21 +1,84 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo -e "${BOLD}╔══════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║   Blackout Mobile Setup              ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════╝${NC}"
+echo ""
+
+# Check prerequisites
+MISSING=0
+
 if ! command -v pnpm >/dev/null 2>&1; then
-  echo "pnpm is required (npm i -g pnpm)."
+  echo -e "${RED}✗ pnpm not found${NC} — install with: npm i -g pnpm"
+  MISSING=1
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo -e "${RED}✗ node not found${NC} — install Node.js 22+"
+  MISSING=1
+else
+  echo -e "${GREEN}✓ node $(node --version)${NC}"
+fi
+
+if [ $MISSING -eq 1 ]; then
+  echo ""
+  echo -e "${RED}Missing prerequisites. Install them and re-run.${NC}"
   exit 1
 fi
 
 cd "$(dirname "$0")/.."
+
+# Install dependencies
+echo ""
+echo -e "${BOLD}Installing dependencies...${NC}"
 pnpm install
-pnpm sync
 
+# Build the web app
+echo ""
+echo -e "${BOLD}Building blackout-web...${NC}"
+pnpm build:web
+
+# Add native platforms if not present
 if [ ! -d "ios/App" ]; then
-  npx cap add ios
+  echo ""
+  echo -e "${BOLD}Adding iOS platform...${NC}"
+  npx cap add ios 2>/dev/null || echo -e "${YELLOW}⚠ iOS requires a Mac with Xcode${NC}"
 fi
 
-if [ ! -d "android/app" ]; then
-  npx cap add android
+if [ ! -d "android/app/src" ]; then
+  echo ""
+  echo -e "${BOLD}Adding Android platform...${NC}"
+  if command -v android >/dev/null 2>&1 || [ -n "${ANDROID_HOME:-}" ]; then
+    npx cap add android
+  else
+    echo -e "${YELLOW}⚠ Android SDK not found. Set ANDROID_HOME or install Android Studio.${NC}"
+    echo -e "${YELLOW}  You can add it later with: npx cap add android${NC}"
+  fi
 fi
 
-echo "Blackout mobile scaffold is ready."
+# Sync web build to native projects
+echo ""
+echo -e "${BOLD}Syncing web build to native projects...${NC}"
+npx cap sync 2>/dev/null || true
+
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║   Setup complete!                    ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
+echo ""
+echo "Next steps:"
+echo "  iOS:     npx cap open ios       (opens Xcode)"
+echo "  Android: npx cap open android   (opens Android Studio)"
+echo ""
+echo "For live reload during development:"
+echo "  1. Start the web dev server:  pnpm web:dev"
+echo "  2. Edit capacitor.config.ts → uncomment server.url"
+echo "  3. Set url to http://YOUR_IP:5173"
+echo "  4. Run: npx cap run ios  OR  npx cap run android"

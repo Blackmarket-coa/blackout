@@ -100,8 +100,8 @@ pnpm mobile:build
 Open native projects:
 
 ```bash
-pnpm mobile:ios
-pnpm mobile:android
+pnpm mobile:open:ios
+pnpm mobile:open:android
 ```
 
 On Windows, use the same command:

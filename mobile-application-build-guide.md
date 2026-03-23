@@ -31,8 +31,8 @@ Optional root shortcuts (wired to `blackout-mobile/`):
 ```bash
 pnpm mobile:build
 pnpm mobile:dev
-pnpm mobile:ios
-pnpm mobile:android
+pnpm mobile:open:ios
+pnpm mobile:open:android
 ```
 
 ## 3) Build the web bundle consumed by mobile
