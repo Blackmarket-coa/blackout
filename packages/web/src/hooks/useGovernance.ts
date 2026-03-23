@@ -1,7 +1,13 @@
+import { api } from '../lib/api';
+
 export function useGovernance() {
   return {
-    async castVote(voteId: string, choice: string) {
-      return { voteId, choice, success: true };
+    castVote(voteId: string, choice: string, userId = 'demo-user') {
+      return api.castVote(voteId, { userId, choice });
+    },
+
+    getVote(voteId: string) {
+      return api.getVote(voteId);
     },
   };
 }

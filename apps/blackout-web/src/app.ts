@@ -235,33 +235,6 @@ export class BlackoutWebApp {
     });
   }
 
-  private renderRepoToolsPage(): string {
-    const tools = [
-      { name: "Build", command: "pnpm build", description: "Run the monorepo build across packages." },
-      { name: "Lint", command: "pnpm lint", description: "Type and static checks via turbo tasks." },
-      { name: "Unit tests", command: "pnpm test", description: "Execute the repository test matrix." },
-      { name: "Feature registry guard", command: "pnpm guard:feature-registry", description: "Validate feature entrypoint declarations." },
-      { name: "Preset completeness", command: "pnpm guard:preset-complete", description: "Ensure feature presets remain complete and consistent." },
-      { name: "Port change guard", command: "pnpm guard:port", description: "Detect unauthorized port exposure changes." },
-    ];
-
-    const items = tools
-      .map(
-        (tool) => `
-          <li class="repo-tools-item">
-            <div>
-              <strong>${tool.name}</strong>
-              <p class="meta">${tool.description}</p>
-            </div>
-            <code>${tool.command}</code>
-          </li>
-        `,
-      )
-      .join("");
-
-    return this.renderWorkspaceUtilityPage("Repo tools", "Key repository scripts for validating and shipping safely.", items);
-  }
-
   private renderDmsPanel(): string {
     const state = this.store.getState();
     const items = state.channels
@@ -345,23 +318,6 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="open-chat-panel" aria-label="Back to chat">Back to chat</button>
         </div>
         <ul class="repo-tools-list">${items}</ul>
-        ${this.repoToolsOpen ? this.renderRepoToolsPage() : renderChatWindow({
-          channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
-          messages: state.messages,
-          canSend: Boolean(state.activeChannelId),
-          sendPending: state.loading.send,
-          richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
-          stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
-          composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
-          composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
-          composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
-          mediaCodeBlocksEnabled: this.getActivePresetFeatures()["features.media.codeBlocks"] ?? false,
-          mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
-          typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
-          showTypingIndicator: this.composerIsTyping,
-          compactMode: this.getCompactModeActive(),
-          compactRecommended: this.isMessageHeavySession(),
-        })}
       </section>
     `;
   }
@@ -762,6 +718,10 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-chat-panel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "chat";
+        this.render();
+      });
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;

@@ -56,3 +56,23 @@
 5. `eas build --platform ios --auto-submit` → ⚠️ unavailable (`eas` CLI missing).
 6. `eas build --platform android` → ⚠️ unavailable (`eas` CLI missing).
 7. Smoke tests / monitoring steps require deployable runtime + infra credentials and were not runnable in this container-only environment.
+
+## Follow-up Remediation Pass
+- ✅ Unblocked `apps/blackout-web` parse error by repairing malformed event binding structure in `bindEvents` and removing duplicate/corrupted workspace rendering segments.
+- ✅ Restored integration expectations for sidebar workspace names (`Alpha Ops`, `Beta Crew`) by rendering real server names in sidebar navigation.
+- ✅ Replaced API stubs with concrete service layers:
+  - In-memory persistence layer for users/channels/messages/votes/federation links
+  - Password hashing + JWT signing/verification
+  - Matrix registration/send integrations using homeserver APIs when configured
+  - Governance vote persistence and federation link persistence
+  - Added Phase 1 migration file under `packages/api/src/db/migrations/001_phase1_schema.sql`
+- ✅ Replaced web in-memory hooks with API-backed and websocket-backed client hooks (`useMessages`, `useGovernance`, `useFederation`).
+- ✅ Wired mobile auth and chat message flows (login API call, session state, message fetch/post path).
+
+## Deployment Checklist Re-run
+1. `npm run test` → ✅ pass.
+2. `npm run build` → ❌ fails in `apps/blackout-client` due existing TypeScript errors unrelated to this pass.
+3. `railway deploy` → ⚠️ unavailable (`railway` CLI missing).
+4. `vercel deploy --prod` → ⚠️ unavailable (`vercel` CLI missing).
+5. `eas build --platform ios --auto-submit` → ⚠️ unavailable (`eas` CLI missing).
+6. `eas build --platform android` → ⚠️ unavailable (`eas` CLI missing).

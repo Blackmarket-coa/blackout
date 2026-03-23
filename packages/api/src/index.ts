@@ -5,10 +5,14 @@ import messageRoutes from './routes/messages';
 import governanceRoutes from './routes/governance';
 import federationRoutes from './routes/federation';
 import channelRoutes from './routes/channels';
+import { authMiddleware } from './middleware/auth';
+import { rateLimit } from './middleware/rate-limit';
 
 const app = new Hono();
 
 app.use('*', cors());
+app.use('*', rateLimit);
+app.use('/api/*', authMiddleware);
 
 app.route('/api/auth', authRoutes);
 app.route('/api/messages', messageRoutes);
