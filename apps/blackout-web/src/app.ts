@@ -16,6 +16,7 @@ import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
@@ -411,14 +412,24 @@ export class BlackoutWebApp {
 
   private renderDmsPanel(): string {
     const state = this.store.getState();
-    const items = state.channels
-      .filter((channel) => /^dm[\s-]/i.test(channel.name) || /\bdirect\b/i.test(channel.name))
+    const dmChannels = getDirectMessageChannels(state.channels, state.unreadByChannel);
+    const starter = `
+      <li class="repo-tools-item">
+        <div>
+          <strong>Start a direct message</strong>
+          <p class="meta">Create a dedicated DM channel with a guided name prefix.</p>
+        </div>
+        <button type="button" class="ghost-btn" data-action="start-dm-channel">Start DM</button>
+      </li>
+    `;
+
+    const items = dmChannels
       .map(
-        (channel) => `
+        ({ channel, displayName, unreadCount }) => `
           <li class="repo-tools-item">
             <div>
-              <strong># ${channel.name}</strong>
-              <p class="meta">Open this conversation from your direct-message list.</p>
+              <strong>${displayName}${unreadCount > 0 ? ` <span class="badge">${unreadCount}</span>` : ""}</strong>
+              <p class="meta">#${channel.name} • Open this conversation from your direct-message list.</p>
             </div>
             <button type="button" class="ghost-btn" data-action="open-channel" data-channel-id="${channel.id}">Open</button>
           </li>
@@ -426,8 +437,8 @@ export class BlackoutWebApp {
       )
       .join("");
 
-    const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM-named channel (for example: "dm-alex") to populate this panel.</p></div></li>';
-    return this.renderWorkspaceUtilityPage("Direct messages", "A focused panel for quick DM access.", items || fallback);
+    const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM channel with names like "dm-alex", "pm-sam", or "@alex:matrix.org".</p></div></li>';
+    return this.renderWorkspaceUtilityPage("Direct messages", "A focused panel for quick DM access.", `${starter}${items || fallback}`);
   }
 
   private renderActivityPanel(): string {
@@ -1026,6 +1037,12 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='create-channel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.openCreateModal("channel");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='start-dm-channel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.openDmComposer();
       });
     });
 
@@ -2558,6 +2575,18 @@ export class BlackoutWebApp {
       });
       this.markSeen(messages);
     });
+  }
+
+  private openDmComposer(): void {
+    const state = this.store.getState();
+    if (!state.activeServerId) {
+      this.store.patch({ error: "Pick a server before starting a DM." });
+      this.render();
+      return;
+    }
+
+    this.store.patch({ pendingCreate: "channel", createError: null, createName: "dm-" });
+    this.render();
   }
 
   private openCreateModal(mode: Exclude<PendingCreate, "none">): void {
