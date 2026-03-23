@@ -88,6 +88,9 @@ pnpm --filter @blackout/blackout-web build:web
 pnpm start
 ```
 
+> Canonical frontend package: `@blackout/blackout-web` (`apps/blackout-web`).  
+> `@blackout/web` and `@blackout/web-ui` are legacy/scaffold paths and are not the deploy target.
+
 Then open:
 
 - Frontend app: `http://localhost:3000/`

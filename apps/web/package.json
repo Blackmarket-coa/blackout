@@ -2,7 +2,7 @@
   "name": "@blackout/web",
   "version": "0.0.1",
   "private": true,
-  "description": "Blackout web application shell",
+  "description": "Legacy web shell (non-deploy); canonical frontend is @blackout/blackout-web",
   "type": "module",
   "scripts": {
     "build": "tsc --build",
