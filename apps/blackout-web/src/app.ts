@@ -29,11 +29,13 @@ type StegoChannel = {
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
+type GovernanceTemplateItem = { id: string; title: string; type: "binary" | "multiple_choice" | "ranked"; options: string[]; durationHours: number };
 
 const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
 const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
 const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
 const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
+const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -68,6 +70,7 @@ export class BlackoutWebApp {
   private gifLibrary: GifLibraryItem[] = [];
   private emojiLibrary: EmojiLibraryItem[] = [];
   private attachmentLibrary: AttachmentLibraryItem[] = [];
+  private governanceTemplates: GovernanceTemplateItem[] = [];
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -109,10 +112,10 @@ export class BlackoutWebApp {
       cohort: "internal",
     },
     presets: {
-      activePreset: "baseline_matrix",
+      activePreset: "blackout_full",
       features: {},
       diagnostics: {
-        deploymentPreset: "baseline_matrix",
+        deploymentPreset: "blackout_full",
         tenantPreset: null,
         userOverrideCount: 0,
       },
@@ -147,6 +150,7 @@ export class BlackoutWebApp {
     this.gifLibrary = this.loadGifLibrary();
     this.emojiLibrary = this.loadEmojiLibrary();
     this.attachmentLibrary = this.loadAttachmentLibrary();
+    this.governanceTemplates = this.loadGovernanceTemplates();
   }
 
   async mount(): Promise<void> {
@@ -175,12 +179,6 @@ export class BlackoutWebApp {
         <header class="header">
           <h1>Blackout Chat</h1>
           <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
-          <details class="header-environment panel-card" data-testid="environment-details">
-            <summary>Environment details</summary>
-            <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
-            <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
-            <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
-          </details>
         </header>
         <div class="header-actions">
           <div class="header-actions-copy">
@@ -559,6 +557,8 @@ export class BlackoutWebApp {
       <section class="stack panel-card" data-testid="feature-presets-panel">
         <h2>Workspace layout presets</h2>
         <p class="meta">Pick the experience level that best matches your team, preview changes, then apply instantly.</p>
+        <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
+        <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         <label class="stack">
           Preset
           <select data-testid="feature-preset-select" data-action="select-preset">
@@ -977,33 +977,81 @@ export class BlackoutWebApp {
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
-      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
+      this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
+      const title = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-title']")?.value.trim() || "Approve sprint release?";
+      const type = this.root.querySelector<HTMLSelectElement>("[data-action='composer-governance-type']")?.value || "binary";
+      const optionsRaw = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']")?.value || "Approve,Block";
+      const duration = Math.max(1, Number.parseInt(this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-duration']")?.value ?? "48", 10) || 48);
+      const options = optionsRaw
+        .split(",")
+        .map((option) => option.trim())
+        .filter(Boolean);
+      this.applyComposerSnippet(`\n/proposal \"${title}\" --type=${type} --options=\"${options.join(",")}\" --duration=${duration}h\n`);
       this.closeComposerPanels();
     });
 
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const snippet = button.dataset.snippet;
-        if (!snippet) return;
-        this.applyComposerSnippet(snippet);
-        this.closeComposerPanels();
-      });
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-vote']")?.addEventListener("click", () => {
+      const optionsRaw = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']")?.value || "Approve,Block";
+      const options = optionsRaw
+        .split(",")
+        .map((option) => option.trim())
+        .filter(Boolean);
+      this.applyComposerSnippet(`\n/vote \"${options[0] ?? "Approve"}\"\n`);
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-file']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [file:quarterly-plan.pdf](https://files.examplecdn.com/quarterly-plan.pdf)");
-      this.closeComposerPanels();
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-save-template']")?.addEventListener("click", () => {
+      const title = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-title']")?.value.trim() || "";
+      const type = (this.root.querySelector<HTMLSelectElement>("[data-action='composer-governance-type']")?.value as GovernanceTemplateItem["type"] | undefined) ?? "binary";
+      const optionsRaw = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']")?.value || "";
+      const durationHours = Math.max(1, Number.parseInt(this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-duration']")?.value ?? "48", 10) || 48);
+      if (!title) return;
+      const options = optionsRaw
+        .split(",")
+        .map((option) => option.trim())
+        .filter(Boolean);
+      const id = this.normalizeStegoChannelId(`gov-${title}`);
+      const template: GovernanceTemplateItem = { id, title, type, options, durationHours };
+      const existing = this.governanceTemplates.find((item) => item.id === id);
+      this.governanceTemplates = existing
+        ? this.governanceTemplates.map((item) => (item.id === id ? template : item))
+        : [...this.governanceTemplates, template];
+      this.persistGovernanceTemplates();
+      this.refreshGovernanceTemplateUi();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
-      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
-      this.closeComposerPanels();
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-export-templates']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-governance-import-json']");
+      if (!importInput) return;
+      importInput.value = JSON.stringify(this.governanceTemplates, null, 2);
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-import-templates']")?.addEventListener("click", () => {
+      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-governance-import-json']");
+      const raw = importInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as GovernanceTemplateItem[];
+        if (!Array.isArray(parsed)) return;
+        const imported = parsed
+          .filter((item) => item && typeof item.title === "string" && (item.type === "binary" || item.type === "multiple_choice" || item.type === "ranked") && Array.isArray(item.options))
+          .map((item) => ({
+            id: this.normalizeStegoChannelId(`gov-${item.title}`),
+            title: item.title,
+            type: item.type,
+            options: item.options.map((option) => String(option)),
+            durationHours: Math.max(1, Number.parseInt(String(item.durationHours), 10) || 48),
+          }));
+        this.governanceTemplates = [...this.governanceTemplates.filter((item) => !imported.some((next) => next.id === item.id)), ...imported];
+        this.persistGovernanceTemplates();
+        this.refreshGovernanceTemplateUi();
+      } catch {
+        return;
+      }
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-stego']")?.addEventListener("click", () => {
@@ -1301,6 +1349,7 @@ export class BlackoutWebApp {
     this.refreshGifLibraryUi();
     this.refreshEmojiLibraryUi();
     this.refreshAttachmentLibraryUi();
+    this.refreshGovernanceTemplateUi();
     this.bindCommandPaletteFocusTrap();
   }
 
@@ -1362,7 +1411,7 @@ export class BlackoutWebApp {
     textarea.focus();
   }
 
-  private toggleComposerPanel(panelName: "attachments" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
+  private toggleComposerPanel(panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
     const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
     if (!panel || !trigger) return;
@@ -1380,7 +1429,7 @@ export class BlackoutWebApp {
       panel.classList.remove("is-open");
       panel.setAttribute("aria-hidden", "true");
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-open-governance'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
     });
   }
@@ -1646,6 +1695,54 @@ export class BlackoutWebApp {
     });
   }
 
+  private refreshGovernanceTemplateUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='composer-governance-template-list']");
+    if (!list) return;
+    if (!this.governanceTemplates.length) {
+      list.innerHTML = '<li class="meta">No governance templates yet.</li>';
+      return;
+    }
+    list.innerHTML = this.governanceTemplates
+      .map((template) => `
+        <li class="composer-channel-row">
+          <div>
+            <strong>${template.title}</strong>
+            <p class="meta">${template.type} · ${template.options.join(" / ")} · ${template.durationHours}h</p>
+          </div>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-governance-template-use" data-template-id="${template.id}">Use</button>
+            <button type="button" data-action="composer-governance-template-delete" data-template-id="${template.id}">Delete</button>
+          </div>
+        </li>
+      `)
+      .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-governance-template-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const template = this.governanceTemplates.find((item) => item.id === button.dataset.templateId);
+        if (!template) return;
+        const titleInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-title']");
+        const typeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-governance-type']");
+        const optionsInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']");
+        const durationInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-duration']");
+        if (titleInput) titleInput.value = template.title;
+        if (typeSelect) typeSelect.value = template.type;
+        if (optionsInput) optionsInput.value = template.options.join(",");
+        if (durationInput) durationInput.value = String(template.durationHours);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-governance-template-delete']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const templateId = button.dataset.templateId;
+        if (!templateId) return;
+        this.governanceTemplates = this.governanceTemplates.filter((template) => template.id !== templateId);
+        this.persistGovernanceTemplates();
+        this.refreshGovernanceTemplateUi();
+      });
+    });
+  }
+
   private normalizeStegoChannelId(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "channel";
   }
@@ -1718,6 +1815,30 @@ export class BlackoutWebApp {
       const parsed = JSON.parse(raw) as AttachmentLibraryItem[];
       if (!Array.isArray(parsed)) return [];
       return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string" && (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio"));
+    } catch {
+      return [];
+    }
+  }
+
+  private persistGovernanceTemplates(): void {
+    globalThis.localStorage.setItem(GOVERNANCE_TEMPLATE_STORAGE_KEY, JSON.stringify(this.governanceTemplates));
+  }
+
+  private loadGovernanceTemplates(): GovernanceTemplateItem[] {
+    const raw = globalThis.localStorage.getItem(GOVERNANCE_TEMPLATE_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as GovernanceTemplateItem[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item) => item && typeof item.id === "string" && typeof item.title === "string" && (item.type === "binary" || item.type === "multiple_choice" || item.type === "ranked") && Array.isArray(item.options))
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          type: item.type,
+          options: item.options.map((option) => String(option)),
+          durationHours: Math.max(1, Number.parseInt(String(item.durationHours), 10) || 48),
+        }));
     } catch {
       return [];
     }
