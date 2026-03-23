@@ -25,6 +25,17 @@ governance.post('/votes', async (c) => {
   });
 
   return c.json(vote, 201);
+
+const governance = new Hono();
+
+const votes = new Map<string, Array<{ userId: string; choice: string }>>();
+
+governance.post('/votes', async (c) => {
+  const { title, options = ['yes', 'no'] } = await c.req.json();
+  const voteId = crypto.randomUUID();
+  votes.set(voteId, []);
+
+  return c.json({ voteId, title, options }, 201);
 });
 
 governance.post('/votes/:voteId/cast', async (c) => {
