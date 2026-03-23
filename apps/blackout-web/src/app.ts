@@ -175,12 +175,6 @@ export class BlackoutWebApp {
         <header class="header">
           <h1>Blackout Chat</h1>
           <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
-          <details class="header-environment panel-card" data-testid="environment-details">
-            <summary>Environment details</summary>
-            <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
-            <p class="meta" data-testid="release-cohort">Release cohort: ${this.runtimeConfig.rollout.cohort}</p>
-            <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
-          </details>
         </header>
         <div class="header-actions">
           <div class="header-actions-copy">
@@ -551,6 +545,8 @@ export class BlackoutWebApp {
       <section class="stack panel-card" data-testid="feature-presets-panel">
         <h2>Workspace layout presets</h2>
         <p class="meta">Pick the experience level that best matches your team, preview changes, then apply instantly.</p>
+        <p class="meta" data-testid="active-preset">Active preset: <strong>${this.appliedPreset}</strong></p>
+        <p class="meta" data-testid="preset-diagnostics">Preset sources: deployment=${this.runtimeConfig.presets.diagnostics.deploymentPreset}, tenant=${this.runtimeConfig.presets.diagnostics.tenantPreset ?? "none"}, user overrides=${this.runtimeConfig.presets.diagnostics.userOverrideCount}</p>
         <label class="stack">
           Preset
           <select data-testid="feature-preset-select" data-action="select-preset">
@@ -959,8 +955,8 @@ export class BlackoutWebApp {
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-poll']")?.addEventListener("click", () => {
-      this.applyComposerSnippet("\n/poll \"When should we ship?\" \"Today\" \"Tomorrow\" \"Friday\"\n");
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-governance']")?.addEventListener("click", () => {
+      this.applyComposerSnippet("\n/proposal \"Approve sprint release?\" --type=binary --options=\"Approve,Block\" --duration=48h\n");
       this.closeComposerPanels();
     });
 

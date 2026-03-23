@@ -74,7 +74,7 @@ export function renderMessageInput({
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
             <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
-            <button type="button" data-action="composer-attach-poll" ${disabled ? "disabled" : ""}>Poll</button>
+            <button type="button" data-action="composer-attach-governance" ${disabled ? "disabled" : ""}>Governance</button>
           </div>
           <div class="composer-channel-editor">
             <p class="composer-popover-title">Attachment library (memes/audio/pictures/videos)</p>
