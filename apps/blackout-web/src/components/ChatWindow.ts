@@ -53,8 +53,11 @@ export function renderChatWindow({
           </small>
         </div>
         <div class="chat-head-actions">
-          <button type="button" class="ghost-btn chat-head-action" aria-label="Open threads">Threads</button>
-          <button type="button" class="ghost-btn chat-head-action" aria-label="Search channel">Search</button>
+          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="members" aria-label="Open member list">Members</button>
+          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="threads" aria-label="Open threads">Threads</button>
+          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="pinned" aria-label="Open pinned messages">Pinned</button>
+          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="search" aria-label="Search channel">Search</button>
+          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="governance" aria-label="Open governance panel">Governance</button>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>

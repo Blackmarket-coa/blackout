@@ -2,7 +2,15 @@ import { ApiError, type GatewayEvent } from "./api/client";
 import { renderChannelSidebar } from "./components/ChannelSidebar";
 import { renderChatWindow } from "./components/ChatWindow";
 import { renderCreateEntityModal } from "./components/CreateEntityModal";
+import { renderDeepDivePanel } from "./components/DeepDivePanel";
+import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsPanel";
+import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
+import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
+import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
+import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/PlatformOpsPanel";
+import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
+import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
@@ -16,8 +24,9 @@ import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
-type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
-type ThemeKey = "blackout_modern" | "legacy_matrix_classic" | "legacy_terminal";
+type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
+type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
+type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance";
 type StegoChannel = {
   id: string;
   name: string;
@@ -63,6 +72,28 @@ export class BlackoutWebApp {
   private composerIsTyping = false;
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
+  private activeRightPanel: RightPanelView | null = null;
+  private activeGovernanceTab: GovernanceRoomTab = "feed";
+  private governanceProposalModalOpen = false;
+  private activeEconomicsTab: EconomicsTab = "boosts";
+  private activeFederationTab: FederationTab = "health";
+  private activeTownhallMode: TownhallMode = "standard";
+  private activeMobileTab: MobileTab = "spaces";
+  private deepDiveCardIndex = 0;
+  private deepDiveBookmarked = 0;
+  private swipeRightGesture: "reply" | "quote" = "reply";
+  private swipeLeftGesture: "thread" | "react" = "thread";
+  private activeRevenueOpsTab: RevenueOpsTab = "monetization";
+  private paymentSheetOpen = false;
+  private paymentIssue = false;
+  private questStage: QuestStage = "open";
+  private installedApps = 2;
+  private activePlatformOpsTab: PlatformOpsTab = "federation";
+  private readinessScore = 86;
+  private vaultUsageGb = 11.5;
+  private hostingTier = 2;
+  private blackboxProvisioned = false;
+  private recommendationMode: "heuristic" | "matrix_public_rooms" = "heuristic";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -179,8 +210,8 @@ export class BlackoutWebApp {
     this.root.innerHTML = `
       <main class="container">
         <header class="header">
-          <h1>Blackout Chat</h1>
-          <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
+          <h1>Blackout Coalition Workspace</h1>
+          <p class="meta">Solarpunk governance and messaging shell with a three-column blackout layout.</p>
         </header>
         <div class="header-actions">
           <div class="header-actions-copy">
@@ -191,7 +222,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -199,6 +230,7 @@ export class BlackoutWebApp {
 
         ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth })}
         ${state.session ? this.renderFeatureToolbar() : ""}
+        ${state.session ? renderMobileTabBar({ activeTab: this.activeMobileTab }) : ""}
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
@@ -245,8 +277,50 @@ export class BlackoutWebApp {
       return this.renderFilesPanel();
     }
 
+    if (this.activeWorkspacePanel === "discover") {
+      return renderDeepDivePanel({
+        cardIndex: this.deepDiveCardIndex,
+        bookmarked: this.deepDiveBookmarked,
+      });
+    }
+
     const state = this.store.getState();
-    return renderChatWindow({
+    const activeChannelName = state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "";
+    const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
+    const isEconomicsRoom = /\b(boost|subscription|quest|market|wallet|monetization)\b/i.test(activeChannelName);
+    const isFederationRoom = /\b(federation|mesh|replication|recovery|self-healing)\b/i.test(activeChannelName);
+    const isTownhallRoom = /\b(townhall|assembly|stage|all-hands)\b/i.test(activeChannelName);
+
+    if (isGovernanceRoom) {
+      return renderGovernanceRoomPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeGovernanceTab,
+        showProposalModal: this.governanceProposalModalOpen,
+      });
+    }
+
+    if (isEconomicsRoom) {
+      return renderEconomicsPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeEconomicsTab,
+      });
+    }
+
+    if (isFederationRoom) {
+      return renderFederationPanel({
+        channelLabel: activeChannelName,
+        activeTab: this.activeFederationTab,
+      });
+    }
+
+    if (isTownhallRoom) {
+      return renderTownhallPanel({
+        channelLabel: activeChannelName,
+        mode: this.activeTownhallMode,
+      });
+    }
+
+    const chatView = renderChatWindow({
       channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
       messages: state.messages,
       canSend: Boolean(state.activeChannelId),
@@ -263,6 +337,66 @@ export class BlackoutWebApp {
       compactMode: this.getCompactModeActive(),
       compactRecommended: this.isMessageHeavySession(),
     });
+
+    return `
+      <section class="workspace-content ${this.activeRightPanel ? "workspace-content--with-panel" : ""}">
+        ${chatView}
+        ${this.activeRightPanel ? this.renderRightPanelOverlay(this.activeRightPanel) : ""}
+      </section>
+    `;
+  }
+
+  private renderRightPanelOverlay(panel: RightPanelView): string {
+    const panelTitle: Record<RightPanelView, string> = {
+      members: "Member list",
+      threads: "Thread view",
+      pinned: "Pinned messages",
+      search: "Search results",
+      governance: "Governance panel",
+    };
+
+    const panelBody: Record<RightPanelView, string> = {
+      members: `<ul class="right-panel-list">
+          <li><strong>Facilitator</strong><span class="meta">Online • can moderate and propose</span></li>
+          <li><strong>Treasury guardian</strong><span class="meta">Online • signer #2</span></li>
+          <li><strong>General member</strong><span class="meta">Away • voter role</span></li>
+        </ul>`,
+      threads: `<ul class="right-panel-list">
+          <li><strong>Budget RFC follow-up</strong><span class="meta">12 replies • updated 4m ago</span></li>
+          <li><strong>Call notes synthesis</strong><span class="meta">7 replies • updated 19m ago</span></li>
+        </ul>`,
+      pinned: `<ul class="right-panel-list">
+          <li><strong>Meeting charter</strong><span class="meta">Pinned by @ops</span></li>
+          <li><strong>Emergency relay docs</strong><span class="meta">Pinned by @security</span></li>
+        </ul>`,
+      search: `<div class="right-panel-search">
+          <label>Find in room<input type="search" value="governance roadmap" readonly /></label>
+          <ul class="right-panel-list">
+            <li><strong>Roadmap checkpoint posted</strong><span class="meta">#governance • 2 results</span></li>
+            <li><strong>Roadmap vote opened</strong><span class="meta">#announcements • 1 result</span></li>
+          </ul>
+        </div>`,
+      governance: `<div class="right-panel-governance">
+          <p class="meta">Active proposal</p>
+          <strong>Enable coalition quest payouts</strong>
+          <p class="meta">Voting window: 48h • quorum 60%</p>
+          <div class="right-panel-actions">
+            <button type="button" class="ghost-btn">Vote approve</button>
+            <button type="button" class="ghost-btn">Vote block</button>
+          </div>
+        </div>`,
+    };
+
+    return `
+      <aside class="right-panel-overlay" data-testid="right-panel-overlay">
+        <div class="right-panel-header">
+          <h3>${panelTitle[panel]}</h3>
+          <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
+        </div>
+        <p class="meta">Plan-aligned contextual overlay for room collaboration workflows.</p>
+        ${panelBody[panel]}
+      </aside>
+    `;
   }
 
   private renderDmsPanel(): string {
@@ -635,15 +769,15 @@ export class BlackoutWebApp {
 
   private renderThemeManagementSection(): string {
     const themes: Array<{ id: ThemeKey; label: string; description: string }> = [
-      { id: "blackout_modern", label: "Blackout modern", description: "Current default styling optimized for daily chat." },
-      { id: "legacy_matrix_classic", label: "Legacy Matrix classic", description: "Classic pre-refresh palette and panel contrast." },
-      { id: "legacy_terminal", label: "Legacy terminal", description: "Green-on-dark high-contrast operations theme." },
+      { id: "dark_canopy", label: "Dark canopy (default)", description: "Deep green and black surfaces for extended low-light sessions." },
+      { id: "light_grove", label: "Light grove", description: "Light green and white surfaces for daylight readability." },
+      { id: "amoled_night", label: "AMOLED night", description: "Pure black OLED surfaces with teal interaction accents." },
     ];
 
     return `
       <section class="stack panel-card theme-panel" data-testid="theme-panel">
         <h2>Theme selection</h2>
-        <p class="meta">Legacy themes are now selectable for teams that prefer older visual styles.</p>
+        <p class="meta">Theme variants from the Blackout UI plan: Dark, Light, and AMOLED.</p>
         <label class="theme-select">
           <span>Active theme</span>
           <select data-action="select-theme" data-testid="theme-select">
@@ -657,11 +791,120 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderSubscriptionPanelSection(): string {
+    const plans = [
+      { name: "Free", price: "$0", highlights: "Core chat, basic steg, community rooms" },
+      { name: "Signal", price: "$4.99/mo", highlights: "Advanced steg codecs + media vault" },
+      { name: "Coalition", price: "$9/mo org", highlights: "Governance rooms, quests, monetization" },
+      { name: "Sovereign", price: "$29/mo org", highlights: "Townhall SFU + federation controls" },
+    ];
+
+    return `
+      <section class="stack panel-card subscription-panel" data-testid="subscription-panel">
+        <h2>Subscription panel</h2>
+        <p class="meta">Plan comparison and add-ons from the Blackout UI plan.</p>
+        <div class="subscription-grid">
+          ${plans
+            .map(
+              (plan) => `
+                <article class="subscription-card">
+                  <h3>${plan.name}</h3>
+                  <strong>${plan.price}</strong>
+                  <p class="meta">${plan.highlights}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+        <div class="subscription-addons">
+          <span class="meta">Add-ons:</span>
+          <span>Self-Healing ($19/mo)</span>
+          <span>Steg Voting Compliance ($49/mo)</span>
+          <span>Bounty Payroll ($9/mo)</span>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderUpgradePromptSection(): string {
+    const prompts = [
+      { trigger: "Select advanced steg codec", location: "Stego panel dropdown", plan: "Signal" },
+      { trigger: "Open Governance room tab", location: "Room header tabs", plan: "Coalition" },
+      { trigger: "Start Townhall mode", location: "Call modal", plan: "Sovereign" },
+      { trigger: "Enable federation dashboard", location: "Admin federation tab", plan: "Sovereign + add-on" },
+    ];
+
+    return `
+      <section class="stack panel-card upgrade-prompts-panel" data-testid="upgrade-prompts-panel">
+        <h2>Contextual upgrade prompts</h2>
+        <p class="meta">Inline triggers should appear at point-of-need, not as generic banner spam.</p>
+        <div class="upgrade-prompt-table">
+          ${prompts
+            .map(
+              (prompt) => `
+                <div><strong>${prompt.trigger}</strong></div>
+                <div class="meta">${prompt.location}</div>
+                <div>${prompt.plan}</div>
+              `,
+            )
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  private renderMobileGesturesPanel(): string {
+    return `
+      <section class="stack panel-card mobile-gestures-panel" data-testid="mobile-gestures-panel">
+        <h2>Mobile gestures</h2>
+        <p class="meta">Configure swipe/press actions for the mobile gesture model.</p>
+        <label>Swipe right on message
+          <select data-action="mobile-gesture-right">
+            <option value="reply" ${this.swipeRightGesture === "reply" ? "selected" : ""}>Reply</option>
+            <option value="quote" ${this.swipeRightGesture === "quote" ? "selected" : ""}>Quote reply</option>
+          </select>
+        </label>
+        <label>Swipe left on message
+          <select data-action="mobile-gesture-left">
+            <option value="thread" ${this.swipeLeftGesture === "thread" ? "selected" : ""}>Thread</option>
+            <option value="react" ${this.swipeLeftGesture === "react" ? "selected" : ""}>Quick react</option>
+          </select>
+        </label>
+        <ul class="meta">
+          <li>Long press: copy, pin, delete, report, view source (dev mode).</li>
+          <li>Pull to refresh in room list.</li>
+          <li>Edge swipe right for back navigation.</li>
+        </ul>
+      </section>
+    `;
+  }
+
+  private renderRevenueOpsPanelSection(): string {
+    return renderRevenueOpsPanel({
+      activeTab: this.activeRevenueOpsTab,
+      paymentSheetOpen: this.paymentSheetOpen,
+      paymentIssue: this.paymentIssue,
+      questStage: this.questStage,
+      installedApps: this.installedApps,
+    });
+  }
+
+  private renderPlatformOpsPanelSection(): string {
+    return renderPlatformOpsPanel({
+      activeTab: this.activePlatformOpsTab,
+      readinessScore: this.readinessScore,
+      vaultUsageGb: this.vaultUsageGb,
+      hostingTier: this.hostingTier,
+      blackboxProvisioned: this.blackboxProvisioned,
+      recommendationMode: this.recommendationMode,
+    });
+  }
+
   private parseTheme(theme: string | null): ThemeKey {
-    if (theme === "legacy_matrix_classic" || theme === "legacy_terminal") {
+    if (theme === "light_grove" || theme === "amoled_night") {
       return theme;
     }
-    return "blackout_modern";
+    return "dark_canopy";
   }
 
   private applyTheme(theme: ThemeKey): void {
@@ -819,6 +1062,14 @@ export class BlackoutWebApp {
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-discover-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "discover";
+        this.activeMobileTab = "home";
+        this.render();
+      });
+    });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;
@@ -848,6 +1099,120 @@ export class BlackoutWebApp {
         this.compactModeEnabled = !this.compactModeEnabled;
         this.render();
       });
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='mobile-gesture-right']")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value as "reply" | "quote";
+      this.swipeRightGesture = value;
+      this.featureActionResult = `Updated swipe-right gesture to ${value}.`;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='mobile-gesture-left']")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value as "thread" | "react";
+      this.swipeLeftGesture = value;
+      this.featureActionResult = `Updated swipe-left gesture to ${value}.`;
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='revenue-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as RevenueOpsTab | undefined;
+        if (!tab) return;
+        this.activeRevenueOpsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-open-payment-sheet']")?.addEventListener("click", () => {
+      this.paymentSheetOpen = true;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-close-payment-sheet']")?.addEventListener("click", () => {
+      this.paymentSheetOpen = false;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-toggle-payment-issue']")?.addEventListener("click", () => {
+      this.paymentIssue = !this.paymentIssue;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='quest-next-stage']")?.addEventListener("click", () => {
+      this.questStage = this.questStage === "open" ? "claimed" : this.questStage === "claimed" ? "submitted" : this.questStage === "submitted" ? "approved" : "approved";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='quest-reset-stage']")?.addEventListener("click", () => {
+      this.questStage = "open";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-install']")?.addEventListener("click", () => {
+      this.installedApps += 1;
+      this.featureActionResult = "Installed app with sandbox permission review.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-uninstall']")?.addEventListener("click", () => {
+      this.installedApps = Math.max(0, this.installedApps - 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-permissions']")?.addEventListener("click", () => {
+      this.featureActionResult = "Permissions reviewed: events.read, governance.write, treasury.read.";
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='platform-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as PlatformOpsTab | undefined;
+        if (!tab) return;
+        this.activePlatformOpsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='platform-refresh-readiness']")?.addEventListener("click", () => {
+      this.readinessScore = 75 + Math.round(Math.random() * 24);
+      this.featureActionResult = "Federation telemetry refreshed.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-toggle-secret-ballot']")?.addEventListener("click", () => {
+      this.featureActionResult = "Secret-ballot compliance mode toggled.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-open-audit-log']")?.addEventListener("click", () => {
+      this.featureActionResult = "Opened steganographic audit trail preview.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-generate-1099']")?.addEventListener("click", () => {
+      this.featureActionResult = "Generated 1099 payroll batch (preview).";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='vault-upload-sim']")?.addEventListener("click", () => {
+      this.vaultUsageGb = Math.min(50, this.vaultUsageGb + 2.5);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='vault-clear-sim']")?.addEventListener("click", () => {
+      this.vaultUsageGb = 0;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-scale-up']")?.addEventListener("click", () => {
+      this.hostingTier = Math.min(5, this.hostingTier + 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-scale-down']")?.addEventListener("click", () => {
+      this.hostingTier = Math.max(1, this.hostingTier - 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-trigger-backup']")?.addEventListener("click", () => {
+      this.featureActionResult = "Manual backup trigger queued.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='blackbox-toggle-provisioning']")?.addEventListener("click", () => {
+      this.blackboxProvisioned = !this.blackboxProvisioned;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='mobile-toggle-recommendation']")?.addEventListener("click", () => {
+      this.recommendationMode = this.recommendationMode === "heuristic" ? "matrix_public_rooms" : "heuristic";
+      this.render();
     });
 
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
@@ -943,6 +1308,117 @@ export class BlackoutWebApp {
       this.render();
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-right-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const panel = button.dataset.panel as RightPanelView | undefined;
+        if (!panel) return;
+        this.activeRightPanel = panel;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='close-right-panel']")?.addEventListener("click", () => {
+      this.activeRightPanel = null;
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as GovernanceRoomTab | undefined;
+        if (!tab) return;
+        this.activeGovernanceTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='governance-open-proposal']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.governanceProposalModalOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='governance-close-proposal']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (element.classList.contains("modal") && target.closest(".modal-content")) return;
+        this.governanceProposalModalOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='economics-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as EconomicsTab | undefined;
+        if (!tab) return;
+        this.activeEconomicsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='federation-set-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as FederationTab | undefined;
+        if (!tab) return;
+        this.activeFederationTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='townhall-set-mode']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode as TownhallMode | undefined;
+        if (!mode) return;
+        this.activeTownhallMode = mode;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='mobile-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as MobileTab | undefined;
+        if (!tab) return;
+        this.activeMobileTab = tab;
+        switch (tab) {
+          case "home":
+            this.activeWorkspacePanel = "discover";
+            break;
+          case "spaces":
+            this.activeWorkspacePanel = "chat";
+            break;
+          case "search":
+            this.activeWorkspacePanel = "activity";
+            break;
+          case "governance":
+            this.activeWorkspacePanel = "chat";
+            break;
+          case "profile":
+            this.settingsOpen = true;
+            break;
+        }
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-dismiss']")?.addEventListener("click", () => {
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Dismissed room card.";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-join']")?.addEventListener("click", () => {
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Joined room from DeepDive.";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='deepdive-bookmark']")?.addEventListener("click", () => {
+      this.deepDiveBookmarked += 1;
+      this.deepDiveCardIndex += 1;
+      this.featureActionResult = "Bookmarked room for later.";
+      this.render();
+    });
+
     this.root.querySelector<HTMLFormElement>("#message-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
       this.composerIsTyping = false;
@@ -975,6 +1451,13 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
+      this.settingsOpen = true;
+      this.featureActionResult = "Opened Subscription panel. Upgrade to Signal to unlock advanced codecs and batch mode.";
+      this.closeComposerPanels();
+      this.render();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-encode']")?.addEventListener("click", () => {
