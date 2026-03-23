@@ -55,7 +55,7 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="toggle-settings" aria-label="Tools">
+          <button type="button" class="sidebar-nav-btn" data-action="open-repo-tools" aria-label="Tools">
             <span class="sidebar-nav-glyph">🛠️</span>
             <span class="sidebar-nav-label">Tools</span>
           </button>

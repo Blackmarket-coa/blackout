@@ -254,6 +254,39 @@ body {
   gap: 0.35rem;
 }
 
+.repo-tools-page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.repo-tools-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.repo-tools-item {
+  border: 1px solid #333747;
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #1f2430;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.repo-tools-item code {
+  display: inline-block;
+  width: fit-content;
+  background: #10151f;
+  border: 1px solid #2f3c57;
+  border-radius: 8px;
+  padding: 0.2rem 0.5rem;
+  color: #c8defe;
+}
+
 .server-nav-list {
   width: 100%;
 }

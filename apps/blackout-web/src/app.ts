@@ -39,6 +39,7 @@ export class BlackoutWebApp {
   private compactModeEnabled = false;
   private settingsOpen = false;
   private composerIsTyping = false;
+  private repoToolsOpen = false;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
   private readonly hasSeenFeatureTooltips: boolean;
@@ -188,7 +189,7 @@ export class BlackoutWebApp {
           activeChannelId: state.activeChannelId,
           unreadByChannel: state.unreadByChannel,
         })}
-        ${renderChatWindow({
+        ${this.repoToolsOpen ? this.renderRepoToolsPage() : renderChatWindow({
           channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
           messages: state.messages,
           canSend: Boolean(state.activeChannelId),
@@ -205,6 +206,45 @@ export class BlackoutWebApp {
           compactMode: this.getCompactModeActive(),
           compactRecommended: this.isMessageHeavySession(),
         })}
+      </section>
+    `;
+  }
+
+
+  private renderRepoToolsPage(): string {
+    const tools = [
+      { name: "Build", command: "pnpm build", description: "Run the monorepo build across packages." },
+      { name: "Lint", command: "pnpm lint", description: "Type and static checks via turbo tasks." },
+      { name: "Unit tests", command: "pnpm test", description: "Execute the repository test matrix." },
+      { name: "Feature registry guard", command: "pnpm guard:feature-registry", description: "Validate feature entrypoint declarations." },
+      { name: "Preset completeness", command: "pnpm guard:preset-complete", description: "Ensure feature presets remain complete and consistent." },
+      { name: "Port change guard", command: "pnpm guard:port", description: "Detect unauthorized port exposure changes." },
+    ];
+
+    const items = tools
+      .map(
+        (tool) => `
+          <li class="repo-tools-item">
+            <div>
+              <strong>${tool.name}</strong>
+              <p class="meta">${tool.description}</p>
+            </div>
+            <code>${tool.command}</code>
+          </li>
+        `,
+      )
+      .join("");
+
+    return `
+      <section class="chat-window repo-tools-page" aria-label="Repository tools">
+        <div class="chat-head">
+          <div class="chat-head-copy">
+            <strong>Repo tools</strong>
+            <small>Key repository scripts for validating and shipping safely.</small>
+          </div>
+          <button type="button" class="ghost-btn" data-action="close-repo-tools" aria-label="Back to chat">Back to chat</button>
+        </div>
+        <ul class="repo-tools-list">${items}</ul>
       </section>
     `;
   }
@@ -497,6 +537,7 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         const serverId = button.dataset.serverId;
         if (!serverId) return;
+        this.repoToolsOpen = false;
         void this.openServer(serverId);
       });
     });
@@ -505,6 +546,7 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         const channelId = button.dataset.channelId;
         if (!channelId) return;
+        this.repoToolsOpen = false;
         void this.openChannel(channelId);
         this.store.patch({ channelDrawerOpen: false });
         this.render();
@@ -530,6 +572,20 @@ export class BlackoutWebApp {
         this.render();
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-repo-tools']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.repoToolsOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.repoToolsOpen = false;
+        this.render();
+      });
+    });
+
 
     this.root.querySelector<HTMLButtonElement>("[data-action='cancel-create']")?.addEventListener("click", () => {
       this.closeCreateModal();
