@@ -60,7 +60,15 @@ export function renderMessageInput({
       `
           : ""
       }
-      <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Write a message…" ${disabled ? "disabled" : ""}></textarea>
+      <div class="composer-shell ${disabled ? "composer-shell--disabled" : ""}">
+        <button type="button" class="composer-shell-icon composer-shell-icon--start" aria-label="Add attachment" title="Add attachment" ${disabled ? "disabled" : ""}>＋</button>
+        <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Message #channel" ${disabled ? "disabled" : ""}></textarea>
+        <div class="composer-shell-actions" aria-hidden="true">
+          <span class="composer-shell-glyph">GIF</span>
+          <span class="composer-shell-glyph">😊</span>
+          <span class="composer-shell-glyph">◌</span>
+        </div>
+      </div>
       <p id="composer-hint" class="meta composer-hint">Enter to send · Shift+Enter for a new line.</p>
       ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" data-testid="typing-indicator">You are typing…</p>' : ""}
       <button type="submit" ${disabled ? "disabled" : ""}>Send message</button>
