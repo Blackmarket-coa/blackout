@@ -456,26 +456,37 @@ export class BlackoutWebApp {
       `;
     }
 
-    const railButtons = enabledFeatures
-      .slice(0, 8)
-      .map((feature) => {
-        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
-        const glyph = this.getFeatureGlyph(feature.name);
-        return `<button type="button" class="feature-rail-btn ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-rail-${feature.id}" title="${feature.name}" aria-label="${feature.name}">${glyph}</button>`;
-      })
-      .join("");
+    const optionsFor = (features: typeof FEATURE_UI_ENTRIES) =>
+      features
+        .map((feature) => {
+          const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+          const selected = this.quickAccessFeatureId === feature.id ? "selected" : "";
+          return `<option value="${kind}|${feature.id}" ${selected}>${feature.name}</option>`;
+        })
+        .join("");
 
-    const toolbarButtons = enabledFeatures
-      .map((feature) => {
-        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        const selected = this.quickAccessFeatureId === feature.id ? "is-selected" : "";
-        const categoryLabel = this.featureKindUi[kind].label;
+    const frequentOptions = optionsFor(enabledFeatures.slice(0, 8));
+    const groupedByKind = enabledFeatures.reduce<Map<UiEntryKind, typeof FEATURE_UI_ENTRIES>>((acc, feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      const existing = acc.get(kind) ?? [];
+      existing.push(feature);
+      acc.set(kind, existing);
+      return acc;
+    }, new Map());
+
+    const groupedDropdowns = (Object.keys(this.featureKindUi) as UiEntryKind[])
+      .map((kind) => {
+        const features = groupedByKind.get(kind) ?? [];
+        if (!features.length) return "";
+        const category = this.featureKindUi[kind];
         return `
-          <button type="button" class="feature-chip ${selected}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="feature-toolbar-${feature.id}">
-            <span>${feature.name}</span>
-            <small>${categoryLabel}</small>
-          </button>
+          <label class="quick-action-select">
+            <span>${category.icon} ${category.label}</span>
+            <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-${kind}">
+              <option value="">Choose action…</option>
+              ${optionsFor(features)}
+            </select>
+          </label>
         `;
       })
       .join("");
@@ -484,23 +495,20 @@ export class BlackoutWebApp {
       <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
         <div class="feature-toolbar-head">
           <h2>Quick actions</h2>
-          <p class="meta">Discord-style dock: icon rail for frequent actions, detailed list for discovery.</p>
+          <p class="meta">Organized dropdowns by category plus a frequent-actions picker.</p>
         </div>
-        <div class="feature-dock-layout">
-          <div class="feature-rail" aria-label="Frequent feature actions">${railButtons}</div>
-          <div class="feature-toolbar-scroll">${toolbarButtons}</div>
+        <div class="quick-actions-grid">
+          <label class="quick-action-select">
+            <span>⚡ Frequent</span>
+            <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-frequent">
+              <option value="">Choose quick action…</option>
+              ${frequentOptions}
+            </select>
+          </label>
+          ${groupedDropdowns}
         </div>
       </section>
     `;
-  }
-
-  private getFeatureGlyph(name: string): string {
-    return name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("");
   }
 
   private renderFeatureCommandPalette(): string {
@@ -862,6 +870,16 @@ export class BlackoutWebApp {
           }
         }
         this.openFeatureById(button.dataset.featureId);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLSelectElement>("[data-action='open-feature-dropdown']").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        if (!value) return;
+        const [, featureId] = value.split("|");
+        this.openFeatureById(featureId);
+        (event.currentTarget as HTMLSelectElement).value = "";
       });
     });
 
