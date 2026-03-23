@@ -14,50 +14,19 @@ interface MessageInputOptions {
 
 export function renderMessageInput({
   disabled,
-  compactMode,
-  richEditingEnabled,
+  compactMode: _compactMode,
+  richEditingEnabled: _richEditingEnabled,
   stegoEnabled,
-  composerRepliesEnabled,
-  composerEditsEnabled,
-  composerRedactionsEnabled,
-  mediaCodeBlocksEnabled,
-  mediaSpoilersEnabled,
+  composerRepliesEnabled: _composerRepliesEnabled,
+  composerEditsEnabled: _composerEditsEnabled,
+  composerRedactionsEnabled: _composerRedactionsEnabled,
+  mediaCodeBlocksEnabled: _mediaCodeBlocksEnabled,
+  mediaSpoilersEnabled: _mediaSpoilersEnabled,
   typingIndicatorsEnabled,
   showTypingIndicator,
 }: MessageInputOptions): string {
-  const advancedActions = [
-    composerRepliesEnabled ? '<option value="reply">Reply template</option>' : "",
-    composerEditsEnabled ? '<option value="edit">Edit note</option>' : "",
-    composerRedactionsEnabled ? '<option value="redact">Redact message</option>' : "",
-    mediaCodeBlocksEnabled ? '<option value="code">Code snippet</option>' : "",
-    mediaSpoilersEnabled ? '<option value="spoiler">Spoiler wrapper</option>' : "",
-  ]
-    .filter(Boolean)
-    .join("");
-
   return `
     <form id="message-form" class="chat-input">
-      ${
-        richEditingEnabled
-          ? `
-        <div class="composer-toolbar ${compactMode ? "composer-toolbar--compact" : ""}" data-testid="composer-toolbar">
-          <button type="button" data-action="composer-format-bold" title="Bold" aria-label="Format bold" ${disabled ? "disabled" : ""}><span aria-hidden="true">𝐁</span><span>Bold</span></button>
-          <button type="button" data-action="composer-format-italic" title="Italic" aria-label="Format italic" ${disabled ? "disabled" : ""}><span aria-hidden="true">𝑰</span><span>Italic</span></button>
-          ${
-            advancedActions
-              ? `<label class="composer-overflow-label">More
-                  <select data-action="composer-more-actions" data-testid="composer-more-actions" ${disabled ? "disabled" : ""}>
-                    <option value="">Select…</option>
-                    ${advancedActions}
-                  </select>
-                </label>`
-              : ""
-          }
-          <button type="button" class="ghost-btn composer-help-btn" data-action="composer-help" title="Message composer help" aria-label="Message composer help">ⓘ</button>
-        </div>
-      `
-          : ""
-      }
       <div class="composer-shell ${disabled ? "composer-shell--disabled" : ""}">
         <button type="button" class="composer-shell-icon composer-shell-icon--start" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>＋</button>
         <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Message #channel" ${disabled ? "disabled" : ""}></textarea>
