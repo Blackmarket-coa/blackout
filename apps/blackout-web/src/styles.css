@@ -1,19 +1,19 @@
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #101114;
+  background: #0A0A0A;
   color: #f2f3f5;
-  --app-bg: #15171b;
-  --header-border: #2a2c31;
-  --header-bg: linear-gradient(135deg, #233149, #161b24 65%);
-  --workspace-bg: #171a21;
-  --workspace-border: #2a2d35;
-  --sidebar-bg: linear-gradient(180deg, #44125f 0%, #5a1f74 48%, #6b2a7d 100%);
-  --panel-bg: #23272f;
-  --panel-bg-alt: #262b33;
-  --panel-border: #3a3f49;
+  --app-bg: #0A0A0A;
+  --header-border: #2B5D34;
+  --header-bg: linear-gradient(135deg, #2B5D34, #163520 65%);
+  --workspace-bg: #163520;
+  --workspace-border: #2F6B3A;
+  --sidebar-bg: linear-gradient(180deg, #2B5D34 0%, #3F7A45 52%, #8D3A2F 100%);
+  --panel-bg: #1A2A20;
+  --panel-bg-alt: #223428;
+  --panel-border: #3C6A45;
   --text-strong: #f2f3f5;
-  --text-muted: #b5bac1;
+  --text-muted: #B7D4C3;
 }
 
 :root[data-theme="legacy_matrix_classic"] {
@@ -153,13 +153,13 @@ body {
 }
 
 .feature-rail-btn:hover {
-  border-color: #3b82f6;
-  background: #2f3d5d;
+  border-color: #2B5D34;
+  background: #244D2B;
 }
 
 .feature-rail-btn.is-selected {
-  background: linear-gradient(135deg, #4f8ef7, #2563eb);
-  border-color: #4f8ef7;
+  background: linear-gradient(135deg, #9FE2BF, #2B5D34);
+  border-color: #9FE2BF;
 }
 
 .feature-toolbar-scroll {
@@ -181,18 +181,18 @@ body {
 }
 
 .feature-chip small {
-  color: #9ea6b2;
+  color: #A9C7B6;
   font-size: 0.72rem;
 }
 
 .feature-chip:hover {
-  background: #2f3d5d;
-  border-color: #3b82f6;
+  background: #244D2B;
+  border-color: #2B5D34;
 }
 
 .feature-chip.is-selected {
-  background: linear-gradient(135deg, #4f8ef7, #2563eb);
-  border-color: #4f8ef7;
+  background: linear-gradient(135deg, #9FE2BF, #2B5D34);
+  border-color: #9FE2BF;
 }
 
 .command-palette-trigger {
@@ -203,11 +203,11 @@ body {
 }
 
 .command-palette-trigger kbd {
-  border: 1px solid #3a3f49;
+  border: 1px solid #3C6A45;
   border-radius: 6px;
   padding: 0.1rem 0.4rem;
   font-size: 0.75rem;
-  color: #c8ced6;
+  color: #B8D8C5;
 }
 
 .workspace {
@@ -288,7 +288,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   justify-content: space-between;
-  border-bottom: 1px solid #2a2d35;
+  border-bottom: 1px solid #2F6B3A;
   padding-bottom: 0.7rem;
 }
 
@@ -387,8 +387,8 @@ body {
 }
 
 .sidebar-btn.is-selected {
-  background: linear-gradient(135deg, #4f8ef7, #2563eb);
-  border-color: #4f8ef7;
+  background: linear-gradient(135deg, #9FE2BF, #2B5D34);
+  border-color: #9FE2BF;
 }
 
 
@@ -551,7 +551,7 @@ body {
 
 .channel-list {
   background: #1f2229;
-  border-right: 1px solid #2a2d35;
+  border-right: 1px solid #2F6B3A;
 }
 
 .sidebar-workspace-name {
@@ -559,7 +559,7 @@ body {
   font-weight: 700;
   margin-bottom: 0.75rem;
   padding-bottom: 0.7rem;
-  border-bottom: 1px solid #2a2d35;
+  border-bottom: 1px solid #2F6B3A;
 }
 
 .sidebar-section-head {
@@ -652,7 +652,7 @@ body {
 .chat-head-action {
   width: auto;
   border-radius: 8px;
-  border: 1px solid #3a3f49;
+  border: 1px solid #3C6A45;
   padding: 0.25rem 0.55rem;
   color: #c6cedd;
 }
@@ -686,7 +686,7 @@ body {
   gap: 0.35rem;
   align-items: center;
   border-radius: 9px;
-  border-color: #3a3f49;
+  border-color: #3C6A45;
   background: linear-gradient(180deg, #292f3c, #1d222d);
   padding: 0.41rem 0.64rem;
 }
@@ -746,7 +746,7 @@ body {
 }
 
 .composer-shell .composer-shell-icon:hover {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #232a3b;
 }
 
@@ -778,7 +778,7 @@ body {
 }
 
 .composer-shell-glyph:hover {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #20283a;
 }
 
@@ -866,7 +866,7 @@ body {
 }
 
 .composer-stego-tabs button.is-active {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #22385f;
 }
 
@@ -950,16 +950,16 @@ textarea {
 }
 
 .panel-card {
-  border: 1px solid #2a2c31;
+  border: 1px solid #2B5D34;
   border-radius: 14px;
   padding: 0.9rem;
-  background: linear-gradient(180deg, #1c2028, #171a21);
+  background: linear-gradient(180deg, #1c2028, #163520);
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
 }
 
 .badge {
   margin-left: 0.35rem;
-  background: #3b82f6;
+  background: #2B5D34;
   color: #fff;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -989,7 +989,7 @@ progress {
 
 .auth-card {
   width: min(380px, 100%);
-  border: 1px solid #2a2c31;
+  border: 1px solid #2B5D34;
   border-radius: 12px;
   padding: 1rem;
   background: #1e1f22;
@@ -1013,8 +1013,8 @@ label {
 }
 
 .channel-create-btn {
-  background: #2f3d5d;
-  border-color: #3b82f6;
+  background: #244D2B;
+  border-color: #2B5D34;
 }
 
 .link-btn {
@@ -1024,7 +1024,7 @@ label {
 .error,
 .loading,
 .empty {
-  color: #b5bac1;
+  color: #B7D4C3;
   font-size: 0.9rem;
 }
 
