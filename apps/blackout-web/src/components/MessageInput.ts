@@ -74,7 +74,72 @@ export function renderMessageInput({
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
             <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
-            <button type="button" data-action="composer-attach-poll" ${disabled ? "disabled" : ""}>Poll</button>
+            <button type="button" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Governance</button>
+          </div>
+          <div class="composer-channel-editor">
+            <p class="composer-popover-title">Attachment library (memes/audio/pictures/videos)</p>
+            <label class="composer-popover-field">Type
+              <select data-action="composer-attachment-type" ${disabled ? "disabled" : ""}>
+                <option value="meme">Meme</option>
+                <option value="picture">Picture</option>
+                <option value="video">Video</option>
+                <option value="audio">Audio</option>
+              </select>
+            </label>
+            <label class="composer-popover-field">Label
+              <input type="text" data-action="composer-attachment-label" placeholder="Sprint retro meme" ${disabled ? "disabled" : ""} />
+            </label>
+            <label class="composer-popover-field">URL
+              <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
+            </label>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add attachment</button>
+              <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
+            </div>
+            <label class="composer-popover-field">Import attachment JSON
+              <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{"type":"meme","label":"Ship it","url":"https://..."}]' ${disabled ? "disabled" : ""}></textarea>
+            </label>
+            <button type="button" data-action="composer-attachment-import" ${disabled ? "disabled" : ""}>Import attachments</button>
+            <ul class="composer-channel-list" data-testid="composer-attachment-library-list">
+              <li class="meta">No custom attachments yet.</li>
+            </ul>
+          </div>
+        </section>
+        <section class="composer-popover" data-panel="governance" data-testid="composer-governance-panel" aria-hidden="true">
+          <p class="composer-popover-title">Governance composer</p>
+          <label class="composer-popover-field">Proposal title
+            <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
+          </label>
+          <label class="composer-popover-field">Proposal type
+            <select data-action="composer-governance-type" ${disabled ? "disabled" : ""}>
+              <option value="binary">Binary</option>
+              <option value="multiple_choice">Multiple choice</option>
+              <option value="ranked">Ranked</option>
+            </select>
+          </label>
+          <label class="composer-popover-field">Options (comma separated)
+            <input type="text" data-action="composer-governance-options" value="Approve,Block" ${disabled ? "disabled" : ""} />
+          </label>
+          <label class="composer-popover-field">Duration (hours)
+            <input type="number" min="1" max="168" step="1" data-action="composer-governance-duration" value="48" ${disabled ? "disabled" : ""} />
+          </label>
+          <div class="composer-popover-actions">
+            <button type="button" data-action="composer-governance-insert-proposal" ${disabled ? "disabled" : ""}>Insert proposal</button>
+            <button type="button" data-action="composer-governance-insert-vote" ${disabled ? "disabled" : ""}>Insert vote</button>
+          </div>
+          <div class="composer-channel-editor">
+            <p class="composer-popover-title">Governance templates</p>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-governance-save-template" ${disabled ? "disabled" : ""}>Save template</button>
+              <button type="button" data-action="composer-governance-export-templates" ${disabled ? "disabled" : ""}>Export templates</button>
+            </div>
+            <label class="composer-popover-field">Import template JSON
+              <textarea rows="2" data-action="composer-governance-import-json" placeholder='[{"title":"Ship release","type":"binary","options":["Approve","Block"],"durationHours":48}]' ${disabled ? "disabled" : ""}></textarea>
+            </label>
+            <button type="button" data-action="composer-governance-import-templates" ${disabled ? "disabled" : ""}>Import templates</button>
+            <ul class="composer-channel-list" data-testid="composer-governance-template-list">
+              <li class="meta">No governance templates yet.</li>
+            </ul>
           </div>
         </section>
         <section class="composer-popover" data-panel="gif" data-testid="composer-gif-panel" aria-hidden="true">

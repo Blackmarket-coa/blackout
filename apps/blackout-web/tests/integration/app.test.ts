@@ -14,7 +14,20 @@ describe("BlackoutWebApp integration", () => {
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
 
-    const app = new BlackoutWebApp(root);
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
     await app.mount();
 
     const username = document.querySelector<HTMLInputElement>("input[name='username']");
@@ -51,7 +64,20 @@ describe("BlackoutWebApp integration", () => {
     const root = document.querySelector("#app");
     if (!root) throw new Error("missing app root in test");
 
-    const app = new BlackoutWebApp(root);
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "baseline_matrix",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "baseline_matrix",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
     await app.mount();
 
     fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
@@ -415,6 +441,23 @@ describe("BlackoutWebApp integration", () => {
     expect((root.querySelector('[data-testid="composer-attachment-panel"]') as HTMLElement).classList.contains("is-open")).toBe(true);
     fireEvent.click(root.querySelector("[data-action='composer-attach-image']") as HTMLButtonElement);
     expect(composer.value).toContain("![uploaded image]");
+    fireEvent.click(attachmentTrigger as HTMLButtonElement);
+    fireEvent.change(root.querySelector("[data-action='composer-attachment-type']") as HTMLSelectElement, { target: { value: "video" } });
+    fireEvent.input(root.querySelector("[data-action='composer-attachment-label']") as HTMLInputElement, { target: { value: "Launch recap" } });
+    fireEvent.input(root.querySelector("[data-action='composer-attachment-url']") as HTMLInputElement, { target: { value: "https://cdn.example.com/videos/launch-recap.mp4" } });
+    fireEvent.click(root.querySelector("[data-action='composer-attachment-add']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-attachment-export']") as HTMLButtonElement);
+    expect((root.querySelector("[data-action='composer-attachment-import-json']") as HTMLTextAreaElement).value).toContain("Launch recap");
+    fireEvent.click(root.querySelector("[data-action='composer-attachment-stego']") as HTMLButtonElement);
+    expect(composer.value).toContain("[stego-attachment");
+    fireEvent.click(root.querySelector("[data-action='composer-open-governance']") as HTMLButtonElement);
+    fireEvent.input(root.querySelector("[data-action='composer-governance-title']") as HTMLInputElement, { target: { value: "Approve release train" } });
+    fireEvent.input(root.querySelector("[data-action='composer-governance-options']") as HTMLInputElement, { target: { value: "Approve,Block,Delay" } });
+    fireEvent.click(root.querySelector("[data-action='composer-governance-save-template']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-action='composer-governance-export-templates']") as HTMLButtonElement);
+    expect((root.querySelector("[data-action='composer-governance-import-json']") as HTMLTextAreaElement).value).toContain("Approve release train");
+    fireEvent.click(root.querySelector("[data-action='composer-governance-insert-proposal']") as HTMLButtonElement);
+    expect(composer.value).toContain("/proposal");
 
     const gifTrigger = root.querySelector('[data-testid="composer-gif-trigger"]') as HTMLButtonElement | null;
     expect(gifTrigger).toBeTruthy();

@@ -15,13 +15,13 @@ describe("resolveMatrixHomeserverUrl", () => {
 });
 
 describe("resolveBlackoutRuntimeConfig", () => {
-  it("defaults to baseline_matrix preset bundle", () => {
+  it("defaults to blackout_full preset bundle", () => {
     const config = resolveBlackoutRuntimeConfig({});
 
-    expect(config.presets.activePreset).toBe("baseline_matrix");
+    expect(config.presets.activePreset).toBe("blackout_full");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
-    expect(config.presets.features["features.stego.enabled"]).toBe(false);
+    expect(config.presets.features["features.stego.enabled"]).toBe(true);
   });
 
   it("merges deployment, tenant, and user overrides when allowed", () => {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
-const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "baseline_matrix") as "baseline_matrix" | "community_plus" | "blackout_full";
+const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "blackout_full") as "baseline_matrix" | "community_plus" | "blackout_full";
 
 const smokeActionByPreset = {
   baseline_matrix: "feature-toggle-matrix-client",

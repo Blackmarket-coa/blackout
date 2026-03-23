@@ -133,6 +133,20 @@ body {
 .quick-action-select {
   display: grid;
   gap: 0.35rem;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feature-rail-btn:hover {
+  border-color: #2B5D34;
+  background: #244D2B;
+}
+
+.feature-rail-btn.is-selected {
+  background: linear-gradient(135deg, #9FE2BF, #2B5D34);
+  border-color: #9FE2BF;
 }
 
 .quick-action-select span {
@@ -150,6 +164,27 @@ body {
 
 .quick-action-select select:hover {
   border-color: #2B5D34;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+  display: grid;
+  gap: 0.12rem;
+  text-align: left;
+}
+
+.feature-chip small {
+  color: #A9C7B6;
+  font-size: 0.72rem;
+}
+
+.feature-chip:hover {
+  background: #244D2B;
+  border-color: #2B5D34;
+}
+
+.feature-chip.is-selected {
+  background: linear-gradient(135deg, #9FE2BF, #2B5D34);
+  border-color: #9FE2BF;
 }
 
 .command-palette-trigger {

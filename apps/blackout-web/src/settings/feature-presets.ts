@@ -206,7 +206,7 @@ export function resolveFeaturePreset(
   tenantPolicy?: TenantPresetPolicy,
   userOverrides?: UserPresetOverrides,
 ): ResolvedPresetConfig {
-  const deploymentPreset = deployment.preset ?? "baseline_matrix";
+  const deploymentPreset = deployment.preset ?? "blackout_full";
   const activePreset = tenantPolicy?.preset ?? deploymentPreset;
 
   let features = { ...FEATURE_PRESET_BUNDLES[activePreset] };
