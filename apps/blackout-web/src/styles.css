@@ -233,6 +233,11 @@ body {
   padding: 0.55rem;
 }
 
+.workspace-content {
+  position: relative;
+  min-width: 0;
+}
+
 .workspace--compact .message-item {
   padding: 0.35rem 0.4rem;
 }
@@ -247,6 +252,63 @@ body {
   border-radius: 0;
   border: 0;
   padding: 0.75rem;
+}
+
+.right-panel-overlay {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(360px, 42vw);
+  border-left: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel-bg) 92%, black 8%);
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  overflow-y: auto;
+  box-shadow: -10px 0 32px rgb(0 0 0 / 28%);
+}
+
+.right-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.right-panel-header h3 {
+  margin: 0;
+}
+
+.right-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.right-panel-list li {
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  background: color-mix(in srgb, var(--panel-bg-alt) 85%, black 15%);
+  display: grid;
+  gap: 0.1rem;
+}
+
+.right-panel-search {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.right-panel-search input {
+  margin-top: 0.35rem;
+}
+
+.right-panel-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
 }
 
 .server-sidebar {
@@ -1098,6 +1160,10 @@ label {
   .quick-actions-grid {
     grid-template-columns: 1fr;
   }
+
+  .right-panel-overlay {
+    width: min(380px, 76vw);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1116,6 +1182,12 @@ label {
   .workspace.show-channel-drawer .channel-list {
     left: 0;
     width: min(88vw, 320px);
+  }
+
+  .right-panel-overlay {
+    width: 100%;
+    border-left: 0;
+    box-shadow: none;
   }
 }
 

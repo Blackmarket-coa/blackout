@@ -18,6 +18,7 @@ const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
+type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance";
 type StegoChannel = {
   id: string;
   name: string;
@@ -63,6 +64,7 @@ export class BlackoutWebApp {
   private composerIsTyping = false;
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
+  private activeRightPanel: RightPanelView | null = null;
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -246,7 +248,7 @@ export class BlackoutWebApp {
     }
 
     const state = this.store.getState();
-    return renderChatWindow({
+    const chatView = renderChatWindow({
       channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
       messages: state.messages,
       canSend: Boolean(state.activeChannelId),
@@ -263,6 +265,66 @@ export class BlackoutWebApp {
       compactMode: this.getCompactModeActive(),
       compactRecommended: this.isMessageHeavySession(),
     });
+
+    return `
+      <section class="workspace-content ${this.activeRightPanel ? "workspace-content--with-panel" : ""}">
+        ${chatView}
+        ${this.activeRightPanel ? this.renderRightPanelOverlay(this.activeRightPanel) : ""}
+      </section>
+    `;
+  }
+
+  private renderRightPanelOverlay(panel: RightPanelView): string {
+    const panelTitle: Record<RightPanelView, string> = {
+      members: "Member list",
+      threads: "Thread view",
+      pinned: "Pinned messages",
+      search: "Search results",
+      governance: "Governance panel",
+    };
+
+    const panelBody: Record<RightPanelView, string> = {
+      members: `<ul class="right-panel-list">
+          <li><strong>Facilitator</strong><span class="meta">Online • can moderate and propose</span></li>
+          <li><strong>Treasury guardian</strong><span class="meta">Online • signer #2</span></li>
+          <li><strong>General member</strong><span class="meta">Away • voter role</span></li>
+        </ul>`,
+      threads: `<ul class="right-panel-list">
+          <li><strong>Budget RFC follow-up</strong><span class="meta">12 replies • updated 4m ago</span></li>
+          <li><strong>Call notes synthesis</strong><span class="meta">7 replies • updated 19m ago</span></li>
+        </ul>`,
+      pinned: `<ul class="right-panel-list">
+          <li><strong>Meeting charter</strong><span class="meta">Pinned by @ops</span></li>
+          <li><strong>Emergency relay docs</strong><span class="meta">Pinned by @security</span></li>
+        </ul>`,
+      search: `<div class="right-panel-search">
+          <label>Find in room<input type="search" value="governance roadmap" readonly /></label>
+          <ul class="right-panel-list">
+            <li><strong>Roadmap checkpoint posted</strong><span class="meta">#governance • 2 results</span></li>
+            <li><strong>Roadmap vote opened</strong><span class="meta">#announcements • 1 result</span></li>
+          </ul>
+        </div>`,
+      governance: `<div class="right-panel-governance">
+          <p class="meta">Active proposal</p>
+          <strong>Enable coalition quest payouts</strong>
+          <p class="meta">Voting window: 48h • quorum 60%</p>
+          <div class="right-panel-actions">
+            <button type="button" class="ghost-btn">Vote approve</button>
+            <button type="button" class="ghost-btn">Vote block</button>
+          </div>
+        </div>`,
+    };
+
+    return `
+      <aside class="right-panel-overlay" data-testid="right-panel-overlay">
+        <div class="right-panel-header">
+          <h3>${panelTitle[panel]}</h3>
+          <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
+        </div>
+        <p class="meta">Plan-aligned contextual overlay for room collaboration workflows.</p>
+        ${panelBody[panel]}
+      </aside>
+    `;
   }
 
   private renderDmsPanel(): string {
@@ -940,6 +1002,20 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='toggle-channel-drawer']")?.addEventListener("click", () => {
       const current = this.store.getState().channelDrawerOpen;
       this.store.patch({ channelDrawerOpen: !current });
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-right-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const panel = button.dataset.panel as RightPanelView | undefined;
+        if (!panel) return;
+        this.activeRightPanel = panel;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='close-right-panel']")?.addEventListener("click", () => {
+      this.activeRightPanel = null;
       this.render();
     });
 
