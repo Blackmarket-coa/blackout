@@ -416,23 +416,23 @@ export class BlackoutWebApp {
     const quickLinks = `
       <li class="dm-hub-shell">
       <section class="dm-hub-card" aria-label="Direct message hub">
-        <button type="button" class="dm-hub-search" data-action="start-dm-channel" aria-label="Find or start a conversation">Find or start a conversation</button>
+        <button type="button" class="dm-hub-search" data-action="start-dm-channel" aria-label="Find or start a secure conversation">Find or start a secure conversation</button>
         <div class="dm-hub-list" role="list">
           <button type="button" class="dm-hub-item" data-action="dm-open-friends" role="listitem">
             <span class="dm-hub-icon" aria-hidden="true">👥</span>
-            <span>Friends</span>
+            <span>Allies</span>
           </button>
           <button type="button" class="dm-hub-item" data-action="dm-open-nitro" role="listitem">
             <span class="dm-hub-icon" aria-hidden="true">⚡</span>
-            <span>Nitro</span>
+            <span>Boosts</span>
           </button>
           <button type="button" class="dm-hub-item dm-hub-item--active" data-action="dm-open-shop" role="listitem">
             <span class="dm-hub-icon" aria-hidden="true">🛍️</span>
-            <span>Shop</span>
+            <span>Black Market</span>
           </button>
           <button type="button" class="dm-hub-item" data-action="dm-open-quests" role="listitem">
             <span class="dm-hub-icon" aria-hidden="true">🎯</span>
-            <span>Quests</span>
+            <span>Missions</span>
           </button>
         </div>
       </section>
@@ -1078,7 +1078,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='dm-open-friends']").forEach((button) => {
       button.addEventListener("click", () => {
         this.openDmComposer();
-        this.featureActionResult = "Friends shortcuts map to direct-message contacts. Start a DM to reach your trusted circle.";
+        this.featureActionResult = "Allies shortcuts map to direct-message contacts. Start a DM to reach your trusted circle.";
         this.render();
       });
     });
@@ -1086,7 +1086,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='dm-open-nitro']").forEach((button) => {
       button.addEventListener("click", () => {
         this.settingsOpen = true;
-        this.featureActionResult = "Nitro perks map to Blackout subscriptions. Open settings to manage plan perks and boosts.";
+        this.featureActionResult = "Boosts map to Blackout subscription perks. Open settings to manage plan upgrades.";
         this.render();
       });
     });
@@ -1094,7 +1094,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='dm-open-shop']").forEach((button) => {
       button.addEventListener("click", () => {
         globalThis.open("https://freeblackmarket.com/digital-products", "_blank", "noopener,noreferrer");
-        this.featureActionResult = "Shop opened digital products at freeblackmarket.com.";
+        this.featureActionResult = "Black Market opened digital products at freeblackmarket.com.";
         this.render();
       });
     });
@@ -1103,7 +1103,7 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         this.settingsOpen = true;
         this.activeRevenueOpsTab = "quests";
-        this.featureActionResult = "Quests opened in Revenue Ops so you can review campaign milestones and payouts.";
+        this.featureActionResult = "Missions opened in Revenue Ops so you can review campaign milestones and payouts.";
         this.render();
       });
     });
