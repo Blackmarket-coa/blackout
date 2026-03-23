@@ -70,6 +70,7 @@ import { MatrixClientContextProvider } from "./MatrixClientContextProvider";
 import { Landmark, LandmarkNavigation } from "../../accessibility/LandmarkNavigation";
 import { ModuleApi } from "../../modules/Api.ts";
 import { SDKContext } from "../../contexts/SDKContext.ts";
+import SettingsPage from "./SettingsPage";
 
 // We need to fetch each pinned message individually (if we don't already have it)
 // so each pinned message may trigger a request. Limit the number per room for sanity.
@@ -101,6 +102,7 @@ interface IProps {
     justRegistered?: boolean;
     roomJustCreatedOpts?: IOpts;
     forceTimeline?: boolean; // see props on MatrixChat
+    initialSettingsTabId?: UserTab;
 }
 
 interface IState {
@@ -735,6 +737,8 @@ class LoggedInView extends React.Component<IProps, IState> {
             }
         }
 
+        const isSettingsPage = this.props.page_type === PageTypes.SettingsPage;
+
         const wrapperClasses = classNames({
             mx_MatrixChat_wrapper: true,
             mx_MatrixChat_useCompactLayout: this.state.useCompactLayout,
@@ -789,8 +793,15 @@ class LoggedInView extends React.Component<IProps, IState> {
                                 )}
                             </div>
                         </div>
-                        {!moduleRenderer && <ResizeHandle passRef={this.resizeHandler} id="lp-resizer" />}
-                        <div className="mx_RoomView_wrapper">{pageElement}</div>
+                        {!moduleRenderer && !isSettingsPage && (
+                            <ResizeHandle passRef={this.resizeHandler} id="lp-resizer" />
+                        )}
+                        <div className="mx_RoomView_wrapper" aria-hidden={isSettingsPage}>
+                            {pageElement}
+                        </div>
+                        {isSettingsPage && (
+                            <SettingsPage initialTabId={this.props.initialSettingsTabId} />
+                        )}
                     </div>
                 </div>
                 <PipContainer />
