@@ -1,47 +1,49 @@
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background: #0A0A0A;
-  color: #f2f3f5;
-  --app-bg: #0A0A0A;
-  --header-border: #2B5D34;
-  --header-bg: linear-gradient(135deg, #2B5D34, #163520 65%);
-  --workspace-bg: #163520;
-  --workspace-border: #2F6B3A;
-  --sidebar-bg: linear-gradient(180deg, #2B5D34 0%, #3F7A45 52%, #8D3A2F 100%);
-  --panel-bg: #1A2A20;
-  --panel-bg-alt: #223428;
-  --panel-border: #3C6A45;
-  --text-strong: #f2f3f5;
-  --text-muted: #B7D4C3;
+  background: #1A1A1A;
+  color: #FAFAFA;
+  --app-bg: #1A1A1A;
+  --header-border: #2D5A27;
+  --header-bg: linear-gradient(135deg, #1E3D1A, #1A1A1A 70%);
+  --workspace-bg: #1A1A1A;
+  --workspace-border: #2D5A27;
+  --sidebar-bg: linear-gradient(180deg, #1E3D1A 0%, #2D5A27 52%, #113029 100%);
+  --panel-bg: #1E3D1A;
+  --panel-bg-alt: #1A2C18;
+  --panel-border: #2D5A27;
+  --text-strong: #FAFAFA;
+  --text-muted: #D2E4D8;
+  --accent-teal: #4ECDC4;
 }
 
-:root[data-theme="legacy_matrix_classic"] {
-  --app-bg: #0f1116;
-  --header-border: #3b4558;
-  --header-bg: linear-gradient(135deg, #1d2a42, #111722 68%);
-  --workspace-bg: #111722;
-  --workspace-border: #374357;
-  --sidebar-bg: linear-gradient(180deg, #24334b 0%, #2c3f61 55%, #355077 100%);
-  --panel-bg: #1f2838;
-  --panel-bg-alt: #253145;
-  --panel-border: #445674;
-  --text-strong: #e7ecf7;
-  --text-muted: #b4c0d7;
+:root[data-theme="light_grove"] {
+  color-scheme: light;
+  --app-bg: #FAFAFA;
+  --header-border: #2D5A27;
+  --header-bg: linear-gradient(135deg, #E8F5E2, #FFFFFF 70%);
+  --workspace-bg: #FFFFFF;
+  --workspace-border: #C7DFC1;
+  --sidebar-bg: linear-gradient(180deg, #E8F5E2 0%, #D7EDCF 52%, #CDE8C5 100%);
+  --panel-bg: #F7FCF4;
+  --panel-bg-alt: #ECF7E7;
+  --panel-border: #C7DFC1;
+  --text-strong: #1A1A1A;
+  --text-muted: #38533C;
 }
 
-:root[data-theme="legacy_terminal"] {
-  --app-bg: #050907;
-  --header-border: #1f6b3f;
-  --header-bg: linear-gradient(135deg, #0f281c, #09140f 66%);
-  --workspace-bg: #07110b;
-  --workspace-border: #1f6b3f;
-  --sidebar-bg: linear-gradient(180deg, #0b2f1d 0%, #0d3a24 55%, #11552f 100%);
-  --panel-bg: #0d1f16;
-  --panel-bg-alt: #10281b;
-  --panel-border: #2a8a55;
-  --text-strong: #d6ffe8;
-  --text-muted: #91c9ab;
+:root[data-theme="amoled_night"] {
+  --app-bg: #000000;
+  --header-border: #2D5A27;
+  --header-bg: linear-gradient(135deg, #000000, #05140f 66%);
+  --workspace-bg: #000000;
+  --workspace-border: #214A2D;
+  --sidebar-bg: linear-gradient(180deg, #03110c 0%, #061b13 55%, #0a2c1f 100%);
+  --panel-bg: #050505;
+  --panel-bg-alt: #0D0D0D;
+  --panel-border: #214A2D;
+  --text-strong: #F5FFFB;
+  --text-muted: #9BC5B5;
 }
 
 * {
@@ -206,7 +208,7 @@ body {
   flex: 1;
   min-height: 420px;
   display: grid;
-  grid-template-columns: 72px 300px minmax(0, 1fr);
+  grid-template-columns: 64px 260px minmax(0, 1fr);
   gap: 0.2rem;
   border: 1px solid var(--workspace-border);
   border-radius: 16px;
@@ -1024,7 +1026,7 @@ label {
   color: #ff9f9f;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .workspace {
     grid-template-columns: 64px minmax(0, 1fr);
     position: relative;
@@ -1062,6 +1064,25 @@ label {
 
   .quick-actions-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0.6rem;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server-sidebar {
+    display: none;
+  }
+
+  .workspace.show-channel-drawer .channel-list {
+    left: 0;
+    width: min(88vw, 320px);
   }
 }
 

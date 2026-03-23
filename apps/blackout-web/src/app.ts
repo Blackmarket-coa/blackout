@@ -17,7 +17,7 @@ import type { ChatMessage, ServerDetails } from "./types";
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
-type ThemeKey = "blackout_modern" | "legacy_matrix_classic" | "legacy_terminal";
+type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type StegoChannel = {
   id: string;
   name: string;
@@ -179,8 +179,8 @@ export class BlackoutWebApp {
     this.root.innerHTML = `
       <main class="container">
         <header class="header">
-          <h1>Blackout Chat</h1>
-          <p class="meta">A familiar, modern messaging workspace inspired by the best team chat apps.</p>
+          <h1>Blackout Coalition Workspace</h1>
+          <p class="meta">Solarpunk governance and messaging shell with a three-column blackout layout.</p>
         </header>
         <div class="header-actions">
           <div class="header-actions-copy">
@@ -635,15 +635,15 @@ export class BlackoutWebApp {
 
   private renderThemeManagementSection(): string {
     const themes: Array<{ id: ThemeKey; label: string; description: string }> = [
-      { id: "blackout_modern", label: "Blackout modern", description: "Current default styling optimized for daily chat." },
-      { id: "legacy_matrix_classic", label: "Legacy Matrix classic", description: "Classic pre-refresh palette and panel contrast." },
-      { id: "legacy_terminal", label: "Legacy terminal", description: "Green-on-dark high-contrast operations theme." },
+      { id: "dark_canopy", label: "Dark canopy (default)", description: "Deep green and black surfaces for extended low-light sessions." },
+      { id: "light_grove", label: "Light grove", description: "Light green and white surfaces for daylight readability." },
+      { id: "amoled_night", label: "AMOLED night", description: "Pure black OLED surfaces with teal interaction accents." },
     ];
 
     return `
       <section class="stack panel-card theme-panel" data-testid="theme-panel">
         <h2>Theme selection</h2>
-        <p class="meta">Legacy themes are now selectable for teams that prefer older visual styles.</p>
+        <p class="meta">Theme variants from the Blackout UI plan: Dark, Light, and AMOLED.</p>
         <label class="theme-select">
           <span>Active theme</span>
           <select data-action="select-theme" data-testid="theme-select">
@@ -658,10 +658,10 @@ export class BlackoutWebApp {
   }
 
   private parseTheme(theme: string | null): ThemeKey {
-    if (theme === "legacy_matrix_classic" || theme === "legacy_terminal") {
+    if (theme === "light_grove" || theme === "amoled_night") {
       return theme;
     }
-    return "blackout_modern";
+    return "dark_canopy";
   }
 
   private applyTheme(theme: ThemeKey): void {
