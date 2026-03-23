@@ -4,7 +4,7 @@
   "private": true,
   "description": "Blackout mobile shell built with Capacitor",
   "scripts": {
-    "build:web": "cd .. && pnpm --filter @blackout/web build",
+    "build:web": "cd .. && pnpm --filter @blackout/blackout-web build:web",
     "copy": "pnpm build:web && cap copy",
     "sync": "pnpm build:web && cap sync",
     "add:ios": "cap add ios",
