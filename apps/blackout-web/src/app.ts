@@ -79,6 +79,8 @@ export class BlackoutWebApp {
   private activeMobileTab: MobileTab = "spaces";
   private deepDiveCardIndex = 0;
   private deepDiveBookmarked = 0;
+  private swipeRightGesture: "reply" | "quote" = "reply";
+  private swipeLeftGesture: "thread" | "react" = "thread";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -207,7 +209,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -838,6 +840,32 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderMobileGesturesPanel(): string {
+    return `
+      <section class="stack panel-card mobile-gestures-panel" data-testid="mobile-gestures-panel">
+        <h2>Mobile gestures</h2>
+        <p class="meta">Configure swipe/press actions for the mobile gesture model.</p>
+        <label>Swipe right on message
+          <select data-action="mobile-gesture-right">
+            <option value="reply" ${this.swipeRightGesture === "reply" ? "selected" : ""}>Reply</option>
+            <option value="quote" ${this.swipeRightGesture === "quote" ? "selected" : ""}>Quote reply</option>
+          </select>
+        </label>
+        <label>Swipe left on message
+          <select data-action="mobile-gesture-left">
+            <option value="thread" ${this.swipeLeftGesture === "thread" ? "selected" : ""}>Thread</option>
+            <option value="react" ${this.swipeLeftGesture === "react" ? "selected" : ""}>Quick react</option>
+          </select>
+        </label>
+        <ul class="meta">
+          <li>Long press: copy, pin, delete, report, view source (dev mode).</li>
+          <li>Pull to refresh in room list.</li>
+          <li>Edge swipe right for back navigation.</li>
+        </ul>
+      </section>
+    `;
+  }
+
   private parseTheme(theme: string | null): ThemeKey {
     if (theme === "light_grove" || theme === "amoled_night") {
       return theme;
@@ -1037,6 +1065,20 @@ export class BlackoutWebApp {
         this.compactModeEnabled = !this.compactModeEnabled;
         this.render();
       });
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='mobile-gesture-right']")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value as "reply" | "quote";
+      this.swipeRightGesture = value;
+      this.featureActionResult = `Updated swipe-right gesture to ${value}.`;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLSelectElement>("[data-action='mobile-gesture-left']")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value as "thread" | "react";
+      this.swipeLeftGesture = value;
+      this.featureActionResult = `Updated swipe-left gesture to ${value}.`;
+      this.render();
     });
 
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
