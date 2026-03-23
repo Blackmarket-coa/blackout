@@ -7,6 +7,8 @@ import { renderEconomicsPanel, type EconomicsTab } from "./components/EconomicsP
 import { renderFederationPanel, type FederationTab } from "./components/FederationPanel";
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
+import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/PlatformOpsPanel";
+import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderAuthView } from "./features/auth/auth-view";
@@ -81,6 +83,17 @@ export class BlackoutWebApp {
   private deepDiveBookmarked = 0;
   private swipeRightGesture: "reply" | "quote" = "reply";
   private swipeLeftGesture: "thread" | "react" = "thread";
+  private activeRevenueOpsTab: RevenueOpsTab = "monetization";
+  private paymentSheetOpen = false;
+  private paymentIssue = false;
+  private questStage: QuestStage = "open";
+  private installedApps = 2;
+  private activePlatformOpsTab: PlatformOpsTab = "federation";
+  private readinessScore = 86;
+  private vaultUsageGb = 11.5;
+  private hostingTier = 2;
+  private blackboxProvisioned = false;
+  private recommendationMode: "heuristic" | "matrix_public_rooms" = "heuristic";
   private selectedTheme: ThemeKey;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -209,7 +222,7 @@ export class BlackoutWebApp {
           <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
           <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
         </div>
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -866,6 +879,27 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderRevenueOpsPanelSection(): string {
+    return renderRevenueOpsPanel({
+      activeTab: this.activeRevenueOpsTab,
+      paymentSheetOpen: this.paymentSheetOpen,
+      paymentIssue: this.paymentIssue,
+      questStage: this.questStage,
+      installedApps: this.installedApps,
+    });
+  }
+
+  private renderPlatformOpsPanelSection(): string {
+    return renderPlatformOpsPanel({
+      activeTab: this.activePlatformOpsTab,
+      readinessScore: this.readinessScore,
+      vaultUsageGb: this.vaultUsageGb,
+      hostingTier: this.hostingTier,
+      blackboxProvisioned: this.blackboxProvisioned,
+      recommendationMode: this.recommendationMode,
+    });
+  }
+
   private parseTheme(theme: string | null): ThemeKey {
     if (theme === "light_grove" || theme === "amoled_night") {
       return theme;
@@ -1078,6 +1112,106 @@ export class BlackoutWebApp {
       const value = (event.currentTarget as HTMLSelectElement).value as "thread" | "react";
       this.swipeLeftGesture = value;
       this.featureActionResult = `Updated swipe-left gesture to ${value}.`;
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='revenue-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as RevenueOpsTab | undefined;
+        if (!tab) return;
+        this.activeRevenueOpsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-open-payment-sheet']")?.addEventListener("click", () => {
+      this.paymentSheetOpen = true;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-close-payment-sheet']")?.addEventListener("click", () => {
+      this.paymentSheetOpen = false;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='revenue-toggle-payment-issue']")?.addEventListener("click", () => {
+      this.paymentIssue = !this.paymentIssue;
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='quest-next-stage']")?.addEventListener("click", () => {
+      this.questStage = this.questStage === "open" ? "claimed" : this.questStage === "claimed" ? "submitted" : this.questStage === "submitted" ? "approved" : "approved";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='quest-reset-stage']")?.addEventListener("click", () => {
+      this.questStage = "open";
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-install']")?.addEventListener("click", () => {
+      this.installedApps += 1;
+      this.featureActionResult = "Installed app with sandbox permission review.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-uninstall']")?.addEventListener("click", () => {
+      this.installedApps = Math.max(0, this.installedApps - 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='app-permissions']")?.addEventListener("click", () => {
+      this.featureActionResult = "Permissions reviewed: events.read, governance.write, treasury.read.";
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='platform-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as PlatformOpsTab | undefined;
+        if (!tab) return;
+        this.activePlatformOpsTab = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='platform-refresh-readiness']")?.addEventListener("click", () => {
+      this.readinessScore = 75 + Math.round(Math.random() * 24);
+      this.featureActionResult = "Federation telemetry refreshed.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-toggle-secret-ballot']")?.addEventListener("click", () => {
+      this.featureActionResult = "Secret-ballot compliance mode toggled.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-open-audit-log']")?.addEventListener("click", () => {
+      this.featureActionResult = "Opened steganographic audit trail preview.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='compliance-generate-1099']")?.addEventListener("click", () => {
+      this.featureActionResult = "Generated 1099 payroll batch (preview).";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='vault-upload-sim']")?.addEventListener("click", () => {
+      this.vaultUsageGb = Math.min(50, this.vaultUsageGb + 2.5);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='vault-clear-sim']")?.addEventListener("click", () => {
+      this.vaultUsageGb = 0;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-scale-up']")?.addEventListener("click", () => {
+      this.hostingTier = Math.min(5, this.hostingTier + 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-scale-down']")?.addEventListener("click", () => {
+      this.hostingTier = Math.max(1, this.hostingTier - 1);
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='hosting-trigger-backup']")?.addEventListener("click", () => {
+      this.featureActionResult = "Manual backup trigger queued.";
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='blackbox-toggle-provisioning']")?.addEventListener("click", () => {
+      this.blackboxProvisioned = !this.blackboxProvisioned;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='mobile-toggle-recommendation']")?.addEventListener("click", () => {
+      this.recommendationMode = this.recommendationMode === "heuristic" ? "matrix_public_rooms" : "heuristic";
       this.render();
     });
 

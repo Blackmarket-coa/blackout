@@ -644,6 +644,51 @@ body {
   gap: 0.25rem;
 }
 
+.ops-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ops-tabs button {
+  width: auto;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.3rem 0.55rem;
+}
+
+.ops-tabs button.is-active {
+  color: var(--text-strong);
+  border-color: var(--accent-teal);
+  background: color-mix(in srgb, var(--accent-teal) 16%, transparent);
+}
+
+.ops-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: color-mix(in srgb, var(--panel-bg) 78%, black 22%);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ops-actions button {
+  width: auto;
+}
+
+.ops-inline-sheet {
+  border: 1px dashed var(--panel-border);
+  border-radius: 10px;
+  padding: 0.55rem;
+}
+
 .server-sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid rgb(255 255 255 / 12%);
