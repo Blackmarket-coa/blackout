@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "co.bmc.blackout",
   "build": {
-    "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/web dev",
-    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/web build",
+    "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/blackout-web dev",
+    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/blackout-web build:web",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../apps/blackout-web/dist"
   },

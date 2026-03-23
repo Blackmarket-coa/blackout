@@ -134,7 +134,7 @@ pnpm test
 For steganography-specific changes, run targeted suites too:
 
 ```bash
-pnpm --filter @blackout/web test
+pnpm --filter @blackout/blackout-web test
 ```
 
 Helpful docs:
