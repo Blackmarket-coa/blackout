@@ -678,7 +678,7 @@ body {
   gap: 0.35rem;
   align-items: center;
   border-radius: 9px;
-  border-color: #3a3f49;
+  border-color: #3C6A45;
   background: linear-gradient(180deg, #292f3c, #1d222d);
   padding: 0.41rem 0.64rem;
 }
@@ -738,7 +738,7 @@ body {
 }
 
 .composer-shell .composer-shell-icon:hover {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #232a3b;
 }
 
@@ -770,7 +770,7 @@ body {
 }
 
 .composer-shell-glyph:hover {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #20283a;
 }
 
@@ -858,7 +858,7 @@ body {
 }
 
 .composer-stego-tabs button.is-active {
-  border-color: #4f8ef7;
+  border-color: #9FE2BF;
   background: #22385f;
 }
 

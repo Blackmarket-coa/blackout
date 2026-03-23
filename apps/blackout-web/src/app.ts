@@ -881,8 +881,8 @@ export class BlackoutWebApp {
       select.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value;
         if (!value) return;
-        const [, featureId] = value.split("|");
-        this.openFeatureById(featureId);
+        const [kind, featureId] = value.split("|") as [UiEntryKind, string];
+        this.openFeatureById(featureId, kind);
         (event.currentTarget as HTMLSelectElement).value = "";
       });
     });
@@ -1728,6 +1728,11 @@ export class BlackoutWebApp {
     const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
     if (!entry) return;
     const [kind] = entry.uiEntry.split(":") as [UiEntryKind, string];
+    if (requestedKind && requestedKind !== kind) {
+      this.featureActionResult = `Could not open ${entry.id}: invalid route mapping.`;
+      this.render();
+      return;
+    }
     const enabled = this.getActivePresetFeatures()[entry.presetKey] ?? false;
     if (!enabled) {
       this.featureActionResult = `${entry.id} is unavailable: blocked by policy or entitlement.`;
@@ -1735,10 +1740,54 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
-    this.featureActionResult = `Opened ${entry.id} via ${kind}.`;
+    const destination = this.routeFeatureToWorkflow(entry.id, kind);
+    this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
     this.telemetry.track("feature_open_success", { featureId: entry.id, entrypointKind: kind });
     this.render();
+  }
+
+  private routeFeatureToWorkflow(featureId: string, kind: UiEntryKind): string {
+    switch (kind) {
+      case "settings_toggle":
+        this.settingsOpen = true;
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "settings panel";
+      case "composer_action":
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "chat composer";
+      case "room_action":
+        if (featureId === "dm_list") {
+          this.activeWorkspacePanel = "dms";
+          return "direct messages panel";
+        }
+        if (featureId === "room_invites") {
+          this.activeWorkspacePanel = "activity";
+          return "activity inbox";
+        }
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "room workflow";
+      case "widget_panel":
+        this.activeWorkspacePanel = "files";
+        this.repoToolsOpen = false;
+        return "files/widget panel";
+      case "admin_console":
+        this.settingsOpen = true;
+        this.activeWorkspacePanel = "repo-tools";
+        this.repoToolsOpen = true;
+        return "admin console tools";
+      case "command_palette":
+        this.openCommandPalette();
+        this.commandPaletteQuery = featureId.replaceAll("_", " ");
+        return "command palette";
+      default:
+        this.activeWorkspacePanel = "chat";
+        this.repoToolsOpen = false;
+        return "chat";
+    }
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
