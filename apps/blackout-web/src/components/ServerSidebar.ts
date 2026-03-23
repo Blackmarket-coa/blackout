@@ -19,6 +19,19 @@ function getInitials(name: string): string {
 export function renderServerSidebar({ servers, activeServerId, activeView }: ServerSidebarProps): string {
   const homeServer = servers.find((server) => server.id === activeServerId) ?? servers[0] ?? null;
   const homeInitials = homeServer ? getInitials(homeServer.name) : "HM";
+  const additionalServers = servers
+    .filter((server) => server.id !== homeServer?.id)
+    .map(
+      (server) => `
+        <li>
+          <button type="button" class="sidebar-nav-btn ${activeServerId === server.id ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}" aria-label="${server.name}">
+            <span class="sidebar-nav-glyph">${getInitials(server.name)}</span>
+            <span class="sidebar-nav-label">${server.name}</span>
+          </button>
+        </li>
+      `,
+    )
+    .join("");
 
   return `
     <aside class="server-sidebar" aria-label="Primary sidebar navigation">
@@ -32,11 +45,12 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
 
       <ul class="server-nav-list">
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "chat" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : "data-action=\"open-chat-panel\""} aria-label="Home">
+          <button type="button" class="sidebar-nav-btn ${activeView === "chat" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : "data-action=\"open-chat-panel\""} aria-label="${homeServer?.name ?? "Home"}">
             <span class="sidebar-nav-glyph">${homeInitials}</span>
-            <span class="sidebar-nav-label">Home</span>
+            <span class="sidebar-nav-label">${homeServer?.name ?? "Home"}</span>
           </button>
         </li>
+        ${additionalServers}
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "dms" ? "is-selected" : ""}" data-action="open-dms-panel" aria-label="Direct messages">
             <span class="sidebar-nav-glyph">💬</span>
