@@ -890,13 +890,20 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-feature-entry']").forEach((button) => {
       button.addEventListener("click", () => {
+        const featureId = button.dataset.featureId;
+        const requestedKind = button.dataset.featureKind as UiEntryKind | undefined;
+        if (!featureId) {
+          this.featureActionResult = "Could not open feature: missing feature id.";
+          this.render();
+          return;
+        }
         if (button.dataset.actionOrigin === "palette") {
           this.closeCommandPalette({ restoreFocus: false });
           if (!this.hasSeenFeatureTooltips) {
             globalThis.localStorage.setItem("blackout.featureTipsSeen", "true");
           }
         }
-        this.openFeatureById(button.dataset.featureId);
+        this.openFeatureById(featureId, requestedKind);
       });
     });
 
