@@ -16,6 +16,8 @@ import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
+type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools";
+
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
   private readonly api = createApiClient();
@@ -39,6 +41,7 @@ export class BlackoutWebApp {
   private compactModeEnabled = false;
   private settingsOpen = false;
   private composerIsTyping = false;
+  private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
   private readonly telemetry;
   private readonly trackedDenials = new Set<string>();
@@ -182,13 +185,166 @@ export class BlackoutWebApp {
 
     return `
       <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""} ${this.getCompactModeActive() ? "workspace--compact" : ""}">
-        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId })}
+        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId, activeView: this.activeWorkspacePanel })}
         ${renderChannelSidebar({
           serverName: selectedServer?.name ?? "Channels",
           channels: state.channels,
           activeChannelId: state.activeChannelId,
           unreadByChannel: state.unreadByChannel,
         })}
+        ${this.renderWorkspacePanel()}
+      </section>
+    `;
+  }
+
+
+  private renderWorkspacePanel(): string {
+    if (this.activeWorkspacePanel === "repo-tools") {
+      return this.renderRepoToolsPage();
+    }
+
+    if (this.activeWorkspacePanel === "dms") {
+      return this.renderDmsPanel();
+    }
+
+    if (this.activeWorkspacePanel === "activity") {
+      return this.renderActivityPanel();
+    }
+
+    if (this.activeWorkspacePanel === "files") {
+      return this.renderFilesPanel();
+    }
+
+    const state = this.store.getState();
+    return renderChatWindow({
+      channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
+      messages: state.messages,
+      canSend: Boolean(state.activeChannelId),
+      sendPending: state.loading.send,
+      richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
+      stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
+      composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
+      composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
+      composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
+      mediaCodeBlocksEnabled: this.getActivePresetFeatures()["features.media.codeBlocks"] ?? false,
+      mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
+      typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
+      showTypingIndicator: this.composerIsTyping,
+      compactMode: this.getCompactModeActive(),
+      compactRecommended: this.isMessageHeavySession(),
+    });
+  }
+
+  private renderRepoToolsPage(): string {
+    const tools = [
+      { name: "Build", command: "pnpm build", description: "Run the monorepo build across packages." },
+      { name: "Lint", command: "pnpm lint", description: "Type and static checks via turbo tasks." },
+      { name: "Unit tests", command: "pnpm test", description: "Execute the repository test matrix." },
+      { name: "Feature registry guard", command: "pnpm guard:feature-registry", description: "Validate feature entrypoint declarations." },
+      { name: "Preset completeness", command: "pnpm guard:preset-complete", description: "Ensure feature presets remain complete and consistent." },
+      { name: "Port change guard", command: "pnpm guard:port", description: "Detect unauthorized port exposure changes." },
+    ];
+
+    const items = tools
+      .map(
+        (tool) => `
+          <li class="repo-tools-item">
+            <div>
+              <strong>${tool.name}</strong>
+              <p class="meta">${tool.description}</p>
+            </div>
+            <code>${tool.command}</code>
+          </li>
+        `,
+      )
+      .join("");
+
+    return this.renderWorkspaceUtilityPage("Repo tools", "Key repository scripts for validating and shipping safely.", items);
+  }
+
+  private renderDmsPanel(): string {
+    const state = this.store.getState();
+    const items = state.channels
+      .filter((channel) => /^dm[\s-]/i.test(channel.name) || /\bdirect\b/i.test(channel.name))
+      .map(
+        (channel) => `
+          <li class="repo-tools-item">
+            <div>
+              <strong># ${channel.name}</strong>
+              <p class="meta">Open this conversation from your direct-message list.</p>
+            </div>
+            <button type="button" class="ghost-btn" data-action="open-channel" data-channel-id="${channel.id}">Open</button>
+          </li>
+        `,
+      )
+      .join("");
+
+    const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM-named channel (for example: "dm-alex") to populate this panel.</p></div></li>';
+    return this.renderWorkspaceUtilityPage("Direct messages", "A focused panel for quick DM access.", items || fallback);
+  }
+
+  private renderActivityPanel(): string {
+    const state = this.store.getState();
+    const activeFeatures = this.getActivePresetFeatures();
+    const items = FEATURE_UI_ENTRIES
+      .filter((entry) => activeFeatures[entry.presetKey] ?? false)
+      .slice(0, 8)
+      .map((feature) => {
+        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+        return `
+          <li class="repo-tools-item">
+            <div>
+              <strong>${feature.name}</strong>
+              <p class="meta">${feature.id}</p>
+            </div>
+            <button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}">Open</button>
+          </li>
+        `;
+      })
+      .join("");
+
+    const fallback = `<li class="repo-tools-item"><div><strong>No active inbox items</strong><p class="meta">You currently have ${state.channels.length} channels and no surfaced activity shortcuts.</p></div></li>`;
+    return this.renderWorkspaceUtilityPage("Activity inbox", "Review feature and activity shortcuts in one place.", items || fallback);
+  }
+
+  private renderFilesPanel(): string {
+    const items = [
+      { name: "Browse channels", description: "Jump to the channel browser and discover rooms with files.", action: "browse-channels" },
+      { name: "Media pipeline widget", description: "Open media upload/rendering feature entry.", featureId: "media_pipeline" },
+      { name: "Link previews", description: "Inspect link preview controls and behavior.", featureId: "media_link_previews" },
+    ]
+      .map((item) => {
+        if (item.action) {
+          return `
+            <li class="repo-tools-item">
+              <div><strong>${item.name}</strong><p class="meta">${item.description}</p></div>
+              <button type="button" class="ghost-btn" data-action="${item.action}">Open</button>
+            </li>
+          `;
+        }
+        return `
+          <li class="repo-tools-item">
+            <div><strong>${item.name}</strong><p class="meta">${item.description}</p></div>
+            <button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${item.featureId}" data-feature-kind="widget_panel">Open</button>
+          </li>
+        `;
+      })
+      .join("");
+
+    return this.renderWorkspaceUtilityPage("Files browser", "Locate upload, preview, and media workflows.", items);
+  }
+
+  private renderWorkspaceUtilityPage(title: string, subtitle: string, items: string): string {
+    return `
+      <section class="chat-window repo-tools-page" aria-label="${title}">
+        <div class="chat-head">
+          <div class="chat-head-copy">
+            <strong>${title}</strong>
+            <small>${subtitle}</small>
+          </div>
+          <button type="button" class="ghost-btn" data-action="open-chat-panel" aria-label="Back to chat">Back to chat</button>
+        </div>
+        <ul class="repo-tools-list">${items}</ul>
         ${this.repoToolsOpen ? this.renderRepoToolsPage() : renderChatWindow({
           channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
           messages: state.messages,
@@ -537,6 +693,7 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         const serverId = button.dataset.serverId;
         if (!serverId) return;
+        this.activeWorkspacePanel = "chat";
         this.repoToolsOpen = false;
         void this.openServer(serverId);
       });
@@ -546,6 +703,7 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         const channelId = button.dataset.channelId;
         if (!channelId) return;
+        this.activeWorkspacePanel = "chat";
         this.repoToolsOpen = false;
         void this.openChannel(channelId);
         this.store.patch({ channelDrawerOpen: false });
@@ -574,11 +732,36 @@ export class BlackoutWebApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "repo-tools";
         this.repoToolsOpen = true;
         this.render();
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-dms-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "dms";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-activity-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "activity";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-files-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "files";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-chat-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;

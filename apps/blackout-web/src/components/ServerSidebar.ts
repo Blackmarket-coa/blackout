@@ -3,6 +3,7 @@ import type { ServerSummary } from "../types";
 interface ServerSidebarProps {
   servers: ServerSummary[];
   activeServerId: string | null;
+  activeView: "chat" | "dms" | "activity" | "files" | "repo-tools";
 }
 
 function getInitials(name: string): string {
@@ -15,7 +16,7 @@ function getInitials(name: string): string {
   return chunks.join("") || name.slice(0, 2).toUpperCase();
 }
 
-export function renderServerSidebar({ servers, activeServerId }: ServerSidebarProps): string {
+export function renderServerSidebar({ servers, activeServerId, activeView }: ServerSidebarProps): string {
   const homeServer = servers.find((server) => server.id === activeServerId) ?? servers[0] ?? null;
   const homeInitials = homeServer ? getInitials(homeServer.name) : "HM";
 
@@ -31,40 +32,47 @@ export function renderServerSidebar({ servers, activeServerId }: ServerSidebarPr
 
       <ul class="server-nav-list">
         <li>
-          <button type="button" class="sidebar-nav-btn is-selected" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : ""} aria-label="Home">
+          <button type="button" class="sidebar-nav-btn ${activeView === "chat" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : "data-action=\"open-chat-panel\""} aria-label="Home">
             <span class="sidebar-nav-glyph">${homeInitials}</span>
             <span class="sidebar-nav-label">Home</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="browse-channels" aria-label="Direct messages">
+          <button type="button" class="sidebar-nav-btn ${activeView === "dms" ? "is-selected" : ""}" data-action="open-dms-panel" aria-label="Direct messages">
             <span class="sidebar-nav-glyph">💬</span>
             <span class="sidebar-nav-label">DMs</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="open-command-palette" aria-label="Activity">
+          <button type="button" class="sidebar-nav-btn ${activeView === "activity" ? "is-selected" : ""}" data-action="open-activity-panel" aria-label="Activity inbox">
             <span class="sidebar-nav-glyph">🔔</span>
             <span class="sidebar-nav-label">Activity</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="browse-channels" aria-label="Files">
+          <button type="button" class="sidebar-nav-btn ${activeView === "files" ? "is-selected" : ""}" data-action="open-files-panel" aria-label="Files browser">
             <span class="sidebar-nav-glyph">📁</span>
             <span class="sidebar-nav-label">Files</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="open-repo-tools" aria-label="Tools">
+          <button type="button" class="sidebar-nav-btn ${activeView === "repo-tools" ? "is-selected" : ""}" data-action="open-repo-tools" aria-label="Tools">
             <span class="sidebar-nav-glyph">🛠️</span>
             <span class="sidebar-nav-label">Tools</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="toggle-compact-mode" aria-label="More options">
-            <span class="sidebar-nav-glyph">•••</span>
-            <span class="sidebar-nav-label">More</span>
-          </button>
+          <details class="sidebar-more">
+            <summary class="sidebar-nav-btn" aria-label="More options">
+              <span class="sidebar-nav-glyph">•••</span>
+              <span class="sidebar-nav-label">More</span>
+            </summary>
+            <div class="sidebar-more-menu" role="menu" aria-label="More sidebar actions">
+              <button type="button" data-action="toggle-settings" role="menuitem">Settings</button>
+              <button type="button" data-action="toggle-compact-mode" role="menuitem">Compact mode</button>
+              <button type="button" data-action="open-command-palette" role="menuitem">Command palette</button>
+            </div>
+          </details>
         </li>
       </ul>
 

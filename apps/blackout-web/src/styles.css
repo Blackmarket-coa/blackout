@@ -277,6 +277,16 @@ body {
   gap: 0.45rem;
 }
 
+.repo-tools-item .ghost-btn {
+  width: fit-content;
+  border: 1px solid #41506f;
+  border-radius: 8px;
+  color: #d8e7ff;
+  background: #1b2538;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
 .repo-tools-item code {
   display: inline-block;
   width: fit-content;
@@ -397,6 +407,49 @@ body {
 .sidebar-nav-label {
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+
+.sidebar-more {
+  position: relative;
+}
+
+.sidebar-more summary {
+  list-style: none;
+}
+
+.sidebar-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-more-menu {
+  position: absolute;
+  left: calc(100% + 0.45rem);
+  top: 0.2rem;
+  min-width: 150px;
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 10px;
+  padding: 0.35rem;
+  background: #2a1140;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
+  z-index: 4;
+}
+
+.sidebar-more-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  text-align: left;
+  color: #f7ebff;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-more-menu button:hover {
+  background: rgb(255 255 255 / 12%);
 }
 
 .sidebar-compose-btn {
