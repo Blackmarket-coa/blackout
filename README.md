@@ -2,18 +2,22 @@
 ![Tests](https://github.com/element-hq/element-web/actions/workflows/tests.yaml/badge.svg)
 ![Static Analysis](https://github.com/element-hq/element-web/actions/workflows/static_analysis.yaml/badge.svg)
 
-# Blackout Web Client (Element fork)
+# Blackout Monorepo (Web + Desktop + Mobile)
 
-This repository is a fork of Element Web with additional governance and steganography-focused capabilities.
+This repository is a pnpm/turborepo monorepo built from an Element Web fork, with additional governance and steganography-focused capabilities.
 
 ## What this repo contains
 
 - Upstream Element Web application architecture.
+- Desktop app workspace: `apps/desktop` (`@blackout/desktop`)
+- Mobile app workspace: `apps/mobile` (`@blackout/mobile`)
 - Blackout governance-focused features and rollout documentation.
 - A steganography subsystem with test coverage and developer tooling.
 
 Key areas:
 
+- Monorepo apps: `apps/*`
+- Shared packages: `packages/*`
 - App bootstrap/runtime: `src/vector/*`
 - Main client features and UI: `src/components/*`, `src/models/*`, `src/settings/*`
 - Steganography code: `src/steganography/*`
@@ -73,6 +77,22 @@ Then edit `config.json` as needed. See `docs/config.md` for configuration detail
 
 ```bash
 pnpm build
+```
+
+### Run app workspaces
+
+```bash
+pnpm web:dev
+pnpm desktop:dev
+pnpm mobile:dev
+```
+
+Build individual apps:
+
+```bash
+pnpm web:build
+pnpm desktop:build
+pnpm mobile:build
 ```
 
 On Windows, use the same command:
