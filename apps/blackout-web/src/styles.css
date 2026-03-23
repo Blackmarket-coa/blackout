@@ -603,7 +603,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: #191c23;
+  background: linear-gradient(160deg, #141821 0%, #10141d 70%);
   padding: 0.8rem 1rem;
 }
 
@@ -666,6 +666,11 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid #23464c;
+  background: linear-gradient(170deg, rgb(28 33 44 / 88%), rgb(14 19 30 / 88%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
 }
 
 .composer-toolbar {
@@ -680,6 +685,10 @@ body {
   display: inline-flex;
   gap: 0.35rem;
   align-items: center;
+  border-radius: 10px;
+  border-color: #3a3f49;
+  background: linear-gradient(180deg, #2a2f39, #1f232c);
+  padding: 0.45rem 0.7rem;
 }
 
 .composer-toolbar--compact button span:last-child {
@@ -699,10 +708,78 @@ body {
 .composer-help-btn {
   width: auto;
   margin-left: auto;
+  border-radius: 12px;
+  min-width: 42px;
 }
 
 .composer-hint {
   margin-top: -0.35rem;
+}
+
+.composer-shell {
+  border: 1px solid #2b3f5f;
+  background: #090c13;
+  border-radius: 12px;
+  padding: 0.4rem 0.55rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  box-shadow: 0 0 0 1px rgb(67 145 255 / 45%), 0 0 0 4px rgb(52 120 216 / 16%);
+}
+
+.composer-shell--disabled {
+  opacity: 0.66;
+}
+
+.composer-shell .composer-shell-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  border: 1px solid #394055;
+  background: #1b1f2b;
+  color: #d0d8e7;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  padding: 0;
+}
+
+.composer-shell .composer-shell-icon:hover {
+  border-color: #4f8ef7;
+  background: #232a3b;
+}
+
+.composer-shell textarea {
+  border: 0;
+  outline: 0;
+  resize: none;
+  min-height: 2.3rem;
+  padding: 0.45rem 0.35rem;
+  background: transparent;
+}
+
+.composer-shell-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #c4cada;
+}
+
+.composer-shell-glyph {
+  font-size: 0.8rem;
+  border: 1px solid #3b4253;
+  border-radius: 999px;
+  padding: 0.18rem 0.42rem;
+  background: #161a24;
+  font-weight: 600;
+  color: #c4cada;
+  cursor: pointer;
+}
+
+.composer-shell-glyph:hover {
+  border-color: #4f8ef7;
+  background: #20283a;
 }
 
 input,

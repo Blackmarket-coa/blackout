@@ -60,7 +60,15 @@ export function renderMessageInput({
       `
           : ""
       }
-      <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Write a message…" ${disabled ? "disabled" : ""}></textarea>
+      <div class="composer-shell ${disabled ? "composer-shell--disabled" : ""}">
+        <button type="button" class="composer-shell-icon composer-shell-icon--start" aria-label="Add attachment" title="Add attachment" ${disabled ? "disabled" : ""}>＋</button>
+        <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Message #channel" ${disabled ? "disabled" : ""}></textarea>
+        <div class="composer-shell-actions">
+          <button type="button" class="composer-shell-glyph" data-action="composer-insert-gif" aria-label="Insert GIF placeholder" title="Insert GIF placeholder" ${disabled ? "disabled" : ""}>GIF</button>
+          <button type="button" class="composer-shell-glyph" data-action="composer-quick-emoji" aria-label="Insert emoji" title="Insert emoji" ${disabled ? "disabled" : ""}>😊</button>
+          <button type="button" class="composer-shell-glyph" data-action="composer-insert-sticker" aria-label="Insert sticker placeholder" title="Insert sticker placeholder" ${disabled ? "disabled" : ""}>◌</button>
+        </div>
+      </div>
       <p id="composer-hint" class="meta composer-hint">Enter to send · Shift+Enter for a new line.</p>
       ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" data-testid="typing-indicator">You are typing…</p>' : ""}
       <button type="submit" ${disabled ? "disabled" : ""}>Send message</button>
