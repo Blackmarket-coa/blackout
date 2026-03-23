@@ -66,6 +66,7 @@ export function renderMessageInput({
         <div class="composer-shell-actions">
           <button type="button" class="composer-shell-glyph" data-action="composer-insert-gif" aria-label="Insert GIF placeholder" title="Insert GIF placeholder" ${disabled ? "disabled" : ""}>GIF</button>
           <button type="button" class="composer-shell-glyph" data-action="composer-quick-emoji" aria-label="Insert emoji" title="Insert emoji" ${disabled ? "disabled" : ""}>😊</button>
+          ${stegoEnabled ? `<button type="button" class="composer-shell-glyph" data-action="composer-quick-stego" aria-label="Insert steganography snippet" title="Insert steganography snippet" ${disabled ? "disabled" : ""}>🕶️</button>` : ""}
           <button type="button" class="composer-shell-glyph" data-action="composer-insert-sticker" aria-label="Insert sticker placeholder" title="Insert sticker placeholder" ${disabled ? "disabled" : ""}>◌</button>
         </div>
       </div>

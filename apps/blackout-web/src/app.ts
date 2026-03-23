@@ -882,6 +882,10 @@ export class BlackoutWebApp {
       this.applyComposerSnippet(" 😊");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-quick-stego']")?.addEventListener("click", () => {
+      this.applyComposerSnippet(" [stego::hidden-message]");
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-insert-sticker']")?.addEventListener("click", () => {
       this.applyComposerSnippet(" :sticker:");
     });
