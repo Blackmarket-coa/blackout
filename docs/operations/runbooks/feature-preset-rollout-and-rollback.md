@@ -33,34 +33,34 @@ Required dimensions:
 
 ## Rollback playbook by preset
 
-### baseline_matrix
+### tier_free
 
 - Target state: matrix-core features only.
 - Rollback trigger: elevated auth/discovery regression or E2EE policy mismatch.
-- Action: apply `baseline_matrix` from Feature Presets panel and confirm.
+- Action: apply `tier_free` from Feature Presets panel and confirm.
 
-### community_plus
+### tier_pro
 
 - Target state: matrix baseline + discord-like composer/widget affordances.
 - Rollback trigger: composer UX regressions or elevated typing/composer client errors.
-- Action: rollback to deployment preset or explicitly apply `baseline_matrix`.
+- Action: rollback to deployment preset or explicitly apply `tier_free`.
 
-### blackout_full
+### tier_enterprise
 
 - Target state: all novel and advanced features enabled.
 - Rollback trigger: any high-risk feature instability or abuse/safety telemetry breach.
-- Action: rollback to `community_plus` first, then `baseline_matrix` if incident persists.
+- Action: rollback to `tier_pro` first, then `tier_free` if incident persists.
 
 ## High-risk feature rollback notes
 
 ### Stego (`stego_toolkit`, `ephemeral_stego_lifecycle`)
 
-- Immediate action: disable `features.stego.enabled` and revert to `community_plus`.
+- Immediate action: disable `features.stego.enabled` and revert to `tier_pro`.
 - Verify deny telemetry trends flatten within one review interval.
 
 ### Paid-room keys (`paid encrypted room creator-key lifecycle`)
 
-- Immediate action: remove entitlement grants and pin tenants to `baseline_matrix`.
+- Immediate action: remove entitlement grants and pin tenants to `tier_free`.
 - Validate no new key grants are emitted before re-enabling.
 
 ### Plugin sandbox

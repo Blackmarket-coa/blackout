@@ -114,10 +114,10 @@ export class BlackoutWebApp {
       cohort: "internal",
     },
     presets: {
-      activePreset: "blackout_full",
+      activePreset: "tier_enterprise",
       features: {},
       diagnostics: {
-        deploymentPreset: "blackout_full",
+        deploymentPreset: "tier_enterprise",
         tenantPreset: null,
         userOverrideCount: 0,
       },
@@ -585,9 +585,9 @@ export class BlackoutWebApp {
         <label class="stack">
           Preset
           <select data-testid="feature-preset-select" data-action="select-preset">
-            ${this.renderPresetOption("baseline_matrix")}
-            ${this.renderPresetOption("community_plus")}
-            ${this.renderPresetOption("blackout_full")}
+            ${this.renderPresetOption("tier_free")}
+            ${this.renderPresetOption("tier_pro")}
+            ${this.renderPresetOption("tier_enterprise")}
           </select>
         </label>
         <div class="stack" data-testid="preset-explainer-panel">

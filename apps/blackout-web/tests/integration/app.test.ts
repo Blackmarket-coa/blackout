@@ -19,10 +19,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -69,10 +69,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -112,14 +112,14 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "community_plus",
+        activePreset: "tier_pro",
         features: {
           "features.composer.richEditing": true,
           "features.governance.entitlements": false,
         },
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
-          tenantPreset: "community_plus",
+          deploymentPreset: "tier_free",
+          tenantPreset: "tier_pro",
           userOverrideCount: 2,
         },
       },
@@ -127,7 +127,7 @@ describe("BlackoutWebApp integration", () => {
     await app.mount();
 
     fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("community_plus");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_pro");
     expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
     expect(root.querySelector('[data-testid="feature-composer-rich-editing"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-admin-governance-entitlements-unavailable"]')).toBeTruthy();
@@ -145,10 +145,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -160,14 +160,14 @@ describe("BlackoutWebApp integration", () => {
     const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-preset-select"]');
     if (!select) throw new Error("missing preset select");
 
-    fireEvent.change(select, { target: { value: "blackout_full" } });
+    fireEvent.change(select, { target: { value: "tier_enterprise" } });
     expect(root.querySelector('[data-testid="preset-capability-features-stego-enabled"]')).toBeTruthy();
 
     fireEvent.click(root.querySelector('[data-testid="apply-preset-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("blackout_full");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_enterprise");
 
     fireEvent.click(root.querySelector('[data-testid="rollback-preset-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("baseline_matrix");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_free");
   });
 
   it("supports one meaningful entrypoint action per feature category", async () => {
@@ -180,10 +180,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "blackout_full",
+        activePreset: "tier_enterprise",
         features: {},
         diagnostics: {
-          deploymentPreset: "blackout_full",
+          deploymentPreset: "tier_enterprise",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -216,10 +216,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -262,10 +262,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "community_plus",
+        activePreset: "tier_pro",
         features: {},
         diagnostics: {
-          deploymentPreset: "community_plus",
+          deploymentPreset: "tier_pro",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -295,10 +295,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "general" },
       presets: {
-        activePreset: "community_plus",
+        activePreset: "tier_pro",
         features: {},
         diagnostics: {
-          deploymentPreset: "community_plus",
+          deploymentPreset: "tier_pro",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -321,10 +321,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "blackout_full",
+        activePreset: "tier_enterprise",
         features: {},
         diagnostics: {
-          deploymentPreset: "blackout_full",
+          deploymentPreset: "tier_enterprise",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -350,10 +350,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -374,10 +374,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "community_plus",
+        activePreset: "tier_pro",
         features: {},
         diagnostics: {
-          deploymentPreset: "community_plus",
+          deploymentPreset: "tier_pro",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -413,10 +413,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "blackout_full",
+        activePreset: "tier_enterprise",
         features: {},
         diagnostics: {
-          deploymentPreset: "blackout_full",
+          deploymentPreset: "tier_enterprise",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -534,10 +534,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "baseline_matrix",
+        activePreset: "tier_free",
         features: {},
         diagnostics: {
-          deploymentPreset: "baseline_matrix",
+          deploymentPreset: "tier_free",
           tenantPreset: null,
           userOverrideCount: 0,
         },

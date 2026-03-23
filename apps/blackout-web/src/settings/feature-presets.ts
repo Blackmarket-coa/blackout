@@ -1,4 +1,4 @@
-export type FeaturePresetKey = "baseline_matrix" | "community_plus" | "blackout_full";
+export type FeaturePresetKey = "tier_free" | "tier_pro" | "tier_enterprise";
 
 export type FeatureFlagMap = Record<string, boolean>;
 
@@ -28,7 +28,7 @@ export interface ResolvedPresetConfig {
   };
 }
 
-const BASELINE_MATRIX: FeatureFlagMap = {
+const TIER_FREE: FeatureFlagMap = {
   "features.matrix.client": true,
   "features.matrix.homeserverDiscovery": true,
   "features.security.e2eeDefaults": true,
@@ -111,8 +111,8 @@ const BASELINE_MATRIX: FeatureFlagMap = {
   "features.engagement.wellbeing": true,
 };
 
-const COMMUNITY_PLUS: FeatureFlagMap = {
-  ...BASELINE_MATRIX,
+const TIER_PRO: FeatureFlagMap = {
+  ...TIER_FREE,
   "features.composer.richEditing": true,
   "features.composer.typingIndicators": true,
   "features.widgets.layouts": true,
@@ -125,8 +125,8 @@ const COMMUNITY_PLUS: FeatureFlagMap = {
   "features.settings.account": true,
 };
 
-const BLACKOUT_FULL: FeatureFlagMap = {
-  ...COMMUNITY_PLUS,
+const TIER_ENTERPRISE: FeatureFlagMap = {
+  ...TIER_PRO,
   "features.platform.bootstrap": true,
   "features.timeline.threads": true,
   "features.timeline.readReceipts": true,
@@ -191,9 +191,9 @@ const BLACKOUT_FULL: FeatureFlagMap = {
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {
-  baseline_matrix: BASELINE_MATRIX,
-  community_plus: COMMUNITY_PLUS,
-  blackout_full: BLACKOUT_FULL,
+  tier_free: TIER_FREE,
+  tier_pro: TIER_PRO,
+  tier_enterprise: TIER_ENTERPRISE,
 };
 
 function mergeFeatures(base: FeatureFlagMap, overrides?: FeatureFlagMap): FeatureFlagMap {
@@ -206,7 +206,7 @@ export function resolveFeaturePreset(
   tenantPolicy?: TenantPresetPolicy,
   userOverrides?: UserPresetOverrides,
 ): ResolvedPresetConfig {
-  const deploymentPreset = deployment.preset ?? "blackout_full";
+  const deploymentPreset = deployment.preset ?? "tier_enterprise";
   const activePreset = tenantPolicy?.preset ?? deploymentPreset;
 
   let features = { ...FEATURE_PRESET_BUNDLES[activePreset] };
