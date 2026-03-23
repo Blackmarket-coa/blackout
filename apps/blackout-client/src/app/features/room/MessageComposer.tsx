@@ -650,6 +650,10 @@ export const MessageComposer = ({
           content['m.relates_to'] = {
             rel_type: 'm.thread',
             event_id: target.rootEventId,
+            is_falling_back: true,
+            'm.in_reply_to': {
+              event_id: target.rootEventId,
+            },
           };
         }
 

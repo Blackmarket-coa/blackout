@@ -124,6 +124,22 @@ export const useSendMessage = (roomId: string) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  const withStatus = useCallback(
+    async (action: () => Promise<void>, fallbackMessage: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await action();
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(fallbackMessage));
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const sendText = useCallback(
     async (body: string) => {
       setLoading(true);
@@ -184,29 +200,35 @@ export const useSendMessage = (roomId: string) => {
 
   const sendReply = useCallback(
     async (body: string, eventId: string) => {
-      await sendEvent(roomId, 'm.room.message', {
-        msgtype: 'm.text',
-        body,
-        'm.relates_to': {
-          'm.in_reply_to': { event_id: eventId },
-        },
-      });
+      await withStatus(async () => {
+        await sendEvent(roomId, 'm.room.message', {
+          msgtype: 'm.text',
+          body,
+          'm.relates_to': {
+            'm.in_reply_to': { event_id: eventId },
+          },
+        });
+      }, 'Failed to send reply.');
     },
-    [roomId, sendEvent],
+    [roomId, sendEvent, withStatus],
   );
 
   const sendThread = useCallback(
     async (body: string, rootEventId: string) => {
-      await sendEvent(roomId, 'm.room.message', {
-        msgtype: 'm.text',
-        body,
-        'm.relates_to': {
-          rel_type: 'm.thread',
-          event_id: rootEventId,
-        },
-      });
+      await withStatus(async () => {
+        await sendEvent(roomId, 'm.room.message', {
+          msgtype: 'm.text',
+          body,
+          'm.relates_to': {
+            rel_type: 'm.thread',
+            event_id: rootEventId,
+            is_falling_back: true,
+            'm.in_reply_to': { event_id: rootEventId },
+          },
+        });
+      }, 'Failed to send thread reply.');
     },
-    [roomId, sendEvent],
+    [roomId, sendEvent, withStatus],
   );
 
   return { sendText, sendRichText, sendMedia, sendReply, sendThread, loading, error };
