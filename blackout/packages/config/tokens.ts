@@ -1,15 +1,15 @@
 // ═══════════════════════════════════════════════════════
 // BLACKOUT DESIGN TOKENS
-// Solarpunk dark theme — forest greens, warm earth, encrypted glow
+// Solarpunk dark theme — deep teals, warm earth, encrypted glow
 // ═══════════════════════════════════════════════════════
 
 export const colors = {
   // Core brand
-  forest: "#1B5E20",
-  leaf: "#2E7D32",
-  leafLight: "#4CAF50",
+  forest: "#004D40",
+  leaf: "#00796B",
+  leafLight: "#26A69A",
   teal: "#00897B",
-  moss: "#33691E",
+  moss: "#00695C",
 
   // Surfaces (dark theme)
   black: "#0D0D0D",
@@ -27,7 +27,7 @@ export const colors = {
   // Accents
   accent: "#FF6F00",       // amber — calls to action
   accentWarm: "#FF8F00",
-  encrypted: "#00E676",    // bright green — E2EE indicator
+  encrypted: "#00BFA5",    // bright teal — E2EE indicator
   danger: "#EF5350",
   warning: "#FFA726",
   info: "#42A5F5",
@@ -35,12 +35,12 @@ export const colors = {
   // Borders & dividers
   border: "#2A2A2A",
   borderLight: "#3A3A3A",
-  borderFocus: "#2E7D32",
+  borderFocus: "#00796B",
 
   // Chat-specific
-  messageSelf: "#1B3A1B",      // your messages background
+  messageSelf: "#123A36",      // your messages background
   messageOther: "#1E1E1E",     // their messages background
-  mentionBg: "rgba(46, 125, 50, 0.15)",
+  mentionBg: "rgba(0, 137, 123, 0.15)",
   unreadBadge: "#FF6F00",
 } as const;
 
