@@ -185,6 +185,7 @@ Helpful docs:
 4. `docs/qa-triage-start.md`
 5. `docs/repo-readiness-next-steps.md`
 6. `mobile-application-build-guide.md`
+7. `docs/operations/runbooks/mobile_release_hardening_checklist.md`
 
 ---
 

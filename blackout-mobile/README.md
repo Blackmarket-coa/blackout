@@ -75,3 +75,7 @@ All wired up in `src/mobile-bootstrap.ts`:
 **iOS:** Requires Apple Developer account ($99/year). Build via Xcode → Archive → Distribute.
 
 **Android:** Requires Google Play Developer account ($25 one-time). Build APK/AAB via Android Studio or `./gradlew bundleRelease`.
+
+For production release controls (signing rotation, version/build governance, store metadata, and rollout channels), use:
+
+- `docs/operations/runbooks/mobile_release_hardening_checklist.md`

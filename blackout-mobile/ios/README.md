@@ -7,7 +7,7 @@
    ```
 2. Sync web assets and plugins:
    ```bash
-   pnpm sync
+   pnpm sync:ios
    ```
 3. Open in Xcode:
    ```bash

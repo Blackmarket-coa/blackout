@@ -8,7 +8,6 @@
     "build": "pnpm build:web",
     "build:web": "cd .. && pnpm --filter @blackout/blackout-web build:web",
     "copy": "pnpm build:web && cap copy",
-    "sync": "pnpm build:web && cap sync",
     "sync:android": "pnpm build:web && cap sync android",
     "sync:ios": "pnpm build:web && cap sync ios",
     "dev": "pnpm preflight && pnpm build:web && echo 'Web bundle built. Run: pnpm sync:android or pnpm sync:ios (after platform setup)'",

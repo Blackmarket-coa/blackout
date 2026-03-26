@@ -7,6 +7,9 @@ import type {
   CreateServerRequest,
   CreateServerResponse,
   MessageListResponse,
+  PushTokenMutationResponse,
+  PushTokenRegisterRequest,
+  PushTokenUnregisterRequest,
   RealtimeGatewayEvent,
   SendMessageRequest,
   SendMessageResponse,
@@ -181,6 +184,32 @@ export class ApiClient {
         "content-type": "application/json",
       },
       body: JSON.stringify({ body } satisfies SendMessageRequest),
+    });
+  }
+
+  async registerDevicePushToken(session: Session, token: string, platform: "ios" | "android" | "web"): Promise<void> {
+    if (this.useMockApi) return;
+
+    await this.fetchJson<PushTokenMutationResponse>("/v1/mobile/push-tokens", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${session.jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token, platform } satisfies PushTokenRegisterRequest),
+    });
+  }
+
+  async unregisterDevicePushToken(session: Session, token: string): Promise<void> {
+    if (this.useMockApi) return;
+
+    await this.fetchJson<PushTokenMutationResponse>("/v1/mobile/push-tokens", {
+      method: "DELETE",
+      headers: {
+        authorization: `Bearer ${session.jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token } satisfies PushTokenUnregisterRequest),
     });
   }
 

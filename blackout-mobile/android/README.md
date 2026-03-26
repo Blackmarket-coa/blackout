@@ -7,7 +7,7 @@
    ```
 2. Sync web assets and plugins:
    ```bash
-   pnpm sync
+   pnpm sync:android
    ```
 3. Open in Android Studio:
    ```bash
