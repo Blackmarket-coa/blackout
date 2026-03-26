@@ -50,8 +50,6 @@ pnpm build:web
 After building the web bundle, sync assets and Capacitor plugins into native projects:
 
 ```bash
-pnpm sync
-# or target one platform:
 pnpm sync:android
 pnpm sync:ios
 ```
@@ -83,7 +81,8 @@ Then run from Xcode/Android Studio using your preferred simulator or physical de
    ```
 3. Sync into native projects:
    ```bash
-   pnpm sync
+   pnpm sync:android   # on Android flow
+   pnpm sync:ios       # on iOS flow
    ```
 4. Re-run from Xcode/Android Studio.
 
@@ -104,7 +103,7 @@ Ensure you rerun:
 
 ```bash
 pnpm build:web
-pnpm sync
+pnpm sync:android   # or pnpm sync:ios
 ```
 
 ### Plugin/platform drift after dependency changes
@@ -113,7 +112,7 @@ Run:
 
 ```bash
 pnpm copy
-pnpm sync
+pnpm sync:android   # or pnpm sync:ios
 ```
 
 ## 8) Canonical mobile path

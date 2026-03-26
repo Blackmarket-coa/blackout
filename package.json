@@ -17,7 +17,6 @@
     "desktop:build": "pnpm --dir blackout-desktop build",
     "mobile:dev": "pnpm --filter blackout-mobile dev",
     "mobile:build": "pnpm --filter blackout-mobile build",
-    "mobile:sync": "pnpm --filter blackout-mobile sync",
     "mobile:sync:android": "pnpm --filter blackout-mobile sync:android",
     "mobile:sync:ios": "pnpm --filter blackout-mobile sync:ios",
     "mobile:open:ios": "pnpm --filter blackout-mobile open:ios",
