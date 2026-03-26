@@ -24,7 +24,8 @@ pnpm install
 pnpm build:web          # builds apps/blackout-web
 npx cap add ios         # one-time: generates Xcode project
 npx cap add android     # one-time: generates Android Studio project
-npx cap sync            # copies web build + native plugins
+pnpm sync:ios           # copies web build + plugins to iOS
+pnpm sync:android       # copies web build + plugins to Android
 npx cap open ios        # opens in Xcode → hit Run
 npx cap open android    # opens in Android Studio → hit Run
 ```
@@ -49,6 +50,11 @@ pnpm build:ios
 # Android
 pnpm build:android
 ```
+
+## Safe local bootstrap
+
+`pnpm dev` in this package now performs preflight checks (Node.js 22+) and builds only the web bundle, without forcing platform sync.
+Use `pnpm sync:android` or `pnpm sync:ios` explicitly after native platform setup.
 
 ## Native Features
 

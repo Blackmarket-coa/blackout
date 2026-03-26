@@ -24,7 +24,14 @@ if ! command -v node >/dev/null 2>&1; then
   echo -e "${RED}✗ node not found${NC} — install Node.js 22+"
   MISSING=1
 else
-  echo -e "${GREEN}✓ node $(node --version)${NC}"
+  NODE_VERSION="$(node --version | tr -d 'v')"
+  NODE_MAJOR="${NODE_VERSION%%.*}"
+  if [ "${NODE_MAJOR}" -lt 22 ]; then
+    echo -e "${RED}✗ node ${NODE_VERSION}${NC} — Node.js 22+ is required"
+    MISSING=1
+  else
+    echo -e "${GREEN}✓ node v${NODE_VERSION}${NC}"
+  fi
 fi
 
 if [ $MISSING -eq 1 ]; then
@@ -66,7 +73,12 @@ fi
 # Sync web build to native projects
 echo ""
 echo -e "${BOLD}Syncing web build to native projects...${NC}"
-npx cap sync 2>/dev/null || true
+if [ -d "android/app/src" ]; then
+  npx cap sync android || true
+fi
+if [ -d "ios/App" ]; then
+  npx cap sync ios || true
+fi
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"

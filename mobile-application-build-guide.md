@@ -4,12 +4,11 @@ This guide explains how to build and run the mobile application in the current B
 
 ## 1) Choose the right mobile path
 
-There are currently two mobile directories:
+Mobile builds are handled by:
 
-- `blackout-mobile/` → **Capacitor-based mobile shell** with iOS/Android tooling scripts (this is the runnable path today).
-- `apps/mobile/` → monorepo workspace placeholder package (`@blackout/mobile`) that currently only runs TypeScript checks.
+- `blackout-mobile/` → **Capacitor-based mobile shell** with iOS/Android tooling scripts.
 
-If your goal is to produce installable iOS/Android builds right now, use **`blackout-mobile/`**.
+Use **`blackout-mobile/`** for installable iOS/Android builds.
 
 ## 2) Prerequisites
 
@@ -31,6 +30,8 @@ Optional root shortcuts (wired to `blackout-mobile/`):
 ```bash
 pnpm mobile:build
 pnpm mobile:dev
+pnpm mobile:sync:android
+pnpm mobile:sync:ios
 pnpm mobile:open:ios
 pnpm mobile:open:android
 ```
@@ -50,6 +51,9 @@ After building the web bundle, sync assets and Capacitor plugins into native pro
 
 ```bash
 pnpm sync
+# or target one platform:
+pnpm sync:android
+pnpm sync:ios
 ```
 
 If this is your first time setting up native folders:
@@ -112,8 +116,6 @@ pnpm copy
 pnpm sync
 ```
 
-## 8) About `apps/mobile` in the monorepo
+## 8) Canonical mobile path
 
-`apps/mobile` is present for monorepo structure alignment but is not yet a fully bootstrapped runtime app. Its scripts currently act as placeholder build/lint/test commands.
-
-Until runtime scaffolding is completed there, continue using `blackout-mobile` for real iOS/Android builds.
+`blackout-mobile` is the canonical and supported mobile path in this repository for native app packaging.
