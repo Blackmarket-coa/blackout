@@ -46,6 +46,8 @@ const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
 const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
 const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
+const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
+const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -102,6 +104,11 @@ export class BlackoutWebApp {
   private quickActionPopup: QuickActionPopup | null = null;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
   private governanceTemplates: GovernanceTemplateItem[] = [];
+  private mobileBridgeEventsBound = false;
+  private pendingMobileRoomId: string | null = null;
+  private pendingPushTokenRegistration: string | null = null;
+  private pushTokenRegisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private pushTokenUnregisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -190,6 +197,7 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
+    this.bindMobileBridgeEvents();
     this.applyTheme(this.selectedTheme);
     this.render();
 
@@ -198,6 +206,10 @@ export class BlackoutWebApp {
 
     this.connectGateway();
     await this.loadServers();
+    const cachedPushToken = globalThis.localStorage.getItem(MOBILE_PUSH_TOKEN_STORAGE_KEY);
+    if (cachedPushToken) {
+      this.schedulePushTokenRegistration(cachedPushToken, 0);
+    }
   }
 
   private render(): void {
@@ -2573,7 +2585,151 @@ export class BlackoutWebApp {
       this.store.patch({ session, error: null });
       this.connectGateway();
       await this.loadServers();
+      const cachedPushToken = this.pendingPushTokenRegistration ?? globalThis.localStorage.getItem(MOBILE_PUSH_TOKEN_STORAGE_KEY);
+      if (cachedPushToken) {
+        this.schedulePushTokenRegistration(cachedPushToken, 0);
+      }
+      if (this.pendingMobileRoomId) {
+        await this.navigateToMobileRoom(this.pendingMobileRoomId);
+        this.pendingMobileRoomId = null;
+      }
     });
+  }
+
+  private bindMobileBridgeEvents(): void {
+    if (this.mobileBridgeEventsBound) return;
+    this.mobileBridgeEventsBound = true;
+
+    globalThis.addEventListener("blackout:deep-link", (event) => {
+      const detail = (event as CustomEvent<{ url?: string }>).detail;
+      const roomId = this.extractRoomIdFromUrl(detail?.url);
+      if (!roomId) return;
+      void this.navigateToMobileRoom(roomId);
+    });
+
+    globalThis.addEventListener("blackout:push-action", (event) => {
+      const detail = (event as CustomEvent<{ notification?: { data?: { room_id?: string } } }>).detail;
+      const roomId = detail?.notification?.data?.room_id;
+      if (!roomId) return;
+      void this.navigateToMobileRoom(roomId);
+    });
+
+    globalThis.addEventListener("blackout:resume-sync", () => {
+      this.featureActionResult = "Mobile resume detected. Sync recovery started.";
+      this.render();
+      void this.recoverAfterReconnect();
+    });
+
+    globalThis.addEventListener("blackout:push-token", (event) => {
+      const detail = (event as CustomEvent<{ token?: string }>).detail;
+      if (!detail?.token) return;
+      globalThis.localStorage.setItem(MOBILE_PUSH_TOKEN_STORAGE_KEY, detail.token);
+      this.pendingPushTokenRegistration = detail.token;
+      this.featureActionResult = "Mobile push token captured. Registering with backend…";
+      this.render();
+      this.schedulePushTokenRegistration(detail.token, 0);
+    });
+  }
+
+  private getMobilePlatform(): "ios" | "android" | "web" {
+    if (globalThis.document.body.classList.contains("blackout-platform-ios")) return "ios";
+    if (globalThis.document.body.classList.contains("blackout-platform-android")) return "android";
+    return "web";
+  }
+
+  private schedulePushTokenRegistration(token: string, attempt: number): void {
+    if (this.pushTokenRegisterRetryTimer) {
+      clearTimeout(this.pushTokenRegisterRetryTimer);
+      this.pushTokenRegisterRetryTimer = null;
+    }
+
+    const session = this.store.getState().session;
+    if (!session) return;
+
+    const run = async () => {
+      try {
+        await this.tryUnregisterPreviousPushToken(token, 0);
+        await this.api.registerDevicePushToken(session, token, this.getMobilePlatform());
+        globalThis.localStorage.setItem(MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY, token);
+        this.pendingPushTokenRegistration = null;
+        this.featureActionResult = "Push token registered with gateway backend.";
+        this.render();
+      } catch {
+        if (attempt >= 5) {
+          this.featureActionResult = "Push token registration failed after retries.";
+          this.render();
+          return;
+        }
+
+        const delayMs = Math.min(30_000, 1_000 * 2 ** attempt);
+        this.pushTokenRegisterRetryTimer = setTimeout(() => {
+          this.schedulePushTokenRegistration(token, attempt + 1);
+        }, delayMs);
+      }
+    };
+
+    void run();
+  }
+
+  private async tryUnregisterPreviousPushToken(nextToken: string, attempt: number): Promise<void> {
+    const session = this.store.getState().session;
+    if (!session) return;
+
+    const previousToken = globalThis.localStorage.getItem(MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY);
+    if (!previousToken || previousToken === nextToken) return;
+
+    try {
+      await this.api.unregisterDevicePushToken(session, previousToken);
+    } catch {
+      if (attempt >= 5) return;
+
+      const delayMs = Math.min(30_000, 1_000 * 2 ** attempt);
+      await new Promise<void>((resolve) => {
+        if (this.pushTokenUnregisterRetryTimer) {
+          clearTimeout(this.pushTokenUnregisterRetryTimer);
+        }
+        this.pushTokenUnregisterRetryTimer = setTimeout(resolve, delayMs);
+      });
+      await this.tryUnregisterPreviousPushToken(nextToken, attempt + 1);
+    }
+  }
+
+  private extractRoomIdFromUrl(url?: string): string | null {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (!["matrix:", "blackout:"].includes(parsed.protocol)) return null;
+      if (parsed.hostname === "room" && parsed.pathname.length > 1) {
+        return decodeURIComponent(parsed.pathname.slice(1));
+      }
+      const queryRoom = parsed.searchParams.get("room_id") ?? parsed.searchParams.get("roomId");
+      return queryRoom?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async navigateToMobileRoom(roomId: string): Promise<void> {
+    const state = this.store.getState();
+    if (!state.session) {
+      this.pendingMobileRoomId = roomId;
+      this.store.patch({ error: "Sign in to open the mobile deep link target room." });
+      this.render();
+      return;
+    }
+
+    const targetChannel = state.channels.find((channel) => channel.id === roomId);
+    if (!targetChannel) {
+      this.featureActionResult = `Mobile room ${roomId} was received but is not available in the active server.`;
+      this.render();
+      return;
+    }
+
+    this.activeWorkspacePanel = "chat";
+    this.repoToolsOpen = false;
+    await this.openChannel(targetChannel.id);
+    this.featureActionResult = `Opened mobile-linked room ${targetChannel.id}.`;
+    this.render();
   }
 
   private async loadServers(): Promise<void> {

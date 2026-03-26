@@ -43,7 +43,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/client run typecheck
       - run: pnpm --filter @blackout/blackout-web exec tsc --noEmit
-      - run: pnpm --filter @blackout/mobile exec tsc --noEmit
+      - run: pnpm --filter blackout-mobile run preflight
 
   unit-tests:
     name: Unit tests (Vitest)
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: ["@blackout/blackout-web", "@blackout/client", "@blackout/mobile"]
+        project: ["@blackout/blackout-web", "@blackout/client", "blackout-mobile"]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

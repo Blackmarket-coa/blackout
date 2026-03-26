@@ -28,6 +28,19 @@ export type MessageListResponse = { data: ChatMessage[] };
 export type SendMessageRequest = { body: string };
 export type SendMessageResponse = ChatMessage;
 
+export interface PushTokenRegisterRequest {
+  token: string;
+  platform: "ios" | "android" | "web";
+}
+
+export interface PushTokenUnregisterRequest {
+  token: string;
+}
+
+export interface PushTokenMutationResponse {
+  ok: boolean;
+}
+
 export interface RealtimeMessageCreatedEvent {
   type: "message.created";
   eventId?: string;
