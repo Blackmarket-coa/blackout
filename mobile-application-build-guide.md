@@ -119,3 +119,7 @@ pnpm sync
 ## 8) Canonical mobile path
 
 `blackout-mobile` is the canonical and supported mobile path in this repository for native app packaging.
+
+For release hardening and production distribution policy, follow:
+
+- `docs/operations/runbooks/mobile_release_hardening_checklist.md`
