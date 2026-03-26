@@ -55,8 +55,8 @@ jobs:
           path: blackout-desktop/src-tauri/target/release/bundle
           if-no-files-found: warn
 
-  build-mobile:
-    name: Build mobile artifact
+  build-mobile-android:
+    name: Build mobile artifact (Android)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,13 +76,49 @@ jobs:
       - run: cd blackout-mobile/android && ./gradlew assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: blackout-mobile-${{ github.ref_name }}
+          name: blackout-mobile-android-${{ github.ref_name }}
           path: blackout-mobile/android/app/build/outputs/**/*.apk
+          if-no-files-found: warn
+
+  build-mobile-ios:
+    name: Build mobile artifact (iOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Ensure iOS project exists
+        working-directory: blackout-mobile
+        run: |
+          if [ ! -d "ios/App" ]; then
+            pnpm add:ios
+          fi
+      - run: pnpm --filter blackout-mobile run sync:ios
+      - name: Build iOS app (unsigned simulator build)
+        working-directory: blackout-mobile/ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blackout-mobile-ios-${{ github.ref_name }}
+          path: blackout-mobile/ios/App/build/Build/Products/**/*.app
           if-no-files-found: warn
 
   release:
     name: Create GitHub release + deploy
-    needs: [build-web, build-desktop, build-mobile]
+    needs: [build-web, build-desktop, build-mobile-android, build-mobile-ios]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
