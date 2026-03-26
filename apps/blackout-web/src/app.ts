@@ -2719,17 +2719,47 @@ export class BlackoutWebApp {
     }
 
     const targetChannel = state.channels.find((channel) => channel.id === roomId);
-    if (!targetChannel) {
-      this.featureActionResult = `Mobile room ${roomId} was received but is not available in the active server.`;
+    this.activeWorkspacePanel = "chat";
+    this.repoToolsOpen = false;
+
+    if (targetChannel) {
+      await this.openChannel(targetChannel.id);
+      this.featureActionResult = `Opened mobile-linked room ${targetChannel.id}.`;
       this.render();
       return;
     }
 
-    this.activeWorkspacePanel = "chat";
-    this.repoToolsOpen = false;
-    await this.openChannel(targetChannel.id);
-    this.featureActionResult = `Opened mobile-linked room ${targetChannel.id}.`;
+    const crossServerMatch = await this.findMobileRoomAcrossServers(roomId);
+    if (!crossServerMatch) {
+      this.featureActionResult = `Mobile room ${roomId} was not found in available servers.`;
+      this.render();
+      return;
+    }
+
+    await this.openServer(crossServerMatch.serverId);
+    await this.openChannel(crossServerMatch.channelId);
+    this.featureActionResult = `Opened mobile-linked room ${crossServerMatch.channelId} from server ${crossServerMatch.serverId}.`;
     this.render();
+  }
+
+  private async findMobileRoomAcrossServers(roomId: string): Promise<{ serverId: string; channelId: string } | null> {
+    const state = this.store.getState();
+    const session = state.session;
+    if (!session) return null;
+
+    for (const server of state.servers) {
+      try {
+        const details = await this.api.getServerDetails(session, server.id);
+        const match = details.channels.find((channel) => channel.id === roomId);
+        if (match) {
+          return { serverId: server.id, channelId: match.id };
+        }
+      } catch {
+        // Continue fallback search through other servers.
+      }
+    }
+
+    return null;
   }
 
   private async loadServers(): Promise<void> {
