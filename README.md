@@ -29,6 +29,7 @@ For deeper architecture context:
 - `docs/features/governance_features_analysis.md`
 - `docs/blackout-reuse-completion-tracker.md`
 - `docs/distributed_self_healing_blueprint.md`
+- `docs/deploying-blackout-fedora-tauri.md`
 
 ---
 
@@ -39,6 +40,7 @@ This project now defines a target architecture for a decentralized, encrypted, s
 Primary blueprint:
 
 - `docs/distributed_self_healing_blueprint.md`
+- `docs/deploying-blackout-fedora-tauri.md`
 
 What the blueprint includes:
 
