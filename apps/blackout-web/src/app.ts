@@ -27,6 +27,12 @@ const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance";
+type SubscriptionTierMatch = {
+  tier: FeaturePresetKey;
+  subscription: string;
+  price: string;
+  highlights: string;
+};
 type StegoChannel = {
   id: string;
   name: string;
@@ -102,6 +108,7 @@ export class BlackoutWebApp {
   private gifLibrary: GifLibraryItem[] = [];
   private emojiLibrary: EmojiLibraryItem[] = [];
   private quickActionPopup: QuickActionPopup | null = null;
+  private subscriptionPopupOpen = false;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
   private governanceTemplates: GovernanceTemplateItem[] = [];
   private mobileBridgeEventsBound = false;
@@ -245,6 +252,7 @@ export class BlackoutWebApp {
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
       ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
+      ${this.subscriptionPopupOpen ? this.renderSubscriptionPopup() : ""}
     `;
 
     this.bindEvents();
@@ -854,30 +862,27 @@ export class BlackoutWebApp {
   }
 
   private renderSubscriptionPanelSection(): string {
-    const plans = [
-      { name: "Free", price: "$0", highlights: "Core chat, basic steg, community rooms" },
-      { name: "Signal", price: "$4.99/mo", highlights: "Advanced steg codecs + media vault" },
-      { name: "Coalition", price: "$9/mo org", highlights: "Governance rooms, quests, monetization" },
-      { name: "Sovereign", price: "$29/mo org", highlights: "Townhall SFU + federation controls" },
-    ];
+    const plans = this.getSubscriptionTierMatches();
 
     return `
       <section class="stack panel-card subscription-panel" data-testid="subscription-panel">
         <h2>Subscription panel</h2>
-        <p class="meta">Plan comparison and add-ons from the Blackout UI plan.</p>
+        <p class="meta">Tier-aligned plan comparison and add-ons from the Blackout UI plan.</p>
         <div class="subscription-grid">
           ${plans
             .map(
               (plan) => `
                 <article class="subscription-card">
-                  <h3>${plan.name}</h3>
+                  <h3>${plan.subscription}</h3>
                   <strong>${plan.price}</strong>
+                  <p class="meta"><strong>Tier:</strong> ${plan.tier}</p>
                   <p class="meta">${plan.highlights}</p>
                 </article>
               `,
             )
             .join("")}
         </div>
+        <button type="button" data-action="open-subscription-popup">Open subscription popup</button>
         <div class="subscription-addons">
           <span class="meta">Add-ons:</span>
           <span>Self-Healing ($19/mo)</span>
@@ -885,6 +890,43 @@ export class BlackoutWebApp {
           <span>Bounty Payroll ($9/mo)</span>
         </div>
       </section>
+    `;
+  }
+
+  private getSubscriptionTierMatches(): SubscriptionTierMatch[] {
+    return [
+      { tier: "tier_free", subscription: "Free", price: "$0", highlights: "Core chat, basic steg, community rooms" },
+      { tier: "tier_pro", subscription: "Signal", price: "$4.99/mo", highlights: "Advanced steg codecs + media vault" },
+      { tier: "tier_enterprise", subscription: "Sovereign", price: "$29/mo org", highlights: "Townhall SFU + federation controls" },
+      { tier: "tier_enterprise", subscription: "Coalition add-on", price: "+$9/mo org", highlights: "Governance rooms, quests, monetization" },
+    ];
+  }
+
+  private renderSubscriptionPopup(): string {
+    const plans = this.getSubscriptionTierMatches();
+    return `
+      <div class="modal-backdrop" data-action="close-subscription-popup">
+        <section class="modal subscription-modal" role="dialog" aria-modal="true" aria-label="Subscription tiers and plans">
+          <h3>Subscription tiers</h3>
+          <p class="meta">Each workspace tier now maps directly to a subscription plan.</p>
+          <div class="subscription-popup-grid">
+            ${plans
+              .map(
+                (plan) => `
+                  <article class="subscription-popup-card">
+                    <strong>${plan.tier} → ${plan.subscription}</strong>
+                    <span>${plan.price}</span>
+                    <p class="meta">${plan.highlights}</p>
+                  </article>
+                `,
+              )
+              .join("")}
+          </div>
+          <div class="modal-actions">
+            <button type="button" data-action="close-subscription-popup">Close</button>
+          </div>
+        </section>
+      </div>
     `;
   }
 
@@ -1545,10 +1587,26 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
-      this.settingsOpen = true;
-      this.featureActionResult = "Opened Subscription panel. Upgrade to Signal to unlock advanced codecs and batch mode.";
+      this.subscriptionPopupOpen = true;
+      this.featureActionResult = "Opened subscription popup. Upgrade to Signal to unlock advanced codecs and batch mode.";
       this.closeComposerPanels();
       this.render();
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='open-subscription-popup']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.subscriptionPopupOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-subscription-popup']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (element.classList.contains("modal-backdrop") && target.closest(".modal")) return;
+        this.subscriptionPopupOpen = false;
+        this.render();
+      });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-encode']")?.addEventListener("click", () => {

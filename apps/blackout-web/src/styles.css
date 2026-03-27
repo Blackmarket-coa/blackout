@@ -1725,6 +1725,25 @@ label {
   gap: 0.5rem;
 }
 
+.subscription-modal {
+  width: min(560px, 100%);
+}
+
+.subscription-popup-grid {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.subscription-popup-card {
+  border: 1px solid #35373c;
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: rgb(255 255 255 / 2%);
+  display: grid;
+  gap: 0.2rem;
+}
+
 .ghost-btn {
   background: transparent;
 }
