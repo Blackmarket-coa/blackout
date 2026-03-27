@@ -1289,6 +1289,12 @@ body {
   min-height: 2.25rem;
   padding: 0.4rem 0.3rem;
   background: transparent;
+  color: #edf2ff;
+  caret-color: #edf2ff;
+}
+
+.composer-shell textarea::placeholder {
+  color: #9aa6c6;
 }
 
 .composer-shell-actions {
