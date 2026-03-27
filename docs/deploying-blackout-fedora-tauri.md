@@ -295,6 +295,116 @@ docker compose pull
 docker compose up -d
 ```
 
+
+## AI prompts for steps that can be completed in this repo
+
+The prompts below are scoped to tasks that can be done locally in this repository (no server SSH required).
+
+### Prompt 1: Prepare deployment config files
+
+```text
+You are working in the Blackout repo. Create deployment-ready local config files without committing secrets.
+
+Tasks:
+1) Copy `deploy/docker/blackout-backend/.env.example` to `deploy/docker/blackout-backend/.env` if missing.
+2) Copy `config.sample.json` to `config.json` if missing.
+3) Replace all `blackout.yourdomain.com` placeholders with `<MY_DOMAIN>` in both files.
+4) Print a checklist of required secret keys that still need real values.
+5) Do not commit `.env`.
+
+Validation commands to run:
+- `test -f deploy/docker/blackout-backend/.env && echo ".env present"`
+- `test -f config.json && echo "config.json present"`
+- `rg -n "blackout\.yourdomain\.com|<generate-strong|<strong-" deploy/docker/blackout-backend/.env config.json`
+```
+
+### Prompt 2: Validate backend compose config before upload
+
+```text
+From the repo root, validate `deploy/docker/blackout-backend/docker-compose.yml` and referenced env defaults.
+
+Tasks:
+1) Run compose config rendering from `deploy/docker/blackout-backend/`.
+2) Report missing variables, bad interpolation, or schema issues.
+3) Summarize exposed ports/services from the rendered config.
+
+Commands:
+- `cd deploy/docker/blackout-backend && docker compose config`
+- `cd deploy/docker/blackout-backend && docker compose config --services`
+```
+
+### Prompt 3: Verify Matrix well-known and nginx templates
+
+```text
+Audit the backend templates for domain/path consistency.
+
+Tasks:
+1) Inspect `deploy/docker/blackout-backend/nginx/nginx.conf` and `deploy/docker/blackout-backend/well-known/matrix/*`.
+2) Confirm matrix endpoints (`/_matrix/`, `/.well-known/matrix/client`, `/.well-known/matrix/server`) align with `SERVER_NAME`/`MATRIX_SERVER_NAME` conventions.
+3) Flag any hardcoded hostnames that should be templated via `.env`.
+4) Provide a minimal patch if inconsistencies exist.
+
+Validation command:
+- `rg -n "matrix|well-known|server_name|blackout\.yourdomain\.com" deploy/docker/blackout-backend/nginx deploy/docker/blackout-backend/well-known`
+```
+
+### Prompt 4: Build web assets used by desktop/mobile wrappers
+
+```text
+Build the Blackout web frontend and verify dist artifacts expected by wrappers.
+
+Tasks:
+1) Install dependencies with lockfile.
+2) Build `@blackout/blackout-web`.
+3) Verify output directory contents and ensure `config.json` can be copied into the dist folder.
+
+Commands:
+- `pnpm install --frozen-lockfile`
+- `pnpm --filter @blackout/blackout-web build:web`
+- `test -d apps/blackout-web/dist && echo "dist exists"`
+- `cp -n config.json apps/blackout-web/dist/config.json || true`
+```
+
+### Prompt 5: Build Tauri desktop binaries locally
+
+```text
+From this repo, perform a desktop preflight for Tauri and attempt a production build.
+
+Tasks:
+1) Check `blackout-desktop/src-tauri/tauri.conf.json` for updater/frontendDist values.
+2) Run Tauri build from `blackout-desktop/`.
+3) List generated installers under `src-tauri/target/release/bundle/`.
+4) If build fails, classify whether dependency/system-package related vs project config related.
+
+Commands:
+- `cd blackout-desktop && pnpm tauri build`
+- `find blackout-desktop/src-tauri/target/release/bundle -maxdepth 3 -type f | head -n 50`
+```
+
+### Prompt 6: Create a deployment handoff checklist artifact
+
+```text
+Generate `docs/operations/evidence/<DATE>-fedora-tauri-deploy-handoff.md` with:
+- domain and DNS status placeholders
+- completed local steps (config, compose validation, web build, tauri build)
+- pending server-only steps (firewall, certbot, compose up, first admin user)
+- exact commands and outputs (or TODO) for each check
+
+Then run:
+- `git status --short`
+- `rg -n "TODO|PENDING|FAILED" docs/operations/evidence/<DATE>-fedora-tauri-deploy-handoff.md`
+```
+
+### What is intentionally excluded from AI-local prompts
+
+These require server/network access or operator credentials and should be run directly by an admin on Fedora:
+
+- Fedora package installation and firewall changes
+- DNS record creation
+- TLS certificate issuance via certbot against public domain
+- Production `docker compose up -d` on the target host
+- Synapse admin user creation on live infrastructure
+
 ## Quick checklist
 
 - Configure `.env` and `config.json` locally
