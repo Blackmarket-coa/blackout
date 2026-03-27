@@ -38,13 +38,9 @@ describe("governance + delegation + voting lifecycle", () => {
 
         graph.setDelegation("budget", "@bob:example.org", "@alice:example.org");
 
-        const tally = delegatedVotingEngine.tally(
-            vote,
-            "budget",
-            ["@alice:example.org", "@bob:example.org"],
-            graph,
-            { quorum: 2 },
-        );
+        const tally = delegatedVotingEngine.tally(vote, "budget", ["@alice:example.org", "@bob:example.org"], graph, {
+            quorum: 2,
+        });
 
         expect(tally.passed).toBe(true);
         expect(tally.totalVotes).toBe(2);

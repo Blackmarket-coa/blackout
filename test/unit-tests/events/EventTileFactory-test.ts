@@ -15,6 +15,8 @@ import {
     pickFactory,
     renderTile,
     RoomCreateEventFactory,
+    TextualEventFactory,
+    JitsiEventFactory,
 } from "../../../src/events/EventTileFactory";
 import SettingsStore from "../../../src/settings/SettingsStore";
 import { createTestClient, mkEvent } from "../../test-utils";
@@ -205,6 +207,36 @@ describe("pickFactory", () => {
 
         it("should return a MessageEventFactory for a UTD event", () => {
             expect(pickFactory(utdEvent, client, false)).toBe(MessageEventFactory);
+        });
+
+        it("should return TextualEventFactory for stable m.widget state events", () => {
+            const event = mkEvent({
+                event: true,
+                type: "m.widget",
+                user: client.getUserId()!,
+                room: roomId,
+                skey: "widget",
+                content: {
+                    type: "m.custom",
+                    url: "https://example.org",
+                },
+            });
+            expect(pickFactory(event, client, false)).toBe(TextualEventFactory);
+        });
+
+        it("should return JitsiEventFactory for stable m.widget Jitsi events", () => {
+            const event = mkEvent({
+                event: true,
+                type: "m.widget",
+                user: client.getUserId()!,
+                room: roomId,
+                skey: "widget",
+                content: {
+                    type: "jitsi",
+                    url: "https://example.org",
+                },
+            });
+            expect(pickFactory(event, client, false)).toBe(JitsiEventFactory);
         });
     });
 });

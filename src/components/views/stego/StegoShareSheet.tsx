@@ -38,7 +38,12 @@ interface ShareTarget {
 /** Available sharing targets. */
 const SHARE_TARGETS: ShareTarget[] = [
     { id: "clipboard", name: "Copy to Clipboard", icon: "\u{1F4CB}", available: true },
-    { id: "native", name: "Share...", icon: "\u{1F4E4}", available: typeof navigator !== "undefined" && "share" in navigator },
+    {
+        id: "native",
+        name: "Share...",
+        icon: "\u{1F4E4}",
+        available: typeof navigator !== "undefined" && "share" in navigator,
+    },
     { id: "download", name: "Download Image", icon: "\u{1F4BE}", available: true },
 ];
 
@@ -48,11 +53,7 @@ const SHARE_TARGETS: ShareTarget[] = [
  * For emoji strategies: copies the emoji string to clipboard or uses Web Share API.
  * For image strategies: downloads the PNG or shares via native share.
  */
-export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
-    carrier,
-    strategy,
-    onClose,
-}): JSX.Element => {
+export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({ carrier, strategy, onClose }): JSX.Element => {
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -65,9 +66,7 @@ export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
                 // Convert data URL to blob and copy as image
                 const response = await fetch(carrier);
                 const blob = await response.blob();
-                await navigator.clipboard.write([
-                    new ClipboardItem({ "image/png": blob }),
-                ]);
+                await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
             } else {
                 await navigator.clipboard.writeText(carrier);
             }
@@ -139,22 +138,14 @@ export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
         <div className="mx_StegoShareSheet">
             <div className="mx_StegoShareSheet_header">
                 <h3>Share Stego Message</h3>
-                <button
-                    className="mx_StegoShareSheet_close"
-                    onClick={onClose}
-                    aria-label="Close share sheet"
-                >
+                <button className="mx_StegoShareSheet_close" onClick={onClose} aria-label="Close share sheet">
                     {"\u2715"}
                 </button>
             </div>
 
             <div className="mx_StegoShareSheet_preview">
                 {isImage ? (
-                    <img
-                        src={carrier}
-                        alt="Steganographic image"
-                        className="mx_StegoShareSheet_previewImage"
-                    />
+                    <img src={carrier} alt="Steganographic carrier" className="mx_StegoShareSheet_previewImage" />
                 ) : (
                     <div className="mx_StegoShareSheet_previewEmoji">
                         <p className="mx_StegoShareSheet_previewLabel">
@@ -194,9 +185,7 @@ export const StegoShareSheet: React.FC<StegoShareSheetProps> = ({
             {error && <div className="mx_StegoShareSheet_error">{error}</div>}
 
             <div className="mx_StegoShareSheet_footer">
-                <p className="mx_StegoShareSheet_footerNote">
-                    Message will self-destruct after the set expiry time.
-                </p>
+                <p className="mx_StegoShareSheet_footerNote">Message will self-destruct after the set expiry time.</p>
             </div>
         </div>
     );

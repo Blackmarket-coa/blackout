@@ -38,6 +38,11 @@ export enum Action {
     ViewUserSettings = "view_user_settings",
 
     /**
+     * Open the room settings. Should be used with an OpenToTabPayload.
+     */
+    OpenRoomSettings = "open_room_settings",
+
+    /**
      * Open the user device settings. No additional payload information required.
      */
     ViewUserDeviceSettings = "view_user_device_settings",

@@ -5,7 +5,12 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { fromRoomContent, IPFS_ROOM_EVENT_TYPE, toRoomEventContent, toRoomStateContent } from "../../../src/services/storage/ipfsRoomEvents";
+import {
+    fromRoomContent,
+    IPFS_ROOM_EVENT_TYPE,
+    toRoomEventContent,
+    toRoomStateContent,
+} from "../../../src/services/storage/ipfsRoomEvents";
 import type { IpfsCidReference } from "../../../src/services/storage/ipfsService";
 
 describe("ipfsRoomEvents", () => {

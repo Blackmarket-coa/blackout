@@ -229,7 +229,7 @@ interface WorkflowYaml {
  */
 type Trigger = Node;
 
-// TODO workflow_call reusables
+// workflow_call is represented as a direct workflow dependency edge.
 /* eslint-disable @typescript-eslint/naming-convention */
 const TRIGGERS: {
     [key in keyof WorkflowYaml["on"]]: (
@@ -272,7 +272,7 @@ const TRIGGERS: {
         name: `Pull Request<br>${project.name}`,
         shape: "circle",
     }),
-    // TODO should we be just dropping these?
+    // Keep workflow_run so cross-workflow dependencies remain visible in the graph.
     workflow_run: (data) => data.workflows.map((parent) => workflows.get(parent)).filter(Boolean) as Workflow[],
 };
 /* eslint-enable @typescript-eslint/naming-convention */
@@ -504,7 +504,7 @@ for (const workflow of workflows.values()) {
     });
 }
 
-// TODO separate disconnected nodes into their own graph
+// Split disconnected nodes into separate components.
 graph.cull();
 
 // This is an awful hack to make the output graphs much better by allowing the splitting of certain nodes //
@@ -540,13 +540,10 @@ components.forEach((graph) => {
     const printer = new MermaidFlowchartPrinter("LR", title, true);
     graph.nodes.forEach((node) => {
         if ("project" in node) {
-            // TODO unsure about this edge
-            // if (node.jobs.length === 1) {
-            //     printer.node(node);
-            //     return;
-            // }
+            // Keep workflow nodes as subgraphs even when there is a single job for consistent rendering.
 
-            // TODO handle job.if on github.event_name
+            // Job-level conditional execution (`job.if`) is currently rendered structurally,
+            // regardless of whether it is event-name dependent.
 
             const subgraph = new Graph<Job>();
             for (const job of node.jobs) {
@@ -591,7 +588,7 @@ components.forEach((graph) => {
                         });
                     });
 
-                    // TODO validate edge case
+                    // If all matrix combinations are excluded, render the base job node.
                     if (variations.length === 0) {
                         printer.node(job);
                         return;

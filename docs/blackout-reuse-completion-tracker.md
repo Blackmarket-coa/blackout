@@ -10,18 +10,18 @@ Legend:
 
 ## Overall status snapshot
 
-| Area                            | Status | Evidence summary                                                                                                                           |
-| ------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Matrix backbone                 | ✅     | Core Element/Matrix app architecture and routing are present; Blackout modules are integrated as feature-flagged additions.                |
-| CRDT (Yjs + y-indexeddb)        | ✅     | Document manager/provider/bindings exist for governance, delegation, education, and mutual-aid docs.                                       |
-| Governance lifecycle + voting   | ✅     | Proposal/vote engines, lifecycle transitions, persistence store, delegated tallying, and lifecycle tests are present.                      |
+| Area                            | Status | Evidence summary                                                                                                                                                                   |
+| ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Matrix backbone                 | ✅     | Core Element/Matrix app architecture and routing are present; Blackout modules are integrated as feature-flagged additions.                                                        |
+| CRDT (Yjs + y-indexeddb)        | ✅     | Document manager/provider/bindings exist for governance, delegation, education, and mutual-aid docs.                                                                               |
+| Governance lifecycle + voting   | ✅     | Proposal/vote engines, lifecycle transitions, persistence store, delegated tallying, and lifecycle tests are present.                                                              |
 | Deliberation clustering         | ✅     | Deterministic clustering now maintains incremental centroids for lower runtime overhead while preserving deterministic grouping and coverage, improving large-room scale behavior. |
-| Delegation / liquid democracy   | ✅     | Delegation graph + persistence + delegated vote attribution are implemented and tested.                                                    |
-| Education module                | ✅     | Education view supports study-circle creation, curriculum editing, tab navigation, and CRDT persistence helpers.                           |
-| Mutual aid board                | ✅     | Mutual-aid board supports lane transitions, filters, audit trail rendering, and CRDT persistence.                                          |
-| IPFS storage                    | ✅     | IPFS service now includes Matrix room-event/state payload helpers with strict parsing/room checks and dedicated tests for CID UX integration. |
-| Sortition / random jury         | ✅     | Deterministic jury selection with reproducibility proof and tests is implemented.                                                          |
-| Cross-cutting productionization | ✅     | Added cross-module e2e coverage (education + mutual-aid + IPFS references) and module rollout hardening docs/checklists for operations and policy tuning. |
+| Delegation / liquid democracy   | ✅     | Delegation graph + persistence + delegated vote attribution are implemented and tested.                                                                                            |
+| Education module                | ✅     | Education view supports study-circle creation, curriculum editing, tab navigation, and CRDT persistence helpers.                                                                   |
+| Mutual aid board                | ✅     | Mutual-aid board supports lane transitions, filters, audit trail rendering, and CRDT persistence.                                                                                  |
+| IPFS storage                    | ✅     | IPFS service now includes Matrix room-event/state payload helpers with strict parsing/room checks and dedicated tests for CID UX integration.                                      |
+| Sortition / random jury         | ✅     | Deterministic jury selection with reproducibility proof and tests is implemented.                                                                                                  |
+| Cross-cutting productionization | ✅     | Added cross-module e2e coverage (education + mutual-aid + IPFS references) and module rollout hardening docs/checklists for operations and policy tuning.                          |
 
 ---
 

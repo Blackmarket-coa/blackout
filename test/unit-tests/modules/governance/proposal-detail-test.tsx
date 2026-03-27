@@ -6,7 +6,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "jest-matrix-react";
 
 import ProposalDetail from "../../../../src/modules/governance/components/ProposalDetail";
 import type { ProposalDocument } from "../../../../src/modules/governance/models/types";
@@ -21,6 +21,9 @@ describe("ProposalDetail", () => {
         state: "discuss",
         createdAt: 1735689600000,
         updatedAt: 1735689600000,
+        schemaVersion: 1,
+        amendments: [],
+        auditTimeline: [],
     };
 
     it("renders deliberation cluster summaries when provided", () => {

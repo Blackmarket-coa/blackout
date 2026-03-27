@@ -45,12 +45,7 @@ const STRATEGY_LABELS: Record<StegoStrategy, string> = {
  * The user types their secret message, selects an encoding strategy,
  * and optionally configures self-destruct and custom expiry.
  */
-export const StegoComposer: React.FC<StegoComposerProps> = ({
-    roomId,
-    onSend,
-    onClose,
-    encrypt,
-}): JSX.Element => {
+export const StegoComposer: React.FC<StegoComposerProps> = ({ roomId, onSend, onClose, encrypt }): JSX.Element => {
     const [message, setMessage] = useState("");
     const [strategy, setStrategy] = useState<StegoStrategy>(StegoStrategy.Emoji);
     const [selfDestruct, setSelfDestruct] = useState(false);
@@ -149,11 +144,7 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
         <div className="mx_StegoComposer">
             <div className="mx_StegoComposer_header">
                 <h3>Steganographic Message</h3>
-                <button
-                    className="mx_StegoComposer_close"
-                    onClick={onClose}
-                    aria-label="Close stego composer"
-                >
+                <button className="mx_StegoComposer_close" onClick={onClose} aria-label="Close stego composer">
                     ✕
                 </button>
             </div>
@@ -208,12 +199,7 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                     {strategy === StegoStrategy.Image && (
                         <label className="mx_StegoComposer_option">
                             <span>Cover image (optional):</span>
-                            <input
-                                ref={coverImageRef}
-                                type="file"
-                                accept="image/png"
-                                disabled={sending}
-                            />
+                            <input ref={coverImageRef} type="file" accept="image/png" disabled={sending} />
                         </label>
                     )}
                 </div>
@@ -224,11 +210,7 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                     <div className="mx_StegoComposer_preview">
                         <h4>Preview:</h4>
                         {strategy === StegoStrategy.Image ? (
-                            <img
-                                src={preview}
-                                alt="Stego preview"
-                                className="mx_StegoComposer_previewImage"
-                            />
+                            <img src={preview} alt="Stego preview" className="mx_StegoComposer_previewImage" />
                         ) : (
                             <div className="mx_StegoComposer_previewEmoji">{preview}</div>
                         )}
@@ -244,11 +226,7 @@ export const StegoComposer: React.FC<StegoComposerProps> = ({
                 >
                     Preview
                 </button>
-                <button
-                    className="mx_StegoComposer_sendBtn"
-                    onClick={handleSend}
-                    disabled={sending || !message.trim()}
-                >
+                <button className="mx_StegoComposer_sendBtn" onClick={handleSend} disabled={sending || !message.trim()}>
                     {sending ? "Encoding..." : "Send Stego"}
                 </button>
             </div>

@@ -67,7 +67,12 @@ export function fromRoomContent(content: unknown, expectedRoomId?: string): Ipfs
     const cid = ipfs.cid;
     const roomId = ipfs.room_id;
     const uploadedAt = ipfs.uploaded_at;
-    if (typeof cid !== "string" || typeof roomId !== "string" || !Number.isFinite(uploadedAt)) {
+    if (
+        typeof cid !== "string" ||
+        typeof roomId !== "string" ||
+        typeof uploadedAt !== "number" ||
+        !Number.isFinite(uploadedAt)
+    ) {
         return undefined;
     }
 

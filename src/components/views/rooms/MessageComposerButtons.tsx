@@ -263,7 +263,9 @@ function steganographyButton(steganographyEnabled: boolean): ReactElement | null
         <CollapsibleButton
             key="controls_steganography"
             className="mx_MessageComposer_button"
-            onClick={() => Modal.createDialog(SteganographyDialog, {})}
+            onClick={() => {
+                Modal.createDialog(SteganographyDialog, {});
+            }}
             title={_t("timeline|context_menu|steganography")}
         >
             <LockIcon />

@@ -53,6 +53,24 @@ function mockPinnedEvent(pinnedMessageIds?: string[], prevPinnedMessageIds?: str
 describe("TextForEvent", () => {
     const mockClient = createTestClient();
 
+
+
+    describe("Widget events", () => {
+        it("renders stable m.widget events", () => {
+            const event = new MatrixEvent({
+                type: "m.widget",
+                state_key: "widget",
+                sender: "@foo:example.com",
+                content: {
+                    name: "video",
+                    url: "https://example.org",
+                },
+            });
+
+            expect(textForEvent(event, mockClient)).toBe("Video widget added by @foo:example.com");
+            expect(hasText(event, mockClient)).toBe(true);
+        });
+    });
     describe("getSenderName()", () => {
         it("Prefers sender.name", () => {
             expect(getSenderName({ sender: { name: "Alice" } } as MatrixEvent)).toBe("Alice");

@@ -156,7 +156,10 @@ export class DelegationGraph {
         return [...this.auditTrail];
     }
 
-    public toDocument(topic: string, now: number = Date.now()): { schemaVersion: number; topic: string; delegationsByUserId: Record<string, string>; updatedAt: number } {
+    public toDocument(
+        topic: string,
+        now: number = Date.now(),
+    ): { schemaVersion: number; topic: string; delegationsByUserId: Record<string, string>; updatedAt: number } {
         return {
             schemaVersion: 1,
             topic,

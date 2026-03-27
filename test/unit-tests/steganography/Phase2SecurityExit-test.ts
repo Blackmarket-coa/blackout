@@ -24,7 +24,7 @@ Please see LICENSE files in the repository root for full details.
 
 import { StegoCodec } from "../../../src/steganography/StegoCodec";
 import { encodeEmoji, decodeEmoji } from "../../../src/steganography/EmojiStego";
-import { encodeImage, decodeImage, calculateCapacity } from "../../../src/steganography/ImageStego";
+import { encodeImage, decodeImage } from "../../../src/steganography/ImageStego";
 import { rsEncode, rsDecode } from "../../../src/steganography/ReedSolomon";
 import { validateCarrierCompatibility } from "../../../src/steganography/CarrierCompatibility";
 import { chunkEmojiCarrier, reassembleEmojiCarrier } from "../../../src/steganography/CarrierChunking";
@@ -47,16 +47,6 @@ function createTestImageData(width = 64, height = 64): ImageData {
     ctx.fillStyle = "#336699";
     ctx.fillRect(0, 0, width, height);
     return ctx.getImageData(0, 0, width, height);
-}
-
-function createTestImageDataUrl(width = 64, height = 64): string {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#336699";
-    ctx.fillRect(0, 0, width, height);
-    return canvas.toDataURL("image/png");
 }
 
 function randomBytes(length: number): Uint8Array {
@@ -319,9 +309,7 @@ describe("Phase 2 — telemetry contains no plaintext or payload data", () => {
             // Bucket must be a string range or the special "0" sentinel, never an exact count
             expect(typeof evt.lengthBucket).toBe("string");
             // Reject raw numeric counts (e.g. "137", "2049") but allow "0" (the zero-length sentinel)
-            if (evt.lengthBucket !== "0") {
-                expect(evt.lengthBucket).not.toMatch(/^\d+$/);
-            }
+            expect(evt.lengthBucket === "0" || !/^\d+$/.test(evt.lengthBucket)).toBe(true);
         }
     });
 
@@ -384,10 +372,9 @@ describe("Phase 2 — codec operates on encrypted payloads, not plaintext", () =
 
         const result = await codec.decodeDiagnostic(message.carrier);
         expect(result.ok).toBe(true);
-        if (result.ok) {
-            // The codec returns the encrypted bytes verbatim — no decryption
-            expect(Array.from(result.payload)).toEqual(Array.from(encryptedPayload));
-        }
+        if (!result.ok) throw new Error("Expected successful decode");
+        // The codec returns the encrypted bytes verbatim — no decryption
+        expect(Array.from(result.payload)).toEqual(Array.from(encryptedPayload));
     });
 
     it("header.plaintext is always empty — caller must decrypt", async () => {
@@ -397,11 +384,10 @@ describe("Phase 2 — codec operates on encrypted payloads, not plaintext", () =
 
         const result = await codec.decodeDiagnostic(message.carrier);
         expect(result.ok).toBe(true);
-        if (result.ok) {
-            // The codec sets plaintext to "" — the calling code is responsible
-            // for Matrix E2EE decryption after stego extraction.
-            expect(result.header.plaintext).toBe("");
-        }
+        if (!result.ok) throw new Error("Expected successful decode");
+        // The codec sets plaintext to "" — the calling code is responsible
+        // for Matrix E2EE decryption after stego extraction.
+        expect(result.header.plaintext).toBe("");
     });
 
     it("CRC-32 integrity check runs before payload is returned", async () => {
@@ -422,16 +408,15 @@ describe("Phase 2 — codec operates on encrypted payloads, not plaintext", () =
         const corrupted = chars.join("");
 
         const result = await codec.decodeDiagnostic(corrupted);
-        // Either fails with checksum mismatch or malformed header — NOT a success
-        if (!result.ok) {
-            expect([
-                StegoDecodeErrorCode.ChecksumMismatch,
-                StegoDecodeErrorCode.MalformedHeader,
-                StegoDecodeErrorCode.UncorrectableCorruption,
-                StegoDecodeErrorCode.NotStegoContent,
-            ]).toContain(result.error.code);
-        }
-        // If RS corrected it, that's also valid (integrity still maintained)
+        // Either fails with checksum mismatch/malformed data or succeeds via correction.
+        const allowedFailureCodes = [
+            StegoDecodeErrorCode.ChecksumMismatch,
+            StegoDecodeErrorCode.MalformedHeader,
+            StegoDecodeErrorCode.UncorrectableCorruption,
+            StegoDecodeErrorCode.NotStegoContent,
+        ];
+        const isAcceptable = result.ok ? result.payload.length >= 0 : allowedFailureCodes.includes(result.error.code);
+        expect(isAcceptable).toBe(true);
     });
 
     it("image stego returns raw encrypted bytes, not plaintext", () => {
@@ -461,9 +446,8 @@ describe("Phase 2 — round-trip correctness across strategies", () => {
             const msg = await codec.encode(payload, { strategy: StegoStrategy.Emoji });
             const result = await codec.decodeDiagnostic(msg.carrier);
             expect(result.ok).toBe(true);
-            if (result.ok) {
-                expect(Array.from(result.payload)).toEqual(Array.from(payload));
-            }
+            if (!result.ok) throw new Error("Expected successful decode");
+            expect(Array.from(result.payload)).toEqual(Array.from(payload));
         }
     });
 
@@ -475,9 +459,8 @@ describe("Phase 2 — round-trip correctness across strategies", () => {
             const msg = await codec.encode(payload, { strategy: StegoStrategy.EmojiString });
             const result = await codec.decodeDiagnostic(msg.carrier);
             expect(result.ok).toBe(true);
-            if (result.ok) {
-                expect(Array.from(result.payload)).toEqual(Array.from(payload));
-            }
+            if (!result.ok) throw new Error("Expected successful decode");
+            expect(Array.from(result.payload)).toEqual(Array.from(payload));
         }
     });
 

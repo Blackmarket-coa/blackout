@@ -39,7 +39,7 @@ getPRInfo() {
 
         apiEndpoint="https://api.github.com/repos/$PR_ORG/$PR_REPO/pulls/$number"
 
-        head=$(curl $apiEndpoint | jq -r '.head.label')
+        head=$(curl -sS $apiEndpoint | jq -r '.head.label // empty')
     fi
 }
 
@@ -67,7 +67,9 @@ if [[ "$head" == *":"* ]]; then
     fi
     TRY_BRANCH=${BRANCH_ARRAY[1]}
 fi
-clone ${TRY_ORG} $defrepo ${TRY_BRANCH}
+if [ -n "$TRY_BRANCH" ] && [ "$TRY_BRANCH" != "null" ]; then
+    clone ${TRY_ORG} $defrepo ${TRY_BRANCH}
+fi
 
 # For merge queue runs we need to extract the temporary branch name
 # the ref_name will look like `gh-readonly-queue/<branch>/pr-<number>-<sha>`

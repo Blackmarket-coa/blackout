@@ -7,7 +7,12 @@ Please see LICENSE files in the repository root for full details.
 
 import type { CurriculumDocument, StudyCircleDocument } from "../../../src/modules/education/models/types";
 import type { TaskBoardDocument } from "../../../src/modules/mutualAid/models/TaskBoard";
-import { loadCurriculum, loadStudyCircle, saveCurriculum, saveStudyCircle } from "../../../src/services/crdt/educationBinding";
+import {
+    loadCurriculum,
+    loadStudyCircle,
+    saveCurriculum,
+    saveStudyCircle,
+} from "../../../src/services/crdt/educationBinding";
 import { loadTaskBoard, saveTaskBoard } from "../../../src/services/crdt/mutualAidBinding";
 import { IpfsService } from "../../../src/services/storage/ipfsService";
 import { fromRoomContent, toRoomEventContent, toRoomStateContent } from "../../../src/services/storage/ipfsRoomEvents";
@@ -40,7 +45,13 @@ describe("Blackout cross-module e2e", () => {
                 { id: "n1", title: "Meal drop", column: "todo", updatedAt: now, requestedByUserId: "@bob:example.org" },
             ],
             offers: [
-                { id: "o1", title: "First-aid training", column: "doing", updatedAt: now, assignedToUserId: "@alice:example.org" },
+                {
+                    id: "o1",
+                    title: "First-aid training",
+                    column: "doing",
+                    updatedAt: now,
+                    assignedToUserId: "@alice:example.org",
+                },
             ],
         };
 

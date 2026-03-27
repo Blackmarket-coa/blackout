@@ -282,7 +282,13 @@ Response:
 
 */
 
-import { type IContent, type MatrixEvent, type IEvent, type StateEvents } from "matrix-js-sdk/src/matrix";
+import {
+    type IContent,
+    type MatrixEvent,
+    type IEvent,
+    type StateEvents,
+    type TimelineEvents,
+} from "matrix-js-sdk/src/matrix";
 import { KnownMembership } from "matrix-js-sdk/src/types";
 import { logger } from "matrix-js-sdk/src/logger";
 
@@ -708,7 +714,7 @@ async function getOpenIdToken(event: MessageEvent<any>): Promise<void> {
 
 async function sendEvent(
     event: MessageEvent<{
-        type: keyof StateEvents;
+        type: string;
         state_key?: string;
         content?: IContent;
     }>,
@@ -745,22 +751,25 @@ async function sendEvent(
         return;
     }
 
-    if (stateKey !== undefined) {
-        // state event
-        try {
-            const res = await client.sendStateEvent(roomId, eventType, content, stateKey);
+    try {
+        if (stateKey !== undefined) {
+            // state event
+            const res = await client.sendStateEvent(roomId, eventType as keyof StateEvents, content, stateKey);
             sendResponse(event, {
                 room_id: roomId,
                 event_id: res.event_id,
             });
-        } catch (e) {
-            sendError(event, _t("scalar|failed_send_event"), e as Error);
             return;
         }
-    } else {
+
         // message event
-        sendError(event, _t("scalar|failed_send_event"), new Error("Sending message events is not implemented"));
-        return;
+        const eventId = await client.sendEvent(roomId, eventType as keyof TimelineEvents, content as any);
+        sendResponse(event, {
+            room_id: roomId,
+            event_id: eventId,
+        });
+    } catch (e) {
+        sendError(event, _t("scalar|failed_send_event"), e as Error);
     }
 }
 
@@ -834,11 +843,17 @@ async function readEvents(
             events: events.map((e) => e.getEffectiveEvent()),
         });
         return;
-    } else {
-        // message events
-        sendError(event, _t("scalar|failed_read_event"), new Error("Reading message events is not implemented"));
-        return;
     }
+
+    // message events (newest first)
+    const messageEvents = [...room.getLiveTimeline().getEvents()]
+        .filter((timelineEvent) => timelineEvent.getType() === eventType)
+        .reverse()
+        .slice(0, effectiveLimit);
+
+    sendResponse(event, {
+        events: messageEvents.map((e) => e.getEffectiveEvent()),
+    });
 }
 
 const onMessage = function (event: MessageEvent<any>): void {

@@ -10,7 +10,6 @@ Please see LICENSE files in the repository root for full details.
  * Represents the various setting levels supported by the SettingsStore.
  */
 export enum SettingLevel {
-    // TODO: [TS] Follow naming convention
     DEVICE = "device",
     ROOM_DEVICE = "room-device",
     ROOM_ACCOUNT = "room-account",

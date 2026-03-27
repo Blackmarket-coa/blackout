@@ -28,7 +28,10 @@ describe("IpfsService", () => {
             json: async () => ({ Hash: "bafy-test", Size: "123" }),
         });
 
-        const service = new IpfsService({ apiBaseUrl: "https://ipfs.example.org" }, fetchMock as unknown as typeof fetch);
+        const service = new IpfsService(
+            { apiBaseUrl: "https://ipfs.example.org" },
+            fetchMock as unknown as typeof fetch,
+        );
         const result = await service.upload(new Blob(["hello"], { type: "text/plain" }));
 
         expect(fetchMock).toHaveBeenCalled();
@@ -46,7 +49,10 @@ describe("IpfsService", () => {
             arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
         });
 
-        const service = new IpfsService({ gatewayBaseUrl: "https://gateway.example.org" }, fetchMock as unknown as typeof fetch);
+        const service = new IpfsService(
+            { gatewayBaseUrl: "https://gateway.example.org" },
+            fetchMock as unknown as typeof fetch,
+        );
         const result = await service.download("bafy-data");
 
         expect(fetchMock).toHaveBeenCalledWith(
@@ -69,5 +75,4 @@ describe("IpfsService", () => {
         expect(service.isConfigured()).toBe(false);
         expect(service.isFeatureEnabled()).toBe(false);
     });
-
 });

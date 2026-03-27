@@ -49,7 +49,10 @@ function assertCanGovern(ctx: GovernancePermissionContext): void {
 
 export class ProposalEngine {
     public create(
-        proposal: Omit<ProposalDocument, "schemaVersion" | "state" | "amendments" | "auditTimeline" | "createdAt" | "updatedAt">,
+        proposal: Omit<
+            ProposalDocument,
+            "schemaVersion" | "state" | "amendments" | "auditTimeline" | "createdAt" | "updatedAt"
+        >,
         permissionContext: GovernancePermissionContext,
         now: number = Date.now(),
     ): ProposalDocument {

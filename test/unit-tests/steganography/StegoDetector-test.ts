@@ -10,12 +10,7 @@ import { encodeEmoji } from "../../../src/steganography/EmojiStego";
 import { STEGO_MARKER, StegoStrategy } from "../../../src/steganography/types";
 
 // Minimal mock for MatrixEvent
-function createMockEvent(
-    eventId: string,
-    roomId: string,
-    body?: string,
-    extra?: Record<string, unknown>,
-): any {
+function createMockEvent(eventId: string, roomId: string, body?: string, extra?: Record<string, unknown>): any {
     const content: Record<string, unknown> = {};
     if (body !== undefined) content.body = body;
     if (extra) Object.assign(content, extra);
@@ -137,11 +132,6 @@ describe("StegoDetector", () => {
         it("should register and call detection callbacks", () => {
             const callback = jest.fn();
             detector.onDetection(callback);
-
-            // Simulate detection via scanEvent
-            const payload = new Uint8Array([1, 2, 3]);
-            const carrier = encodeEmoji(payload, Date.now() + 1000, StegoStrategy.Emoji);
-            const event = createMockEvent("$event1", "!room:test", carrier);
 
             // scanEvent doesn't fire callbacks (only onTimelineEvent does),
             // but we can verify the callback was registered

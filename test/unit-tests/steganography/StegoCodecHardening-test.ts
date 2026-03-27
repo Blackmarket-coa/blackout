@@ -50,11 +50,10 @@ describe("StegoCodec hardening", () => {
 
         for (const sample of corpus) {
             const outcome = (await codec.decodeDiagnostic(sample)) as DecodeOutcome;
-            if (outcome.ok) {
-                expect(outcome.payload).toBeInstanceOf(Uint8Array);
-            } else {
-                expect(outcome.error.code).toBeDefined();
-            }
+            const isValidOutcome = outcome.ok
+                ? outcome.payload instanceof Uint8Array
+                : outcome.error.code !== undefined;
+            expect(isValidOutcome).toBe(true);
         }
     });
 

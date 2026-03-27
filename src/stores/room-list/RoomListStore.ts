@@ -30,7 +30,13 @@ import { AsyncStoreWithClient } from "../AsyncStoreWithClient";
 import { RoomNotificationStateStore } from "../notifications/RoomNotificationStateStore";
 import { VisibilityProvider } from "./filters/VisibilityProvider";
 import { SpaceWatcher } from "./SpaceWatcher";
-import { type IRoomTimelineActionPayload } from "../../actions/MatrixActionCreators";
+import {
+    type IAccountDataActionPayload,
+    type IEventDecryptedActionPayload,
+    type IRoomMyMembershipActionPayload,
+    type IRoomTagsActionPayload,
+    type IRoomTimelineActionPayload,
+} from "../../actions/MatrixActionCreators";
 import { type RoomListStore as Interface, RoomListStoreEvent } from "./Interface";
 import { UPDATE_EVENT } from "../AsyncStore";
 import { SdkContextClass } from "../../contexts/SDKContext";
@@ -201,7 +207,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
                 return;
             }
         } else if (payload.action === "MatrixActions.Room.tags") {
-            const roomPayload = <any>payload; // TODO: Type out the dispatcher types
+            const roomPayload = payload as IRoomTagsActionPayload;
             await this.handleRoomUpdate(roomPayload.room, RoomUpdateCause.PossibleTagChange);
             this.updateFn.trigger();
         } else if (payload.action === "MatrixActions.Room.timeline") {
@@ -249,7 +255,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
                 await tryUpdate(room);
             }
         } else if (payload.action === "MatrixActions.Event.decrypted") {
-            const eventPayload = <any>payload; // TODO: Type out the dispatcher types
+            const eventPayload = payload as IEventDecryptedActionPayload;
             const roomId = eventPayload.event.getRoomId();
             if (!roomId) {
                 return;
@@ -262,7 +268,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
             await this.handleRoomUpdate(room, RoomUpdateCause.Timeline);
             this.updateFn.trigger();
         } else if (payload.action === "MatrixActions.accountData" && payload.event_type === EventType.Direct) {
-            const eventPayload = <any>payload; // TODO: Type out the dispatcher types
+            const eventPayload = payload as IAccountDataActionPayload;
             const dmMap = eventPayload.event.getContent();
             for (const userId of Object.keys(dmMap)) {
                 const roomIds = dmMap[userId];
@@ -282,7 +288,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
             }
             this.updateFn.trigger();
         } else if (payload.action === "MatrixActions.Room.myMembership") {
-            this.onDispatchMyMembership(<any>payload);
+            this.onDispatchMyMembership(payload as IRoomMyMembershipActionPayload);
             return;
         }
 
@@ -303,8 +309,7 @@ export class RoomListStoreClass extends AsyncStoreWithClient<EmptyObject> implem
      *
      * Public for test.
      */
-    public async onDispatchMyMembership(membershipPayload: any): Promise<void> {
-        // TODO: Type out the dispatcher types so membershipPayload is not any
+    public async onDispatchMyMembership(membershipPayload: IRoomMyMembershipActionPayload): Promise<void> {
         const oldMembership = getEffectiveMembership(membershipPayload.oldMembership);
         const newMembership = getEffectiveMembershipTag(membershipPayload.room, membershipPayload.membership);
         if (oldMembership !== EffectiveMembership.Join && newMembership === EffectiveMembership.Join) {

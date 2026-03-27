@@ -20,8 +20,6 @@ interface IpfsUploadResult {
     mimeType?: string;
 }
 
-
-
 interface IpfsCidReference {
     roomId: string;
     cid: string;
@@ -59,7 +57,9 @@ export class IpfsService {
         }
 
         try {
-            const response = await this.fetchWithTimeout(this.buildUrl(this.config.apiBaseUrl, this.config.healthPath ?? DEFAULT_HEALTH_PATH));
+            const response = await this.fetchWithTimeout(
+                this.buildUrl(this.config.apiBaseUrl, this.config.healthPath ?? DEFAULT_HEALTH_PATH),
+            );
             if (!response.ok) {
                 return { ok: false, detail: `IPFS API health check failed with status ${response.status}` };
             }
@@ -78,10 +78,13 @@ export class IpfsService {
         const body = new FormData();
         body.append("file", content);
 
-        const response = await this.fetchWithTimeout(this.buildUrl(this.config.apiBaseUrl, this.config.addPath ?? DEFAULT_ADD_PATH), {
-            method: "POST",
-            body,
-        });
+        const response = await this.fetchWithTimeout(
+            this.buildUrl(this.config.apiBaseUrl, this.config.addPath ?? DEFAULT_ADD_PATH),
+            {
+                method: "POST",
+                body,
+            },
+        );
 
         if (!response.ok) {
             throw new Error(`IPFS upload failed with status ${response.status}`);

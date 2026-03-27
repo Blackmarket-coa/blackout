@@ -22,10 +22,18 @@ export PR_REPO=element-web
 
 # Set up the js-sdk first
 scripts/fetchdep.sh matrix-org matrix-js-sdk develop
+MATRIX_JS_SDK_LINKED=0
 pushd matrix-js-sdk
 [ -n "$JS_SDK_GITHUB_BASE_REF" ] && git fetch --depth 1 origin $JS_SDK_GITHUB_BASE_REF && git checkout $JS_SDK_GITHUB_BASE_REF
-yarn link
-yarn install --frozen-lockfile
+
+js_sdk_package_manager=$(jq -r '.packageManager // empty' package.json)
+if [[ "$js_sdk_package_manager" == *"pnpm@"* ]]; then
+    echo "Skipping matrix-js-sdk link: packageManager '$js_sdk_package_manager' is not compatible with yarn classic link in layered.sh"
+else
+    yarn link
+    yarn install --frozen-lockfile
+    MATRIX_JS_SDK_LINKED=1
+fi
 popd
 
 # Also set up matrix-analytics-events for branch with matching name
@@ -41,6 +49,6 @@ if [ -d matrix-analytics-events ]; then
 fi
 
 # Link the layers into element-web
-yarn link matrix-js-sdk
+[ "$MATRIX_JS_SDK_LINKED" -eq 1 ] && yarn link matrix-js-sdk
 [ -d matrix-analytics-events ] && yarn link @matrix-org/analytics-events
 yarn install --frozen-lockfile $@

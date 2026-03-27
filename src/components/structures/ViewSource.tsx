@@ -57,8 +57,7 @@ export default class ViewSource extends React.Component<IProps, IState> {
         }
 
         const isEncrypted = mxEvent.isEncrypted();
-        // @ts-ignore
-        const decryptedEventSource = mxEvent.clearEvent; // FIXME: clearEvent is private
+        const decryptedEventSource = isEncrypted ? mxEvent.getEffectiveEvent() : null;
         const originalEventSource = mxEvent.event;
         const copyOriginalFunc = (): string => {
             return stringify(originalEventSource);

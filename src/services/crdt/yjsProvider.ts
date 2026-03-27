@@ -31,5 +31,8 @@ export function createIndexedDbPersistence(
         };
     }
 
-    return new IndexeddbPersistence(getPersistenceKey(roomId, docType, docId), yDoc);
+    const persistence = new IndexeddbPersistence(getPersistenceKey(roomId, docType, docId), yDoc);
+    return {
+        whenSynced: persistence.whenSynced.then(() => undefined),
+    };
 }

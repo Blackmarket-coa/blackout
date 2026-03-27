@@ -25,11 +25,11 @@ import {
 } from "matrix-js-sdk/src/matrix";
 import { logger } from "matrix-js-sdk/src/logger";
 import { type PermissionChanged as PermissionChangedEvent } from "@matrix-org/analytics-events/types/typescript/PermissionChanged";
-import { type SessionMembershipData, type IRTCNotificationContent } from "matrix-js-sdk/src/matrixrtc";
+import { MatrixRTCSession, type SessionMembershipData, type IRTCNotificationContent } from "matrix-js-sdk/src/matrixrtc";
 
 import { MatrixClientPeg } from "./MatrixClientPeg";
 import { PosthogAnalytics } from "./PosthogAnalytics";
-import SdkConfig from "./SdkConfig";
+import SdkConfig, { DEFAULTS } from "./SdkConfig";
 import PlatformPeg from "./PlatformPeg";
 import * as TextForEvent from "./TextForEvent";
 import * as Avatar from "./Avatar";
@@ -270,8 +270,7 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
             plaf.requestNotificationPermission().then((result) => {
                 if (result !== "granted") {
                     // The permission request was dismissed or denied
-                    // TODO: Support alternative branding in messaging
-                    const brand = SdkConfig.get().brand;
+                    const brand = SdkConfig.get().brand ?? DEFAULTS.brand;
                     const description =
                         result === "denied"
                             ? _t("settings|notifications|error_permissions_denied", { brand })
@@ -488,16 +487,6 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
      * @returns A promise that will always resolve.
      */
     private async handleRTCNotification(ev: MatrixEvent, toaster: ToastStore, room: Room): Promise<void> {
-        // TODO: Use the call_id to get the *correct* call. We assume there is only one call per room here.
-        const rtcSession = room && room.client.matrixRTC.getRoomSession(room);
-        if (
-            rtcSession?.slotDescription?.application == "m.call" &&
-            rtcSession.memberships.some((membership) => membership.userId === room.client.getUserId())
-        ) {
-            // If we're already joined to the session, don't notify.
-            return;
-        }
-
         // XXX: Should use parseCallNotificationContent once the types are exported.
         const content = ev.getContent() as IRTCNotificationContent;
         const roomId = ev.getRoomId();
@@ -546,6 +535,13 @@ class NotifierClass extends TypedEventEmitter<keyof EmittedEvents, EmittedEvents
         // This means if you have malformed notifications or call memberships your notifications
         // will overwrite, but the solution to that is to use well-formed events.
         const callId = callMembership.getContent<SessionMembershipData>().call_id ?? "";
+
+        const rtcSession = MatrixRTCSession.sessionForSlot(room.client, room, { application: "m.call", id: callId });
+        if (rtcSession.memberships.some((membership) => membership.userId === room.client.getUserId())) {
+            // If we're already joined to this session, don't notify.
+            return;
+        }
+
         const key = getIncomingCallToastKey(callId, roomId);
 
         if (toaster.hasToast(key)) {

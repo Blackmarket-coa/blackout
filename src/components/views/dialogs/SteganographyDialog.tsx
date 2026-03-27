@@ -33,6 +33,7 @@ interface IProps {
  * Supports optional AES-GCM encryption via passphrase.
  */
 export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JSX.Element {
+    const encryptionAvailable = Boolean(globalThis.crypto?.subtle);
     const messageBody = mxEvent?.getContent().body || "";
     const hasHidden = containsSteganographyMessage(messageBody);
     const canDecode = Boolean(mxEvent);
@@ -41,7 +42,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
     const [secretMessage, setSecretMessage] = useState("");
     const [coverText, setCoverText] = useState("");
     const [passphrase, setPassphrase] = useState("");
-    const [useEncryption, setUseEncryption] = useState(true);
+    const [useEncryption, setUseEncryption] = useState(encryptionAvailable);
     const [result, setResult] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
@@ -56,6 +57,11 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
             return;
         }
 
+        if (useEncryption && !encryptionAvailable) {
+            setError(_t("steganography|error_encryption_unavailable"));
+            return;
+        }
+
         setProcessing(true);
         setError(null);
         try {
@@ -65,12 +71,12 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                 useEncryption && passphrase ? passphrase : undefined,
             );
             setResult(encoded);
-        } catch (e) {
+        } catch {
             setError(_t("steganography|error_encoding"));
         } finally {
             setProcessing(false);
         }
-    }, [coverText, secretMessage, passphrase, useEncryption]);
+    }, [coverText, encryptionAvailable, secretMessage, passphrase, useEncryption]);
 
     const onDecode = useCallback(async () => {
         setProcessing(true);
@@ -82,7 +88,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
             } else {
                 setResult(decoded);
             }
-        } catch (e) {
+        } catch {
             setError(_t("steganography|error_decoding"));
         } finally {
             setProcessing(false);
@@ -183,9 +189,7 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                             {messageBody.length > 200 ? messageBody.slice(0, 200) + "..." : messageBody}
                         </div>
                         {hasHidden && (
-                            <p className="mx_SteganographyDialog_hint">
-                                {_t("steganography|hidden_message_detected")}
-                            </p>
+                            <p className="mx_SteganographyDialog_hint">{_t("steganography|hidden_message_detected")}</p>
                         )}
                     </div>
                 )}
@@ -197,10 +201,14 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
                             <input
                                 type="checkbox"
                                 checked={useEncryption}
+                                disabled={!encryptionAvailable}
                                 onChange={(e) => setUseEncryption(e.target.checked)}
                             />
                             {_t("steganography|use_encryption")}
                         </label>
+                    )}
+                    {mode === "encode" && !encryptionAvailable && (
+                        <p className="mx_SteganographyDialog_hint">{_t("steganography|encryption_unavailable_hint")}</p>
                     )}
                     {(mode === "decode" || useEncryption) && (
                         <div className="mx_SteganographyDialog_field">
@@ -223,10 +231,12 @@ export default function SteganographyDialog({ mxEvent, onFinished }: IProps): JS
 
                 {result && (
                     <div className="mx_SteganographyDialog_result">
-                        <label>{mode === "encode" ? _t("steganography|result_encoded") : _t("steganography|result_decoded")}</label>
-                        <div className="mx_SteganographyDialog_resultContent">
-                            {result}
-                        </div>
+                        <label>
+                            {mode === "encode"
+                                ? _t("steganography|result_encoded")
+                                : _t("steganography|result_decoded")}
+                        </label>
+                        <div className="mx_SteganographyDialog_resultContent">{result}</div>
                         {mode === "encode" && (
                             <div className="mx_SteganographyDialog_resultActions">
                                 <button type="button" onClick={onSendEncoded} className="mx_Dialog_primary">

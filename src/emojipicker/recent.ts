@@ -12,10 +12,6 @@ import { orderBy } from "lodash";
 import SettingsStore from "../settings/SettingsStore";
 import { SettingLevel } from "../settings/SettingLevel";
 
-interface ILegacyFormat {
-    [emoji: string]: [number, number]; // [count, date]
-}
-
 // New format tries to be more space efficient for synchronization. Ordered by Date descending.
 export type RecentEmojiData = [emoji: string, count: number][];
 
@@ -24,14 +20,6 @@ const SETTING_NAME = "recent_emoji";
 // we store more recents than we typically query but this lets us sort by weighted usage
 // even if you haven't used your typically favourite emoji for a little while.
 const STORAGE_LIMIT = 100;
-
-// TODO remove this after some time
-function migrate(): void {
-    const data: ILegacyFormat = JSON.parse(window.localStorage.mx_reaction_count || "{}");
-    const sorted = Object.entries(data).sort(([, [count1, date1]], [, [count2, date2]]) => date2 - date1);
-    const newFormat = sorted.map(([emoji, [count, date]]) => [emoji, count]);
-    SettingsStore.setValue(SETTING_NAME, null, SettingLevel.ACCOUNT, newFormat.slice(0, STORAGE_LIMIT));
-}
 
 function getRecentEmoji(): RecentEmojiData {
     return SettingsStore.getValue(SETTING_NAME) || [];
@@ -54,12 +42,7 @@ export function add(emoji: string): void {
 }
 
 export function get(limit = 24): string[] {
-    let recents = getRecentEmoji();
-
-    if (recents.length < 1) {
-        migrate();
-        recents = getRecentEmoji();
-    }
+    const recents = getRecentEmoji();
 
     // perform a stable sort on `count` to keep the recent (date) order as a secondary sort factor
     const sorted = orderBy(recents, "1", "desc");

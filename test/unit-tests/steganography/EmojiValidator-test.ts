@@ -25,20 +25,17 @@ describe("EmojiValidator", () => {
         it("should detect variation selector emojis", () => {
             // ❤️ (0xC0) has a VS16
             const heartIndex = EMOJI_POOL.indexOf("❤️");
-            if (heartIndex >= 0) {
-                const result = validateEmoji("❤️", heartIndex);
-                expect(result.hasVariationSelector).toBe(true);
-                expect(result.warnings.length).toBeGreaterThan(0);
-            }
+            expect(heartIndex).toBeGreaterThanOrEqual(0);
+            const result = validateEmoji("❤️", heartIndex);
+            expect(result.hasVariationSelector).toBe(true);
+            expect(result.warnings.length).toBeGreaterThan(0);
         });
 
         it("should flag round-trip mismatches", () => {
             // Validate with wrong index — should fail round-trip
             const result = validateEmoji("🐶", 99);
             expect(result.roundTripOk).toBe(false);
-            expect(result.warnings).toContain(
-                "Round-trip mismatch: encode/decode would produce different byte",
-            );
+            expect(result.warnings).toContain("Round-trip mismatch: encode/decode would produce different byte");
         });
     });
 

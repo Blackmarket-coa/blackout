@@ -12,17 +12,17 @@ This runbook closes the remaining rollout-hardening stream for Blackout modules.
 ## Pre-rollout checks
 
 1. **Feature flags**
-   - Confirm `feature_blackout_education`, `feature_blackout_mutual_aid`, `feature_blackout_deliberation_clustering`, and `feature_blackout_ipfs_storage` are enabled for the pilot cohort.
+    - Confirm `feature_blackout_education`, `feature_blackout_mutual_aid`, `feature_blackout_deliberation_clustering`, and `feature_blackout_ipfs_storage` are enabled for the pilot cohort.
 2. **Governance policy defaults**
-   - Validate room voting defaults:
-     - quorum >= 1 for decisions requiring explicit participation
-     - supermajority ratio set per room charter for sensitive actions
+    - Validate room voting defaults:
+        - quorum >= 1 for decisions requiring explicit participation
+        - supermajority ratio set per room charter for sensitive actions
 3. **IPFS backend health**
-   - Verify API health endpoint response before enabling upload UX.
-   - Verify gateway read path and client timeout behavior.
+    - Verify API health endpoint response before enabling upload UX.
+    - Verify gateway read path and client timeout behavior.
 4. **Localization readiness**
-   - Ensure newly surfaced Blackout labels use translation keys before rollout.
-   - Confirm fallback behavior for missing translations in pilot locales.
+    - Ensure newly surfaced Blackout labels use translation keys before rollout.
+    - Confirm fallback behavior for missing translations in pilot locales.
 
 ## Rollout checklist
 

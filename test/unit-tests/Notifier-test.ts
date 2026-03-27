@@ -43,6 +43,7 @@ import UserActivity from "../../src/UserActivity";
 import Modal from "../../src/Modal";
 import { mkThread } from "../test-utils/threads";
 import dis from "../../src/dispatcher/dispatcher";
+import SdkConfig from "../../src/SdkConfig";
 import { type ThreadPayload } from "../../src/dispatcher/payloads/ThreadPayload";
 import { Action } from "../../src/dispatcher/actions";
 import { addReplyToMessageContent } from "../../src/utils/Reply";
@@ -702,4 +703,21 @@ describe("Notifier", () => {
             expect(fn).not.toHaveBeenCalled();
         });
     });
+
+    describe("setEnabled", () => {
+        it("uses default brand when config brand is missing for denied permissions", async () => {
+            MockPlatform.requestNotificationPermission = jest.fn().mockResolvedValue("denied");
+            jest.spyOn(SdkConfig, "get").mockReturnValue({} as any);
+            jest.spyOn(Notifier, "isEnabled").mockReturnValue(true);
+            const createDialogSpy = jest.spyOn(Modal, "createDialog").mockReset();
+
+            Notifier.setEnabled(true);
+
+            await waitFor(() => expect(createDialogSpy).toHaveBeenCalled());
+            expect(createDialogSpy.mock.calls.at(-1)?.[1]).toMatchObject({
+                description: expect.stringContaining("Element"),
+            });
+        });
+    });
+
 });

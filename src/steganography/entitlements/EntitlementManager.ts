@@ -10,7 +10,7 @@ import {
     bucketDeviceCount,
     bucketPayloadSize,
     bucketRequestedExpiry,
-    EntitlementAuditLogger,
+    type EntitlementAuditLogger,
     type EntitlementAuditReason,
 } from "./EntitlementInfrastructure";
 

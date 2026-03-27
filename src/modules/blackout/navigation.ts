@@ -40,4 +40,3 @@ export function getEnabledBlackoutModuleNavigationItems(): BlackoutModuleNavigat
 export function getBlackoutRouteById(id: BlackoutModuleNavigationItem["id"]): string {
     return `/blackout/${id}`;
 }
-

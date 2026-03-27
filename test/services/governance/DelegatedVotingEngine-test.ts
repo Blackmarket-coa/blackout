@@ -84,5 +84,4 @@ describe("DelegatedVotingEngine", () => {
         expect(tally.quorumMet).toBe(false);
         expect(tally.passed).toBe(false);
     });
-
 });

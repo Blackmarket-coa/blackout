@@ -1,0 +1,77 @@
+name: Security checks
+
+on:
+    pull_request: {}
+    push:
+        branches: [develop, master]
+    merge_group:
+        types: [checks_requested]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    security-events: write
+
+jobs:
+    dependency_audit:
+        name: Dependency vulnerability audit
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  cache: yarn
+                  node-version: "lts/*"
+
+            - name: Install dependencies
+              run: yarn install --frozen-lockfile
+
+            - name: Yarn audit (high+ only)
+              run: yarn npm audit --all --recursive --severity high
+
+            - name: OSV scanner
+              uses: google/osv-scanner-action/osv-scanner-action@v1
+              with:
+                  scan-args: |-
+                      --lockfile=yarn.lock
+
+    semgrep:
+        name: Semgrep SAST
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Semgrep
+              uses: semgrep/semgrep-action@v1
+              with:
+                  config: >-
+                      p/security-audit
+                      p/secrets
+
+    gitleaks:
+        name: Gitleaks secret scan
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Run Gitleaks
+              uses: gitleaks/gitleaks-action@v2
+
+    trivy:
+        name: Trivy filesystem scan
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Trivy FS scan
+              uses: aquasecurity/trivy-action@0.24.0
+              with:
+                  scan-type: fs
+                  scan-ref: .
+                  severity: CRITICAL,HIGH
+                  ignore-unfixed: true
+                  exit-code: "1"

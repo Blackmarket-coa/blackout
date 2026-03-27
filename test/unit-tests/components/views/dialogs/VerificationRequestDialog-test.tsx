@@ -328,11 +328,11 @@ class MockVerificationRequest
     async accept(): Promise<void> {}
 
     startVerification(_method: string): Promise<Verifier> {
-        throw new Error("Method not implemented.");
+        return Promise.reject(new Error("Unexpected startVerification call in test request"));
     }
 
     scanQRCode(_qrCodeData: Uint8ClampedArray): Promise<Verifier> {
-        throw new Error("Method not implemented.");
+        return Promise.reject(new Error("Unexpected scanQRCode call in test request"));
     }
 
     async generateQRCode(): Promise<Uint8ClampedArray | undefined> {

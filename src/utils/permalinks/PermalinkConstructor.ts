@@ -8,32 +8,19 @@ Please see LICENSE files in the repository root for full details.
 
 /**
  * Interface for classes that actually produce permalinks (strings).
- * TODO: Convert this to a real TypeScript interface
  */
-export default class PermalinkConstructor {
-    public forEvent(roomId: string, eventId: string, serverCandidates: string[] = []): string {
-        throw new Error("Not implemented");
-    }
+export default abstract class PermalinkConstructor {
+    public abstract forEvent(roomId: string, eventId: string, serverCandidates?: string[]): string;
 
-    public forRoom(roomIdOrAlias: string, serverCandidates: string[] = []): string {
-        throw new Error("Not implemented");
-    }
+    public abstract forRoom(roomIdOrAlias: string, serverCandidates?: string[]): string;
 
-    public forUser(userId: string): string {
-        throw new Error("Not implemented");
-    }
+    public abstract forUser(userId: string): string;
 
-    public forEntity(entityId: string): string {
-        throw new Error("Not implemented");
-    }
+    public abstract forEntity(entityId: string): string;
 
-    public isPermalinkHost(host: string): boolean {
-        throw new Error("Not implemented");
-    }
+    public abstract isPermalinkHost(host: string): boolean;
 
-    public parsePermalink(fullUrl: string): PermalinkParts {
-        throw new Error("Not implemented");
-    }
+    public abstract parsePermalink(fullUrl: string): PermalinkParts;
 }
 
 // Inspired by/Borrowed with permission from the matrix-bot-sdk:

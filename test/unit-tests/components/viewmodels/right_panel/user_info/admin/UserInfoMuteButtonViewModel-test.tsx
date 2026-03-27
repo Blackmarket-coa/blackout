@@ -192,6 +192,28 @@ describe("useMuteButtonViewModel", () => {
         expect(mockClient.setPowerLevel).toHaveBeenCalledWith(mockRoom.roomId, defaultMember.userId, -1);
     });
 
+    it("should default message powerlevel to 0 when missing", async () => {
+        const defaultUnmutedMember = {
+            ...defaultMember,
+            powerLevel: 0,
+            membership: KnownMembership.Join,
+        } as RoomMember;
+
+        jest.spyOn(mockRoom.currentState, "getStateEvents").mockReturnValueOnce({
+            getContent: jest.fn().mockReturnValue({}),
+        } as unknown as MatrixEvent);
+
+        const { result } = renderMuteButtonHook({
+            ...defaultAdminToolsProps,
+            member: defaultUnmutedMember,
+            isUpdating: false,
+        });
+
+        await result.current.onMuteButtonClick();
+
+        expect(mockClient.setPowerLevel).toHaveBeenCalledWith(mockRoom.roomId, defaultMember.userId, -1);
+    });
+
     it("returns false if either argument is falsy", () => {
         // @ts-ignore to let us purposely pass incorrect args
         expect(isMuted(defaultMember, null)).toBe(false);
@@ -226,5 +248,14 @@ describe("useMuteButtonViewModel", () => {
 
         const lowerPowerLevelContents = { events: { "m.room.message": 10 }, events_default: -10 };
         expect(isMuted(defaultMember, lowerPowerLevelContents)).toBe(true);
+    });
+    it("uses m.room.message when it is 0", () => {
+        const mutedByDefaultEventOnly = {
+            ...defaultMember,
+            powerLevel: -1,
+        } as RoomMember;
+
+        const powerLevelContents = { events: { "m.room.message": 0 }, events_default: 50 };
+        expect(isMuted(mutedByDefaultEventOnly, powerLevelContents)).toBe(true);
     });
 });

@@ -52,5 +52,4 @@ describe("VotingEngine", () => {
         expect(supermajority.quorumMet).toBe(true);
         expect(supermajority.passed).toBe(true);
     });
-
 });

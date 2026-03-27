@@ -21,13 +21,7 @@ Please see LICENSE files in the repository root for full details.
 
 import { crc32 } from "./crc32";
 import { decodeEmoji, encodeEmoji, hasStegoMarker, looksLikeStegoEmoji } from "./EmojiStego";
-import {
-    calculateCapacity,
-    dataUrlToImageData,
-    decodeImage,
-    encodeImage,
-    imageDataToDataUrl,
-} from "./ImageStego";
+import { calculateCapacity, dataUrlToImageData, decodeImage, encodeImage, imageDataToDataUrl } from "./ImageStego";
 import { rsDecode, rsEncode } from "./ReedSolomon";
 import {
     DEFAULT_STEGO_CONFIG,
@@ -243,17 +237,18 @@ export class StegoCodec {
               : "unknown";
 
         const length = carrier.length;
-        const lengthBucket: StegoDecodeFailureTelemetryEvent["lengthBucket"] = length === 0
-            ? "0"
-            : length <= 32
-              ? "1-32"
-              : length <= 128
-                ? "33-128"
-                : length <= 512
-                  ? "129-512"
-                  : length <= 2048
-                    ? "513-2048"
-                    : "2049+";
+        const lengthBucket: StegoDecodeFailureTelemetryEvent["lengthBucket"] =
+            length === 0
+                ? "0"
+                : length <= 32
+                  ? "1-32"
+                  : length <= 128
+                    ? "33-128"
+                    : length <= 512
+                      ? "129-512"
+                      : length <= 2048
+                        ? "513-2048"
+                        : "2049+";
 
         this.config.decodeFailureReporter?.({
             code: error.code,
@@ -274,14 +269,6 @@ export class StegoCodec {
      */
     public looksLikeEmojiStego(content: string): boolean {
         return hasStegoMarker(content) || looksLikeStegoEmoji(content);
-    }
-
-    /**
-     * Decode an emoji carrier string (backward-compatible wrapper).
-     */
-    private decodeEmojiCarrier(carrier: string): { payload: Uint8Array; header: StegoDecodeResult } | null {
-        const result = this.decodeEmojiCarrierDiagnostic(carrier);
-        return result.ok ? { payload: result.payload, header: result.header } : null;
     }
 
     /**
@@ -337,10 +324,7 @@ export class StegoCodec {
         let rsAttempted = false;
         let rsCorrected = false;
 
-        if (
-            header.strategy === StegoStrategy.Emoji ||
-            header.strategy === StegoStrategy.EmojiString
-        ) {
+        if (header.strategy === StegoStrategy.Emoji || header.strategy === StegoStrategy.EmojiString) {
             rsAttempted = true;
             const rsDecoded = rsDecode(payload, this.config.reedSolomonSymbols);
             if (rsDecoded) {
@@ -478,16 +462,6 @@ export class StegoCodec {
                 expired: false,
             },
         };
-    }
-
-    /**
-     * Decode an image carrier (backward-compatible wrapper).
-     */
-    private async decodeImageCarrier(
-        carrier: string,
-    ): Promise<{ payload: Uint8Array; header: StegoDecodeResult } | null> {
-        const result = await this.decodeImageCarrierDiagnostic(carrier);
-        return result.ok ? { payload: result.payload, header: result.header } : null;
     }
 }
 

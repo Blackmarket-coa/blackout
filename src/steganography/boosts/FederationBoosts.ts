@@ -55,7 +55,11 @@ export class RevenueShareLedger {
         private readonly records: RevenueShareEntry[] = [],
     ) {}
 
-    public recordBoostRevenue(input: { homeserverId: string; periodKey: string; grossCredits: number }): RevenueShareEntry {
+    public recordBoostRevenue(input: {
+        homeserverId: string;
+        periodKey: string;
+        grossCredits: number;
+    }): RevenueShareEntry {
         const platformCredits = round2(input.grossCredits * this.platformShare);
         const homeserverCredits = round2(input.grossCredits - platformCredits);
         const entry: RevenueShareEntry = {

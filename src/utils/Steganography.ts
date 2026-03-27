@@ -44,7 +44,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     return webCrypto.subtle.deriveKey(
         {
             name: "PBKDF2",
-            salt,
+            salt: salt as BufferSource,
             iterations: 100000,
             hash: "SHA-256",
         },
@@ -80,9 +80,9 @@ async function encryptData(plaintext: string, passphrase: string): Promise<Uint8
  */
 async function decryptData(data: Uint8Array, passphrase: string): Promise<string> {
     const webCrypto = getWebCrypto();
-    const salt = data.slice(0, 16);
-    const iv = data.slice(16, 28);
-    const ciphertext = data.slice(28);
+    const salt = Uint8Array.from(data.subarray(0, 16));
+    const iv = Uint8Array.from(data.subarray(16, 28));
+    const ciphertext = Uint8Array.from(data.subarray(28));
     const key = await deriveKey(passphrase, salt);
 
     const plaintext = await webCrypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
@@ -182,7 +182,7 @@ export async function decodeSteganographyMessage(text: string, passphrase?: stri
  * Check if text contains a steganographic message.
  */
 export function containsSteganographyMessage(text: string): boolean {
-    const markerRegex = new RegExp(`${ZW_MARKER}([${ZW_0}${ZW_1}${ZW_SEP}]+)${ZW_MARKER}`);
+    const markerRegex = new RegExp(`${ZW_MARKER}([\u200B\u200C\u200D]+)${ZW_MARKER}`);
     return markerRegex.test(text);
 }
 
@@ -190,6 +190,7 @@ export function containsSteganographyMessage(text: string): boolean {
  * Strip all steganographic content from text, returning clean visible text.
  */
 export function stripSteganographyContent(text: string): string {
-    const allZeroWidth = new RegExp(`[${ZW_0}${ZW_1}${ZW_SEP}${ZW_MARKER}]`, "g");
-    return text.replace(allZeroWidth, "");
+    return Array.from(text)
+        .filter((char) => char !== ZW_0 && char !== ZW_1 && char !== ZW_SEP && char !== ZW_MARKER)
+        .join("");
 }

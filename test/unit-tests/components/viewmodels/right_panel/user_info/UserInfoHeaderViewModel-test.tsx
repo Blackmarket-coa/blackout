@@ -156,17 +156,21 @@ describe("useUserInfoHeaderViewModel", () => {
             thumbnailMxc: undefined,
             hasThumbnail: false,
             thumbnailHttp: null,
-            getThumbnailHttp: function (width: number, height: number, mode?: "scale" | "crop"): string | null {
-                throw new Error("Function not implemented.");
+            getThumbnailHttp: function (_width: number, _height: number, _mode?: "scale" | "crop"): string | null {
+                return null;
             },
-            getThumbnailOfSourceHttp: function (width: number, height: number, mode?: "scale" | "crop"): string | null {
-                throw new Error("Function not implemented.");
+            getThumbnailOfSourceHttp: function (
+                _width: number,
+                _height: number,
+                _mode?: "scale" | "crop",
+            ): string | null {
+                return null;
             },
-            getSquareThumbnailHttp: function (dim: number): string | null {
-                throw new Error("Function not implemented.");
+            getSquareThumbnailHttp: function (_dim: number): string | null {
+                return null;
             },
             downloadSource: function (): Promise<Response> {
-                throw new Error("Function not implemented.");
+                return Promise.reject(new Error("Unexpected downloadSource call in avatar click test"));
             },
         });
 

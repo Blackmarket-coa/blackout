@@ -14,6 +14,7 @@ interface Props {
 export default function ProposalComposer({ onCreate }: Props): React.JSX.Element {
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
+    const canSubmit = Boolean(title.trim() && body.trim());
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
@@ -54,7 +55,8 @@ export default function ProposalComposer({ onCreate }: Props): React.JSX.Element
                     data-testid="blackout-proposal-body"
                 />
             </label>
-            <button type="submit" data-testid="blackout-proposal-create">
+            <p>{body.length} characters</p>
+            <button type="submit" disabled={!canSubmit} data-testid="blackout-proposal-create">
                 Create
             </button>
         </form>

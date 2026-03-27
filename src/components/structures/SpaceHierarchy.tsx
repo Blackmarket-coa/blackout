@@ -619,7 +619,9 @@ export const useRoomHierarchy = (
 
     useDispatcher(defaultDispatcher, (payload) => {
         if (payload.action === Action.UpdateSpaceHierarchy) {
-            setRooms([]); // TODO
+            setRooms([]);
+            setHierarchy(undefined);
+            setError(undefined);
             resetHierarchy();
         }
     });

@@ -111,8 +111,8 @@ const STATE_EVENT_TILE_TYPES = new Map<string, Factory>([
     [EventType.RoomPowerLevels, TextualEventFactory],
     [EventType.RoomPinnedEvents, TextualEventFactory],
     [EventType.RoomServerAcl, TextualEventFactory],
-    // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
     ["im.vector.modular.widgets", TextualEventFactory], // note that Jitsi widgets are special in pickFactory()
+    ["m.widget", TextualEventFactory],
     [WIDGET_LAYOUT_EVENT_TYPE, TextualEventFactory],
     [EventType.RoomTombstone, TextualEventFactory],
     [EventType.RoomJoinRules, TextualEventFactory],
@@ -200,8 +200,7 @@ export function pickFactory(
         }
     }
 
-    // TODO: Enable support for m.widget event type (https://github.com/vector-im/element-web/issues/13111)
-    if (evType === "im.vector.modular.widgets") {
+    if (evType === "im.vector.modular.widgets" || evType === "m.widget") {
         let type = mxEvent.getContent()["type"];
         if (!type) {
             // deleted/invalid widget - try the past widget type

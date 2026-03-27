@@ -8,7 +8,6 @@ Please see LICENSE files in the repository root for full details.
 import { StegoCodec, getDefaultCodec } from "../../../src/steganography/StegoCodec";
 import { StegoStrategy } from "../../../src/steganography/types";
 
-
 function createTestImageDataUrl(): string {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -173,9 +172,7 @@ describe("StegoCodec", () => {
         it("should throw without a cover image", async () => {
             const payload = new Uint8Array(2000);
 
-            await expect(
-                codec.encode(payload, { strategy: StegoStrategy.Image }),
-            ).rejects.toThrow("cover image");
+            await expect(codec.encode(payload, { strategy: StegoStrategy.Image })).rejects.toThrow("cover image");
         });
     });
 

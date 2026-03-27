@@ -246,12 +246,14 @@ and the steganography feature set that is currently under active development.
 Audit run summary (local run on this branch):
 
 - `yarn install --frozen-lockfile`: **pass**
-- `yarn lint:types`: **fail** (multiple TypeScript issues)
-- `yarn lint:js`: **fail** (ESLint issues across steganography sources/tests)
-- `yarn lint:style`: **fail** (Stylelint issues in steganography styles)
-- `yarn test test/unit-tests/steganography --runInBand`: **fail**
-    - 20 suites passed, 1 failed (`CarrierTransportProperty-test.ts`), 184 tests
-      total with 1 failing assertion.
+- `yarn lint:types`: **pass**
+- `yarn lint:js`: **pass**
+- `yarn lint:style`: **pass**
+- `yarn test test/unit-tests/steganography --runInBand`: **pass**
+    - 21 suites passed, 184 tests passed.
+- `yarn audit --groups dependencies --level moderate`: **fail**
+    - 1 moderate vulnerability reported for transitive dependency `counterpart`
+      under `@element-hq/web-shared-components` (no upstream patch available).
 
 ### Recommended QA baseline before merge
 
@@ -263,10 +265,13 @@ yarn lint:types
 yarn lint:js
 yarn lint:style
 yarn test test/unit-tests/steganography --runInBand
+yarn audit --groups dependencies --level moderate
 ```
 
 When touching non-steganography areas, keep the same lint/type/style gates and
 run an appropriately scoped Jest target for the modified subsystem.
+
+A concise action checklist for bringing the repo back to a fully green state is in `docs/repo-readiness-next-steps.md`; ongoing prioritization is tracked in `docs/qa-triage-start.md`.
 
 ## Steganography toolkit integration
 

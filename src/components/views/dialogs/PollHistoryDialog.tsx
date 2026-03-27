@@ -26,7 +26,6 @@ export const PollHistoryDialog: React.FC<PollHistoryDialogProps> = ({
     permalinkCreator,
     onFinished,
 }) => {
-    // @TODO hide dialog title somehow
     return (
         <BaseDialog onFinished={onFinished}>
             <PollHistory

@@ -199,7 +199,7 @@ export default class VideoFeed extends React.PureComponent<IProps, IState> {
             if (pipMode && primary) avatarSize = "76px";
             else if (pipMode && !primary) avatarSize = "16px";
             else if (!pipMode && primary) avatarSize = "160px";
-            else; // TBD
+            else avatarSize = "76px";
 
             content = <RoomAvatar room={callRoom} size={avatarSize} />;
         } else {

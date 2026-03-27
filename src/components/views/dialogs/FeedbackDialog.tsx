@@ -16,6 +16,7 @@ import SdkConfig from "../../../SdkConfig";
 import Modal from "../../../Modal";
 import BugReportDialog from "./BugReportDialog";
 import InfoDialog from "./InfoDialog";
+import ErrorDialog, { extractErrorMessageFromError } from "./ErrorDialog";
 import { submitFeedback } from "../../../rageshake/submit-rageshake";
 import { useStateToggle } from "../../../hooks/useStateToggle";
 import StyledCheckbox from "../elements/StyledCheckbox";
@@ -42,11 +43,21 @@ const FeedbackDialog: React.FC<IProps> = (props: IProps) => {
     };
 
     const hasFeedback = !!SdkConfig.get().bug_report_endpoint_url;
-    const onFinished = (sendFeedback: boolean): void => {
+    const onFinished = async (sendFeedback: boolean): Promise<void> => {
         if (hasFeedback && sendFeedback) {
             const label = props.feature ? `${props.feature}-feedback` : "feedback";
-            // TODO: Handle rejection.
-            submitFeedback(label, comment, canContact);
+            try {
+                await submitFeedback(label, comment, canContact);
+            } catch (error) {
+                Modal.createDialog(ErrorDialog, {
+                    title: _t("common|error"),
+                    description: extractErrorMessageFromError(
+                        error,
+                        _t("bug_reporting|failed_send_logs_causes|unknown_error"),
+                    ),
+                });
+                return;
+            }
 
             Modal.createDialog(InfoDialog, {
                 title: _t("feedback|sent"),

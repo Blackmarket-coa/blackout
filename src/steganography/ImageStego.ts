@@ -28,7 +28,6 @@ const CHANNELS_PER_PIXEL = 3;
 const BITS_PER_PIXEL = BITS_PER_CHANNEL * CHANNELS_PER_PIXEL;
 
 /** Length prefix size in bytes (4 bytes = 32-bit unsigned). */
-const LENGTH_PREFIX_BYTES = 4;
 
 /** Minimum header for image stego: magic(2) + version(1) + length(4) + crc(4) + expiry(6) = 17 bytes. */
 const IMAGE_HEADER_BYTES = 17;
@@ -190,8 +189,7 @@ export function decodeImage(imageData: ImageData): { header: StegoHeader; payloa
         return null; // Payload claims to be larger than image capacity
     }
 
-    const checksum =
-        ((headerBytes[7] << 24) | (headerBytes[8] << 16) | (headerBytes[9] << 8) | headerBytes[10]) >>> 0;
+    const checksum = ((headerBytes[7] << 24) | (headerBytes[8] << 16) | (headerBytes[9] << 8) | headerBytes[10]) >>> 0;
 
     const tsHi = (headerBytes[11] << 8) | headerBytes[12];
     const tsLo = ((headerBytes[13] << 24) | (headerBytes[14] << 16) | (headerBytes[15] << 8) | headerBytes[16]) >>> 0;

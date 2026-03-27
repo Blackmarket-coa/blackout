@@ -570,7 +570,8 @@ export default class ScrollPanel extends React.Component<IProps> {
      */
     public scrollRelative = (multiple: -1 | 1): void => {
         const scrollNode = this.getScrollNode();
-        // TODO: Document what magic number 0.9 is doing
+        // Scroll 90% of the viewport height so the user retains 10% visual overlap
+        // for context continuity when paging up/down.
         const delta = multiple * scrollNode.clientHeight * 0.9;
         scrollNode.scrollBy(0, delta);
         this.saveScrollState();

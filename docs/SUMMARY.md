@@ -20,6 +20,7 @@
 # Build
 
 - [Customisations](customisations.md)
+- [SFU townhall integration build plan](blackout-sfu-townhall-build-plan.md)
 - [Deprecated Modules](deprecated-modules.md)
 - [Native Node modules](native-node-modules.md)
 

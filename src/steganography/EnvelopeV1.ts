@@ -123,7 +123,12 @@ function readVarint(data: Uint8Array, offset: number): { value: number; bytesRea
     throw new Error("Unexpected end of envelope while reading varint");
 }
 
-function readBytes(data: Uint8Array, offset: number, len: number, field: string): { value: Uint8Array; offset: number } {
+function readBytes(
+    data: Uint8Array,
+    offset: number,
+    len: number,
+    field: string,
+): { value: Uint8Array; offset: number } {
     if (len < 0 || offset + len > data.length) {
         throw new Error(`Unexpected end of envelope while reading ${field}`);
     }

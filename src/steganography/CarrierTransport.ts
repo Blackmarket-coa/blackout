@@ -69,5 +69,9 @@ export function normalizeIncomingCarrier(rawCarrier: string): string {
         return rawCarrier;
     }
 
-    return reassembleEmojiCarrier(lines);
+    try {
+        return reassembleEmojiCarrier(lines);
+    } catch {
+        return rawCarrier;
+    }
 }
