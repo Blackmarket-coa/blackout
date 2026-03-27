@@ -1,0 +1,22 @@
+{
+  "name": "@blackout/ui",
+  "version": "0.0.1",
+  "private": true,
+  "description": "React component library (RN-compatible) for Blackout UI",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@blackout/core": "workspace:*",
+    "@blackout/design": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

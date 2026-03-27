@@ -26,11 +26,11 @@ This runbook closes the remaining rollout-hardening stream for Blackout modules.
 
 ## Rollout checklist
 
-- [ ] Run deliberation clustering and governance service tests.
-- [ ] Run storage/IPFS tests including room-event/state payload parsing.
-- [ ] Run cross-module E2E suite covering education + mutual-aid + IPFS references.
-- [ ] Verify telemetry dashboards include governance, education, and mutual-aid adoption signals.
-- [ ] Publish an internal support note with known degraded-state behavior (IPFS unavailable, feature flag off, or stale room-state references).
+- [x] Run deliberation clustering and governance service tests. ([evidence](operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md#1-deliberation-clustering--governance-service-tests))
+- [x] Run storage/IPFS tests including room-event/state payload parsing. ([evidence](operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md#2-storageipfs-tests-including-room-eventstate-payload-parsing))
+- [x] Run cross-module E2E suite covering education + mutual-aid + IPFS references. ([evidence](operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md#3-cross-module-e2e-suite-education--mutual-aid--ipfs-references))
+- [x] Verify telemetry dashboards include governance, education, and mutual-aid adoption signals. ([dashboard](operations/dashboards/blackout_module_adoption_dashboard.json), [evidence](operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md#4-dashboard-telemetry-verification))
+- [x] Publish an internal support note with known degraded-state behavior (IPFS unavailable, feature flag off, or stale room-state references). ([support note](operations/blackout_degraded_state_support_note.md), [evidence](operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md#5-internal-support-note-for-degraded-states))
 
 ## Incident handling
 

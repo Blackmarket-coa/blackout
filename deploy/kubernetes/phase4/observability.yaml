@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+    name: element
+    labels:
+        app: element
+spec:
+    selector:
+        matchLabels:
+            app: element
+    endpoints:
+        - port: http
+          path: /health/live
+          interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+    name: element-slo-alerts
+    labels:
+        app: element
+spec:
+    groups:
+        - name: element.availability
+          rules:
+              - alert: ElementHighErrorBudgetBurn
+                expr: sum(rate(nginx_ingress_controller_requests{status=~"5.."}[5m])) / sum(rate(nginx_ingress_controller_requests[5m])) > 0.01
+                for: 10m
+                labels:
+                    severity: page
+                annotations:
+                    summary: "Element error budget burn is high"
+                    description: "5xx ratio exceeded 1% over 10 minutes"

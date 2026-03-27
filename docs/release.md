@@ -1,3 +1,6 @@
+- [ ] `pnpm guard:port` passes (no unintended `_port/**` implementation changes).
+- [ ] `pnpm guard:port:range -- --base <release-base-ref>` passes for release comparison.
+
 > Tip: Paste this into the browser console to make the checkboxes on this page tickable. (Bear in mind that your ticks will be lost if you reload though.)
 >
 > ```

@@ -1,0 +1,40 @@
+{
+  "name": "@blackout/blackout-web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Blackout daily chat client (Cinny fork migration shell)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "build:web": "vite build",
+    "dev": "vite",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "clean": "rimraf dist",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "smoke:integration": "node scripts/smoke-integration.mjs",
+    "pretest:e2e": "playwright install --with-deps chromium"
+  },
+  "dependencies": {
+    "@blackout/core": "workspace:*",
+    "@blackout/design": "workspace:*",
+    "@blackout/ui": "workspace:*",
+    "@capacitor/core": "^7.0.0"
+  },
+  "optionalDependencies": {
+    "@capacitor/keyboard": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@testing-library/dom": "^10.4.1",
+    "jsdom": "^26.1.0",
+    "typescript": "5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
+  }
+}

@@ -21,20 +21,33 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
             - uses: actions/setup-node@v4
               with:
-                  cache: yarn
-                  node-version: "lts/*"
+                  package-manager-cache: false
+                  node-version-file: ".node-version"
 
             - name: Install dependencies
               run: yarn install --frozen-lockfile
 
             - name: Yarn audit (high+ only)
-              run: yarn npm audit --all --recursive --severity high
+              run: |
+                  set -eo pipefail
+                  audit_output=$(mktemp)
+                  yarn audit --groups dependencies --json > "$audit_output" || true
+
+                  high_or_critical=$(jq -r 'select(.type=="auditAdvisory") | .data.advisory.severity' "$audit_output" | grep -Ec '^(high|critical)$' || true)
+
+                  if [ "$high_or_critical" -gt 0 ]; then
+                      echo "Found $high_or_critical high/critical dependency vulnerabilities"
+                      cat "$audit_output"
+                      exit 1
+                  fi
 
             - name: OSV scanner
-              uses: google/osv-scanner-action/osv-scanner-action@v1
+              uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
               with:
                   scan-args: |-
                       --lockfile=yarn.lock
@@ -57,9 +70,24 @@ jobs:
         runs-on: ubuntu-24.04
         steps:
             - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-            - name: Run Gitleaks
+            - name: Run Gitleaks (pull request range)
+              if: github.event_name == 'pull_request'
               uses: gitleaks/gitleaks-action@v2
+              with:
+                  args: detect --redact --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Run Gitleaks (push/merge queue range)
+              if: github.event_name != 'pull_request'
+              uses: gitleaks/gitleaks-action@v2
+              with:
+                  args: detect --redact --log-opts="${{ github.event.before }}..${{ github.sha }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     trivy:
         name: Trivy filesystem scan

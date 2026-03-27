@@ -7,6 +7,14 @@ us in our development room, [#element-dev](https://matrix.to/#/#element-dev:matr
 This is the best place to ask questions about the code, how to work on the project
 or whether a change is likely to be accepted.
 
+## _port migration guardrail
+
+The `_port/` tree is parked reference material for migration and is read-only for implementation work.
+
+- Run `pnpm guard:port` before opening a PR.
+- For branch comparisons (e.g. local CI parity), run `pnpm guard:port:range -- --base <ref>`.
+- Only migration metadata docs (`_port/README.md`, `_port/MIGRATION_INVENTORY.md`) are allowed to change by default.
+
 ## How to contribute
 
 The preferred and easiest way to contribute changes to the project is to fork

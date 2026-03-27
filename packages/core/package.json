@@ -1,0 +1,19 @@
+{
+  "name": "@blackout/core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Core governance engines, event types, federation, and p2p transport",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

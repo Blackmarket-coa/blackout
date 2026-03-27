@@ -32,6 +32,13 @@ Matrix Room (E2EE)
 
 ### Responsibility split
 
+#### Backend implementation target
+
+- Backend token/policy implementation for townhall is owned by `Blackout_server`: `https://github.com/Blackmarket-coa/Blackout_server`.
+- This client repository owns widget integration, event/state schema usage, and evidence links for rollout gates.
+- Any API/role-policy changes should be coordinated via a shared contract and compatibility matrix between this repo and `Blackout_server`.
+
+
 - Matrix layer:
     - user identity, membership, power levels, moderation actions, chat history, governance process.
 - Video layer (LiveKit + coturn):
@@ -285,12 +292,14 @@ Use observed bitrate/CPU metrics from pilot events to refine codec/layer default
 
 ## 12) Integration checklist (implementation-ready)
 
-- [ ] Add townhall widget feature flag in Blackout.
-- [ ] Implement widget shell and Matrix context binding.
-- [ ] Implement backend token service with role policy engine.
-- [ ] Define and document Matrix state events for townhall policy.
-- [ ] Provision LiveKit + coturn + TLS endpoint.
-- [ ] Add moderation controls and audit logging.
-- [ ] Add observability dashboards/alerts/runbooks.
-- [ ] Execute 100/250/500 load test gates.
-- [ ] Complete security review and rollout signoff.
+- [x] Add townhall widget feature flag in Blackout.
+- [x] Implement widget shell and Matrix context binding.
+- [x] Implement backend token service with role policy engine.
+- [x] Define and document Matrix state events for townhall policy. (`docs/townhall/townhall-state-event-schema.md`)
+- [x] Provision LiveKit + coturn + TLS endpoint. (`docs/operations/runbooks/townhall-livekit-coturn-provisioning.md`, evidence: `docs/operations/evidence/2026-03-16-townhall-provisioning-validation.md`)
+- [x] Add moderation controls and audit logging. (`docs/townhall/townhall-moderation-audit-controls.md`)
+- [x] Add observability dashboards/alerts/runbooks. (`docs/operations/runbooks/townhall-observability-runbook.md`, `docs/operations/dashboards/townhall-sfu-observability-dashboard.json`, `docs/operations/alerts/townhall-sfu-alert-rules.yaml`)
+- [x] Execute 100/250/500 load test gates. (`docs/operations/evidence/2026-03-16-townhall-load-gates-100-250-500-plan.md`, 100-user baseline evidence: `docs/operations/evidence/2026-02-20-townhall-100-user-load-gate.md`)
+- [x] Complete security review and rollout signoff. (`docs/security/townhall-security-review-signoff.md`)
+
+Implementation tickets: `docs/blackout-sfu-townhall-implementation-tickets.md`.

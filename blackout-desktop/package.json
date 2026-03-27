@@ -1,0 +1,15 @@
+{
+  "name": "blackout-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons:generate": "./scripts/generate-icons.sh",
+    "dev": "pnpm icons:generate && tauri dev",
+    "build": "pnpm icons:generate && tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

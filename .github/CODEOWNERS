@@ -34,3 +34,7 @@
 /playwright/testcontainers/synapse.ts
 /playwright/testcontainers/mas.ts
 
+
+/_port/**                 @element-hq/element-web-team
+/tools/ci/check-no-port-changes.mjs @element-hq/element-web-team
+/.github/workflows/port-guard.yml   @element-hq/element-web-team

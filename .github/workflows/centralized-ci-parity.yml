@@ -1,0 +1,43 @@
+name: Centralized CI Parity
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tools/ci/**'
+      - '.github/workflows/centralized-ci-parity.yml'
+      - 'docs/**'
+      - '_port/**'
+
+jobs:
+  parity:
+    name: Canonical parity replay
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard _port changes in PR range
+        if: github.event_name == 'pull_request'
+        run: node tools/ci/check-no-port-changes.mjs --range origin/${{ github.base_ref }}...HEAD
+
+      - name: Run parity pipeline
+        run: pnpm ci:parity

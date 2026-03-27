@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+    name: element-request-scaleout
+    namespace: element-web
+spec:
+    scaleTargetRef:
+        name: element
+    minReplicaCount: 3
+    maxReplicaCount: 20
+    triggers:
+        - type: prometheus
+          metadata:
+              serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+              metricName: nginx_ingress_rps
+              query: sum(rate(nginx_ingress_controller_requests[2m]))
+              threshold: "250"

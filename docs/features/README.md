@@ -20,6 +20,7 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 
 ## Additional feature planning docs
 
+- `discord_parity_blueprint.md`: Matrix-first parity blueprint mapping Discord UX to Blackout equivalents, status, architecture, and phased roadmap.
 - `privacy_first_stego_roadmap.md`: roadmap for privacy-first steganographic messaging.
 - `privacy-first-phase0/`: concrete Phase 0 foundation artifacts (ADRs, data classification, requirements, legal playbook).
 - `privacy-first-phase2/`: Phase 2 client-only steganography toolkit completion evidence (security exit criteria, telemetry proof, test inventory).
@@ -27,5 +28,9 @@ See `docs/blackout-reuse-completion-tracker.md` for the detailed evidence and ex
 - `privacy-first-phase4/`: Phase 4 federation boost primitives (tier policy, throttling, revenue-share accounting, dashboard snapshots).
 - `privacy-first-phase5/`: Phase 5 paid encrypted room creator-key lifecycle artifacts (payment-gated grants, device binding, rotation/revocation, private discovery defaults).
 - `privacy-first-phase6/`: Phase 6 plugin sandbox and cosmetic marketplace safety artifacts (capability manifests, explicit/revocable permissions, network/exfiltration conformance tests).
+- `epic_name_delivery_blueprint.md`: EPIC implementation scaffold covering technical design, schema evolution, UI/UX, testing, telemetry, feature flags, and migration notes.
+- `epic_open_source_options.md`: vetted open-source implementation options for EPIC feature flags, policy enforcement, telemetry, schema validation, and Matrix compatibility testing.
+- `feature_to_open_source_map.md`: direct mapping from `feature_registry.json` feature IDs to suggested open-source equivalents and adoption guidance.
+- `composer_rich_feature_ui_guide.md`: UI/UX guidance for scaling rich composer capabilities with a progressive-disclosure `[+]` pattern, active feature chips, and phased rollout strategy.
 
 - `../blackout-rollout-runbook.md`: rollout hardening checklist for operations, localization readiness, and policy tuning.

@@ -4,6 +4,10 @@
 /key.pem
 /lib
 /node_modules
+**/node_modules
+**/.yarn
+**/.yarn/cache
+**/.pnp.*
 /webapp
 /.npmrc
 /*.log
@@ -38,6 +42,11 @@ storybook-static
 /packages/shared-components/node_modules
 /packages/shared-components/dist
 /packages/shared-components/src/i18nKeys.d.ts
+
+# blackout-web vite output
+/apps/blackout-web/dist
+/apps/blackout-web/test-results
+/apps/blackout-web/playwright-report
 
 # TSC incremental compilation information
 *.tsbuildinfo

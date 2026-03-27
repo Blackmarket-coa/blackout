@@ -1,0 +1,28 @@
+{
+    "title": "Federation Resilience",
+    "timezone": "utc",
+    "schemaVersion": 39,
+    "version": 1,
+    "panels": [
+        {
+            "title": "Federation sender backlog",
+            "type": "timeseries",
+            "targets": [{ "expr": "matrix_federation_sender_backlog", "legendFormat": "backlog" }]
+        },
+        {
+            "title": "Federation retry rate",
+            "type": "timeseries",
+            "targets": [{ "expr": "sum(rate(matrix_federation_retry_total[5m]))", "legendFormat": "retry/s" }]
+        },
+        {
+            "title": "Remote retry saturation",
+            "type": "stat",
+            "targets": [{ "expr": "sum(rate(matrix_federation_retry_total[5m])) > 25", "legendFormat": "saturation" }]
+        },
+        {
+            "title": "Backlog drain health",
+            "type": "stat",
+            "targets": [{ "expr": "max_over_time(matrix_federation_sender_backlog[30m])", "legendFormat": "max_30m" }]
+        }
+    ]
+}

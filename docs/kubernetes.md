@@ -94,12 +94,13 @@ Then you can deploy it to your cluster with something like `kubectl apply -f my-
       selector:
         matchLabels:
           app: element
-      replicas: 1
+      replicas: 3
       template:
         metadata:
           labels:
             app: element
         spec:
+          terminationGracePeriodSeconds: 30
           containers:
           - name: element
             image: vectorim/element-web:latest
@@ -113,16 +114,20 @@ Then you can deploy it to your cluster with something like `kubectl apply -f my-
               protocol: TCP
             readinessProbe:
                 httpGet:
-                    path: /
+                    path: /health/ready
                     port: element
                 initialDelaySeconds: 2
                 periodSeconds: 3
             livenessProbe:
                 httpGet:
-                    path: /
+                    path: /health/live
                     port: element
                 initialDelaySeconds: 10
                 periodSeconds: 10
+            lifecycle:
+                preStop:
+                    exec:
+                        command: ["/bin/sh", "-c", "sleep 10"]
           volumes:
           - name: config-volume
             configMap:

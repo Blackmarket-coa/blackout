@@ -51,13 +51,11 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-              with:
-                  repository: element-hq/element-web
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
-                  node-version: "lts/*"
+                  package-manager-cache: false
+                  node-version-file: ".node-version"
 
             - name: Fetch layered build
               env:
@@ -125,7 +123,6 @@ jobs:
             - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
               with:
                   persist-credentials: false
-                  repository: element-hq/element-web
 
             - name: 📥 Download artifact
               uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -135,9 +132,9 @@ jobs:
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               with:
-                  cache: "yarn"
+                  package-manager-cache: false
                   cache-dependency-path: yarn.lock
-                  node-version: "lts/*"
+                  node-version-file: ".node-version"
 
             - name: Install dependencies
               run: yarn install --frozen-lockfile
@@ -198,13 +195,12 @@ jobs:
               if: inputs.skip != true
               with:
                   persist-credentials: false
-                  repository: element-hq/element-web
 
             - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6
               if: inputs.skip != true
               with:
-                  cache: "yarn"
-                  node-version: "lts/*"
+                  package-manager-cache: false
+                  node-version-file: ".node-version"
 
             - name: Install dependencies
               if: inputs.skip != true

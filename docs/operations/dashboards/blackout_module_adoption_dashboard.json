@@ -1,0 +1,33 @@
+{
+    "title": "Blackout Module Adoption",
+    "description": "Rollout telemetry for governance, education, and mutual-aid module adoption.",
+    "panels": [
+        {
+            "title": "Governance adoption events",
+            "targets": [
+                {
+                    "expr": "sum(blackout_module_adoption_total{module=\"governance\"})",
+                    "legendFormat": "governance"
+                }
+            ]
+        },
+        {
+            "title": "Education adoption events",
+            "targets": [
+                {
+                    "expr": "sum(blackout_module_adoption_total{module=\"education\"})",
+                    "legendFormat": "education"
+                }
+            ]
+        },
+        {
+            "title": "Mutual-aid adoption events",
+            "targets": [
+                {
+                    "expr": "sum(blackout_module_adoption_total{module=\"mutual-aid\"})",
+                    "legendFormat": "mutual-aid"
+                }
+            ]
+        }
+    ]
+}

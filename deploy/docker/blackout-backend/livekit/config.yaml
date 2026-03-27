@@ -1,0 +1,25 @@
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+rtc:
+  tcp_port: 7881
+  port_range_start: ${LIVEKIT_RTC_UDP_START}
+  port_range_end: ${LIVEKIT_RTC_UDP_END}
+  use_external_ip: true
+
+redis:
+  address: redis:6379
+  password: ${REDIS_PASSWORD}
+
+audio:
+  active_level: 35
+  min_percentile: 70
+
+keys:
+  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+
+room:
+  auto_create: true
+
+logging:
+  level: info

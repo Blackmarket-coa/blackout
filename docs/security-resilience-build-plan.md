@@ -5,6 +5,9 @@ This plan translates the strategy into an implementation roadmap for this reposi
 > Phase 1 completion details are tracked in `docs/security-phase1-foundation.md`.
 > Phase 2 completion details are tracked in `docs/security-phase2-app-hardening.md`.
 > Phase 3 completion details are tracked in `docs/security-phase3-auth-modernization.md`.
+> Phase 4 completion details are tracked in `docs/security-phase4-resilience-ha.md`.
+> Phase 5 implementation artifacts are tracked in `docs/security-phase5-cluster-platform-security.md`.
+> Phase 6 remains open in this plan and is not yet marked complete.
 
 ## 0) Goals, constraints, and success metrics
 
@@ -92,7 +95,7 @@ jobs:
 
 ---
 
-## Phase 2 (Weeks 3-4): App-layer hardening
+## Phase 2 (Weeks 3-4): App-layer hardening ✅ Complete
 
 ### Deliverables
 
@@ -200,7 +203,7 @@ export const oidc = new UserManager({
 
 ---
 
-## Phase 4 (Weeks 7-8): Resilience and high availability
+## Phase 4 (Weeks 7-8): Resilience and high availability ✅ Complete
 
 ### Deliverables
 
@@ -252,10 +255,11 @@ readinessProbe:
 
 - Single node/pod failure does not impact user-facing availability.
 - Service-level objectives defined with alert thresholds.
+- In-repo manifests include probe endpoints, HA scaling primitives, OpenTelemetry collector bootstrap, and optional upstream retry/circuit-breaker policy templates.
 
 ---
 
-## Phase 5 (Weeks 9-10): Cluster and platform security
+## Phase 5 (Weeks 9-10): Cluster and platform security ✅ Complete
 
 ### Deliverables
 
@@ -296,10 +300,11 @@ spec:
 
 - New workloads are blocked unless policy-compliant.
 - Cross-namespace traffic restricted by explicit policy.
+- In-repo templates provide namespace segmentation, default-deny networking, Kyverno enforcement, and Vault-backed external secret wiring baselines.
 
 ---
 
-## Phase 6 (Weeks 11-12): UX hardening and compliance controls
+## Phase 6 (Weeks 11-12): UX hardening and compliance controls 🚧 Planned / Not yet marked complete
 
 ### Deliverables
 

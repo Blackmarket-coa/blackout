@@ -19,6 +19,17 @@
 
 ---
 
+## 1.1) Strategic posture alignment
+
+This governance plan supports the broader Blackout strategic posture:
+
+- Keep governance participation frictionless to preserve value-first UX.
+- Reinforce privacy/decentralization credibility through self-host and federation-ready architecture choices.
+- Preserve category focus on cooperative governance + secure communication (avoid generalized productivity-suite sprawl).
+- Prioritize moat compounding in sequence: steganography adoption -> governance trust -> federation network effects -> inter-community voting.
+
+---
+
 ## 2) Reuse strategy (what to adopt vs what to avoid)
 
 ### Reuse directly
@@ -208,7 +219,7 @@ src/
 
 ### Tasks
 
-1. Implement board states (ToDo/Doing/Done) and transitions.
+1. Implement board states (Backlog/In-Progress/Done) and transitions.
 2. Add matching hints between needs/offers.
 3. Persist board state with Yjs and scope to Matrix room.
 

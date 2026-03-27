@@ -1,0 +1,36 @@
+# Optional service-mesh policy for upstream dependency retries + circuit breaking.
+# Apply only if your platform uses Istio.
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+    name: matrix-upstream-circuit-breaker
+spec:
+    host: matrix.example.internal
+    trafficPolicy:
+        connectionPool:
+            tcp:
+                maxConnections: 100
+            http:
+                http1MaxPendingRequests: 1000
+                maxRequestsPerConnection: 100
+        outlierDetection:
+            consecutive5xxErrors: 5
+            interval: 30s
+            baseEjectionTime: 30s
+            maxEjectionPercent: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+    name: matrix-upstream-retries
+spec:
+    hosts:
+        - matrix.example.internal
+    http:
+        - retries:
+              attempts: 3
+              perTryTimeout: 2s
+              retryOn: connect-failure,refused-stream,5xx
+          route:
+              - destination:
+                    host: matrix.example.internal
