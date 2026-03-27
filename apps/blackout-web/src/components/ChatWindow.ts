@@ -40,6 +40,9 @@ export function renderChatWindow({
   compactRecommended,
 }: ChatWindowProps): string {
   const renderedMessages = renderGroupedMessages(messages, compactMode);
+  const uniqueParticipants = new Set(messages.map((message) => message.sender)).size;
+  const lastMessage = messages[messages.length - 1];
+  const freshnessLabel = lastMessage ? formatRecency(lastMessage.timestamp) : "No activity yet";
 
   return `
     <section class="chat-window">
@@ -51,6 +54,11 @@ export function renderChatWindow({
             Team updates and fast decisions happen here.
             ${compactMode ? " Compact mode is active for this high-density stream." : compactRecommended ? " Compact mode is recommended for message-heavy channels." : ""}
           </small>
+        </div>
+        <div class="chat-head-presence" aria-label="Channel activity snapshot">
+          <span class="chat-head-chip">${uniqueParticipants} active</span>
+          <span class="chat-head-chip">${messages.length} messages</span>
+          <span class="chat-head-chip">${freshnessLabel}</span>
         </div>
         <div class="chat-head-actions">
           <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="members" aria-label="Open member list">Members</button>
@@ -79,11 +87,17 @@ export function renderChatWindow({
 }
 
 function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean): string {
+  let previousDayKey: string | null = null;
+
   return messages
     .map((message, index) => {
       const previous = messages[index - 1];
       const compact = forceCompact || shouldCompact(previous, message);
-      return renderMessageItem(message, { compact });
+      const dayKey = dayKeyForMessage(message.timestamp);
+      const dayDivider =
+        dayKey !== previousDayKey ? `<li class="message-day-divider"><span>${formatDayLabel(message.timestamp)}</span></li>` : "";
+      previousDayKey = dayKey;
+      return `${dayDivider}${renderMessageItem(message, { compact })}`;
     })
     .join("");
 }
@@ -97,4 +111,31 @@ function shouldCompact(previous: ChatMessage | undefined, current: ChatMessage):
   if (Number.isNaN(previousTime) || Number.isNaN(currentTime)) return false;
 
   return currentTime - previousTime <= GROUP_WINDOW_MS;
+}
+
+function dayKeyForMessage(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return "unknown";
+  return `${parsed.getUTCFullYear()}-${parsed.getUTCMonth()}-${parsed.getUTCDate()}`;
+}
+
+function formatDayLabel(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return "Conversation";
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatRecency(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return "No activity yet";
+
+  const elapsedMs = Date.now() - parsed.getTime();
+  if (elapsedMs < 60_000) return "Live now";
+  if (elapsedMs < 3_600_000) return `${Math.max(1, Math.floor(elapsedMs / 60_000))}m ago`;
+  if (elapsedMs < 86_400_000) return `${Math.max(1, Math.floor(elapsedMs / 3_600_000))}h ago`;
+  return `${Math.max(1, Math.floor(elapsedMs / 86_400_000))}d ago`;
 }
