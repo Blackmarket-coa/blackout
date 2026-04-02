@@ -195,6 +195,9 @@ export const ClientLayout = () => {
                 if (eventId === jumpTargetEventId && found) {
                   setJumpTargetEventId(null);
                 }
+                if (eventId === unreadMarkerEventId && found) {
+                  setUnreadMarkerEventId(null);
+                }
               }}
             />
           </section>

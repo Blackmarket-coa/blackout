@@ -1,0 +1,232 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import React, { act } from 'react';
+import ReactDOM from 'react-dom/client';
+import { Provider, createStore } from 'jotai';
+import type { MatrixEvent, Room } from 'matrix-js-sdk';
+import ClientLayout from '../../../../src/app/pages/client/ClientLayout';
+import { rightPanelAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../../src/app/state/navigation';
+
+let mockRoom: Room | null = null;
+let mockEvents: MatrixEvent[] = [];
+const mockClient = {
+  getRooms: () => [] as Room[],
+  getUserId: () => '@me:example.org',
+  setAccountData: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
+  useMatrixClient: () => mockClient,
+}));
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('../../../../src/app/features/deaddrop', () => ({
+  DeadDropComposer: () => null,
+  DeadDropIndicator: () => null,
+  DeadDropSettings: () => null,
+  useDeadDrop: () => ({ data: { enabled: false }, queueCount: 0 }),
+}));
+
+vi.mock('../../../../src/app/features/room/MessageComposer', () => ({
+  default: () => null,
+}));
+
+vi.mock('../../../../src/app/features/room/RoomTimeline', () => ({
+  default: ({ jumpToEventId }: { jumpToEventId?: string }) => (
+    <div data-testid="timeline" data-jump={jumpToEventId ?? ''}>
+      timeline
+    </div>
+  ),
+}));
+
+vi.mock('../../../../src/app/hooks/useRoom', () => ({
+  useRoom: () => ({ data: mockRoom, loading: false, error: null }),
+}));
+
+vi.mock('../../../../src/app/hooks/useTimeline', () => ({
+  useRoomTimeline: () => ({ data: mockEvents, loading: false, error: null, loadMore: vi.fn() }),
+}));
+
+const makeEvent = (id: string, body: string, relType?: string): MatrixEvent =>
+  ({
+    getId: () => id,
+    getTs: () => 1_700_000_000_000,
+    getContent: () => ({ body, ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}) }),
+  }) as unknown as MatrixEvent;
+
+const makeRoom = ({
+  roomId,
+  name,
+  type,
+  children = [],
+}: {
+  roomId: string;
+  name: string;
+  type?: string;
+  children?: Array<{ roomId: string; order?: string }>;
+}): Room =>
+  ({
+    roomId,
+    name,
+    getType: () => type,
+    getCanonicalAlias: () => `#${name}:example.org`,
+    getUnreadNotificationCount: () => 0,
+    getMyMembership: () => 'join',
+    getJoinedMembers: () => [],
+    getEventReadUpTo: () => '$read',
+    currentState: {
+      getStateEvents: (eventType: string) => {
+        if (eventType === 'm.space.child') {
+          return children.map((child) => ({
+            getStateKey: () => child.roomId,
+            getContent: () => ({ order: child.order }),
+          }));
+        }
+        if (eventType === 'm.room.pinned_events') {
+          return { getContent: () => ({ pinned: ['$evt-pin'] }) };
+        }
+        return [];
+      },
+    },
+  }) as unknown as Room;
+
+const renderLayout = ({
+  rooms,
+  selectedRoomId,
+  selectedSpaceId,
+  rightPanel,
+}: {
+  rooms: Room[];
+  selectedRoomId: string | null;
+  selectedSpaceId: string | null;
+  rightPanel: 'members' | 'threads' | 'pins' | 'search' | null;
+}) => {
+  mockClient.getRooms = () => rooms;
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+  const store = createStore();
+  store.set(selectedRoomIdAtom, selectedRoomId);
+  store.set(selectedSpaceIdAtom, selectedSpaceId);
+  store.set(rightPanelAtom, rightPanel);
+
+  act(() => {
+    root.render(
+      <Provider store={store}>
+        <ClientLayout />
+      </Provider>,
+    );
+  });
+
+  return { container, root, store };
+};
+
+describe('ClientLayout UI wiring', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockEvents = [];
+    mockRoom = null;
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('threads/pins/search click sets jump target and closes panel', () => {
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    mockRoom = room;
+    mockEvents = [
+      makeEvent('$evt-thread', 'thread', 'm.thread'),
+      makeEvent('$evt-pin', 'pinned message'),
+      makeEvent('$evt-search', 'find me'),
+    ];
+
+    const { container } = renderLayout({
+      rooms: [room],
+      selectedRoomId: '!room:example.org',
+      selectedSpaceId: null,
+      rightPanel: 'threads',
+    });
+
+    const button = container.querySelector('aside button[type="button"]:not([aria-label])') as HTMLButtonElement;
+    // click first thread result button inside panel body
+    const threadButton = Array.from(container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.includes('thread'),
+    ) as HTMLButtonElement;
+
+    expect(threadButton).toBeTruthy();
+    act(() => threadButton.click());
+
+    expect(container.textContent).not.toContain('Close');
+    expect((container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump).toBe('$evt-thread');
+    expect(button).toBeTruthy();
+  });
+
+  it('switching rooms closes right panel', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    const roomB = makeRoom({ roomId: '!room-b:example.org', name: 'Room B' });
+    mockRoom = roomA;
+
+    const { container, store } = renderLayout({
+      rooms: [roomA, roomB],
+      selectedRoomId: '!room-a:example.org',
+      selectedSpaceId: null,
+      rightPanel: 'members',
+    });
+
+    expect(container.textContent).toContain('Close');
+
+    act(() => {
+      store.set(selectedRoomIdAtom, '!room-b:example.org');
+    });
+
+    expect(container.textContent).not.toContain('Close');
+  });
+
+  it('persists and restores collapsed space groups per selected space', async () => {
+    const nestedRoom = makeRoom({ roomId: '!nested:example.org', name: 'Nested' });
+    const childSpace = makeRoom({ roomId: '!child-space:example.org', name: 'Child Space', type: 'm.space', children: [{ roomId: '!nested:example.org' }] });
+    const rootSpace = makeRoom({
+      roomId: '!root-space:example.org',
+      name: 'Root Space',
+      type: 'm.space',
+      children: [{ roomId: '!child-space:example.org', order: 'a' }],
+    });
+    mockRoom = nestedRoom;
+
+    const rooms = [rootSpace, childSpace, nestedRoom];
+    const firstRender = renderLayout({
+      rooms,
+      selectedRoomId: null,
+      selectedSpaceId: '!root-space:example.org',
+      rightPanel: null,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const collapseButton = Array.from(firstRender.container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.includes('▼'),
+    ) as HTMLButtonElement;
+    expect(collapseButton).toBeTruthy();
+
+    act(() => collapseButton.click());
+    expect(localStorage.getItem('blackout.collapsed.!root-space:example.org')).toContain('true');
+    act(() => {
+      firstRender.root.unmount();
+    });
+
+    const secondRender = renderLayout({
+      rooms,
+      selectedRoomId: null,
+      selectedSpaceId: '!root-space:example.org',
+      rightPanel: null,
+    });
+
+    expect(secondRender.container.textContent).toContain('▶ Rooms');
+    expect(secondRender.container.textContent).not.toContain('Nested');
+  });
+});
