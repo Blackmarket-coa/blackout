@@ -13,6 +13,8 @@ const mockClient = {
   getRooms: () => [] as Room[],
   getUserId: () => '@me:example.org',
   setAccountData: vi.fn().mockResolvedValue(undefined),
+  on: vi.fn(),
+  off: vi.fn(),
 };
 
 vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({

@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { userIdAtom } from '../../state/auth';
 import {
   selectedRoomIdAtom,
   selectedSpaceIdAtom,
@@ -16,6 +17,7 @@ import { settingsAtom } from '../../state/settings';
 import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
+import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useRoomTimeline } from '../../hooks/useTimeline';
 import { useRoom } from '../../hooks/useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
@@ -37,58 +39,10 @@ const roomUnread = (room: Room): number => room.getUnreadNotificationCount('tota
 const isTablet = (width: number): boolean => width < 1100;
 const isMobile = (width: number): boolean => width < 760;
 
-const QuickSwitcher = ({
-  rooms,
-  open,
-  onClose,
-  onPick,
-}: {
-  rooms: Room[];
-  open: boolean;
-  onClose: () => void;
-  onPick: (roomId: string) => void;
-}) => {
-  const [query, setQuery] = useState('');
-  const filtered = useMemo(
-    () => rooms.filter((room) => room.name.toLowerCase().includes(query.toLowerCase())).slice(0, 20),
-    [query, rooms],
-  );
-
-  if (!open) return null;
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 30 }} onClick={onClose}>
-      <div
-        style={{ width: 520, maxWidth: '92vw', margin: '10vh auto', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 12, padding: 10 }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          autoFocus
-          placeholder="Jump to room…"
-          style={{ width: '100%', background: 'var(--bg-input)', color: 'var(--text-primary)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 8 }}
-        />
-        <div style={{ marginTop: 8, maxHeight: 340, overflowY: 'auto' }}>
-          {filtered.map((room) => (
-            <button
-              key={room.roomId}
-              type="button"
-              onClick={() => onPick(room.roomId)}
-              style={{ width: '100%', textAlign: 'left', border: 'none', background: 'transparent', color: 'var(--text-primary)', padding: '6px 4px' }}
-            >
-              {roomKindIcon(room)} {room.name}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const ClientLayout = () => {
   const client = useMatrixClient();
   const rooms = useAtomValue(joinedRoomsAtom);
+  const userId = useAtomValue(userIdAtom);
   const [settings, setSettings] = useAtom(settingsAtom);
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
   const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
@@ -98,6 +52,7 @@ export const ClientLayout = () => {
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
   const previousRoomIdRef = useRef<string | null>(null);
@@ -159,6 +114,33 @@ export const ClientLayout = () => {
   const deadDrop = useDeadDrop(selectedRoomId ?? '');
   const activeRoomState = useRoom(selectedRoomId ?? '');
   const timelineState = useRoomTimeline(selectedRoomId ?? '');
+  const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
+
+  const mentionItems = useMemo(() => {
+    if (!userId) return [];
+
+    return rooms
+      .flatMap((room) =>
+        room
+          .getLiveTimeline()
+          .getEvents()
+          .filter((event) => event.getType() === 'm.room.message')
+          .filter((event) => {
+            const content = event.getContent<Record<string, unknown>>();
+            const body = typeof content.body === 'string' ? content.body : '';
+            return body.includes(userId);
+          })
+          .map((event) => ({
+            roomId: room.roomId,
+            roomName: room.name,
+            eventId: event.getId(),
+            body: (event.getContent<Record<string, unknown>>().body as string | undefined) ?? '',
+          })),
+      )
+      .filter((entry): entry is { roomId: string; roomName: string; eventId: string; body: string } => Boolean(entry.eventId))
+      .slice(-40)
+      .reverse();
+  }, [rooms, userId]);
 
   const groups = useMemo(
     () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
@@ -170,10 +152,10 @@ export const ClientLayout = () => {
     await client.setAccountData('blackout.space_order', { order: next });
   };
 
-  const openRoom = (roomId: string) => {
+  const openRoom = (roomId: string, jumpToEventId?: string) => {
     const room = rooms.find((candidate) => candidate.roomId === roomId) ?? null;
     setSelectedRoomId(roomId);
-    setJumpTargetEventId(null);
+    setJumpTargetEventId(jumpToEventId ?? null);
     setUnreadMarkerEventId(getUnreadMarkerEventId(room, client.getUserId()));
   };
 
@@ -217,15 +199,7 @@ export const ClientLayout = () => {
 
   return (
     <section style={{ height: '100vh', width: '100%', display: 'grid', gridTemplateColumns: desktop ? `${layout.spaceColumnWidth}px ${layout.roomColumnWidth}px 1fr` : mobile ? '1fr' : '1fr', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-      <QuickSwitcher
-        rooms={homeRooms}
-        open={quickOpen}
-        onClose={() => setQuickOpen(false)}
-        onPick={(roomId) => {
-          openRoom(roomId);
-          setQuickOpen(false);
-        }}
-      />
+      <NavigationQuickSwitcher open={quickOpen} onClose={() => setQuickOpen(false)} />
 
       {(desktop || (!mobile && !selectedRoomId)) ? (
         <aside style={{ borderRight: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 8, background: 'var(--bg-nav)' }}>
@@ -255,6 +229,25 @@ export const ClientLayout = () => {
             ))}
           </div>
           <button type="button" style={{ width: 40, height: 40, borderRadius: 10, border: '1px dashed var(--border-default)', background: 'var(--bg-input)' }}>＋</button>
+          {desktop ? (
+            <section style={{ width: '100%', borderTop: '1px solid var(--border-default)', padding: 8, display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-muted)' }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{userId ?? 'Anonymous'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Status: {myPresence}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button type="button" style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                  Settings
+                </button>
+                <button type="button" style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                  Mute
+                </button>
+              </div>
+            </section>
+          ) : null}
         </aside>
       ) : null}
 
@@ -334,7 +327,36 @@ export const ClientLayout = () => {
           </aside>
         ) : null}
 
+        {inboxOpen ? (
+          <aside style={{ position: 'absolute', top: 44, right: 8, width: 360, maxHeight: '55vh', overflowY: 'auto', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: '-2px 4px 16px rgba(0,0,0,.2)', zIndex: 5 }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border-default)' }}>
+              <strong>Mentions Inbox</strong>
+              <button type="button" onClick={() => setInboxOpen(false)}>Close</button>
+            </header>
+            <div style={{ padding: 8, display: 'grid', gap: 6 }}>
+              {mentionItems.length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>No mentions yet.</small> : null}
+              {mentionItems.map((item) => (
+                <button
+                  key={item.eventId}
+                  type="button"
+                  onClick={() => {
+                    openRoom(item.roomId, item.eventId);
+                    setInboxOpen(false);
+                  }}
+                  style={{ textAlign: 'left', border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}
+                >
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.roomName}</div>
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.body}</div>
+                </button>
+              ))}
+            </div>
+          </aside>
+        ) : null}
+
         <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+          <button type="button" onClick={() => setInboxOpen((prev) => !prev)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
+            Inbox {mentionItems.length > 0 ? `(${mentionItems.length})` : ''}
+          </button>
           {RIGHT_PANELS.map((panel) => (
             <button key={panel} type="button" onClick={() => setRightPanel(panel)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
               {panel}
