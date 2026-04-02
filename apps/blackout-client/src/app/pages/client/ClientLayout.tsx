@@ -1,7 +1,7 @@
-import { type DragEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
-import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import {
@@ -18,6 +18,8 @@ import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
 import { useRoomTimeline } from '../../hooks/useTimeline';
 import { useRoom } from '../../hooks/useRoom';
+import RightPanelContent from '../../features/right-panel/RightPanelContent';
+import { buildSpaceGroups, getUnreadMarkerEventId } from '../../features/right-panel/rightPanelUtils';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
 
@@ -32,154 +34,8 @@ const roomKindIcon = (room: Room): string => {
 
 const roomUnread = (room: Room): number => room.getUnreadNotificationCount('total') || 0;
 
-const getTimelineBody = (event: MatrixEvent): string => {
-  const content = event.getContent<Record<string, unknown>>();
-  return typeof content.body === 'string' ? content.body : '';
-};
-
-const getTimelineRelation = (event: MatrixEvent): Record<string, unknown> | null => {
-  const content = event.getContent<Record<string, unknown>>();
-  const relation = content['m.relates_to'];
-  return typeof relation === 'object' && relation !== null ? (relation as Record<string, unknown>) : null;
-};
-
-const getEventTimestamp = (event: MatrixEvent): string => {
-  const ts = event.getTs?.() ?? Date.now();
-  return new Date(ts).toLocaleString();
-};
-
 const isTablet = (width: number): boolean => width < 1100;
 const isMobile = (width: number): boolean => width < 760;
-
-const groupedMembers = (members: RoomMember[]) => {
-  const online = members.filter((member) => member.membership === 'join' && (member as RoomMember & { presence?: string }).presence === 'online');
-  const away = members.filter((member) => member.membership === 'join' && (member as RoomMember & { presence?: string }).presence === 'unavailable');
-  const offline = members.filter((member) => member.membership === 'join' && !(member as RoomMember & { presence?: string }).presence);
-  return { online, away, offline };
-};
-
-const RightPanelContent = ({
-  panel,
-  room,
-  events,
-  onJumpToEvent,
-}: {
-  panel: Exclude<RightPanelType, null>;
-  room: Room | null;
-  events: MatrixEvent[];
-  onJumpToEvent: (eventId: string) => void;
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  if (!room) {
-    return <div style={{ padding: 12, color: 'var(--text-secondary)' }}>Pick a room to view {panel}.</div>;
-  }
-
-  if (panel === 'members') {
-    const members = groupedMembers(room.getJoinedMembers());
-    const renderGroup = (title: string, group: RoomMember[]) => (
-      <section style={{ marginBottom: 12 }}>
-        <strong style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{title} · {group.length}</strong>
-        <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
-          {group.map((member) => (
-            <div key={member.userId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: title === 'Online' ? 'var(--success)' : title === 'Away' ? 'var(--warning)' : 'var(--text-muted)' }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name ?? member.userId}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-
-    return (
-      <div style={{ padding: 12, overflowY: 'auto', height: 'calc(100% - 44px)' }}>
-        {renderGroup('Online', members.online)}
-        {renderGroup('Away', members.away)}
-        {renderGroup('Offline', members.offline)}
-      </div>
-    );
-  }
-
-  if (panel === 'threads') {
-    const threadEvents = events.filter((event) => getTimelineRelation(event)?.rel_type === 'm.thread');
-    return (
-      <div style={{ padding: 12, overflowY: 'auto', height: 'calc(100% - 44px)', display: 'grid', gap: 8 }}>
-        {threadEvents.length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>No active threads yet.</small> : null}
-        {threadEvents.map((event, index) => (
-          <button
-            key={event.getId() ?? `thread-${index}`}
-            type="button"
-            style={{ textAlign: 'left', border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}
-            onClick={() => {
-              const eventId = event.getId();
-              if (eventId) onJumpToEvent(eventId);
-            }}
-          >
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{getEventTimestamp(event)}</div>
-            <div>{getTimelineBody(event) || '[thread message]'}</div>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  if (panel === 'pins') {
-    const pinState = room.currentState.getStateEvents('m.room.pinned_events', '');
-    const pinnedIds = Array.isArray(pinState?.getContent<Record<string, unknown>>()?.pinned)
-      ? (pinState?.getContent<Record<string, unknown>>()?.pinned as string[])
-      : [];
-    const pinnedEvents = pinnedIds
-      .map((eventId) => events.find((event) => event.getId() === eventId))
-      .filter((event): event is MatrixEvent => Boolean(event));
-
-    return (
-      <div style={{ padding: 12, overflowY: 'auto', height: 'calc(100% - 44px)', display: 'grid', gap: 8 }}>
-        {pinnedEvents.length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>No pinned messages.</small> : null}
-        {pinnedEvents.map((event, index) => (
-          <button
-            key={event.getId() ?? `pin-${index}`}
-            type="button"
-            style={{ textAlign: 'left', border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}
-            onClick={() => {
-              const eventId = event.getId();
-              if (eventId) onJumpToEvent(eventId);
-            }}
-          >
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{getEventTimestamp(event)}</div>
-            <div>{getTimelineBody(event) || '[pinned event]'}</div>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  const searchResults = events.filter((event) => getTimelineBody(event).toLowerCase().includes(searchQuery.toLowerCase())).slice(-50).reverse();
-  return (
-    <div style={{ padding: 12, overflowY: 'auto', height: 'calc(100% - 44px)', display: 'grid', gap: 8 }}>
-      <input
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Search this room"
-        style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: 8 }}
-      />
-      {searchQuery.trim().length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>Type to search room messages.</small> : null}
-      {searchResults.map((event, index) => (
-        <button
-          key={event.getId() ?? `search-${index}`}
-          type="button"
-          style={{ textAlign: 'left', border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}
-          onClick={() => {
-            const eventId = event.getId();
-            if (eventId) onJumpToEvent(eventId);
-          }}
-        >
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{getEventTimestamp(event)}</div>
-          <div>{getTimelineBody(event)}</div>
-        </button>
-      ))}
-    </div>
-  );
-};
 
 const QuickSwitcher = ({
   rooms,
@@ -238,12 +94,13 @@ export const ClientLayout = () => {
   const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
   const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
-  const [unreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
+  const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
+  const previousRoomIdRef = useRef<string | null>(null);
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -271,6 +128,24 @@ export const ClientLayout = () => {
     setSpaceOrder(spaces.map((room) => room.roomId));
   }, [spaceOrder.length, spaces]);
 
+  useEffect(() => {
+    const key = `blackout.collapsed.${selectedSpaceId ?? 'home'}`;
+    const raw = window.localStorage.getItem(key);
+    setCollapsedFolders(raw ? (JSON.parse(raw) as Record<string, boolean>) : {});
+  }, [selectedSpaceId]);
+
+  useEffect(() => {
+    const key = `blackout.collapsed.${selectedSpaceId ?? 'home'}`;
+    window.localStorage.setItem(key, JSON.stringify(collapsedFolders));
+  }, [collapsedFolders, selectedSpaceId]);
+
+  useEffect(() => {
+    if (previousRoomIdRef.current && previousRoomIdRef.current !== selectedRoomId) {
+      setRightPanel(null);
+    }
+    previousRoomIdRef.current = selectedRoomId;
+  }, [selectedRoomId, setRightPanel]);
+
   const orderedSpaces = useMemo(
     () => [...spaces].sort((a, b) => spaceOrder.indexOf(a.roomId) - spaceOrder.indexOf(b.roomId)),
     [spaceOrder, spaces],
@@ -285,46 +160,21 @@ export const ClientLayout = () => {
   const activeRoomState = useRoom(selectedRoomId ?? '');
   const timelineState = useRoomTimeline(selectedRoomId ?? '');
 
-  const groups = useMemo(() => {
-    if (!selectedSpaceId) {
-      return [['Rooms', selectedSpaceRooms] as const];
-    }
-
-    const selectedSpace = rooms.find((room) => room.roomId === selectedSpaceId);
-    if (!selectedSpace) {
-      return [['Rooms', selectedSpaceRooms] as const];
-    }
-
-    const childEvents = selectedSpace.currentState.getStateEvents('m.space.child');
-    if (!childEvents.length) {
-      return [['Rooms', selectedSpaceRooms] as const];
-    }
-
-    const orderedChildRoomIds = childEvents
-      .map((event) => ({
-        roomId: event.getStateKey(),
-        order: typeof event.getContent<Record<string, unknown>>().order === 'string' ? event.getContent<Record<string, unknown>>().order as string : 'zzz',
-      }))
-      .filter((entry): entry is { roomId: string; order: string } => Boolean(entry.roomId))
-      .sort((a, b) => a.order.localeCompare(b.order))
-      .map((entry) => entry.roomId);
-
-    const roomById = new Map(rooms.map((room) => [room.roomId, room]));
-    const directRooms = orderedChildRoomIds.map((roomId) => roomById.get(roomId)).filter((room): room is Room => Boolean(room) && room.getType() !== 'm.space');
-    const childSpaces = orderedChildRoomIds.map((roomId) => roomById.get(roomId)).filter((room): room is Room => Boolean(room) && room.getType() === 'm.space');
-
-    const spaceGroups = childSpaces.map((space) => {
-      const nestedIds = space.currentState.getStateEvents('m.space.child').map((event) => event.getStateKey()).filter((id): id is string => Boolean(id));
-      const nestedRooms = nestedIds.map((id) => roomById.get(id)).filter((room): room is Room => Boolean(room) && room.getType() !== 'm.space');
-      return [space.name, nestedRooms] as const;
-    });
-
-    return [['General', directRooms] as const, ...spaceGroups];
-  }, [rooms, selectedSpaceId, selectedSpaceRooms]);
+  const groups = useMemo(
+    () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
+    [rooms, selectedSpaceId, selectedSpaceRooms],
+  );
 
   const persistSpaceOrder = async (next: string[]) => {
     setSpaceOrder(next);
     await client.setAccountData('blackout.space_order', { order: next });
+  };
+
+  const openRoom = (roomId: string) => {
+    const room = rooms.find((candidate) => candidate.roomId === roomId) ?? null;
+    setSelectedRoomId(roomId);
+    setJumpTargetEventId(null);
+    setUnreadMarkerEventId(getUnreadMarkerEventId(room, client.getUserId()));
   };
 
   const renderRoomContent = () => {
@@ -369,7 +219,7 @@ export const ClientLayout = () => {
         open={quickOpen}
         onClose={() => setQuickOpen(false)}
         onPick={(roomId) => {
-          setSelectedRoomId(roomId);
+          openRoom(roomId);
           setQuickOpen(false);
         }}
       />
@@ -413,27 +263,27 @@ export const ClientLayout = () => {
           </header>
 
           <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
-            {groups.map(([category, categoryRooms]) => {
-              const collapsed = collapsedFolders[category] ?? false;
+            {groups.map((group) => {
+              const collapsed = collapsedFolders[group.id] ?? false;
               return (
-                <section key={category} style={{ marginBottom: 12 }}>
+                <section key={group.id} style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <button type="button" onClick={() => setCollapsedFolders((prev) => ({ ...prev, [category]: !collapsed }))} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>
-                      {collapsed ? '▶' : '▼'} {category}
+                    <button type="button" onClick={() => setCollapsedFolders((prev) => ({ ...prev, [group.id]: !collapsed }))} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>
+                      {collapsed ? '▶' : '▼'} {group.label}
                     </button>
                     <button type="button" style={{ border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)' }}>+</button>
                   </div>
 
                   {!collapsed ? (
                     <div style={{ marginTop: 4 }}>
-                      {categoryRooms.length === 0 ? (
+                      {group.rooms.length === 0 ? (
                         <small style={{ opacity: 0.8, padding: '4px 8px', display: 'block' }}>No rooms</small>
                       ) : null}
-                      {categoryRooms.map((room) => (
+                      {group.rooms.map((room) => (
                         <button
                           key={room.roomId}
                           type="button"
-                          onClick={() => setSelectedRoomId(room.roomId)}
+                          onClick={() => openRoom(room.roomId)}
                           style={{ width: '100%', textAlign: 'left', border: 'none', background: selectedRoomId === room.roomId ? 'var(--bg-surface-hover)' : 'transparent', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8 }}
                         >
                           <span>{roomKindIcon(room)}</span>
