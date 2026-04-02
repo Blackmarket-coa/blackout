@@ -9,13 +9,14 @@ import { MatrixBootstrapper } from './app/components/MatrixBootstrapper';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
 import './app/styles/theme.css.ts';
 import './app/i18n';
+import ClientLayout from './app/pages/client/ClientLayout';
 
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
   {
     path: '/',
-    element: null,
+    element: <ClientLayout />,
   },
 ]);
 

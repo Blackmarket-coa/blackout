@@ -4,10 +4,18 @@ import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
-import { selectedRoomIdAtom, selectedSpaceIdAtom, rightPanelAtom, type RightPanelType } from '../../state/navigation';
+import {
+  selectedRoomIdAtom,
+  selectedSpaceIdAtom,
+  rightPanelAtom,
+  roomJumpTargetEventIdAtom,
+  roomUnreadMarkerEventIdAtom,
+  type RightPanelType,
+} from '../../state/navigation';
 import { settingsAtom } from '../../state/settings';
 import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
+import RoomTimeline from '../../features/room/RoomTimeline';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
 
@@ -81,6 +89,8 @@ export const ClientLayout = () => {
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
   const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
+  const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
+  const [unreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -148,9 +158,17 @@ export const ClientLayout = () => {
             <DeadDropIndicator config={deadDrop.data} queueCount={deadDrop.queueCount} />
           </header>
 
-          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 12 }}>
-            <p style={{ marginTop: 0, opacity: 0.85 }}>Room timeline: {selectedRoomId}</p>
-            <small>Timeline UI is elided in this shell build.</small>
+          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, height: 'min(62vh, 760px)', minHeight: 360, overflow: 'hidden' }}>
+            <RoomTimeline
+              roomId={selectedRoomId}
+              unreadEventId={unreadMarkerEventId ?? undefined}
+              jumpToEventId={jumpTargetEventId ?? undefined}
+              onJumpResolved={(eventId, found) => {
+                if (eventId === jumpTargetEventId && found) {
+                  setJumpTargetEventId(null);
+                }
+              }}
+            />
           </section>
 
           {deadDrop.data.enabled ? <DeadDropComposer roomId={selectedRoomId} /> : <MessageComposer roomId={selectedRoomId} />}
