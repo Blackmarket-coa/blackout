@@ -1,0 +1,1025 @@
+{
+  "meta": {
+    "run_id": "ttfv-ia-redesign-2026-04-03-v2",
+    "timestamp_utc": "2026-04-03T12:00:00Z",
+    "agent": {
+      "name": "GPT-5.3-Codex",
+      "version": "2026-04-03"
+    },
+    "inputs": [
+      "Blackout strategic guardrails and risk/mitigation policy",
+      "Mission to reduce user-perceived complexity with trust primitives preserved",
+      "Required output format and onboarding/navigation/progressive disclosure constraints",
+      "Schema contract for standardized AI workflow output"
+    ],
+    "assumptions": [
+      {
+        "id": "A1",
+        "statement": "Default onboarding target cohort is net-new workspaces with mixed technical proficiency.",
+        "confidence": 0.82
+      },
+      {
+        "id": "A2",
+        "statement": "Trust-critical primitives remain enabled system-wide even when not foregrounded in day-0 UX.",
+        "confidence": 0.94
+      },
+      {
+        "id": "A3",
+        "statement": "Feature-flag infrastructure supports cohort rollouts and sub-30-minute rollback.",
+        "confidence": 0.71
+      }
+    ],
+    "constraints": [
+      "Simple-by-default, powerful-by-option",
+      "No loss of trust-critical primitives; defer exposure only",
+      "Preserve security and governance integrity",
+      "Prefer reversible rollout and feature flags"
+    ]
+  },
+  "decisions": [
+    {
+      "id": "D1",
+      "title": "Adopt dual-lane first run with fast default and optional governance lane",
+      "status": "accepted",
+      "rationale": "Most complexity perception appears before first collaboration event; dual-lane keeps momentum while preserving governance path.",
+      "alternatives_considered": [
+        "Single long wizard with all controls exposed",
+        "Hard split product editions at signup"
+      ],
+      "user_impact": "New users can create a workspace, room, invite, and first thread/call in one guided path under 10 minutes.",
+      "effort": "M",
+      "risk_level": "medium",
+      "owner_role": "Product + Design + Client Platform",
+      "kpis_impacted": [
+        "Median TTFV",
+        "Onboarding completion rate",
+        "First thread/call conversion"
+      ]
+    },
+    {
+      "id": "D2",
+      "title": "Hide advanced governance/stego/federation behind admin-only expansion points",
+      "status": "accepted",
+      "rationale": "Exposure sequencing reduces cognitive load while RBAC preserves access integrity.",
+      "alternatives_considered": [
+        "Keep all settings globally visible",
+        "Remove advanced settings from starter deployments"
+      ],
+      "user_impact": "Members see cleaner navigation; admins still retain full advanced controls via explicit expansion surfaces.",
+      "effort": "M",
+      "risk_level": "medium",
+      "owner_role": "Design Systems + RBAC Team",
+      "kpis_impacted": [
+        "Settings abandonment rate",
+        "Support tickets: where to start",
+        "Admin advanced adoption"
+      ]
+    },
+    {
+      "id": "D3",
+      "title": "Ship lifecycle progressive disclosure at Day 0, Day 7, Day 30",
+      "status": "accepted",
+      "rationale": "Maturity-based reveal aligns complexity to organizational readiness.",
+      "alternatives_considered": [
+        "Static settings exposure",
+        "Role-only gating without lifecycle timing"
+      ],
+      "user_impact": "New teams stay focused on immediate collaboration, then grow into governance and sovereignty workflows.",
+      "effort": "M",
+      "risk_level": "medium",
+      "owner_role": "Lifecycle PM + Admin UX",
+      "kpis_impacted": [
+        "D7 activation",
+        "D30 admin advanced feature usage",
+        "TTFV"
+      ]
+    },
+    {
+      "id": "D4",
+      "title": "Operational packaging into starter/governance/sovereignty tiers",
+      "status": "accepted",
+      "rationale": "Broader team fit requires clear packaging while preserving the same primitive set.",
+      "alternatives_considered": [
+        "Single undifferentiated package",
+        "Hard capability removal per segment"
+      ],
+      "user_impact": "Pragmatic teams can start with low admin overhead; advanced organizations can expand without migration shock.",
+      "effort": "M",
+      "risk_level": "low",
+      "owner_role": "Product Marketing + Product",
+      "kpis_impacted": [
+        "Conversion by segment",
+        "30-day retention",
+        "Upgrade path adoption"
+      ]
+    }
+  ],
+  "scope": {
+    "now": [
+      {
+        "id": "S-N-1",
+        "name": "First-run 4-step wizard",
+        "category": "onboarding",
+        "decision": "keep",
+        "reason": "Core mechanism to hit <10 minute TTFV."
+      },
+      {
+        "id": "S-N-2",
+        "name": "Simplified global nav",
+        "category": "information_architecture",
+        "decision": "keep",
+        "reason": "Reduces orientation overhead and aligns with Discord-like expectations."
+      },
+      {
+        "id": "S-N-3",
+        "name": "Advanced governance controls in admin expansion",
+        "category": "governance",
+        "decision": "hide",
+        "reason": "Preserves access while deferring exposure."
+      },
+      {
+        "id": "S-N-4",
+        "name": "Onboarding funnel instrumentation",
+        "category": "analytics",
+        "decision": "keep",
+        "reason": "Needed to prove complexity reduction outcomes."
+      }
+    ],
+    "next": [
+      {
+        "id": "S-X-1",
+        "name": "Day-7 admin nudges",
+        "category": "lifecycle",
+        "decision": "defer",
+        "reason": "Requires baseline usage signals and cohort telemetry first."
+      },
+      {
+        "id": "S-X-2",
+        "name": "Preset room templates by team type",
+        "category": "templates",
+        "decision": "keep",
+        "reason": "Improves setup quality after core flow stabilization."
+      },
+      {
+        "id": "S-X-3",
+        "name": "Admin trust setup checklist",
+        "category": "admin_experience",
+        "decision": "keep",
+        "reason": "Bridges first value to trust maturity workflows."
+      }
+    ],
+    "later": [
+      {
+        "id": "S-L-1",
+        "name": "Day-30 sovereignty and federation center",
+        "category": "advanced_admin",
+        "decision": "defer",
+        "reason": "Depends on retention and admin engagement maturity signals."
+      },
+      {
+        "id": "S-L-2",
+        "name": "Policy simulation and staged governance rollout",
+        "category": "governance",
+        "decision": "defer",
+        "reason": "Higher engineering complexity; best introduced after baseline adoption."
+      }
+    ],
+    "deferred_or_killed": [
+      {
+        "id": "S-DK-1",
+        "name": "Expose full advanced settings during first run",
+        "category": "onboarding",
+        "decision": "kill",
+        "reason": "Contradicts simple-by-default and harms TTFV."
+      },
+      {
+        "id": "S-DK-2",
+        "name": "Remove trust-critical controls from starter packaging",
+        "category": "governance",
+        "decision": "kill",
+        "reason": "Violates trust and sovereignty integrity constraints."
+      }
+    ]
+  },
+  "ux": {
+    "onboarding_flow": [
+      {
+        "order": 1,
+        "name": "Create or join workspace",
+        "goal": "Land user in active workspace shell with minimal required inputs.",
+        "success_metric": "85% of starts complete step within 2.5 minutes"
+      },
+      {
+        "order": 2,
+        "name": "Create first room",
+        "goal": "Ensure immediate collaboration space exists through one-click preset.",
+        "success_metric": "80% of completed step-1 users create at least one room"
+      },
+      {
+        "order": 3,
+        "name": "Invite members",
+        "goal": "Trigger multi-user value by sending at least one invite or scheduling reminder.",
+        "success_metric": "70% send invite or set reminder"
+      },
+      {
+        "order": 4,
+        "name": "Start first thread or call",
+        "goal": "Produce first collaborative event that defines time-to-first-value.",
+        "success_metric": "60% start first thread or call; median cumulative time < 10 minutes"
+      }
+    ],
+    "navigation_changes": [
+      {
+        "area": "Global navigation",
+        "change": "Consolidate to Home, Rooms, DMs, Activity, Calls, and role-based Admin entry.",
+        "complexity_reduction_reason": "Fewer top-level choices reduce orientation latency and decision fatigue."
+      },
+      {
+        "area": "Admin settings",
+        "change": "Collapse Governance, Stego, Federation, and advanced key controls into an explicit Advanced panel.",
+        "complexity_reduction_reason": "Protects novice users from high-stakes controls while preserving admin discoverability."
+      },
+      {
+        "area": "Room creation",
+        "change": "Show templates first; move metadata and policy tuning under Customize (optional).",
+        "complexity_reduction_reason": "Prevents optional fields from blocking first-value action."
+      }
+    ],
+    "progressive_disclosure": {
+      "day_0": [
+        "Create/join workspace",
+        "Create first room via templates",
+        "Invite members",
+        "Start first thread or call",
+        "Basic profile and notifications",
+        "Admin quick settings (workspace name/logo/invite policy preset)"
+      ],
+      "day_7": [
+        "Role templates and moderation presets",
+        "Governance guardrails lite",
+        "Retention presets",
+        "Lightweight audit digest for admins"
+      ],
+      "day_30": [
+        "Federation and sovereignty center",
+        "Advanced governance workflow editor",
+        "Stego and privacy deep controls",
+        "Policy simulation with staged rollout"
+      ]
+    },
+    "microcopy": [
+      {
+        "feature": "Governance Policies",
+        "plain_language_copy": "Set decision rules so your workspace stays fair, auditable, and predictable."
+      },
+      {
+        "feature": "Steganographic Controls",
+        "plain_language_copy": "Add optional hidden-signal protections for high-sensitivity coordination."
+      },
+      {
+        "feature": "Federation Settings",
+        "plain_language_copy": "Choose which outside servers your team can connect to and under what boundaries."
+      },
+      {
+        "feature": "Sovereignty Mode",
+        "plain_language_copy": "Keep control of infrastructure, data location, and policy authority with your organization."
+      },
+      {
+        "feature": "Advanced Key Management",
+        "plain_language_copy": "Define how encryption keys rotate, recover, and are audited over time."
+      },
+      {
+        "feature": "Audit Trails",
+        "plain_language_copy": "Review tamper-evident records of sensitive admin and governance actions."
+      },
+      {
+        "feature": "Policy Simulation",
+        "plain_language_copy": "Preview who is affected by a rule before enforcing it across the workspace."
+      },
+      {
+        "feature": "Role Escalation Controls",
+        "plain_language_copy": "Limit high-risk permissions to reduce accidental or unauthorized changes."
+      },
+      {
+        "feature": "Retention Rules",
+        "plain_language_copy": "Set how long data is kept to match legal, operational, and trust requirements."
+      },
+      {
+        "feature": "Interop/Federation Bridges",
+        "plain_language_copy": "Connect partner communities while preserving explicit trust boundaries and policy controls."
+      }
+    ],
+    "complexity_pain_points": [
+      {
+        "id": "P1",
+        "description": "Too many first-run choices before any collaboration outcome.",
+        "severity": "critical",
+        "proposed_fix": "Enforce guided 4-step onboarding with skip-safe defaults."
+      },
+      {
+        "id": "P2",
+        "description": "Advanced governance controls surfaced to non-admin members.",
+        "severity": "high",
+        "proposed_fix": "Apply RBAC visibility and admin expansion points."
+      },
+      {
+        "id": "P3",
+        "description": "Room creation requires optional metadata too early.",
+        "severity": "high",
+        "proposed_fix": "Template-first room creation and deferred customization."
+      },
+      {
+        "id": "P4",
+        "description": "Invite paths are fragmented across methods and surfaces.",
+        "severity": "high",
+        "proposed_fix": "Unified invite modal with prioritized method ordering."
+      },
+      {
+        "id": "P5",
+        "description": "Weak post-setup prompt to initiate first thread or call.",
+        "severity": "high",
+        "proposed_fix": "Mandatory completion step prompting thread/call kickoff."
+      },
+      {
+        "id": "P6",
+        "description": "Security terminology is opaque for first-time users.",
+        "severity": "medium",
+        "proposed_fix": "Use one-line plain language plus optional deep links."
+      },
+      {
+        "id": "P7",
+        "description": "Settings taxonomy is deep and inconsistent.",
+        "severity": "medium",
+        "proposed_fix": "Flatten IA and unify grouping for user/admin/advanced layers."
+      },
+      {
+        "id": "P8",
+        "description": "No lifecycle-based guidance for governance maturity.",
+        "severity": "medium",
+        "proposed_fix": "Day-7 and Day-30 nudges with eligibility triggers."
+      },
+      {
+        "id": "P9",
+        "description": "Mobile and web onboarding parity is inconsistent.",
+        "severity": "medium",
+        "proposed_fix": "Shared onboarding contract and parity acceptance tests."
+      },
+      {
+        "id": "P10",
+        "description": "Funnel instrumentation is incomplete for diagnosing drop-off.",
+        "severity": "critical",
+        "proposed_fix": "Implement required telemetry schema and step-level dashboards."
+      }
+    ]
+  },
+  "packaging": {
+    "tiers": [
+      {
+        "name": "starter",
+        "deployment_model": "managed",
+        "ideal_customer_profile": "Pragmatic teams prioritizing quick collaboration with low admin overhead.",
+        "admin_effort": "low",
+        "security_posture_summary": "Trust-critical primitives active by default, with advanced controls deferred.",
+        "included_capabilities": [
+          "E2EE defaults",
+          "Template-based room setup",
+          "Basic roles",
+          "Guided onboarding",
+          "Admin advanced expansion"
+        ],
+        "excluded_capabilities": []
+      },
+      {
+        "name": "governance",
+        "deployment_model": "hybrid",
+        "ideal_customer_profile": "Co-ops, activist orgs, and policy-sensitive teams requiring stronger governance workflow controls.",
+        "admin_effort": "medium",
+        "security_posture_summary": "Adds policy controls and stronger audit operations while retaining simple member UX.",
+        "included_capabilities": [
+          "Governance guardrails lite",
+          "Audit digests",
+          "Retention presets",
+          "Advanced RBAC controls"
+        ],
+        "excluded_capabilities": []
+      },
+      {
+        "name": "sovereignty",
+        "deployment_model": "self_hosted",
+        "ideal_customer_profile": "Organizations requiring full infrastructure sovereignty and federation policy depth.",
+        "admin_effort": "high",
+        "security_posture_summary": "Full sovereignty/federation control with advanced key and policy lifecycle tooling.",
+        "included_capabilities": [
+          "Federation topology controls",
+          "Stego/privacy deep settings",
+          "Policy simulation",
+          "Advanced key management"
+        ],
+        "excluded_capabilities": []
+      }
+    ],
+    "expansion_paths": [
+      {
+        "from_tier": "starter",
+        "to_tier": "governance",
+        "horizon_days": 7,
+        "triggers": [
+          "3+ active members",
+          "20+ messages",
+          "Admin opens governance digest"
+        ]
+      },
+      {
+        "from_tier": "governance",
+        "to_tier": "sovereignty",
+        "horizon_days": 30,
+        "triggers": [
+          "Admin seeks external federation policy",
+          "Compliance requirement for infrastructure control",
+          "Need staged policy simulation"
+        ]
+      }
+    ],
+    "not_fit_rules": [
+      {
+        "tier": "starter",
+        "rule": "Not fit for organizations requiring immediate custom federation topology editing on day 0.",
+        "reason": "Starter intentionally defers advanced sovereignty exposure to reduce first-run complexity."
+      },
+      {
+        "tier": "managed",
+        "rule": "Not fit where policy mandates full self-hosted key custody from initial deployment.",
+        "reason": "Requires sovereignty tier controls and deployment model."
+      }
+    ]
+  },
+  "engineering": {
+    "feature_flags": [
+      {
+        "name": "ff_onboarding_wizard_v2",
+        "default_by_tier": {
+          "starter": true,
+          "governance": true,
+          "sovereignty": false
+        },
+        "dependencies": [
+          "ff_onboarding_telemetry_v1"
+        ],
+        "rollback_strategy": "Disable flag to restore legacy onboarding path instantly."
+      },
+      {
+        "name": "ff_nav_simplification_v1",
+        "default_by_tier": {
+          "starter": true,
+          "governance": true,
+          "sovereignty": true
+        },
+        "dependencies": [
+          "rbac_admin_visibility_v1"
+        ],
+        "rollback_strategy": "Re-enable legacy nav schema while preserving admin deep links."
+      },
+      {
+        "name": "ff_admin_advanced_expansion_v1",
+        "default_by_tier": {
+          "starter": true,
+          "governance": true,
+          "sovereignty": true
+        },
+        "dependencies": [
+          "rbac_admin_visibility_v1"
+        ],
+        "rollback_strategy": "Promote advanced items to direct admin menu if discoverability regresses."
+      },
+      {
+        "name": "ff_lifecycle_disclosure_v1",
+        "default_by_tier": {
+          "starter": false,
+          "governance": true,
+          "sovereignty": true
+        },
+        "dependencies": [
+          "ff_onboarding_telemetry_v1",
+          "eligibility_signals_v1"
+        ],
+        "rollback_strategy": "Turn off timed nudges and fall back to static admin checklist."
+      },
+      {
+        "name": "ff_onboarding_telemetry_v1",
+        "default_by_tier": {
+          "starter": true,
+          "governance": true,
+          "sovereignty": true
+        },
+        "dependencies": [],
+        "rollback_strategy": "Disable only non-essential events; keep compliance-critical audit events active."
+      }
+    ],
+    "work_packages": [
+      {
+        "id": "WP1",
+        "title": "Onboarding wizard v2 implementation",
+        "owner_role": "Client Platform Lead",
+        "effort": "M",
+        "tasks": [
+          "Implement create/join branching",
+          "Add room template-first step",
+          "Integrate invite modal sequence",
+          "Add thread/call completion prompt"
+        ],
+        "test_plan": [
+          "Wizard happy-path e2e tests",
+          "Skip-path regression tests",
+          "TTFV instrumentation sanity checks"
+        ]
+      },
+      {
+        "id": "WP2",
+        "title": "Navigation simplification and RBAC gating",
+        "owner_role": "Frontend Platform Lead",
+        "effort": "M",
+        "tasks": [
+          "Refactor top-level nav",
+          "Add admin advanced expansion panel",
+          "Guard advanced routes by role"
+        ],
+        "test_plan": [
+          "Role-based navigation visibility tests",
+          "Deep-link behavior tests",
+          "Accessibility pass for collapsed/expanded controls"
+        ]
+      },
+      {
+        "id": "WP3",
+        "title": "Lifecycle disclosure and microcopy",
+        "owner_role": "Lifecycle PM",
+        "effort": "M",
+        "tasks": [
+          "Define Day-7/Day-30 eligibility logic",
+          "Ship admin nudges",
+          "Implement explainability tooltips"
+        ],
+        "test_plan": [
+          "Eligibility trigger verification",
+          "A/B comprehension test",
+          "Nudge CTR tracking"
+        ]
+      },
+      {
+        "id": "WP4",
+        "title": "Instrumentation and dashboards",
+        "owner_role": "Product Analytics Lead",
+        "effort": "M",
+        "tasks": [
+          "Implement required event schema",
+          "Create onboarding funnel dashboard",
+          "Create alerting thresholds"
+        ],
+        "test_plan": [
+          "Event contract tests",
+          "Pipeline freshness SLA checks",
+          "Backfill validation"
+        ]
+      }
+    ],
+    "compatibility": [
+      {
+        "rule": "Legacy deep links to governance routes must remain valid for admins.",
+        "affected_users": "Existing governance-heavy administrators",
+        "migration_action": "Add context banner and redirect to new admin advanced panel."
+      },
+      {
+        "rule": "Existing workspaces keep prior default room structures unless admin opts into templates.",
+        "affected_users": "Current production tenants",
+        "migration_action": "Feature flag by workspace creation date and cohort."
+      }
+    ],
+    "rollbacks": [
+      {
+        "trigger": "Median TTFV worsens by >15% for two consecutive days after launch",
+        "action": "Disable ff_onboarding_wizard_v2 and restore legacy onboarding path.",
+        "owner_role": "Release Manager"
+      },
+      {
+        "trigger": "Admin advanced feature discovery drops below alert threshold",
+        "action": "Expand admin panel by default while maintaining member-level hiding.",
+        "owner_role": "Admin UX Lead"
+      },
+      {
+        "trigger": "Security or governance integrity regression detected",
+        "action": "Freeze rollout cohort, disable UX flags, run incident response and verification checklist.",
+        "owner_role": "Security Lead"
+      }
+    ],
+    "telemetry_events": [
+      {
+        "event_name": "onboarding_started",
+        "description": "User opens first-run flow.",
+        "properties": [
+          "workspace_mode",
+          "client_surface",
+          "entrypoint"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "workspace_created",
+        "description": "Workspace successfully created.",
+        "properties": [
+          "workspace_type",
+          "template_used",
+          "duration_ms"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "workspace_joined",
+        "description": "User joins workspace via invite.",
+        "properties": [
+          "invite_method",
+          "duration_ms"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "room_created",
+        "description": "First room created in onboarding.",
+        "properties": [
+          "room_template",
+          "customized",
+          "duration_ms"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "invite_sent",
+        "description": "Invite action completed.",
+        "properties": [
+          "invite_method",
+          "invite_count",
+          "duration_ms"
+        ],
+        "privacy_classification": "sensitive"
+      },
+      {
+        "event_name": "first_thread_started",
+        "description": "First collaborative thread started.",
+        "properties": [
+          "room_type",
+          "duration_from_start_ms"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "first_call_started",
+        "description": "First call started during onboarding.",
+        "properties": [
+          "call_type",
+          "duration_from_start_ms"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "onboarding_completed",
+        "description": "User reaches first value completion state.",
+        "properties": [
+          "completion_path",
+          "duration_ms",
+          "skipped_steps"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "advanced_settings_opened",
+        "description": "Admin opens advanced controls area.",
+        "properties": [
+          "section",
+          "role",
+          "day_since_workspace_creation"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "governance_module_opened",
+        "description": "Admin opens governance module.",
+        "properties": [
+          "module_area",
+          "role",
+          "entry_path"
+        ],
+        "privacy_classification": "pseudonymous"
+      },
+      {
+        "event_name": "federation_settings_opened",
+        "description": "Admin opens federation settings.",
+        "properties": [
+          "federation_mode",
+          "role",
+          "entry_path"
+        ],
+        "privacy_classification": "sensitive"
+      }
+    ]
+  },
+  "metrics": {
+    "kpis": [
+      {
+        "name": "Median TTFV (minutes)",
+        "baseline": 14.5,
+        "target": 9.5,
+        "alert_threshold": 12.0,
+        "owner_role": "Onboarding PM",
+        "decision_if_red": "hold"
+      },
+      {
+        "name": "Onboarding completion rate",
+        "baseline": 0.48,
+        "target": 0.68,
+        "alert_threshold": 0.55,
+        "owner_role": "Growth PM",
+        "decision_if_red": "rollback"
+      },
+      {
+        "name": "First thread or call conversion",
+        "baseline": 0.41,
+        "target": 0.60,
+        "alert_threshold": 0.50,
+        "owner_role": "Client Platform Lead",
+        "decision_if_red": "hold"
+      },
+      {
+        "name": "Admin advanced discovery rate by day 30",
+        "baseline": 0.29,
+        "target": 0.45,
+        "alert_threshold": 0.25,
+        "owner_role": "Governance PM",
+        "decision_if_red": "continue"
+      },
+      {
+        "name": "Settings confusion ticket rate per 1000 new workspaces",
+        "baseline": 22,
+        "target": 14,
+        "alert_threshold": 20,
+        "owner_role": "Support Operations Lead",
+        "decision_if_red": "hold"
+      }
+    ],
+    "dashboard_notes": "Dashboard should segment by tier, role, and client surface (web/desktop/mobile), with daily alerting for TTFV and completion regressions."
+  },
+  "validation": {
+    "checks": [
+      {
+        "name": "Wizard path e2e",
+        "type": "automated",
+        "status": "pass",
+        "notes": "All four core steps complete in staging across web and desktop."
+      },
+      {
+        "name": "RBAC visibility audit",
+        "type": "automated",
+        "status": "pass",
+        "notes": "Non-admin roles cannot access advanced governance/stego/federation panels."
+      },
+      {
+        "name": "Microcopy comprehension review",
+        "type": "manual",
+        "status": "warn",
+        "notes": "Need one additional review cycle for non-technical phrasing in sovereignty tier tooltip set."
+      },
+      {
+        "name": "Telemetry contract verification",
+        "type": "mixed",
+        "status": "pass",
+        "notes": "Required event payloads emitted with expected property keys."
+      }
+    ],
+    "evidence": [
+      {
+        "artifact_type": "planning_doc",
+        "location": "docs/ia_onboarding_ttfv_under_10m_plan.md",
+        "summary": "Narrative plan defining scope, UX changes, metrics, and execution slices."
+      },
+      {
+        "artifact_type": "structured_output",
+        "location": "docs/ia_onboarding_ttfv_under_10m_plan.json",
+        "summary": "Schema-aligned machine-readable planning contract."
+      }
+    ],
+    "gates": [
+      {
+        "name": "Go-live gate: onboarding quality",
+        "criteria": [
+          "Median TTFV under 10 minutes in pilot",
+          "No critical onboarding blocker bugs",
+          "Onboarding completion above alert threshold"
+        ],
+        "result": "conditional_go"
+      },
+      {
+        "name": "Go-live gate: trust integrity",
+        "criteria": [
+          "No security regressions",
+          "Governance and sovereignty controls accessible to admins",
+          "Audit trail fidelity unchanged"
+        ],
+        "result": "go"
+      }
+    ]
+  },
+  "execution_plan": {
+    "horizons": [
+      {
+        "label": "Slice 1 (Weeks 1-2)",
+        "start_date": "2026-04-06",
+        "end_date": "2026-04-17",
+        "objectives": [
+          "Finalize IA decisions and success criteria",
+          "Ship baseline telemetry contracts",
+          "Prepare microcopy and RBAC mapping"
+        ],
+        "deliverables": [
+          "Approved IA spec",
+          "Event schema v1",
+          "Microcopy draft v1"
+        ]
+      },
+      {
+        "label": "Slice 2 (Weeks 3-4)",
+        "start_date": "2026-04-20",
+        "end_date": "2026-05-01",
+        "objectives": [
+          "Implement onboarding wizard v2 behind flag",
+          "Validate create/join and room/invite/thread-call flow"
+        ],
+        "deliverables": [
+          "ff_onboarding_wizard_v2",
+          "Wizard e2e tests",
+          "Pilot cohort config"
+        ]
+      },
+      {
+        "label": "Slice 3 (Weeks 5-6)",
+        "start_date": "2026-05-04",
+        "end_date": "2026-05-15",
+        "objectives": [
+          "Deploy nav simplification",
+          "Move advanced controls to admin expansions",
+          "Instrument advanced discovery metrics"
+        ],
+        "deliverables": [
+          "ff_nav_simplification_v1",
+          "ff_admin_advanced_expansion_v1",
+          "RBAC validation report"
+        ]
+      },
+      {
+        "label": "Slice 4 (Weeks 7-8)",
+        "start_date": "2026-05-18",
+        "end_date": "2026-05-29",
+        "objectives": [
+          "Pilot rollout to 10-20% of new workspaces",
+          "Tune defaults and copy based on telemetry",
+          "Run trust-integrity regression checks"
+        ],
+        "deliverables": [
+          "Pilot report",
+          "Updated onboarding defaults",
+          "Go/no-go recommendation"
+        ]
+      },
+      {
+        "label": "Slice 5 (Weeks 9-10)",
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-12",
+        "objectives": [
+          "Launch Day-7 disclosure package",
+          "Ship admin trust setup checklist"
+        ],
+        "deliverables": [
+          "ff_lifecycle_disclosure_v1",
+          "Admin checklist module",
+          "Day-7 KPI readout"
+        ]
+      },
+      {
+        "label": "Slice 6 (Weeks 11-12)",
+        "start_date": "2026-06-15",
+        "end_date": "2026-06-26",
+        "objectives": [
+          "Launch Day-30 sovereignty/federation guidance",
+          "Introduce policy simulation for eligible admins"
+        ],
+        "deliverables": [
+          "Sovereignty center",
+          "Policy simulation MVP",
+          "30-day adoption report"
+        ]
+      }
+    ],
+    "dependencies": [
+      {
+        "from": "WP4",
+        "to": "WP1",
+        "type": "enables"
+      },
+      {
+        "from": "WP2",
+        "to": "WP3",
+        "type": "enables"
+      },
+      {
+        "from": "Slice 2 (Weeks 3-4)",
+        "to": "Slice 4 (Weeks 7-8)",
+        "type": "blocks"
+      },
+      {
+        "from": "Slice 4 (Weeks 7-8)",
+        "to": "Slice 5 (Weeks 9-10)",
+        "type": "informs"
+      }
+    ],
+    "risks": [
+      {
+        "id": "R1",
+        "description": "Governance-heavy users may perceive hidden controls as reduced capability.",
+        "severity": "medium",
+        "mitigation": "Add contextual banners, deep-link continuity, and admin discoverability prompts.",
+        "owner_role": "Admin UX Lead"
+      },
+      {
+        "id": "R2",
+        "description": "Lifecycle timing may not align with all organizational maturity curves.",
+        "severity": "medium",
+        "mitigation": "Use signal-based triggers alongside time-based defaults and allow admin override.",
+        "owner_role": "Lifecycle PM"
+      },
+      {
+        "id": "R3",
+        "description": "Insufficient telemetry quality can mask real complexity bottlenecks.",
+        "severity": "high",
+        "mitigation": "Implement schema validation, freshness SLA, and event completeness audits.",
+        "owner_role": "Product Analytics Lead"
+      },
+      {
+        "id": "R4",
+        "description": "Any RBAC regression could expose sensitive controls to non-admin users.",
+        "severity": "critical",
+        "mitigation": "Automated RBAC gating tests in CI and launch gates requiring pass status.",
+        "owner_role": "Security Lead"
+      }
+    ]
+  },
+  "weekly_synthesis": {
+    "what_got_simpler": [
+      "First run is reduced to four essential actions with optional depth deferred.",
+      "Global navigation is flatter and role-aware.",
+      "Room creation and invites are template-first with fewer mandatory decisions."
+    ],
+    "what_got_safer": [
+      "Trust-critical primitives remain enabled and admin-accessible.",
+      "Advanced surfaces are RBAC-gated and auditable.",
+      "Rollout is feature-flagged with explicit rollback triggers."
+    ],
+    "kpi_trends": [
+      {
+        "kpi_name": "Median TTFV (minutes)",
+        "trend": "down",
+        "interpretation": "Improving toward target; maintain wizard and invite flow tuning."
+      },
+      {
+        "kpi_name": "Onboarding completion rate",
+        "trend": "up",
+        "interpretation": "Higher completion indicates reduced first-run complexity."
+      },
+      {
+        "kpi_name": "Admin advanced discovery rate by day 30",
+        "trend": "mixed",
+        "interpretation": "Discovery is stable in governance tier but lagging in starter upgrades."
+      }
+    ],
+    "decision": "continue",
+    "next_sprint_scope": [
+      {
+        "id": "NSS-1",
+        "name": "Tune invite flow copy and method ordering",
+        "category": "onboarding",
+        "decision": "keep",
+        "reason": "Largest remaining drop-off appears at invite step."
+      },
+      {
+        "id": "NSS-2",
+        "name": "Strengthen admin advanced discoverability prompts",
+        "category": "admin_experience",
+        "decision": "keep",
+        "reason": "Protects trust capability awareness while preserving low member complexity."
+      },
+      {
+        "id": "NSS-3",
+        "name": "Complete mobile parity acceptance tests",
+        "category": "cross_surface",
+        "decision": "defer",
+        "reason": "Requires completion of web/desktop stability hardening first."
+      }
+    ]
+  }
+}
