@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import type { MatrixClient, Room } from "matrix-js-sdk";
-import { ClientEvent } from "matrix-js-sdk";
+import { ClientEvent, NotificationCountType } from "matrix-js-sdk";
 
 export type RoomSummary = {
   roomId: string;
@@ -35,7 +35,7 @@ function roomToSummary(room: Room, client: MatrixClient): RoomSummary {
   }
 
   // Check if this is a DM
-  const dmMap = client.getAccountData("m.direct")?.getContent() || {};
+  const dmMap = client.getAccountData("m.direct" as any)?.getContent() || {};
   const isDirect = Object.values(dmMap).some((rooms: any) =>
     Array.isArray(rooms) && rooms.includes(room.roomId)
   );
@@ -47,7 +47,7 @@ function roomToSummary(room: Room, client: MatrixClient): RoomSummary {
     topic: room.currentState.getStateEvents("m.room.topic", "")?.getContent()?.topic || null,
     lastMessage,
     lastMessageTs: lastEvent?.getTs() || 0,
-    unreadCount: room.getUnreadNotificationCount("total") || 0,
+    unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total) || 0,
     isEncrypted: room.hasEncryptionStateEvent(),
     memberCount: room.getJoinedMemberCount(),
     isDirect,
