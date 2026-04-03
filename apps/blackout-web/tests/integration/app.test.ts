@@ -592,11 +592,48 @@ describe("BlackoutWebApp integration", () => {
     const browseButton = getByRole(root, "button", { name: "Browse channels" });
     fireEvent.click(browseButton);
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Browse available channels");
+    expect(root.querySelector(".chat-window")).toBeTruthy();
 
     const createButton = root.querySelector<HTMLButtonElement>("[data-action='create-channel']");
     if (!createButton) throw new Error("missing create channel button");
     fireEvent.click(createButton);
     expect(root.querySelector("#create-entity-form")).toBeTruthy();
+  });
+
+  it("opens widget entries from the files panel", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "tier_enterprise",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "tier_enterprise",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+    });
+
+    fireEvent.click(root.querySelector("[data-action='open-files-panel']") as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-feature-id='media_pipeline']") as HTMLButtonElement);
+
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened media_pipeline");
+    expect(root.querySelector('[data-testid="right-panel-overlay"]')?.textContent).toContain("Media pipeline widget");
   });
 
   it("supports DM panel quick-start action with dm- prefix", async () => {
