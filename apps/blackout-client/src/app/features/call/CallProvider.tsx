@@ -28,6 +28,9 @@ interface MatrixRtcSessionLike {
   stop?: () => void;
   joinRoomSession?: () => Promise<void>;
   leaveRoomSession?: () => Promise<void>;
+  setLocalMediaStream?: (stream: unknown) => Promise<void> | void;
+  setAudioInputDevice?: (deviceId: string) => Promise<void> | void;
+  setVideoInputDevice?: (deviceId: string) => Promise<void> | void;
 }
 
 interface MatrixRtcSessionStarter {
@@ -124,6 +127,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [audioLevels, setAudioLevels] = useState<Record<string, AudioLevelState>>({});
 
   const activeSessionRef = useRef<MatrixRtcSessionLike | null>(null);
+  const activeDeviceStreamRef = useRef<{ getTracks: () => Array<{ stop: () => void }> } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -144,9 +148,31 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       video: preferredVideoDeviceId ? { deviceId: { exact: preferredVideoDeviceId } } : false,
     };
 
-    void navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-      stream.getTracks().forEach((track) => track.stop());
+    let cancelled = false;
+    void navigator.mediaDevices.getUserMedia(constraints).then(async (stream) => {
+      if (cancelled) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      const session = activeSessionRef.current;
+      if (session?.setAudioInputDevice && preferredAudioDeviceId) {
+        await session.setAudioInputDevice(preferredAudioDeviceId);
+      }
+      if (session?.setVideoInputDevice && preferredVideoDeviceId) {
+        await session.setVideoInputDevice(preferredVideoDeviceId);
+      }
+      if (session?.setLocalMediaStream) {
+        await session.setLocalMediaStream(stream);
+      }
+
+      activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      activeDeviceStreamRef.current = stream;
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [joined, preferredAudioDeviceId, preferredVideoDeviceId]);
 
   useEffect(() => {
@@ -169,6 +195,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     activeSessionRef.current?.stop?.();
 
     activeSessionRef.current = null;
+    activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    activeDeviceStreamRef.current = null;
     setJoined(false);
     setRoomId(null);
     setMembership({});

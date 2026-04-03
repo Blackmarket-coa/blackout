@@ -20,12 +20,13 @@ import RoomTimeline from '../../features/room/RoomTimeline';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
+import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
 import { useOptionalCall } from '../../features/call';
 import { useRoomTimeline } from '../../hooks/useTimeline';
 import { useRoom } from '../../hooks/useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
-import { buildSpaceGroups, getMentionInboxItems } from '../../features/right-panel/rightPanelUtils';
+import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
@@ -55,7 +56,7 @@ export const ClientLayout = () => {
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
   const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
   const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
-  const { openRoomWithContext, markEventRead } = useMentionNavigation();
+  const { openRoomWithContext } = useMentionNavigation();
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -64,13 +65,12 @@ export const ClientLayout = () => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
   const previousRoomIdRef = useRef<string | null>(null);
-  const [inboxReadEventIds, setInboxReadEventIds] = useState<Record<string, boolean>>({});
-  const [inboxReadLoaded, setInboxReadLoaded] = useState(false);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>('');
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
   const callState = useOptionalCall();
+  const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -159,70 +159,6 @@ export const ClientLayout = () => {
   const timelineState = useRoomTimeline(selectedRoomId ?? '');
   const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
 
-  const rawMentionItems = useMemo(
-    () =>
-      getMentionInboxItems({
-        rooms,
-        userId,
-      }),
-    [rooms, userId],
-  );
-
-  const mentionItems = useMemo(
-    () =>
-      rawMentionItems.map((item) => ({
-        ...item,
-        unread: item.unread && !inboxReadEventIds[item.eventId],
-      })),
-    [inboxReadEventIds, rawMentionItems],
-  );
-
-  useEffect(() => {
-    if (!userId) return;
-    const accountEvent = client.getAccountData('blackout.inbox.read.v1');
-    const content = accountEvent?.getContent<Record<string, unknown>>() ?? {};
-    const version = typeof content.version === 'number' ? content.version : 1;
-    const readByUser = version >= 2
-      ? (content.users as Record<string, unknown> | undefined)?.[userId]
-      : content[userId];
-    if (readByUser && typeof readByUser === 'object' && !Array.isArray(readByUser)) {
-      const next = Object.fromEntries(
-        Object.entries(readByUser as Record<string, unknown>).filter(([, isRead]) => isRead === true),
-      );
-      setInboxReadEventIds(next);
-      if (version < 2) {
-        void client.setAccountData('blackout.inbox.read.v1', {
-          version: 2,
-          users: { [userId]: next },
-          updatedAt: Date.now(),
-        });
-      }
-    }
-    setInboxReadLoaded(true);
-  }, [client, userId]);
-
-  useEffect(() => {
-    if (!userId || !inboxReadLoaded) return;
-    const payload = {
-      version: 2,
-      users: { [userId]: inboxReadEventIds },
-      updatedAt: Date.now(),
-    };
-    void client.setAccountData('blackout.inbox.read.v1', payload);
-  }, [client, inboxReadEventIds, inboxReadLoaded, userId]);
-
-  useEffect(() => {
-    const receiptAlignedIds = rawMentionItems
-      .filter((item) => item.unread === false && !inboxReadEventIds[item.eventId])
-      .map((item) => item.eventId);
-    if (receiptAlignedIds.length === 0) return;
-
-    setInboxReadEventIds((prev) => ({
-      ...prev,
-      ...Object.fromEntries(receiptAlignedIds.map((eventId) => [eventId, true])),
-    }));
-  }, [inboxReadEventIds, rawMentionItems]);
-
   const groups = useMemo(
     () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
     [rooms, selectedSpaceId, selectedSpaceRooms],
@@ -237,13 +173,8 @@ export const ClientLayout = () => {
     openRoomWithContext(roomId, jumpToEventId);
   };
 
-  const readMentionEvent = async (roomId: string, eventId: string) => {
-    await markEventRead(roomId, eventId);
-    setInboxReadEventIds((prev) => ({ ...prev, [eventId]: true }));
-  };
-
   const markAllMentionsRead = async () => {
-    await Promise.all(mentionItems.map((item) => readMentionEvent(item.roomId, item.eventId)));
+    await markAllRead();
   };
 
   const openSettingsSection = (section: 'appearance' | 'voice-video') => {
@@ -488,7 +419,7 @@ export const ClientLayout = () => {
             items={mentionItems}
             onClose={() => setInboxOpen(false)}
             onMarkAllRead={markAllMentionsRead}
-            onMarkReadLocal={(eventId) => setInboxReadEventIds((prev) => ({ ...prev, [eventId]: true }))}
+            onMarkReadLocal={markReadLocal}
           />
         ) : null}
 

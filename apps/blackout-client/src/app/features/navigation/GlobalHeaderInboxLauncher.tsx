@@ -1,24 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { joinedRoomsAtom } from '../../state/rooms';
 import { userIdAtom } from '../../state/auth';
-import { getMentionInboxItems } from '../right-panel/rightPanelUtils';
 import GlobalMentionsInbox from './GlobalMentionsInbox';
+import { useInboxModel } from './useInboxModel';
 
 export const GlobalHeaderInboxLauncher = () => {
-  const rooms = useAtomValue(joinedRoomsAtom);
   const userId = useAtomValue(userIdAtom);
   const [open, setOpen] = useState(false);
-  const [readState, setReadState] = useState<Record<string, boolean>>({});
-
-  const items = useMemo(
-    () =>
-      getMentionInboxItems({ rooms, userId }).map((item) => ({
-        ...item,
-        unread: item.unread && !readState[item.eventId],
-      })),
-    [readState, rooms, userId],
-  );
+  const { items, markAllRead, markReadLocal } = useInboxModel();
 
   if (!userId) return null;
 
@@ -35,13 +24,8 @@ export const GlobalHeaderInboxLauncher = () => {
         <GlobalMentionsInbox
           items={items}
           onClose={() => setOpen(false)}
-          onMarkAllRead={async () => {
-            setReadState((prev) => ({
-              ...prev,
-              ...Object.fromEntries(items.map((item) => [item.eventId, true])),
-            }));
-          }}
-          onMarkReadLocal={(eventId) => setReadState((prev) => ({ ...prev, [eventId]: true }))}
+          onMarkAllRead={markAllRead}
+          onMarkReadLocal={markReadLocal}
         />
       ) : null}
     </div>
