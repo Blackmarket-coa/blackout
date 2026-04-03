@@ -26,7 +26,8 @@ const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
-type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance";
+type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
+type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
 type SubscriptionTierMatch = {
   tier: FeaturePresetKey;
   subscription: string;
@@ -77,10 +78,12 @@ export class BlackoutWebApp {
   private commandPalettePreviouslyFocusedSelector: string | null = null;
   private compactModeEnabled = false;
   private settingsOpen = false;
+  private activeSettingsPage: SettingsPageView = "workspace";
   private composerIsTyping = false;
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
   private activeRightPanel: RightPanelView | null = null;
+  private activeWidgetFeatureId: string | null = null;
   private activeGovernanceTab: GovernanceRoomTab = "feed";
   private governanceProposalModalOpen = false;
   private activeEconomicsTab: EconomicsTab = "boosts";
@@ -227,7 +230,7 @@ export class BlackoutWebApp {
     this.root.innerHTML = `
       <main class="container">
         ${!state.session ? `<div class="header-actions"><button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button><button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button></div>` : ""}
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? this.renderSettingsWorkspace() : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -352,12 +355,30 @@ export class BlackoutWebApp {
   }
 
   private renderRightPanelOverlay(panel: RightPanelView): string {
+    if (panel === "widget") {
+      const widget = this.describeWidgetPanel(this.activeWidgetFeatureId);
+      return `
+        <aside class="right-panel-overlay" data-testid="right-panel-overlay">
+          <div class="right-panel-header">
+            <h3>${widget.title}</h3>
+            <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
+          </div>
+          <p class="meta">${widget.subtitle}</p>
+          <div class="right-panel-widget-body">
+            <p><strong>${widget.heading}</strong></p>
+            <p class="meta">${widget.description}</p>
+          </div>
+        </aside>
+      `;
+    }
+
     const panelTitle: Record<RightPanelView, string> = {
       members: "Member list",
       threads: "Thread view",
       pinned: "Pinned messages",
       search: "Search results",
       governance: "Governance panel",
+      widget: "Widget panel",
     };
 
     const panelBody: Record<RightPanelView, string> = {
@@ -390,6 +411,7 @@ export class BlackoutWebApp {
             <button type="button" class="ghost-btn">Vote block</button>
           </div>
         </div>`,
+      widget: "",
     };
 
     return `
@@ -762,6 +784,44 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderSettingsWorkspace(): string {
+    return `
+      <section class="settings-shell" data-testid="settings-shell">
+        <div class="settings-page-nav" role="tablist" aria-label="Settings pages">
+          ${this.renderSettingsNavButton("workspace", "Workspace")}
+          ${this.renderSettingsNavButton("appearance", "Appearance")}
+          ${this.renderSettingsNavButton("monetization", "Monetization")}
+          ${this.renderSettingsNavButton("mobile", "Mobile")}
+          ${this.renderSettingsNavButton("operations", "Operations")}
+        </div>
+        <section class="admin-grid" data-testid="settings-page-content">
+          ${this.renderSettingsPageContent()}
+        </section>
+      </section>
+    `;
+  }
+
+  private renderSettingsNavButton(page: SettingsPageView, label: string): string {
+    const selected = this.activeSettingsPage === page;
+    return `<button type="button" class="ghost-btn ${selected ? "settings-page-nav__button--active" : ""}" role="tab" aria-selected="${selected ? "true" : "false"}" data-action="settings-page" data-page="${page}" data-testid="settings-page-${page}">${label}</button>`;
+  }
+
+  private renderSettingsPageContent(): string {
+    if (this.activeSettingsPage === "appearance") {
+      return `${this.renderThemeManagementSection()}`;
+    }
+    if (this.activeSettingsPage === "monetization") {
+      return `${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}`;
+    }
+    if (this.activeSettingsPage === "mobile") {
+      return `${this.renderMobileGesturesPanel()}`;
+    }
+    if (this.activeSettingsPage === "operations") {
+      return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
+    }
+    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+  }
+
   private renderPresetManagementSection(): string {
     const previewFeatures = Object.entries(FEATURE_PRESET_BUNDLES[this.selectedPreset]);
     const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
@@ -784,7 +844,7 @@ export class BlackoutWebApp {
           <h3>What changes with this preset</h3>
           <progress max="${previewFeatures.length}" value="${enabledFeatures.length}" data-testid="preset-capability-meter"></progress>
           <p class="meta">${enabledFeatures.length}/${previewFeatures.length} capabilities enabled.</p>
-          <ul class="stack">
+          <ul class="stack preset-feature-list">
             ${enabledFeatures.map((key) => `<li class="meta" data-testid="preset-capability-${key.replaceAll(".", "-")}">${key}</li>`).join("")}
           </ul>
         </div>
@@ -1150,6 +1210,7 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='browse-channels']").forEach((button) => {
       button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
         this.store.patch({ channelDrawerOpen: true });
         this.featureActionResult = "Browse available channels from the channel list, then pick one to jump into the conversation.";
         this.render();
@@ -1219,6 +1280,15 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='toggle-settings']").forEach((button) => {
       button.addEventListener("click", () => {
         this.settingsOpen = !this.settingsOpen;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='settings-page']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const page = button.dataset.page as SettingsPageView | undefined;
+        if (!page) return;
+        this.activeSettingsPage = page;
         this.render();
       });
     });
@@ -1442,12 +1512,16 @@ export class BlackoutWebApp {
         const panel = button.dataset.panel as RightPanelView | undefined;
         if (!panel) return;
         this.activeRightPanel = panel;
+        if (panel !== "widget") {
+          this.activeWidgetFeatureId = null;
+        }
         this.render();
       });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='close-right-panel']")?.addEventListener("click", () => {
       this.activeRightPanel = null;
+      this.activeWidgetFeatureId = null;
       this.render();
     });
 
@@ -2537,9 +2611,11 @@ export class BlackoutWebApp {
         this.repoToolsOpen = false;
         return "room workflow";
       case "widget_panel":
-        this.activeWorkspacePanel = "files";
+        this.activeWorkspacePanel = "chat";
         this.repoToolsOpen = false;
-        return "files/widget panel";
+        this.activeRightPanel = "widget";
+        this.activeWidgetFeatureId = featureId;
+        return "chat widget panel";
       case "admin_console":
         this.settingsOpen = true;
         this.activeWorkspacePanel = "repo-tools";
@@ -2561,6 +2637,32 @@ export class BlackoutWebApp {
     if (!entry) return;
     this.quickActionPopup = { featureId, kind, name: entry.name };
     this.render();
+  }
+
+  private describeWidgetPanel(featureId: string | null): { title: string; subtitle: string; heading: string; description: string } {
+    if (featureId === "media_pipeline") {
+      return {
+        title: "Media pipeline widget",
+        subtitle: "Open media upload/rendering feature entry.",
+        heading: "Media upload and MXC pipeline",
+        description: "Uploads, transforms, and rendering previews are now surfaced in the widget panel.",
+      };
+    }
+    if (featureId === "media_link_previews") {
+      return {
+        title: "Link previews widget",
+        subtitle: "Inspect link preview controls and behavior.",
+        heading: "Link preview cards",
+        description: "Preview card controls are surfaced here so metadata behavior can be verified quickly.",
+      };
+    }
+    const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
+    return {
+      title: "Widget panel",
+      subtitle: "Feature widgets open here from the workspace.",
+      heading: entry?.name ?? "Widget workspace",
+      description: entry ? `Feature id: ${entry.id}.` : "Open a widget entry from quick actions or files browser.",
+    };
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
