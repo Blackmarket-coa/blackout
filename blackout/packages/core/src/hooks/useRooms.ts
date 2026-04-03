@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from "react";
 import type { MatrixClient, Room } from "matrix-js-sdk";
-import { ClientEvent, NotificationCountType } from "matrix-js-sdk";
+import { ClientEvent, EventType, NotificationCountType } from "matrix-js-sdk";
 
 export type RoomSummary = {
   roomId: string;
@@ -35,7 +35,7 @@ function roomToSummary(room: Room, client: MatrixClient): RoomSummary {
   }
 
   // Check if this is a DM
-  const dmMap = client.getAccountData("m.direct" as any)?.getContent() || {};
+  const dmMap = client.getAccountData(EventType.Direct)?.getContent() || {};
   const isDirect = Object.values(dmMap).some((rooms: any) =>
     Array.isArray(rooms) && rooms.includes(room.roomId)
   );

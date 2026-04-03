@@ -58,8 +58,8 @@ export function useDeepDive(client: MatrixClient | null) {
 
         setRooms(discoverable);
         setCurrentIndex(0);
-      } catch (err) {
-        console.error("DeepDive discover failed:", err);
+      } catch {
+        // Ignore discovery failures and keep prior state.
       } finally {
         setIsLoading(false);
       }
@@ -73,8 +73,8 @@ export function useDeepDive(client: MatrixClient | null) {
       if (!client) return;
       try {
         await client.joinRoom(roomId);
-      } catch (err) {
-        console.error("Failed to join room:", err);
+      } catch {
+        // Ignore join failures and keep feed navigable.
       }
       setCurrentIndex((i: number) => i + 1);
     },
