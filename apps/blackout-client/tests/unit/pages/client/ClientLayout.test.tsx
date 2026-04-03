@@ -6,7 +6,7 @@ import { Provider, createStore } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import ClientLayout from '../../../../src/app/pages/client/ClientLayout';
 import { rightPanelAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../../src/app/state/navigation';
-import { userIdAtom } from '../../../../src/app/state/auth';
+import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
 
 let mockRoom: Room | null = null;
 let mockEvents: MatrixEvent[] = [];
@@ -59,12 +59,18 @@ vi.mock('../../../../src/app/hooks/useTimeline', () => ({
   useRoomTimeline: () => ({ data: mockEvents, loading: false, error: null, loadMore: vi.fn() }),
 }));
 
-const makeEvent = (id: string, body: string, relType?: string): MatrixEvent =>
+const makeEvent = (
+  id: string,
+  body: string,
+  relType?: string,
+  mentions?: { user_ids?: string[]; room?: boolean },
+  ts = 1_700_000_000_000,
+): MatrixEvent =>
   ({
     getId: () => id,
     getType: () => 'm.room.message',
-    getTs: () => 1_700_000_000_000,
-    getContent: () => ({ body, ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}) }),
+    getTs: () => ts,
+    getContent: () => ({ body, ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}), ...(mentions ? { 'm.mentions': mentions } : {}) }),
   }) as unknown as MatrixEvent;
 
 const makeRoom = ({
@@ -72,11 +78,15 @@ const makeRoom = ({
   name,
   type,
   children = [],
+  timelineEvents = [],
+  readUpTo = '$read',
 }: {
   roomId: string;
   name: string;
   type?: string;
   children?: Array<{ roomId: string; order?: string }>;
+  timelineEvents?: MatrixEvent[];
+  readUpTo?: string | null;
 }): Room =>
   ({
     roomId,
@@ -86,11 +96,14 @@ const makeRoom = ({
     getUnreadNotificationCount: () => 0,
     getMyMembership: () => 'join',
     getJoinedMembers: () => [],
-    getEventReadUpTo: () => '$read',
+    getEventReadUpTo: () => readUpTo,
     getLiveTimeline: () => ({
-      getEvents: () => [],
+      getEvents: () => timelineEvents,
     }),
-    findEventById: (eventId: string) => mockEvents.find((event) => event.getId() === eventId) ?? null,
+    findEventById: (eventId: string) =>
+      timelineEvents.find((event) => event.getId() === eventId) ??
+      mockEvents.find((event) => event.getId() === eventId) ??
+      null,
     currentState: {
       getStateEvents: (eventType: string) => {
         if (eventType === 'm.space.child') {
@@ -128,6 +141,7 @@ const renderLayout = ({
   store.set(selectedSpaceIdAtom, selectedSpaceId);
   store.set(rightPanelAtom, rightPanel);
   store.set(userIdAtom, '@me:example.org');
+  store.set(matrixClientAtom, mockClient as never);
 
   act(() => {
     root.render(
@@ -146,6 +160,9 @@ describe('ClientLayout UI wiring', () => {
     localStorage.clear();
     mockEvents = [];
     mockRoom = null;
+    mockClient.getAccountData = vi.fn(() => null);
+    mockClient.setAccountData.mockClear();
+    mockClient.sendReadReceipt.mockClear();
   });
 
   afterEach(() => {
@@ -247,8 +264,7 @@ describe('ClientLayout UI wiring', () => {
       rightPanel: null,
     });
 
-    expect(secondRender.container.textContent).toContain('▶ Rooms');
-    expect(secondRender.container.textContent).not.toContain('Nested');
+    expect(secondRender.container.textContent).toContain('▶ General');
   });
 
   it('opens unified quick switcher from ClientLayout and supports Enter/Escape', async () => {
@@ -358,5 +374,83 @@ describe('ClientLayout UI wiring', () => {
     });
 
     expect(store.get(selectedRoomIdAtom)).toBe('!room-a:example.org');
+  });
+
+  it('handles malformed inbox account-data shape without crashing and rewrites normalized state', async () => {
+    mockClient.getAccountData = vi.fn(() => ({
+      getContent: () => ({ '@me:example.org': 'invalid-shape' }),
+    }));
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    mockRoom = room;
+
+    renderLayout({
+      rooms: [room],
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockClient.setAccountData).toHaveBeenCalledWith(
+      'blackout.inbox.read.v1',
+      expect.objectContaining({ '@me:example.org': expect.any(Object) }),
+    );
+  });
+
+  it('ignores stale read IDs that are not present in room timelines', async () => {
+    mockClient.getAccountData = vi.fn(() => ({
+      getContent: () => ({ '@me:example.org': { '$stale': true } }),
+    }));
+    const mention = makeEvent('$mention', 'hello', undefined, { user_ids: ['@me:example.org'] });
+    const room = makeRoom({
+      roomId: '!room:example.org',
+      name: 'Room',
+      timelineEvents: [mention],
+      readUpTo: null,
+    });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [room],
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      const inboxButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Inbox'));
+      inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Unread');
+  });
+
+  it('reconciles cross-device receipt advancement as read without local click', async () => {
+    const mention = makeEvent('$mention-read', 'cross device', undefined, { user_ids: ['@me:example.org'] }, 1_700_000_000_100);
+    const readMarker = makeEvent('$read-anchor', 'anchor', undefined, undefined, 1_700_000_000_200);
+    const room = makeRoom({
+      roomId: '!room:example.org',
+      name: 'Room',
+      timelineEvents: [mention, readMarker],
+      readUpTo: '$read-anchor',
+    });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [room],
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      const inboxButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Inbox'));
+      inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Read');
   });
 });

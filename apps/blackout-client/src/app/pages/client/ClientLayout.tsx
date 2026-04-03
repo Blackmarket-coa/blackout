@@ -19,6 +19,7 @@ import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
+import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { SettingsPage } from '../../features/settings';
 import { useOptionalCall } from '../../features/call';
 import { useRoomTimeline } from '../../hooks/useTimeline';
@@ -54,7 +55,7 @@ export const ClientLayout = () => {
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
   const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
   const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
-  const { openRoomWithContext, openMentionItem, markEventRead } = useMentionNavigation();
+  const { openRoomWithContext, markEventRead } = useMentionNavigation();
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -65,6 +66,10 @@ export const ClientLayout = () => {
   const previousRoomIdRef = useRef<string | null>(null);
   const [inboxReadEventIds, setInboxReadEventIds] = useState<Record<string, boolean>>({});
   const [inboxReadLoaded, setInboxReadLoaded] = useState(false);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>('');
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
   const callState = useOptionalCall();
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
@@ -103,6 +108,23 @@ export const ClientLayout = () => {
     const key = `blackout.collapsed.${selectedSpaceId ?? 'home'}`;
     window.localStorage.setItem(key, JSON.stringify(collapsedFolders));
   }, [collapsedFolders, selectedSpaceId]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const loadDevices = async () => {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audio = devices.filter((device) => device.kind === 'audioinput');
+      const video = devices.filter((device) => device.kind === 'videoinput');
+      setAudioDevices(audio);
+      setVideoDevices(video);
+      if (!selectedAudioDeviceId && audio[0]) setSelectedAudioDeviceId(audio[0].deviceId);
+      if (!selectedVideoDeviceId && video[0]) setSelectedVideoDeviceId(video[0].deviceId);
+    };
+
+    void loadDevices();
+    navigator.mediaDevices.addEventListener?.('devicechange', loadDevices);
+    return () => navigator.mediaDevices.removeEventListener?.('devicechange', loadDevices);
+  }, [selectedAudioDeviceId, selectedVideoDeviceId]);
 
   useEffect(() => {
     if (previousRoomIdRef.current && previousRoomIdRef.current !== selectedRoomId) {
@@ -316,6 +338,39 @@ export const ClientLayout = () => {
                   {callState?.joined ? (callState.deafened ? 'Undeafen' : 'Deafen') : 'No Call'}
                 </button>
               </div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                Call: {callState?.joined ? `Connected (${Object.keys(callState.membership).length} participants)` : 'Idle'}
+              </div>
+              <div style={{ display: 'grid', gap: 4 }}>
+                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  Mic
+                  <select
+                    value={selectedAudioDeviceId}
+                    onChange={(event) => setSelectedAudioDeviceId(event.target.value)}
+                    style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
+                  >
+                    {audioDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  Camera
+                  <select
+                    value={selectedVideoDeviceId}
+                    onChange={(event) => setSelectedVideoDeviceId(event.target.value)}
+                    style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
+                  >
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${device.deviceId.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </section>
           ) : null}
         </aside>
@@ -397,36 +452,12 @@ export const ClientLayout = () => {
         ) : null}
 
         {inboxOpen ? (
-          <aside style={{ position: 'absolute', top: 44, right: 8, width: 360, maxHeight: '55vh', overflowY: 'auto', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: '-2px 4px 16px rgba(0,0,0,.2)', zIndex: 5 }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border-default)' }}>
-              <strong>Mentions Inbox</strong>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" onClick={() => void markAllMentionsRead()}>Mark all read</button>
-                <button type="button" onClick={() => setInboxOpen(false)}>Close</button>
-              </div>
-            </header>
-            <div style={{ padding: 8, display: 'grid', gap: 6 }}>
-              {mentionItems.length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>No mentions yet.</small> : null}
-              {mentionItems.map((item) => (
-                <button
-                  key={item.eventId}
-                  type="button"
-                  onClick={() => {
-                    void openMentionItem(item).then(() =>
-                      setInboxReadEventIds((prev) => ({ ...prev, [item.eventId]: true })),
-                    );
-                    setInboxOpen(false);
-                  }}
-                  style={{ textAlign: 'left', border: item.unread ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)', borderRadius: 8, background: item.unread ? 'var(--accent-muted)' : 'var(--bg-input)', padding: 8 }}
-                >
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {item.roomName} {item.unread ? '• Unread' : '• Read'}
-                  </div>
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.body}</div>
-                </button>
-              ))}
-            </div>
-          </aside>
+          <GlobalMentionsInbox
+            items={mentionItems}
+            onClose={() => setInboxOpen(false)}
+            onMarkAllRead={markAllMentionsRead}
+            onMarkReadLocal={(eventId) => setInboxReadEventIds((prev) => ({ ...prev, [eventId]: true }))}
+          />
         ) : null}
 
         {settingsOpen ? (
