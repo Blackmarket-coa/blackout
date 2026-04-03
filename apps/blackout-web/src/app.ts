@@ -24,7 +24,7 @@ import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
-type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
+type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
 type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
@@ -255,13 +255,28 @@ export class BlackoutWebApp {
     this.scrollMessagesToBottom();
   }
 
+  private getSidebarActiveView(): "home" | "rooms" | "dms" | "activity" | "calls" | "admin" {
+    if (this.settingsOpen) return "admin";
+    if (this.activeWorkspacePanel === "dms") return "dms";
+    if (this.activeWorkspacePanel === "activity") return "activity";
+    if (this.activeWorkspacePanel === "calls") return "calls";
+    return "rooms";
+  }
+
+  private hasAdminAccess(): boolean {
+    const state = this.store.getState();
+    const activeServer = state.servers.find((server) => server.id === state.activeServerId);
+    if (!activeServer) return false;
+    return /admin|owner|mod|moderator/i.test(activeServer.role);
+  }
+
   private renderWorkspace(): string {
     const state = this.store.getState();
     const selectedServer = state.servers.find((server) => server.id === state.activeServerId);
 
     return `
       <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""} ${this.getCompactModeActive() ? "workspace--compact" : ""}">
-        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId, activeView: this.activeWorkspacePanel })}
+        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId, activeView: this.getSidebarActiveView(), showAdminEntry: this.hasAdminAccess() })}
         ${renderChannelSidebar({
           serverName: selectedServer?.name ?? "Channels",
           channels: state.channels,
@@ -288,6 +303,10 @@ export class BlackoutWebApp {
 
     if (this.activeWorkspacePanel === "activity") {
       return this.renderActivityPanel();
+    }
+
+    if (this.activeWorkspacePanel === "calls") {
+      return this.renderCallsPanel();
     }
 
     if (this.activeWorkspacePanel === "files") {
@@ -353,6 +372,7 @@ export class BlackoutWebApp {
     });
 
     return `
+      ${this.renderFirstRunGuide()}
       <section class="workspace-content ${this.activeRightPanel ? "workspace-content--with-panel" : ""}">
         ${chatView}
         ${this.activeRightPanel ? this.renderRightPanelOverlay(this.activeRightPanel) : ""}
@@ -557,6 +577,65 @@ export class BlackoutWebApp {
       .join("");
 
     return this.renderWorkspaceUtilityPage("Files browser", "Locate upload, preview, and media workflows.", items);
+  }
+
+
+  private renderCallsPanel(): string {
+    return this.renderWorkspaceUtilityPage(
+      "Calls",
+      "Start a room call quickly or open threaded follow-up.",
+      `<li class="repo-tools-item"><div><strong>Start room call</strong><p class="meta">Launch a lightweight call in the active room.</p></div><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button></li>
+       <li class="repo-tools-item"><div><strong>Start thread</strong><p class="meta">Open thread panel to kick off focused discussion.</p></div><button type="button" class="ghost-btn" data-action="onboarding-open-thread">Open thread</button></li>`
+    );
+  }
+
+  private renderFirstRunGuide(): string {
+    if (!this.runtimeConfig.simpleMode.onboarding_progressive_disclosure) return "";
+
+    const state = this.store.getState();
+    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
+    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
+
+    const steps = [
+      {
+        id: "workspace",
+        label: "Create or join workspace",
+        done: Boolean(state.session),
+        action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>',
+      },
+      {
+        id: "room",
+        label: "Create first room (template-first)",
+        done: state.channels.length > 0,
+        action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>',
+      },
+      {
+        id: "invite",
+        label: "Invite members",
+        done: inviteSent,
+        action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>',
+      },
+      {
+        id: "conversation",
+        label: "Start thread or call",
+        done: conversationStarted,
+        action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>',
+      },
+    ];
+
+    if (steps.every((step) => step.done)) return "";
+
+    return `
+      <section class="panel-card stack" data-testid="first-run-guide">
+        <h2>First-run guide (4 steps)</h2>
+        <p class="meta">Start fast: workspace → room → invite → thread/call.</p>
+        <ol class="stack">
+          ${steps
+            .map((step) => `<li><strong>${step.done ? "✅" : "⬜"} ${step.label}</strong><div class="modal-actions">${step.done ? "<span class=\"meta\">Done</span>" : step.action}</div></li>`)
+            .join("")}
+        </ol>
+      </section>
+    `;
   }
 
   private renderWorkspaceUtilityPage(title: string, subtitle: string, items: string): string {
@@ -1133,6 +1212,70 @@ export class BlackoutWebApp {
         this.openCommandPalette();
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-home-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
+        this.store.patch({ channelDrawerOpen: false });
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-rooms-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
+        this.store.patch({ channelDrawerOpen: true });
+        this.featureActionResult = "Rooms opened. Create your first room or pick an existing one.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-calls-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "calls";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-admin-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.settingsOpen = true;
+        this.featureActionResult = "Admin controls are available in Settings.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-send-invite']").forEach((button) => {
+      button.addEventListener("click", async () => {
+        try {
+          await globalThis.navigator.clipboard?.writeText(globalThis.location.href);
+          this.featureActionResult = "Invite link copied. Share it with your team.";
+        } catch {
+          this.featureActionResult = "Invite ready. Copy the current URL and share it with your team.";
+        }
+        globalThis.localStorage.setItem("blackout.onboarding.invite_sent", "true");
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-thread']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeRightPanel = "threads";
+        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        this.featureActionResult = "Thread panel opened. Start your first threaded discussion.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-start-call']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "calls";
+        this.activeTownhallMode = "standard";
+        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        this.featureActionResult = "Call setup ready from the Calls panel.";
+        this.render();
+      });
+    });
+
 
     this.root.querySelectorAll<HTMLElement>("[data-action='close-command-palette']").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -1272,6 +1415,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-chat-panel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "chat";
+        this.settingsOpen = false;
         this.render();
       });
     });
