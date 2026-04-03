@@ -16,7 +16,17 @@ export type TelemetryEventName =
   | "break_prompt_shown"
   | "break_prompt_accepted"
   | "break_prompt_dismissed"
-  | "session_length_bucket";
+  | "session_length_bucket"
+  | "onboarding_step_viewed"
+  | "onboarding_step_completed"
+  | "onboarding_step_dropped"
+  | "advanced_panel_viewed"
+  | "advanced_module_entered"
+  | "kpi_ttfv"
+  | "kpi_ttfv_checkpoint"
+  | "kpi_onboarding_completion"
+  | "kpi_invite_completion"
+  | "kpi_advanced_feature_discovery";
 
 export interface TelemetryEvent {
   name: TelemetryEventName | string;

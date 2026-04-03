@@ -55,6 +55,7 @@ const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
 const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
+const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -119,6 +120,11 @@ export class BlackoutWebApp {
   private pendingPushTokenRegistration: string | null = null;
   private pushTokenRegisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private pushTokenUnregisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly viewedOnboardingSteps = new Set<number>();
+  private readonly completedOnboardingSteps = new Set<number>();
+  private onboardingCompletionTracked = false;
+  private advancedPanelViewedTracked = false;
+  private readonly advancedModuleDiscoveryTracked = new Set<string>();
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -218,6 +224,9 @@ export class BlackoutWebApp {
 
     const state = this.store.getState();
     if (!state.session) return;
+    if (!globalThis.localStorage.getItem(ONBOARDING_STARTED_AT_STORAGE_KEY)) {
+      globalThis.localStorage.setItem(ONBOARDING_STARTED_AT_STORAGE_KEY, String(Date.now()));
+    }
 
     this.connectGateway();
     await this.loadServers();
@@ -268,6 +277,86 @@ export class BlackoutWebApp {
     const activeServer = state.servers.find((server) => server.id === state.activeServerId);
     if (!activeServer) return false;
     return /admin|owner|mod|moderator/i.test(activeServer.role);
+  }
+
+  private getRoleClass(): string {
+    const state = this.store.getState();
+    const activeServer = state.servers.find((server) => server.id === state.activeServerId);
+    return activeServer?.role?.toLowerCase() ?? "unknown";
+  }
+
+  private telemetryContext(): Record<string, string | number | boolean | null> {
+    const state = this.store.getState();
+    return {
+      tenant_id: state.activeServerId ?? "none",
+      role_class: this.getRoleClass(),
+      client_surface: "web",
+      flag_cohort: this.runtimeConfig.rollout.cohort,
+      simple_mode_enabled: this.runtimeConfig.simpleMode.simple_mode_default,
+    };
+  }
+
+  private trackKpiEvent(name: string, payload: Record<string, string | number | boolean | null> = {}): void {
+    this.telemetry.track(name, {
+      ...this.telemetryContext(),
+      ...payload,
+    });
+  }
+
+  private onboardingSteps() {
+    const state = this.store.getState();
+    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
+    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
+    return [
+      { index: 1, label: "Create or join workspace", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>' },
+      { index: 2, label: "Create first room (template-first)", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>' },
+      { index: 3, label: "Invite members", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>' },
+      { index: 4, label: "Start thread or call", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
+    ];
+  }
+
+  private trackOnboardingProgress(): void {
+    const steps = this.onboardingSteps();
+    const firstIncomplete = steps.find((step) => !step.done);
+
+    if (firstIncomplete && !this.viewedOnboardingSteps.has(firstIncomplete.index)) {
+      this.viewedOnboardingSteps.add(firstIncomplete.index);
+      this.trackKpiEvent("onboarding_step_viewed", { step: firstIncomplete.index });
+    }
+
+    for (const step of steps) {
+      if (step.done && !this.completedOnboardingSteps.has(step.index)) {
+        this.completedOnboardingSteps.add(step.index);
+        this.trackKpiEvent("onboarding_step_completed", { step: step.index });
+      }
+    }
+
+    if (steps.every((step) => step.done) && !this.onboardingCompletionTracked) {
+      this.onboardingCompletionTracked = true;
+      const startedAtRaw = globalThis.localStorage.getItem(ONBOARDING_STARTED_AT_STORAGE_KEY);
+      const startedAt = startedAtRaw ? Number.parseInt(startedAtRaw, 10) : Date.now();
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      this.trackKpiEvent("kpi_onboarding_completion", { completed: true, ttfv_ms: elapsedMs });
+      this.trackKpiEvent("kpi_ttfv", { ttfv_ms: elapsedMs });
+    }
+  }
+
+  private trackOnboardingDrop(reason: string): void {
+    const firstIncomplete = this.onboardingSteps().find((step) => !step.done);
+    if (!firstIncomplete) return;
+    this.trackKpiEvent("onboarding_step_dropped", {
+      step: firstIncomplete.index,
+      reason,
+    });
+  }
+
+  private trackAdvancedDiscovery(module: "governance" | "federation" | "stego"): void {
+    if (!this.hasAdminAccess()) return;
+    const dedupe = `${module}:${this.store.getState().activeServerId ?? "none"}`;
+    if (this.advancedModuleDiscoveryTracked.has(dedupe)) return;
+    this.advancedModuleDiscoveryTracked.add(dedupe);
+    this.trackKpiEvent("advanced_module_entered", { module });
+    this.trackKpiEvent("kpi_advanced_feature_discovery", { module, eligible_admin: true });
   }
 
   private renderWorkspace(): string {
@@ -325,6 +414,7 @@ export class BlackoutWebApp {
     const isTownhallRoom = /\b(townhall|assembly|stage|all-hands)\b/i.test(activeChannelName);
 
     if (isGovernanceRoom) {
+      this.trackAdvancedDiscovery("governance");
       return renderGovernanceRoomPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeGovernanceTab,
@@ -340,6 +430,7 @@ export class BlackoutWebApp {
     }
 
     if (isFederationRoom) {
+      this.trackAdvancedDiscovery("federation");
       return renderFederationPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeFederationTab,
@@ -591,37 +682,8 @@ export class BlackoutWebApp {
 
   private renderFirstRunGuide(): string {
     if (!this.runtimeConfig.simpleMode.onboarding_progressive_disclosure) return "";
-
-    const state = this.store.getState();
-    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
-    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
-
-    const steps = [
-      {
-        id: "workspace",
-        label: "Create or join workspace",
-        done: Boolean(state.session),
-        action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>',
-      },
-      {
-        id: "room",
-        label: "Create first room (template-first)",
-        done: state.channels.length > 0,
-        action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>',
-      },
-      {
-        id: "invite",
-        label: "Invite members",
-        done: inviteSent,
-        action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>',
-      },
-      {
-        id: "conversation",
-        label: "Start thread or call",
-        done: conversationStarted,
-        action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>',
-      },
-    ];
+    const steps = this.onboardingSteps();
+    this.trackOnboardingProgress();
 
     if (steps.every((step) => step.done)) return "";
 
@@ -743,6 +805,10 @@ export class BlackoutWebApp {
 
   private renderFeatureLibraryDisclosure(): string {
     const openByDefault = this.isAdvancedCohort() && !this.shouldProgressivelyDiscloseOnboarding();
+    if (this.hasAdminAccess() && this.shouldShowAdvancedAdminModules() && !this.advancedPanelViewedTracked) {
+      this.advancedPanelViewedTracked = true;
+      this.trackKpiEvent("advanced_panel_viewed", { panel: "feature_library" });
+    }
     return `
       <details class="stack panel-card" data-testid="feature-library-disclosure" ${openByDefault ? "open" : ""}>
         <summary><strong>Advanced feature library</strong> <span class="meta">Role-based progressive reveal for power workflows.</span></summary>
@@ -1238,6 +1304,7 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-admin-panel']").forEach((button) => {
       button.addEventListener("click", () => {
+        this.trackOnboardingDrop("opened_admin_before_completion");
         this.settingsOpen = true;
         this.featureActionResult = "Admin controls are available in Settings.";
         this.render();
@@ -1253,6 +1320,7 @@ export class BlackoutWebApp {
           this.featureActionResult = "Invite ready. Copy the current URL and share it with your team.";
         }
         globalThis.localStorage.setItem("blackout.onboarding.invite_sent", "true");
+        this.trackKpiEvent("kpi_invite_completion", { completed: true });
         this.render();
       });
     });
@@ -1262,6 +1330,7 @@ export class BlackoutWebApp {
         this.activeRightPanel = "threads";
         globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
         this.featureActionResult = "Thread panel opened. Start your first threaded discussion.";
+        this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "thread" });
         this.render();
       });
     });
@@ -1272,6 +1341,7 @@ export class BlackoutWebApp {
         this.activeTownhallMode = "standard";
         globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
         this.featureActionResult = "Call setup ready from the Calls panel.";
+        this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "call" });
         this.render();
       });
     });
@@ -1799,6 +1869,7 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+      this.trackAdvancedDiscovery("stego");
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
@@ -1866,6 +1937,7 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
       this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+      this.trackAdvancedDiscovery("governance");
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
@@ -2752,6 +2824,9 @@ export class BlackoutWebApp {
     this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
     this.telemetry.track("feature_open_success", { featureId: entry.id, entrypointKind: kind });
+    if (entry.id.includes("governance")) this.trackAdvancedDiscovery("governance");
+    if (entry.id.includes("federation")) this.trackAdvancedDiscovery("federation");
+    if (entry.id.includes("stego")) this.trackAdvancedDiscovery("stego");
     this.render();
   }
 
