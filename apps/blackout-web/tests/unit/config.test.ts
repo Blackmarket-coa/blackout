@@ -102,7 +102,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
 
   it("defaults existing tenants to pre-wave behavior unless explicitly enabled", () => {
     const config = resolveBlackoutRuntimeConfig({
-      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "sovereignty" }),
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
     });
 
     expect(config.simpleMode.simple_mode_default).toBe(false);
@@ -116,7 +116,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
         show_advanced_admin_modules: false,
         onboarding_progressive_disclosure: true,
       }),
-      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "sovereignty" }),
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
     });
 
     expect(config.simpleMode.simple_mode_default).toBe(true);

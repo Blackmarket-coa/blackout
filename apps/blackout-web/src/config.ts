@@ -54,6 +54,10 @@ function parseOptionalBooleanEnv(value: string | undefined): boolean | undefined
   return undefined;
 }
 
+function isFeaturePresetKey(value: string): value is FeaturePresetKey {
+  return value in FEATURE_PRESET_BUNDLES;
+}
+
 function parsePresetEnv(value: string | undefined): { preset?: FeaturePresetKey } | undefined {
   if (!value) return undefined;
 
