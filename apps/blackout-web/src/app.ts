@@ -672,13 +672,16 @@ export class BlackoutWebApp {
         if (!features.length) return "";
         const category = this.featureKindUi[kind];
         return `
-          <label class="quick-action-select">
-            <span>${category.icon} ${category.label}</span>
-            <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-${kind}">
-              <option value="">Choose action…</option>
-              ${optionsFor(features)}
-            </select>
-          </label>
+          <details class="quick-action-group" data-testid="feature-toolbar-group-${kind}">
+            <summary>${category.icon} ${category.label}</summary>
+            <label class="quick-action-select">
+              <span>Select action</span>
+              <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-${kind}">
+                <option value="">Choose action…</option>
+                ${optionsFor(features)}
+              </select>
+            </label>
+          </details>
         `;
       })
       .join("");
@@ -687,10 +690,10 @@ export class BlackoutWebApp {
       <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
         <div class="feature-toolbar-head">
           <h2>Quick actions</h2>
-          <p class="meta">Organized dropdowns by category plus a frequent-actions picker.</p>
+          <p class="meta">Frequent actions stay visible. Categories expand only when you need them.</p>
         </div>
         <div class="quick-actions-grid">
-          <label class="quick-action-select">
+          <label class="quick-action-select quick-action-select--pinned">
             <span>⚡ Frequent</span>
             <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-frequent">
               <option value="">Choose quick action…</option>
