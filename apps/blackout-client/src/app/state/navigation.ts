@@ -21,3 +21,13 @@ export const sidebarVisibleAtom = atom<boolean>(true);
  * Active right-side panel in the room view.
  */
 export const rightPanelAtom = atom<RightPanelType>(null);
+
+/**
+ * Optional event to focus when opening a room timeline.
+ */
+export const roomJumpTargetEventIdAtom = atom<string | null>(null);
+
+/**
+ * Optional unread marker event for the selected room timeline.
+ */
+export const roomUnreadMarkerEventIdAtom = atom<string | null>(null);

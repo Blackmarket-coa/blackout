@@ -17,6 +17,9 @@ interface HierarchyRoom {
   guestCanJoin?: boolean;
   childrenState?: Array<Record<string, unknown>>;
 }
+interface HierarchyResponseLike {
+  rooms?: unknown[];
+}
 
 interface CategoryNode {
   id: string;
@@ -29,13 +32,65 @@ const hierarchyCacheAtom = atomFamily(() => atom<CategoryNode[] | null>(null));
 const hierarchyLoadingAtom = atomFamily(() => atom<boolean>(false));
 const collapseStateAtom = atom<Record<string, boolean>>({});
 
+const getRoomType = (room: HierarchyRoom | Room): string => {
+  if (typeof (room as Room).getType === 'function') {
+    return (room as Room).getType() ?? '';
+  }
+  const roomType = (room as { roomType?: unknown }).roomType;
+  return typeof roomType === 'string' ? roomType : '';
+};
+
 const iconForRoom = (room: HierarchyRoom | Room): string => {
-  const type = 'roomType' in room ? room.roomType ?? '' : room.getType?.() ?? '';
+  const type = getRoomType(room);
   if (type === 'm.space') return '🗂️';
   if (type.includes('voice')) return '🔊';
   if (type.includes('forum')) return '💬';
   if (type.includes('announcement')) return '📢';
   return '💭';
+};
+
+const toHierarchyRoom = (value: unknown): HierarchyRoom | null => {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const roomId = typeof record.roomId === 'string' ? record.roomId : typeof record.room_id === 'string' ? record.room_id : null;
+  if (!roomId) return null;
+
+  return {
+    roomId,
+    name: typeof record.name === 'string' ? record.name : 'Unnamed',
+    avatarUrl: typeof record.avatarUrl === 'string' ? record.avatarUrl : typeof record.avatar_url === 'string' ? record.avatar_url : undefined,
+    topic: typeof record.topic === 'string' ? record.topic : undefined,
+    numJoinedMembers:
+      typeof record.numJoinedMembers === 'number'
+        ? record.numJoinedMembers
+        : typeof record.num_joined_members === 'number'
+          ? record.num_joined_members
+          : undefined,
+    roomType: typeof record.roomType === 'string' ? record.roomType : typeof record.room_type === 'string' ? record.room_type : undefined,
+    worldReadable:
+      typeof record.worldReadable === 'boolean'
+        ? record.worldReadable
+        : typeof record.world_readable === 'boolean'
+          ? record.world_readable
+          : undefined,
+    guestCanJoin:
+      typeof record.guestCanJoin === 'boolean'
+        ? record.guestCanJoin
+        : typeof record.guest_can_join === 'boolean'
+          ? record.guest_can_join
+          : undefined,
+    childrenState: Array.isArray(record.childrenState)
+      ? (record.childrenState as Array<Record<string, unknown>>)
+      : Array.isArray(record.children_state)
+        ? (record.children_state as Array<Record<string, unknown>>)
+        : undefined,
+  };
+};
+
+const readHierarchyRooms = (response: unknown): HierarchyRoom[] => {
+  const rooms = (response as HierarchyResponseLike)?.rooms;
+  if (!Array.isArray(rooms)) return [];
+  return rooms.map(toHierarchyRoom).filter((room): room is HierarchyRoom => room !== null);
 };
 
 const sortByChildOrder = (rooms: HierarchyRoom[], childrenState: Array<Record<string, unknown>> | undefined): HierarchyRoom[] => {
@@ -197,16 +252,16 @@ export const SpaceTree = ({ spaceId }: { spaceId: string | null }) => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const response = await client.getRoomHierarchy(spaceId, 50, undefined, 10);
-        const rootChildren = ((response as { rooms?: HierarchyRoom[] }).rooms ?? []) as HierarchyRoom[];
+        const response = await client.getRoomHierarchy(spaceId, 50, undefined, undefined);
+        const rootChildren = readHierarchyRooms(response);
         const map = new Map<string, HierarchyRoom[]>();
 
         await Promise.all(
           rootChildren
             .filter((room) => room.roomType === 'm.space')
             .map(async (space) => {
-              const nested = await client.getRoomHierarchy(space.roomId, 50, undefined, 10);
-              map.set(space.roomId, (((nested as { rooms?: HierarchyRoom[] }).rooms ?? []) as HierarchyRoom[]));
+              const nested = await client.getRoomHierarchy(space.roomId, 50, undefined, undefined);
+              map.set(space.roomId, readHierarchyRooms(nested));
             }),
         );
 

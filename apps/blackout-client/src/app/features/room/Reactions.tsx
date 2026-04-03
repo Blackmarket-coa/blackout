@@ -162,13 +162,13 @@ export const Reactions = memo(({ roomId, targetEventId }: ReactionsProps) => {
 
   const sendReaction = useCallback(
     async (emoji: string) => {
-      await client.sendEvent(roomId, 'm.reaction', {
+      await client.sendEvent(roomId, 'm.reaction' as never, {
         'm.relates_to': {
           rel_type: 'm.annotation',
           event_id: targetEventId,
           key: emoji,
         },
-      });
+      } as never);
 
       setRecent((prev) => [emoji, ...prev.filter((value) => value !== emoji)].slice(0, 12));
     },

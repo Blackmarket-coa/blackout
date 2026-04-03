@@ -137,7 +137,7 @@ export const AutoModPanel = ({ roomId }: { roomId: string }) => {
   const save = async () => {
     setSaveState('saving');
     try {
-      await client.sendStateEvent(roomId, EVENT_TYPE, config, '');
+      await client.sendStateEvent(roomId, EVENT_TYPE as never, config as never, '');
       setDraft(null);
       setSaveState('saved');
     } catch (error) {
@@ -357,4 +357,3 @@ export const AutoModPanel = ({ roomId }: { roomId: string }) => {
     </section>
   );
 };
-

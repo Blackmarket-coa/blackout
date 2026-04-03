@@ -18,6 +18,8 @@ export interface AppSettings {
   devMode: boolean;
   streamerMode: boolean;
   layout: LayoutSettings;
+  preferredAudioDeviceId?: string;
+  preferredVideoDeviceId?: string;
 }
 
 const defaultSettings: AppSettings = {

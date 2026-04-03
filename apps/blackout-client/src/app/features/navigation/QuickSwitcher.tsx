@@ -48,7 +48,7 @@ const buildIndex = (rooms: Room[]): BaseResult[] => {
 
   rooms.forEach((room) => {
     const alias = room.getCanonicalAlias() ?? '';
-    const unread = room.getUnreadNotificationCount('total');
+    const unread = room.getUnreadNotificationCount();
     const isSpace = room.getType() === 'm.space';
 
     list.push({
@@ -175,7 +175,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
         const room = await client.createRoom({
           is_direct: true,
           invite: [result.id],
-          preset: 'trusted_private_chat',
+          preset: 'private_chat' as never,
         });
         setSelectedRoomId(room.room_id);
         onClose();
@@ -190,6 +190,48 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
     [client, onClose, onCommandPicked, setSelectedRoomId, setSelectedSpaceId],
   );
 
+  const handleSelectionKey = useCallback(
+    (key: string, preventDefault: () => void) => {
+      if (key === 'Escape') {
+        preventDefault();
+        onClose();
+        return;
+      }
+
+      if (!flattened.length) return;
+      if (key === 'ArrowDown') {
+        preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % flattened.length);
+        return;
+      }
+      if (key === 'ArrowUp') {
+        preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + flattened.length) % flattened.length);
+        return;
+      }
+      if (key === 'Enter') {
+        preventDefault();
+        const item = flattened[selectedIndex];
+        if (item) void activate(item);
+      }
+    },
+    [activate, flattened, onClose, selectedIndex],
+  );
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    handleSelectionKey(event.key, () => event.preventDefault());
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      handleSelectionKey(event.key, () => event.preventDefault());
+    };
+
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => window.removeEventListener('keydown', onWindowKeyDown);
+  }, [handleSelectionKey, open]);
+
   if (!open) return null;
 
   return (
@@ -197,35 +239,13 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
       <section
         style={{ width: 'min(880px, 95vw)', margin: '6vh auto', maxHeight: '80vh', border: '1px solid var(--border-default)', borderRadius: 14, background: 'var(--bg-surface)', color: 'var(--text-primary)', overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,.35)' }}
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            onClose();
-            return;
-          }
-
-          if (!flattened.length) return;
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            setSelectedIndex((prev) => (prev + 1) % flattened.length);
-            return;
-          }
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setSelectedIndex((prev) => (prev - 1 + flattened.length) % flattened.length);
-            return;
-          }
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            const item = flattened[selectedIndex];
-            if (item) void activate(item);
-          }
-        }}
+        onKeyDown={handleKeyDown}
       >
         <input
           autoFocus
           value={search}
           onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Search rooms, spaces, users, commands"
           style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '14px 16px', fontSize: 16 }}
         />

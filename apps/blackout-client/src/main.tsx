@@ -7,24 +7,32 @@ import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/MatrixBootstrapper';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
+import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './app/styles/theme.css.ts';
 import './app/i18n';
+import ClientLayout from './app/pages/client/ClientLayout';
 
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
   {
     path: '/',
-    element: null,
+    element: <ClientLayout />,
   },
 ]);
 
+// eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
   const authState = useAtomValue(authStateAtom);
   const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
 
   if (authState === 'logged_in') {
-    return <RouterProvider router={router} />;
+    return (
+      <>
+        <GlobalHeaderInboxLauncher />
+        <RouterProvider router={router} />
+      </>
+    );
   }
 
   const title =

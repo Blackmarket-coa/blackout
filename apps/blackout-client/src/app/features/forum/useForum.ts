@@ -117,7 +117,7 @@ export const useSetForumSettings = (roomId: string) => {
   const client = useMatrixClient();
   return useCallback(
     async (settings: ForumSettings) => {
-      await client.sendStateEvent(roomId, FORUM_EVENT_TYPE, settings, '');
+      await client.sendStateEvent(roomId, FORUM_EVENT_TYPE as never, settings as never, '');
     },
     [client, roomId],
   );

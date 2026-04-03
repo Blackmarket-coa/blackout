@@ -265,21 +265,21 @@ export class DraupnirClient {
 
   public async sendCommand(roomId: string, command: string, args: string[] = []): Promise<void> {
     const message = `${COMMAND_PREFIX} ${command} ${args.join(' ')}`.trim();
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
+    await this.matrixClient.sendEvent(roomId, 'm.room.message' as never, {
       msgtype: 'm.text',
       body: message,
-    });
+    } as never);
   }
 
   public async sendPromptResponse(roomId: string, response: string): Promise<void> {
-    await this.matrixClient.sendEvent(roomId, 'm.room.message', {
+    await this.matrixClient.sendEvent(roomId, 'm.room.message' as never, {
       msgtype: 'm.text',
       body: response,
-    });
+    } as never);
   }
 
   private readConfigEventRoom(): Room | null {
-    const config = this.matrixClient.getAccountData(CONFIG_EVENT)?.getContent() as
+    const config = this.matrixClient.getAccountData(CONFIG_EVENT as never)?.getContent() as
       | { managementRoomId?: string; managementRoomAlias?: string }
       | undefined;
 

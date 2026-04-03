@@ -8,6 +8,8 @@ interface StickerMessageProps {
 export const StickerMessage = ({ event }: StickerMessageProps) => {
   const { ref, inView } = useInViewport<HTMLDivElement>();
   const { src, loading, error } = useResolvedMediaSource(event);
+  const body = event.getContent<Record<string, unknown>>().body;
+  const alt = typeof body === 'string' ? body : 'Sticker';
 
   return (
     <div ref={ref} style={{ width: 240, maxWidth: '100%' }}>
@@ -16,7 +18,7 @@ export const StickerMessage = ({ event }: StickerMessageProps) => {
       {inView && src ? (
         <img
           src={src}
-          alt={typeof event.getContent<Record<string, unknown>>().body === 'string' ? event.getContent<Record<string, unknown>>().body : 'Sticker'}
+          alt={alt}
           loading="lazy"
           style={{ width: '100%', maxWidth: 240, height: 'auto', background: 'transparent', border: 'none' }}
         />

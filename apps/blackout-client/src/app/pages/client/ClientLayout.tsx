@@ -1,13 +1,33 @@
-import { type DragEvent, useEffect, useMemo, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
-import { selectedRoomIdAtom, selectedSpaceIdAtom, rightPanelAtom, type RightPanelType } from '../../state/navigation';
+import { userIdAtom } from '../../state/auth';
+import {
+  selectedRoomIdAtom,
+  selectedSpaceIdAtom,
+  rightPanelAtom,
+  roomJumpTargetEventIdAtom,
+  roomUnreadMarkerEventIdAtom,
+  type RightPanelType,
+} from '../../state/navigation';
 import { settingsAtom } from '../../state/settings';
 import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
+import RoomTimeline from '../../features/room/RoomTimeline';
+import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
+import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
+import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
+import { useInboxModel } from '../../features/navigation/useInboxModel';
+import { SettingsPage } from '../../features/settings';
+import { useOptionalCall } from '../../features/call';
+import { useRoomTimeline } from '../../hooks/useTimeline';
+import { useRoom } from '../../hooks/useRoom';
+import RightPanelContent from '../../features/right-panel/RightPanelContent';
+import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
+import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
 
@@ -20,72 +40,37 @@ const roomKindIcon = (room: Room): string => {
   return '💭';
 };
 
-const roomUnread = (room: Room): number => room.getUnreadNotificationCount('total') || 0;
+const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
 
 const isTablet = (width: number): boolean => width < 1100;
 const isMobile = (width: number): boolean => width < 760;
 
-const QuickSwitcher = ({
-  rooms,
-  open,
-  onClose,
-  onPick,
-}: {
-  rooms: Room[];
-  open: boolean;
-  onClose: () => void;
-  onPick: (roomId: string) => void;
-}) => {
-  const [query, setQuery] = useState('');
-  const filtered = useMemo(
-    () => rooms.filter((room) => room.name.toLowerCase().includes(query.toLowerCase())).slice(0, 20),
-    [query, rooms],
-  );
-
-  if (!open) return null;
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 30 }} onClick={onClose}>
-      <div
-        style={{ width: 520, maxWidth: '92vw', margin: '10vh auto', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 12, padding: 10 }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          autoFocus
-          placeholder="Jump to room…"
-          style={{ width: '100%', background: 'var(--bg-input)', color: 'var(--text-primary)', border: '1px solid var(--border-default)', borderRadius: 8, padding: 8 }}
-        />
-        <div style={{ marginTop: 8, maxHeight: 340, overflowY: 'auto' }}>
-          {filtered.map((room) => (
-            <button
-              key={room.roomId}
-              type="button"
-              onClick={() => onPick(room.roomId)}
-              style={{ width: '100%', textAlign: 'left', border: 'none', background: 'transparent', color: 'var(--text-primary)', padding: '6px 4px' }}
-            >
-              {roomKindIcon(room)} {room.name}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const ClientLayout = () => {
   const client = useMatrixClient();
   const rooms = useAtomValue(joinedRoomsAtom);
+  const userId = useAtomValue(userIdAtom);
   const [settings, setSettings] = useAtom(settingsAtom);
+  const [, setSettingsPage] = useAtom(settingsPageAtom);
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
   const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
+  const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
+  const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
+  const { openRoomWithContext } = useMentionNavigation();
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
+  const previousRoomIdRef = useRef<string | null>(null);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>('');
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
+  const callState = useOptionalCall();
+  const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -113,6 +98,52 @@ export const ClientLayout = () => {
     setSpaceOrder(spaces.map((room) => room.roomId));
   }, [spaceOrder.length, spaces]);
 
+  useEffect(() => {
+    const key = `blackout.collapsed.${selectedSpaceId ?? 'home'}`;
+    const raw = window.localStorage.getItem(key);
+    setCollapsedFolders(raw ? (JSON.parse(raw) as Record<string, boolean>) : {});
+  }, [selectedSpaceId]);
+
+  useEffect(() => {
+    const key = `blackout.collapsed.${selectedSpaceId ?? 'home'}`;
+    window.localStorage.setItem(key, JSON.stringify(collapsedFolders));
+  }, [collapsedFolders, selectedSpaceId]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const loadDevices = async () => {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audio = devices.filter((device) => device.kind === 'audioinput');
+      const video = devices.filter((device) => device.kind === 'videoinput');
+      setAudioDevices(audio);
+      setVideoDevices(video);
+      if (!selectedAudioDeviceId && audio[0]) setSelectedAudioDeviceId(audio[0].deviceId);
+      if (!selectedVideoDeviceId && video[0]) setSelectedVideoDeviceId(video[0].deviceId);
+    };
+
+    void loadDevices();
+    navigator.mediaDevices.addEventListener?.('devicechange', loadDevices);
+    return () => navigator.mediaDevices.removeEventListener?.('devicechange', loadDevices);
+  }, [selectedAudioDeviceId, selectedVideoDeviceId]);
+
+  useEffect(() => {
+    if (settings.preferredAudioDeviceId) {
+      setSelectedAudioDeviceId(settings.preferredAudioDeviceId);
+      callState?.setPreferredAudioDeviceId(settings.preferredAudioDeviceId);
+    }
+    if (settings.preferredVideoDeviceId) {
+      setSelectedVideoDeviceId(settings.preferredVideoDeviceId);
+      callState?.setPreferredVideoDeviceId(settings.preferredVideoDeviceId);
+    }
+  }, [callState, settings.preferredAudioDeviceId, settings.preferredVideoDeviceId]);
+
+  useEffect(() => {
+    if (previousRoomIdRef.current && previousRoomIdRef.current !== selectedRoomId) {
+      setRightPanel(null);
+    }
+    previousRoomIdRef.current = selectedRoomId;
+  }, [selectedRoomId, setRightPanel]);
+
   const orderedSpaces = useMemo(
     () => [...spaces].sort((a, b) => spaceOrder.indexOf(a.roomId) - spaceOrder.indexOf(b.roomId)),
     [spaceOrder, spaces],
@@ -124,19 +155,31 @@ export const ClientLayout = () => {
   }, [homeRooms, selectedSpaceId]);
 
   const deadDrop = useDeadDrop(selectedRoomId ?? '');
+  const activeRoomState = useRoom(selectedRoomId ?? '');
+  const timelineState = useRoomTimeline(selectedRoomId ?? '');
+  const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
 
-  const groups = useMemo(() => {
-    const bucket = new Map<string, Room[]>();
-    selectedSpaceRooms.forEach((room) => {
-      const key = room.name.charAt(0).toUpperCase() || '#';
-      bucket.set(key, [...(bucket.get(key) ?? []), room]);
-    });
-    return [...bucket.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [selectedSpaceRooms]);
+  const groups = useMemo(
+    () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
+    [rooms, selectedSpaceId, selectedSpaceRooms],
+  );
 
   const persistSpaceOrder = async (next: string[]) => {
     setSpaceOrder(next);
-    await client.setAccountData('blackout.space_order', { order: next });
+    await client.setAccountData('blackout.space_order' as never, { order: next } as never);
+  };
+
+  const openRoom = (roomId: string, jumpToEventId?: string) => {
+    openRoomWithContext(roomId, jumpToEventId);
+  };
+
+  const markAllMentionsRead = async () => {
+    await markAllRead();
+  };
+
+  const openSettingsSection = (section: 'appearance' | 'voice-video') => {
+    setSettingsPage(section);
+    setSettingsOpen(true);
   };
 
   const renderRoomContent = () => {
@@ -148,9 +191,20 @@ export const ClientLayout = () => {
             <DeadDropIndicator config={deadDrop.data} queueCount={deadDrop.queueCount} />
           </header>
 
-          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 12 }}>
-            <p style={{ marginTop: 0, opacity: 0.85 }}>Room timeline: {selectedRoomId}</p>
-            <small>Timeline UI is elided in this shell build.</small>
+          <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, height: 'min(62vh, 760px)', minHeight: 360, overflow: 'hidden' }}>
+            <RoomTimeline
+              roomId={selectedRoomId}
+              unreadEventId={unreadMarkerEventId ?? undefined}
+              jumpToEventId={jumpTargetEventId ?? undefined}
+              onJumpResolved={(eventId, found) => {
+                if (eventId === jumpTargetEventId && found) {
+                  setJumpTargetEventId(null);
+                }
+                if (eventId === unreadMarkerEventId && found) {
+                  setUnreadMarkerEventId(null);
+                }
+              }}
+            />
           </section>
 
           {deadDrop.data.enabled ? <DeadDropComposer roomId={selectedRoomId} /> : <MessageComposer roomId={selectedRoomId} />}
@@ -168,15 +222,7 @@ export const ClientLayout = () => {
 
   return (
     <section style={{ height: '100vh', width: '100%', display: 'grid', gridTemplateColumns: desktop ? `${layout.spaceColumnWidth}px ${layout.roomColumnWidth}px 1fr` : mobile ? '1fr' : '1fr', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-      <QuickSwitcher
-        rooms={homeRooms}
-        open={quickOpen}
-        onClose={() => setQuickOpen(false)}
-        onPick={(roomId) => {
-          setSelectedRoomId(roomId);
-          setQuickOpen(false);
-        }}
-      />
+      <NavigationQuickSwitcher open={quickOpen} onClose={() => setQuickOpen(false)} />
 
       {(desktop || (!mobile && !selectedRoomId)) ? (
         <aside style={{ borderRight: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 8, background: 'var(--bg-nav)' }}>
@@ -206,6 +252,90 @@ export const ClientLayout = () => {
             ))}
           </div>
           <button type="button" style={{ width: 40, height: 40, borderRadius: 10, border: '1px dashed var(--border-default)', background: 'var(--bg-input)' }}>＋</button>
+          {desktop ? (
+            <section style={{ width: '100%', borderTop: '1px solid var(--border-default)', padding: 8, display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-muted)' }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }}>{userId ?? 'Anonymous'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Status: {myPresence}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button type="button" onClick={() => openSettingsSection('appearance')} style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openSettingsSection('voice-video')}
+                  style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}
+                >
+                  Devices
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  type="button"
+                  disabled={!callState?.joined || !callState.roomId}
+                  onClick={() => callState?.setMuted(!callState.muted)}
+                  style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11, opacity: callState?.joined ? 1 : 0.6 }}
+                >
+                  {callState?.joined ? (callState.muted ? 'Unmute' : 'Mute') : 'No Call'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!callState?.joined || !callState.roomId}
+                  onClick={() => callState?.setDeafened(!callState.deafened)}
+                  style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11, opacity: callState?.joined ? 1 : 0.6 }}
+                >
+                  {callState?.joined ? (callState.deafened ? 'Undeafen' : 'Deafen') : 'No Call'}
+                </button>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                Call: {callState?.joined ? `Connected (${Object.keys(callState.membership).length} participants)` : 'Idle'}
+              </div>
+              <div style={{ display: 'grid', gap: 4 }}>
+                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  Mic
+                  <select
+                    value={selectedAudioDeviceId}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setSelectedAudioDeviceId(next);
+                      callState?.setPreferredAudioDeviceId(next);
+                      setSettings((prev) => ({ ...prev, preferredAudioDeviceId: next }));
+                    }}
+                    style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
+                  >
+                    {audioDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Microphone ${device.deviceId.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  Camera
+                  <select
+                    value={selectedVideoDeviceId}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setSelectedVideoDeviceId(next);
+                      callState?.setPreferredVideoDeviceId(next);
+                      setSettings((prev) => ({ ...prev, preferredVideoDeviceId: next }));
+                    }}
+                    style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
+                  >
+                    {videoDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${device.deviceId.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+          ) : null}
         </aside>
       ) : null}
 
@@ -213,28 +343,30 @@ export const ClientLayout = () => {
         <aside style={{ borderRight: '1px solid var(--border-default)', background: 'var(--bg-surface)', display: mobile && selectedRoomId ? 'none' : 'block' }}>
           <header style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-default)', padding: '0 10px' }}>
             <strong>{selectedSpaceId ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ?? 'Space' : 'Home'}</strong>
-            <button type="button" onClick={() => setQuickOpen(true)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>Ctrl+K</button>
           </header>
 
           <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
-            {groups.map(([category, categoryRooms]) => {
-              const collapsed = collapsedFolders[category] ?? false;
+            {groups.map((group) => {
+              const collapsed = collapsedFolders[group.id] ?? false;
               return (
-                <section key={category} style={{ marginBottom: 12 }}>
+                <section key={group.id} style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <button type="button" onClick={() => setCollapsedFolders((prev) => ({ ...prev, [category]: !collapsed }))} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>
-                      {collapsed ? '▶' : '▼'} {category}
+                    <button type="button" onClick={() => setCollapsedFolders((prev) => ({ ...prev, [group.id]: !collapsed }))} style={{ border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}>
+                      {collapsed ? '▶' : '▼'} {group.label}
                     </button>
                     <button type="button" style={{ border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)' }}>+</button>
                   </div>
 
                   {!collapsed ? (
                     <div style={{ marginTop: 4 }}>
-                      {categoryRooms.map((room) => (
+                      {group.rooms.length === 0 ? (
+                        <small style={{ opacity: 0.8, padding: '4px 8px', display: 'block' }}>No rooms</small>
+                      ) : null}
+                      {group.rooms.map((room) => (
                         <button
                           key={room.roomId}
                           type="button"
-                          onClick={() => setSelectedRoomId(room.roomId)}
+                          onClick={() => openRoom(room.roomId)}
                           style={{ width: '100%', textAlign: 'left', border: 'none', background: selectedRoomId === room.roomId ? 'var(--bg-surface-hover)' : 'transparent', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8 }}
                         >
                           <span>{roomKindIcon(room)}</span>
@@ -270,10 +402,41 @@ export const ClientLayout = () => {
               <strong>{rightPanel}</strong>
               <button type="button" onClick={() => setRightPanel(null)}>Close</button>
             </div>
+            <RightPanelContent
+              panel={rightPanel}
+              room={activeRoomState.data}
+              events={timelineState.data}
+              onJumpToEvent={(eventId) => {
+                setJumpTargetEventId(eventId);
+                setRightPanel(null);
+              }}
+            />
+          </aside>
+        ) : null}
+
+        {inboxOpen ? (
+          <GlobalMentionsInbox
+            items={mentionItems}
+            onClose={() => setInboxOpen(false)}
+            onMarkAllRead={markAllMentionsRead}
+            onMarkReadLocal={markReadLocal}
+          />
+        ) : null}
+
+        {settingsOpen ? (
+          <aside style={{ position: 'absolute', inset: 16, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 12, padding: 10, zIndex: 10, overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <strong>Settings</strong>
+              <button type="button" onClick={() => setSettingsOpen(false)}>Close</button>
+            </div>
+            <SettingsPage />
           </aside>
         ) : null}
 
         <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+          <button type="button" onClick={() => setInboxOpen((prev) => !prev)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
+            Inbox {mentionItems.length > 0 ? `(${mentionItems.length})` : ''}
+          </button>
           {RIGHT_PANELS.map((panel) => (
             <button key={panel} type="button" onClick={() => setRightPanel(panel)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
               {panel}

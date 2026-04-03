@@ -28,6 +28,9 @@ interface MatrixRtcSessionLike {
   stop?: () => void;
   joinRoomSession?: () => Promise<void>;
   leaveRoomSession?: () => Promise<void>;
+  setLocalMediaStream?: (stream: unknown) => Promise<void> | void;
+  setAudioInputDevice?: (deviceId: string) => Promise<void> | void;
+  setVideoInputDevice?: (deviceId: string) => Promise<void> | void;
 }
 
 interface MatrixRtcSessionStarter {
@@ -53,6 +56,10 @@ interface CallContextValue {
   setCameraEnabled: (value: boolean) => void;
   setScreenSharing: (value: boolean) => void;
   updateAudioLevels: (levels: AudioLevelState[]) => void;
+  preferredAudioDeviceId: string | null;
+  preferredVideoDeviceId: string | null;
+  setPreferredAudioDeviceId: (deviceId: string | null) => void;
+  setPreferredVideoDeviceId: (deviceId: string | null) => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -114,10 +121,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [focusUrl, setFocusUrl] = useState<string | null>(null);
+  const [preferredAudioDeviceId, setPreferredAudioDeviceId] = useState<string | null>(null);
+  const [preferredVideoDeviceId, setPreferredVideoDeviceId] = useState<string | null>(null);
   const [membership, setMembership] = useState<Record<string, CallMemberState>>({});
   const [audioLevels, setAudioLevels] = useState<Record<string, AudioLevelState>>({});
 
   const activeSessionRef = useRef<MatrixRtcSessionLike | null>(null);
+  const activeDeviceStreamRef = useRef<{ getTracks: () => Array<{ stop: () => void }> } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +141,46 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [client]);
 
   useEffect(() => {
+    if (!joined || !navigator.mediaDevices?.getUserMedia) return;
+
+    const constraints = {
+      audio: preferredAudioDeviceId ? { deviceId: { exact: preferredAudioDeviceId } } : true,
+      video: preferredVideoDeviceId ? { deviceId: { exact: preferredVideoDeviceId } } : false,
+    };
+
+    let cancelled = false;
+    void navigator.mediaDevices.getUserMedia(constraints).then(async (stream) => {
+      if (cancelled) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      const session = activeSessionRef.current;
+      if (session?.setAudioInputDevice && preferredAudioDeviceId) {
+        await session.setAudioInputDevice(preferredAudioDeviceId);
+      }
+      if (session?.setVideoInputDevice && preferredVideoDeviceId) {
+        await session.setVideoInputDevice(preferredVideoDeviceId);
+      }
+      if (session?.setLocalMediaStream) {
+        await session.setLocalMediaStream(stream);
+      }
+
+      activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      activeDeviceStreamRef.current = stream;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [joined, preferredAudioDeviceId, preferredVideoDeviceId]);
+
+  useEffect(() => {
+    const emitter = client as unknown as {
+      on: (event: string, cb: (event: MatrixEvent, state: RoomState) => void) => void;
+      off: (event: string, cb: (event: MatrixEvent, state: RoomState) => void) => void;
+    };
+
     const onRoomStateEvent = (event: MatrixEvent, state: RoomState) => {
       if (!roomId || state.roomId !== roomId) return;
       if (!MSC3401_EVENT_TYPES.includes(event.getType())) return;
@@ -141,8 +191,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       setMembership((prev) => ({ ...prev, [member.userId]: member }));
     };
 
-    client.on('RoomState.events', onRoomStateEvent);
-    return () => client.off('RoomState.events', onRoomStateEvent);
+    emitter.on('RoomState.events', onRoomStateEvent);
+    return () => {
+      emitter.off('RoomState.events', onRoomStateEvent);
+    };
   }, [client, roomId]);
 
   const leaveCall = useCallback(async () => {
@@ -150,6 +202,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     activeSessionRef.current?.stop?.();
 
     activeSessionRef.current = null;
+    activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    activeDeviceStreamRef.current = null;
     setJoined(false);
     setRoomId(null);
     setMembership({});
@@ -212,8 +266,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       setCameraEnabled,
       setScreenSharing,
       updateAudioLevels,
+      preferredAudioDeviceId,
+      preferredVideoDeviceId,
+      setPreferredAudioDeviceId,
+      setPreferredVideoDeviceId,
     }),
-    [audioLevels, cameraEnabled, deafened, focusUrl, joinCall, joined, leaveCall, membership, muted, roomId, screenSharing, updateAudioLevels],
+    [audioLevels, cameraEnabled, deafened, focusUrl, joinCall, joined, leaveCall, membership, muted, preferredAudioDeviceId, preferredVideoDeviceId, roomId, screenSharing, updateAudioLevels],
   );
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;
@@ -227,3 +285,6 @@ export const useCall = (): CallContextValue => {
   }
   return context;
 };
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useOptionalCall = (): CallContextValue | null => useContext(CallContext);

@@ -1,20 +1,9 @@
 import { useMemo, useState } from 'react';
-import { BaseEditor, Descendant, Editor, Transforms, createEditor } from 'slate';
-import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
+import { Descendant, Editor, Transforms, createEditor } from 'slate';
+import { Editable, Slate, withReact } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { useSendMessage } from '../../hooks/useTimeline';
 import type { ForumTag } from './useForum';
-
-type CustomText = { text: string };
-type ParagraphElement = { type: 'paragraph'; children: CustomText[] };
-
-declare module 'slate' {
-  interface CustomTypes {
-    Editor: BaseEditor & ReactEditor;
-    Element: ParagraphElement;
-    Text: CustomText;
-  }
-}
 
 const toBody = (value: Descendant[]): string => {
   return value
@@ -100,7 +89,7 @@ export const CreatePostModal = ({
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>Body (rich text editor)</div>
           <div style={{ border: '1px solid var(--border-default)', borderRadius: 8, padding: 8, minHeight: 120 }}>
-            <Slate editor={editor} value={value} onChange={(next) => setValue(next)}>
+            <Slate editor={editor} initialValue={value} onValueChange={(next) => setValue(next)}>
               <Editable placeholder="Write your forum post…" />
             </Slate>
           </div>
