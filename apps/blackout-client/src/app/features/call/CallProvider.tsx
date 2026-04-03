@@ -53,6 +53,10 @@ interface CallContextValue {
   setCameraEnabled: (value: boolean) => void;
   setScreenSharing: (value: boolean) => void;
   updateAudioLevels: (levels: AudioLevelState[]) => void;
+  preferredAudioDeviceId: string | null;
+  preferredVideoDeviceId: string | null;
+  setPreferredAudioDeviceId: (deviceId: string | null) => void;
+  setPreferredVideoDeviceId: (deviceId: string | null) => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -114,6 +118,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
   const [focusUrl, setFocusUrl] = useState<string | null>(null);
+  const [preferredAudioDeviceId, setPreferredAudioDeviceId] = useState<string | null>(null);
+  const [preferredVideoDeviceId, setPreferredVideoDeviceId] = useState<string | null>(null);
   const [membership, setMembership] = useState<Record<string, CallMemberState>>({});
   const [audioLevels, setAudioLevels] = useState<Record<string, AudioLevelState>>({});
 
@@ -129,6 +135,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       mounted = false;
     };
   }, [client]);
+
+  useEffect(() => {
+    if (!joined || !navigator.mediaDevices?.getUserMedia) return;
+
+    const constraints = {
+      audio: preferredAudioDeviceId ? { deviceId: { exact: preferredAudioDeviceId } } : true,
+      video: preferredVideoDeviceId ? { deviceId: { exact: preferredVideoDeviceId } } : false,
+    };
+
+    void navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
+    });
+  }, [joined, preferredAudioDeviceId, preferredVideoDeviceId]);
 
   useEffect(() => {
     const onRoomStateEvent = (event: MatrixEvent, state: RoomState) => {
@@ -212,8 +231,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       setCameraEnabled,
       setScreenSharing,
       updateAudioLevels,
+      preferredAudioDeviceId,
+      preferredVideoDeviceId,
+      setPreferredAudioDeviceId,
+      setPreferredVideoDeviceId,
     }),
-    [audioLevels, cameraEnabled, deafened, focusUrl, joinCall, joined, leaveCall, membership, muted, roomId, screenSharing, updateAudioLevels],
+    [audioLevels, cameraEnabled, deafened, focusUrl, joinCall, joined, leaveCall, membership, muted, preferredAudioDeviceId, preferredVideoDeviceId, roomId, screenSharing, updateAudioLevels],
   );
 
   return <CallContext.Provider value={value}>{children}</CallContext.Provider>;

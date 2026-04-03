@@ -127,6 +127,17 @@ export const ClientLayout = () => {
   }, [selectedAudioDeviceId, selectedVideoDeviceId]);
 
   useEffect(() => {
+    if (settings.preferredAudioDeviceId) {
+      setSelectedAudioDeviceId(settings.preferredAudioDeviceId);
+      callState?.setPreferredAudioDeviceId(settings.preferredAudioDeviceId);
+    }
+    if (settings.preferredVideoDeviceId) {
+      setSelectedVideoDeviceId(settings.preferredVideoDeviceId);
+      callState?.setPreferredVideoDeviceId(settings.preferredVideoDeviceId);
+    }
+  }, [callState, settings.preferredAudioDeviceId, settings.preferredVideoDeviceId]);
+
+  useEffect(() => {
     if (previousRoomIdRef.current && previousRoomIdRef.current !== selectedRoomId) {
       setRightPanel(null);
     }
@@ -170,12 +181,22 @@ export const ClientLayout = () => {
     if (!userId) return;
     const accountEvent = client.getAccountData('blackout.inbox.read.v1');
     const content = accountEvent?.getContent<Record<string, unknown>>() ?? {};
-    const readByUser = content[userId];
-    if (readByUser && typeof readByUser === 'object') {
+    const version = typeof content.version === 'number' ? content.version : 1;
+    const readByUser = version >= 2
+      ? (content.users as Record<string, unknown> | undefined)?.[userId]
+      : content[userId];
+    if (readByUser && typeof readByUser === 'object' && !Array.isArray(readByUser)) {
       const next = Object.fromEntries(
         Object.entries(readByUser as Record<string, unknown>).filter(([, isRead]) => isRead === true),
       );
       setInboxReadEventIds(next);
+      if (version < 2) {
+        void client.setAccountData('blackout.inbox.read.v1', {
+          version: 2,
+          users: { [userId]: next },
+          updatedAt: Date.now(),
+        });
+      }
     }
     setInboxReadLoaded(true);
   }, [client, userId]);
@@ -183,7 +204,8 @@ export const ClientLayout = () => {
   useEffect(() => {
     if (!userId || !inboxReadLoaded) return;
     const payload = {
-      [userId]: inboxReadEventIds,
+      version: 2,
+      users: { [userId]: inboxReadEventIds },
       updatedAt: Date.now(),
     };
     void client.setAccountData('blackout.inbox.read.v1', payload);
@@ -346,7 +368,12 @@ export const ClientLayout = () => {
                   Mic
                   <select
                     value={selectedAudioDeviceId}
-                    onChange={(event) => setSelectedAudioDeviceId(event.target.value)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setSelectedAudioDeviceId(next);
+                      callState?.setPreferredAudioDeviceId(next);
+                      setSettings((prev) => ({ ...prev, preferredAudioDeviceId: next }));
+                    }}
                     style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
                   >
                     {audioDevices.map((device) => (
@@ -360,7 +387,12 @@ export const ClientLayout = () => {
                   Camera
                   <select
                     value={selectedVideoDeviceId}
-                    onChange={(event) => setSelectedVideoDeviceId(event.target.value)}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setSelectedVideoDeviceId(next);
+                      callState?.setPreferredVideoDeviceId(next);
+                      setSettings((prev) => ({ ...prev, preferredVideoDeviceId: next }));
+                    }}
                     style={{ width: '100%', marginTop: 2, border: '1px solid var(--border-default)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 10 }}
                   >
                     {videoDevices.map((device) => (

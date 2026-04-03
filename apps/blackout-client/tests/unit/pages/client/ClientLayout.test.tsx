@@ -396,7 +396,7 @@ describe('ClientLayout UI wiring', () => {
 
     expect(mockClient.setAccountData).toHaveBeenCalledWith(
       'blackout.inbox.read.v1',
-      expect.objectContaining({ '@me:example.org': expect.any(Object) }),
+      expect.objectContaining({ version: 2, users: expect.any(Object) }),
     );
   });
 
