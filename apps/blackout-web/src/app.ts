@@ -169,9 +169,9 @@ export class BlackoutWebApp {
       },
     },
     simpleMode: {
-      enabledByDefault: true,
-      showAdvancedAdminModules: false,
-      onboardingProgressiveDisclosure: true,
+      simple_mode_default: true,
+      show_advanced_admin_modules: false,
+      onboarding_progressive_disclosure: true,
     },
     engagement: {
       policy: {
@@ -269,7 +269,7 @@ export class BlackoutWebApp {
           unreadByChannel: state.unreadByChannel,
           currentUserDisplayName: state.session?.user.username ?? "User",
           currentUserHandle: state.session ? `@${state.session.user.username}` : "@user",
-          showAdvancedModules: !this.runtimeConfig.simpleMode.enabledByDefault || this.runtimeConfig.simpleMode.showAdvancedAdminModules,
+          showAdvancedModules: this.shouldShowAdvancedAdminModules(),
         })}
         ${this.renderWorkspacePanel()}
       </section>
@@ -613,9 +613,18 @@ export class BlackoutWebApp {
     `;
   }
 
+  private shouldShowAdvancedAdminModules(): boolean {
+    return !this.runtimeConfig.simpleMode.simple_mode_default || this.runtimeConfig.simpleMode.show_advanced_admin_modules;
+  }
+
+  private shouldProgressivelyDiscloseOnboarding(): boolean {
+    return this.runtimeConfig.simpleMode.onboarding_progressive_disclosure;
+  }
+
   private renderFeatureEntryPoints(): string {
     const filterQuery = this.featureFilter.trim().toLowerCase();
     const grouped = new Map<UiEntryKind, string[]>();
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     for (const feature of FEATURE_UI_ENTRIES) {
       if (
         filterQuery &&
@@ -624,6 +633,7 @@ export class BlackoutWebApp {
         continue;
       }
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") continue;
       const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
@@ -646,14 +656,14 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("composer_action", grouped.get("composer_action") ?? [])}
         ${this.renderFeatureGroup("room_action", grouped.get("room_action") ?? [])}
         ${this.renderFeatureGroup("widget_panel", grouped.get("widget_panel") ?? [])}
-        ${this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? [])}
+        ${showAdvancedModules ? this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? []) : `<p class="meta">Advanced admin modules are hidden in simple mode.</p>`}
         ${this.renderFeatureGroup("command_palette", grouped.get("command_palette") ?? [])}
       </section>
     `;
   }
 
   private renderFeatureLibraryDisclosure(): string {
-    const openByDefault = this.isAdvancedCohort();
+    const openByDefault = this.isAdvancedCohort() && !this.shouldProgressivelyDiscloseOnboarding();
     return `
       <details class="stack panel-card" data-testid="feature-library-disclosure" ${openByDefault ? "open" : ""}>
         <summary><strong>Advanced feature library</strong> <span class="meta">Role-based progressive reveal for power workflows.</span></summary>
@@ -666,7 +676,12 @@ export class BlackoutWebApp {
 
   private renderFeatureToolbar(): string {
     const activeFeatures = this.getActivePresetFeatures();
-    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => activeFeatures[feature.presetKey] ?? false);
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
+    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") return false;
+      return activeFeatures[feature.presetKey] ?? false;
+    });
 
     if (!enabledFeatures.length) {
       return `
@@ -737,7 +752,10 @@ export class BlackoutWebApp {
   private renderFeatureCommandPalette(): string {
     const query = this.commandPaletteQuery.trim().toLowerCase();
     const activeFeatures = this.getActivePresetFeatures();
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     const rows = FEATURE_UI_ENTRIES.filter((feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") return false;
       if (!query) return true;
       return `${feature.id} ${feature.name} ${feature.uiEntry}`.toLowerCase().includes(query);
     })

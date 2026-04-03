@@ -72,9 +72,9 @@ describe("resolveBlackoutRuntimeConfig", () => {
   it("sets simple mode flags to starter-safe defaults", () => {
     const config = resolveBlackoutRuntimeConfig({});
 
-    expect(config.simpleMode.enabledByDefault).toBe(true);
-    expect(config.simpleMode.showAdvancedAdminModules).toBe(false);
-    expect(config.simpleMode.onboardingProgressiveDisclosure).toBe(true);
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
   });
 
   it("supports env overrides for simple mode flags", () => {
@@ -84,11 +84,35 @@ describe("resolveBlackoutRuntimeConfig", () => {
       VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE: "false",
     });
 
-    expect(config.simpleMode.enabledByDefault).toBe(false);
-    expect(config.simpleMode.showAdvancedAdminModules).toBe(true);
-    expect(config.simpleMode.onboardingProgressiveDisclosure).toBe(false);
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(false);
   });
 
+
+  it("defaults existing tenants to pre-wave behavior unless explicitly enabled", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+  });
+
+  it("supports snake_case app-level flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_APP_LEVEL_FLAGS: JSON.stringify({
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      }),
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
+  });
   it("resolves engagement policy and notification rules from env", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_ENGAGEMENT_POLICY_SERVER: JSON.stringify({
