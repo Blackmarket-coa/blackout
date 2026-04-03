@@ -43,6 +43,11 @@ storybook-static
 /packages/shared-components/dist
 /packages/shared-components/src/i18nKeys.d.ts
 
+# Package build outputs
+/packages/core/dist
+/packages/design/dist
+/packages/ui/dist
+
 # blackout-web vite output
 /apps/blackout-web/dist
 /apps/blackout-web/test-results

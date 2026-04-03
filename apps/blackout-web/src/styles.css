@@ -76,20 +76,6 @@ body {
   gap: 0.95rem;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 1.2rem;
-}
-
-.header {
-  padding: 1rem 1.2rem;
-  border: 1px solid var(--header-border);
-  border-radius: 18px;
-  background: var(--header-bg);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(12px);
-}
-
 .header-environment {
   margin-top: 0.75rem;
   padding: 0.65rem 0.75rem;
@@ -104,19 +90,6 @@ body {
   margin: 0.25rem 0 0;
   color: var(--text-muted);
   font-size: 0.9rem;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.header-actions-copy {
-  display: grid;
-  gap: 0.2rem;
 }
 
 .feature-toolbar {
@@ -1083,32 +1056,6 @@ body {
   border-right: 1px solid var(--panel-border);
 }
 
-.channel-overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
-  margin-bottom: 0.75rem;
-}
-
-.channel-overview-metric {
-  border: 1px solid color-mix(in srgb, var(--panel-border) 85%, white 15%);
-  border-radius: 11px;
-  padding: 0.45rem 0.3rem;
-  display: grid;
-  place-items: center;
-  gap: 0.05rem;
-  background: var(--glass-bg);
-}
-
-.channel-overview-metric strong {
-  font-size: 0.94rem;
-}
-
-.channel-overview-metric span {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
 .sidebar-workspace-name {
   font-size: 1rem;
   font-weight: 700;
@@ -1255,6 +1202,45 @@ body {
   border: 1px solid #3C6A45;
   padding: 0.25rem 0.55rem;
   color: #c6cedd;
+}
+
+.chat-head-overflow {
+  position: relative;
+}
+
+.chat-head-overflow summary {
+  list-style: none;
+}
+
+.chat-head-overflow summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-head-overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.3rem);
+  min-width: 140px;
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.35rem;
+  background: var(--panel-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  z-index: 5;
+}
+
+.chat-head-overflow-menu .ghost-btn {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+}
+
+.chat-head-overflow-menu .ghost-btn:hover {
+  background: rgb(255 255 255 / 10%);
 }
 
 .message-item--compact p {
@@ -1615,17 +1601,6 @@ label {
   color: #c5cad1;
 }
 
-.channel-footer-actions {
-  display: grid;
-  gap: 0.45rem;
-  margin-top: 0.55rem;
-}
-
-.channel-create-btn {
-  background: #244D2B;
-  border-color: #2B5D34;
-}
-
 .link-btn {
   width: auto;
 }
@@ -1671,10 +1646,6 @@ label {
     width: min(75vw, 320px);
     z-index: 3;
     box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
-  }
-
-  .header-actions {
-    align-items: stretch;
   }
 
   .quick-actions-grid {
