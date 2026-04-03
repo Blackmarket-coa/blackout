@@ -35,6 +35,24 @@ function parseJsonEnv<T>(value: string | undefined, fallback: T): T {
   }
 }
 
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") return false;
+  return fallback;
+}
+
+function parseOptionalBooleanEnv(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") return false;
+  return undefined;
+}
+
 function isFeaturePresetKey(value: string): value is FeaturePresetKey {
   return value in FEATURE_PRESET_BUNDLES;
 }
@@ -61,6 +79,36 @@ export function resolveMatrixHomeserverUrl(env: Record<string, string | undefine
   return normalized;
 }
 
+interface AppLevelFlagOverrides {
+  simple_mode_default?: boolean;
+  show_advanced_admin_modules?: boolean;
+  onboarding_progressive_disclosure?: boolean;
+}
+
+function resolveAppLevelFlags(env: Record<string, string | undefined>, hasTenantPolicy: boolean): Required<AppLevelFlagOverrides> {
+  const jsonFlags = parseJsonEnv<AppLevelFlagOverrides | undefined>(env.VITE_APP_LEVEL_FLAGS, undefined);
+  const simpleModeDefault =
+    jsonFlags?.simple_mode_default ??
+    parseOptionalBooleanEnv(env.VITE_SIMPLE_MODE_DEFAULT) ??
+    (hasTenantPolicy ? false : true);
+
+  const showAdvancedAdminModules =
+    jsonFlags?.show_advanced_admin_modules ??
+    parseOptionalBooleanEnv(env.VITE_SHOW_ADVANCED_ADMIN_MODULES) ??
+    !simpleModeDefault;
+
+  const onboardingProgressiveDisclosure =
+    jsonFlags?.onboarding_progressive_disclosure ??
+    parseOptionalBooleanEnv(env.VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE) ??
+    parseBooleanEnv(env.VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE, true);
+
+  return {
+    simple_mode_default: simpleModeDefault,
+    show_advanced_admin_modules: showAdvancedAdminModules,
+    onboarding_progressive_disclosure: onboardingProgressiveDisclosure,
+  };
+}
+
 export interface BlackoutRuntimeConfig {
   homeserverUrl: string;
   mode: "daily-chat";
@@ -68,6 +116,11 @@ export interface BlackoutRuntimeConfig {
     cohort: ReleaseCohort;
   };
   presets: ResolvedPresetConfig;
+  simpleMode: {
+    simple_mode_default: boolean;
+    show_advanced_admin_modules: boolean;
+    onboarding_progressive_disclosure: boolean;
+  };
   engagement: {
     policy: EngagementPolicy;
     notificationRules: NotificationRule[];
@@ -95,6 +148,7 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
       cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
     },
     presets: resolveFeaturePreset(deployment ?? {}, tenantPolicy, userOverrides),
+    simpleMode: resolveAppLevelFlags(env, Boolean(tenantPolicy)),
     engagement: {
       policy: resolveEngagementPolicy({
         server: serverEngagement,

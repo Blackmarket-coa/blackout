@@ -24,7 +24,7 @@ import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 
-type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
+type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
 type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
@@ -55,6 +55,7 @@ const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
 const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
+const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -119,6 +120,11 @@ export class BlackoutWebApp {
   private pendingPushTokenRegistration: string | null = null;
   private pushTokenRegisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private pushTokenUnregisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly viewedOnboardingSteps = new Set<number>();
+  private readonly completedOnboardingSteps = new Set<number>();
+  private onboardingCompletionTracked = false;
+  private advancedPanelViewedTracked = false;
+  private readonly advancedModuleDiscoveryTracked = new Set<string>();
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -168,6 +174,11 @@ export class BlackoutWebApp {
         userOverrideCount: 0,
       },
     },
+    simpleMode: {
+      simple_mode_default: true,
+      show_advanced_admin_modules: false,
+      onboarding_progressive_disclosure: true,
+    },
     engagement: {
       policy: {
         notifications: { mode: "balanced" },
@@ -213,6 +224,9 @@ export class BlackoutWebApp {
 
     const state = this.store.getState();
     if (!state.session) return;
+    if (!globalThis.localStorage.getItem(ONBOARDING_STARTED_AT_STORAGE_KEY)) {
+      globalThis.localStorage.setItem(ONBOARDING_STARTED_AT_STORAGE_KEY, String(Date.now()));
+    }
 
     this.connectGateway();
     await this.loadServers();
@@ -250,13 +264,108 @@ export class BlackoutWebApp {
     this.scrollMessagesToBottom();
   }
 
+  private getSidebarActiveView(): "home" | "rooms" | "dms" | "activity" | "calls" | "admin" {
+    if (this.settingsOpen) return "admin";
+    if (this.activeWorkspacePanel === "dms") return "dms";
+    if (this.activeWorkspacePanel === "activity") return "activity";
+    if (this.activeWorkspacePanel === "calls") return "calls";
+    return "rooms";
+  }
+
+  private hasAdminAccess(): boolean {
+    const state = this.store.getState();
+    const activeServer = state.servers.find((server) => server.id === state.activeServerId);
+    if (!activeServer) return false;
+    return /admin|owner|mod|moderator/i.test(activeServer.role);
+  }
+
+  private getRoleClass(): string {
+    const state = this.store.getState();
+    const activeServer = state.servers.find((server) => server.id === state.activeServerId);
+    return activeServer?.role?.toLowerCase() ?? "unknown";
+  }
+
+  private telemetryContext(): Record<string, string | number | boolean | null> {
+    const state = this.store.getState();
+    return {
+      tenant_id: state.activeServerId ?? "none",
+      role_class: this.getRoleClass(),
+      client_surface: "web",
+      flag_cohort: this.runtimeConfig.rollout.cohort,
+      simple_mode_enabled: this.runtimeConfig.simpleMode.simple_mode_default,
+    };
+  }
+
+  private trackKpiEvent(name: string, payload: Record<string, string | number | boolean | null> = {}): void {
+    this.telemetry.track(name, {
+      ...this.telemetryContext(),
+      ...payload,
+    });
+  }
+
+  private onboardingSteps() {
+    const state = this.store.getState();
+    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
+    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
+    return [
+      { index: 1, label: "Create or join workspace", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>' },
+      { index: 2, label: "Create first room (template-first)", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>' },
+      { index: 3, label: "Invite members", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>' },
+      { index: 4, label: "Start thread or call", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
+    ];
+  }
+
+  private trackOnboardingProgress(): void {
+    const steps = this.onboardingSteps();
+    const firstIncomplete = steps.find((step) => !step.done);
+
+    if (firstIncomplete && !this.viewedOnboardingSteps.has(firstIncomplete.index)) {
+      this.viewedOnboardingSteps.add(firstIncomplete.index);
+      this.trackKpiEvent("onboarding_step_viewed", { step: firstIncomplete.index });
+    }
+
+    for (const step of steps) {
+      if (step.done && !this.completedOnboardingSteps.has(step.index)) {
+        this.completedOnboardingSteps.add(step.index);
+        this.trackKpiEvent("onboarding_step_completed", { step: step.index });
+      }
+    }
+
+    if (steps.every((step) => step.done) && !this.onboardingCompletionTracked) {
+      this.onboardingCompletionTracked = true;
+      const startedAtRaw = globalThis.localStorage.getItem(ONBOARDING_STARTED_AT_STORAGE_KEY);
+      const startedAt = startedAtRaw ? Number.parseInt(startedAtRaw, 10) : Date.now();
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      this.trackKpiEvent("kpi_onboarding_completion", { completed: true, ttfv_ms: elapsedMs });
+      this.trackKpiEvent("kpi_ttfv", { ttfv_ms: elapsedMs });
+    }
+  }
+
+  private trackOnboardingDrop(reason: string): void {
+    const firstIncomplete = this.onboardingSteps().find((step) => !step.done);
+    if (!firstIncomplete) return;
+    this.trackKpiEvent("onboarding_step_dropped", {
+      step: firstIncomplete.index,
+      reason,
+    });
+  }
+
+  private trackAdvancedDiscovery(module: "governance" | "federation" | "stego"): void {
+    if (!this.hasAdminAccess()) return;
+    const dedupe = `${module}:${this.store.getState().activeServerId ?? "none"}`;
+    if (this.advancedModuleDiscoveryTracked.has(dedupe)) return;
+    this.advancedModuleDiscoveryTracked.add(dedupe);
+    this.trackKpiEvent("advanced_module_entered", { module });
+    this.trackKpiEvent("kpi_advanced_feature_discovery", { module, eligible_admin: true });
+  }
+
   private renderWorkspace(): string {
     const state = this.store.getState();
     const selectedServer = state.servers.find((server) => server.id === state.activeServerId);
 
     return `
       <section class="workspace ${state.channelDrawerOpen ? "show-channel-drawer" : ""} ${this.getCompactModeActive() ? "workspace--compact" : ""}">
-        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId, activeView: this.activeWorkspacePanel })}
+        ${renderServerSidebar({ servers: state.servers, activeServerId: state.activeServerId, activeView: this.getSidebarActiveView(), showAdminEntry: this.hasAdminAccess() })}
         ${renderChannelSidebar({
           serverName: selectedServer?.name ?? "Channels",
           channels: state.channels,
@@ -264,6 +373,7 @@ export class BlackoutWebApp {
           unreadByChannel: state.unreadByChannel,
           currentUserDisplayName: state.session?.user.username ?? "User",
           currentUserHandle: state.session ? `@${state.session.user.username}` : "@user",
+          showAdvancedModules: this.shouldShowAdvancedAdminModules(),
         })}
         ${this.renderWorkspacePanel()}
       </section>
@@ -284,6 +394,10 @@ export class BlackoutWebApp {
       return this.renderActivityPanel();
     }
 
+    if (this.activeWorkspacePanel === "calls") {
+      return this.renderCallsPanel();
+    }
+
     if (this.activeWorkspacePanel === "files") {
       return this.renderFilesPanel();
     }
@@ -300,6 +414,7 @@ export class BlackoutWebApp {
     const isTownhallRoom = /\b(townhall|assembly|stage|all-hands)\b/i.test(activeChannelName);
 
     if (isGovernanceRoom) {
+      this.trackAdvancedDiscovery("governance");
       return renderGovernanceRoomPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeGovernanceTab,
@@ -315,6 +430,7 @@ export class BlackoutWebApp {
     }
 
     if (isFederationRoom) {
+      this.trackAdvancedDiscovery("federation");
       return renderFederationPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeFederationTab,
@@ -347,6 +463,7 @@ export class BlackoutWebApp {
     });
 
     return `
+      ${this.renderFirstRunGuide()}
       <section class="workspace-content ${this.activeRightPanel ? "workspace-content--with-panel" : ""}">
         ${chatView}
         ${this.activeRightPanel ? this.renderRightPanelOverlay(this.activeRightPanel) : ""}
@@ -553,6 +670,36 @@ export class BlackoutWebApp {
     return this.renderWorkspaceUtilityPage("Files browser", "Locate upload, preview, and media workflows.", items);
   }
 
+
+  private renderCallsPanel(): string {
+    return this.renderWorkspaceUtilityPage(
+      "Calls",
+      "Start a room call quickly or open threaded follow-up.",
+      `<li class="repo-tools-item"><div><strong>Start room call</strong><p class="meta">Launch a lightweight call in the active room.</p></div><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button></li>
+       <li class="repo-tools-item"><div><strong>Start thread</strong><p class="meta">Open thread panel to kick off focused discussion.</p></div><button type="button" class="ghost-btn" data-action="onboarding-open-thread">Open thread</button></li>`
+    );
+  }
+
+  private renderFirstRunGuide(): string {
+    if (!this.runtimeConfig.simpleMode.onboarding_progressive_disclosure) return "";
+    const steps = this.onboardingSteps();
+    this.trackOnboardingProgress();
+
+    if (steps.every((step) => step.done)) return "";
+
+    return `
+      <section class="panel-card stack" data-testid="first-run-guide">
+        <h2>First-run guide (4 steps)</h2>
+        <p class="meta">Start fast: workspace → room → invite → thread/call.</p>
+        <ol class="stack">
+          ${steps
+            .map((step) => `<li><strong>${step.done ? "✅" : "⬜"} ${step.label}</strong><div class="modal-actions">${step.done ? "<span class=\"meta\">Done</span>" : step.action}</div></li>`)
+            .join("")}
+        </ol>
+      </section>
+    `;
+  }
+
   private renderWorkspaceUtilityPage(title: string, subtitle: string, items: string): string {
     return `
       <section class="chat-window repo-tools-page" aria-label="${title}">
@@ -607,9 +754,18 @@ export class BlackoutWebApp {
     `;
   }
 
+  private shouldShowAdvancedAdminModules(): boolean {
+    return !this.runtimeConfig.simpleMode.simple_mode_default || this.runtimeConfig.simpleMode.show_advanced_admin_modules;
+  }
+
+  private shouldProgressivelyDiscloseOnboarding(): boolean {
+    return this.runtimeConfig.simpleMode.onboarding_progressive_disclosure;
+  }
+
   private renderFeatureEntryPoints(): string {
     const filterQuery = this.featureFilter.trim().toLowerCase();
     const grouped = new Map<UiEntryKind, string[]>();
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     for (const feature of FEATURE_UI_ENTRIES) {
       if (
         filterQuery &&
@@ -618,6 +774,7 @@ export class BlackoutWebApp {
         continue;
       }
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") continue;
       const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
@@ -640,14 +797,18 @@ export class BlackoutWebApp {
         ${this.renderFeatureGroup("composer_action", grouped.get("composer_action") ?? [])}
         ${this.renderFeatureGroup("room_action", grouped.get("room_action") ?? [])}
         ${this.renderFeatureGroup("widget_panel", grouped.get("widget_panel") ?? [])}
-        ${this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? [])}
+        ${showAdvancedModules ? this.renderFeatureGroup("admin_console", grouped.get("admin_console") ?? []) : `<p class="meta">Advanced admin modules are hidden in simple mode.</p>`}
         ${this.renderFeatureGroup("command_palette", grouped.get("command_palette") ?? [])}
       </section>
     `;
   }
 
   private renderFeatureLibraryDisclosure(): string {
-    const openByDefault = this.isAdvancedCohort();
+    const openByDefault = this.isAdvancedCohort() && !this.shouldProgressivelyDiscloseOnboarding();
+    if (this.hasAdminAccess() && this.shouldShowAdvancedAdminModules() && !this.advancedPanelViewedTracked) {
+      this.advancedPanelViewedTracked = true;
+      this.trackKpiEvent("advanced_panel_viewed", { panel: "feature_library" });
+    }
     return `
       <details class="stack panel-card" data-testid="feature-library-disclosure" ${openByDefault ? "open" : ""}>
         <summary><strong>Advanced feature library</strong> <span class="meta">Role-based progressive reveal for power workflows.</span></summary>
@@ -660,7 +821,12 @@ export class BlackoutWebApp {
 
   private renderFeatureToolbar(): string {
     const activeFeatures = this.getActivePresetFeatures();
-    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => activeFeatures[feature.presetKey] ?? false);
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
+    const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") return false;
+      return activeFeatures[feature.presetKey] ?? false;
+    });
 
     if (!enabledFeatures.length) {
       return `
@@ -731,7 +897,10 @@ export class BlackoutWebApp {
   private renderFeatureCommandPalette(): string {
     const query = this.commandPaletteQuery.trim().toLowerCase();
     const activeFeatures = this.getActivePresetFeatures();
+    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     const rows = FEATURE_UI_ENTRIES.filter((feature) => {
+      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
+      if (!showAdvancedModules && kind === "admin_console") return false;
       if (!query) return true;
       return `${feature.id} ${feature.name} ${feature.uiEntry}`.toLowerCase().includes(query);
     })
@@ -1109,6 +1278,74 @@ export class BlackoutWebApp {
         this.openCommandPalette();
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-home-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
+        this.store.patch({ channelDrawerOpen: false });
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-rooms-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "chat";
+        this.store.patch({ channelDrawerOpen: true });
+        this.featureActionResult = "Rooms opened. Create your first room or pick an existing one.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-calls-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "calls";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-admin-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.trackOnboardingDrop("opened_admin_before_completion");
+        this.settingsOpen = true;
+        this.featureActionResult = "Admin controls are available in Settings.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-send-invite']").forEach((button) => {
+      button.addEventListener("click", async () => {
+        try {
+          await globalThis.navigator.clipboard?.writeText(globalThis.location.href);
+          this.featureActionResult = "Invite link copied. Share it with your team.";
+        } catch {
+          this.featureActionResult = "Invite ready. Copy the current URL and share it with your team.";
+        }
+        globalThis.localStorage.setItem("blackout.onboarding.invite_sent", "true");
+        this.trackKpiEvent("kpi_invite_completion", { completed: true });
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-thread']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeRightPanel = "threads";
+        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        this.featureActionResult = "Thread panel opened. Start your first threaded discussion.";
+        this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "thread" });
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-start-call']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "calls";
+        this.activeTownhallMode = "standard";
+        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        this.featureActionResult = "Call setup ready from the Calls panel.";
+        this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "call" });
+        this.render();
+      });
+    });
+
 
     this.root.querySelectorAll<HTMLElement>("[data-action='close-command-palette']").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -1248,6 +1485,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-chat-panel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "chat";
+        this.settingsOpen = false;
         this.render();
       });
     });
@@ -1631,6 +1869,7 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+      this.trackAdvancedDiscovery("stego");
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
@@ -1698,6 +1937,7 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
       this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+      this.trackAdvancedDiscovery("governance");
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
@@ -2584,6 +2824,9 @@ export class BlackoutWebApp {
     this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
     this.telemetry.track("feature_open_success", { featureId: entry.id, entrypointKind: kind });
+    if (entry.id.includes("governance")) this.trackAdvancedDiscovery("governance");
+    if (entry.id.includes("federation")) this.trackAdvancedDiscovery("federation");
+    if (entry.id.includes("stego")) this.trackAdvancedDiscovery("stego");
     this.render();
   }
 

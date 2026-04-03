@@ -68,6 +68,51 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.diagnostics.deploymentPreset).toBe("tier_pro");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
   });
+
+  it("sets simple mode flags to starter-safe defaults", () => {
+    const config = resolveBlackoutRuntimeConfig({});
+
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
+  });
+
+  it("supports env overrides for simple mode flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_SIMPLE_MODE_DEFAULT: "false",
+      VITE_SHOW_ADVANCED_ADMIN_MODULES: "true",
+      VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE: "false",
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(false);
+  });
+
+
+  it("defaults existing tenants to pre-wave behavior unless explicitly enabled", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+  });
+
+  it("supports snake_case app-level flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_APP_LEVEL_FLAGS: JSON.stringify({
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      }),
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "tier_enterprise" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
+  });
   it("resolves engagement policy and notification rules from env", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_ENGAGEMENT_POLICY_SERVER: JSON.stringify({
