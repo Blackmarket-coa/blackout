@@ -15,25 +15,25 @@ describe("resolveMatrixHomeserverUrl", () => {
 });
 
 describe("resolveBlackoutRuntimeConfig", () => {
-  it("defaults to tier_enterprise preset bundle", () => {
+  it("defaults to starter preset bundle", () => {
     const config = resolveBlackoutRuntimeConfig({});
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
+    expect(config.presets.activePreset).toBe("starter");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
-    expect(config.presets.features["features.stego.enabled"]).toBe(true);
+    expect(config.presets.features["features.stego.enabled"]).toBe(false);
   });
 
   it("merges deployment, tenant, and user overrides when allowed", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: JSON.stringify({
-        preset: "tier_pro",
+        preset: "governance",
         defaults: {
           "features.matrix.widgetCompat": false,
         },
       }),
       VITE_FEATURE_TENANT_POLICY: JSON.stringify({
-        preset: "tier_enterprise",
+        preset: "sovereignty",
         overrides: {
           "features.townhall.enabled": false,
         },
@@ -49,7 +49,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
       VITE_RELEASE_COHORT: "beta",
     });
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
+    expect(config.presets.activePreset).toBe("sovereignty");
     expect(config.presets.features["features.matrix.widgetCompat"]).toBe(false);
     expect(config.presets.features["features.townhall.enabled"]).toBe(false);
     expect(config.presets.features["features.composer.typingIndicators"]).toBe(false);
@@ -58,14 +58,24 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.rollout.cohort).toBe("beta");
   });
 
-  it("accepts shorthand preset strings for deployment and tenant env vars", () => {
+  it("migrates legacy tier preset keys without forcing tenant changes", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: "tier_pro",
       VITE_FEATURE_TENANT_POLICY: "tier_enterprise",
     });
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
-    expect(config.presets.diagnostics.deploymentPreset).toBe("tier_pro");
+    expect(config.presets.activePreset).toBe("sovereignty");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("governance");
+  });
+
+  it("accepts shorthand preset strings for deployment and tenant env vars", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_DEPLOYMENT_DEFAULTS: "governance",
+      VITE_FEATURE_TENANT_POLICY: "sovereignty",
+    });
+
+    expect(config.presets.activePreset).toBe("sovereignty");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("governance");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
   });
 

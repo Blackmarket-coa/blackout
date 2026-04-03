@@ -56,6 +56,7 @@ const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
 const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
 const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
+const PRESET_AUDIT_LOG_STORAGE_KEY = "blackout.preset.audit.v1";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -166,10 +167,10 @@ export class BlackoutWebApp {
       cohort: "internal",
     },
     presets: {
-      activePreset: "tier_enterprise",
+      activePreset: "starter",
       features: {},
       diagnostics: {
-        deploymentPreset: "tier_enterprise",
+        deploymentPreset: "starter",
         tenantPreset: null,
         userOverrideCount: 0,
       },
@@ -994,6 +995,11 @@ export class BlackoutWebApp {
   private renderPresetManagementSection(): string {
     const previewFeatures = Object.entries(FEATURE_PRESET_BUNDLES[this.selectedPreset]);
     const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
+    const impact = this.describePresetImpact(this.appliedPreset, this.selectedPreset);
+    const auditRows = this.loadPresetAuditLog()
+      .slice(0, 5)
+      .map((entry) => `<li class="meta">${entry}</li>`)
+      .join("");
 
     return `
       <section class="stack panel-card" data-testid="feature-presets-panel">
@@ -1004,15 +1010,16 @@ export class BlackoutWebApp {
         <label class="stack">
           Preset
           <select data-testid="feature-preset-select" data-action="select-preset">
-            ${this.renderPresetOption("tier_free")}
-            ${this.renderPresetOption("tier_pro")}
-            ${this.renderPresetOption("tier_enterprise")}
+            ${this.renderPresetOption("starter")}
+            ${this.renderPresetOption("governance")}
+            ${this.renderPresetOption("sovereignty")}
           </select>
         </label>
         <div class="stack" data-testid="preset-explainer-panel">
           <h3>What changes with this preset</h3>
           <progress max="${previewFeatures.length}" value="${enabledFeatures.length}" data-testid="preset-capability-meter"></progress>
           <p class="meta">${enabledFeatures.length}/${previewFeatures.length} capabilities enabled.</p>
+          <p class="meta" data-testid="preset-impact-summary">${impact}</p>
           <ul class="stack preset-feature-list">
             ${enabledFeatures.map((key) => `<li class="meta" data-testid="preset-capability-${key.replaceAll(".", "-")}">${key}</li>`).join("")}
           </ul>
@@ -1021,8 +1028,38 @@ export class BlackoutWebApp {
           <button type="button" data-action="apply-preset" data-testid="apply-preset-button" ${this.selectedPreset === this.appliedPreset ? "disabled" : ""}>Apply preset</button>
           <button type="button" class="ghost-btn" data-action="rollback-preset" data-testid="rollback-preset-button" ${this.appliedPreset === this.deploymentPreset ? "disabled" : ""}>Reset to default preset</button>
         </div>
+        <div class="stack">
+          <h3>Preset audit trail</h3>
+          <ul class="stack" data-testid="preset-audit-log">${auditRows || '<li class="meta">No preset changes recorded yet.</li>'}</ul>
+        </div>
       </section>
     `;
+  }
+
+  private describePresetImpact(fromPreset: FeaturePresetKey, toPreset: FeaturePresetKey): string {
+    if (fromPreset === toPreset) return "No changes pending.";
+    const from = FEATURE_PRESET_BUNDLES[fromPreset];
+    const to = FEATURE_PRESET_BUNDLES[toPreset];
+    const enabledDelta = Object.keys(to).filter((key) => (to[key] ?? false) && !(from[key] ?? false)).length;
+    const disabledDelta = Object.keys(from).filter((key) => (from[key] ?? false) && !(to[key] ?? false)).length;
+    return `Impact summary: +${enabledDelta} capabilities enabled, -${disabledDelta} capabilities disabled.`;
+  }
+
+  private loadPresetAuditLog(): string[] {
+    const raw = globalThis.localStorage.getItem(PRESET_AUDIT_LOG_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as string[];
+      return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private appendPresetAuditLog(entry: string): void {
+    const current = this.loadPresetAuditLog();
+    const next = [entry, ...current].slice(0, 50);
+    globalThis.localStorage.setItem(PRESET_AUDIT_LOG_STORAGE_KEY, JSON.stringify(next));
   }
 
   private renderEpicDeliverySection(): string {
@@ -1110,10 +1147,9 @@ export class BlackoutWebApp {
 
   private getSubscriptionTierMatches(): SubscriptionTierMatch[] {
     return [
-      { tier: "tier_free", subscription: "Free", price: "$0", highlights: "Core chat, basic steg, community rooms" },
-      { tier: "tier_pro", subscription: "Signal", price: "$4.99/mo", highlights: "Advanced steg codecs + media vault" },
-      { tier: "tier_enterprise", subscription: "Sovereign", price: "$29/mo org", highlights: "Townhall SFU + federation controls" },
-      { tier: "tier_enterprise", subscription: "Coalition add-on", price: "+$9/mo org", highlights: "Governance rooms, quests, monetization" },
+      { tier: "starter", subscription: "Starter", price: "$0", highlights: "Core chat, templates, secure defaults" },
+      { tier: "governance", subscription: "Governance", price: "$9.99/mo", highlights: "Governance workflows and policy controls" },
+      { tier: "sovereignty", subscription: "Sovereignty", price: "$29/mo org", highlights: "Federation + advanced stego + sovereign controls" },
     ];
   }
 
@@ -1671,22 +1707,28 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='apply-preset']")?.addEventListener("click", () => {
       if (this.selectedPreset === this.appliedPreset) return;
-      const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?`) ?? true;
+      const summary = this.describePresetImpact(this.appliedPreset, this.selectedPreset);
+      const approved = globalThis.confirm?.(`Apply preset ${this.selectedPreset}?\n\n${summary}`) ?? true;
       if (!approved) return;
+      const previousPreset = this.appliedPreset;
       this.appliedPreset = this.selectedPreset;
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.selectedPreset] };
-      this.telemetry.track("preset_applied", { preset: this.appliedPreset, cohort: this.runtimeConfig.rollout.cohort });
+      this.appendPresetAuditLog(`${new Date().toISOString()} applied ${previousPreset} → ${this.appliedPreset}`);
+      this.telemetry.track("preset_applied", { preset: this.appliedPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='rollback-preset']")?.addEventListener("click", () => {
       if (this.appliedPreset === this.deploymentPreset) return;
-      const approved = globalThis.confirm?.(`Rollback preset to ${this.deploymentPreset}?`) ?? true;
+      const summary = this.describePresetImpact(this.appliedPreset, this.deploymentPreset);
+      const approved = globalThis.confirm?.(`Rollback preset to ${this.deploymentPreset}?\n\n${summary}`) ?? true;
       if (!approved) return;
+      const previousPreset = this.appliedPreset;
       this.appliedPreset = this.deploymentPreset;
       this.selectedPreset = this.deploymentPreset;
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.deploymentPreset] };
-      this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, cohort: this.runtimeConfig.rollout.cohort });
+      this.appendPresetAuditLog(`${new Date().toISOString()} rollback ${previousPreset} → ${this.deploymentPreset}`);
+      this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
       this.render();
     });
 

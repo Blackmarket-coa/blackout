@@ -1,6 +1,7 @@
 import {
   FEATURE_PRESET_BUNDLES,
   resolveFeaturePreset,
+  normalizeFeaturePresetKey,
   type DeploymentPresetConfig,
   type FeaturePresetKey,
   type ResolvedPresetConfig,
@@ -61,8 +62,9 @@ function parsePresetEnv(value: string | undefined): { preset?: FeaturePresetKey 
   if (!value) return undefined;
 
   const trimmed = value.trim();
-  if (isFeaturePresetKey(trimmed)) {
-    return { preset: trimmed };
+  const normalized = normalizeFeaturePresetKey(trimmed);
+  if (normalized) {
+    return { preset: normalized };
   }
 
   return parseJsonEnv<{ preset?: FeaturePresetKey } | undefined>(value, undefined);

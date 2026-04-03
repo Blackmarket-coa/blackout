@@ -1,3 +1,13 @@
+## Scope
+- [ ] Lane: A (UX) / B (Packaging) / C (Instrumentation)
+- [ ] PR wave: Wave 1 / Wave 2 / Wave 3
+
+## User-facing before/after
+- [ ] Before and after behavior clearly stated for users/admins.
+
+## Risk and rollback
+- [ ] Rollback toggle(s) documented (exact feature flag/config key).
+- [ ] Blast radius + rollback steps documented.
 ## Summary
 - [ ] User-facing before/after statement included.
 - [ ] Scope is mapped to a single wave (Wave 1 / Wave 2 / Wave 3).
