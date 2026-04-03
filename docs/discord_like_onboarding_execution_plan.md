@@ -1,167 +1,154 @@
-# Blackout Execution Plan: Discord-Like Simplicity with Governance + Sovereignty Intact
+# Blackout Blueprint: Simple Core + Optional Power
 
-## 1) Decisions made
+## Goal
+Deliver a **Discord-familiar default experience** while preserving Blackout differentiation via optional governance and sovereignty depth.
 
-1. **Adopt a dual-mode product posture:** `Simple` mode default for all new workspaces; `Advanced` mode available at any time from settings.
-2. **Enforce progressive disclosure for governance/privacy:** only show essential trust choices during onboarding; defer policy granularity to guided post-onboarding setup.
-3. **Ship in reversible slices with feature flags:** all major onboarding, governance explainers, and packaging flows behind kill switches and cohort targeting.
-4. **Standardize safe defaults:** conservative privacy defaults, sane moderation presets, and minimal initial role complexity.
-5. **Repackage positioning from “activist/co-op first” to “mission-critical teams with sovereignty needs”:** keep values and decentralization intact while broadening language and templates.
-6. **Instrument complexity burden explicitly:** track setup friction and time-to-first-value as first-class product metrics.
-
----
-
-## 2) Feature scope now / next / later
-
-### Now (0-6 weeks)
-
-| Initiative | User impact | Effort | Risk | Owner role | KPI |
-|---|---|---:|---|---|---|
-| **Guided workspace creation (3-step wizard)** | Faster first success; less setup anxiety | M | Over-simplifying options for power users | Product + Frontend | Workspace creation completion rate +15%; median setup time < 6 min |
-| **Default “Community Baseline” policy pack** | Immediate moderation/governance confidence without manual config | S | Defaults may not fit edge cases | Governance PM + Trust/Safety | % new workspaces using defaults at day 7 > 70% |
-| **Just-in-time governance explainers (inline “Why this matters”)** | Better trust comprehension with less cognitive load | S | Tooltip fatigue | UX Writer + Design | Explainer engagement > 35%; policy abandonment -20% |
-| **Role templates (Owner/Admin/Member/Guest)** | Reduces permission complexity | M | Template misfit for atypical orgs | Platform + Security | Permission misconfiguration incidents -30% |
-| **Feature flags for onboarding + policy UX** | Reversible rollout and safe experiments | S | Flag sprawl / config drift | Platform Infra | 100% of new onboarding features flag-controlled |
-
-### Next (6-12 weeks)
-
-| Initiative | User impact | Effort | Risk | Owner role | KPI |
-|---|---|---:|---|---|---|
-| **“Trust Center” single pane** (room/server health, policies, audits) | One place to understand governance status | M | Information density creep | Product + Frontend | Weekly active Trust Center users > 40% of admins |
-| **Adaptive onboarding by persona** (team lead, moderator, IT admin) | Higher relevance; reduced unnecessary steps | M | Incorrect persona detection | Product Analytics + Frontend | Onboarding step drop-off -25% |
-| **Governance simulator (“preview outcome”)** | Confidence before applying complex policy changes | L | Logic mismatch with production behavior | Platform + QA | Rollback after policy changes -40% |
-| **Import assistant from Discord/Slack role model** | Easier migration for pragmatic teams | L | Mapping inaccuracies | Integrations + PM | Import completion > 60%; week-4 retention +10% |
-
-### Later (12+ weeks)
-
-| Initiative | User impact | Effort | Risk | Owner role | KPI |
-|---|---|---:|---|---|---|
-| **Policy marketplace / curated templates** | Faster fit for non-activist verticals | M | Quality control of templates | Ecosystem PM + Governance | % installs from templates > 35% |
-| **Delegated governance workflows** (proposal, review, enactment) | Advanced sovereignty with less admin burden | L | Process complexity for small teams | Governance + Platform | Proposal-to-enactment cycle time -30% |
-| **Federation readiness score + guided hardening** | Makes decentralization practical for mainstream teams | L | Overreliance on score abstraction | Security + SRE | Federation setup success rate +20% |
+Design rules:
+- **Simple Core by default** (mainstream-first UX)
+- **Optional Power by role/tier** (admin-discoverable controls)
+- **Reversible rollout** (flags, cohorts, rollback)
+- **No compromise on security/governance integrity**
 
 ---
 
-## 3) UX changes
+## A) Default Chat Mode (mainstream familiar)
 
-1. **Onboarding IA simplification**
-   - Replace long forms with 3 core decisions: purpose, member model, safety preset.
-   - Defer advanced policy controls to a post-onboarding checklist.
-2. **Progressive disclosure framework**
-   - Use “basic/advanced” sections everywhere governance settings appear.
-   - Keep advanced hidden unless user intent is explicit.
-3. **Concise explainability standards**
-   - Every sensitive control gets one-line summary + “Learn more” drawer.
-   - Use plain language (“Who can invite?”) before protocol terms.
-4. **Safety-first defaults with visible override**
-   - Default to audited presets; expose clear “customize” affordance.
-5. **Reduced decision count in first session**
-   - Hard cap of 7 decisions before first successful conversation/channel activity.
+**Audience:** new workspaces, non-technical teams, invited members.
 
----
+**Visibility rule:** always visible to all users in all tiers.
 
-## 4) Operational packaging changes
-
-1. **New edition framing**
-   - **Blackout Team**: pragmatic default package (hosted or self-hosted quickstart).
-   - **Blackout Sovereign**: full governance/federation depth for high-control organizations.
-2. **Vertical onboarding kits** (nonprofit, co-op, startup, agency, newsroom)
-   - Include starter roles, moderation policy, compliance hints, and rollout checklist.
-3. **Admin launch playbooks**
-   - Day 0, Day 7, Day 30 operating guides to move from setup to healthy governance.
-4. **Support/CS enablement**
-   - “Complexity triage” scripts: identify when to keep defaults vs unlock advanced controls.
-5. **Rollout governance**
-   - Feature release rubric requiring: flag, rollback path, KPI hypothesis, documentation delta.
+| Feature | Keep/Hide/Defer | Why (user value + strategic fit) | KPI affected | Failure mode | Rollback trigger |
+|---|---|---|---|---|---|
+| Server/Workspace + channel list with unread badges | **Keep** | Matches Discord mental model; immediate orientation | D1 activation, first-session retention | Navigation confusion on multi-space accounts | p75 time-to-first-message worsens >10% vs baseline |
+| Text channels + threaded replies | **Keep** | Core team collaboration behavior; low cognitive load | Messages/user/day, thread adoption | Thread misuse causing fragmented chats | Thread usage <10% and confusion tickets >2% of WAU |
+| Voice rooms + push-to-talk | **Keep** | Real-time coordination expected by mainstream users | Voice DAU, session length | Permission friction, echo/audio support load | Voice join failures >3% sessions |
+| Reactions, mentions, emoji picker, typing indicators | **Keep** | Familiar social affordances improve engagement | 7-day retention, messages sent | Noise/notification fatigue | Notification mute rate spikes >20% |
+| One-click invite link + QR invite | **Keep** | Low-friction growth loop for pragmatic teams | Invite conversion, member growth | Unauthorized joins due to over-open links | Abuse/spam incident rate > baseline +25% |
+| Basic role presets (Owner/Admin/Member/Guest) | **Keep** | Keeps permissions understandable while safe by default | Admin setup time, permission incidents | Misfit for special org structures | Permission rollback actions >15% admins/week |
+| Safety baseline preset (anti-spam + reporting) | **Keep** | Trust signal without forcing governance complexity | Moderation incident rate | False positives frustrate users | Report false-positive ratio >8% |
+| DM + group DM | **Keep** | Expected chat capability; essential for parity | DMs/day, retention | Harassment risk in open communities | Abuse report rate in DM > threshold |
+| Granular custom role matrix editor | **Hide** (advanced) | Powerful but high cognitive load for onboarding | Onboarding completion | Admins cannot find needed control | >10% admins open help for permissions in week 1 |
+| Federation routing / peering setup | **Defer** from onboarding | Strategic differentiator but not first-session value | Setup completion, support volume | Early confusion and drop-off | Setup abandonment >5pp in onboarding experiments |
 
 ---
 
-## 5) Metrics and instrumentation
+## B) Advanced Modes
 
-### Core north-star and guardrail metrics
+## B1) Governance Pack
 
-- **Time to First Value (TTFV):** minutes from signup to first active channel conversation.
-- **Onboarding completion rate:** % users completing guided setup.
-- **Governance confidence score:** in-product pulse (“I understand my workspace safety setup”).
-- **Policy error rate:** reverted/misconfigured permissions per 100 admin actions.
-- **Advanced feature adoption quality:** usage of advanced controls without increase in support tickets.
+**Audience:** moderators, compliance-sensitive communities, cooperatives.
 
-### Event instrumentation requirements
+**Visibility rule:** hidden by default; discoverable if user is **Workspace Admin+** and workspace tier includes Governance Pack.
 
-- `onboarding_started`, `onboarding_step_completed`, `onboarding_completed`
-- `preset_applied`, `preset_customized`, `policy_changed`, `policy_reverted`
-- `explainability_opened`, `learn_more_clicked`
-- `advanced_mode_enabled`, `advanced_mode_disabled`
-- `first_channel_created`, `first_message_sent`, `first_admin_invite_sent`
+| Feature | Keep/Hide/Defer | Why (user value + strategic fit) | KPI affected | Failure mode | Rollback trigger |
+|---|---|---|---|---|---|
+| Policy templates (community, co-op, newsroom, nonprofit) | **Keep** | Progressive disclosure path from default to structured governance | Template adoption, policy misconfig rate | Template mismatch causes policy edits churn | Template churn >30% within 7 days |
+| Proposal + approval workflow for policy changes | **Keep** | Governance trust and accountability moat | Policy rollback rate, admin confidence score | Slow operations due to over-approval | Median policy change lead time >2x baseline |
+| Audit log with human-readable explanations | **Keep** | Transparency without requiring protocol expertise | Audit views/admin, trust score | Log noise/verbosity | Audit log bounce rate >60% |
+| Delegated moderation scopes | **Keep** | Scale moderation without full admin rights | Incident response SLA | Scope confusion creates gaps | Incident SLA misses +20% |
+| Advanced vote configuration (quorum, veto classes) | **Hide** (deep advanced) | Powerful, but should not appear before baseline adoption | Governance completion | Setup paralysis in new orgs | Onboarding completion drops >3pp in exposed cohort |
+| On-chain/cryptographic attestation options | **Defer** (later beta) | Strong differentiator but niche early demand | Enterprise conversion, advanced adoption | Support burden + trust confusion | Support tickets tagged “attestation” > threshold with low adoption |
 
-### Measurement cadence
+## B2) Sovereignty Pack
 
-- Weekly product review: funnel conversion + friction heatmap.
-- Bi-weekly governance review: policy safety incidents + rollback data.
-- Monthly strategy review: segment retention (activist/co-op vs pragmatic teams).
+**Audience:** self-hosters, regulated teams, infrastructure-capable orgs.
 
----
+**Visibility rule:** hidden by default; discoverable if user is **Org Owner/SysAdmin** and workspace tier includes Sovereignty Pack.
 
-## 6) Validation checklist
-
-### Product validation
-
-- [ ] New users can complete setup and send first message in < 10 minutes (p50).
-- [ ] At least 70% of new workspaces stay on defaults through day 7 without incident.
-- [ ] Fewer than 3 governance concepts shown before first successful collaboration event.
-
-### Engineering validation
-
-- [ ] Every new UX flow is behind a runtime flag.
-- [ ] Every flag has owner, expiry date, and rollback runbook.
-- [ ] No regression in auth, encryption, or moderation enforcement tests.
-
-### GTM/operations validation
-
-- [ ] Team vs Sovereign packaging is reflected in docs, pricing narrative, and demos.
-- [ ] At least 3 vertical kits reviewed by design partner teams.
-- [ ] CS playbooks reduce governance-related support resolution time by 20%.
+| Feature | Keep/Hide/Defer | Why (user value + strategic fit) | KPI affected | Failure mode | Rollback trigger |
+|---|---|---|---|---|---|
+| Deployment profiles (Hosted / Self-hosted / Hybrid) | **Keep** | Clear sovereignty choice without technical overload | Deployment conversion, setup success | Wrong profile choice at setup | Setup failure >5% by selected profile |
+| Data residency selector + retention presets | **Keep** | Practical compliance value for pragmatic teams | Enterprise win rate, admin completion | Misunderstood legal semantics | Residency-related support escalations >10/week |
+| Key management mode (managed vs customer-managed) | **Keep** | Critical trust differentiator with staged complexity | KMS adoption, security posture score | Misconfiguration risk for CMK | Encryption/key errors >1% active workspaces |
+| Federation peering wizard | **Hide** (advanced setup) | Important sovereignty feature but not day-0 essential | Federation setup success | Failed peering harms trust | Federation failure >15% attempts |
+| Multi-region failover orchestration UI | **Defer** | Valuable for mature teams; high complexity upfront | Uptime SLA adherence | Misconfigured failover events | Failover test success <95% in pilot cohort |
+| Custom protocol bridge matrix | **Defer** | High strategic optionality, low initial onboarding value | Integration adoption | Reliability issues affect perceived quality | Bridge incident rate > baseline +20% |
 
 ---
 
-## 7) Execution plan (2-week slices)
+## C) Feature-flag map and visibility rules
 
-### Slice 1 (Weeks 1-2): Baseline simplification + flags
+## Flag taxonomy
 
-- Finalize onboarding 3-step IA and copy.
-- Implement feature flags and rollout cohorts.
-- Add baseline policy pack and role templates.
-- Instrument core onboarding + policy events.
+- `core.default_chat_mode` (global, ON by default)
+- `adv.governance_pack.enabled`
+- `adv.sovereignty_pack.enabled`
+- `adv.governance.deep_vote_config`
+- `adv.sovereignty.peering_wizard`
+- `adv.sovereignty.failover_ui`
+- `adv.protocol.bridge_matrix`
 
-### Slice 2 (Weeks 3-4): Explainability + first-run quality
+## Visibility policy
 
-- Launch inline governance explainers.
-- Introduce post-onboarding checklist for advanced settings.
-- Run A/B test: current onboarding vs guided onboarding.
-- Review metrics and tighten confusing steps.
+1. **Hidden by default:** all `adv.*` flags are OFF for new workspaces.
+2. **Discoverability gates:** show “Unlock advanced controls” entry if:
+   - user role is Admin+ for Governance Pack; Owner/SysAdmin for Sovereignty Pack, and
+   - workspace tier entitles the pack.
+3. **Contextual reveal:** first reveal is read-only preview + impact note + recommended template.
+4. **Safety lock:** deep-advanced controls require explicit “I understand impact” confirmation.
+5. **Auditability:** every advanced toggle writes actor, timestamp, workspace, previous/new value.
 
-### Slice 3 (Weeks 5-6): Trust visibility + packaging shift
+## Flag operations
 
-- Ship Trust Center v1 for admins.
-- Publish Team vs Sovereign packaging pages and docs.
-- Enable vertical onboarding kits for 2 target segments.
-- Train CS/support on complexity triage scripts.
+- Owner per flag: PM + Engineering manager.
+- Required metadata: hypothesis, KPI target, rollback threshold, expiry date.
+- Rollout order: internal dogfood -> design partners -> 10% eligible admins -> 50% -> GA.
 
-### Slice 4 (Weeks 7-8): Persona adaptation + migration utility
+---
 
-- Add persona-based onboarding branching.
-- Prototype Discord/Slack role import assistant.
-- Run pilot with pragmatic team cohort.
-- Iterate based on drop-off and misconfiguration signals.
+## D) Kill/Defer list for initial onboarding (high-complexity surfaces)
 
-### Slice 5 (Weeks 9-10): Governance simulation (beta)
+These surfaces are removed from initial onboarding and moved to post-activation setup:
 
-- Deliver policy change simulator for high-risk actions.
-- Gate to admin beta cohort.
-- Compare rollback/incidence metrics vs control.
+| Surface | Decision | Why | KPI protected | Failure mode if shown too early | Rollback trigger |
+|---|---|---|---|---|---|
+| Full permission matrix editor | **Defer** | Too many decisions before first value | Onboarding completion | Choice paralysis | Completion drops >3pp |
+| Federation topology configuration | **Defer** | Infrastructure-heavy, low day-0 need | Time-to-first-message | Early abandonment | p50 setup time >10 min |
+| Custom governance constitution builder | **Defer** | High conceptual load for mainstream teams | Activation rate | Users skip setup entirely | Setup abandonment > baseline +15% |
+| Multi-region + failover topology UI | **Defer** | Requires SRE maturity not present at onboarding | Successful setup rate | Misconfiguration incidents | Pilot failover success <95% |
+| Advanced cryptographic attestation panel | **Hide** then staged beta | Niche high-value feature; poor first-run fit | Support burden, trust score | Misinterpretation of trust semantics | Ticket volume spikes with low adoption |
 
-### Slice 6 (Weeks 11-12): Consolidation + scale decision
+---
 
-- Promote winning onboarding flows to broader rollout.
-- Retire low-performing flags.
-- Publish QBR with KPI outcomes and recommended scale/hold decisions.
+## E) Migration-safe rollout plan
+
+## Phase 0 (Weeks 1-2): Guardrails + baseline
+
+- Keep existing users on current experience by default.
+- Introduce flags and entitlement plumbing.
+- Launch Default Chat Mode for **new workspaces only**.
+- Baseline metrics captured for control cohort.
+
+## Phase 1 (Weeks 3-4): Opt-in migration
+
+- Existing workspace admins get in-product “Try Simple Core” prompt.
+- One-click rollback for 30 days.
+- Auto-generated diff preview: what changes in nav/settings visibility.
+
+## Phase 2 (Weeks 5-8): Assisted migration
+
+- Target cohorts: low-governance-complexity teams first.
+- CS playbook for migration support.
+- Weekly review of activation, support tickets, and policy incidents.
+
+## Phase 3 (Weeks 9-12): Scale + stabilize
+
+- Promote to default for eligible existing workspaces with strong metrics.
+- Keep advanced packs hidden unless entitlement + role rules satisfied.
+- Decommission unused flags and keep high-risk controls gated.
+
+## Migration safety controls
+
+- Snapshot config before migration; restore in one click.
+- Immutable audit event for each migration/rollback.
+- Rollback trigger (global): if any guardrail metric degrades >10% for 2 consecutive weeks.
+
+---
+
+## Success scorecard (must pass)
+
+- Onboarding completion +15%.
+- p50 time-to-first-message < 6 minutes.
+- No increase in moderation/security incident rate.
+- Advanced feature adoption concentrated in admin cohorts (not accidental exposure).
+- Support tickets per 1k WAU flat or improved during rollout.
