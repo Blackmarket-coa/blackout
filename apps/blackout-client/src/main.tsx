@@ -21,6 +21,7 @@ const router = createBrowserRouter([
   },
 ]);
 
+// eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
   const authState = useAtomValue(authStateAtom);
   const cryptoInitError = useAtomValue(cryptoInitErrorAtom);

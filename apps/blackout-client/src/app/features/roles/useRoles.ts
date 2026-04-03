@@ -151,7 +151,7 @@ export const useSetRole = (roomId: string) => {
         delete users[userId];
       }
 
-      await client.sendStateEvent(roomId, 'm.room.power_levels', { ...content, users }, '');
+      await client.sendStateEvent(roomId, 'm.room.power_levels' as never, { ...content, users } as never, '');
     },
     [client, roomId, roomState.data],
   );
@@ -165,10 +165,10 @@ export const useManageRoles = (roomId: string) => {
     async (nextRoles: RoleDefinition[]) => {
       await client.sendStateEvent(
         roomId,
-        ROLES_EVENT_TYPE,
+        ROLES_EVENT_TYPE as never,
         {
           roles: sortRoles(nextRoles),
-        },
+        } as never,
         '',
       );
     },

@@ -63,25 +63,25 @@ const parseFeaturedChannels = (value: unknown): FeaturedChannel[] => {
 const parseOnboardingSteps = (value: unknown): OnboardingStep[] => {
   if (!Array.isArray(value)) return [];
 
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
+  const steps: OnboardingStep[] = [];
+  value.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const record = item as Record<string, unknown>;
 
-      if (record.type !== 'rules' && record.type !== 'roles' && record.type !== 'channels') return null;
-      if (typeof record.title !== 'string') return null;
+    if (record.type !== 'rules' && record.type !== 'roles' && record.type !== 'channels') return;
+    if (typeof record.title !== 'string') return;
 
-      return {
-        type: record.type,
-        title: record.title,
-        content: typeof record.content === 'string' ? record.content : undefined,
-        description: typeof record.description === 'string' ? record.description : undefined,
-        requireAccept: record.requireAccept === true,
-        roles: Array.isArray(record.roles) ? record.roles.filter((role): role is string => typeof role === 'string') : undefined,
-        channels: Array.isArray(record.channels) ? record.channels.filter((channel): channel is string => typeof channel === 'string') : undefined,
-      };
-    })
-    .filter((item): item is OnboardingStep => item !== null);
+    steps.push({
+      type: record.type,
+      title: record.title,
+      content: typeof record.content === 'string' ? record.content : undefined,
+      description: typeof record.description === 'string' ? record.description : undefined,
+      requireAccept: record.requireAccept === true,
+      roles: Array.isArray(record.roles) ? record.roles.filter((role): role is string => typeof role === 'string') : undefined,
+      channels: Array.isArray(record.channels) ? record.channels.filter((channel): channel is string => typeof channel === 'string') : undefined,
+    });
+  });
+  return steps;
 };
 
 export const useWelcomeContent = (spaceId: string) => {
@@ -135,7 +135,7 @@ export const useSetWelcomeContent = (spaceId: string) => {
 
   return useCallback(
     async (content: WelcomeContent) => {
-      await client.sendStateEvent(spaceId, WELCOME_EVENT_TYPE, content, '');
+      await client.sendStateEvent(spaceId, WELCOME_EVENT_TYPE as never, content as never, '');
     },
     [client, spaceId],
   );
@@ -146,7 +146,7 @@ export const useSetOnboardingContent = (spaceId: string) => {
 
   return useCallback(
     async (content: OnboardingContent) => {
-      await client.sendStateEvent(spaceId, ONBOARDING_EVENT_TYPE, content, '');
+      await client.sendStateEvent(spaceId, ONBOARDING_EVENT_TYPE as never, content as never, '');
     },
     [client, spaceId],
   );
@@ -154,26 +154,30 @@ export const useSetOnboardingContent = (spaceId: string) => {
 
 export const useOnboardingCompletion = (spaceId: string) => {
   const client = useMatrixClient();
+  const accountDataClient = client as unknown as {
+    getAccountData: (type: string) => { getContent: () => unknown } | undefined;
+    setAccountData: (type: string, content: Record<string, unknown>) => Promise<unknown>;
+  };
 
   const readCompletion = useCallback(async (): Promise<boolean> => {
-    const accountData = client.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY)?.getContent() as
+    const accountData = accountDataClient.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY)?.getContent() as
       | { spaces?: Record<string, boolean> }
       | undefined;
     return accountData?.spaces?.[spaceId] === true;
-  }, [client, spaceId]);
+  }, [accountDataClient, spaceId]);
 
   const markCompleted = useCallback(async () => {
-    const event = client.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY);
+    const event = accountDataClient.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY);
     const content = (event?.getContent() as { spaces?: Record<string, boolean> } | undefined) ?? {};
 
-    await client.setAccountData(ONBOARDING_ACCOUNT_DATA_KEY, {
+    await accountDataClient.setAccountData(ONBOARDING_ACCOUNT_DATA_KEY, {
       ...content,
       spaces: {
         ...(content.spaces ?? {}),
         [spaceId]: true,
       },
     });
-  }, [client, spaceId]);
+  }, [accountDataClient, spaceId]);
 
   return {
     readCompletion,
@@ -186,7 +190,7 @@ export const useSpaceMemberStats = (spaceId: string) => {
 
   return useMemo(() => {
     const joined = members.data.length;
-    const online = members.data.filter((member) => member.presence === 'online').length;
+    const online = members.data.filter((member) => member.events.member?.getContent<Record<string, unknown>>()?.presence === 'online').length;
 
     return {
       data: { memberCount: joined, onlineCount: online },

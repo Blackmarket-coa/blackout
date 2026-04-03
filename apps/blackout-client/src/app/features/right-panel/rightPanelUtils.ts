@@ -98,14 +98,20 @@ const collectSpaceGroups = (
   const orderedChildIds = getOrderedChildIds(space);
   const directRooms = orderedChildIds
     .map((roomId) => roomById.get(roomId))
-    .filter((room): room is Room => Boolean(room) && room.getType() !== 'm.space');
+    .filter((room): room is Room => {
+      if (!room) return false;
+      return room.getType() !== 'm.space';
+    });
 
   const label = parentPath ? `${parentPath} / ${space.name}` : space.name;
   groups.push({ id: space.roomId, label, rooms: directRooms });
 
   const childSpaces = orderedChildIds
     .map((roomId) => roomById.get(roomId))
-    .filter((room): room is Room => Boolean(room) && room.getType() === 'm.space');
+    .filter((room): room is Room => {
+      if (!room) return false;
+      return room.getType() === 'm.space';
+    });
 
   childSpaces.forEach((childSpace) => collectSpaceGroups(childSpace, roomById, groups, label, new Set(visited)));
 };
@@ -136,12 +142,18 @@ export const buildSpaceGroups = ({
   const roomById = new Map(rooms.map((room) => [room.roomId, room]));
   const directRooms = childIds
     .map((roomId) => roomById.get(roomId))
-    .filter((room): room is Room => Boolean(room) && room.getType() !== 'm.space');
+    .filter((room): room is Room => {
+      if (!room) return false;
+      return room.getType() !== 'm.space';
+    });
 
   const groups: SpaceGroup[] = [{ id: 'general', label: 'General', rooms: directRooms }];
   const childSpaces = childIds
     .map((roomId) => roomById.get(roomId))
-    .filter((room): room is Room => Boolean(room) && room.getType() === 'm.space');
+    .filter((room): room is Room => {
+      if (!room) return false;
+      return room.getType() === 'm.space';
+    });
 
   childSpaces.forEach((space) => collectSpaceGroups(space, roomById, groups));
   return groups;

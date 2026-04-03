@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../utils/markdown';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
@@ -48,7 +49,7 @@ const DcButton = ({
   variant = 'primary',
 }: {
   onClick?: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   variant?: 'primary' | 'secondary' | 'danger';
 }) => {
   const bg = variant === 'primary' ? dc.blurple : variant === 'danger' ? dc.danger : dc.inputBg;

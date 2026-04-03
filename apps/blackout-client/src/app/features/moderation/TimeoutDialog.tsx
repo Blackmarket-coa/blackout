@@ -118,7 +118,7 @@ export const TimeoutDialog = ({
       const previousPower = typeof currentUsers[targetUserId] === 'number' ? currentUsers[targetUserId] : 0;
 
       const nextUsers = { ...currentUsers, [targetUserId]: 0 };
-      await client.sendStateEvent(roomId, POWER_EVENT, { ...content, users: nextUsers }, '');
+      await client.sendStateEvent(roomId, POWER_EVENT as never, { ...content, users: nextUsers } as never, '');
 
       const timeoutEvent = roomRef.currentState.getStateEvents(TIMEOUT_EVENT, '');
       const existing = parseTimeouts(timeoutEvent?.getContent<Record<string, unknown>>()).filter(
@@ -139,7 +139,7 @@ export const TimeoutDialog = ({
         },
       ];
 
-      await client.sendStateEvent(roomId, TIMEOUT_EVENT, { entries: nextEntries }, '');
+      await client.sendStateEvent(roomId, TIMEOUT_EVENT as never, { entries: nextEntries } as never, '');
 
       window.setTimeout(() => {
         void restoreTimeout(roomId, targetUserId, previousPower, client);
@@ -215,12 +215,12 @@ const restoreTimeout = async (roomId: string, userId: string, previousPower: num
   const users = (content.users && typeof content.users === 'object' ? content.users : {}) as Record<string, number>;
   if (users[userId] === previousPower) return;
 
-  await client.sendStateEvent(roomId, POWER_EVENT, { ...content, users: { ...users, [userId]: previousPower } }, '');
+  await client.sendStateEvent(roomId, POWER_EVENT as never, { ...content, users: { ...users, [userId]: previousPower } } as never, '');
 
   const timeoutEvent = room.currentState.getStateEvents(TIMEOUT_EVENT, '');
   const entries = parseTimeouts(timeoutEvent?.getContent<Record<string, unknown>>()).filter(
     (entry) => !(entry.userId === userId && entry.expiresAt <= Date.now()),
   );
 
-  await client.sendStateEvent(roomId, TIMEOUT_EVENT, { entries }, '');
+  await client.sendStateEvent(roomId, TIMEOUT_EVENT as never, { entries } as never, '');
 };
