@@ -128,7 +128,7 @@ export const useSetDeadDrop = (roomId: string) => {
 
   return useCallback(
     async (config: DeadDropConfig) => {
-      await client.sendStateEvent(roomId, DEAD_DROP_EVENT_TYPE, config, '');
+      await client.sendStateEvent(roomId, DEAD_DROP_EVENT_TYPE as never, config as never, '');
     },
     [client, roomId],
   );
@@ -139,8 +139,8 @@ export const useDeadDropQueueActions = (roomId: string) => {
 
   return useMemo(
     () => ({
-      flush: async () => client.sendStateEvent(roomId, DEAD_DROP_COMMAND_EVENT_TYPE, { action: 'flush', at: Date.now() }, ''),
-      clear: async () => client.sendStateEvent(roomId, DEAD_DROP_COMMAND_EVENT_TYPE, { action: 'clear', at: Date.now() }, ''),
+      flush: async () => client.sendStateEvent(roomId, DEAD_DROP_COMMAND_EVENT_TYPE as never, { action: 'flush', at: Date.now() } as never, ''),
+      clear: async () => client.sendStateEvent(roomId, DEAD_DROP_COMMAND_EVENT_TYPE as never, { action: 'clear', at: Date.now() } as never, ''),
     }),
     [client, roomId],
   );

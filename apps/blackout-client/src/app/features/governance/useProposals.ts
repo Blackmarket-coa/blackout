@@ -162,7 +162,7 @@ export const useCastVote = (roomId: string) => {
     async (payload: VoteContent) => {
       await (client as unknown as {
         sendEvent: (rid: string, et: string, content: Record<string, unknown>) => Promise<unknown>;
-      }).sendEvent(roomId, VOTE_EVENT_TYPE, payload);
+      }).sendEvent(roomId, VOTE_EVENT_TYPE, payload as unknown as Record<string, unknown>);
     },
     [client, roomId],
   );
@@ -233,7 +233,7 @@ export const useCreateProposal = (roomId: string) => {
   return useCallback(
     async (content: ProposalContent) => {
       const stateKey = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await client.sendStateEvent(roomId, PROPOSAL_EVENT_TYPE, content, stateKey);
+      await client.sendStateEvent(roomId, PROPOSAL_EVENT_TYPE as never, content as never, stateKey);
     },
     [client, roomId],
   );
