@@ -40,7 +40,7 @@ const roomKindIcon = (room: Room): string => {
   return '💭';
 };
 
-const roomUnread = (room: Room): number => room.getUnreadNotificationCount('total') || 0;
+const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
 
 const isTablet = (width: number): boolean => width < 1100;
 const isMobile = (width: number): boolean => width < 760;
@@ -166,7 +166,7 @@ export const ClientLayout = () => {
 
   const persistSpaceOrder = async (next: string[]) => {
     setSpaceOrder(next);
-    await client.setAccountData('blackout.space_order', { order: next });
+    await client.setAccountData('blackout.space_order' as never, { order: next } as never);
   };
 
   const openRoom = (roomId: string, jumpToEventId?: string) => {

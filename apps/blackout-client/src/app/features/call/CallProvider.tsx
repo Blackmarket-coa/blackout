@@ -176,6 +176,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [joined, preferredAudioDeviceId, preferredVideoDeviceId]);
 
   useEffect(() => {
+    const emitter = client as unknown as {
+      on: (event: string, cb: (event: MatrixEvent, state: RoomState) => void) => void;
+      off: (event: string, cb: (event: MatrixEvent, state: RoomState) => void) => void;
+    };
+
     const onRoomStateEvent = (event: MatrixEvent, state: RoomState) => {
       if (!roomId || state.roomId !== roomId) return;
       if (!MSC3401_EVENT_TYPES.includes(event.getType())) return;
@@ -186,8 +191,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       setMembership((prev) => ({ ...prev, [member.userId]: member }));
     };
 
-    client.on('RoomState.events', onRoomStateEvent);
-    return () => client.off('RoomState.events', onRoomStateEvent);
+    emitter.on('RoomState.events', onRoomStateEvent);
+    return () => {
+      emitter.off('RoomState.events', onRoomStateEvent);
+    };
   }, [client, roomId]);
 
   const leaveCall = useCallback(async () => {

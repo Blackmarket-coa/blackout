@@ -26,7 +26,7 @@ export const useInboxModel = () => {
   useEffect(() => {
     if (!userId || loaded) return;
 
-    const accountEvent = client.getAccountData(INBOX_ACCOUNT_DATA_KEY);
+    const accountEvent = client.getAccountData(INBOX_ACCOUNT_DATA_KEY as never);
     const content = accountEvent?.getContent<Record<string, unknown>>() ?? {};
     const version = typeof content.version === 'number' ? content.version : 1;
     const readByUser = version >= 2 ? (content.users as Record<string, unknown> | undefined)?.[userId] : content[userId];
@@ -34,15 +34,15 @@ export const useInboxModel = () => {
     if (readByUser && typeof readByUser === 'object' && !Array.isArray(readByUser)) {
       const next = Object.fromEntries(
         Object.entries(readByUser as Record<string, unknown>).filter(([, isRead]) => isRead === true),
-      );
+      ) as Record<string, boolean>;
       setReadEventIds(next);
 
       if (version < 2) {
-        void client.setAccountData(INBOX_ACCOUNT_DATA_KEY, {
+        void client.setAccountData(INBOX_ACCOUNT_DATA_KEY as never, {
           version: 2,
           users: { [userId]: next },
           updatedAt: Date.now(),
-        });
+        } as never);
       }
     }
 
@@ -51,11 +51,11 @@ export const useInboxModel = () => {
 
   useEffect(() => {
     if (!userId || !loaded) return;
-    void client.setAccountData(INBOX_ACCOUNT_DATA_KEY, {
+    void client.setAccountData(INBOX_ACCOUNT_DATA_KEY as never, {
       version: 2,
       users: { [userId]: readEventIds },
       updatedAt: Date.now(),
-    });
+    } as never);
   }, [client, loaded, readEventIds, userId]);
 
   useEffect(() => {

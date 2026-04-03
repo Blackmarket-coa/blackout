@@ -48,7 +48,7 @@ const buildIndex = (rooms: Room[]): BaseResult[] => {
 
   rooms.forEach((room) => {
     const alias = room.getCanonicalAlias() ?? '';
-    const unread = room.getUnreadNotificationCount('total');
+    const unread = room.getUnreadNotificationCount();
     const isSpace = room.getType() === 'm.space';
 
     list.push({
@@ -175,7 +175,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
         const room = await client.createRoom({
           is_direct: true,
           invite: [result.id],
-          preset: 'trusted_private_chat',
+          preset: 'private_chat' as never,
         });
         setSelectedRoomId(room.room_id);
         onClose();
