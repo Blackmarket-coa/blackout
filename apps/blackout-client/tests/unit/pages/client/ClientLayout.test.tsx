@@ -6,13 +6,17 @@ import { Provider, createStore } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import ClientLayout from '../../../../src/app/pages/client/ClientLayout';
 import { rightPanelAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../../src/app/state/navigation';
+import { userIdAtom } from '../../../../src/app/state/auth';
 
 let mockRoom: Room | null = null;
 let mockEvents: MatrixEvent[] = [];
+const mountedRoots: ReactDOM.Root[] = [];
 const mockClient = {
   getRooms: () => [] as Room[],
   getUserId: () => '@me:example.org',
+  getUser: () => ({ presence: 'online' }),
   setAccountData: vi.fn().mockResolvedValue(undefined),
+  sendReadReceipt: vi.fn().mockResolvedValue(undefined),
   on: vi.fn(),
   off: vi.fn(),
 };
@@ -28,6 +32,10 @@ vi.mock('../../../../src/app/features/deaddrop', () => ({
   DeadDropIndicator: () => null,
   DeadDropSettings: () => null,
   useDeadDrop: () => ({ data: { enabled: false }, queueCount: 0 }),
+}));
+
+vi.mock('../../../../src/app/features/settings', () => ({
+  SettingsPage: () => <div data-testid="settings-page">settings page</div>,
 }));
 
 vi.mock('../../../../src/app/features/room/MessageComposer', () => ({
@@ -53,6 +61,7 @@ vi.mock('../../../../src/app/hooks/useTimeline', () => ({
 const makeEvent = (id: string, body: string, relType?: string): MatrixEvent =>
   ({
     getId: () => id,
+    getType: () => 'm.room.message',
     getTs: () => 1_700_000_000_000,
     getContent: () => ({ body, ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}) }),
   }) as unknown as MatrixEvent;
@@ -77,6 +86,10 @@ const makeRoom = ({
     getMyMembership: () => 'join',
     getJoinedMembers: () => [],
     getEventReadUpTo: () => '$read',
+    getLiveTimeline: () => ({
+      getEvents: () => [],
+    }),
+    findEventById: (eventId: string) => mockEvents.find((event) => event.getId() === eventId) ?? null,
     currentState: {
       getStateEvents: (eventType: string) => {
         if (eventType === 'm.space.child') {
@@ -113,6 +126,7 @@ const renderLayout = ({
   store.set(selectedRoomIdAtom, selectedRoomId);
   store.set(selectedSpaceIdAtom, selectedSpaceId);
   store.set(rightPanelAtom, rightPanel);
+  store.set(userIdAtom, '@me:example.org');
 
   act(() => {
     root.render(
@@ -122,6 +136,7 @@ const renderLayout = ({
     );
   });
 
+  mountedRoots.push(root);
   return { container, root, store };
 };
 
@@ -133,6 +148,9 @@ describe('ClientLayout UI wiring', () => {
   });
 
   afterEach(() => {
+    act(() => {
+      mountedRoots.splice(0).forEach((root) => root.unmount());
+    });
     document.body.innerHTML = '';
   });
 
@@ -230,5 +248,47 @@ describe('ClientLayout UI wiring', () => {
 
     expect(secondRender.container.textContent).toContain('▶ Rooms');
     expect(secondRender.container.textContent).not.toContain('Nested');
+  });
+
+  it('opens unified quick switcher from ClientLayout and supports Enter/Escape', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    mockRoom = roomA;
+    const rooms = [roomA];
+
+    const { container, store } = renderLayout({
+      rooms,
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+
+    const quickInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    expect(quickInput).toBeTruthy();
+    act(() => {
+      quickInput.focus();
+    });
+
+    act(() => {
+      quickInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(store.get(selectedRoomIdAtom)).toBe('!room-a:example.org');
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const reopenedInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    act(() => {
+      reopenedInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+    expect(container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]')).toBeNull();
   });
 });

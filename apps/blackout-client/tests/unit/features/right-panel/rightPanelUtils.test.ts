@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import {
   buildSpaceGroups,
+  getMentionInboxItems,
   getPinnedEvents,
   getThreadEvents,
   getUnreadMarkerEventId,
@@ -24,17 +25,23 @@ const mockEvent = ({
   id,
   body,
   relType,
+  mentions,
+  ts = 1_700_000_000_000,
 }: {
   id: string;
   body?: string;
   relType?: string;
+  mentions?: { user_ids?: string[]; room?: boolean };
+  ts?: number;
 }): MatrixEvent =>
   ({
     getId: () => id,
-    getTs: () => 1_700_000_000_000,
+    getTs: () => ts,
+    getType: () => 'm.room.message',
     getContent: () => ({
       ...(body ? { body } : {}),
       ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}),
+      ...(mentions ? { 'm.mentions': mentions } : {}),
     }),
   }) as unknown as MatrixEvent;
 
@@ -58,6 +65,9 @@ const mockRoom = ({
     name,
     getType: () => type,
     getEventReadUpTo: () => readUpTo,
+    getLiveTimeline: () => ({
+      getEvents: () => [],
+    }),
     currentState: {
       getStateEvents: (eventType: string) => {
         if (eventType === 'm.space.child') {
@@ -135,5 +145,44 @@ describe('rightPanelUtils', () => {
 
     expect(getUnreadMarkerEventId(room, '@me:example.org')).toBe('$event');
     expect(getUnreadMarkerEventId(room, null)).toBeNull();
+  });
+
+  it('builds mention inbox from structured mention signals and dedupes by event/time window', () => {
+    const mentionA = mockEvent({
+      id: '$mention-a',
+      body: 'hello there',
+      mentions: { user_ids: ['@me:example.org'] },
+      ts: 1_700_000_100_000,
+    });
+    const mentionDuplicate = mockEvent({
+      id: '$mention-dup',
+      body: 'hello there',
+      mentions: { user_ids: ['@me:example.org'] },
+      ts: 1_700_000_120_000,
+    });
+    const mentionAll = mockEvent({
+      id: '$mention-all',
+      body: 'attention everyone',
+      mentions: { room: true },
+      ts: 1_700_000_180_000,
+    });
+    const room = {
+      ...mockRoom({ roomId: '!mentions:example.org', name: 'Mentions', readUpTo: '$mention-a' }),
+      getLiveTimeline: () => ({
+        getEvents: () => [mentionA, mentionDuplicate, mentionAll],
+      }),
+    } as unknown as Room;
+
+    const items = getMentionInboxItems({
+      rooms: [room],
+      userId: '@me:example.org',
+      dedupeWindowMs: 60_000,
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items[0]?.eventId).toBe('$mention-all');
+    expect(items[0]?.unread).toBe(true);
+    expect(items[1]?.eventId).toBe('$mention-a');
+    expect(items[1]?.unread).toBe(false);
   });
 });

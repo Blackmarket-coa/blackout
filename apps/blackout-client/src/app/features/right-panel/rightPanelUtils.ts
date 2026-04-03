@@ -151,3 +151,90 @@ export const getUnreadMarkerEventId = (room: Room | null, userId: string | null)
   if (!room || !userId) return null;
   return room.getEventReadUpTo(userId, true) ?? null;
 };
+
+const getMentionedUserIds = (content: Record<string, unknown>): string[] => {
+  const mentions = content['m.mentions'];
+  if (!mentions || typeof mentions !== 'object') return [];
+
+  const users = (mentions as Record<string, unknown>).user_ids;
+  if (!Array.isArray(users)) return [];
+  return users.filter((userId): userId is string => typeof userId === 'string');
+};
+
+const eventHighlightsUser = (event: MatrixEvent): boolean => {
+  const pushActions = (event as MatrixEvent & { getPushActions?: () => unknown }).getPushActions?.();
+  if (!pushActions || typeof pushActions !== 'object') return false;
+
+  const tweaks = (pushActions as { tweaks?: unknown }).tweaks;
+  if (!tweaks || typeof tweaks !== 'object') return false;
+  return Boolean((tweaks as Record<string, unknown>).highlight);
+};
+
+export interface MentionInboxItem {
+  roomId: string;
+  roomName: string;
+  eventId: string;
+  body: string;
+  timestamp: number;
+  unread: boolean;
+}
+
+export const getMentionInboxItems = ({
+  rooms,
+  userId,
+  now = Date.now(),
+  dedupeWindowMs = 60_000,
+}: {
+  rooms: Room[];
+  userId: string | null;
+  now?: number;
+  dedupeWindowMs?: number;
+}): MentionInboxItem[] => {
+  if (!userId) return [];
+
+  const dedupeKeys = new Set<string>();
+  const byEventId = new Set<string>();
+  const items: MentionInboxItem[] = [];
+
+  rooms.forEach((room) => {
+    const events = room
+      .getLiveTimeline()
+      .getEvents()
+      .filter((event) => event.getType() === 'm.room.message');
+
+    const readUpToEventId = room.getEventReadUpTo(userId, true);
+    const readUpToTs = readUpToEventId
+      ? events.find((event) => event.getId() === readUpToEventId)?.getTs?.() ?? 0
+      : 0;
+
+    events.forEach((event) => {
+      const eventId = event.getId();
+      if (!eventId || byEventId.has(eventId)) return;
+
+      const content = event.getContent<Record<string, unknown>>();
+      const body = typeof content.body === 'string' ? content.body : '';
+      const timestamp = event.getTs?.() ?? now;
+      const mentionUsers = getMentionedUserIds(content);
+      const mentionAll = Boolean((content['m.mentions'] as Record<string, unknown> | undefined)?.room);
+      const isMentioned = mentionUsers.includes(userId) || mentionAll || eventHighlightsUser(event);
+      if (!isMentioned) return;
+
+      const dedupeKey = `${room.roomId}:${body.trim().toLowerCase().slice(0, 64)}:${Math.floor(timestamp / dedupeWindowMs)}`;
+      if (dedupeKeys.has(dedupeKey)) return;
+
+      dedupeKeys.add(dedupeKey);
+      byEventId.add(eventId);
+
+      items.push({
+        roomId: room.roomId,
+        roomName: room.name,
+        eventId,
+        body,
+        timestamp,
+        unread: timestamp > readUpToTs,
+      });
+    });
+  });
+
+  return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 40);
+};

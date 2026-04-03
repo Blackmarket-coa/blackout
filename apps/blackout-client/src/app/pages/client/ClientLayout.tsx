@@ -18,10 +18,12 @@ import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } fr
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
+import { SettingsPage } from '../../features/settings';
+import { useOptionalCall } from '../../features/call';
 import { useRoomTimeline } from '../../hooks/useTimeline';
 import { useRoom } from '../../hooks/useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
-import { buildSpaceGroups, getUnreadMarkerEventId } from '../../features/right-panel/rightPanelUtils';
+import { buildSpaceGroups, getMentionInboxItems, getUnreadMarkerEventId } from '../../features/right-panel/rightPanelUtils';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
 
@@ -53,9 +55,12 @@ export const ClientLayout = () => {
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
   const previousRoomIdRef = useRef<string | null>(null);
+  const [inboxReadEventIds, setInboxReadEventIds] = useState<Record<string, boolean>>({});
+  const callState = useOptionalCall();
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -116,31 +121,17 @@ export const ClientLayout = () => {
   const timelineState = useRoomTimeline(selectedRoomId ?? '');
   const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
 
-  const mentionItems = useMemo(() => {
-    if (!userId) return [];
-
-    return rooms
-      .flatMap((room) =>
-        room
-          .getLiveTimeline()
-          .getEvents()
-          .filter((event) => event.getType() === 'm.room.message')
-          .filter((event) => {
-            const content = event.getContent<Record<string, unknown>>();
-            const body = typeof content.body === 'string' ? content.body : '';
-            return body.includes(userId);
-          })
-          .map((event) => ({
-            roomId: room.roomId,
-            roomName: room.name,
-            eventId: event.getId(),
-            body: (event.getContent<Record<string, unknown>>().body as string | undefined) ?? '',
-          })),
-      )
-      .filter((entry): entry is { roomId: string; roomName: string; eventId: string; body: string } => Boolean(entry.eventId))
-      .slice(-40)
-      .reverse();
-  }, [rooms, userId]);
+  const mentionItems = useMemo(
+    () =>
+      getMentionInboxItems({
+        rooms,
+        userId,
+      }).map((item) => ({
+        ...item,
+        unread: item.unread && !inboxReadEventIds[item.eventId],
+      })),
+    [inboxReadEventIds, rooms, userId],
+  );
 
   const groups = useMemo(
     () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
@@ -157,6 +148,24 @@ export const ClientLayout = () => {
     setSelectedRoomId(roomId);
     setJumpTargetEventId(jumpToEventId ?? null);
     setUnreadMarkerEventId(getUnreadMarkerEventId(room, client.getUserId()));
+  };
+
+  const markEventRead = async (roomId: string, eventId: string) => {
+    const room = rooms.find((candidate) => candidate.roomId === roomId);
+    const event = room?.findEventById(eventId);
+    if (!event) return;
+
+    const receiptClient = client as typeof client & {
+      sendReadReceipt?: (event: unknown) => Promise<unknown>;
+    };
+    if (receiptClient.sendReadReceipt) {
+      await receiptClient.sendReadReceipt(event);
+    }
+    setInboxReadEventIds((prev) => ({ ...prev, [eventId]: true }));
+  };
+
+  const markAllMentionsRead = async () => {
+    await Promise.all(mentionItems.map((item) => markEventRead(item.roomId, item.eventId)));
   };
 
   const renderRoomContent = () => {
@@ -239,12 +248,22 @@ export const ClientLayout = () => {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
-                <button type="button" style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                <button type="button" onClick={() => setSettingsOpen(true)} style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
                   Settings
                 </button>
-                <button type="button" style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
-                  Mute
-                </button>
+                {callState?.joined && callState.roomId ? (
+                  <button
+                    type="button"
+                    onClick={() => callState.setMuted(!callState.muted)}
+                    style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}
+                  >
+                    {callState.muted ? 'Unmute' : 'Mute'}
+                  </button>
+                ) : (
+                  <button type="button" disabled style={{ flex: 1, border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11, opacity: 0.6 }}>
+                    No Call
+                  </button>
+                )}
               </div>
             </section>
           ) : null}
@@ -255,7 +274,6 @@ export const ClientLayout = () => {
         <aside style={{ borderRight: '1px solid var(--border-default)', background: 'var(--bg-surface)', display: mobile && selectedRoomId ? 'none' : 'block' }}>
           <header style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-default)', padding: '0 10px' }}>
             <strong>{selectedSpaceId ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ?? 'Space' : 'Home'}</strong>
-            <button type="button" onClick={() => setQuickOpen(true)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>Ctrl+K</button>
           </header>
 
           <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
@@ -331,7 +349,10 @@ export const ClientLayout = () => {
           <aside style={{ position: 'absolute', top: 44, right: 8, width: 360, maxHeight: '55vh', overflowY: 'auto', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: '-2px 4px 16px rgba(0,0,0,.2)', zIndex: 5 }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottom: '1px solid var(--border-default)' }}>
               <strong>Mentions Inbox</strong>
-              <button type="button" onClick={() => setInboxOpen(false)}>Close</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => void markAllMentionsRead()}>Mark all read</button>
+                <button type="button" onClick={() => setInboxOpen(false)}>Close</button>
+              </div>
             </header>
             <div style={{ padding: 8, display: 'grid', gap: 6 }}>
               {mentionItems.length === 0 ? <small style={{ color: 'var(--text-secondary)' }}>No mentions yet.</small> : null}
@@ -341,15 +362,28 @@ export const ClientLayout = () => {
                   type="button"
                   onClick={() => {
                     openRoom(item.roomId, item.eventId);
+                    void markEventRead(item.roomId, item.eventId);
                     setInboxOpen(false);
                   }}
-                  style={{ textAlign: 'left', border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: 8 }}
+                  style={{ textAlign: 'left', border: item.unread ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)', borderRadius: 8, background: item.unread ? 'var(--accent-muted)' : 'var(--bg-input)', padding: 8 }}
                 >
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{item.roomName}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {item.roomName} {item.unread ? '• Unread' : '• Read'}
+                  </div>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.body}</div>
                 </button>
               ))}
             </div>
+          </aside>
+        ) : null}
+
+        {settingsOpen ? (
+          <aside style={{ position: 'absolute', inset: 16, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 12, padding: 10, zIndex: 10, overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <strong>Settings</strong>
+              <button type="button" onClick={() => setSettingsOpen(false)}>Close</button>
+            </div>
+            <SettingsPage />
           </aside>
         ) : null}
 
