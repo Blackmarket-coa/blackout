@@ -35,6 +35,15 @@ function parseJsonEnv<T>(value: string | undefined, fallback: T): T {
   }
 }
 
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") return false;
+  return fallback;
+}
+
 function isFeaturePresetKey(value: string): value is FeaturePresetKey {
   return value in FEATURE_PRESET_BUNDLES;
 }
@@ -68,6 +77,11 @@ export interface BlackoutRuntimeConfig {
     cohort: ReleaseCohort;
   };
   presets: ResolvedPresetConfig;
+  simpleMode: {
+    enabledByDefault: boolean;
+    showAdvancedAdminModules: boolean;
+    onboardingProgressiveDisclosure: boolean;
+  };
   engagement: {
     policy: EngagementPolicy;
     notificationRules: NotificationRule[];
@@ -95,6 +109,11 @@ export function resolveBlackoutRuntimeConfig(env: Record<string, string | undefi
       cohort: resolveReleaseCohort(env.VITE_RELEASE_COHORT),
     },
     presets: resolveFeaturePreset(deployment ?? {}, tenantPolicy, userOverrides),
+    simpleMode: {
+      enabledByDefault: parseBooleanEnv(env.VITE_SIMPLE_MODE_DEFAULT, true),
+      showAdvancedAdminModules: parseBooleanEnv(env.VITE_SHOW_ADVANCED_ADMIN_MODULES, false),
+      onboardingProgressiveDisclosure: parseBooleanEnv(env.VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE, true),
+    },
     engagement: {
       policy: resolveEngagementPolicy({
         server: serverEngagement,

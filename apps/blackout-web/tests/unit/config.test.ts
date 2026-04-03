@@ -68,6 +68,27 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.diagnostics.deploymentPreset).toBe("tier_pro");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
   });
+
+  it("sets simple mode flags to starter-safe defaults", () => {
+    const config = resolveBlackoutRuntimeConfig({});
+
+    expect(config.simpleMode.enabledByDefault).toBe(true);
+    expect(config.simpleMode.showAdvancedAdminModules).toBe(false);
+    expect(config.simpleMode.onboardingProgressiveDisclosure).toBe(true);
+  });
+
+  it("supports env overrides for simple mode flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_SIMPLE_MODE_DEFAULT: "false",
+      VITE_SHOW_ADVANCED_ADMIN_MODULES: "true",
+      VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE: "false",
+    });
+
+    expect(config.simpleMode.enabledByDefault).toBe(false);
+    expect(config.simpleMode.showAdvancedAdminModules).toBe(true);
+    expect(config.simpleMode.onboardingProgressiveDisclosure).toBe(false);
+  });
+
   it("resolves engagement policy and notification rules from env", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_ENGAGEMENT_POLICY_SERVER: JSON.stringify({

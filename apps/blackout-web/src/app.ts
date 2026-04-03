@@ -168,6 +168,11 @@ export class BlackoutWebApp {
         userOverrideCount: 0,
       },
     },
+    simpleMode: {
+      enabledByDefault: true,
+      showAdvancedAdminModules: false,
+      onboardingProgressiveDisclosure: true,
+    },
     engagement: {
       policy: {
         notifications: { mode: "balanced" },
@@ -264,6 +269,7 @@ export class BlackoutWebApp {
           unreadByChannel: state.unreadByChannel,
           currentUserDisplayName: state.session?.user.username ?? "User",
           currentUserHandle: state.session ? `@${state.session.user.username}` : "@user",
+          showAdvancedModules: !this.runtimeConfig.simpleMode.enabledByDefault || this.runtimeConfig.simpleMode.showAdvancedAdminModules,
         })}
         ${this.renderWorkspacePanel()}
       </section>

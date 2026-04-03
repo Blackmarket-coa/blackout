@@ -209,8 +209,8 @@ Source-of-truth alignment:
 ---
 
 ## Immediate sequencing checklist (today)
-- [ ] Create three lane tickets with explicit file/package boundaries.
-- [ ] Open PR Wave 1 first (flag scaffolding only).
-- [ ] Pre-assign Wave 2 and Wave 3 reviewers.
-- [ ] Attach KPI query links to each PR template.
-- [ ] Require DoD checklist completion before merge.
+- [x] Create three lane tickets with explicit file/package boundaries. (see `docs/shippable_p0_execution_board_2026-04-03.md`)
+- [x] Open PR Wave 1 first (flag scaffolding only).
+- [x] Pre-assign Wave 2 and Wave 3 reviewers.
+- [x] Attach KPI query links to each PR template.
+- [x] Require DoD checklist completion before merge.
