@@ -58,8 +58,8 @@ export function useDeepDive(client: MatrixClient | null) {
 
         setRooms(discoverable);
         setCurrentIndex(0);
-      } catch (err) {
-        console.error("DeepDive discover failed:", err);
+      } catch {
+        // Ignore discovery failures and keep prior state.
       } finally {
         setIsLoading(false);
       }
@@ -73,18 +73,18 @@ export function useDeepDive(client: MatrixClient | null) {
       if (!client) return;
       try {
         await client.joinRoom(roomId);
-      } catch (err) {
-        console.error("Failed to join room:", err);
+      } catch {
+        // Ignore join failures and keep feed navigable.
       }
-      setCurrentIndex((i) => i + 1);
+      setCurrentIndex((i: number) => i + 1);
     },
     [client]
   );
 
   // Swipe left = dismiss
   const dismiss = useCallback((roomId: string) => {
-    setDismissed((prev) => new Set(prev).add(roomId));
-    setCurrentIndex((i) => i + 1);
+    setDismissed((prev: Set<string>) => new Set(prev).add(roomId));
+    setCurrentIndex((i: number) => i + 1);
   }, []);
 
   // Current room in the feed

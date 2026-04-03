@@ -7,6 +7,19 @@
 
 import type { MatrixClient } from "matrix-js-sdk";
 
+type SendCustomStateEvent = (
+  roomId: string,
+  eventType: string,
+  content: Record<string, unknown>,
+  stateKey?: string
+) => Promise<unknown>;
+
+type SendCustomTimelineEvent = (
+  roomId: string,
+  eventType: string,
+  content: Record<string, unknown>
+) => Promise<unknown>;
+
 // Custom event type identifiers
 export const EventTypes = {
   PROPOSAL: "co.bmc.governance.proposal",
@@ -35,7 +48,9 @@ export async function createProposal(
   roomId: string,
   proposal: Omit<ProposalContent, "status" | "created_by">
 ) {
-  return client.sendStateEvent(roomId, EventTypes.PROPOSAL, {
+  const sendCustomStateEvent = client.sendStateEvent.bind(client) as SendCustomStateEvent;
+
+  return sendCustomStateEvent(roomId, EventTypes.PROPOSAL, {
     ...proposal,
     status: "active",
     created_by: client.getUserId(),
@@ -59,7 +74,9 @@ export async function castVote(
   vote: VoteContent["vote"],
   reason?: string
 ) {
-  return client.sendEvent(roomId, EventTypes.VOTE, {
+  const sendCustomTimelineEvent = client.sendEvent.bind(client) as SendCustomTimelineEvent;
+
+  return sendCustomTimelineEvent(roomId, EventTypes.VOTE, {
     proposal_event_id: proposalEventId,
     vote,
     reason,
@@ -81,7 +98,9 @@ export async function delegateVote(
   delegateTo: string,
   scope: DelegationContent["scope"] = "room"
 ) {
-  return client.sendStateEvent(
+  const sendCustomStateEvent = client.sendStateEvent.bind(client) as SendCustomStateEvent;
+
+  return sendCustomStateEvent(
     roomId,
     EventTypes.DELEGATION,
     {

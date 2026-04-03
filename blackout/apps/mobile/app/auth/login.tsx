@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { colors, spacing, radii, typography } from "@blackout/config";
-import { useBlackoutAuth } from "../lib/auth-context";
+import { useBlackoutAuth } from "../../lib/auth-context";
 
 export default function LoginScreen() {
   const { login, error, isLoading } = useBlackoutAuth();

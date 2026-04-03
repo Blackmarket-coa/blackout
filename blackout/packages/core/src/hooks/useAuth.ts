@@ -41,12 +41,12 @@ export function useAuth(storage: SessionStorage): AuthState & AuthActions {
 
   // Attempt to restore a saved session on mount
   const restoreSession = useCallback(async () => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s: AuthState) => ({ ...s, isLoading: true, error: null }));
 
     try {
       const session = await storage.restore();
       if (!session) {
-        setState((s) => ({ ...s, isLoading: false }));
+        setState((s: AuthState) => ({ ...s, isLoading: false }));
         return;
       }
 
@@ -82,7 +82,7 @@ export function useAuth(storage: SessionStorage): AuthState & AuthActions {
   // Login with credentials
   const login = useCallback(
     async (homeserverUrl: string, username: string, password: string) => {
-      setState((s) => ({ ...s, isLoading: true, error: null }));
+      setState((s: AuthState) => ({ ...s, isLoading: true, error: null }));
 
       try {
         const client = createBlackoutClient({ homeserverUrl });
@@ -100,7 +100,7 @@ export function useAuth(storage: SessionStorage): AuthState & AuthActions {
           error: null,
         });
       } catch (err: any) {
-        setState((s) => ({
+        setState((s: AuthState) => ({
           ...s,
           isLoading: false,
           error: err?.data?.error || err?.message || "Login failed",

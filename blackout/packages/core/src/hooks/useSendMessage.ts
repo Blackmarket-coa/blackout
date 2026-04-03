@@ -5,6 +5,7 @@
 
 import { useCallback } from "react";
 import type { MatrixClient } from "matrix-js-sdk";
+import { EventType, MsgType, RelationType } from "matrix-js-sdk";
 
 export function useSendMessage(client: MatrixClient | null, roomId: string | null) {
   const sendText = useCallback(
@@ -32,7 +33,7 @@ export function useSendMessage(client: MatrixClient | null, roomId: string | nul
       }
 
       await client.sendMessage(roomId, {
-        msgtype: "m.text",
+        msgtype: MsgType.Text,
         body: `> <${replyEvent.getSender()}> ${replyEvent.getContent().body}\n\n${body.trim()}`,
         "m.relates_to": {
           "m.in_reply_to": { event_id: replyToEventId },
@@ -47,9 +48,9 @@ export function useSendMessage(client: MatrixClient | null, roomId: string | nul
   const sendReaction = useCallback(
     async (eventId: string, emoji: string) => {
       if (!client || !roomId) return;
-      await client.sendEvent(roomId, "m.reaction", {
+      await client.sendEvent(roomId, EventType.Reaction, {
         "m.relates_to": {
-          rel_type: "m.annotation",
+          rel_type: RelationType.Annotation,
           event_id: eventId,
           key: emoji,
         },
@@ -63,14 +64,14 @@ export function useSendMessage(client: MatrixClient | null, roomId: string | nul
       if (!client || !roomId || !newBody.trim()) return;
       await client.sendMessage(roomId, {
         "m.new_content": {
-          msgtype: "m.text",
+          msgtype: MsgType.Text,
           body: newBody.trim(),
         },
         "m.relates_to": {
-          rel_type: "m.replace",
+          rel_type: RelationType.Replace,
           event_id: eventId,
         },
-        msgtype: "m.text",
+        msgtype: MsgType.Text,
         body: `* ${newBody.trim()}`,
       });
     },
