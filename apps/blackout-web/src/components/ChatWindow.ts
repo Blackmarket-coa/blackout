@@ -62,10 +62,15 @@ export function renderChatWindow({
         </div>
         <div class="chat-head-actions">
           <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="members" aria-label="Open member list">Members</button>
-          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="threads" aria-label="Open threads">Threads</button>
-          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="pinned" aria-label="Open pinned messages">Pinned</button>
           <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="search" aria-label="Search channel">Search</button>
-          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="governance" aria-label="Open governance panel">Governance</button>
+          <details class="chat-head-overflow">
+            <summary class="ghost-btn chat-head-action" aria-label="More actions">···</summary>
+            <div class="chat-head-overflow-menu" role="menu">
+              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="threads" role="menuitem">Threads</button>
+              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="pinned" role="menuitem">Pinned</button>
+              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="governance" role="menuitem">Governance</button>
+            </div>
+          </details>
         </div>
       </div>
       <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>

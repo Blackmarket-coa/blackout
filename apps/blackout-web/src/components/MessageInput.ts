@@ -34,7 +34,6 @@ export function renderMessageInput({
           <button type="button" class="composer-shell-glyph" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="Open GIF picker" aria-expanded="false" ${disabled ? "disabled" : ""}>GIF</button>
           <button type="button" class="composer-shell-glyph" data-action="composer-toggle-emoji-picker" data-testid="composer-emoji-trigger" aria-label="Open emoji picker" title="Open emoji picker" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
           ${stegoEnabled ? `<button type="button" class="composer-shell-glyph" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Open stego composer" aria-expanded="false" ${disabled ? "disabled" : ""}>🕶️</button>` : ""}
-          <button type="button" class="composer-shell-glyph" data-action="composer-toggle-sticker-picker" data-testid="composer-sticker-trigger" aria-label="Open sticker picker" title="Open sticker picker" aria-expanded="false" ${disabled ? "disabled" : ""}>◌</button>
         </div>
       </div>
       <div class="composer-popovers">
@@ -165,14 +164,6 @@ export function renderMessageInput({
             <ul class="composer-channel-list" data-testid="composer-emoji-library-list">
               <li class="meta">No custom emoji yet.</li>
             </ul>
-          </div>
-        </section>
-        <section class="composer-popover" data-panel="sticker" data-testid="composer-sticker-panel" aria-hidden="true">
-          <p class="composer-popover-title">Choose a sticker</p>
-          <div class="composer-popover-actions">
-            <button type="button" data-action="composer-select-sticker" data-snippet=" 🐦✨" ${disabled ? "disabled" : ""}>🐦✨</button>
-            <button type="button" data-action="composer-select-sticker" data-snippet=" (╯°□°）╯︵ ┻━┻" ${disabled ? "disabled" : ""}>(╯°□°）╯︵ ┻━┻</button>
-            <button type="button" data-action="composer-select-sticker" data-snippet=" (づ｡◕‿‿◕｡)づ" ${disabled ? "disabled" : ""}>(づ｡◕‿‿◕｡)づ</button>
           </div>
         </section>
         ${

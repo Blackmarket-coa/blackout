@@ -226,19 +226,7 @@ export class BlackoutWebApp {
 
     this.root.innerHTML = `
       <main class="container">
-        <header class="header">
-          <h1>Blackout Coalition Workspace</h1>
-          <p class="meta">Solarpunk governance and messaging shell with a three-column blackout layout.</p>
-        </header>
-        <div class="header-actions">
-          <div class="header-actions-copy">
-            <strong>Workspace controls</strong>
-            <span class="meta">Use ⌘K / Ctrl+K for the command palette, or open settings for full feature management.</span>
-          </div>
-          ${this.renderFeatureCommandPaletteTrigger()}
-          <button type="button" class="ghost-btn" data-action="toggle-compact-mode" data-testid="toggle-compact-mode">${this.compactModeEnabled ? "Disable compact mode" : "Enable compact mode"}</button>
-          <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
-        </div>
+        ${!state.session ? `<div class="header-actions"><button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button><button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button></div>` : ""}
         ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
@@ -644,14 +632,7 @@ export class BlackoutWebApp {
     `;
   }
 
-  private renderFeatureCommandPaletteTrigger(): string {
-    return `
-      <button type="button" class="ghost-btn command-palette-trigger" data-action="open-command-palette" data-testid="open-command-palette">
-        <span>Open command palette</span>
-        <kbd>⌘K / Ctrl+K</kbd>
-      </button>
-    `;
-  }
+
 
   private renderFeatureToolbar(): string {
     const activeFeatures = this.getActivePresetFeatures();
@@ -1213,15 +1194,6 @@ export class BlackoutWebApp {
       });
     });
 
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-deepdive-rollout-note']").forEach((button) => {
-      button.addEventListener("click", () => {
-        this.activeWorkspacePanel = "discover";
-        this.activeMobileTab = "home";
-        this.featureActionResult = "DeepDive is queued for a later rollout.";
-        this.render();
-      });
-    });
-
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='close-repo-tools']").forEach((button) => {
       button.addEventListener("click", () => {
         this.repoToolsOpen = false;
@@ -1578,10 +1550,6 @@ export class BlackoutWebApp {
       this.toggleComposerPanel("emoji", "[data-action='composer-toggle-emoji-picker']");
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-sticker-picker']")?.addEventListener("click", () => {
-      this.toggleComposerPanel("sticker", "[data-action='composer-toggle-sticker-picker']");
-    });
-
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
     });
@@ -1631,15 +1599,6 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-emoji']").forEach((button) => {
-      button.addEventListener("click", () => {
-        const snippet = button.dataset.snippet;
-        if (!snippet) return;
-        this.applyComposerSnippet(snippet);
-        this.closeComposerPanels();
-      });
-    });
-
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-sticker']").forEach((button) => {
       button.addEventListener("click", () => {
         const snippet = button.dataset.snippet;
         if (!snippet) return;
@@ -2110,7 +2069,7 @@ export class BlackoutWebApp {
       panel.classList.remove("is-open");
       panel.setAttribute("aria-hidden", "true");
     });
-    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-open-governance'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-sticker-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-open-governance'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
     });
   }

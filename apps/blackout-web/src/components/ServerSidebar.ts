@@ -76,21 +76,15 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn" data-action="open-deepdive-rollout-note" aria-label="DeepDive discovery coming later">
-            <span class="sidebar-nav-glyph">🧭</span>
-            <span class="sidebar-nav-label">DeepDive (Soon)</span>
-          </button>
-        </li>
-        <li>
           <details class="sidebar-more">
             <summary class="sidebar-nav-btn" aria-label="More options">
               <span class="sidebar-nav-glyph">•••</span>
               <span class="sidebar-nav-label">More</span>
             </summary>
             <div class="sidebar-more-menu" role="menu" aria-label="More sidebar actions">
-              <button type="button" data-action="toggle-settings" role="menuitem">Settings</button>
-              <button type="button" data-action="toggle-compact-mode" role="menuitem">Compact mode</button>
-              <button type="button" data-action="open-command-palette" role="menuitem">Command palette</button>
+              <button type="button" data-action="toggle-settings" data-testid="toggle-settings-button" role="menuitem">Settings</button>
+              <button type="button" data-action="toggle-compact-mode" data-testid="toggle-compact-mode" role="menuitem">Compact mode</button>
+              <button type="button" data-action="open-command-palette" data-testid="open-command-palette" role="menuitem">Command palette</button>
             </div>
           </details>
         </li>

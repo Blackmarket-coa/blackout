@@ -484,12 +484,6 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(root.querySelector("[data-action='composer-emoji-stego']") as HTMLButtonElement);
     expect(composer.value).toContain("[stego-emoji");
 
-    const stickerTrigger = root.querySelector('[data-testid="composer-sticker-trigger"]') as HTMLButtonElement | null;
-    expect(stickerTrigger).toBeTruthy();
-    fireEvent.click(stickerTrigger as HTMLButtonElement);
-    fireEvent.click(root.querySelector("[data-action='composer-select-sticker']") as HTMLButtonElement);
-    expect(composer.value).toContain("🐦✨");
-
     const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement | null;
     expect(stegoTrigger).toBeTruthy();
     fireEvent.click(stegoTrigger as HTMLButtonElement);
@@ -599,8 +593,8 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(browseButton);
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Browse available channels");
 
-    const createButton = root.querySelector<HTMLButtonElement>(".channel-create-btn");
-    if (!createButton) throw new Error("missing create channel footer button");
+    const createButton = root.querySelector<HTMLButtonElement>("[data-action='create-channel']");
+    if (!createButton) throw new Error("missing create channel button");
     fireEvent.click(createButton);
     expect(root.querySelector("#create-entity-form")).toBeTruthy();
   });
