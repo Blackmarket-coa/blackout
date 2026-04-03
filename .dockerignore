@@ -6,6 +6,9 @@ node_modules/
 karma-reports/
 .idea/
 .tmp/
+.git/
+_port/
+infra/
 #config.json*
 # Exclude the playwright directory as much as we can as the snapshots are huge and we bind mount it in
 playwright/

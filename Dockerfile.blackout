@@ -13,7 +13,7 @@ COPY apps/ ./apps/
 
 COPY blackout/ ./blackout/
 
-COPY config.json ./config.json
+COPY config.sample.json ./config.json
 
 RUN pnpm install --frozen-lockfile
 
@@ -29,7 +29,7 @@ RUN apk add jq moreutils
 
 COPY --from=builder /src/apps/blackout-web/dist /app
 
-COPY config.json /app/config.json
+COPY config.sample.json /app/config.json
 
 COPY deploy/docker/nginx-templates/* /etc/nginx/templates/
 
