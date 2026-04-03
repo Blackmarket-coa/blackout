@@ -28,13 +28,18 @@ export function renderMessageInput({
   return `
     <form id="message-form" class="chat-input">
       <div class="composer-shell ${disabled ? "composer-shell--disabled" : ""}">
-        <button type="button" class="composer-shell-icon composer-shell-icon--start" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>＋</button>
-        <textarea name="message" rows="2" aria-describedby="composer-hint" placeholder="Message #channel" ${disabled ? "disabled" : ""}></textarea>
+        <textarea name="message" rows="1" aria-describedby="composer-hint" placeholder="Message — end-to-end encrypted" ${disabled ? "disabled" : ""}></textarea>
         <div class="composer-shell-actions">
-          <button type="button" class="composer-shell-glyph" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="Open GIF picker" aria-expanded="false" ${disabled ? "disabled" : ""}>GIF</button>
-          <button type="button" class="composer-shell-glyph" data-action="composer-toggle-emoji-picker" data-testid="composer-emoji-trigger" aria-label="Open emoji picker" title="Open emoji picker" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
-          ${stegoEnabled ? `<button type="button" class="composer-shell-glyph" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Open stego composer" aria-expanded="false" ${disabled ? "disabled" : ""}>🕶️</button>` : ""}
+          <button type="button" class="composer-shell-icon" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>📎</button>
+          <button type="button" class="composer-shell-icon" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="GIF" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
+          ${stegoEnabled ? `<button type="button" class="composer-shell-icon composer-shell-icon--steg" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Steganography" aria-expanded="false" ${disabled ? "disabled" : ""}>🛡</button>` : ""}
+          <button type="button" class="composer-shell-icon" data-action="composer-open-governance" aria-label="Insert governance proposal" title="Governance" ${disabled ? "disabled" : ""}>🗳</button>
+          <button type="submit" class="composer-shell-icon composer-shell-icon--send" aria-label="Send message" title="Send" ${disabled ? "disabled" : ""}>➤</button>
         </div>
+      </div>
+      <div class="composer-e2ee-hint">
+        <span>🔒</span>
+        Messages are end-to-end encrypted. Only members of this room can read them.
       </div>
       <div class="composer-popovers">
         <section class="composer-popover" data-panel="attachments" data-testid="composer-attachment-panel" aria-hidden="true">
@@ -255,9 +260,7 @@ export function renderMessageInput({
             : ""
         }
       </div>
-      <p id="composer-hint" class="meta composer-hint">Enter to send · Shift+Enter for a new line.</p>
-      ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" data-testid="typing-indicator">You are typing…</p>' : ""}
-      <button type="submit" ${disabled ? "disabled" : ""}>Send message</button>
+      ${typingIndicatorsEnabled && showTypingIndicator ? '<p class="meta" style="font-size:11px; color: var(--text-faint); padding: 0 16px 4px;" data-testid="typing-indicator">You are typing…</p>' : ""}
     </form>
   `;
 }

@@ -26,7 +26,6 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
         <li>
           <button type="button" class="sidebar-nav-btn ${activeServerId === server.id ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}" aria-label="${server.name}">
             <span class="sidebar-nav-glyph">${getInitials(server.name)}</span>
-            <span class="sidebar-nav-label">${server.name}</span>
           </button>
         </li>
       `,
@@ -35,67 +34,62 @@ export function renderServerSidebar({ servers, activeServerId, activeView }: Ser
 
   return `
     <aside class="server-sidebar" aria-label="Primary sidebar navigation">
-      <div class="sidebar-window-controls" aria-hidden="true">
-        <span class="window-dot window-dot--red"></span>
-        <span class="window-dot window-dot--yellow"></span>
-        <span class="window-dot window-dot--green"></span>
-      </div>
 
-      <button type="button" class="sidebar-brand" data-action="open-command-palette" aria-label="Open command palette">🐦</button>
+      <button type="button" class="sidebar-brand" data-action="open-command-palette" aria-label="Open command palette">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
 
-      <ul class="server-nav-list">
+      <div class="sidebar-divider"></div>
+
+      <ul class="server-nav-list" role="list">
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "chat" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : "data-action=\"open-chat-panel\""} aria-label="${homeServer?.name ?? "Home"}">
+          <button type="button" class="sidebar-nav-btn ${activeView === "chat" ? "is-selected" : ""}" ${homeServer ? `data-action="open-server" data-server-id="${homeServer.id}"` : `data-action="open-chat-panel"`} aria-label="${homeServer?.name ?? "Home"}">
             <span class="sidebar-nav-glyph">${homeInitials}</span>
-            <span class="sidebar-nav-label">${homeServer?.name ?? "Home"}</span>
           </button>
         </li>
         ${additionalServers}
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "dms" ? "is-selected" : ""}" data-action="open-dms-panel" aria-label="Direct messages">
             <span class="sidebar-nav-glyph">💬</span>
-            <span class="sidebar-nav-label">DMs</span>
           </button>
         </li>
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "activity" ? "is-selected" : ""}" data-action="open-activity-panel" aria-label="Activity inbox">
             <span class="sidebar-nav-glyph">🔔</span>
-            <span class="sidebar-nav-label">Activity</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "files" ? "is-selected" : ""}" data-action="open-files-panel" aria-label="Files browser">
+          <button type="button" class="sidebar-nav-btn ${activeView === "files" ? "is-selected" : ""}" data-action="open-files-panel" aria-label="Files">
             <span class="sidebar-nav-glyph">📁</span>
-            <span class="sidebar-nav-label">Files</span>
           </button>
         </li>
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "repo-tools" ? "is-selected" : ""}" data-action="open-repo-tools" aria-label="Tools">
-            <span class="sidebar-nav-glyph">🛠️</span>
-            <span class="sidebar-nav-label">Tools</span>
+            <span class="sidebar-nav-glyph">🔧</span>
           </button>
-        </li>
-        <li>
-          <details class="sidebar-more">
-            <summary class="sidebar-nav-btn" aria-label="More options">
-              <span class="sidebar-nav-glyph">•••</span>
-              <span class="sidebar-nav-label">More</span>
-            </summary>
-            <div class="sidebar-more-menu" role="menu" aria-label="More sidebar actions">
-              <button type="button" data-action="toggle-settings" data-testid="toggle-settings-button" role="menuitem">Settings</button>
-              <button type="button" data-action="toggle-compact-mode" data-testid="toggle-compact-mode" role="menuitem">Compact mode</button>
-              <button type="button" data-action="open-command-palette" data-testid="open-command-palette" role="menuitem">Command palette</button>
-            </div>
-          </details>
         </li>
       </ul>
 
-      <button type="button" class="sidebar-compose-btn" data-action="create-server" aria-label="Create workspace">+</button>
+      <div class="sidebar-divider"></div>
 
-      <button type="button" class="sidebar-profile" data-action="toggle-settings" aria-label="Profile and status">
-        <span class="sidebar-profile-avatar">🙂</span>
-        <span class="sidebar-profile-status" aria-hidden="true"></span>
+      <button type="button" class="sidebar-nav-btn" data-action="create-server" aria-label="Create space" style="border: 2px dashed var(--text-faint); background: none; color: var(--text-faint);" onmouseover="this.style.borderColor='var(--teal)'; this.style.color='var(--teal)'; this.style.background='var(--bg-hover)';" onmouseout="this.style.borderColor='var(--text-faint)'; this.style.color='var(--text-faint)'; this.style.background='none';">
+        <span style="font-size: 22px; font-weight: 300;">+</span>
       </button>
+
+      <details class="sidebar-more" style="margin-top: auto;">
+        <summary class="sidebar-nav-btn" aria-label="More options" style="list-style: none;">
+          <span class="sidebar-nav-glyph">⚙</span>
+        </summary>
+        <div class="sidebar-more-menu" role="menu" aria-label="More sidebar actions">
+          <button type="button" data-action="toggle-settings" data-testid="toggle-settings-button" role="menuitem">Settings</button>
+          <button type="button" data-action="toggle-compact-mode" data-testid="toggle-compact-mode" role="menuitem">Compact mode</button>
+          <button type="button" data-action="open-command-palette" data-testid="open-command-palette" role="menuitem">Command palette</button>
+        </div>
+      </details>
+
     </aside>
   `;
 }

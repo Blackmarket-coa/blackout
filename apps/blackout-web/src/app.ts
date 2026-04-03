@@ -259,6 +259,8 @@ export class BlackoutWebApp {
           channels: state.channels,
           activeChannelId: state.activeChannelId,
           unreadByChannel: state.unreadByChannel,
+          currentUserDisplayName: state.session?.user.username ?? "User",
+          currentUserHandle: state.session ? `@${state.session.user.username}` : "@user",
         })}
         ${this.renderWorkspacePanel()}
       </section>
