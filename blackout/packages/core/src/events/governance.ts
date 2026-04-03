@@ -35,7 +35,7 @@ export async function createProposal(
   roomId: string,
   proposal: Omit<ProposalContent, "status" | "created_by">
 ) {
-  return client.sendStateEvent(roomId, EventTypes.PROPOSAL, {
+  return client.sendStateEvent(roomId, EventTypes.PROPOSAL as any, {
     ...proposal,
     status: "active",
     created_by: client.getUserId(),
@@ -59,7 +59,7 @@ export async function castVote(
   vote: VoteContent["vote"],
   reason?: string
 ) {
-  return client.sendEvent(roomId, EventTypes.VOTE, {
+  return client.sendEvent(roomId, EventTypes.VOTE as any, {
     proposal_event_id: proposalEventId,
     vote,
     reason,
@@ -83,7 +83,7 @@ export async function delegateVote(
 ) {
   return client.sendStateEvent(
     roomId,
-    EventTypes.DELEGATION,
+    EventTypes.DELEGATION as any,
     {
       delegate_to: delegateTo,
       scope,

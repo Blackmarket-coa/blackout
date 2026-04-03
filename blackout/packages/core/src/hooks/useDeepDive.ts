@@ -76,15 +76,15 @@ export function useDeepDive(client: MatrixClient | null) {
       } catch (err) {
         console.error("Failed to join room:", err);
       }
-      setCurrentIndex((i) => i + 1);
+      setCurrentIndex((i: number) => i + 1);
     },
     [client]
   );
 
   // Swipe left = dismiss
   const dismiss = useCallback((roomId: string) => {
-    setDismissed((prev) => new Set(prev).add(roomId));
-    setCurrentIndex((i) => i + 1);
+    setDismissed((prev: Set<string>) => new Set(prev).add(roomId));
+    setCurrentIndex((i: number) => i + 1);
   }, []);
 
   // Current room in the feed

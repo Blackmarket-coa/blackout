@@ -86,7 +86,7 @@ export function useTimeline(client: MatrixClient | null, roomId: string | null) 
       if (event.getRoomId() !== roomId) return;
       const msg = eventToMessage(event, client);
       if (msg) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev: TimelineMessage[]) => [...prev, msg]);
       }
     };
 
