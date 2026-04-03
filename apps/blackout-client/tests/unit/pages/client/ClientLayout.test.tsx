@@ -15,6 +15,7 @@ const mockClient = {
   getRooms: () => [] as Room[],
   getUserId: () => '@me:example.org',
   getUser: () => ({ presence: 'online' }),
+  getAccountData: vi.fn(() => null),
   setAccountData: vi.fn().mockResolvedValue(undefined),
   sendReadReceipt: vi.fn().mockResolvedValue(undefined),
   on: vi.fn(),
@@ -290,5 +291,72 @@ describe('ClientLayout UI wiring', () => {
     });
 
     expect(container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]')).toBeNull();
+  });
+
+  it('supports ArrowDown/ArrowUp keyboard selection in quick switcher through ClientLayout', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    const roomB = makeRoom({ roomId: '!room-b:example.org', name: 'Room B' });
+    mockRoom = roomA;
+
+    const { container, store } = renderLayout({
+      rooms: [roomA, roomB],
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+
+    const quickInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(store.get(selectedRoomIdAtom)).toBe('!room-b:example.org');
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const reopenedInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    expect(reopenedInput).toBeTruthy();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(store.get(selectedRoomIdAtom)).toBe('!room-a:example.org');
   });
 });

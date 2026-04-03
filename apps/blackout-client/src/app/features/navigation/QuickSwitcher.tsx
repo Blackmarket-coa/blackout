@@ -190,30 +190,47 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
     [client, onClose, onCommandPicked, setSelectedRoomId, setSelectedSpaceId],
   );
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onClose();
-      return;
-    }
+  const handleSelectionKey = useCallback(
+    (key: string, preventDefault: () => void) => {
+      if (key === 'Escape') {
+        preventDefault();
+        onClose();
+        return;
+      }
 
-    if (!flattened.length) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % flattened.length);
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + flattened.length) % flattened.length);
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const item = flattened[selectedIndex];
-      if (item) void activate(item);
-    }
+      if (!flattened.length) return;
+      if (key === 'ArrowDown') {
+        preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % flattened.length);
+        return;
+      }
+      if (key === 'ArrowUp') {
+        preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + flattened.length) % flattened.length);
+        return;
+      }
+      if (key === 'Enter') {
+        preventDefault();
+        const item = flattened[selectedIndex];
+        if (item) void activate(item);
+      }
+    },
+    [activate, flattened, onClose, selectedIndex],
+  );
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    handleSelectionKey(event.key, () => event.preventDefault());
   };
+
+  useEffect(() => {
+    if (!open) return;
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      handleSelectionKey(event.key, () => event.preventDefault());
+    };
+
+    window.addEventListener('keydown', onWindowKeyDown);
+    return () => window.removeEventListener('keydown', onWindowKeyDown);
+  }, [handleSelectionKey, open]);
 
   if (!open) return null;
 
