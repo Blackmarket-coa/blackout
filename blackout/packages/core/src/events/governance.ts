@@ -102,7 +102,7 @@ export async function delegateVote(
 
   return sendCustomStateEvent(
     roomId,
-    EventTypes.DELEGATION,
+    EventTypes.DELEGATION as any,
     {
       delegate_to: delegateTo,
       scope,

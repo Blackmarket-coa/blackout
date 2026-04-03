@@ -47,33 +47,23 @@ export function renderChatWindow({
   return `
     <section class="chat-window">
       <div class="chat-head">
-        <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer" aria-label="Toggle channel drawer">☰</button>
-        <div class="chat-head-copy">
-          <span># ${channelLabel}</span>
-          <small>
-            Team updates and fast decisions happen here.
-            ${compactMode ? " Compact mode is active for this high-density stream." : compactRecommended ? " Compact mode is recommended for message-heavy channels." : ""}
-          </small>
-        </div>
-        <div class="chat-head-presence" aria-label="Channel activity snapshot">
-          <span class="chat-head-chip">${uniqueParticipants} active</span>
-          <span class="chat-head-chip">${messages.length} messages</span>
-          <span class="chat-head-chip">${freshnessLabel}</span>
+        <div class="chat-head-left">
+          <button type="button" class="mobile-toggle" data-action="toggle-channel-drawer" aria-label="Toggle channel drawer">☰</button>
+          <div class="chat-head-title">
+            <span class="chat-head-hash">#</span>
+            <span>${channelLabel}</span>
+          </div>
+          <span class="chat-head-topic">${compactMode ? "Compact mode active" : compactRecommended ? "Compact mode recommended" : "End-to-end encrypted"}</span>
+          <span class="chat-head-chip">🛡 E2EE Verified</span>
         </div>
         <div class="chat-head-actions">
-          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="members" aria-label="Open member list">Members</button>
-          <button type="button" class="ghost-btn chat-head-action" data-action="open-right-panel" data-panel="search" aria-label="Search channel">Search</button>
-          <details class="chat-head-overflow">
-            <summary class="ghost-btn chat-head-action" aria-label="More actions">···</summary>
-            <div class="chat-head-overflow-menu" role="menu">
-              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="threads" role="menuitem">Threads</button>
-              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="pinned" role="menuitem">Pinned</button>
-              <button type="button" class="ghost-btn" data-action="open-right-panel" data-panel="governance" role="menuitem">Governance</button>
-            </div>
-          </details>
+          <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="threads" title="Threads" aria-label="Open threads">🧵</button>
+          <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="pinned" title="Pinned" aria-label="View pinned messages">📌</button>
+          <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="members" title="Members" aria-label="Open member list">👥</button>
+          <input type="search" class="chat-head-search" placeholder="Search…" aria-label="Search channel" data-action="focus-search">
         </div>
       </div>
-      <ul class="message-list">${renderedMessages || '<li class="empty">No messages yet — start the conversation with a quick hello 👋</li>'}</ul>
+      <ul class="message-list">${renderedMessages || '<li class="empty" style="padding: 20px; color: var(--text-muted); font-size: 14px;">No messages yet — start the conversation 👋</li>'}</ul>
       ${renderMessageInput({
         disabled: !canSend || sendPending,
         compactMode,
@@ -100,7 +90,7 @@ function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean): 
       const compact = forceCompact || shouldCompact(previous, message);
       const dayKey = dayKeyForMessage(message.timestamp);
       const dayDivider =
-        dayKey !== previousDayKey ? `<li class="message-day-divider"><span>${formatDayLabel(message.timestamp)}</span></li>` : "";
+        dayKey !== previousDayKey ? `<li class="message-day-divider">${formatDayLabel(message.timestamp)}</li>` : "";
       previousDayKey = dayKey;
       return `${dayDivider}${renderMessageItem(message, { compact })}`;
     })
