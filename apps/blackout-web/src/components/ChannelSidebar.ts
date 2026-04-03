@@ -7,6 +7,7 @@ interface ChannelSidebarProps {
   unreadByChannel: Record<string, number>;
   currentUserDisplayName?: string;
   currentUserHandle?: string;
+  showAdvancedModules?: boolean;
 }
 
 type ChannelKind = "text" | "voice" | "governance" | "forum" | "announcement";
@@ -77,6 +78,7 @@ export function renderChannelSidebar({
   unreadByChannel,
   currentUserDisplayName = "User",
   currentUserHandle = "@user",
+  showAdvancedModules = true,
 }: ChannelSidebarProps): string {
   // Partition channels into named categories
   const generalChannels = channels.filter((ch) => {
@@ -110,7 +112,8 @@ export function renderChannelSidebar({
       <div class="channel-list-scroll">
         ${channels.length === 0 ? '<p class="empty" style="padding: 12px 16px; font-size: 13px;">No channels yet.</p>' : ""}
         ${section("General", generalChannels)}
-        ${section("Governance", governanceChannels)}
+        ${!showAdvancedModules ? '<p class="meta" style="padding: 0 16px;">Advanced rooms are hidden in simple mode.</p>' : ""}
+        ${showAdvancedModules ? section("Governance", governanceChannels) : ""}
         ${section("Voice", voiceChannels)}
         <li style="list-style: none;">
           <button type="button" class="channel-browse-btn" data-action="browse-channels">Browse channels</button>

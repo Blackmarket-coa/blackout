@@ -15,25 +15,25 @@ describe("resolveMatrixHomeserverUrl", () => {
 });
 
 describe("resolveBlackoutRuntimeConfig", () => {
-  it("defaults to tier_enterprise preset bundle", () => {
+  it("defaults to starter preset bundle", () => {
     const config = resolveBlackoutRuntimeConfig({});
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
+    expect(config.presets.activePreset).toBe("starter");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
-    expect(config.presets.features["features.stego.enabled"]).toBe(true);
+    expect(config.presets.features["features.stego.enabled"]).toBe(false);
   });
 
   it("merges deployment, tenant, and user overrides when allowed", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: JSON.stringify({
-        preset: "tier_pro",
+        preset: "governance",
         defaults: {
           "features.matrix.widgetCompat": false,
         },
       }),
       VITE_FEATURE_TENANT_POLICY: JSON.stringify({
-        preset: "tier_enterprise",
+        preset: "sovereignty",
         overrides: {
           "features.townhall.enabled": false,
         },
@@ -49,7 +49,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
       VITE_RELEASE_COHORT: "beta",
     });
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
+    expect(config.presets.activePreset).toBe("sovereignty");
     expect(config.presets.features["features.matrix.widgetCompat"]).toBe(false);
     expect(config.presets.features["features.townhall.enabled"]).toBe(false);
     expect(config.presets.features["features.composer.typingIndicators"]).toBe(false);
@@ -58,15 +58,70 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.rollout.cohort).toBe("beta");
   });
 
-  it("accepts shorthand preset strings for deployment and tenant env vars", () => {
+  it("migrates legacy tier preset keys without forcing tenant changes", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: "tier_pro",
       VITE_FEATURE_TENANT_POLICY: "tier_enterprise",
     });
 
-    expect(config.presets.activePreset).toBe("tier_enterprise");
-    expect(config.presets.diagnostics.deploymentPreset).toBe("tier_pro");
+    expect(config.presets.activePreset).toBe("sovereignty");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("governance");
+  });
+
+  it("accepts shorthand preset strings for deployment and tenant env vars", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_DEPLOYMENT_DEFAULTS: "governance",
+      VITE_FEATURE_TENANT_POLICY: "sovereignty",
+    });
+
+    expect(config.presets.activePreset).toBe("sovereignty");
+    expect(config.presets.diagnostics.deploymentPreset).toBe("governance");
     expect(config.presets.features["features.bmc.roles"]).toBe(true);
+  });
+
+  it("sets simple mode flags to starter-safe defaults", () => {
+    const config = resolveBlackoutRuntimeConfig({});
+
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
+  });
+
+  it("supports env overrides for simple mode flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_SIMPLE_MODE_DEFAULT: "false",
+      VITE_SHOW_ADVANCED_ADMIN_MODULES: "true",
+      VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE: "false",
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(false);
+  });
+
+
+  it("defaults existing tenants to pre-wave behavior unless explicitly enabled", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "sovereignty" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(false);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(true);
+  });
+
+  it("supports snake_case app-level flags", () => {
+    const config = resolveBlackoutRuntimeConfig({
+      VITE_APP_LEVEL_FLAGS: JSON.stringify({
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      }),
+      VITE_FEATURE_TENANT_POLICY: JSON.stringify({ preset: "sovereignty" }),
+    });
+
+    expect(config.simpleMode.simple_mode_default).toBe(true);
+    expect(config.simpleMode.show_advanced_admin_modules).toBe(false);
+    expect(config.simpleMode.onboarding_progressive_disclosure).toBe(true);
   });
   it("resolves engagement policy and notification rules from env", () => {
     const config = resolveBlackoutRuntimeConfig({

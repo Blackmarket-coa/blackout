@@ -1,14 +1,15 @@
-export type FeaturePresetKey = "tier_free" | "tier_pro" | "tier_enterprise";
+export type FeaturePresetKey = "starter" | "governance" | "sovereignty";
+export type LegacyFeaturePresetKey = "tier_free" | "tier_pro" | "tier_enterprise";
 
 export type FeatureFlagMap = Record<string, boolean>;
 
 export interface DeploymentPresetConfig {
-  preset?: FeaturePresetKey;
+  preset?: FeaturePresetKey | LegacyFeaturePresetKey;
   defaults?: FeatureFlagMap;
 }
 
 export interface TenantPresetPolicy {
-  preset?: FeaturePresetKey;
+  preset?: FeaturePresetKey | LegacyFeaturePresetKey;
   overrides?: FeatureFlagMap;
   allowUserOverrides?: boolean;
   userOverrideAllowlist?: string[];
@@ -28,7 +29,20 @@ export interface ResolvedPresetConfig {
   };
 }
 
-const TIER_FREE: FeatureFlagMap = {
+const PRESET_MIGRATION_MAP: Record<LegacyFeaturePresetKey, FeaturePresetKey> = {
+  tier_free: "starter",
+  tier_pro: "governance",
+  tier_enterprise: "sovereignty",
+};
+
+export function normalizeFeaturePresetKey(value: string | undefined): FeaturePresetKey | undefined {
+  if (!value) return undefined;
+  if (value === "starter" || value === "governance" || value === "sovereignty") return value;
+  if (value === "tier_free" || value === "tier_pro" || value === "tier_enterprise") return PRESET_MIGRATION_MAP[value];
+  return undefined;
+}
+
+const STARTER: FeatureFlagMap = {
   "features.matrix.client": true,
   "features.matrix.homeserverDiscovery": true,
   "features.security.e2eeDefaults": true,
@@ -111,8 +125,8 @@ const TIER_FREE: FeatureFlagMap = {
   "features.engagement.wellbeing": true,
 };
 
-const TIER_PRO: FeatureFlagMap = {
-  ...TIER_FREE,
+const GOVERNANCE: FeatureFlagMap = {
+  ...STARTER,
   "features.composer.richEditing": true,
   "features.composer.typingIndicators": true,
   "features.widgets.layouts": true,
@@ -123,10 +137,11 @@ const TIER_PRO: FeatureFlagMap = {
   "features.settings.notifications": true,
   "features.settings.appearance": true,
   "features.settings.account": true,
+  "features.governance.entitlements": true,
 };
 
-const TIER_ENTERPRISE: FeatureFlagMap = {
-  ...TIER_PRO,
+const SOVEREIGNTY: FeatureFlagMap = {
+  ...GOVERNANCE,
   "features.platform.bootstrap": true,
   "features.timeline.threads": true,
   "features.timeline.readReceipts": true,
@@ -177,7 +192,6 @@ const TIER_ENTERPRISE: FeatureFlagMap = {
 
   "features.stego.enabled": true,
   "features.stego.ephemeral": true,
-  "features.governance.entitlements": true,
   "features.federationBoost.enabled": true,
   "features.townhall.enabled": true,
   "features.epic.deliveryBlueprint": true,
@@ -191,9 +205,9 @@ const TIER_ENTERPRISE: FeatureFlagMap = {
 };
 
 export const FEATURE_PRESET_BUNDLES: Record<FeaturePresetKey, FeatureFlagMap> = {
-  tier_free: TIER_FREE,
-  tier_pro: TIER_PRO,
-  tier_enterprise: TIER_ENTERPRISE,
+  starter: STARTER,
+  governance: GOVERNANCE,
+  sovereignty: SOVEREIGNTY,
 };
 
 function mergeFeatures(base: FeatureFlagMap, overrides?: FeatureFlagMap): FeatureFlagMap {
@@ -206,8 +220,9 @@ export function resolveFeaturePreset(
   tenantPolicy?: TenantPresetPolicy,
   userOverrides?: UserPresetOverrides,
 ): ResolvedPresetConfig {
-  const deploymentPreset = deployment.preset ?? "tier_enterprise";
-  const activePreset = tenantPolicy?.preset ?? deploymentPreset;
+  const deploymentPreset = normalizeFeaturePresetKey(deployment.preset) ?? "starter";
+  const tenantPreset = normalizeFeaturePresetKey(tenantPolicy?.preset);
+  const activePreset = tenantPreset ?? deploymentPreset;
 
   let features = { ...FEATURE_PRESET_BUNDLES[activePreset] };
   features = mergeFeatures(features, deployment.defaults);
@@ -229,7 +244,7 @@ export function resolveFeaturePreset(
     features,
     diagnostics: {
       deploymentPreset,
-      tenantPreset: tenantPolicy?.preset ?? null,
+      tenantPreset: tenantPreset ?? null,
       userOverrideCount,
     },
   };
