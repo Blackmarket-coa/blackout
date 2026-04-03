@@ -27,6 +27,7 @@ const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 type WorkspacePanelView = "chat" | "dms" | "activity" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
+type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
 type SubscriptionTierMatch = {
   tier: FeaturePresetKey;
   subscription: string;
@@ -77,6 +78,7 @@ export class BlackoutWebApp {
   private commandPalettePreviouslyFocusedSelector: string | null = null;
   private compactModeEnabled = false;
   private settingsOpen = false;
+  private activeSettingsPage: SettingsPageView = "workspace";
   private composerIsTyping = false;
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
@@ -228,7 +230,7 @@ export class BlackoutWebApp {
     this.root.innerHTML = `
       <main class="container">
         ${!state.session ? `<div class="header-actions"><button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button><button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button></div>` : ""}
-        ${this.settingsOpen ? `<section class="admin-grid">${this.renderPresetManagementSection()}${this.renderThemeManagementSection()}${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}${this.renderMobileGesturesPanel()}${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}</section>` : ""}
+        ${this.settingsOpen ? this.renderSettingsWorkspace() : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
@@ -782,6 +784,44 @@ export class BlackoutWebApp {
     `;
   }
 
+  private renderSettingsWorkspace(): string {
+    return `
+      <section class="settings-shell" data-testid="settings-shell">
+        <div class="settings-page-nav" role="tablist" aria-label="Settings pages">
+          ${this.renderSettingsNavButton("workspace", "Workspace")}
+          ${this.renderSettingsNavButton("appearance", "Appearance")}
+          ${this.renderSettingsNavButton("monetization", "Monetization")}
+          ${this.renderSettingsNavButton("mobile", "Mobile")}
+          ${this.renderSettingsNavButton("operations", "Operations")}
+        </div>
+        <section class="admin-grid" data-testid="settings-page-content">
+          ${this.renderSettingsPageContent()}
+        </section>
+      </section>
+    `;
+  }
+
+  private renderSettingsNavButton(page: SettingsPageView, label: string): string {
+    const selected = this.activeSettingsPage === page;
+    return `<button type="button" class="ghost-btn ${selected ? "settings-page-nav__button--active" : ""}" role="tab" aria-selected="${selected ? "true" : "false"}" data-action="settings-page" data-page="${page}" data-testid="settings-page-${page}">${label}</button>`;
+  }
+
+  private renderSettingsPageContent(): string {
+    if (this.activeSettingsPage === "appearance") {
+      return `${this.renderThemeManagementSection()}`;
+    }
+    if (this.activeSettingsPage === "monetization") {
+      return `${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}`;
+    }
+    if (this.activeSettingsPage === "mobile") {
+      return `${this.renderMobileGesturesPanel()}`;
+    }
+    if (this.activeSettingsPage === "operations") {
+      return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
+    }
+    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+  }
+
   private renderPresetManagementSection(): string {
     const previewFeatures = Object.entries(FEATURE_PRESET_BUNDLES[this.selectedPreset]);
     const enabledFeatures = previewFeatures.filter(([, enabled]) => enabled).map(([key]) => key);
@@ -804,7 +844,7 @@ export class BlackoutWebApp {
           <h3>What changes with this preset</h3>
           <progress max="${previewFeatures.length}" value="${enabledFeatures.length}" data-testid="preset-capability-meter"></progress>
           <p class="meta">${enabledFeatures.length}/${previewFeatures.length} capabilities enabled.</p>
-          <ul class="stack">
+          <ul class="stack preset-feature-list">
             ${enabledFeatures.map((key) => `<li class="meta" data-testid="preset-capability-${key.replaceAll(".", "-")}">${key}</li>`).join("")}
           </ul>
         </div>
@@ -1240,6 +1280,15 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='toggle-settings']").forEach((button) => {
       button.addEventListener("click", () => {
         this.settingsOpen = !this.settingsOpen;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='settings-page']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const page = button.dataset.page as SettingsPageView | undefined;
+        if (!page) return;
+        this.activeSettingsPage = page;
         this.render();
       });
     });

@@ -285,6 +285,41 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="feature-widget-townhall-sfu"]')).toBeFalsy();
   });
 
+  it("supports settings page navigation for reduced scrolling", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "tier_enterprise",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "tier_enterprise",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    expect(root.querySelector('[data-testid="feature-presets-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="subscription-panel"]')).toBeFalsy();
+
+    fireEvent.click(root.querySelector('[data-testid="settings-page-monetization"]') as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="subscription-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="upgrade-prompts-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="feature-presets-panel"]')).toBeFalsy();
+
+    fireEvent.click(root.querySelector('[data-testid="settings-page-operations"]') as HTMLButtonElement);
+    expect(root.querySelector('[data-testid="revenue-ops-panel"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="platform-ops-panel"]')).toBeTruthy();
+  });
+
   it("progressively reveals advanced feature library by cohort", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
