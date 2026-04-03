@@ -1,11 +1,8 @@
 {
     "default_server_config": {
         "m.homeserver": {
-            "base_url": "https://matrix-client.matrix.org",
-            "server_name": "matrix.org"
-        },
-        "m.identity_server": {
-            "base_url": "https://matrix.org"
+            "base_url": "https://matrix.theblackout.app",
+            "server_name": "matrix.theblackout.app"
         }
     },
     "disable_custom_urls": false,
@@ -21,11 +18,10 @@
     "default_federate": true,
     "default_theme": "light",
     "room_directory": {
-        "servers": ["matrix.org"]
+        "servers": ["matrix.theblackout.app"]
     },
     "enable_presence_by_hs_url": {
-        "https://matrix.org": false,
-        "https://matrix-client.matrix.org": false
+        "https://matrix.theblackout.app": false
     },
     "setting_defaults": {
         "breadcrumbs": true
@@ -34,7 +30,7 @@
         "preferred_domain": "meet.jit.si"
     },
     "element_call": {
-        "url": "https://call.example.com",
+        "url": "https://theblackout.app/livekit",
         "brand": "Blackout Calls"
     },
     "security": {
@@ -45,5 +41,5 @@
             "require_verification": true
         }
     },
-    "map_style_url": "https://api.maptiler.com/maps/streets/style.json?key=fU3vlMsMn4Jb6dnEIFsx"
+    "map_style_url": null
 }
