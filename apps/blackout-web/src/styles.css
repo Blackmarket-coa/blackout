@@ -2112,10 +2112,54 @@ body {
   padding: 0.26rem 0.56rem;
 }
 
-.composer-segmented-control button.is-active {
-  border-color: #7fa9ff;
-  background: #24395f;
-  color: #f4f7ff;
+.composer-mode-tabs {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.composer-mode-tabs button {
+  border-radius: 999px;
+  border: 1px solid #435172;
+  background: transparent;
+  color: #b9c4dd;
+  padding: 0.2rem 0.6rem;
+}
+
+.composer-mode-tabs button.is-active {
+  background: #2f4367;
+  color: #e7eeff;
+}
+
+.composer-attachment-view {
+  display: none;
+  gap: 0.45rem;
+}
+
+.composer-attachment-view.is-active {
+  display: grid;
+}
+
+.composer-action-primary {
+  width: fit-content;
+  border-radius: 8px;
+  border: 1px solid #4e7dff;
+  background: #365fd2;
+  color: #f7f9ff;
+  padding: 0.3rem 0.65rem;
+}
+
+.composer-action-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.composer-action-tertiary {
+  border: none !important;
+  background: transparent !important;
+  color: #a9badf !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .composer-popover-field {
