@@ -404,15 +404,39 @@ describe("BlackoutWebApp integration", () => {
     await app.mount();
     fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
+    const overviewTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-overview"]');
+    const monetizationTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-monetization"]');
+    const operationsTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-operations"]');
+    if (!overviewTab || !monetizationTab || !operationsTab) throw new Error("missing settings page tabs");
+
+    expect(overviewTab.classList.contains("settings-page-nav__button--active")).toBe(true);
+    expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(operationsTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(overviewTab.getAttribute("aria-selected")).toBe("true");
+    expect(monetizationTab.getAttribute("aria-selected")).toBe("false");
+    expect(operationsTab.getAttribute("aria-selected")).toBe("false");
+    expect(overviewTab.textContent?.trim().length).toBeGreaterThan(0);
+    expect(monetizationTab.textContent?.trim().length).toBeGreaterThan(0);
+    expect(operationsTab.textContent?.trim().length).toBeGreaterThan(0);
+
     expect(root.querySelector('[data-testid="feature-presets-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="subscription-panel"]')).toBeFalsy();
 
-    fireEvent.click(root.querySelector('[data-testid="settings-page-monetization"]') as HTMLButtonElement);
+    fireEvent.click(monetizationTab);
+    expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(true);
+    expect(overviewTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(monetizationTab.getAttribute("aria-selected")).toBe("true");
+    expect(overviewTab.getAttribute("aria-selected")).toBe("false");
     expect(root.querySelector('[data-testid="subscription-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="upgrade-prompts-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-presets-panel"]')).toBeFalsy();
 
-    fireEvent.click(root.querySelector('[data-testid="settings-page-operations"]') as HTMLButtonElement);
+    fireEvent.click(operationsTab);
+    expect(operationsTab.classList.contains("settings-page-nav__button--active")).toBe(true);
+    expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(operationsTab.getAttribute("aria-selected")).toBe("true");
+    expect(monetizationTab.getAttribute("aria-selected")).toBe("false");
+    expect(operationsTab.textContent?.trim().length).toBeGreaterThan(0);
     expect(root.querySelector('[data-testid="revenue-ops-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="platform-ops-panel"]')).toBeTruthy();
   });
