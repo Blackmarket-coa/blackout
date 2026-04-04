@@ -21,9 +21,11 @@ export interface ApiMessage {
   id: string;
   channelId: string;
   userId: string;
+  username?: string;
   content: string;
   contentStegoTier: number;
   createdAt: string;
+  governance?: { type: string; data: any };
 }
 
 export const api = {
