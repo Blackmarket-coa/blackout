@@ -305,12 +305,22 @@ export class BlackoutWebApp {
   }
 
 
+  private centerPromptInView(prompt: HTMLElement): void {
+    const scrollContainer = prompt.closest<HTMLElement>(".composer-popover.is-open, .workspace-content, .chat-window");
+    if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+      const promptRect = prompt.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const targetTop = scrollContainer.scrollTop + (promptRect.top - containerRect.top) - ((scrollContainer.clientHeight - promptRect.height) / 2);
+      scrollContainer.scrollTo({ top: Math.max(0, targetTop), left: 0, behavior: "auto" });
+      return;
+    }
+    prompt.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+
   private centerVisibleOnboardingPrompts(): void {
     const prompts = this.root.querySelectorAll<HTMLElement>("[data-testid='first-run-guide'], [data-testid^='composer-tour-']");
     if (!prompts.length) return;
-    prompts.forEach((prompt) => {
-      prompt.scrollIntoView({ block: "center", inline: "nearest" });
-    });
+    prompts.forEach((prompt) => this.centerPromptInView(prompt));
   }
 
   private getSidebarActiveView(): "home" | "rooms" | "dms" | "activity" | "calls" | "admin" {
@@ -529,7 +539,9 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
     if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
     panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
-    panel.scrollIntoView({ block: "center", inline: "nearest" });
+    panel.scrollTop = 0;
+    const prompt = panel.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
+    if (prompt) this.centerPromptInView(prompt);
     this.trackKpiEvent("onboarding_step_viewed", {
       step: module === "stego" ? 5 : 6,
       module,
@@ -540,7 +552,7 @@ export class BlackoutWebApp {
   private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
     const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
     if (!tour) return;
-    tour.scrollIntoView({ block: "center", inline: "nearest" });
+    this.centerPromptInView(tour);
     const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
     const finalStep = 2;
     if (step >= finalStep) {
@@ -2982,6 +2994,7 @@ export class BlackoutWebApp {
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
       panel.scrollIntoView({ block: "center", inline: "nearest" });
+      panel.scrollTop = 0;
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
       }
