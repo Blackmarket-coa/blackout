@@ -1,3 +1,5 @@
+import { renderGlossaryTip } from "./glossary";
+
 interface MessageInputOptions {
   disabled: boolean;
   compactMode: boolean;
@@ -39,11 +41,14 @@ export function renderMessageInput({
       </div>
       <div class="composer-e2ee-hint">
         <span>🔒</span>
-        Messages are end-to-end encrypted. Only members of this room can read them.
+        Messages are end-to-end encrypted ${renderGlossaryTip("E2EE")}. Only members of this room can read them.
       </div>
       <div class="composer-popovers">
         <section class="composer-popover" data-panel="attachments" data-testid="composer-attachment-panel" aria-hidden="true">
-          <p class="composer-popover-title">Add attachment</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Add attachment</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
             <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
@@ -79,7 +84,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="governance" data-testid="composer-governance-panel" aria-hidden="true">
-          <p class="composer-popover-title">Governance composer</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Governance composer</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <label class="composer-popover-field">Proposal title
             <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
           </label>
@@ -116,7 +124,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="gif" data-testid="composer-gif-panel" aria-hidden="true">
-          <p class="composer-popover-title">Choose a GIF</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Choose a GIF</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-select-gif" data-snippet=" ![celebration gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW43bDFxa2V0NGRoMHY2MGp3aHJ2eGlpM3BsNmdreXVqZm45MG11dCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o6fJ1BM7R2EBRDnxK/giphy.gif)" ${disabled ? "disabled" : ""}>Celebration</button>
             <button type="button" data-action="composer-select-gif" data-snippet=" ![thumbs up gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdnVybmZwY2VjN2NkcjM2MHZxN3VxZXNnZXJpc3UxaDF0a2pxdGQ5NyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0HlBO7eyXzSZkJri/giphy.gif)" ${disabled ? "disabled" : ""}>Thumbs up</button>
@@ -144,7 +155,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="emoji" data-testid="composer-emoji-panel" aria-hidden="true">
-          <p class="composer-popover-title">Emoji picker</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Emoji picker</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-select-emoji" data-snippet=" 😊" ${disabled ? "disabled" : ""}>😊</button>
             <button type="button" data-action="composer-select-emoji" data-snippet=" 🔥" ${disabled ? "disabled" : ""}>🔥</button>
@@ -174,7 +188,11 @@ export function renderMessageInput({
         ${
           stegoEnabled
             ? `<section class="composer-popover" data-panel="stego" data-testid="composer-stego-panel" aria-hidden="true">
-                <p class="composer-popover-title">Stego composer</p>
+                <div class="composer-popover-head">
+                  <p class="composer-popover-title">Stego composer ${renderGlossaryTip("Steganography")} ${renderGlossaryTip("Stego Tier")}</p>
+                  <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+                </div>
+                <p class="meta">Hide secret messages inside normal-looking text. Only someone with your passphrase can read them.</p>
                 <div class="composer-stego-tabs" role="tablist" aria-label="Stego tools">
                   <button type="button" data-action="composer-stego-tab-encode" data-testid="composer-stego-tab-encode" class="is-active" role="tab" aria-selected="true" ${disabled ? "disabled" : ""}>Hide</button>
                   <button type="button" data-action="composer-stego-tab-decrypt" data-testid="composer-stego-tab-decrypt" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Decrypt</button>
@@ -184,34 +202,48 @@ export function renderMessageInput({
                   <label class="composer-popover-field">Hidden text
                     <input type="text" data-action="composer-stego-hidden" value="hidden-message" ${disabled ? "disabled" : ""} />
                   </label>
-                  <label class="composer-popover-field">Cover text
+                  <label class="composer-popover-field">Cover text ${renderGlossaryTip("Cover text")}
                     <input type="text" data-action="composer-stego-cover" value="let's sync after standup" ${disabled ? "disabled" : ""} />
                   </label>
                   <label class="composer-popover-field">Passphrase
                     <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
                   </label>
-                  <label class="composer-popover-field">Codec
-                    <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
-                      <option value="basic-lsb-image">Basic LSB (Image)</option>
-                      <option value="dct-image" disabled>DCT Image (Signal lock)</option>
-                      <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
-                      <option value="audio-phase" disabled>Audio Phase (Signal lock)</option>
-                      <option value="batch-mode" disabled>Batch Mode (Signal lock)</option>
-                    </select>
-                  </label>
-                  <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
-                  <label class="composer-popover-field">Stego channel
-                    <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
-                      <option value="">No saved channel</option>
-                    </select>
-                  </label>
-                  <label class="composer-popover-inline">
-                    <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
-                    Ephemeral message
-                  </label>
-                  <label class="composer-popover-field">TTL (hours)
-                    <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
-                  </label>
+                  <p class="meta" data-testid="composer-stego-passphrase-strength">Passphrase strength: weak</p>
+                  <div class="composer-stego-preview" data-testid="composer-stego-preview">
+                    <p class="meta">Others see: <span data-testid="composer-stego-preview-cover">let's sync after standup</span></p>
+                    <p class="meta">Hidden inside: <span data-testid="composer-stego-preview-hidden">hidden-message</span></p>
+                    <label class="composer-popover-inline">
+                      <input type="checkbox" data-action="composer-stego-preview-reveal" ${disabled ? "disabled" : ""} />
+                      Reveal invisible positions
+                    </label>
+                    <p class="meta" data-testid="composer-stego-preview-reveal-output" hidden></p>
+                  </div>
+                  <details class="composer-stego-advanced">
+                    <summary>Advanced options</summary>
+                    <label class="composer-popover-field">Codec ${renderGlossaryTip("Codec")}
+                      <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
+                        <option value="basic-lsb-image">Basic LSB (Image)</option>
+                        <option value="dct-image" disabled>DCT Image (Signal lock)</option>
+                        <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
+                        <option value="audio-phase" disabled>Audio Phase (Signal lock)</option>
+                        <option value="batch-mode" disabled>Batch Mode (Signal lock)</option>
+                      </select>
+                    </label>
+                    <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
+                    <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
+                    <label class="composer-popover-field">Stego channel
+                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
+                        <option value="">No saved channel</option>
+                      </select>
+                    </label>
+                    <label class="composer-popover-inline">
+                      <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
+                      Ephemeral message ${renderGlossaryTip("Ephemeral")}
+                    </label>
+                    <label class="composer-popover-field">TTL (hours) ${renderGlossaryTip("TTL")}
+                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
+                    </label>
+                  </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>
                 <div class="composer-stego-view" data-stego-view="decrypt">

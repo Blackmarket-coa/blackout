@@ -10,11 +10,13 @@ import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/Platfo
 import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
+import { renderGlossaryTip } from "./components/glossary";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
+import { renderBugReportFab } from "./components/BugReportFab";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
@@ -23,6 +25,13 @@ import type { BlackoutRuntimeConfig } from "./config";
 import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
+const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
+const ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY = "blackout.onboarding.conversation_started";
+const ONBOARDING_ADVANCED_STEGO_STORAGE_KEY = "blackout.onboarding.advanced.stego";
+const ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY = "blackout.onboarding.advanced.governance";
+const ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY = "blackout.onboarding.advanced.federation";
+const ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.stego.dismissed";
+const ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.governance.dismissed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
@@ -42,6 +51,8 @@ type StegoChannel = {
   rotationDays: number;
   updatedAt: string;
 };
+
+type AdvancedModule = "governance" | "federation" | "stego";
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
@@ -121,6 +132,10 @@ export class BlackoutWebApp {
   private pendingPushTokenRegistration: string | null = null;
   private pushTokenRegisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private pushTokenUnregisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private bugReportOpen = false;
+  private bugReportIssue = "";
+  private bugReportSteps = "";
+  private bugReportSuggestions = "";
   private readonly viewedOnboardingSteps = new Set<number>();
   private readonly completedOnboardingSteps = new Set<number>();
   private onboardingCompletionTracked = false;
@@ -219,17 +234,7 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
-    globalThis.document.addEventListener("pointerdown", (event) => {
-      const target = event.target as HTMLElement;
-      if (!target) return;
-      const hasOpenPanel = this.root.querySelector(".composer-popover.is-open");
-      if (!hasOpenPanel) return;
-      const insidePanel = target.closest(".composer-popover");
-      const isTrigger = target.closest("[data-action^='composer-toggle-'], [data-action='composer-open-governance'], [data-action='composer-toggle-stego-panel']");
-      if (!insidePanel && !isTrigger) {
-        this.closeComposerPanels();
-      }
-    });
+    globalThis.document.addEventListener("pointerdown", this.handleDocumentPointerDown);
     this.bindMobileBridgeEvents();
     this.applyTheme(this.selectedTheme);
     this.render();
@@ -270,6 +275,12 @@ export class BlackoutWebApp {
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
       ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
       ${this.subscriptionPopupOpen ? this.renderSubscriptionPopup() : ""}
+      ${renderBugReportFab({
+        open: this.bugReportOpen,
+        issue: this.bugReportIssue,
+        steps: this.bugReportSteps,
+        suggestions: this.bugReportSuggestions,
+      })}
     `;
 
     this.bindEvents();
@@ -315,15 +326,46 @@ export class BlackoutWebApp {
     });
   }
 
+  private submitBugReport(): void {
+    if (!this.bugReportIssue.trim()) return;
+    const metadata = {
+      device_type: /Mobi|Android|iPhone|iPad/i.test(globalThis.navigator.userAgent) ? "mobile" : "desktop",
+      screen_width: globalThis.innerWidth,
+      screen_height: globalThis.innerHeight,
+      user_agent: globalThis.navigator.userAgent,
+      current_view: this.settingsOpen ? `settings:${this.activeSettingsPage}` : this.activeWorkspacePanel,
+      timestamp: new Date().toISOString(),
+      app_version: "0.0.1",
+    };
+    this.telemetry.track("user_bug_report", {
+      ...metadata,
+      issue: this.bugReportIssue.trim(),
+      steps_to_reproduce: this.bugReportSteps.trim() || null,
+      suggestions: this.bugReportSuggestions.trim() || null,
+    });
+    this.featureActionResult = "Bug report sent. Thanks for helping improve Blackout.";
+    this.bugReportOpen = false;
+    this.bugReportIssue = "";
+    this.bugReportSteps = "";
+    this.bugReportSuggestions = "";
+    this.render();
+  }
+
   private onboardingSteps() {
     const state = this.store.getState();
-    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
-    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
+    const inviteSent = globalThis.localStorage.getItem(ONBOARDING_INVITE_SENT_STORAGE_KEY) === "true";
+    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY) === "true";
+    const stegoExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_STEGO_STORAGE_KEY) === "true";
+    const governanceExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY) === "true";
+    const federationExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY) === "true";
     return [
       { index: 1, label: "Create or join workspace", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>' },
       { index: 2, label: "Create first room (template-first)", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>' },
       { index: 3, label: "Invite members", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>' },
       { index: 4, label: "Start thread or call", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
+      { index: 5, label: "Optional: Try hiding a message (Stego)", done: stegoExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-stego">Open stego</button>' },
+      { index: 6, label: "Optional: Create a proposal", done: governanceExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-governance">Open governance</button>' },
+      { index: 7, label: "Optional: Explore federation", done: federationExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-federation">Open federation</button>' },
     ];
   }
 
@@ -362,13 +404,95 @@ export class BlackoutWebApp {
     });
   }
 
-  private trackAdvancedDiscovery(module: "governance" | "federation" | "stego"): void {
+  private advancedOnboardingStorageKey(module: AdvancedModule): string {
+    if (module === "stego") return ONBOARDING_ADVANCED_STEGO_STORAGE_KEY;
+    if (module === "governance") return ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY;
+    return ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY;
+  }
+
+  private tourDismissedStorageKey(module: Extract<AdvancedModule, "stego" | "governance">): string {
+    return module === "stego" ? ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY : ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY;
+  }
+
+  private markAdvancedOnboardingComplete(module: AdvancedModule, reason: "completed" | "skipped"): void {
+    globalThis.localStorage.setItem(this.advancedOnboardingStorageKey(module), "true");
+    this.trackKpiEvent("onboarding_step_completed", {
+      step: module === "stego" ? 5 : module === "governance" ? 6 : 7,
+      module,
+      reason,
+    });
+  }
+
+  private tourCopy(module: Extract<AdvancedModule, "stego" | "governance">): string[] {
+    return module === "stego"
+      ? [
+          "This tool lets you hide secret messages inside normal-looking text.",
+          "Enter a hidden message, some cover text, and a passphrase.",
+          "The output looks like regular text — only someone with the passphrase can decode it.",
+        ]
+      : [
+          "This is how your community makes decisions together.",
+          "Create a proposal, set options and a voting window, then publish.",
+          "When quorum is met, the vote result is recorded for the room.",
+        ];
+  }
+
+  private renderAdvancedTourStep(module: Extract<AdvancedModule, "stego" | "governance">, step: number): string {
+    const copy = this.tourCopy(module);
+    const current = copy[Math.min(step, copy.length - 1)];
+    return `<aside class="composer-tour" data-testid="composer-tour-${module}" data-tour-module="${module}" data-tour-step="${step}"><p>${current}</p><div class="composer-tour-actions"><button type="button" class="ghost-btn" data-action="onboarding-tour-skip" data-tour="${module}">Skip tour</button><button type="button" data-action="onboarding-tour-next" data-tour="${module}">${step >= copy.length - 1 ? "Finish" : "Next"}</button></div></aside>`;
+  }
+
+  private maybeShowAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    if (globalThis.localStorage.getItem(this.tourDismissedStorageKey(module)) === "true") return;
+    const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
+    if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
+    panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
+    this.trackKpiEvent("onboarding_step_viewed", {
+      step: module === "stego" ? 5 : 6,
+      module,
+      walkthrough: true,
+    });
+  }
+
+  private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
+    if (!tour) return;
+    const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
+    const finalStep = 2;
+    if (step >= finalStep) {
+      tour.remove();
+      globalThis.localStorage.setItem(this.tourDismissedStorageKey(module), "true");
+      this.markAdvancedOnboardingComplete(module, "completed");
+      this.trackKpiEvent("advanced_tour_completed", { module });
+      this.featureActionResult = module === "stego"
+        ? "Stego walkthrough complete. Try encoding your first hidden message."
+        : "Governance walkthrough complete. Draft your first proposal.";
+      this.render();
+      return;
+    }
+    tour.outerHTML = this.renderAdvancedTourStep(module, step + 1);
+  }
+
+  private skipAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`)?.remove();
+    globalThis.localStorage.setItem(this.tourDismissedStorageKey(module), "true");
+    this.markAdvancedOnboardingComplete(module, "skipped");
+    this.trackKpiEvent("advanced_tour_skipped", { module });
+    this.featureActionResult = module === "stego" ? "Stego tour skipped." : "Governance tour skipped.";
+    this.render();
+  }
+
+  private trackAdvancedDiscovery(module: AdvancedModule): void {
     if (!this.hasAdminAccess()) return;
     const dedupe = `${module}:${this.store.getState().activeServerId ?? "none"}`;
     if (this.advancedModuleDiscoveryTracked.has(dedupe)) return;
     this.advancedModuleDiscoveryTracked.add(dedupe);
     this.trackKpiEvent("advanced_module_entered", { module });
     this.trackKpiEvent("kpi_advanced_feature_discovery", { module, eligible_admin: true });
+    if (module === "federation") {
+      this.markAdvancedOnboardingComplete("federation", "completed");
+    }
   }
 
   private renderWorkspace(): string {
@@ -702,7 +826,7 @@ export class BlackoutWebApp {
     return `
       <section class="panel-card stack" data-testid="first-run-guide">
         <h2>First-run guide (4 steps)</h2>
-        <p class="meta">Start fast: workspace → room → invite → thread/call.</p>
+        <p class="meta">Start fast with secure chat ${renderGlossaryTip("E2EE")}, then grow with Federation ${renderGlossaryTip("Federation")} and a stronger Reputation Tier ${renderGlossaryTip("Reputation Tier")}.</p>
         <ol class="stack">
           ${steps
             .map((step) => `<li><strong>${step.done ? "✅" : "⬜"} ${step.label}</strong><div class="modal-actions">${step.done ? "<span class=\"meta\">Done</span>" : step.action}</div></li>`)
@@ -1288,6 +1412,22 @@ export class BlackoutWebApp {
 
     if (event.key === "Escape" && this.commandPaletteOpen) {
       this.closeCommandPalette();
+      return;
+    }
+
+    if (event.key === "Escape" && this.root.querySelector(".composer-popover.is-open")) {
+      this.closeComposerPanels();
+    }
+  };
+
+  private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
+    if (!(event.target instanceof Element)) return;
+    const hasOpenPanel = this.root.querySelector(".composer-popover.is-open");
+    if (!hasOpenPanel) return;
+    const insidePanel = event.target.closest(".composer-popover");
+    const isTrigger = event.target.closest("[data-action^='composer-toggle-'], [data-action='composer-open-governance']");
+    if (!insidePanel && !isTrigger) {
+      this.closeComposerPanels();
     }
   };
 
@@ -1366,7 +1506,7 @@ export class BlackoutWebApp {
         } catch {
           this.featureActionResult = "Invite ready. Copy the current URL and share it with your team.";
         }
-        globalThis.localStorage.setItem("blackout.onboarding.invite_sent", "true");
+        globalThis.localStorage.setItem(ONBOARDING_INVITE_SENT_STORAGE_KEY, "true");
         this.trackKpiEvent("kpi_invite_completion", { completed: true });
         this.render();
       });
@@ -1375,7 +1515,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-thread']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeRightPanel = "threads";
-        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        globalThis.localStorage.setItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY, "true");
         this.featureActionResult = "Thread panel opened. Start your first threaded discussion.";
         this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "thread" });
         this.render();
@@ -1386,11 +1526,80 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "calls";
         this.activeTownhallMode = "standard";
-        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        globalThis.localStorage.setItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY, "true");
         this.featureActionResult = "Call setup ready from the Calls panel.";
         this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "call" });
         this.render();
       });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-governance']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-federation']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activePlatformOpsTab = "federation";
+        this.settingsOpen = true;
+        this.activeSettingsPage = "operations";
+        this.trackAdvancedDiscovery("federation");
+        this.featureActionResult = "Federation panel opened. Review node health and snapshots.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-tour-next']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const module = button.dataset.tour as "stego" | "governance" | undefined;
+        if (!module) return;
+        this.advanceAdvancedTour(module);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-tour-skip']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const module = button.dataset.tour as "stego" | "governance" | undefined;
+        if (!module) return;
+        this.skipAdvancedTour(module);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='open-bug-report']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.bugReportOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-bug-report']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (element.classList.contains("bug-report-modal-backdrop") && target.closest(".bug-report-modal")) return;
+        this.bugReportOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-issue']")?.addEventListener("input", (event) => {
+      this.bugReportIssue = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-steps']")?.addEventListener("input", (event) => {
+      this.bugReportSteps = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-suggestions']")?.addEventListener("input", (event) => {
+      this.bugReportSuggestions = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLFormElement>("[data-action='submit-bug-report']")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.submitBugReport();
     });
 
 
@@ -1911,6 +2120,11 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-attachments']")?.addEventListener("click", () => {
       this.toggleComposerPanel("attachments", "[data-action='composer-toggle-attachments']");
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-close-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.closeComposerPanels();
+      });
+    });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-gif-picker']")?.addEventListener("click", () => {
       this.toggleComposerPanel("gif", "[data-action='composer-toggle-gif-picker']");
@@ -1959,6 +2173,24 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-tab-password']")?.addEventListener("click", () => {
       this.switchStegoView("password");
     });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']")?.addEventListener("input", () => {
+      this.updateStegoEncodePreview();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']")?.addEventListener("input", () => {
+      this.updateStegoEncodePreview();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']")?.addEventListener("input", () => {
+      this.updateStegoPassphraseStrength();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-preview-reveal']")?.addEventListener("change", () => {
+      this.updateStegoEncodePreview();
+    });
+    this.updateStegoEncodePreview();
+    this.updateStegoPassphraseStrength();
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-gif']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -2427,13 +2659,31 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
     const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
     if (!panel || !trigger) return;
+    const shouldRestoreComposerFocus = panelName === "governance" || panelName === "stego";
     const shouldOpen = !panel.classList.contains("is-open");
     this.closeComposerPanels();
     if (shouldOpen) {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
+      if (panelName === "stego") {
+        this.maybeShowAdvancedTour("stego");
+      }
+      if (panelName === "governance") {
+        this.maybeShowAdvancedTour("governance");
+      }
     }
+    if (shouldRestoreComposerFocus) {
+      this.restoreMessageComposerFocus();
+    }
+  }
+
+  private restoreMessageComposerFocus(): void {
+    const textarea = this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']");
+    if (!textarea) return;
+    globalThis.requestAnimationFrame(() => {
+      textarea.focus();
+    });
   }
 
   private closeComposerPanels(): void {
@@ -2456,6 +2706,38 @@ export class BlackoutWebApp {
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-selected", isActive ? "true" : "false");
     });
+  }
+
+  private updateStegoPassphraseStrength(): void {
+    const passphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']")?.value ?? "";
+    const strengthOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-passphrase-strength']");
+    if (!strengthOutput) return;
+    const strength = passphrase.length >= 14 && /[^a-zA-Z0-9]/.test(passphrase)
+      ? "strong"
+      : passphrase.length >= 8
+        ? "medium"
+        : "weak";
+    strengthOutput.textContent = `Passphrase strength: ${strength}`;
+  }
+
+  private updateStegoEncodePreview(): void {
+    const hidden = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']")?.value.trim() || "hidden-message";
+    const cover = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']")?.value.trim() || "let's sync after standup";
+    const reveal = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-preview-reveal']")?.checked ?? false;
+    const coverOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-cover']");
+    const hiddenOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-hidden']");
+    const revealOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-reveal-output']");
+    if (coverOutput) coverOutput.textContent = cover;
+    if (hiddenOutput) hiddenOutput.textContent = hidden;
+    if (!revealOutput) return;
+    if (!reveal) {
+      revealOutput.hidden = true;
+      revealOutput.textContent = "";
+      return;
+    }
+    const markerCount = Math.max(1, Math.min(hidden.length, 12));
+    revealOutput.hidden = false;
+    revealOutput.textContent = `Reveal mode: ${cover}${"•".repeat(markerCount)} (• marks invisible insert positions)`;
   }
 
   private generateStegoPassphrase(length = 24): string {

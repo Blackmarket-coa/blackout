@@ -2011,6 +2011,52 @@ body {
   border-top: 1px solid rgba(26,188,156,0.04);
 }
 
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.info-tip__trigger {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid #4b638d;
+  background: #172238;
+  color: #b5cbff;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0;
+  margin-left: 0.2rem;
+  cursor: pointer;
+}
+
+.info-tip__popover {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translateX(-50%);
+  display: none;
+  min-width: 220px;
+  max-width: min(340px, 80vw);
+  padding: 0.42rem 0.52rem;
+  border-radius: 8px;
+  border: 1px solid #3b4f74;
+  background: #0f1829;
+  color: #dbe7ff;
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: normal;
+  z-index: 25;
+  box-shadow: 0 10px 22px rgb(0 0 0 / 30%);
+}
+
+.info-tip:hover .info-tip__popover,
+.info-tip:focus-within .info-tip__popover {
+  display: block;
+}
+
 .composer-popovers {
   display: grid;
   gap: 0.4rem;
@@ -2036,6 +2082,13 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9faad0;
+}
+
+.composer-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
 }
 
 .composer-popover-actions {
@@ -2108,6 +2161,32 @@ body {
   display: grid;
 }
 
+.composer-stego-preview {
+  border: 1px dashed #3d4e6c;
+  border-radius: 8px;
+  padding: 0.45rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.composer-stego-preview p {
+  margin: 0;
+}
+
+.composer-stego-advanced {
+  border: 1px solid #324667;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.composer-stego-advanced summary {
+  cursor: pointer;
+  color: #d5ddf1;
+  font-size: 0.82rem;
+}
+
 .composer-popover-inline {
   display: inline-flex;
   align-items: center;
@@ -2122,6 +2201,72 @@ body {
 
 .composer-stego-result--error {
   color: #fca5a5;
+}
+
+.composer-tour {
+  border: 1px solid #3b4f74;
+  background: #0f1a2d;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.composer-tour p {
+  margin: 0;
+  color: #d9e6ff;
+  font-size: 0.78rem;
+}
+
+.composer-tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.bug-report-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 5.5rem;
+  z-index: 60;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 999px;
+  border: 1px solid #40608d;
+  background: #13233b;
+  color: #d7e7ff;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
+}
+
+.bug-report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  display: grid;
+  place-items: center;
+  z-index: 70;
+  padding: 1rem;
+}
+
+.bug-report-modal {
+  width: min(560px, 100%);
+  background: #0f1829;
+  border: 1px solid #3b4f74;
+  border-radius: 12px;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.bug-report-modal form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bug-report-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
 }
 
 .composer-channel-editor {
@@ -2357,6 +2502,17 @@ label {
   .workspace.show-channel-drawer .channel-list {
     left: 0;
     width: min(88vw, 260px);
+    height: 100%;
+    z-index: 30;
+  }
+
+  .workspace.show-channel-drawer::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 45%);
+    z-index: 20;
+    pointer-events: none;
   }
 
   .mobile-tabbar {
@@ -2402,6 +2558,35 @@ label {
 
   .governance-taskboard {
     grid-template-columns: 1fr;
+  }
+
+  .chat-input {
+    position: relative;
+    padding-bottom: 5rem;
+  }
+
+  .composer-popover.is-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 72vh;
+    max-height: 86vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 0.8rem;
+    z-index: 55;
+    box-shadow: 0 -10px 30px rgb(0 0 0 / 45%);
+  }
+
+  .composer-popover.is-open::before {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 4px;
+    border-radius: 999px;
+    background: #5f6f8c;
+    margin: 0 auto 0.45rem;
   }
 }
 
