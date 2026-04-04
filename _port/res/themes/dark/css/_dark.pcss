@@ -25,6 +25,21 @@ $roomsublist-skeleton-ui-bg: linear-gradient(180deg, $background 0%, #ffffff00 1
 $roomtile-default-badge-bg-color: var(--cpd-color-icon-secondary);
 /* ******************** */
 
+
+
+:root {
+    /* BMC accessibility palette for high-visibility UI surfaces. */
+    --bmc-blue-900: #0a2e1a;
+    --bmc-blue-700: #2f6b3b;
+    --bmc-green-700: #3f8a4a;
+    --bmc-green-500: #6fcf7a;
+    --bmc-yellow-400: #d8b94a;
+    --bmc-surface: #0f1a13;
+    --bmc-surface-strong: #1b2b1f;
+    --bmc-text: #f2fff4;
+    --bmc-border-strong: #6fcf7a;
+    --bmc-focus-ring: #d8b94a;
+}
 /**
  * Creating a `semantic` color scale. This will not be needed with the new
  * visual language, but necessary during the transition period
@@ -74,7 +89,7 @@ $text-secondary-color: #b9bec6;
 $dark-panel-bg-color: var(--cpd-color-bg-subtle-secondary);
 $muted-fg-color: $header-panel-text-primary-color;
 $light-fg-color: $header-panel-text-secondary-color;
-$focus-bg-color: $room-highlight-color;
+$focus-bg-color: var(--bmc-surface-strong);
 $info-plinth-bg-color: $header-panel-bg-color;
 $event-selected-color: var(--cpd-color-bg-subtle-secondary);
 $topleftmenu-color: $primary-content;
@@ -100,10 +115,10 @@ $widget-body-bg-color: $panel-actions;
 
 /* Menu */
 /* ******************** */
-$menu-border-color: #000000;
-$menu-bg-color: $header-panel-bg-color;
+$menu-border-color: var(--bmc-border-strong);
+$menu-bg-color: var(--bmc-surface);
 $menu-box-shadow-color: $background;
-$menu-selected-color: $room-highlight-color;
+$menu-selected-color: var(--bmc-surface-strong);
 /* ******************** */
 
 /* Settings */
@@ -141,8 +156,8 @@ $input-placeholder: var(--cpd-color-text-secondary);
 
 /* Dialog */
 /* ******************** */
-$dialog-title-fg-color: $primary-content;
-$dialog-backdrop-color: #00000080;
+$dialog-title-fg-color: var(--bmc-text);
+$dialog-backdrop-color: color-mix(in srgb, var(--bmc-blue-900) 65%, transparent);
 $dialog-close-fg-color: $icon-button-color;
 $dialog-close-external-color: $primary-content;
 /* ******************** */

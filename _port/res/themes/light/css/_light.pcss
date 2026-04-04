@@ -3,6 +3,21 @@
     --emoji-font-family: "";
 }
 
+
+
+:root {
+    /* BMC accessibility palette for high-visibility UI surfaces. */
+    --bmc-blue-900: #1f4d32;
+    --bmc-blue-700: #2f6b3b;
+    --bmc-green-700: #2f6b3b;
+    --bmc-green-500: #3f8a4a;
+    --bmc-yellow-400: #d8b94a;
+    --bmc-surface: #f7fbf6;
+    --bmc-surface-strong: #e9f4e6;
+    --bmc-text: #102016;
+    --bmc-border-strong: #2f6b3b;
+    --bmc-focus-ring: #1f7a3f;
+}
 /* Nunito and Inter lacks combining diacritics, so these will fall through
    to the next font. Helevetica's diacritics sometimes do not combine
    nicely (on OSX, at least) and result in a huge horizontal mess.
@@ -105,7 +120,7 @@ $info-plinth-fg-color: var(--cpd-color-gray-900);
 $dark-panel-bg-color: var(--cpd-color-bg-subtle-secondary);
 $muted-fg-color: #61708b;
 $light-fg-color: #747474;
-$focus-bg-color: $preview-widget-bar-color;
+$focus-bg-color: var(--bmc-surface-strong);
 $info-plinth-bg-color: #f7f7f7;
 $event-selected-color: var(--cpd-color-bg-subtle-secondary);
 $topleftmenu-color: #212121;
@@ -136,10 +151,10 @@ $widget-body-bg-color: $background;
 
 /* Menu */
 /* ******************** */
-$menu-border-color: #e7e7e7;
-$menu-bg-color: $background;
+$menu-border-color: var(--bmc-border-strong);
+$menu-bg-color: var(--bmc-surface);
 $menu-box-shadow-color: rgba(118, 131, 156, 0.6);
-$menu-selected-color: #f5f8fa;
+$menu-selected-color: var(--bmc-surface-strong);
 /* ******************** */
 
 /* Settings */
@@ -191,8 +206,8 @@ $input-placeholder: var(--cpd-color-text-secondary);
 
 /* Dialog */
 /* ******************** */
-$dialog-title-fg-color: var(--cpd-color-text-primary);
-$dialog-backdrop-color: #030c1b4d;
+$dialog-title-fg-color: var(--bmc-text);
+$dialog-backdrop-color: color-mix(in srgb, var(--bmc-blue-900) 42%, transparent);
 $dialog-close-fg-color: $icon-button-color;
 $dialog-close-external-color: $background;
 /* ******************** */
