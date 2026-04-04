@@ -1,13 +1,16 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   Text,
   FlatList,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Animated,
+  Easing,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Send, Shield } from "lucide-react-native";
@@ -15,24 +18,204 @@ import { useTimeline, useSendMessage, type TimelineMessage } from "@blackout/cor
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
 
-function MessageBubble({ message }: { message: TimelineMessage }) {
+type VineAction = {
+  label: string;
+  primary?: boolean;
+};
+
+type SelectionTarget =
+  | { kind: "message"; eventId: string }
+  | { kind: "avatar"; eventId: string };
+
+const MAX_VISIBLE_ACTIONS = 5;
+const VINE_ANIMATION_MS = 250;
+
+function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
+  const content = message.content.toLowerCase();
+  const proposalPattern = /(governance|proposal|vote yes|vote)/i;
+  const filePattern =
+    /\.(pdf|docx?|xlsx?|csv|png|jpe?g|gif|zip|md|txt)\b/i.test(content) ||
+    /\b(attachment|uploaded|file)\b/i.test(content);
+
+  if (proposalPattern.test(content)) return "proposal";
+  if (filePattern) return "file";
+  return "plain";
+}
+
+function getMessageActions(message: TimelineMessage): VineAction[] {
+  const kind = detectMessageKind(message);
+  if (kind === "proposal") {
+    return [
+      { label: "Vote yes", primary: true },
+      { label: "Thread" },
+      { label: "Share" },
+      { label: "React" },
+    ];
+  }
+  if (kind === "file") {
+    return [{ label: "Download" }, { label: "Preview" }, { label: "Share" }, { label: "Pin" }];
+  }
+  return [{ label: "React" }, { label: "Thread" }, { label: "Forward" }, { label: "Pin" }, { label: "Flag" }];
+}
+
+function getAvatarActions(): VineAction[] {
+  return [{ label: "DM" }, { label: "View profile" }, { label: "Trade" }, { label: "Follow" }];
+}
+
+function MessageBubble({
+  message,
+  selection,
+  onSelect,
+  onOpenOverflow,
+}: {
+  message: TimelineMessage;
+  selection: SelectionTarget | null;
+  onSelect: (next: SelectionTarget) => void;
+  onOpenOverflow: (actions: VineAction[]) => void;
+}) {
   const timeStr = new Date(message.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const initial = message.senderName?.charAt(0)?.toUpperCase() || "?";
+  const messageActions = useMemo(() => getMessageActions(message), [message]);
+  const avatarActions = useMemo(() => getAvatarActions(), []);
+  const messageSelected =
+    selection?.kind === "message" && selection.eventId === message.eventId;
+  const avatarSelected =
+    selection?.kind === "avatar" && selection.eventId === message.eventId;
+  const visibleMessageActions = messageActions.slice(0, MAX_VISIBLE_ACTIONS);
+  const overflowMessageActions = messageActions.slice(MAX_VISIBLE_ACTIONS);
+  const visibleAvatarActions = avatarActions.slice(0, MAX_VISIBLE_ACTIONS);
+  const overflowAvatarActions = avatarActions.slice(MAX_VISIBLE_ACTIONS);
+  const animation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (messageSelected || avatarSelected) {
+      animation.setValue(0);
+      Animated.timing(animation, {
+        toValue: 1,
+        duration: VINE_ANIMATION_MS,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [animation, messageSelected, avatarSelected]);
 
   return (
-    <View
-      style={[
-        styles.bubble,
-        message.isOwn ? styles.bubbleOwn : styles.bubbleOther,
-      ]}
-    >
-      {!message.isOwn && (
-        <Text style={styles.senderName}>{message.senderName}</Text>
+    <View>
+      <View style={[styles.messageRow, message.isOwn && styles.messageRowOwn]}>
+        {!message.isOwn && (
+          <Pressable
+            style={styles.avatar}
+            onPress={() => onSelect({ kind: "avatar", eventId: message.eventId })}
+          >
+            <Text style={styles.avatarText}>{initial}</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={() => onSelect({ kind: "message", eventId: message.eventId })}
+          style={[
+            styles.bubble,
+            message.isOwn ? styles.bubbleOwn : styles.bubbleOther,
+            messageSelected && styles.bubbleSelected,
+          ]}
+        >
+          {!message.isOwn && (
+            <Text style={styles.senderName}>{message.senderName}</Text>
+          )}
+          <Text style={styles.messageText}>{message.content}</Text>
+          <Text style={styles.messageTime}>{timeStr}</Text>
+        </Pressable>
+      </View>
+
+      {avatarSelected && (
+        <Animated.View
+          style={[
+            styles.vineActions,
+            styles.vineActionsAvatar,
+            {
+              opacity: animation,
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-4, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {visibleAvatarActions.map((action) => (
+            <Pressable
+              key={`${message.eventId}-avatar-${action.label}`}
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+            >
+              <Text style={styles.vineActionLabel}>{action.label}</Text>
+            </Pressable>
+          ))}
+          {overflowAvatarActions.length > 0 && (
+            <Pressable
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onOpenOverflow(avatarActions)}
+            >
+              <Text style={styles.vineActionLabel}>More</Text>
+            </Pressable>
+          )}
+        </Animated.View>
       )}
-      <Text style={styles.messageText}>{message.content}</Text>
-      <Text style={styles.messageTime}>{timeStr}</Text>
+
+      {messageSelected && (
+        <Animated.View
+          style={[
+            styles.vineActions,
+            {
+              opacity: animation,
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-4, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {visibleMessageActions.map((action) => (
+            <Pressable
+              key={`${message.eventId}-${action.label}`}
+              style={({ hovered }) => [
+                styles.vineAction,
+                action.primary && styles.vineActionPrimary,
+                hovered && styles.vineActionHovered,
+              ]}
+            >
+              <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
+                {action.label}
+              </Text>
+            </Pressable>
+          ))}
+          {overflowMessageActions.length > 0 && (
+            <Pressable
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onOpenOverflow(messageActions)}
+            >
+              <Text style={styles.vineActionLabel}>More</Text>
+            </Pressable>
+          )}
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -47,7 +230,11 @@ export default function RoomScreen() {
   const { sendText } = useSendMessage(client, roomId || null);
 
   const [text, setText] = useState("");
+  const [selectedTarget, setSelectedTarget] = useState<SelectionTarget | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [overflowActions, setOverflowActions] = useState<VineAction[]>([]);
   const listRef = useRef<FlatList>(null);
+  const selectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get room name for header
   const room = client?.getRoom(roomId || "");
@@ -66,6 +253,38 @@ export default function RoomScreen() {
     const msg = text;
     setText("");
     await sendText(msg);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (selectTimeoutRef.current) clearTimeout(selectTimeoutRef.current);
+    };
+  }, []);
+
+  const handleSelect = (next: SelectionTarget) => {
+    if (
+      selectedTarget &&
+      (selectedTarget.eventId !== next.eventId || selectedTarget.kind !== next.kind)
+    ) {
+      setSelectedTarget(null);
+      if (selectTimeoutRef.current) clearTimeout(selectTimeoutRef.current);
+      selectTimeoutRef.current = setTimeout(() => {
+        setSelectedTarget(next);
+      }, VINE_ANIMATION_MS);
+      return;
+    }
+    setSelectedTarget((current) =>
+      current &&
+      current.eventId === next.eventId &&
+      current.kind === next.kind
+        ? null
+        : next
+    );
+  };
+
+  const openOverflow = (actions: VineAction[]) => {
+    setOverflowActions(actions);
+    setOverflowOpen(true);
   };
 
   return (
@@ -89,12 +308,20 @@ export default function RoomScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
+        <Pressable style={styles.timelinePressArea} onPress={() => setSelectedTarget(null)}>
         {/* Timeline */}
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(item) => item.eventId}
-          renderItem={({ item }) => <MessageBubble message={item} />}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              selection={selectedTarget}
+              onSelect={handleSelect}
+              onOpenOverflow={openOverflow}
+            />
+          )}
           contentContainerStyle={styles.timeline}
           onStartReached={() => canPaginate && loadMore()}
           onStartReachedThreshold={0.5}
@@ -104,6 +331,7 @@ export default function RoomScreen() {
             ) : null
           }
         />
+        </Pressable>
 
         {/* Composer */}
         <View style={styles.composer}>
@@ -118,15 +346,43 @@ export default function RoomScreen() {
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
           />
-          <TouchableOpacity
+          <Pressable
             style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
             onPress={handleSend}
             disabled={!text.trim()}
           >
             <Send size={20} color={text.trim() ? colors.black : colors.textMuted} />
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <Modal
+        visible={overflowOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverflowOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setOverflowOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={styles.sheetTitle}>Quick actions</Text>
+            <View style={styles.sheetActions}>
+              {overflowActions.map((action) => (
+                <Pressable
+                  key={`sheet-${action.label}`}
+                  style={({ hovered }) => [
+                    styles.vineAction,
+                    action.primary && styles.vineActionPrimary,
+                    hovered && styles.vineActionHovered,
+                  ]}
+                >
+                  <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -151,6 +407,33 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: spacing.xs,
   },
+  timelinePressArea: {
+    flex: 1,
+  },
+  messageRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  messageRowOwn: {
+    justifyContent: "flex-end",
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    backgroundColor: "rgba(26,188,156,0.10)",
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: spacing.xs,
+  },
+  avatarText: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   loadingText: {
     color: colors.textMuted,
     fontSize: typography.bodySmall.fontSize,
@@ -163,6 +446,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.lg,
     marginVertical: spacing.xxs,
+  },
+  bubbleSelected: {
+    backgroundColor: "rgba(22,129,61,0.2)",
+    borderLeftWidth: 2,
+    borderLeftColor: "#1ABC9C",
   },
   bubbleOwn: {
     alignSelf: "flex-end",
@@ -223,5 +511,63 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.surfaceRaised,
+  },
+  vineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    marginLeft: 48,
+  },
+  vineActionsAvatar: {
+    marginLeft: 48,
+  },
+  vineAction: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: "rgba(22,129,61,0.12)",
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.2)",
+  },
+  vineActionHovered: {
+    backgroundColor: "rgba(26,188,156,0.25)",
+  },
+  vineActionPrimary: {
+    backgroundColor: "rgba(26,188,156,0.2)",
+    borderColor: "#1ABC9C",
+  },
+  vineActionLabel: {
+    color: "#1ABC9C",
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  vineActionLabelPrimary: {
+    fontWeight: "600",
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#0a1a0f",
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    borderTopWidth: 1,
+    borderColor: "rgba(26,188,156,0.25)",
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  sheetTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.h3.fontSize,
+    fontWeight: "600",
+  },
+  sheetActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    paddingBottom: spacing.lg,
   },
 });
