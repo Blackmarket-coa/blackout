@@ -108,6 +108,7 @@ export class ApiClient {
         name: serverId === "srv_alpha" ? "Alpha Ops" : "Beta Crew",
         channels: [
           { id: "chn_general", name: "general" },
+          { id: "chn_governance", name: "governance-council", capabilityTags: ["governance"] },
           { id: "chn_standup", name: "standup" },
         ],
       };

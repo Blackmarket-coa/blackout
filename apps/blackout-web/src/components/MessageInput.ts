@@ -2,6 +2,8 @@ import { renderGlossaryTip } from "./glossary";
 
 interface MessageInputOptions {
   disabled: boolean;
+  canPropose: boolean;
+  governanceEnabled: boolean;
   compactMode: boolean;
   richEditingEnabled: boolean;
   stegoEnabled: boolean;
@@ -69,6 +71,8 @@ function renderAttachmentBulkImportSection(disabled: boolean): string {
 
 export function renderMessageInput({
   disabled,
+  canPropose,
+  governanceEnabled,
   compactMode: _compactMode,
   richEditingEnabled: _richEditingEnabled,
   stegoEnabled,
@@ -89,7 +93,7 @@ export function renderMessageInput({
           <button type="button" class="composer-shell-icon" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>📎</button>
           <button type="button" class="composer-shell-icon" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="GIF" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
           ${stegoEnabled ? `<button type="button" class="composer-shell-icon composer-shell-icon--steg" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Steganography" aria-expanded="false" ${disabled ? "disabled" : ""}>🛡</button>` : ""}
-          <button type="button" class="composer-shell-icon" data-action="composer-open-governance" aria-label="Insert governance proposal" title="Governance" ${disabled ? "disabled" : ""}>🗳</button>
+          <button type="button" class="composer-shell-icon" data-action="composer-open-governance" aria-label="Open governance composer" title="Governance composer" ${disabled ? "disabled" : ""}>🧾</button>
           <button type="submit" class="composer-shell-icon composer-shell-icon--send" aria-label="Send message" title="Send" ${disabled ? "disabled" : ""}>➤</button>
         </div>
       </div>
@@ -106,7 +110,7 @@ export function renderMessageInput({
           <div class="composer-popover-actions">
             <button type="button" class="composer-action-tertiary" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
             <button type="button" class="composer-action-tertiary" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
-            <button type="button" class="composer-action-tertiary" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Governance</button>
+            <button type="button" class="composer-action-tertiary" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Open governance composer</button>
           </div>
           <div class="composer-channel-editor">
             <div class="composer-mode-tabs" role="tablist" aria-label="Attachment library modes">
@@ -152,7 +156,7 @@ export function renderMessageInput({
         <section class="composer-popover" data-panel="governance" data-testid="composer-governance-panel" aria-hidden="true">
           <div class="composer-popover-head">
             <p class="composer-popover-title">Governance composer</p>
-            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close governance composer">Close</button>
           </div>
           <label class="composer-popover-field">Proposal title
             <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
@@ -171,9 +175,10 @@ export function renderMessageInput({
             <input type="number" min="1" max="168" step="1" data-action="composer-governance-duration" value="48" ${disabled ? "disabled" : ""} />
           </label>
           <div class="composer-popover-actions">
-            <button type="button" data-action="composer-governance-insert-proposal" ${disabled ? "disabled" : ""}>Insert proposal</button>
+            <button type="button" data-action="composer-governance-insert-proposal" ${disabled || !canPropose ? "disabled" : ""}>Insert proposal</button>
             <button type="button" data-action="composer-governance-insert-vote" ${disabled ? "disabled" : ""}>Insert vote</button>
           </div>
+          ${!canPropose ? '<p class="meta" role="status">You can vote, but proposal creation requires elevated governance permission.</p>' : ""}
           <div class="composer-channel-editor">
             <p class="composer-popover-title">Governance templates</p>
             <div class="composer-popover-actions">

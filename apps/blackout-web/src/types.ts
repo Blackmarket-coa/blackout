@@ -15,7 +15,10 @@ export interface ServerSummary {
 export interface ChannelSummary {
   id: string;
   name: string;
+  capabilityTags?: ChannelCapabilityTag[];
 }
+
+export type ChannelCapabilityTag = "governance" | "economics" | "federation" | "townhall";
 
 export interface ServerDetails {
   id: string;
@@ -28,6 +31,18 @@ export interface ChatMessage {
   sender: string;
   body: string;
   timestamp: string;
+}
+
+export interface GovernanceProposal {
+  id: string;
+  channelId: string;
+  title: string;
+  description: string;
+  voteType: "simple_majority" | "supermajority" | "ranked_choice" | "approval";
+  durationHours: number;
+  quorum: number;
+  status: "active" | "passed" | "rejected";
+  createdAt: string;
 }
 
 export type NotificationMode = "minimal" | "balanced" | "aggressive";
