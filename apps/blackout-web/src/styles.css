@@ -2377,18 +2377,22 @@ body {
 }
 
 .composer-tour {
-  border: 1px solid #3b4f74;
-  background: #0f1a2d;
+  border: 1px solid color-mix(in srgb, var(--accent-teal) 34%, #2a405f);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-bg) 86%, #081418), color-mix(in srgb, var(--panel-bg-alt) 84%, #081921));
   border-radius: 10px;
-  padding: 0.45rem 0.55rem;
+  padding: 0.5rem 0.6rem;
   display: grid;
   gap: 0.45rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .composer-tour p {
   margin: 0;
-  color: #d9e6ff;
+  color: #dce9ff;
   font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .composer-tour-actions {
