@@ -216,9 +216,9 @@ export const ClientLayout = () => {
   }, [onboardingSpaceId]);
 
   const selectedSpaceRooms = useMemo(() => {
-    if (!selectedSpaceId) return homeRooms;
+    if (settings.mobileRoomListScope === 'all' || !selectedSpaceId) return homeRooms;
     return homeRooms.filter((room) => room.roomId.includes(selectedSpaceId.slice(1, 5)) || room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase()));
-  }, [homeRooms, selectedSpaceId]);
+  }, [homeRooms, selectedSpaceId, settings.mobileRoomListScope]);
 
   const deadDrop = useDeadDrop(selectedRoomId ?? '');
   const activeRoomState = useRoom(selectedRoomId ?? '');
@@ -245,7 +245,7 @@ export const ClientLayout = () => {
     await markAllRead();
   };
 
-  const openSettingsSection = (section: 'appearance' | 'voice-video') => {
+  const openSettingsSection = (section: 'appearance' | 'voice-video' | 'accessibility') => {
     setSettingsPage(section);
     setSettingsOpen(true);
   };
@@ -527,10 +527,22 @@ export const ClientLayout = () => {
       ) : null}
 
       <main style={{ position: 'relative', minWidth: 0 }}>
-        {mobile && selectedRoomId ? (
-          <button type="button" onClick={() => setSelectedRoomId(null)} style={{ margin: 8, border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>
-            ← Back
-          </button>
+        {mobile ? (
+          <header style={{ position: 'sticky', top: 0, zIndex: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: 8, borderBottom: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {selectedRoomId ? (
+                <button type="button" onClick={() => setSelectedRoomId(null)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>
+                  ← Back
+                </button>
+              ) : null}
+              <button type="button" onClick={() => setSelectedSpaceId(null)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)' }}>
+                Home
+              </button>
+            </div>
+            <button type="button" onClick={() => openSettingsSection('appearance')} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: '4px 10px' }}>
+              Settings
+            </button>
+          </header>
         ) : null}
 
         {renderRoomContent()}
@@ -577,6 +589,34 @@ export const ClientLayout = () => {
               <strong>Settings</strong>
               <button type="button" onClick={() => setSettingsOpen(false)}>Close</button>
             </div>
+            {mobile ? (
+              <section style={{ marginBottom: 10, border: '1px solid var(--border-default)', borderRadius: 10, padding: 10, display: 'grid', gap: 8 }}>
+                <strong style={{ fontSize: 13 }}>Mobile quick settings</strong>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <button type="button" onClick={() => setSettingsPage('appearance')} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: '4px 8px' }}>
+                    Theme
+                  </button>
+                  <button type="button" onClick={() => setSettingsPage('appearance')} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: '4px 8px' }}>
+                    Density
+                  </button>
+                  <button type="button" onClick={() => setSettingsPage('accessibility')} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: '4px 8px' }}>
+                    Readability
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Room organization</span>
+                  <select
+                    aria-label="Room organization"
+                    value={settings.mobileRoomListScope ?? 'space'}
+                    onChange={(event) => setSettings((prev) => ({ ...prev, mobileRoomListScope: event.target.value as 'space' | 'all' }))}
+                    style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                  >
+                    <option value="space">Current space</option>
+                    <option value="all">All rooms</option>
+                  </select>
+                </div>
+              </section>
+            ) : null}
             <SettingsPage />
           </aside>
         ) : null}
