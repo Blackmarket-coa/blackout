@@ -62,14 +62,17 @@ const RADIAL_ACTIONS: RadialAction[] = [
 ];
 
 function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
-  const content = message.content.toLowerCase();
-  const proposalPattern = /(governance|proposal|vote yes|vote)/i;
-  const filePattern =
-    /\.(pdf|docx?|xlsx?|csv|png|jpe?g|gif|zip|md|txt)\b/i.test(content) ||
-    /\b(attachment|uploaded|file)\b/i.test(content);
+  const msgtype = message.msgtype ?? message.type;
 
-  if (proposalPattern.test(content)) return "proposal";
-  if (filePattern) return "file";
+  if (message.eventType === "m.room.proposal" || msgtype === "app.blackout.proposal") {
+    return "proposal";
+  }
+  if (msgtype === "m.image" || msgtype === "m.file" || msgtype === "m.video") {
+    return "file";
+  }
+  if (msgtype === "m.text") {
+    return "plain";
+  }
   return "plain";
 }
 
