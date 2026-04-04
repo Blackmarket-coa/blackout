@@ -8,7 +8,7 @@ const TAB_META: Array<{ id: MobileTab; label: string; icon: string; badge?: stri
   { id: "home", label: "Home", icon: "⌂", badge: "3" },
   { id: "spaces", label: "Spaces", icon: "▦", badge: "12" },
   { id: "search", label: "Search", icon: "⌕" },
-  { id: "governance", label: "Governance", icon: "🗳️", badge: "2" },
+  { id: "governance", label: "Gov Hub", icon: "🏛️", badge: "2" },
   { id: "profile", label: "Profile", icon: "◉" },
 ];
 

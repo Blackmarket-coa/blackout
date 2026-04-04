@@ -1,46 +1,71 @@
 import { renderGlossaryTip } from "./glossary";
+import type { GovernanceProposal } from "../types";
 
 export type GovernanceRoomTab = "feed" | "proposals" | "taskboard";
 
 interface GovernanceRoomPanelProps {
+  channelId: string;
   channelLabel: string;
   activeTab: GovernanceRoomTab;
   showProposalModal: boolean;
+  proposals: GovernanceProposal[];
+  canPropose: boolean;
+  canVote: boolean;
+  actionMessage?: string | null;
 }
 
-export function renderGovernanceRoomPanel({ channelLabel, activeTab, showProposalModal }: GovernanceRoomPanelProps): string {
+export function renderGovernanceRoomPanel({
+  channelId,
+  channelLabel,
+  activeTab,
+  showProposalModal,
+  proposals,
+  canPropose,
+  canVote,
+  actionMessage = null,
+}: GovernanceRoomPanelProps): string {
+  const activeProposal = proposals.find((proposal) => proposal.status === "active") ?? proposals[0];
+
   return `
-    <section class="governance-room" data-testid="governance-room-panel">
+    <section class="governance-room" data-testid="governance-room-panel" data-channel-id="${channelId}">
       <header class="governance-room-header">
         <div>
           <h2>Governance Room · ${channelLabel}</h2>
           <p class="meta">Feed, proposals, and task board workflows for coalition decision-making.</p>
         </div>
-        <button type="button" class="ghost-btn" data-action="governance-open-proposal">+ New Proposal</button>
+        <button type="button" class="ghost-btn" data-action="governance-open-proposal" ${canPropose ? "" : "disabled aria-disabled='true'"} title="${canPropose ? "Create a new governance proposal" : "Insufficient permissions to create proposals"}">+ New Proposal</button>
       </header>
-      <nav class="governance-tabs" aria-label="Governance room tabs">
-        <button type="button" class="${activeTab === "feed" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="feed">Feed</button>
-        <button type="button" class="${activeTab === "proposals" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="proposals">Proposals</button>
-        <button type="button" class="${activeTab === "taskboard" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="taskboard">Task Board</button>
+      <nav class="governance-tabs" aria-label="Governance room tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="${activeTab === "feed"}" aria-controls="governance-panel-feed" id="governance-tab-feed" class="${activeTab === "feed" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="feed">Decision feed</button>
+        <button type="button" role="tab" aria-selected="${activeTab === "proposals"}" aria-controls="governance-panel-proposals" id="governance-tab-proposals" class="${activeTab === "proposals" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="proposals">Proposal board</button>
+        <button type="button" role="tab" aria-selected="${activeTab === "taskboard"}" aria-controls="governance-panel-taskboard" id="governance-tab-taskboard" class="${activeTab === "taskboard" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="taskboard">Execution tasks</button>
       </nav>
-      ${activeTab === "feed" ? renderFeedView() : ""}
-      ${activeTab === "proposals" ? renderProposalsView() : ""}
+      ${actionMessage ? `<p class="meta" role="status" data-testid="governance-action-message">${actionMessage}</p>` : ""}
+      ${activeTab === "feed" ? renderFeedView(activeProposal, canVote) : ""}
+      ${activeTab === "proposals" ? renderProposalsView(proposals) : ""}
       ${activeTab === "taskboard" ? renderTaskBoardView() : ""}
-      ${showProposalModal ? renderProposalModal() : ""}
+      ${showProposalModal ? renderProposalModal(canPropose) : ""}
     </section>
   `;
 }
 
-function renderFeedView(): string {
+function renderFeedView(activeProposal: GovernanceProposal | undefined, canVote: boolean): string {
+  const title = activeProposal?.title ?? "No active proposal";
+  const timing = activeProposal ? `${activeProposal.durationHours}h voting window` : "Create one to start governance voting";
+
   return `
-    <section class="governance-feed" data-testid="governance-feed-view">
+    <section class="governance-feed" data-testid="governance-feed-view" role="tabpanel" id="governance-panel-feed" aria-labelledby="governance-tab-feed">
       <article class="governance-proposal-pinned">
-        <strong>Active proposal: Adopt coalition sprint budget</strong>
-        <p class="meta">For 18 · Against 3 · Abstain 2 · closes in 18h</p>
+        <strong>Active proposal: ${title}</strong>
+        <p class="meta">${timing}</p>
         <div class="governance-tally">
           <span class="for" style="width: 72%"></span>
           <span class="against" style="width: 18%"></span>
           <span class="abstain" style="width: 10%"></span>
+        </div>
+        <div class="governance-modal-actions">
+          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast an approve vote" : "Insufficient permissions to vote"}">Vote approve</button>
+          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast a block vote" : "Insufficient permissions to vote"}">Vote block</button>
         </div>
       </article>
       <p class="meta">Discussion feed remains below with pinned proposal context above the timeline.</p>
@@ -48,12 +73,19 @@ function renderFeedView(): string {
   `;
 }
 
-function renderProposalsView(): string {
+function renderProposalsView(proposals: GovernanceProposal[]): string {
   return `
-    <section class="governance-proposals" data-testid="governance-proposals-view">
-      <article class="governance-proposal-card"><h3>Rotate treasury signers</h3><p class="meta">Status: Active · Deadline: 14h</p></article>
-      <article class="governance-proposal-card"><h3>Approve outreach grant</h3><p class="meta">Status: Passed · Deadline: Closed</p></article>
-      <article class="governance-proposal-card"><h3>Enable marketplace bridge</h3><p class="meta">Status: Rejected · Deadline: Closed</p></article>
+    <section class="governance-proposals" data-testid="governance-proposals-view" role="tabpanel" id="governance-panel-proposals" aria-labelledby="governance-tab-proposals">
+      ${
+        proposals.length
+          ? proposals
+              .map(
+                (proposal) =>
+                  `<article class="governance-proposal-card"><h3>${proposal.title}</h3><p class="meta">Status: ${proposal.status} · Duration: ${proposal.durationHours}h</p></article>`,
+              )
+              .join("")
+          : '<p class="meta">No proposals yet. Create one to start governance voting.</p>'
+      }
     </section>
   `;
 }
@@ -67,7 +99,7 @@ function renderTaskBoardView(): string {
   ];
 
   return `
-    <section class="governance-taskboard" data-testid="governance-taskboard-view">
+    <section class="governance-taskboard" data-testid="governance-taskboard-view" role="tabpanel" id="governance-panel-taskboard" aria-labelledby="governance-tab-taskboard">
       ${columns
         .map(
           (column) => `<article class="governance-column"><h3>${column.title}</h3><div class="governance-task-card"><strong>${column.card}</strong><p class="meta">Assignee: coalition-ops · bounty: 150 credits</p></div></article>`,
@@ -77,7 +109,7 @@ function renderTaskBoardView(): string {
   `;
 }
 
-function renderProposalModal(): string {
+function renderProposalModal(canPropose: boolean): string {
   return `
     <div class="modal governance-modal" data-action="governance-close-proposal" role="presentation">
       <section class="modal-content governance-modal-card" role="dialog" aria-modal="true" aria-label="Create proposal">
@@ -85,21 +117,21 @@ function renderProposalModal(): string {
           <h3>Create Proposal</h3>
           <p class="meta">Title, vote type, duration, quorum, and attachments.</p>
         </header>
-        <label>Title<input type="text" value="Adopt quarterly roadmap" /></label>
-        <label>Description<textarea rows="4">Define budget and delivery goals for the next quarter.</textarea></label>
+        <label>Title<input type="text" data-action="governance-proposal-title" value="Adopt quarterly roadmap" /></label>
+        <label>Description<textarea rows="4" data-action="governance-proposal-description">Define budget and delivery goals for the next quarter.</textarea></label>
         <label>Vote type
-          <select>
-            <option>Simple majority</option>
-            <option>Supermajority (2/3)</option>
-            <option>Ranked choice</option>
-            <option>Approval voting</option>
+          <select data-action="governance-proposal-vote-type">
+            <option value="simple_majority">Simple majority</option>
+            <option value="supermajority">Supermajority (2/3)</option>
+            <option value="ranked_choice">Ranked choice</option>
+            <option value="approval">Approval voting</option>
           </select>
         </label>
-        <label>Duration<select><option>48 hours</option><option>7 days</option><option>14 days</option></select></label>
-        <label>Quorum ${renderGlossaryTip("Quorum")}<input type="number" min="1" max="100" value="60" /></label>
+        <label>Duration<select data-action="governance-proposal-duration"><option value="48">48 hours</option><option value="168">7 days</option><option value="336">14 days</option></select></label>
+        <label>Quorum ${renderGlossaryTip("Quorum")}<input type="number" min="1" max="100" value="60" data-action="governance-proposal-quorum" /></label>
         <div class="governance-modal-actions">
           <button type="button" class="ghost-btn" data-action="governance-close-proposal">Cancel</button>
-          <button type="button">Create proposal</button>
+          <button type="button" data-action="governance-create-proposal" ${canPropose ? "" : "disabled aria-disabled='true'"}>Create proposal</button>
         </div>
       </section>
     </div>

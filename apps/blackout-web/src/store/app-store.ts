@@ -1,4 +1,4 @@
-import type { ChannelSummary, ChatMessage, ServerSummary, Session } from "../types";
+import type { ChannelSummary, ChatMessage, GovernanceProposal, ServerSummary, Session } from "../types";
 
 const NAV_STORAGE_KEY = "blackout.web.navigation";
 
@@ -27,6 +27,7 @@ export interface AppState {
   error: string | null;
   unreadByChannel: Record<string, number>;
   channelDrawerOpen: boolean;
+  governanceProposals: GovernanceProposal[];
 }
 
 interface PersistedNavigation {
@@ -60,6 +61,7 @@ export class AppStore {
       error: null,
       unreadByChannel: {},
       channelDrawerOpen: false,
+      governanceProposals: [],
     };
   }
 

@@ -28,7 +28,7 @@ import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
-import type { ChatMessage, ServerDetails } from "./types";
+import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
@@ -107,8 +107,8 @@ export class BlackoutWebApp {
   private repoToolsOpen = false;
   private activeRightPanel: RightPanelView | null = null;
   private activeWidgetFeatureId: string | null = null;
-  private activeGovernanceTab: GovernanceRoomTab = "feed";
-  private governanceProposalModalOpen = false;
+  private governanceTabByChannel: Record<string, GovernanceRoomTab> = {};
+  private governanceProposalModalByChannel: Record<string, boolean> = {};
   private activeEconomicsTab: EconomicsTab = "boosts";
   private activeFederationTab: FederationTab = "health";
   private activeTownhallMode: TownhallMode = "standard";
@@ -313,6 +313,59 @@ export class BlackoutWebApp {
     const activeServer = state.servers.find((server) => server.id === state.activeServerId);
     if (!activeServer) return false;
     return /admin|owner|mod|moderator/i.test(activeServer.role);
+  }
+
+  private governanceFeatureEnabled(): boolean {
+    const features = this.getActivePresetFeatures();
+    return (features["features.governance.entitlements"] ?? false) || (features["features.bmc.governance"] ?? false);
+  }
+
+  private canPropose(): boolean {
+    return this.governanceFeatureEnabled() && this.hasAdminAccess();
+  }
+
+  private canVote(): boolean {
+    return this.governanceFeatureEnabled();
+  }
+
+  private activeChannel() {
+    const state = this.store.getState();
+    return state.channels.find((channel) => channel.id === state.activeChannelId) ?? null;
+  }
+
+  private activeChannelHasCapability(capability: "governance" | "economics" | "federation" | "townhall"): boolean {
+    const channel = this.activeChannel();
+    return Boolean(channel?.capabilityTags?.includes(capability));
+  }
+
+  private inferCapabilityTags(channelName: string): ChannelCapabilityTag[] {
+    const tags: ChannelCapabilityTag[] = [];
+    const normalized = channelName.toLowerCase();
+    if (/\b(governance|proposal|council|treasury|vote)\b/.test(normalized)) tags.push("governance");
+    if (/\b(boost|subscription|quest|market|wallet|monetization)\b/.test(normalized)) tags.push("economics");
+    if (/\b(federation|mesh|replication|recovery|self-healing)\b/.test(normalized)) tags.push("federation");
+    if (/\b(townhall|assembly|stage|all-hands)\b/.test(normalized)) tags.push("townhall");
+    return tags;
+  }
+
+  private getGovernanceTabForChannel(channelId: string): GovernanceRoomTab {
+    return this.governanceTabByChannel[channelId] ?? "feed";
+  }
+
+  private governanceModalOpen(channelId: string): boolean {
+    return this.governanceProposalModalByChannel[channelId] ?? false;
+  }
+
+  private openGovernanceDestination(): void {
+    const state = this.store.getState();
+    const governanceChannel = state.channels.find((channel) => channel.capabilityTags?.includes("governance"));
+    if (governanceChannel) {
+      void this.openChannel(governanceChannel.id);
+      this.featureActionResult = `Opened governance room #${governanceChannel.name}.`;
+      return;
+    }
+    this.activeRightPanel = "governance";
+    this.featureActionResult = "No governance-tagged room found. Opened governance vote panel instead.";
   }
 
   private getRoleClass(): string {
@@ -558,18 +611,25 @@ export class BlackoutWebApp {
     }
 
     const state = this.store.getState();
-    const activeChannelName = state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "";
-    const isGovernanceRoom = /\b(governance|proposal|council|treasury)\b/i.test(activeChannelName);
-    const isEconomicsRoom = /\b(boost|subscription|quest|market|wallet|monetization)\b/i.test(activeChannelName);
-    const isFederationRoom = /\b(federation|mesh|replication|recovery|self-healing)\b/i.test(activeChannelName);
-    const isTownhallRoom = /\b(townhall|assembly|stage|all-hands)\b/i.test(activeChannelName);
+    const activeChannel = state.channels.find((channel) => channel.id === state.activeChannelId) ?? null;
+    const activeChannelName = activeChannel?.name ?? "";
+    const activeChannelId = activeChannel?.id ?? "";
+    const isGovernanceRoom = this.activeChannelHasCapability("governance");
+    const isEconomicsRoom = this.activeChannelHasCapability("economics");
+    const isFederationRoom = this.activeChannelHasCapability("federation");
+    const isTownhallRoom = this.activeChannelHasCapability("townhall");
 
-    if (isGovernanceRoom) {
+    if (isGovernanceRoom && activeChannelId) {
       this.trackAdvancedDiscovery("governance");
       return renderGovernanceRoomPanel({
+        channelId: activeChannelId,
         channelLabel: activeChannelName,
-        activeTab: this.activeGovernanceTab,
-        showProposalModal: this.governanceProposalModalOpen,
+        activeTab: this.getGovernanceTabForChannel(activeChannelId),
+        showProposalModal: this.governanceModalOpen(activeChannelId),
+        proposals: state.governanceProposals.filter((proposal) => proposal.channelId === activeChannelId),
+        canPropose: this.canPropose(),
+        canVote: this.canVote(),
+        actionMessage: this.featureActionResult,
       });
     }
 
@@ -599,6 +659,8 @@ export class BlackoutWebApp {
       channelLabel: state.activeChannelId ? `#${state.channels.find((channel) => channel.id === state.activeChannelId)?.name ?? "channel"}` : "Pick a channel",
       messages: state.messages,
       canSend: Boolean(state.activeChannelId),
+      canPropose: this.canPropose(),
+      governanceEnabled: this.governanceFeatureEnabled(),
       sendPending: state.loading.send,
       richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
       stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
@@ -676,9 +738,10 @@ export class BlackoutWebApp {
           <strong>Enable coalition quest payouts</strong>
           <p class="meta">Voting window: 48h • quorum 60%</p>
           <div class="right-panel-actions">
-            <button type="button" class="ghost-btn">Vote approve</button>
-            <button type="button" class="ghost-btn">Vote block</button>
+            <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${this.canVote() ? "" : "disabled"}>Vote approve</button>
+            <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${this.canVote() ? "" : "disabled"}>Vote block</button>
           </div>
+          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is unavailable until governance entitlements are enabled.</p>'}
         </div>`,
       widget: "",
     };
@@ -1447,6 +1510,14 @@ export class BlackoutWebApp {
 
     if (event.key === "Escape" && this.root.querySelector(".composer-popover.is-open")) {
       this.closeComposerPanels();
+      return;
+    }
+
+    if (event.key === "Escape" && this.root.querySelector(".governance-modal")) {
+      const channelId = this.store.getState().activeChannelId;
+      if (!channelId) return;
+      this.governanceProposalModalByChannel[channelId] = false;
+      this.render();
     }
   };
 
@@ -2058,6 +2129,11 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         const panel = button.dataset.panel as RightPanelView | undefined;
         if (!panel) return;
+        if (panel === "governance" && !this.governanceFeatureEnabled()) {
+          this.featureActionResult = "Governance vote panel is disabled by feature policy.";
+          this.render();
+          return;
+        }
         this.activeRightPanel = panel;
         if (panel !== "widget") {
           this.activeWidgetFeatureId = null;
@@ -2075,24 +2151,80 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-set-tab']").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.tab as GovernanceRoomTab | undefined;
-        if (!tab) return;
-        this.activeGovernanceTab = tab;
+        const channelId = this.store.getState().activeChannelId;
+        if (!tab || !channelId) return;
+        this.governanceTabByChannel[channelId] = tab;
         this.render();
       });
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='governance-open-proposal']").forEach((element) => {
       element.addEventListener("click", () => {
-        this.governanceProposalModalOpen = true;
+        const channelId = this.store.getState().activeChannelId;
+        if (!channelId || !this.canPropose()) {
+          this.featureActionResult = "You do not have permission to create proposals in this room.";
+          this.render();
+          return;
+        }
+        this.governanceProposalModalByChannel[channelId] = true;
         this.render();
       });
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='governance-close-proposal']").forEach((element) => {
       element.addEventListener("click", (event) => {
+        const channelId = this.store.getState().activeChannelId;
         const target = event.target as HTMLElement;
+        if (!channelId) return;
         if (element.classList.contains("modal") && target.closest(".modal-content")) return;
-        this.governanceProposalModalOpen = false;
+        this.governanceProposalModalByChannel[channelId] = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-create-proposal']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const state = this.store.getState();
+        if (!state.activeChannelId || !this.canPropose()) return;
+        const title = this.root.querySelector<HTMLInputElement>("[data-action='governance-proposal-title']")?.value.trim() ?? "";
+        const description = this.root.querySelector<HTMLTextAreaElement>("[data-action='governance-proposal-description']")?.value.trim() ?? "";
+        const voteType = (this.root.querySelector<HTMLSelectElement>("[data-action='governance-proposal-vote-type']")?.value ??
+          "simple_majority") as GovernanceProposal["voteType"];
+        const durationHours = Math.max(1, Number.parseInt(this.root.querySelector<HTMLSelectElement>("[data-action='governance-proposal-duration']")?.value ?? "48", 10) || 48);
+        const quorum = Math.min(100, Math.max(1, Number.parseInt(this.root.querySelector<HTMLInputElement>("[data-action='governance-proposal-quorum']")?.value ?? "60", 10) || 60));
+        if (!title || description.length < 8) {
+          this.featureActionResult = "Proposal validation failed: add a title and a descriptive body (8+ chars).";
+          this.render();
+          return;
+        }
+        const proposal: GovernanceProposal = {
+          id: `gov_${Date.now()}`,
+          channelId: state.activeChannelId,
+          title,
+          description,
+          voteType,
+          durationHours,
+          quorum,
+          status: "active",
+          createdAt: new Date().toISOString(),
+        };
+        this.store.patch({
+          governanceProposals: [proposal, ...state.governanceProposals],
+        });
+        this.governanceProposalModalByChannel[state.activeChannelId] = false;
+        this.featureActionResult = "Proposal created and published to the governance board.";
+        this.trackKpiEvent("governance_proposal_created", { channel_id: state.activeChannelId, vote_type: voteType });
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-vote']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const state = this.store.getState();
+        if (!state.activeChannelId || !this.canVote()) return;
+        const vote = button.dataset.vote ?? "approve";
+        this.featureActionResult = `Vote submitted: ${vote}.`;
+        this.trackKpiEvent("governance_vote_cast", { channel_id: state.activeChannelId, vote });
         this.render();
       });
     });
@@ -2140,7 +2272,9 @@ export class BlackoutWebApp {
             this.activeWorkspacePanel = "activity";
             break;
           case "governance":
+            this.settingsOpen = false;
             this.activeWorkspacePanel = "chat";
+            this.openGovernanceDestination();
             break;
           case "profile":
             this.settingsOpen = true;
@@ -2301,12 +2435,22 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-open-governance']").forEach((button) => {
       button.addEventListener("click", () => {
+        if (!this.governanceFeatureEnabled()) {
+          this.featureActionResult = "Governance composer is disabled by feature policy.";
+          this.render();
+          return;
+        }
         this.toggleComposerPanel("governance", button);
         this.trackAdvancedDiscovery("governance");
       });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
+      if (!this.canPropose()) {
+        this.featureActionResult = "You need proposal permissions to insert governance proposals.";
+        this.render();
+        return;
+      }
       const title = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-title']")?.value.trim() || "Approve sprint release?";
       const type = this.root.querySelector<HTMLSelectElement>("[data-action='composer-governance-type']")?.value || "binary";
       const optionsRaw = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']")?.value || "Approve,Block";
@@ -2330,6 +2474,11 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-save-template']")?.addEventListener("click", () => {
+      if (!this.canPropose()) {
+        this.featureActionResult = "Template save requires governance proposal permissions.";
+        this.render();
+        return;
+      }
       const title = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-title']")?.value.trim() || "";
       const type = (this.root.querySelector<HTMLSelectElement>("[data-action='composer-governance-type']")?.value as GovernanceTemplateItem["type"] | undefined) ?? "binary";
       const optionsRaw = this.root.querySelector<HTMLInputElement>("[data-action='composer-governance-options']")?.value || "";
@@ -2361,7 +2510,11 @@ export class BlackoutWebApp {
       if (!raw) return;
       try {
         const parsed = JSON.parse(raw) as GovernanceTemplateItem[];
-        if (!Array.isArray(parsed)) return;
+        if (!Array.isArray(parsed)) {
+          this.featureActionResult = "Template import failed: payload must be a JSON array.";
+          this.render();
+          return;
+        }
         const imported = parsed
           .filter((item) => item && typeof item.title === "string" && (item.type === "binary" || item.type === "multiple_choice" || item.type === "ranked") && Array.isArray(item.options))
           .map((item) => ({
@@ -2374,7 +2527,11 @@ export class BlackoutWebApp {
         this.governanceTemplates = [...this.governanceTemplates.filter((item) => !imported.some((next) => next.id === item.id)), ...imported];
         this.persistGovernanceTemplates();
         this.refreshGovernanceTemplateUi();
+        this.featureActionResult = `Imported ${imported.length} governance template(s).`;
+        this.render();
       } catch {
+        this.featureActionResult = "Template import failed: invalid JSON format.";
+        this.render();
         return;
       }
     });
@@ -2724,6 +2881,14 @@ export class BlackoutWebApp {
     this.updateAttachmentActionState();
     this.refreshGovernanceTemplateUi();
     this.bindCommandPaletteFocusTrap();
+    this.manageGovernanceModalFocus();
+  }
+
+  private manageGovernanceModalFocus(): void {
+    const modal = this.root.querySelector<HTMLElement>(".governance-modal-card");
+    if (!modal) return;
+    const primaryInput = modal.querySelector<HTMLInputElement>("[data-action='governance-proposal-title']");
+    primaryInput?.focus();
   }
 
   private openCommandPalette(): void {
@@ -3447,15 +3612,28 @@ export class BlackoutWebApp {
     }
   }
 
-  private persistGovernanceTemplates(): void {
-    globalThis.localStorage.setItem(GOVERNANCE_TEMPLATE_STORAGE_KEY, JSON.stringify(this.governanceTemplates));
+  private persistGovernanceTemplates(channelId = this.store.getState().activeChannelId): void {
+    if (!channelId) return;
+    const raw = globalThis.localStorage.getItem(GOVERNANCE_TEMPLATE_STORAGE_KEY);
+    let existing: Record<string, GovernanceTemplateItem[]> = {};
+    if (raw) {
+      try {
+        existing = JSON.parse(raw) as Record<string, GovernanceTemplateItem[]>;
+      } catch {
+        existing = {};
+      }
+    }
+    existing[channelId] = this.governanceTemplates;
+    globalThis.localStorage.setItem(GOVERNANCE_TEMPLATE_STORAGE_KEY, JSON.stringify(existing));
   }
 
-  private loadGovernanceTemplates(): GovernanceTemplateItem[] {
+  private loadGovernanceTemplates(channelId = this.store.getState().activeChannelId): GovernanceTemplateItem[] {
     const raw = globalThis.localStorage.getItem(GOVERNANCE_TEMPLATE_STORAGE_KEY);
     if (!raw) return [];
     try {
-      const parsed = JSON.parse(raw) as GovernanceTemplateItem[];
+      if (!channelId) return [];
+      const parsedByChannel = JSON.parse(raw) as Record<string, GovernanceTemplateItem[]>;
+      const parsed = parsedByChannel[channelId];
       if (!Array.isArray(parsed)) return [];
       return parsed
         .filter((item) => item && typeof item.id === "string" && typeof item.title === "string" && (item.type === "binary" || item.type === "multiple_choice" || item.type === "ranked") && Array.isArray(item.options))
@@ -3826,11 +4004,15 @@ export class BlackoutWebApp {
 
     await this.withLoading("channels", async () => {
       const details: ServerDetails = await this.api.getServerDetails(state.session!, serverId);
-      const preferredChannelId = state.activeChannelId && details.channels.some((channel) => channel.id === state.activeChannelId) ? state.activeChannelId : details.channels[0]?.id ?? null;
+      const channels = details.channels.map((channel) => ({
+        ...channel,
+        capabilityTags: channel.capabilityTags?.length ? channel.capabilityTags : this.inferCapabilityTags(channel.name),
+      }));
+      const preferredChannelId = state.activeChannelId && channels.some((channel) => channel.id === state.activeChannelId) ? state.activeChannelId : channels[0]?.id ?? null;
 
       this.store.patch({
         activeServerId: serverId,
-        channels: details.channels,
+        channels,
         activeChannelId: preferredChannelId,
         messages: [],
       });
@@ -3856,6 +4038,7 @@ export class BlackoutWebApp {
           [channelId]: 0,
         },
       });
+      this.governanceTemplates = this.loadGovernanceTemplates(channelId);
       this.markSeen(messages);
     });
   }
@@ -3925,13 +4108,17 @@ export class BlackoutWebApp {
         }
 
         const channel = await this.api.createChannel(current.session!, current.activeServerId, name);
+        const channelWithCapabilities = {
+          ...channel,
+          capabilityTags: channel.capabilityTags?.length ? channel.capabilityTags : this.inferCapabilityTags(channel.name),
+        };
         this.store.patch({
-          channels: [...current.channels, channel],
+          channels: [...current.channels, channelWithCapabilities],
           pendingCreate: "none",
           createError: null,
           createName: "",
         });
-        await this.openChannel(channel.id);
+        await this.openChannel(channelWithCapabilities.id);
       },
       (message) => {
         this.store.patch({ createError: message });
