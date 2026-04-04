@@ -449,7 +449,7 @@ export default function RoomScreen() {
     }
 
     const getPendingVotes = () => {
-      const proposalEvents = room.currentState.getStateEvents(EventTypes.PROPOSAL as any);
+      const proposalEvents = room.currentState.getStateEvents(EventTypes.PROPOSAL);
       const list = Array.isArray(proposalEvents) ? proposalEvents : proposalEvents ? [proposalEvents] : [];
       const activeCount = list.filter((event) => event.getContent()?.status === "active").length;
       setPendingVoteCount(activeCount);
