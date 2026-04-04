@@ -13,6 +13,8 @@ export type TimelineMessage = {
   senderName: string;
   senderAvatar: string | null;
   content: string;
+  eventType: string;
+  msgtype: string | null;
   type: string;
   timestamp: number;
   isEdited: boolean;
@@ -26,11 +28,16 @@ function eventToMessage(
 ): TimelineMessage | null {
   // Skip state events, redactions, etc
   const type = event.getType();
-  if (type !== "m.room.message" && type !== "m.room.encrypted") {
+  if (
+    type !== "m.room.message" &&
+    type !== "m.room.encrypted" &&
+    type !== "m.room.proposal"
+  ) {
     return null;
   }
 
   const content = event.getContent();
+  const msgtype = typeof content.msgtype === "string" ? content.msgtype : null;
   const sender = event.getSender()!;
   const room = client.getRoom(event.getRoomId()!);
   const member = room?.getMember(sender);
@@ -42,8 +49,10 @@ function eventToMessage(
     senderAvatar: member?.getAvatarUrl(
       client.getHomeserverUrl(), 40, 40, "crop", false, false
     ) || null,
-    content: content.body || content.msgtype || "[encrypted]",
-    type: content.msgtype || type,
+    content: content.body || content.title || msgtype || "[encrypted]",
+    eventType: type,
+    msgtype,
+    type: msgtype || type,
     timestamp: event.getTs(),
     isEdited: !!content["m.new_content"],
     replyTo: content["m.relates_to"]?.["m.in_reply_to"]?.event_id || null,
