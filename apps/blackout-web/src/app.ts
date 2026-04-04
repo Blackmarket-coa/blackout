@@ -18,6 +18,12 @@ import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { renderBugReportFab } from "./components/BugReportFab";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import {
+  parseAttachmentImport,
+  validateAttachmentInput,
+  validateAttachmentUrl,
+  type AttachmentType,
+} from "./utils/attachment-validation";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
@@ -58,7 +64,8 @@ type AdvancedModule = "governance" | "federation" | "stego";
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
-type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
+type AttachmentType = "image" | "video" | "audio" | "file" | "governance" | "meme";
+type AttachmentLibraryItem = { id: string; type: AttachmentType; label: string; url: string };
 type GovernanceTemplateItem = { id: string; title: string; type: "binary" | "multiple_choice" | "ranked"; options: string[]; durationHours: number };
 type AttachmentPanelMode = "quick" | "manage" | "bulk";
 
@@ -600,6 +607,7 @@ export class BlackoutWebApp {
       mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
       typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
       showTypingIndicator: this.composerIsTyping,
+      attachmentMode: this.attachmentComposerMode,
       compactMode: this.getCompactModeActive(),
       compactRecommended: this.isMessageHeavySession(),
     });
@@ -2211,6 +2219,18 @@ export class BlackoutWebApp {
       this.switchStegoView("password");
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-mode-quick-add']")?.addEventListener("click", () => {
+      this.switchAttachmentComposerMode("quick-add");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-mode-library']")?.addEventListener("click", () => {
+      this.switchAttachmentComposerMode("library");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-mode-bulk-import']")?.addEventListener("click", () => {
+      this.switchAttachmentComposerMode("bulk-import");
+    });
+
     this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']")?.addEventListener("input", () => {
       this.updateStegoEncodePreview();
     });
@@ -2513,12 +2533,32 @@ export class BlackoutWebApp {
       }
     });
 
+    const attachmentTypeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
+    const attachmentLabelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
+    const attachmentUrlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
+    const attachmentAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
+    const attachmentImportInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
+    const syncAttachmentDraftUi = (): void => {
+      const url = attachmentUrlInput?.value ?? "";
+      const urlResult = validateAttachmentUrl(url);
+      const urlError = url.length > 0 && !urlResult.valid ? urlResult.error ?? "Invalid URL." : "";
+      const hasLabel = (attachmentLabelInput?.value.trim() ?? "").length > 0;
+      if (attachmentAddButton) attachmentAddButton.disabled = !hasLabel || !urlResult.valid;
+      const urlErrorNode = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-url-error']");
+      if (urlErrorNode) {
+        urlErrorNode.textContent = urlError;
+      }
+      this.refreshAttachmentDraftPreview();
+    };
+    attachmentTypeSelect?.addEventListener("change", syncAttachmentDraftUi);
+    attachmentLabelInput?.addEventListener("input", syncAttachmentDraftUi);
+    attachmentUrlInput?.addEventListener("input", syncAttachmentDraftUi);
+    syncAttachmentDraftUi();
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
-      const typeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
       const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
-      const label = labelInput?.value.trim() ?? "";
       const url = urlInput?.value.trim() ?? "";
       this.updateAttachmentActionState();
       const quickAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
@@ -2531,15 +2571,31 @@ export class BlackoutWebApp {
         : [...this.attachmentLibrary, item];
       this.persistAttachmentLibrary();
       this.refreshAttachmentLibraryUi();
-      if (labelInput) labelInput.value = "";
+      if (labelInput) labelInput.value = normalizedLabel;
       if (urlInput) urlInput.value = "";
       this.updateAttachmentActionState();
     });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.addEventListener("input", (event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      this.syncAttachmentLabelHelper(input.value.trim());
+    });
+    this.syncAttachmentLabelHelper(this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "");
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-export']")?.addEventListener("click", () => {
       const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
       if (!importInput) return;
       importInput.value = JSON.stringify(this.attachmentLibrary, null, 2);
+      this.switchAttachmentComposerMode("bulk-import");
+      this.updateAttachmentImportValidationState();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-search']")?.addEventListener("input", () => {
+      this.refreshAttachmentLibraryUi();
+    });
+
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']")?.addEventListener("input", () => {
+      this.updateAttachmentImportValidationState();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']")?.addEventListener("click", () => {
@@ -2550,20 +2606,28 @@ export class BlackoutWebApp {
       if (!raw || importButton?.disabled) return;
       try {
         const parsed = JSON.parse(raw) as Array<{ type?: string; label?: string; url?: string }>;
-        if (!Array.isArray(parsed)) return;
+        if (!Array.isArray(parsed)) {
+          this.updateAttachmentImportValidationState("JSON must be an array of attachment objects.", true);
+          return;
+        }
         const imported = parsed
-          .filter((item) => (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio") && typeof item.label === "string" && typeof item.url === "string")
+          .filter((item) => typeof item.label === "string" && typeof item.url === "string" && ATTACHMENT_TYPES.includes(this.normalizeAttachmentType(item.type)))
           .map((item) => ({
-            id: this.normalizeStegoChannelId(`${item.type}-${item.label as string}`),
-            type: item.type as AttachmentLibraryItem["type"],
+            id: this.normalizeStegoChannelId(`${this.normalizeAttachmentType(item.type)}-${item.label as string}`),
+            type: this.normalizeAttachmentType(item.type),
             label: item.label as string,
             url: item.url as string,
           }));
+        if (!imported.length) {
+          this.updateAttachmentImportValidationState("No valid attachments found. Each item needs type, label, and url.", true);
+          return;
+        }
         this.attachmentLibrary = [...this.attachmentLibrary.filter((entry) => !imported.some((item) => item.id === entry.id)), ...imported];
         this.persistAttachmentLibrary();
         this.refreshAttachmentLibraryUi();
         this.updateAttachmentActionState();
       } catch {
+        this.updateAttachmentImportValidationState("Invalid JSON. Check formatting and try again.", true);
         return;
       }
     });
@@ -2655,6 +2719,7 @@ export class BlackoutWebApp {
     this.refreshStegoChannelUi();
     this.refreshGifLibraryUi();
     this.refreshEmojiLibraryUi();
+    this.syncComposerAttachmentTypeUi();
     this.refreshAttachmentLibraryUi();
     this.switchAttachmentMode(this.activeAttachmentMode);
     this.updateAttachmentActionState();
@@ -2731,6 +2796,9 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
+      if (panelName === "attachments") {
+        this.switchAttachmentComposerMode("quick-add");
+      }
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
       }
@@ -2758,6 +2826,26 @@ export class BlackoutWebApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-open-governance'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  private normalizeAttachmentType(type: string | undefined): AttachmentType {
+    if (!type) return "image";
+    if (type === "picture") return "image";
+    return ATTACHMENT_TYPES.includes(type as AttachmentType) ? (type as AttachmentType) : "image";
+  }
+
+  private setComposerAttachmentType(type: AttachmentType): void {
+    this.selectedAttachmentType = this.normalizeAttachmentType(type);
+    this.syncComposerAttachmentTypeUi();
+  }
+
+  private syncComposerAttachmentTypeUi(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-attachment-type']").forEach((button) => {
+      const buttonType = this.normalizeAttachmentType(button.dataset.attachmentType);
+      const isActive = buttonType === this.selectedAttachmentType;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
   }
 
@@ -3073,11 +3161,17 @@ export class BlackoutWebApp {
   private refreshAttachmentLibraryUi(): void {
     const list = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-library-list']");
     if (!list) return;
-    if (!this.attachmentLibrary.length) {
-      list.innerHTML = '<li class="meta">No custom attachments yet.</li>';
+    const query = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-search']")?.value.trim().toLowerCase() ?? "";
+    const visibleAttachments = query
+      ? this.attachmentLibrary.filter((entry) =>
+        `${entry.type} ${entry.label} ${entry.url}`.toLowerCase().includes(query),
+      )
+      : this.attachmentLibrary;
+    if (!visibleAttachments.length) {
+      list.innerHTML = `<li class="meta">${query ? "No attachments match your search." : "No custom attachments yet."}</li>`;
       return;
     }
-    list.innerHTML = this.attachmentLibrary
+    list.innerHTML = visibleAttachments
       .map((entry) => `
         <li class="composer-channel-row">
           <div>
@@ -3085,6 +3179,7 @@ export class BlackoutWebApp {
             <p class="meta">${entry.type} · ${entry.url}</p>
           </div>
           <div class="composer-popover-actions">
+            <button type="button" data-action="composer-attachment-edit" data-attachment-id="${entry.id}">Edit</button>
             <button type="button" data-action="composer-attachment-use" data-attachment-id="${entry.id}">Use</button>
             <button type="button" data-action="composer-attachment-stego" data-attachment-id="${entry.id}">Add stego</button>
             <button type="button" data-action="composer-attachment-delete" data-attachment-id="${entry.id}">Delete</button>
@@ -3092,6 +3187,20 @@ export class BlackoutWebApp {
         </li>
       `)
       .join("");
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-edit']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const entry = this.attachmentLibrary.find((item) => item.id === button.dataset.attachmentId);
+        if (!entry) return;
+        const typeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
+        const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
+        const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
+        if (typeSelect) typeSelect.value = entry.type;
+        if (labelInput) labelInput.value = entry.label;
+        if (urlInput) urlInput.value = entry.url;
+        this.switchAttachmentComposerMode("quick-add");
+      });
+    });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-use']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3123,6 +3232,57 @@ export class BlackoutWebApp {
         this.refreshAttachmentLibraryUi();
       });
     });
+  }
+
+  private inferAttachmentMediaType(type: AttachmentType, url: string): string {
+    const lowerUrl = url.toLowerCase();
+    if (type === "audio" || /\.(mp3|wav|ogg|m4a|flac)(\?|#|$)/.test(lowerUrl)) return "audio";
+    if (type === "video" || /\.(mp4|webm|mov|mkv|avi)(\?|#|$)/.test(lowerUrl)) return "video";
+    if (type === "picture" || type === "meme" || /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(lowerUrl)) return "image";
+    return "file";
+  }
+
+  private refreshAttachmentDraftPreview(): void {
+    const previewNode = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-preview']");
+    if (!previewNode) return;
+    const type = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']")?.value as AttachmentType | undefined;
+    const label = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "";
+    const url = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']")?.value.trim() ?? "";
+    const parsed = validateAttachmentInput({ type, label, url });
+    if (!parsed.attachment) {
+      previewNode.innerHTML = "";
+      return;
+    }
+    const mediaType = this.inferAttachmentMediaType(parsed.attachment.type, parsed.attachment.url);
+    const icon = mediaType === "image" ? "🖼️" : mediaType === "video" ? "🎬" : mediaType === "audio" ? "🎧" : "📎";
+    const thumbnail = mediaType === "image"
+      ? `<img src="${parsed.attachment.url}" alt="${parsed.attachment.label}" class="composer-attachment-thumb" loading="lazy" />`
+      : `<span class="composer-attachment-icon" aria-hidden="true">${icon}</span>`;
+    previewNode.innerHTML = `
+      <div class="composer-attachment-preview-card">
+        ${thumbnail}
+        <div>
+          <strong>${parsed.attachment.label}</strong>
+          <p class="meta">${mediaType} · ${parsed.attachment.type}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  private updateAttachmentImportFeedback(overrideMessage?: string): void {
+    const feedback = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-import-feedback']");
+    if (!feedback) return;
+    if (overrideMessage) {
+      feedback.textContent = overrideMessage;
+      return;
+    }
+    const raw = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']")?.value ?? "";
+    if (!raw.trim()) {
+      feedback.textContent = "";
+      return;
+    }
+    const result = parseAttachmentImport(raw);
+    feedback.textContent = result.error ?? `${result.parsedCount} attachment(s) ready to import.`;
   }
 
   private refreshGovernanceTemplateUi(): void {
@@ -3175,6 +3335,38 @@ export class BlackoutWebApp {
 
   private normalizeStegoChannelId(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "channel";
+  }
+
+  private isAttachmentLabelValid(label: string): boolean {
+    if (!label) return true;
+    return label.length >= 2;
+  }
+
+  private syncAttachmentLabelHelper(label: string): void {
+    const helper = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-label-helper']");
+    if (!helper) return;
+    if (!label) {
+      helper.hidden = false;
+      helper.textContent = "Optional: leave blank to auto-generate from the URL.";
+      return;
+    }
+    if (!this.isAttachmentLabelValid(label)) {
+      helper.hidden = false;
+      helper.textContent = "Label is too short. Use at least 2 characters, or leave it blank.";
+      return;
+    }
+    helper.hidden = true;
+  }
+
+  private deriveAttachmentLabelFromUrl(url: string, type: AttachmentLibraryItem["type"]): string {
+    try {
+      const parsed = new URL(url);
+      const segment = parsed.pathname.split("/").filter(Boolean).pop()?.trim() ?? "";
+      if (segment) return decodeURIComponent(segment);
+    } catch {
+      return `${type} attachment`;
+    }
+    return `${type} attachment`;
   }
 
   private persistStegoChannels(): void {
@@ -3244,7 +3436,14 @@ export class BlackoutWebApp {
     try {
       const parsed = JSON.parse(raw) as AttachmentLibraryItem[];
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string" && (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio"));
+      return parsed
+        .filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string")
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          url: item.url,
+          type: this.normalizeAttachmentType(item.type),
+        }));
     } catch {
       return [];
     }
