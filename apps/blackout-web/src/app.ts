@@ -42,7 +42,7 @@ const ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY = "blackout.onboarding.guide.dismis
 const QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY = "blackout.quick_actions.collapsed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
-type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
+type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night" | "storybook_meadow" | "adventure_spectrum";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
 type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
 type SubscriptionTierMatch = {
@@ -1327,12 +1327,14 @@ export class BlackoutWebApp {
       { id: "dark_canopy", label: "Dark canopy (default)", description: "Deep green and black surfaces for extended low-light sessions." },
       { id: "light_grove", label: "Light grove", description: "Light green and white surfaces for daylight readability." },
       { id: "amoled_night", label: "AMOLED night", description: "Pure black OLED surfaces with teal interaction accents." },
+      { id: "storybook_meadow", label: "Storybook meadow", description: "Warm natural tones with soft highlights for calm reading and collaboration." },
+      { id: "adventure_spectrum", label: "Adventure spectrum", description: "Playful high-contrast accents and clear landmarks for color-blind-friendly navigation." },
     ];
 
     return `
       <section class="stack panel-card theme-panel" data-testid="theme-panel">
         <h2>Theme selection</h2>
-        <p class="meta">Theme variants from the Blackout UI plan: Dark, Light, and AMOLED.</p>
+        <p class="meta">Theme variants from the Blackout UI plan: Dark, Light, AMOLED, Storybook, and Spectrum.</p>
         <label class="theme-select">
           <span>Active theme</span>
           <select data-action="select-theme" data-testid="theme-select">
@@ -1489,7 +1491,7 @@ export class BlackoutWebApp {
   }
 
   private parseTheme(theme: string | null): ThemeKey {
-    if (theme === "light_grove" || theme === "amoled_night") {
+    if (theme === "light_grove" || theme === "amoled_night" || theme === "storybook_meadow" || theme === "adventure_spectrum") {
       return theme;
     }
     return "dark_canopy";
