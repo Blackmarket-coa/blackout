@@ -45,7 +45,10 @@ export function renderMessageInput({
       </div>
       <div class="composer-popovers">
         <section class="composer-popover" data-panel="attachments" data-testid="composer-attachment-panel" aria-hidden="true">
-          <p class="composer-popover-title">Add attachment</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Add attachment</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
             <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
@@ -81,7 +84,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="governance" data-testid="composer-governance-panel" aria-hidden="true">
-          <p class="composer-popover-title">Governance composer</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Governance composer</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <label class="composer-popover-field">Proposal title
             <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
           </label>
@@ -118,7 +124,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="gif" data-testid="composer-gif-panel" aria-hidden="true">
-          <p class="composer-popover-title">Choose a GIF</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Choose a GIF</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-select-gif" data-snippet=" ![celebration gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaW43bDFxa2V0NGRoMHY2MGp3aHJ2eGlpM3BsNmdreXVqZm45MG11dCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o6fJ1BM7R2EBRDnxK/giphy.gif)" ${disabled ? "disabled" : ""}>Celebration</button>
             <button type="button" data-action="composer-select-gif" data-snippet=" ![thumbs up gif](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdnVybmZwY2VjN2NkcjM2MHZxN3VxZXNnZXJpc3UxaDF0a2pxdGQ5NyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0HlBO7eyXzSZkJri/giphy.gif)" ${disabled ? "disabled" : ""}>Thumbs up</button>
@@ -146,7 +155,10 @@ export function renderMessageInput({
           </div>
         </section>
         <section class="composer-popover" data-panel="emoji" data-testid="composer-emoji-panel" aria-hidden="true">
-          <p class="composer-popover-title">Emoji picker</p>
+          <div class="composer-popover-head">
+            <p class="composer-popover-title">Emoji picker</p>
+            <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+          </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-select-emoji" data-snippet=" 😊" ${disabled ? "disabled" : ""}>😊</button>
             <button type="button" data-action="composer-select-emoji" data-snippet=" 🔥" ${disabled ? "disabled" : ""}>🔥</button>
@@ -176,7 +188,10 @@ export function renderMessageInput({
         ${
           stegoEnabled
             ? `<section class="composer-popover" data-panel="stego" data-testid="composer-stego-panel" aria-hidden="true">
-                <p class="composer-popover-title">Stego composer ${renderGlossaryTip("Steganography")} ${renderGlossaryTip("Stego Tier")}</p>
+                <div class="composer-popover-head">
+                  <p class="composer-popover-title">Stego composer ${renderGlossaryTip("Steganography")} ${renderGlossaryTip("Stego Tier")}</p>
+                  <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
+                </div>
                 <p class="meta">Hide secret messages inside normal-looking text. Only someone with your passphrase can read them.</p>
                 <div class="composer-stego-tabs" role="tablist" aria-label="Stego tools">
                   <button type="button" data-action="composer-stego-tab-encode" data-testid="composer-stego-tab-encode" class="is-active" role="tab" aria-selected="true" ${disabled ? "disabled" : ""}>Hide</button>

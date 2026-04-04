@@ -2084,6 +2084,13 @@ body {
   color: #9faad0;
 }
 
+.composer-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
 .composer-popover-actions {
   display: flex;
   align-items: center;
@@ -2495,6 +2502,17 @@ label {
   .workspace.show-channel-drawer .channel-list {
     left: 0;
     width: min(88vw, 260px);
+    height: 100%;
+    z-index: 30;
+  }
+
+  .workspace.show-channel-drawer::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 45%);
+    z-index: 20;
+    pointer-events: none;
   }
 
   .mobile-tabbar {
@@ -2540,6 +2558,35 @@ label {
 
   .governance-taskboard {
     grid-template-columns: 1fr;
+  }
+
+  .chat-input {
+    position: relative;
+    padding-bottom: 5rem;
+  }
+
+  .composer-popover.is-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: 72vh;
+    max-height: 86vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 0.8rem;
+    z-index: 55;
+    box-shadow: 0 -10px 30px rgb(0 0 0 / 45%);
+  }
+
+  .composer-popover.is-open::before {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 4px;
+    border-radius: 999px;
+    background: #5f6f8c;
+    margin: 0 auto 0.45rem;
   }
 }
 

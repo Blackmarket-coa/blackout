@@ -2120,6 +2120,11 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-attachments']")?.addEventListener("click", () => {
       this.toggleComposerPanel("attachments", "[data-action='composer-toggle-attachments']");
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-close-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.closeComposerPanels();
+      });
+    });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-gif-picker']")?.addEventListener("click", () => {
       this.toggleComposerPanel("gif", "[data-action='composer-toggle-gif-picker']");
