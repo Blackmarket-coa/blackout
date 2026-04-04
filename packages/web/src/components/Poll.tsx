@@ -16,7 +16,7 @@ export function Poll({ poll }: { poll: any }) {
       {!hasVoted && (
         <button
           onClick={async () => {
-            await castVote(poll.id, 'yes');
+            await castVote(poll.id, 'yes', 'demo-user');
             setHasVoted(true);
           }}
         >

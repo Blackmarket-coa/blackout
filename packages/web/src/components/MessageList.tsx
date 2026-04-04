@@ -14,7 +14,7 @@ export function MessageList({ channelId }: { channelId: string }) {
     <div>
       {messages.map((msg) => (
         <div key={msg.id}>
-          <strong>{msg.username}</strong> {msg.content}
+          <strong>{msg.username ?? msg.userId}</strong> {msg.content}
           {msg.governance?.type === 'poll' ? <Poll poll={msg.governance.data} /> : null}
         </div>
       ))}
