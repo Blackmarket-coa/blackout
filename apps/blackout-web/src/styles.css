@@ -2718,6 +2718,39 @@ label {
 }
 
 @media (max-width: 768px) {
+  .chat-head {
+    height: auto;
+    padding: 0.45rem 0.65rem;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .chat-head-left,
+  .chat-head-actions {
+    width: 100%;
+  }
+
+  .chat-head-title {
+    min-width: 0;
+  }
+
+  .chat-head-title span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-head-topic,
+  .chat-head-chip,
+  .chat-head-action--desktop,
+  .chat-head-search--desktop {
+    display: none;
+  }
+
+  .chat-head-actions {
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
   .workspace {
     position: relative;
   }
