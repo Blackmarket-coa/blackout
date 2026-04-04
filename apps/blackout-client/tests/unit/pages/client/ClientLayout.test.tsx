@@ -7,6 +7,7 @@ import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import ClientLayout from '../../../../src/app/pages/client/ClientLayout';
 import { rightPanelAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../../src/app/state/navigation';
 import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
+import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
 let mockRoom: Room | null = null;
 let mockEvents: MatrixEvent[] = [];
@@ -18,6 +19,8 @@ const mockClient = {
   getAccountData: vi.fn(() => null),
   setAccountData: vi.fn().mockResolvedValue(undefined),
   sendReadReceipt: vi.fn().mockResolvedValue(undefined),
+  leave: vi.fn().mockResolvedValue(undefined),
+  joinRoom: vi.fn().mockResolvedValue({ roomId: '!joined:example.org' }),
   on: vi.fn(),
   off: vi.fn(),
 };
@@ -163,6 +166,9 @@ describe('ClientLayout UI wiring', () => {
     mockClient.getAccountData = vi.fn(() => null);
     mockClient.setAccountData.mockClear();
     mockClient.sendReadReceipt.mockClear();
+    mockClient.leave.mockClear();
+    mockClient.joinRoom.mockClear();
+    vi.stubGlobal('prompt', vi.fn(() => '#new-room:example.org'));
   });
 
   afterEach(() => {
@@ -170,6 +176,7 @@ describe('ClientLayout UI wiring', () => {
       mountedRoots.splice(0).forEach((root) => root.unmount());
     });
     document.body.innerHTML = '';
+    vi.unstubAllGlobals();
   });
 
   it('threads/pins/search click sets jump target and closes panel', () => {
@@ -395,6 +402,133 @@ describe('ClientLayout UI wiring', () => {
     });
 
     expect(store.get(selectedRoomIdAtom)).toBe('!room-a:example.org');
+  });
+
+  it('queues slash commands into composer payload when command is selected', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    mockRoom = roomA;
+
+    const { container, store } = renderLayout({
+      rooms: [roomA],
+      selectedRoomId: '!room-a:example.org',
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const quickInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      quickInput.value = '/shrug';
+      quickInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const shrugCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('/shrug'),
+    ) as HTMLButtonElement;
+    act(() => {
+      shrugCommandButton.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(store.get(composerCommandPayloadAtom)?.text).toBe('/shrug');
+    expect(container.textContent).toContain('Ready to send /shrug.');
+  });
+
+  it('shows validation message when room-scoped command is picked without a room', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    mockRoom = roomA;
+
+    const { container } = renderLayout({
+      rooms: [roomA],
+      selectedRoomId: null,
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const quickInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      quickInput.value = '/topic';
+      quickInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const topicCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('/topic'),
+    ) as HTMLButtonElement;
+    act(() => {
+      topicCommandButton.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Select a room before using /topic.');
+  });
+
+  it('runs direct /leave and /join command actions from quick switcher', async () => {
+    const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
+    mockRoom = roomA;
+
+    const { container, store } = renderLayout({
+      rooms: [roomA],
+      selectedRoomId: '!room-a:example.org',
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const leaveInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      leaveInput.value = '/leave';
+      leaveInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const leaveCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('/leave'),
+    ) as HTMLButtonElement;
+    act(() => {
+      leaveCommandButton.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockClient.leave).toHaveBeenCalledWith('!room-a:example.org');
+    expect(store.get(selectedRoomIdAtom)).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+    });
+    const joinInput = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      joinInput.value = '/join';
+      joinInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const joinCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('/join'),
+    ) as HTMLButtonElement;
+    act(() => {
+      joinCommandButton.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockClient.joinRoom).toHaveBeenCalledWith('#new-room:example.org');
+    expect(store.get(selectedRoomIdAtom)).toBe('!joined:example.org');
   });
 
   it('handles malformed inbox account-data shape without crashing and rewrites normalized state', async () => {

@@ -2,11 +2,13 @@ import { type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode
 import { BaseEditor, Editor, Element as SlateElement, Node, Range, Text, Transforms, createEditor } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
+import { useAtom } from 'jotai';
 import { useRoomMembers } from '../../hooks/useRoom';
 import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
 import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
 import { useSendTyping } from '../../hooks/useTyping';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { composerCommandPayloadAtom } from '../../state/composer';
 import { uploadMedia } from '../../utils/media';
 import { HideMessageDialog } from '../steganography';
 
@@ -359,6 +361,7 @@ export const MessageComposer = ({
   const [scheduledEnabled, setScheduledEnabled] = useState(false);
   const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
   const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
+  const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const featureMenuRef = useRef<HTMLDivElement | null>(null);
@@ -381,6 +384,13 @@ export const MessageComposer = ({
     if (!initialMarkdown) return;
     setValue([{ type: 'paragraph', children: [{ text: initialMarkdown }] }]);
   }, [initialMarkdown]);
+
+  useEffect(() => {
+    if (!commandPayload) return;
+    if (commandPayload.roomId && commandPayload.roomId !== roomId) return;
+    setValue([{ type: 'paragraph', children: [{ text: commandPayload.text }] }]);
+    setCommandPayload(null);
+  }, [commandPayload, roomId, setCommandPayload]);
 
   useEffect(() => {
     if (!featureMenuOpen) return;

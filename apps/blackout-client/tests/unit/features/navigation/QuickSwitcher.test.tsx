@@ -96,4 +96,42 @@ describe('QuickSwitcher keyboard behavior', () => {
       root.unmount();
     });
   });
+
+  it('calls onCommandPicked when selecting a Commands entry', async () => {
+    mockClient.getRooms = () => [makeRoom({ roomId: '!room-a:example.org', name: 'Room A' })];
+    const onClose = vi.fn();
+    const onCommandPicked = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = ReactDOM.createRoot(container);
+
+    act(() => {
+      root.render(
+        <Provider store={createStore()}>
+          <QuickSwitcher open onClose={onClose} onCommandPicked={onCommandPicked} />
+        </Provider>,
+      );
+    });
+
+    const input = container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]') as HTMLInputElement;
+    await act(async () => {
+      input.value = '/nick';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const commandButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('/nick'),
+    ) as HTMLButtonElement;
+    act(() => {
+      commandButton.click();
+    });
+
+    expect(onCommandPicked).toHaveBeenCalledWith('/nick');
+    expect(onClose).toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });
