@@ -16,8 +16,16 @@ import {
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Send, Shield, X } from "lucide-react-native";
 import {
+  DOMAIN_ACTIONS,
   EventTypes,
+  RADIAL_ACTIONS,
   castVote,
+  getAvatarActions,
+  getMessageActions,
+  type DomainId,
+  type RadialAction,
+  type SelectionTarget,
+  type VineAction,
   useTimeline,
   useSendMessage,
   type TimelineMessage,
@@ -25,76 +33,8 @@ import {
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
 
-type VineAction = {
-  label: string;
-  primary?: boolean;
-};
-
-type SelectionTarget =
-  | { kind: "message"; eventId: string }
-  | { kind: "avatar"; eventId: string };
-
 const MAX_VISIBLE_ACTIONS = 5;
 const VINE_ANIMATION_MS = 250;
-
-type DomainId = "governance" | "trade" | "logistics" | "discover";
-type RadialAction = {
-  label: "Vote" | "People" | "Create" | "Map" | "Events" | "Settings" | "Message" | "Search";
-  angle: number;
-};
-
-const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
-  governance: ["Active votes", "Results", "Proposals", "Delegates"],
-  trade: ["Marketplace", "Payments", "My orders"],
-  logistics: ["Tracking", "Fleet", "Routing"],
-  discover: ["DeepDive", "Communities", "Featured"],
-};
-
-const RADIAL_ACTIONS: RadialAction[] = [
-  { label: "Vote", angle: 0 },
-  { label: "People", angle: 45 },
-  { label: "Create", angle: 90 },
-  { label: "Map", angle: 135 },
-  { label: "Events", angle: 180 },
-  { label: "Settings", angle: 225 },
-  { label: "Message", angle: 270 },
-  { label: "Search", angle: 315 },
-];
-
-function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
-  const msgtype = message.msgtype ?? message.type;
-
-  if (message.eventType === "m.room.proposal" || msgtype === "app.blackout.proposal") {
-    return "proposal";
-  }
-  if (msgtype === "m.image" || msgtype === "m.file" || msgtype === "m.video") {
-    return "file";
-  }
-  if (msgtype === "m.text") {
-    return "plain";
-  }
-  return "plain";
-}
-
-function getMessageActions(message: TimelineMessage): VineAction[] {
-  const kind = detectMessageKind(message);
-  if (kind === "proposal") {
-    return [
-      { label: "Vote yes", primary: true },
-      { label: "Thread" },
-      { label: "Share" },
-      { label: "React" },
-    ];
-  }
-  if (kind === "file") {
-    return [{ label: "Download" }, { label: "Preview" }, { label: "Share" }, { label: "Pin" }];
-  }
-  return [{ label: "React" }, { label: "Thread" }, { label: "Forward" }, { label: "Pin" }, { label: "Flag" }];
-}
-
-function getAvatarActions(): VineAction[] {
-  return [{ label: "DM" }, { label: "View profile" }, { label: "Trade" }, { label: "Follow" }];
-}
 
 function MessageBubble({
   message,
