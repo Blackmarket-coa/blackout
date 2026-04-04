@@ -36,6 +36,12 @@ function inferChannelKind(channelName: string): ChannelKind {
   return "text";
 }
 
+function inferChannelKindFromSummary(channel: ChannelSummary): ChannelKind {
+  if (channel.capabilityTags?.includes("governance")) return "governance";
+  if (channel.capabilityTags?.includes("townhall")) return "voice";
+  return inferChannelKind(channel.name);
+}
+
 function getInitials(name: string): string {
   return (
     name
@@ -49,7 +55,7 @@ function getInitials(name: string): string {
 
 function renderChannelItem(channel: ChannelSummary, activeChannelId: string | null, unreadByChannel: Record<string, number>): string {
   const unreadCount = unreadByChannel[channel.id] ?? 0;
-  const kind = inferChannelKind(channel.name);
+  const kind = inferChannelKindFromSummary(channel);
   const kindMeta = CHANNEL_KIND_META[kind];
   const isGovernance = kind === "governance";
   const badgeClass = isGovernance ? "badge badge--governance" : "badge";
@@ -82,11 +88,11 @@ export function renderChannelSidebar({
 }: ChannelSidebarProps): string {
   // Partition channels into named categories
   const generalChannels = channels.filter((ch) => {
-    const k = inferChannelKind(ch.name);
+    const k = inferChannelKindFromSummary(ch);
     return k === "text" || k === "forum" || k === "announcement";
   });
-  const governanceChannels = channels.filter((ch) => inferChannelKind(ch.name) === "governance");
-  const voiceChannels = channels.filter((ch) => inferChannelKind(ch.name) === "voice");
+  const governanceChannels = channels.filter((ch) => inferChannelKindFromSummary(ch) === "governance");
+  const voiceChannels = channels.filter((ch) => inferChannelKindFromSummary(ch) === "voice");
 
   function section(label: string, items: ChannelSummary[]): string {
     if (items.length === 0) return "";

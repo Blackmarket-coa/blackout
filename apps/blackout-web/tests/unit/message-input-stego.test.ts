@@ -6,6 +6,8 @@ describe("renderMessageInput stego gating", () => {
   it("renders locked advanced codecs and inline upgrade action", () => {
     const html = renderMessageInput({
       disabled: false,
+      canPropose: true,
+      governanceEnabled: true,
       compactMode: false,
       richEditingEnabled: true,
       stegoEnabled: true,
@@ -16,6 +18,7 @@ describe("renderMessageInput stego gating", () => {
       mediaSpoilersEnabled: true,
       typingIndicatorsEnabled: true,
       showTypingIndicator: false,
+      attachmentMode: "quick-add",
     });
 
     expect(html).toContain("Basic LSB (Image)");

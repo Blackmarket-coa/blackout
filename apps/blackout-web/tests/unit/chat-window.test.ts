@@ -8,6 +8,8 @@ describe("renderChatWindow", () => {
       channelLabel: "governance",
       messages: [],
       canSend: true,
+      canPropose: true,
+      governanceEnabled: true,
       sendPending: false,
       richEditingEnabled: true,
       stegoEnabled: true,
