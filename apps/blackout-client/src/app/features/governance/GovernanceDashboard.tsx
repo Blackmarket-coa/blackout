@@ -4,77 +4,104 @@ import { userIdAtom } from '../../state/auth';
 import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';
-import { useProposals, type ProposalStatus, type ProposalType } from './useProposals';
+import { useProposalResult, useProposals, useVotes, type ProposalModel } from './useProposals';
+
+type GovernanceTab = 'active' | 'past' | 'create' | 'my-votes' | 'results';
+
+const tabButtonStyle = (active: boolean) => ({
+  border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
+  borderRadius: 8,
+  background: active ? 'var(--accent-muted)' : 'var(--bg-input)',
+  color: 'var(--text-primary)',
+  padding: '6px 10px',
+});
+
+const voteChoiceLabel = (choice: string | string[]): string => (typeof choice === 'string' ? choice : choice.join(', '));
+
+const MyVoteRow = ({
+  roomId,
+  proposal,
+  currentUserId,
+  onOpen,
+}: {
+  roomId: string;
+  proposal: ProposalModel;
+  currentUserId: string;
+  onOpen: (proposalId: string) => void;
+}) => {
+  const votes = useVotes(proposal.proposalEventId, roomId);
+  const myVote = votes.data.find((vote) => vote.voterId === currentUserId) ?? null;
+
+  if (!myVote) return null;
+
+  return (
+    <article style={{ border: '1px solid var(--border-default)', borderRadius: 12, background: 'var(--bg-surface)', padding: 12, display: 'grid', gap: 6 }}>
+      <strong>{proposal.title}</strong>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+        Status: {proposal.status} • Your vote: {voteChoiceLabel(myVote.choice)}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={() => onOpen(proposal.proposalEventId)}
+          style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '4px 10px' }}
+        >
+          View / Change Vote
+        </button>
+      </div>
+    </article>
+  );
+};
+
+const ProposalResultRow = ({ roomId, proposal, onOpen }: { roomId: string; proposal: ProposalModel; onOpen: (proposalId: string) => void }) => {
+  const result = useProposalResult(proposal.proposalEventId, roomId);
+
+  return (
+    <article style={{ border: '1px solid var(--border-default)', borderRadius: 12, background: 'var(--bg-surface)', padding: 12, display: 'grid', gap: 6 }}>
+      <strong>{proposal.title}</strong>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+        Computed status: {result.data?.computedStatus ?? proposal.status} • Votes: {result.data?.voteCount ?? 0}/{proposal.quorum}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={() => onOpen(proposal.proposalEventId)}
+          style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '4px 10px' }}
+        >
+          View Proposal
+        </button>
+      </div>
+    </article>
+  );
+};
 
 export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
   const currentUserId = useAtomValue(userIdAtom) ?? '';
   const proposals = useProposals(roomId);
-
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
-  const [showCreator, setShowCreator] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | ProposalStatus>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | ProposalType>('all');
+  const [activeTab, setActiveTab] = useState<GovernanceTab>('active');
 
-  const filtered = useMemo(
-    () =>
-      proposals.data.filter((proposal) => {
-        if (statusFilter !== 'all' && proposal.status !== statusFilter) return false;
-        if (typeFilter !== 'all' && proposal.type !== typeFilter) return false;
-        return true;
-      }),
-    [proposals.data, statusFilter, typeFilter],
+  const activeProposals = useMemo(
+    () => proposals.data.filter((proposal) => proposal.status === 'active'),
+    [proposals.data],
   );
-
-  const activeProposals = filtered.filter((proposal) => proposal.status === 'active');
-  const pastProposals = filtered.filter((proposal) => proposal.status !== 'active');
+  const pastProposals = useMemo(
+    () => proposals.data.filter((proposal) => proposal.status !== 'active'),
+    [proposals.data],
+  );
 
   return (
     <section style={{ display: 'grid', gap: 12 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <header style={{ display: 'grid', gap: 8 }}>
         <h2 style={{ margin: 0 }}>Governance Dashboard</h2>
-
-        <div style={{ display: 'inline-flex', gap: 8 }}>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as 'all' | ProposalStatus)}
-            style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '4px 8px' }}
-          >
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="passed">Passed</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-
-          <select
-            value={typeFilter}
-            onChange={(event) => setTypeFilter(event.target.value as 'all' | ProposalType)}
-            style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '4px 8px' }}
-          >
-            <option value="all">All types</option>
-            <option value="binary">Binary</option>
-            <option value="multiple_choice">Multiple choice</option>
-            <option value="ranked">Ranked</option>
-          </select>
-
-          <button
-            type="button"
-            onClick={() => setShowCreator((prev) => !prev)}
-            style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--accent-primary)', color: 'var(--bg-surface)', padding: '6px 10px' }}
-          >
-            {showCreator ? 'Close Creator' : 'Create Proposal'}
-          </button>
+        <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setActiveTab('active')} style={tabButtonStyle(activeTab === 'active')}>Active</button>
+          <button type="button" onClick={() => setActiveTab('past')} style={tabButtonStyle(activeTab === 'past')}>Past</button>
+          <button type="button" onClick={() => setActiveTab('create')} style={tabButtonStyle(activeTab === 'create')}>Create</button>
+          <button type="button" onClick={() => setActiveTab('my-votes')} style={tabButtonStyle(activeTab === 'my-votes')}>My Votes</button>
+          <button type="button" onClick={() => setActiveTab('results')} style={tabButtonStyle(activeTab === 'results')}>Results</button>
         </div>
       </header>
-
-      {showCreator ? (
-        <ProposalCreator
-          roomId={roomId}
-          onCreated={() => {
-            setShowCreator(false);
-          }}
-        />
-      ) : null}
 
       {selectedProposalId ? (
         <section style={{ border: '1px solid var(--border-default)', borderRadius: 12, background: 'var(--bg-surface)', padding: 12, display: 'grid', gap: 8 }}>
@@ -87,41 +114,55 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
           </button>
           <ProposalDetail roomId={roomId} proposalId={selectedProposalId} currentUserId={currentUserId} />
         </section>
-      ) : (
-        <>
-          <section style={{ display: 'grid', gap: 8 }}>
-            <h3 style={{ margin: 0 }}>Active Proposals</h3>
-            {activeProposals.map((proposal) => (
-              <ProposalCard
-                key={proposal.proposalEventId}
-                roomId={roomId}
-                proposal={proposal}
-                currentUserId={currentUserId}
-                onOpen={setSelectedProposalId}
-              />
-            ))}
-            {!proposals.loading && activeProposals.length === 0 ? (
-              <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No active proposals.</div>
-            ) : null}
-          </section>
+      ) : null}
 
-          <section style={{ display: 'grid', gap: 8 }}>
-            <h3 style={{ margin: 0 }}>Past Proposals</h3>
-            {pastProposals.map((proposal) => (
-              <ProposalCard
-                key={proposal.proposalEventId}
-                roomId={roomId}
-                proposal={proposal}
-                currentUserId={currentUserId}
-                onOpen={setSelectedProposalId}
-              />
-            ))}
-            {!proposals.loading && pastProposals.length === 0 ? (
-              <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No past proposals.</div>
-            ) : null}
-          </section>
-        </>
-      )}
+      {!selectedProposalId && activeTab === 'active' ? (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Active Proposals</h3>
+          {activeProposals.map((proposal) => (
+            <ProposalCard key={proposal.proposalEventId} roomId={roomId} proposal={proposal} currentUserId={currentUserId} onOpen={setSelectedProposalId} />
+          ))}
+          {!proposals.loading && activeProposals.length === 0 ? <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No active proposals.</div> : null}
+        </section>
+      ) : null}
+
+      {!selectedProposalId && activeTab === 'past' ? (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Past Proposals</h3>
+          {pastProposals.map((proposal) => (
+            <ProposalCard key={proposal.proposalEventId} roomId={roomId} proposal={proposal} currentUserId={currentUserId} onOpen={setSelectedProposalId} />
+          ))}
+          {!proposals.loading && pastProposals.length === 0 ? <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No past proposals.</div> : null}
+        </section>
+      ) : null}
+
+      {!selectedProposalId && activeTab === 'create' ? <ProposalCreator roomId={roomId} /> : null}
+
+      {!selectedProposalId && activeTab === 'my-votes' ? (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>My Votes</h3>
+          {proposals.data.map((proposal) => (
+            <MyVoteRow
+              key={proposal.proposalEventId}
+              roomId={roomId}
+              proposal={proposal}
+              currentUserId={currentUserId}
+              onOpen={setSelectedProposalId}
+            />
+          ))}
+          {!proposals.loading && proposals.data.length === 0 ? <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No proposals available for voting history.</div> : null}
+        </section>
+      ) : null}
+
+      {!selectedProposalId && activeTab === 'results' ? (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Results</h3>
+          {proposals.data.map((proposal) => (
+            <ProposalResultRow key={proposal.proposalEventId} roomId={roomId} proposal={proposal} onOpen={setSelectedProposalId} />
+          ))}
+          {!proposals.loading && proposals.data.length === 0 ? <div style={{ color: 'var(--text-secondary)', padding: 8 }}>No proposal results yet.</div> : null}
+        </section>
+      ) : null}
     </section>
   );
 };
