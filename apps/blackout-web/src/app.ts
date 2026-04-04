@@ -461,6 +461,7 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
     if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
     panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
+    panel.scrollIntoView({ block: "nearest" });
     this.trackKpiEvent("onboarding_step_viewed", {
       step: module === "stego" ? 5 : 6,
       module,
@@ -471,6 +472,7 @@ export class BlackoutWebApp {
   private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
     const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
     if (!tour) return;
+    tour.scrollIntoView({ block: "nearest" });
     const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
     const finalStep = 2;
     if (step >= finalStep) {
@@ -2577,11 +2579,6 @@ export class BlackoutWebApp {
       if (urlInput) urlInput.value = "";
       this.updateAttachmentActionState();
     });
-
-    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.addEventListener("input", (event) => {
-      const input = event.currentTarget as HTMLInputElement;
-      this.syncAttachmentLabelHelper(input.value.trim());
-    });
     this.syncAttachmentLabelHelper(this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "");
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-export']")?.addEventListener("click", () => {
@@ -2789,32 +2786,26 @@ export class BlackoutWebApp {
 
   private toggleComposerPanel(
     panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego",
-    triggerSelectorOrButton: string | HTMLButtonElement,
+    triggerTarget: string | HTMLButtonElement,
   ): void {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
-    const trigger = typeof triggerSelectorOrButton === "string"
-      ? this.root.querySelector<HTMLButtonElement>(triggerSelectorOrButton)
-      : triggerSelectorOrButton;
+    const trigger = typeof triggerTarget === "string"
+      ? this.root.querySelector<HTMLButtonElement>(triggerTarget)
+      : triggerTarget;
     if (!panel || !trigger) return;
-    const shouldRestoreComposerFocus = panelName === "governance" || panelName === "stego";
     const shouldOpen = !panel.classList.contains("is-open");
     this.closeComposerPanels();
     if (shouldOpen) {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
-      if (panelName === "attachments") {
-        this.switchAttachmentComposerMode("quick-add");
-      }
+      panel.scrollIntoView({ block: "nearest" });
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
       }
       if (panelName === "governance") {
         this.maybeShowAdvancedTour("governance");
       }
-    }
-    if (shouldRestoreComposerFocus) {
-      this.restoreMessageComposerFocus();
     }
   }
 
