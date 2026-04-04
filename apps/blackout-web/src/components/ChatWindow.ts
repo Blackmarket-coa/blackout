@@ -16,6 +16,7 @@ interface ChatWindowProps {
   mediaSpoilersEnabled: boolean;
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
+  attachmentMode: "quick-add" | "library" | "bulk-import";
   compactMode: boolean;
   compactRecommended: boolean;
 }
@@ -36,6 +37,7 @@ export function renderChatWindow({
   mediaSpoilersEnabled,
   typingIndicatorsEnabled,
   showTypingIndicator,
+  attachmentMode,
   compactMode,
   compactRecommended,
 }: ChatWindowProps): string {
@@ -60,6 +62,8 @@ export function renderChatWindow({
           <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="threads" title="Threads" aria-label="Open threads">🧵</button>
           <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="pinned" title="Pinned" aria-label="View pinned messages">📌</button>
           <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="members" title="Members" aria-label="Open member list">👥</button>
+          <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="search" title="Search panel" aria-label="Open search panel">🔎</button>
+          <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="governance" title="Governance panel" aria-label="Open governance panel">🏛️</button>
           <input type="search" class="chat-head-search" placeholder="Search…" aria-label="Search channel" data-action="focus-search">
         </div>
       </div>
@@ -76,6 +80,7 @@ export function renderChatWindow({
         mediaSpoilersEnabled,
         typingIndicatorsEnabled,
         showTypingIndicator,
+        attachmentMode,
       })}
     </section>
   `;
