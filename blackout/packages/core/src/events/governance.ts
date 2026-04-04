@@ -22,7 +22,7 @@ type SendCustomTimelineEvent = (
 
 // Custom event type identifiers
 export const EventTypes = {
-  PROPOSAL: "co.bmc.governance.proposal",
+  PROPOSAL: "app.blackout.proposal",
   VOTE: "co.bmc.governance.vote",
   DELEGATION: "co.bmc.governance.delegation",
   ROLE_ASSIGNMENT: "co.bmc.governance.role",
