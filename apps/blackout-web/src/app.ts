@@ -33,6 +33,7 @@ const ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY = "blackout.onboarding.advanced
 const ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.stego.dismissed";
 const ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.governance.dismissed";
 const ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY = "blackout.onboarding.guide.dismissed";
+const QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY = "blackout.quick_actions.collapsed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
@@ -141,6 +142,7 @@ export class BlackoutWebApp {
   private readonly completedOnboardingSteps = new Set<number>();
   private onboardingCompletionTracked = false;
   private onboardingGuideDismissed = globalThis.localStorage.getItem(ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY) === "true";
+  private quickActionBarCollapsed = globalThis.localStorage.getItem(QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY) === "true";
   private advancedPanelViewedTracked = false;
   private readonly advancedModuleDiscoveryTracked = new Set<string>();
 
@@ -1018,10 +1020,21 @@ export class BlackoutWebApp {
     return `
       <section class="feature-toolbar panel-card" data-testid="feature-toolbar">
         <div class="feature-toolbar-head">
-          <h2>Quick actions</h2>
-          <p class="meta">Frequent actions stay visible. Categories expand only when you need them.</p>
+          <div>
+            <h2>Quick actions</h2>
+            <p class="meta">Frequent actions stay visible. Categories expand only when you need them.</p>
+          </div>
+          <button
+            type="button"
+            class="ghost-btn"
+            data-action="toggle-quick-action-bar"
+            aria-expanded="${this.quickActionBarCollapsed ? "false" : "true"}"
+            aria-label="${this.quickActionBarCollapsed ? "Expand quick actions" : "Collapse quick actions"}"
+          >
+            ${this.quickActionBarCollapsed ? "Expand" : "Collapse"}
+          </button>
         </div>
-        <div class="quick-actions-grid">
+        <div class="quick-actions-grid ${this.quickActionBarCollapsed ? "quick-actions-grid--collapsed" : ""}">
           <label class="quick-action-select quick-action-select--pinned">
             <span>⚡ Frequent</span>
             <select data-action="open-feature-dropdown" data-testid="feature-toolbar-dropdown-frequent">
@@ -1582,6 +1595,14 @@ export class BlackoutWebApp {
         this.onboardingGuideDismissed = true;
         globalThis.localStorage.setItem(ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY, "true");
         this.trackOnboardingDrop("user_closed_guide");
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='toggle-quick-action-bar']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.quickActionBarCollapsed = !this.quickActionBarCollapsed;
+        globalThis.localStorage.setItem(QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY, String(this.quickActionBarCollapsed));
         this.render();
       });
     });

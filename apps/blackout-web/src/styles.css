@@ -181,6 +181,10 @@ body {
   gap: 0.6rem;
 }
 
+.quick-actions-grid--collapsed {
+  display: none;
+}
+
 .quick-action-select {
   display: grid;
   gap: 0.35rem;
