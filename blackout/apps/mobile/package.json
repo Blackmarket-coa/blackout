@@ -12,6 +12,7 @@
   "dependencies": {
     "@blackout/config": "workspace:*",
     "@blackout/core": "workspace:*",
+    "@blackout/ui": "workspace:*",
     "expo": "~52.0.0",
     "expo-haptics": "~14.0.0",
     "expo-notifications": "~0.29.0",
