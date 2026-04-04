@@ -2427,6 +2427,7 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
     const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
     if (!panel || !trigger) return;
+    const shouldRestoreComposerFocus = panelName === "governance" || panelName === "stego";
     const shouldOpen = !panel.classList.contains("is-open");
     this.closeComposerPanels();
     if (shouldOpen) {
@@ -2434,6 +2435,17 @@ export class BlackoutWebApp {
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
     }
+    if (shouldRestoreComposerFocus) {
+      this.restoreMessageComposerFocus();
+    }
+  }
+
+  private restoreMessageComposerFocus(): void {
+    const textarea = this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']");
+    if (!textarea) return;
+    globalThis.requestAnimationFrame(() => {
+      textarea.focus();
+    });
   }
 
   private closeComposerPanels(): void {
