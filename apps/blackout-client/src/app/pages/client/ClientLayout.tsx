@@ -2,7 +2,7 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
-import { Link, useInRouterContext } from 'react-router-dom';
+import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { userIdAtom } from '../../state/auth';
@@ -77,6 +77,10 @@ export const ClientLayout = () => {
   const callState = useOptionalCall();
   const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
   const inRouterContext = useInRouterContext();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { roomId: routeRoomId } = useParams<{ roomId?: string }>();
+  const hasHydratedNavigationRef = useRef(false);
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -149,6 +153,46 @@ export const ClientLayout = () => {
     }
     previousRoomIdRef.current = selectedRoomId;
   }, [selectedRoomId, setRightPanel]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextSpaceId = params.get('space');
+    const nextPanelParam = params.get('panel');
+    const nextJumpTargetEventId = params.get('event');
+    const nextRightPanel = RIGHT_PANELS.includes(nextPanelParam as RightPanelType)
+      ? (nextPanelParam as RightPanelType)
+      : null;
+    const hasUrlNavigationState = Boolean(routeRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId);
+
+    if (!hasUrlNavigationState && !hasHydratedNavigationRef.current) {
+      hasHydratedNavigationRef.current = true;
+      return;
+    }
+
+    setSelectedRoomId(routeRoomId ?? null);
+    setSelectedSpaceId(nextSpaceId);
+    setRightPanel(nextRightPanel);
+    setJumpTargetEventId(nextJumpTargetEventId);
+    hasHydratedNavigationRef.current = true;
+  }, [location.search, routeRoomId, setJumpTargetEventId, setRightPanel, setSelectedRoomId, setSelectedSpaceId]);
+
+  useEffect(() => {
+    if (!hasHydratedNavigationRef.current) return;
+
+    const pathname = selectedRoomId ? `/room/${encodeURIComponent(selectedRoomId)}` : '/';
+    const params = new URLSearchParams();
+
+    if (selectedSpaceId) params.set('space', selectedSpaceId);
+    if (rightPanel) params.set('panel', rightPanel);
+    if (jumpTargetEventId) params.set('event', jumpTargetEventId);
+
+    const search = params.toString();
+    const nextUrl = `${pathname}${search ? `?${search}` : ''}`;
+    const currentUrl = `${location.pathname}${location.search}`;
+    if (nextUrl === currentUrl) return;
+
+    void navigate({ pathname, search: search ? `?${search}` : '' });
+  }, [jumpTargetEventId, location.pathname, location.search, navigate, rightPanel, selectedRoomId, selectedSpaceId]);
 
   const orderedSpaces = useMemo(
     () => [...spaces].sort((a, b) => spaceOrder.indexOf(a.roomId) - spaceOrder.indexOf(b.roomId)),
