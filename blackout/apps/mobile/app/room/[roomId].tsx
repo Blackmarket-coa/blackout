@@ -9,11 +9,12 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Modal,
   Animated,
   Easing,
 } from "react-native";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { Send, Shield } from "lucide-react-native";
+import { Send, Shield, X } from "lucide-react-native";
 import {
   DOMAIN_ACTIONS,
   EventTypes,
@@ -29,11 +30,82 @@ import {
   useSendMessage,
   type TimelineMessage,
 } from "@blackout/core";
-import { CanopyBar, OverflowSheet, RadialBloom, VineActions } from "@blackout/ui";
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
 
+const MAX_VISIBLE_ACTIONS = 5;
 const VINE_ANIMATION_MS = 250;
+
+type VineAction = {
+  label: string;
+  primary?: boolean;
+};
+
+type SelectionTarget =
+  | { kind: "message"; eventId: string }
+  | { kind: "avatar"; eventId: string };
+
+const MAX_VISIBLE_ACTIONS = 5;
+const VINE_ANIMATION_MS = 250;
+
+type DomainId = "governance" | "trade" | "logistics" | "discover";
+type RadialAction = {
+  label: "Vote" | "People" | "Create" | "Map" | "Events" | "Settings" | "Message" | "Search";
+  angle: number;
+};
+
+const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
+  governance: ["Active votes", "Results", "Proposals", "Delegates"],
+  trade: ["Marketplace", "Payments", "My orders"],
+  logistics: ["Tracking", "Fleet", "Routing"],
+  discover: ["DeepDive", "Communities", "Featured"],
+};
+
+const RADIAL_ACTIONS: RadialAction[] = [
+  { label: "Vote", angle: 0 },
+  { label: "People", angle: 45 },
+  { label: "Create", angle: 90 },
+  { label: "Map", angle: 135 },
+  { label: "Events", angle: 180 },
+  { label: "Settings", angle: 225 },
+  { label: "Message", angle: 270 },
+  { label: "Search", angle: 315 },
+];
+
+function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
+  const msgtype = message.msgtype ?? message.type;
+
+  if (message.eventType === "m.room.proposal" || msgtype === "app.blackout.proposal") {
+    return "proposal";
+  }
+  if (msgtype === "m.image" || msgtype === "m.file" || msgtype === "m.video") {
+    return "file";
+  }
+  if (msgtype === "m.text") {
+    return "plain";
+  }
+  return "plain";
+}
+
+function getMessageActions(message: TimelineMessage): VineAction[] {
+  const kind = detectMessageKind(message);
+  if (kind === "proposal") {
+    return [
+      { label: "Vote yes", primary: true },
+      { label: "Thread" },
+      { label: "Share" },
+      { label: "React" },
+    ];
+  }
+  if (kind === "file") {
+    return [{ label: "Download" }, { label: "Preview" }, { label: "Share" }, { label: "Pin" }];
+  }
+  return [{ label: "React" }, { label: "Thread" }, { label: "Forward" }, { label: "Pin" }, { label: "Flag" }];
+}
+
+function getAvatarActions(): VineAction[] {
+  return [{ label: "DM" }, { label: "View profile" }, { label: "Trade" }, { label: "Follow" }];
+}
 
 function MessageBubble({
   message,
@@ -59,6 +131,10 @@ function MessageBubble({
     selection?.kind === "message" && selection.eventId === message.eventId;
   const avatarSelected =
     selection?.kind === "avatar" && selection.eventId === message.eventId;
+  const visibleMessageActions = messageActions.slice(0, MAX_VISIBLE_ACTIONS);
+  const overflowMessageActions = messageActions.slice(MAX_VISIBLE_ACTIONS);
+  const visibleAvatarActions = avatarActions.slice(0, MAX_VISIBLE_ACTIONS);
+  const overflowAvatarActions = avatarActions.slice(MAX_VISIBLE_ACTIONS);
   const animation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -101,22 +177,93 @@ function MessageBubble({
       </View>
 
       {avatarSelected && (
-        <VineActions
-          actions={avatarActions}
-          animation={animation}
-          style={styles.vineActionsAvatar}
-          onAction={(action) => onAction(action, { kind: "avatar", eventId: message.eventId })}
-          onOpenOverflow={() => onOpenOverflow(avatarActions)}
-        />
+        <Animated.View
+          style={[
+            styles.vineActions,
+            styles.vineActionsAvatar,
+            {
+              opacity: animation,
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-4, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {visibleAvatarActions.map((action) => (
+            <Pressable
+              key={`${message.eventId}-avatar-${action.label}`}
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onAction(action, { kind: "avatar", eventId: message.eventId })}
+            >
+              <Text style={styles.vineActionLabel}>{action.label}</Text>
+            </Pressable>
+          ))}
+          {overflowAvatarActions.length > 0 && (
+            <Pressable
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onOpenOverflow(avatarActions)}
+            >
+              <Text style={styles.vineActionLabel}>More</Text>
+            </Pressable>
+          )}
+        </Animated.View>
       )}
 
       {messageSelected && (
-        <VineActions
-          actions={messageActions}
-          animation={animation}
-          onAction={(action) => onAction(action, { kind: "message", eventId: message.eventId })}
-          onOpenOverflow={() => onOpenOverflow(messageActions)}
-        />
+        <Animated.View
+          style={[
+            styles.vineActions,
+            {
+              opacity: animation,
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-4, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {visibleMessageActions.map((action) => (
+            <Pressable
+              key={`${message.eventId}-${action.label}`}
+              style={({ hovered }) => [
+                styles.vineAction,
+                action.primary && styles.vineActionPrimary,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onAction(action, { kind: "message", eventId: message.eventId })}
+            >
+              <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
+                {action.label}
+              </Text>
+            </Pressable>
+          ))}
+          {overflowMessageActions.length > 0 && (
+            <Pressable
+              style={({ hovered }) => [
+                styles.vineAction,
+                hovered && styles.vineActionHovered,
+              ]}
+              onPress={() => onOpenOverflow(messageActions)}
+            >
+              <Text style={styles.vineActionLabel}>More</Text>
+            </Pressable>
+          )}
+        </Animated.View>
       )}
     </View>
   );
@@ -313,7 +460,7 @@ export default function RoomScreen() {
     }
 
     const getPendingVotes = () => {
-      const proposalEvents = room.currentState.getStateEvents(EventTypes.PROPOSAL);
+      const proposalEvents = room.currentState.getStateEvents(EventTypes.PROPOSAL as any);
       const list = Array.isArray(proposalEvents) ? proposalEvents : proposalEvents ? [proposalEvents] : [];
       const activeCount = list.filter((event) => event.getContent()?.status === "active").length;
       setPendingVoteCount(activeCount);
@@ -457,13 +604,89 @@ export default function RoomScreen() {
         />
         </Pressable>
 
-        <CanopyBar
-          activeDomain={activeDomain}
-          composerFocused={composerFocused}
-          pendingVoteCount={pendingVoteCount}
-          animation={canopyAnimation}
-          onToggleDomain={toggleDomain}
-        />
+        <View style={styles.canopyBar}>
+          <Pressable
+            onPress={() => toggleDomain("governance")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "governance" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "governance" && styles.canopyPillLabelActive]}>
+              Governance
+            </Text>
+            {pendingVoteCount > 0 && (
+              <View style={styles.canopyBadge}>
+                <Text style={styles.canopyBadgeText}>{pendingVoteCount > 99 ? "99+" : pendingVoteCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("trade")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "trade" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "trade" && styles.canopyPillLabelActive]}>Trade</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("logistics")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "logistics" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "logistics" && styles.canopyPillLabelActive]}>
+              Logistics
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("discover")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "discover" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "discover" && styles.canopyPillLabelActive]}>
+              Discover
+            </Text>
+          </Pressable>
+        </View>
+
+        {activeDomain && !composerFocused && (
+          <Animated.View
+            style={[
+              styles.canopyExpand,
+              {
+                opacity: canopyAnimation,
+                transform: [
+                  {
+                    translateY: canopyAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-4, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {DOMAIN_ACTIONS[activeDomain].map((label) => (
+              <Pressable key={`${activeDomain}-${label}`} style={({ hovered }) => [styles.canopySub, hovered && styles.canopySubHovered]}>
+                <Text style={styles.canopySubLabel}>
+                  {label}
+                  {activeDomain === "governance" && label === "Active votes" && pendingVoteCount > 0
+                    ? ` (${pendingVoteCount})`
+                    : ""}
+                </Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        )}
 
         {/* Composer */}
         <View style={styles.composer}>
@@ -493,17 +716,83 @@ export default function RoomScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
-      <RadialBloom open={radialOpen} scales={radialScales} onClose={closeRadial} onAction={handleRadialAction} />
-      <OverflowSheet
-        open={overflowOpen}
-        actions={overflowActions}
-        onClose={() => setOverflowOpen(false)}
-        onAction={async (action) => {
-          if (!selectedTarget) return;
-          await handleVineAction(action, selectedTarget);
-          setOverflowOpen(false);
-        }}
-      />
+      <Modal
+        visible={radialOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeRadial}
+      >
+        <Pressable style={styles.radialOverlay} onPress={closeRadial}>
+          <Text style={styles.radialHint}>Tap outside to close · Esc to dismiss</Text>
+          <Pressable style={styles.radialHub} onPress={() => undefined}>
+            <View style={styles.radialRingCircle} />
+            {RADIAL_ACTIONS.map((action, index) => {
+              const radius = 100;
+              const radians = (action.angle * Math.PI) / 180;
+              const x = radius * Math.cos(radians);
+              const y = radius * Math.sin(radians);
+              return (
+                <Animated.View
+                  key={action.label}
+                  style={[
+                    styles.radialNodeWrap,
+                    {
+                      transform: [
+                        { translateX: x },
+                        { translateY: y },
+                        { scale: radialScales[index] },
+                      ],
+                    },
+                  ]}
+                >
+                  <Pressable
+                    style={({ hovered }) => [styles.radialNode, hovered && styles.radialNodeHovered]}
+                    onPress={() => handleRadialAction(action.label)}
+                  >
+                    <Text style={styles.radialNodeLabel}>{action.label}</Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+            <Pressable style={styles.radialCenterBtn} onPress={closeRadial}>
+              <X size={20} color="#1ABC9C" />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={overflowOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverflowOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setOverflowOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => undefined}>
+            <Text style={styles.sheetTitle}>Quick actions</Text>
+            <View style={styles.sheetActions}>
+              {overflowActions.map((action) => (
+                <Pressable
+                  key={`sheet-${action.label}`}
+                  style={({ hovered }) => [
+                    styles.vineAction,
+                    action.primary && styles.vineActionPrimary,
+                    hovered && styles.vineActionHovered,
+                  ]}
+                  onPress={async () => {
+                    if (!selectedTarget) return;
+                    await handleVineAction(action, selectedTarget);
+                    setOverflowOpen(false);
+                  }}
+                >
+                  <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </>
   );
 }
