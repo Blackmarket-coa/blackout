@@ -27,6 +27,24 @@ describe("BlackoutWebApp integration", () => {
           userOverrideCount: 0,
         },
       },
+      simpleMode: {
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      },
+      engagement: {
+        policy: {
+          notifications: { mode: "balanced" },
+          discover: { enabled: true },
+          streaks: { enabled: false },
+          leaderboards: { enabled: false },
+          wellbeing: {
+            breakPrompts: { enabled: true },
+            maxNudgesPerDay: 3,
+          },
+        },
+        notificationRules: [],
+      },
     });
     await app.mount();
 
@@ -77,6 +95,24 @@ describe("BlackoutWebApp integration", () => {
           userOverrideCount: 0,
         },
       },
+      simpleMode: {
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      },
+      engagement: {
+        policy: {
+          notifications: { mode: "balanced" },
+          discover: { enabled: true },
+          streaks: { enabled: false },
+          leaderboards: { enabled: false },
+          wellbeing: {
+            breakPrompts: { enabled: true },
+            maxNudgesPerDay: 3,
+          },
+        },
+        notificationRules: [],
+      },
     });
     await app.mount();
 
@@ -102,6 +138,67 @@ describe("BlackoutWebApp integration", () => {
       expect(root.textContent).toContain("line 1");
     });
   });
+
+  it("allows signed-in users to close settings after opening from an authenticated entrypoint", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "starter",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "starter",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      },
+      engagement: {
+        policy: {
+          notifications: { mode: "balanced" },
+          discover: { enabled: true },
+          streaks: { enabled: false },
+          leaderboards: { enabled: false },
+          wellbeing: {
+            breakPrompts: { enabled: true },
+            maxNudgesPerDay: 3,
+          },
+        },
+        notificationRules: [],
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(getByRole(root, "button", { name: "Admin" })).toBeTruthy();
+    });
+
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(root.querySelector('[data-testid="settings-shell"]')).toBeTruthy();
+    });
+
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(root.querySelector('[data-testid="settings-shell"]')).toBeNull();
+    });
+  });
+
   it("shows active preset diagnostics in header", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
