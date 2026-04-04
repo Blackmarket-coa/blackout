@@ -326,7 +326,7 @@ export class BlackoutWebApp {
   }
 
   private centerVisibleOnboardingPrompts(): void {
-    const prompts = this.root.querySelectorAll<HTMLElement>("[data-testid='first-run-guide'], [data-testid^='composer-tour-']");
+    const prompts = this.root.querySelectorAll<HTMLElement>("[data-testid='first-run-guide']");
     if (!prompts.length) return;
     prompts.forEach((prompt) => this.centerPromptInView(prompt));
   }
@@ -530,9 +530,9 @@ export class BlackoutWebApp {
           "Your final message looks ordinary, but only teammates with the passphrase can decode it.",
         ]
       : [
-          "Mission control: this is where your organization makes decisions together.",
-          "Create a proposal, set response options and a decision window, then publish.",
-          "When quorum is met, the final decision is logged for your operation room.",
+          "Toolkit briefing: mission governance keeps team decisions transparent and accountable.",
+          "Build a proposal, define response options, then set the decision window before launch.",
+          "When quorum is met, the mission log records the final decision for the whole crew.",
         ];
   }
 
@@ -548,8 +548,6 @@ export class BlackoutWebApp {
     if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
     panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
     panel.scrollTop = 0;
-    const prompt = panel.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
-    if (prompt) this.centerPromptInView(prompt);
     this.trackKpiEvent("onboarding_step_viewed", {
       step: module === "stego" ? 5 : 6,
       module,
