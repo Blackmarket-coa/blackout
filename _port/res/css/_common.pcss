@@ -338,7 +338,9 @@ legend {
 
 .mx_Dialog {
     background-color: $background;
-    color: $light-fg-color;
+    color: $primary-content;
+    border: 2px solid var(--bmc-border-strong, $strong-input-border-color);
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--bmc-blue-900, #003b7a) 35%, transparent);
     font-size: $font-15px;
     position: relative;
     padding: var(--cpd-space-8x) var(--cpd-space-10x);
@@ -432,6 +434,14 @@ legend {
     }
 }
 
+
+
+.mx_Dialog :focus-visible,
+.mx_ContextualMenu :focus-visible,
+.mx_AuthPage_modal :focus-visible {
+    outline: 3px solid var(--bmc-focus-ring, $accent);
+    outline-offset: 2px;
+}
 .mx_Dialog_fixedWidth {
     width: 60vw;
     max-width: 704px;
