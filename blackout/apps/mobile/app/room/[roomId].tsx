@@ -12,7 +12,7 @@ import {
   Animated,
   Easing,
 } from "react-native";
-import { useLocalSearchParams, Stack } from "expo-router";
+import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Send, Shield, X } from "lucide-react-native";
 import { EventTypes, useTimeline, useSendMessage, type TimelineMessage } from "@blackout/core";
 import { useBlackoutAuth } from "../../lib/auth-context";
@@ -246,6 +246,7 @@ function MessageBubble({
 
 export default function RoomScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const router = useRouter();
   const { client } = useBlackoutAuth();
   const { messages, isLoading, loadMore, canPaginate } = useTimeline(
     client,
@@ -349,6 +350,36 @@ export default function RoomScreen() {
 
   const closeRadial = () => {
     setRadialOpen(false);
+  };
+
+  const handleRadialAction = (action: RadialAction["label"]) => {
+    closeRadial();
+    switch (action) {
+      case "Vote":
+        setActiveDomain("governance");
+        break;
+      case "People":
+        if (roomId) router.push(`/room/${encodeURIComponent(roomId)}/members`);
+        break;
+      case "Create":
+        router.push("/create-room");
+        break;
+      case "Map":
+        router.push("/map");
+        break;
+      case "Events":
+        router.push("/events");
+        break;
+      case "Settings":
+        router.push("/settings");
+        break;
+      case "Message":
+        router.push("/new-dm");
+        break;
+      case "Search":
+        inputRef.current?.focus();
+        break;
+    }
   };
 
   useEffect(() => {
@@ -656,7 +687,10 @@ export default function RoomScreen() {
                     },
                   ]}
                 >
-                  <Pressable style={({ hovered }) => [styles.radialNode, hovered && styles.radialNodeHovered]} onPress={closeRadial}>
+                  <Pressable
+                    style={({ hovered }) => [styles.radialNode, hovered && styles.radialNodeHovered]}
+                    onPress={() => handleRadialAction(action.label)}
+                  >
                     <Text style={styles.radialNodeLabel}>{action.label}</Text>
                   </Pressable>
                 </Animated.View>
