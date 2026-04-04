@@ -219,17 +219,7 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
-    globalThis.document.addEventListener("pointerdown", (event) => {
-      const target = event.target as HTMLElement;
-      if (!target) return;
-      const hasOpenPanel = this.root.querySelector(".composer-popover.is-open");
-      if (!hasOpenPanel) return;
-      const insidePanel = target.closest(".composer-popover");
-      const isTrigger = target.closest("[data-action^='composer-toggle-'], [data-action='composer-open-governance'], [data-action='composer-toggle-stego-panel']");
-      if (!insidePanel && !isTrigger) {
-        this.closeComposerPanels();
-      }
-    });
+    globalThis.document.addEventListener("pointerdown", this.handleDocumentPointerDown);
     this.bindMobileBridgeEvents();
     this.applyTheme(this.selectedTheme);
     this.render();
@@ -1288,6 +1278,22 @@ export class BlackoutWebApp {
 
     if (event.key === "Escape" && this.commandPaletteOpen) {
       this.closeCommandPalette();
+      return;
+    }
+
+    if (event.key === "Escape" && this.root.querySelector(".composer-popover.is-open")) {
+      this.closeComposerPanels();
+    }
+  };
+
+  private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
+    if (!(event.target instanceof Element)) return;
+    const hasOpenPanel = this.root.querySelector(".composer-popover.is-open");
+    if (!hasOpenPanel) return;
+    const insidePanel = event.target.closest(".composer-popover");
+    const isTrigger = event.target.closest("[data-action^='composer-toggle-'], [data-action='composer-open-governance']");
+    if (!insidePanel && !isTrigger) {
+      this.closeComposerPanels();
     }
   };
 
