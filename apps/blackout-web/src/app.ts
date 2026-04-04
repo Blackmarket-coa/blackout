@@ -2103,6 +2103,24 @@ export class BlackoutWebApp {
       this.switchStegoView("password");
     });
 
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']")?.addEventListener("input", () => {
+      this.updateStegoEncodePreview();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']")?.addEventListener("input", () => {
+      this.updateStegoEncodePreview();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']")?.addEventListener("input", () => {
+      this.updateStegoPassphraseStrength();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-preview-reveal']")?.addEventListener("change", () => {
+      this.updateStegoEncodePreview();
+    });
+    this.updateStegoEncodePreview();
+    this.updateStegoPassphraseStrength();
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-gif']").forEach((button) => {
       button.addEventListener("click", () => {
         const snippet = button.dataset.snippet;
@@ -2617,6 +2635,38 @@ export class BlackoutWebApp {
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-selected", isActive ? "true" : "false");
     });
+  }
+
+  private updateStegoPassphraseStrength(): void {
+    const passphrase = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-passphrase']")?.value ?? "";
+    const strengthOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-passphrase-strength']");
+    if (!strengthOutput) return;
+    const strength = passphrase.length >= 14 && /[^a-zA-Z0-9]/.test(passphrase)
+      ? "strong"
+      : passphrase.length >= 8
+        ? "medium"
+        : "weak";
+    strengthOutput.textContent = `Passphrase strength: ${strength}`;
+  }
+
+  private updateStegoEncodePreview(): void {
+    const hidden = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-hidden']")?.value.trim() || "hidden-message";
+    const cover = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-cover']")?.value.trim() || "let's sync after standup";
+    const reveal = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-preview-reveal']")?.checked ?? false;
+    const coverOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-cover']");
+    const hiddenOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-hidden']");
+    const revealOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-stego-preview-reveal-output']");
+    if (coverOutput) coverOutput.textContent = cover;
+    if (hiddenOutput) hiddenOutput.textContent = hidden;
+    if (!revealOutput) return;
+    if (!reveal) {
+      revealOutput.hidden = true;
+      revealOutput.textContent = "";
+      return;
+    }
+    const markerCount = Math.max(1, Math.min(hidden.length, 12));
+    revealOutput.hidden = false;
+    revealOutput.textContent = `Reveal mode: ${cover}${"•".repeat(markerCount)} (• marks invisible insert positions)`;
   }
 
   private generateStegoPassphrase(length = 24): string {

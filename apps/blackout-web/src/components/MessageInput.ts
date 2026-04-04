@@ -177,6 +177,7 @@ export function renderMessageInput({
           stegoEnabled
             ? `<section class="composer-popover" data-panel="stego" data-testid="composer-stego-panel" aria-hidden="true">
                 <p class="composer-popover-title">Stego composer ${renderGlossaryTip("Steganography")} ${renderGlossaryTip("Stego Tier")}</p>
+                <p class="meta">Hide secret messages inside normal-looking text. Only someone with your passphrase can read them.</p>
                 <div class="composer-stego-tabs" role="tablist" aria-label="Stego tools">
                   <button type="button" data-action="composer-stego-tab-encode" data-testid="composer-stego-tab-encode" class="is-active" role="tab" aria-selected="true" ${disabled ? "disabled" : ""}>Hide</button>
                   <button type="button" data-action="composer-stego-tab-decrypt" data-testid="composer-stego-tab-decrypt" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Decrypt</button>
@@ -192,29 +193,42 @@ export function renderMessageInput({
                   <label class="composer-popover-field">Passphrase
                     <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
                   </label>
-                  <label class="composer-popover-field">Codec ${renderGlossaryTip("Codec")}
-                    <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
-                      <option value="basic-lsb-image">Basic LSB (Image)</option>
-                      <option value="dct-image" disabled>DCT Image (Signal lock)</option>
-                      <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
-                      <option value="audio-phase" disabled>Audio Phase (Signal lock)</option>
-                      <option value="batch-mode" disabled>Batch Mode (Signal lock)</option>
-                    </select>
-                  </label>
-                  <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
-                  <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
-                  <label class="composer-popover-field">Stego channel
-                    <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
-                      <option value="">No saved channel</option>
-                    </select>
-                  </label>
-                  <label class="composer-popover-inline">
-                    <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
-                    Ephemeral message ${renderGlossaryTip("Ephemeral")}
-                  </label>
-                  <label class="composer-popover-field">TTL (hours) ${renderGlossaryTip("TTL")}
-                    <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
-                  </label>
+                  <p class="meta" data-testid="composer-stego-passphrase-strength">Passphrase strength: weak</p>
+                  <div class="composer-stego-preview" data-testid="composer-stego-preview">
+                    <p class="meta">Others see: <span data-testid="composer-stego-preview-cover">let's sync after standup</span></p>
+                    <p class="meta">Hidden inside: <span data-testid="composer-stego-preview-hidden">hidden-message</span></p>
+                    <label class="composer-popover-inline">
+                      <input type="checkbox" data-action="composer-stego-preview-reveal" ${disabled ? "disabled" : ""} />
+                      Reveal invisible positions
+                    </label>
+                    <p class="meta" data-testid="composer-stego-preview-reveal-output" hidden></p>
+                  </div>
+                  <details class="composer-stego-advanced">
+                    <summary>Advanced options</summary>
+                    <label class="composer-popover-field">Codec ${renderGlossaryTip("Codec")}
+                      <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
+                        <option value="basic-lsb-image">Basic LSB (Image)</option>
+                        <option value="dct-image" disabled>DCT Image (Signal lock)</option>
+                        <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
+                        <option value="audio-phase" disabled>Audio Phase (Signal lock)</option>
+                        <option value="batch-mode" disabled>Batch Mode (Signal lock)</option>
+                      </select>
+                    </label>
+                    <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
+                    <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
+                    <label class="composer-popover-field">Stego channel
+                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
+                        <option value="">No saved channel</option>
+                      </select>
+                    </label>
+                    <label class="composer-popover-inline">
+                      <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
+                      Ephemeral message ${renderGlossaryTip("Ephemeral")}
+                    </label>
+                    <label class="composer-popover-field">TTL (hours) ${renderGlossaryTip("TTL")}
+                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
+                    </label>
+                  </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>
                 <div class="composer-stego-view" data-stego-view="decrypt">

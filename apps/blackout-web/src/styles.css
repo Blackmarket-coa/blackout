@@ -2154,6 +2154,32 @@ body {
   display: grid;
 }
 
+.composer-stego-preview {
+  border: 1px dashed #3d4e6c;
+  border-radius: 8px;
+  padding: 0.45rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.composer-stego-preview p {
+  margin: 0;
+}
+
+.composer-stego-advanced {
+  border: 1px solid #324667;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.composer-stego-advanced summary {
+  cursor: pointer;
+  color: #d5ddf1;
+  font-size: 0.82rem;
+}
+
 .composer-popover-inline {
   display: inline-flex;
   align-items: center;
