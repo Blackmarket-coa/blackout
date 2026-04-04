@@ -219,12 +219,15 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
+  height: 100dvh;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
 .container {
   height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2826,7 +2829,7 @@ label {
 
   .chat-input {
     position: relative;
-    padding-bottom: 5rem;
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .composer-popover.is-open {
