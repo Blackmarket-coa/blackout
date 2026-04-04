@@ -2297,9 +2297,11 @@ export class BlackoutWebApp {
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
-      this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
-      this.trackAdvancedDiscovery("governance");
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-open-governance']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("governance", button);
+        this.trackAdvancedDiscovery("governance");
+      });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
@@ -2785,9 +2787,14 @@ export class BlackoutWebApp {
     textarea.focus();
   }
 
-  private toggleComposerPanel(panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
+  private toggleComposerPanel(
+    panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego",
+    triggerSelectorOrButton: string | HTMLButtonElement,
+  ): void {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
-    const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
+    const trigger = typeof triggerSelectorOrButton === "string"
+      ? this.root.querySelector<HTMLButtonElement>(triggerSelectorOrButton)
+      : triggerSelectorOrButton;
     if (!panel || !trigger) return;
     const shouldRestoreComposerFocus = panelName === "governance" || panelName === "stego";
     const shouldOpen = !panel.classList.contains("is-open");
