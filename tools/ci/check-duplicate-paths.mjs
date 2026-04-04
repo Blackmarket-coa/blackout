@@ -25,6 +25,15 @@ function checkCaseInsensitivePathCollisions(files) {
   return [...byLower.values()].filter((group) => group.length > 1);
 }
 
+
+function isTestLikeFile(file) {
+  return (
+    file.includes('/tests/') ||
+    file.includes('/test/') ||
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
+  );
+}
+
 function collectRoutePathLiterals(files) {
   const routeLiterals = new Map();
 
@@ -34,7 +43,7 @@ function collectRoutePathLiterals(files) {
   ];
 
   for (const file of files) {
-    if (!textExtensions.has(extname(file))) continue;
+    if (!textExtensions.has(extname(file)) || isTestLikeFile(file)) continue;
 
     const content = readFileSync(file, 'utf8');
     for (const pattern of patterns) {
