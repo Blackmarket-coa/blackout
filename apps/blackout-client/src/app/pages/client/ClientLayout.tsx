@@ -25,6 +25,7 @@ import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
 import { useOptionalCall } from '../../features/call';
+import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoomTimeline } from '../../hooks/useTimeline';
 import { useRoom } from '../../hooks/useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
@@ -199,6 +200,21 @@ export const ClientLayout = () => {
     [spaceOrder, spaces],
   );
 
+  const onboardingSpaceId = useMemo(() => {
+    if (selectedSpaceId) return selectedSpaceId;
+    if (orderedSpaces[0]?.roomId) return orderedSpaces[0].roomId;
+    return 'home';
+  }, [orderedSpaces, selectedSpaceId]);
+  const [suppressedOnboardingBySpace, setSuppressedOnboardingBySpace] = useState<Record<string, boolean>>({});
+  const onboardingSuppressed = suppressedOnboardingBySpace[onboardingSpaceId] === true;
+
+  useEffect(() => {
+    setSuppressedOnboardingBySpace((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      return { ...prev, [onboardingSpaceId]: false };
+    });
+  }, [onboardingSpaceId]);
+
   const selectedSpaceRooms = useMemo(() => {
     if (!selectedSpaceId) return homeRooms;
     return homeRooms.filter((room) => room.roomId.includes(selectedSpaceId.slice(1, 5)) || room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase()));
@@ -318,14 +334,24 @@ export const ClientLayout = () => {
       return (
         <div style={{ padding: 16, display: 'grid', gap: 8 }}>
           {composerCommandStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{composerCommandStatus}</div> : null}
-          <div>Space overview: {selectedSpaceId}</div>
+          <WelcomeScreen
+            spaceId={selectedSpaceId}
+            actionLabel="Explore"
+            onPickChannel={(roomId) => openRoom(roomId)}
+            onJoinOrExplore={() => setSelectedRoomId(null)}
+          />
         </div>
       );
     }
     return (
       <div style={{ padding: 16, display: 'grid', gap: 8 }}>
         {composerCommandStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{composerCommandStatus}</div> : null}
-        <div>Welcome to Blackout.</div>
+        <WelcomeScreen
+          spaceId={onboardingSpaceId}
+          actionLabel="Explore"
+          onPickChannel={(roomId) => openRoom(roomId)}
+          onJoinOrExplore={() => setSelectedRoomId(null)}
+        />
       </div>
     );
   };
@@ -508,6 +534,15 @@ export const ClientLayout = () => {
         ) : null}
 
         {renderRoomContent()}
+
+        {!selectedRoomId && !onboardingSuppressed ? (
+          <OnboardingWizard
+            spaceId={onboardingSpaceId}
+            open
+            onClose={() => setSuppressedOnboardingBySpace((prev) => ({ ...prev, [onboardingSpaceId]: true }))}
+            onComplete={() => setSuppressedOnboardingBySpace((prev) => ({ ...prev, [onboardingSpaceId]: true }))}
+          />
+        ) : null}
 
         {rightPanel ? (
           <aside style={{ position: 'absolute', top: 0, right: 0, width: 320, height: '100%', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border-default)', boxShadow: '-4px 0 16px rgba(0,0,0,.2)' }}>

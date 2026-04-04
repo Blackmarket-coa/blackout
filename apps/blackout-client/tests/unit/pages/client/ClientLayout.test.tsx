@@ -9,9 +9,22 @@ import { rightPanelAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../.
 import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
 import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useInRouterContext: () => false,
+    useLocation: () => ({ pathname: '/', search: '' }),
+    useNavigate: () => vi.fn(),
+    useParams: () => ({}),
+    Link: ({ children, ...rest }: React.ComponentProps<'a'>) => <a {...rest}>{children}</a>,
+  };
+});
+
 let mockRoom: Room | null = null;
 let mockEvents: MatrixEvent[] = [];
 const mountedRoots: ReactDOM.Root[] = [];
+const onboardingCompletionBySpace: Record<string, boolean> = {};
 const mockClient = {
   getRooms: () => [] as Room[],
   getUserId: () => '@me:example.org',
@@ -60,6 +73,36 @@ vi.mock('../../../../src/app/hooks/useRoom', () => ({
 
 vi.mock('../../../../src/app/hooks/useTimeline', () => ({
   useRoomTimeline: () => ({ data: mockEvents, loading: false, error: null, loadMore: vi.fn() }),
+}));
+
+vi.mock('../../../../src/app/features/welcome', () => ({
+  WelcomeScreen: ({ spaceId }: { spaceId: string }) => <div data-testid="welcome-screen">welcome:{spaceId}</div>,
+  OnboardingWizard: ({
+    spaceId,
+    open,
+    onComplete,
+  }: {
+    spaceId: string;
+    open: boolean;
+    onClose: () => void;
+    onComplete?: () => void;
+  }) => {
+    if (!open || onboardingCompletionBySpace[spaceId]) return null;
+    return (
+      <div data-testid="onboarding-wizard">
+        onboarding:{spaceId}
+        <button
+          type="button"
+          onClick={() => {
+            onboardingCompletionBySpace[spaceId] = true;
+            onComplete?.();
+          }}
+        >
+          complete onboarding
+        </button>
+      </div>
+    );
+  },
 }));
 
 const makeEvent = (
@@ -163,6 +206,9 @@ describe('ClientLayout UI wiring', () => {
     localStorage.clear();
     mockEvents = [];
     mockRoom = null;
+    Object.keys(onboardingCompletionBySpace).forEach((key) => {
+      delete onboardingCompletionBySpace[key];
+    });
     mockClient.getAccountData = vi.fn(() => null);
     mockClient.setAccountData.mockClear();
     mockClient.sendReadReceipt.mockClear();
@@ -607,5 +653,61 @@ describe('ClientLayout UI wiring', () => {
     });
 
     expect(container.textContent).toContain('Read');
+  });
+
+  it('shows onboarding wizard for incomplete users in the active space', () => {
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    const space = makeRoom({ roomId: '!space:example.org', name: 'Space', type: 'm.space' });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [space, room],
+      selectedRoomId: null,
+      selectedSpaceId: '!space:example.org',
+      rightPanel: null,
+    });
+
+    expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')?.textContent).toContain('onboarding:!space:example.org');
+  });
+
+  it('hides onboarding wizard immediately after completion', async () => {
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    const space = makeRoom({ roomId: '!space:example.org', name: 'Space', type: 'm.space' });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [space, room],
+      selectedRoomId: null,
+      selectedSpaceId: '!space:example.org',
+      rightPanel: null,
+    });
+
+    const completeButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('complete onboarding'),
+    ) as HTMLButtonElement;
+    expect(completeButton).toBeTruthy();
+
+    act(() => completeButton.click());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+  });
+
+  it('does not show onboarding wizard again for returning users', () => {
+    onboardingCompletionBySpace['!space:example.org'] = true;
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    const space = makeRoom({ roomId: '!space:example.org', name: 'Space', type: 'm.space' });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [space, room],
+      selectedRoomId: null,
+      selectedSpaceId: '!space:example.org',
+      rightPanel: null,
+    });
+
+    expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
   });
 });
