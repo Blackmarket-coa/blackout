@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { Send, Shield } from "lucide-react-native";
-import { useTimeline, useSendMessage, type TimelineMessage } from "@blackout/core";
+import { EventTypes, useTimeline, useSendMessage, type TimelineMessage } from "@blackout/core";
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
 
@@ -29,6 +29,15 @@ type SelectionTarget =
 
 const MAX_VISIBLE_ACTIONS = 5;
 const VINE_ANIMATION_MS = 250;
+
+type DomainId = "governance" | "trade" | "logistics" | "discover";
+
+const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
+  governance: ["Active votes", "Results", "Proposals", "Delegates"],
+  trade: ["Marketplace", "Payments", "My orders"],
+  logistics: ["Tracking", "Fleet", "Routing"],
+  discover: ["DeepDive", "Communities", "Featured"],
+};
 
 function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
   const content = message.content.toLowerCase();
@@ -233,7 +242,13 @@ export default function RoomScreen() {
   const [selectedTarget, setSelectedTarget] = useState<SelectionTarget | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [overflowActions, setOverflowActions] = useState<VineAction[]>([]);
+  const [activeDomain, setActiveDomain] = useState<DomainId | null>(null);
+  const [lastActiveDomain, setLastActiveDomain] = useState<DomainId | null>(null);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [pendingVoteCount, setPendingVoteCount] = useState(0);
   const listRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
+  const canopyAnimation = useRef(new Animated.Value(0)).current;
   const selectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get room name for header
@@ -287,6 +302,90 @@ export default function RoomScreen() {
     setOverflowOpen(true);
   };
 
+  const toggleDomain = (domain: DomainId) => {
+    setActiveDomain((current) => (current === domain ? null : domain));
+  };
+
+  useEffect(() => {
+    if (!activeDomain) {
+      canopyAnimation.setValue(0);
+      return;
+    }
+    canopyAnimation.setValue(0);
+    Animated.timing(canopyAnimation, {
+      toValue: 1,
+      duration: VINE_ANIMATION_MS,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  }, [activeDomain, canopyAnimation]);
+
+  useEffect(() => {
+    if (!room) {
+      setPendingVoteCount(0);
+      return;
+    }
+
+    const getPendingVotes = () => {
+      const proposalEvents = room.currentState.getStateEvents(EventTypes.PROPOSAL as any);
+      const list = Array.isArray(proposalEvents) ? proposalEvents : proposalEvents ? [proposalEvents] : [];
+      const activeCount = list.filter((event) => event.getContent()?.status === "active").length;
+      setPendingVoteCount(activeCount);
+    };
+
+    getPendingVotes();
+    const onTimeline = () => getPendingVotes();
+    client?.on("Room.timeline" as any, onTimeline);
+    return () => {
+      client?.off("Room.timeline" as any, onTimeline);
+    };
+  }, [client, room]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const targetTag = (event.target as HTMLElement | null)?.tagName;
+      const isInput = targetTag === "INPUT" || targetTag === "TEXTAREA";
+      if (event.key === "/" && !isInput) {
+        event.preventDefault();
+        inputRef.current?.focus();
+        return;
+      }
+      if (isInput) return;
+
+      if (event.key === "g" || event.key === "G") {
+        event.preventDefault();
+        setActiveDomain((current) => (current === "governance" ? null : "governance"));
+      } else if (event.key === "t" || event.key === "T") {
+        event.preventDefault();
+        setActiveDomain((current) => (current === "trade" ? null : "trade"));
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setActiveDomain(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const handleComposerFocus = () => {
+    setComposerFocused(true);
+    if (activeDomain) {
+      setLastActiveDomain(activeDomain);
+      setActiveDomain(null);
+    }
+  };
+
+  const handleComposerBlur = () => {
+    setComposerFocused(false);
+    if (lastActiveDomain) {
+      setActiveDomain(lastActiveDomain);
+      setLastActiveDomain(null);
+    }
+  };
+
   return (
     <>
       <Stack.Screen
@@ -333,9 +432,94 @@ export default function RoomScreen() {
         />
         </Pressable>
 
+        <View style={styles.canopyBar}>
+          <Pressable
+            onPress={() => toggleDomain("governance")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "governance" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "governance" && styles.canopyPillLabelActive]}>
+              Governance
+            </Text>
+            {pendingVoteCount > 0 && (
+              <View style={styles.canopyBadge}>
+                <Text style={styles.canopyBadgeText}>{pendingVoteCount > 99 ? "99+" : pendingVoteCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("trade")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "trade" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "trade" && styles.canopyPillLabelActive]}>Trade</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("logistics")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "logistics" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "logistics" && styles.canopyPillLabelActive]}>
+              Logistics
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => toggleDomain("discover")}
+            style={({ hovered }) => [
+              styles.canopyPill,
+              activeDomain === "discover" && styles.canopyPillActive,
+              hovered && styles.canopyPillHovered,
+            ]}
+          >
+            <Text style={[styles.canopyPillLabel, activeDomain === "discover" && styles.canopyPillLabelActive]}>
+              Discover
+            </Text>
+          </Pressable>
+        </View>
+
+        {activeDomain && !composerFocused && (
+          <Animated.View
+            style={[
+              styles.canopyExpand,
+              {
+                opacity: canopyAnimation,
+                transform: [
+                  {
+                    translateY: canopyAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-4, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {DOMAIN_ACTIONS[activeDomain].map((label) => (
+              <Pressable key={`${activeDomain}-${label}`} style={({ hovered }) => [styles.canopySub, hovered && styles.canopySubHovered]}>
+                <Text style={styles.canopySubLabel}>
+                  {label}
+                  {activeDomain === "governance" && label === "Active votes" && pendingVoteCount > 0
+                    ? ` (${pendingVoteCount})`
+                    : ""}
+                </Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        )}
+
         {/* Composer */}
         <View style={styles.composer}>
           <TextInput
+            ref={inputRef}
             style={styles.composerInput}
             value={text}
             onChangeText={setText}
@@ -345,6 +529,8 @@ export default function RoomScreen() {
             maxLength={4096}
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
+            onFocus={handleComposerFocus}
+            onBlur={handleComposerBlur}
           />
           <Pressable
             style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
@@ -488,6 +674,83 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     gap: spacing.sm,
+  },
+  canopyBar: {
+    flexDirection: "row",
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#0d1f14",
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(26,188,156,0.1)",
+  },
+  canopyPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.12)",
+    backgroundColor: "rgba(22,129,61,0.06)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  canopyPillHovered: {
+    backgroundColor: "rgba(26,188,156,0.12)",
+    borderColor: "rgba(26,188,156,0.25)",
+  },
+  canopyPillActive: {
+    backgroundColor: "rgba(26,188,156,0.15)",
+    borderColor: "#1ABC9C",
+  },
+  canopyPillLabel: {
+    color: "#6aaa7a",
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  canopyPillLabelActive: {
+    color: "#1ABC9C",
+  },
+  canopyBadge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#1ABC9C",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 2,
+  },
+  canopyBadgeText: {
+    color: "#0a1a0f",
+    fontSize: 8,
+    fontWeight: "600",
+  },
+  canopyExpand: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(26,188,156,0.06)",
+    backgroundColor: "#0d1f14",
+  },
+  canopySub: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.1)",
+    backgroundColor: "rgba(22,129,61,0.08)",
+  },
+  canopySubHovered: {
+    backgroundColor: "rgba(26,188,156,0.18)",
+    borderColor: "#1ABC9C",
+  },
+  canopySubLabel: {
+    fontSize: 12,
+    color: "#8ce0a8",
+    fontWeight: "500",
   },
   composerInput: {
     flex: 1,
