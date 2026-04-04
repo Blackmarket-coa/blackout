@@ -70,13 +70,16 @@ export function renderMessageInput({
             <label class="composer-popover-field">URL
               <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
             </label>
+            <p class="meta" data-testid="composer-attachment-url-error" aria-live="polite"></p>
+            <div class="composer-attachment-preview" data-testid="composer-attachment-preview" aria-live="polite"></div>
             <div class="composer-popover-actions">
               <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add attachment</button>
               <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
             </div>
             <label class="composer-popover-field">Import attachment JSON
-              <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{"type":"meme","label":"Ship it","url":"https://..."}]' ${disabled ? "disabled" : ""}></textarea>
+              <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{ "type":"meme","label":"Ship it","url":"https://..." }]' ${disabled ? "disabled" : ""}></textarea>
             </label>
+            <p class="meta" data-testid="composer-attachment-import-feedback" aria-live="polite"></p>
             <button type="button" data-action="composer-attachment-import" ${disabled ? "disabled" : ""}>Import attachments</button>
             <ul class="composer-channel-list" data-testid="composer-attachment-library-list">
               <li class="meta">No custom attachments yet.</li>
