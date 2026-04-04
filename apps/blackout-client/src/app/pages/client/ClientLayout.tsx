@@ -32,6 +32,16 @@ import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
+import {
+  buildFeatureEntrypointRegistry,
+  getQuickActionEntriesForSurface,
+  getUnseenQuickActionIds,
+  invokeQuickAction,
+  markQuickActionsSeen,
+  type QuickActionId,
+  readQuickActionCollapsed,
+  writeQuickActionCollapsed,
+} from '../../features/quick-actions/featureEntrypoints';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
 
@@ -66,6 +76,7 @@ export const ClientLayout = () => {
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [quickActionsCollapsed, setQuickActionsCollapsed] = useState(() => readQuickActionCollapsed());
   const [inboxOpen, setInboxOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
@@ -231,6 +242,19 @@ export const ClientLayout = () => {
   );
 
   const canOpenModerationDashboard = useMemo(() => hasModeratorAccess(rooms, userId), [rooms, userId]);
+  const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
+  const desktopQuickActions = useMemo(() => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'), [featureEntrypointRegistry]);
+  const mobileQuickActions = useMemo(() => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'mobile'), [featureEntrypointRegistry]);
+  const unseenQuickActionIds = useMemo(() => getUnseenQuickActionIds(featureEntrypointRegistry.entries), [featureEntrypointRegistry.entries]);
+
+  useEffect(() => {
+    writeQuickActionCollapsed(quickActionsCollapsed);
+  }, [quickActionsCollapsed]);
+
+  useEffect(() => {
+    if (unseenQuickActionIds.length === 0) return;
+    markQuickActionsSeen(unseenQuickActionIds);
+  }, [unseenQuickActionIds]);
 
   const persistSpaceOrder = async (next: string[]) => {
     setSpaceOrder(next);
@@ -257,6 +281,19 @@ export const ClientLayout = () => {
       text: command,
     });
     setComposerCommandStatus(`Ready to send ${command}.`);
+  };
+
+  const handleQuickAction = (actionId: QuickActionId) => {
+    invokeQuickAction(actionId, {
+      openSettings: () => openSettingsSection('appearance'),
+      openDevices: () => openSettingsSection('voice-video'),
+      toggleInbox: () => setInboxOpen((prev) => !prev),
+      openThreads: () => setRightPanel('threads'),
+      openSearch: () => setRightPanel('search'),
+      queueCommand: (command) => {
+        void handleCommandPicked(command);
+      },
+    });
   };
 
   const handleCommandPicked = async (command: string) => {
@@ -393,6 +430,28 @@ export const ClientLayout = () => {
           <button type="button" style={{ width: 40, height: 40, borderRadius: 10, border: '1px dashed var(--border-default)', background: 'var(--bg-input)' }}>＋</button>
           {desktop ? (
             <section style={{ width: '100%', borderTop: '1px solid var(--border-default)', padding: 8, display: 'grid', gap: 6 }}>
+              {userId ? (
+                <section style={{ border: '1px solid var(--border-default)', borderRadius: 8, padding: 6, display: 'grid', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <strong style={{ fontSize: 12 }}>Quick actions</strong>
+                    <button type="button" onClick={() => setQuickActionsCollapsed((prev) => !prev)} style={{ border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                      {quickActionsCollapsed ? 'Expand' : 'Collapse'}
+                    </button>
+                  </div>
+                  {!quickActionsCollapsed ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {desktopQuickActions.map((entry) => (
+                        <button key={entry.id} type="button" onClick={() => handleQuickAction(entry.id)} style={{ border: '1px solid var(--border-default)', borderRadius: 6, background: 'var(--bg-input)', fontSize: 11 }}>
+                          {entry.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {unseenQuickActionIds.length > 0 ? (
+                    <small style={{ color: 'var(--text-secondary)' }}>New shortcuts available: {unseenQuickActionIds.slice(0, 2).join(', ')}</small>
+                  ) : null}
+                </section>
+              ) : null}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-muted)' }} />
                 <div style={{ minWidth: 0 }}>
@@ -543,6 +602,28 @@ export const ClientLayout = () => {
               Settings
             </button>
           </header>
+        ) : null}
+        {mobile && userId ? (
+          <section style={{ borderBottom: '1px solid var(--border-default)', padding: 8, display: 'grid', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ fontSize: 12 }}>Quick actions</strong>
+              <button type="button" onClick={() => setQuickActionsCollapsed((prev) => !prev)} style={{ border: '1px solid var(--border-default)', borderRadius: 8, background: 'var(--bg-input)', padding: '2px 8px' }}>
+                {quickActionsCollapsed ? 'Expand' : 'Collapse'}
+              </button>
+            </div>
+            {!quickActionsCollapsed ? (
+              <div style={{ display: 'flex', overflowX: 'auto', gap: 6 }}>
+                {mobileQuickActions.map((entry) => (
+                  <button key={entry.id} type="button" onClick={() => handleQuickAction(entry.id)} style={{ whiteSpace: 'nowrap', border: '1px solid var(--border-default)', borderRadius: 999, background: 'var(--bg-input)', padding: '4px 10px' }}>
+                    {entry.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {unseenQuickActionIds.length > 0 ? (
+              <small style={{ color: 'var(--text-secondary)' }}>Tip: try {mobileQuickActions[0]?.label ?? 'quick actions'} to discover newly enabled tools.</small>
+            ) : null}
+          </section>
         ) : null}
 
         {renderRoomContent()}
