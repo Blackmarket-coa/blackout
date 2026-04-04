@@ -1,4 +1,5 @@
-import { atomWithStorage } from 'jotai/utils';
+import { normalizeThemeId } from '@blackout/core';
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { ThemePreference } from '../styles/theme.css';
 
 export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
@@ -24,7 +25,7 @@ export interface AppSettings {
 }
 
 const defaultSettings: AppSettings = {
-  theme: 'dark',
+  theme: 'dark_canopy',
   pageZoom: 1,
   twitterEmoji: true,
   showNotifications: true,
@@ -39,7 +40,18 @@ const defaultSettings: AppSettings = {
   mobileRoomListScope: 'space',
 };
 
+export const normalizeAppSettingsTheme = (theme: string): ThemePreference => normalizeThemeId(theme);
+
+const appSettingsStorage = createJSONStorage<AppSettings>(() => localStorage, {
+  reviver: (key, value) => {
+    if (key === 'theme' && typeof value === 'string') {
+      return normalizeAppSettingsTheme(value);
+    }
+    return value;
+  },
+});
+
 /**
  * Persisted client settings for appearance, notifications, and developer toggles.
  */
-export const settingsAtom = atomWithStorage<AppSettings>('blackout.settings.v1', defaultSettings);
+export const settingsAtom = atomWithStorage<AppSettings>('blackout.settings.v1', defaultSettings, appSettingsStorage);
