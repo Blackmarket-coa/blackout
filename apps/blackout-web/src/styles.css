@@ -2112,6 +2112,12 @@ body {
   padding: 0.26rem 0.56rem;
 }
 
+.composer-segmented-control button.is-active {
+  border-color: #7fa9ff;
+  background: #24395f;
+  color: #f4f7ff;
+}
+
 .composer-popover-field {
   display: grid;
   gap: 0.2rem;

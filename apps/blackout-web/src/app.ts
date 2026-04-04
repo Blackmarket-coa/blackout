@@ -58,9 +58,10 @@ type AdvancedModule = "governance" | "federation" | "stego";
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
-type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
-type AttachmentComposerMode = "quick-add" | "library" | "bulk-import";
+type AttachmentType = "image" | "video" | "audio" | "file" | "governance" | "meme";
+type AttachmentLibraryItem = { id: string; type: AttachmentType; label: string; url: string };
 type GovernanceTemplateItem = { id: string; title: string; type: "binary" | "multiple_choice" | "ranked"; options: string[]; durationHours: number };
+const ATTACHMENT_TYPES: AttachmentType[] = ["image", "video", "audio", "file", "governance", "meme"];
 
 const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
 const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
@@ -129,7 +130,7 @@ export class BlackoutWebApp {
   private quickActionPopup: QuickActionPopup | null = null;
   private subscriptionPopupOpen = false;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
-  private attachmentComposerMode: AttachmentComposerMode = "quick-add";
+  private selectedAttachmentType: AttachmentType = "image";
   private governanceTemplates: GovernanceTemplateItem[] = [];
   private mobileBridgeEventsBound = false;
   private pendingMobileRoomId: string | null = null;
@@ -2260,14 +2261,12 @@ export class BlackoutWebApp {
       });
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
-      this.closeComposerPanels();
-    });
-
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-file']")?.addEventListener("click", () => {
-      this.applyComposerSnippet(" [file:quarterly-plan.pdf](https://files.examplecdn.com/quarterly-plan.pdf)");
-      this.closeComposerPanels();
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-attachment-type']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const type = button.dataset.attachmentType as AttachmentType | undefined;
+        if (!type) return;
+        this.setComposerAttachmentType(type);
+      });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
@@ -2507,10 +2506,9 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
-      const typeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
-      const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const type = this.selectedAttachmentType;
       const label = labelInput?.value.trim() ?? "";
       const url = urlInput?.value.trim() ?? "";
       if (!url) return;
@@ -2555,10 +2553,10 @@ export class BlackoutWebApp {
           return;
         }
         const imported = parsed
-          .filter((item) => (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio") && typeof item.label === "string" && typeof item.url === "string")
+          .filter((item) => typeof item.label === "string" && typeof item.url === "string" && ATTACHMENT_TYPES.includes(this.normalizeAttachmentType(item.type)))
           .map((item) => ({
-            id: this.normalizeStegoChannelId(`${item.type}-${item.label as string}`),
-            type: item.type as AttachmentLibraryItem["type"],
+            id: this.normalizeStegoChannelId(`${this.normalizeAttachmentType(item.type)}-${item.label as string}`),
+            type: this.normalizeAttachmentType(item.type),
             label: item.label as string,
             url: item.url as string,
           }));
@@ -2664,6 +2662,7 @@ export class BlackoutWebApp {
     this.refreshStegoChannelUi();
     this.refreshGifLibraryUi();
     this.refreshEmojiLibraryUi();
+    this.syncComposerAttachmentTypeUi();
     this.refreshAttachmentLibraryUi();
     this.switchAttachmentComposerMode(this.attachmentComposerMode);
     this.updateAttachmentImportValidationState();
@@ -2770,6 +2769,26 @@ export class BlackoutWebApp {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-toggle-attachments'], [data-action='composer-open-governance'], [data-action='composer-toggle-gif-picker'], [data-action='composer-toggle-emoji-picker'], [data-action='composer-toggle-stego-panel']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  private normalizeAttachmentType(type: string | undefined): AttachmentType {
+    if (!type) return "image";
+    if (type === "picture") return "image";
+    return ATTACHMENT_TYPES.includes(type as AttachmentType) ? (type as AttachmentType) : "image";
+  }
+
+  private setComposerAttachmentType(type: AttachmentType): void {
+    this.selectedAttachmentType = this.normalizeAttachmentType(type);
+    this.syncComposerAttachmentTypeUi();
+  }
+
+  private syncComposerAttachmentTypeUi(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-select-attachment-type']").forEach((button) => {
+      const buttonType = this.normalizeAttachmentType(button.dataset.attachmentType);
+      const isActive = buttonType === this.selectedAttachmentType;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
   }
 
@@ -3261,7 +3280,14 @@ export class BlackoutWebApp {
     try {
       const parsed = JSON.parse(raw) as AttachmentLibraryItem[];
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string" && (item.type === "meme" || item.type === "picture" || item.type === "video" || item.type === "audio"));
+      return parsed
+        .filter((item) => item && typeof item.id === "string" && typeof item.label === "string" && typeof item.url === "string")
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          url: item.url,
+          type: this.normalizeAttachmentType(item.type),
+        }));
     } catch {
       return [];
     }

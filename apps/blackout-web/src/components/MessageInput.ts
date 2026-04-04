@@ -103,17 +103,28 @@ export function renderMessageInput({
             <p class="composer-popover-title">Add attachment</p>
             <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
           </div>
-          <div class="composer-popover-actions">
-            <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
-            <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
-            <button type="button" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Governance</button>
-          </div>
           <div class="composer-channel-editor">
-            <p class="composer-popover-title">Attachment tools</p>
-            <div class="composer-segmented-control" role="tablist" aria-label="Attachment tools">
-              <button type="button" data-action="composer-attachment-mode-quick-add" role="tab" aria-selected="${attachmentMode === "quick-add" ? "true" : "false"}" class="${attachmentMode === "quick-add" ? "is-active" : ""}" ${disabled ? "disabled" : ""}>Quick Add</button>
-              <button type="button" data-action="composer-attachment-mode-library" role="tab" aria-selected="${attachmentMode === "library" ? "true" : "false"}" class="${attachmentMode === "library" ? "is-active" : ""}" ${disabled ? "disabled" : ""}>Library</button>
-              <button type="button" data-action="composer-attachment-mode-bulk-import" role="tab" aria-selected="${attachmentMode === "bulk-import" ? "true" : "false"}" class="${attachmentMode === "bulk-import" ? "is-active" : ""}" ${disabled ? "disabled" : ""}>Bulk Import</button>
+            <p class="composer-popover-title">Attachment library (images/video/audio/files/governance/memes)</p>
+            <div class="composer-popover-field">
+              <span>Type</span>
+              <div class="composer-popover-actions composer-segmented-control" role="group" aria-label="Attachment type">
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="image" aria-pressed="true" class="is-active" ${disabled ? "disabled" : ""}>Image</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="video" aria-pressed="false" ${disabled ? "disabled" : ""}>Video</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="audio" aria-pressed="false" ${disabled ? "disabled" : ""}>Audio</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="file" aria-pressed="false" ${disabled ? "disabled" : ""}>File</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="governance" aria-pressed="false" ${disabled ? "disabled" : ""}>Governance</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="meme" aria-pressed="false" ${disabled ? "disabled" : ""}>Meme</button>
+              </div>
+            </div>
+            <label class="composer-popover-field">Label
+              <input type="text" data-action="composer-attachment-label" placeholder="Sprint retro meme" ${disabled ? "disabled" : ""} />
+            </label>
+            <label class="composer-popover-field">URL
+              <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
+            </label>
+            <div class="composer-popover-actions">
+              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add attachment</button>
+              <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
             </div>
             ${renderAttachmentQuickAddSection(disabled)}
             ${renderAttachmentLibrarySection(disabled)}
