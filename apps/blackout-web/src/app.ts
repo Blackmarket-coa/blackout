@@ -16,6 +16,7 @@ import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
+import { renderBugReportFab } from "./components/BugReportFab";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
@@ -131,6 +132,10 @@ export class BlackoutWebApp {
   private pendingPushTokenRegistration: string | null = null;
   private pushTokenRegisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private pushTokenUnregisterRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private bugReportOpen = false;
+  private bugReportIssue = "";
+  private bugReportSteps = "";
+  private bugReportSuggestions = "";
   private readonly viewedOnboardingSteps = new Set<number>();
   private readonly completedOnboardingSteps = new Set<number>();
   private onboardingCompletionTracked = false;
@@ -270,6 +275,12 @@ export class BlackoutWebApp {
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
       ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
       ${this.subscriptionPopupOpen ? this.renderSubscriptionPopup() : ""}
+      ${renderBugReportFab({
+        open: this.bugReportOpen,
+        issue: this.bugReportIssue,
+        steps: this.bugReportSteps,
+        suggestions: this.bugReportSuggestions,
+      })}
     `;
 
     this.bindEvents();
@@ -313,6 +324,31 @@ export class BlackoutWebApp {
       ...this.telemetryContext(),
       ...payload,
     });
+  }
+
+  private submitBugReport(): void {
+    if (!this.bugReportIssue.trim()) return;
+    const metadata = {
+      device_type: /Mobi|Android|iPhone|iPad/i.test(globalThis.navigator.userAgent) ? "mobile" : "desktop",
+      screen_width: globalThis.innerWidth,
+      screen_height: globalThis.innerHeight,
+      user_agent: globalThis.navigator.userAgent,
+      current_view: this.settingsOpen ? `settings:${this.activeSettingsPage}` : this.activeWorkspacePanel,
+      timestamp: new Date().toISOString(),
+      app_version: "0.0.1",
+    };
+    this.telemetry.track("user_bug_report", {
+      ...metadata,
+      issue: this.bugReportIssue.trim(),
+      steps_to_reproduce: this.bugReportSteps.trim() || null,
+      suggestions: this.bugReportSuggestions.trim() || null,
+    });
+    this.featureActionResult = "Bug report sent. Thanks for helping improve Blackout.";
+    this.bugReportOpen = false;
+    this.bugReportIssue = "";
+    this.bugReportSteps = "";
+    this.bugReportSuggestions = "";
+    this.render();
   }
 
   private onboardingSteps() {
@@ -1534,6 +1570,36 @@ export class BlackoutWebApp {
         if (!module) return;
         this.skipAdvancedTour(module);
       });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='open-bug-report']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.bugReportOpen = true;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-bug-report']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (element.classList.contains("bug-report-modal-backdrop") && target.closest(".bug-report-modal")) return;
+        this.bugReportOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-issue']")?.addEventListener("input", (event) => {
+      this.bugReportIssue = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-steps']")?.addEventListener("input", (event) => {
+      this.bugReportSteps = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='bug-report-suggestions']")?.addEventListener("input", (event) => {
+      this.bugReportSuggestions = (event.currentTarget as HTMLTextAreaElement).value;
+    });
+    this.root.querySelector<HTMLFormElement>("[data-action='submit-bug-report']")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.submitBugReport();
     });
 
 

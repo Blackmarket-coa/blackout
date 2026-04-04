@@ -2217,6 +2217,51 @@ body {
   gap: 0.4rem;
 }
 
+.bug-report-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 5.5rem;
+  z-index: 60;
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 999px;
+  border: 1px solid #40608d;
+  background: #13233b;
+  color: #d7e7ff;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
+}
+
+.bug-report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  display: grid;
+  place-items: center;
+  z-index: 70;
+  padding: 1rem;
+}
+
+.bug-report-modal {
+  width: min(560px, 100%);
+  background: #0f1829;
+  border: 1px solid #3b4f74;
+  border-radius: 12px;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.bug-report-modal form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bug-report-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
 .composer-channel-editor {
   display: grid;
   gap: 0.42rem;
