@@ -301,6 +301,16 @@ export class BlackoutWebApp {
 
     this.bindEvents();
     this.scrollMessagesToBottom();
+    this.centerVisibleOnboardingPrompts();
+  }
+
+
+  private centerVisibleOnboardingPrompts(): void {
+    const prompts = this.root.querySelectorAll<HTMLElement>("[data-testid='first-run-guide'], [data-testid^='composer-tour-']");
+    if (!prompts.length) return;
+    prompts.forEach((prompt) => {
+      prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    });
   }
 
   private getSidebarActiveView(): "home" | "rooms" | "dms" | "activity" | "calls" | "admin" {
@@ -519,7 +529,7 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
     if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
     panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
-    panel.scrollIntoView({ block: "nearest" });
+    panel.scrollIntoView({ block: "center", inline: "nearest" });
     this.trackKpiEvent("onboarding_step_viewed", {
       step: module === "stego" ? 5 : 6,
       module,
@@ -530,7 +540,7 @@ export class BlackoutWebApp {
   private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
     const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
     if (!tour) return;
-    tour.scrollIntoView({ block: "nearest" });
+    tour.scrollIntoView({ block: "center", inline: "nearest" });
     const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
     const finalStep = 2;
     if (step >= finalStep) {
@@ -2971,7 +2981,7 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
-      panel.scrollIntoView({ block: "nearest" });
+      panel.scrollIntoView({ block: "center", inline: "nearest" });
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
       }
