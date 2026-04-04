@@ -202,6 +202,27 @@ describe('ClientLayout UI wiring', () => {
     expect(button).toBeTruthy();
   });
 
+
+  it('governance button opens governance panel', () => {
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [room],
+      selectedRoomId: '!room:example.org',
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    const governanceButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'governance') as HTMLButtonElement;
+    expect(governanceButton).toBeTruthy();
+
+    act(() => governanceButton.click());
+
+    expect(container.textContent).toContain('Governance Dashboard');
+    expect(container.textContent).toContain('Close');
+  });
+
   it('switching rooms closes right panel', async () => {
     const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
     const roomB = makeRoom({ roomId: '!room-b:example.org', name: 'Room B' });
