@@ -24,6 +24,13 @@ import type { BlackoutRuntimeConfig } from "./config";
 import type { ChatMessage, ServerDetails } from "./types";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
+const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
+const ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY = "blackout.onboarding.conversation_started";
+const ONBOARDING_ADVANCED_STEGO_STORAGE_KEY = "blackout.onboarding.advanced.stego";
+const ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY = "blackout.onboarding.advanced.governance";
+const ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY = "blackout.onboarding.advanced.federation";
+const ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.stego.dismissed";
+const ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.governance.dismissed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
@@ -43,6 +50,8 @@ type StegoChannel = {
   rotationDays: number;
   updatedAt: string;
 };
+
+type AdvancedModule = "governance" | "federation" | "stego";
 type GifLibraryItem = { id: string; label: string; url: string };
 type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
@@ -308,13 +317,19 @@ export class BlackoutWebApp {
 
   private onboardingSteps() {
     const state = this.store.getState();
-    const inviteSent = globalThis.localStorage.getItem("blackout.onboarding.invite_sent") === "true";
-    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem("blackout.onboarding.conversation_started") === "true";
+    const inviteSent = globalThis.localStorage.getItem(ONBOARDING_INVITE_SENT_STORAGE_KEY) === "true";
+    const conversationStarted = state.messages.length > 0 || globalThis.localStorage.getItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY) === "true";
+    const stegoExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_STEGO_STORAGE_KEY) === "true";
+    const governanceExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY) === "true";
+    const federationExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY) === "true";
     return [
       { index: 1, label: "Create or join workspace", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>' },
       { index: 2, label: "Create first room (template-first)", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>' },
       { index: 3, label: "Invite members", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>' },
       { index: 4, label: "Start thread or call", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
+      { index: 5, label: "Optional: Try hiding a message (Stego)", done: stegoExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-stego">Open stego</button>' },
+      { index: 6, label: "Optional: Create a proposal", done: governanceExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-governance">Open governance</button>' },
+      { index: 7, label: "Optional: Explore federation", done: federationExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-federation">Open federation</button>' },
     ];
   }
 
@@ -353,13 +368,95 @@ export class BlackoutWebApp {
     });
   }
 
-  private trackAdvancedDiscovery(module: "governance" | "federation" | "stego"): void {
+  private advancedOnboardingStorageKey(module: AdvancedModule): string {
+    if (module === "stego") return ONBOARDING_ADVANCED_STEGO_STORAGE_KEY;
+    if (module === "governance") return ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY;
+    return ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY;
+  }
+
+  private tourDismissedStorageKey(module: Extract<AdvancedModule, "stego" | "governance">): string {
+    return module === "stego" ? ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY : ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY;
+  }
+
+  private markAdvancedOnboardingComplete(module: AdvancedModule, reason: "completed" | "skipped"): void {
+    globalThis.localStorage.setItem(this.advancedOnboardingStorageKey(module), "true");
+    this.trackKpiEvent("onboarding_step_completed", {
+      step: module === "stego" ? 5 : module === "governance" ? 6 : 7,
+      module,
+      reason,
+    });
+  }
+
+  private tourCopy(module: Extract<AdvancedModule, "stego" | "governance">): string[] {
+    return module === "stego"
+      ? [
+          "This tool lets you hide secret messages inside normal-looking text.",
+          "Enter a hidden message, some cover text, and a passphrase.",
+          "The output looks like regular text — only someone with the passphrase can decode it.",
+        ]
+      : [
+          "This is how your community makes decisions together.",
+          "Create a proposal, set options and a voting window, then publish.",
+          "When quorum is met, the vote result is recorded for the room.",
+        ];
+  }
+
+  private renderAdvancedTourStep(module: Extract<AdvancedModule, "stego" | "governance">, step: number): string {
+    const copy = this.tourCopy(module);
+    const current = copy[Math.min(step, copy.length - 1)];
+    return `<aside class="composer-tour" data-testid="composer-tour-${module}" data-tour-module="${module}" data-tour-step="${step}"><p>${current}</p><div class="composer-tour-actions"><button type="button" class="ghost-btn" data-action="onboarding-tour-skip" data-tour="${module}">Skip tour</button><button type="button" data-action="onboarding-tour-next" data-tour="${module}">${step >= copy.length - 1 ? "Finish" : "Next"}</button></div></aside>`;
+  }
+
+  private maybeShowAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    if (globalThis.localStorage.getItem(this.tourDismissedStorageKey(module)) === "true") return;
+    const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
+    if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
+    panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
+    this.trackKpiEvent("onboarding_step_viewed", {
+      step: module === "stego" ? 5 : 6,
+      module,
+      walkthrough: true,
+    });
+  }
+
+  private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
+    if (!tour) return;
+    const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
+    const finalStep = 2;
+    if (step >= finalStep) {
+      tour.remove();
+      globalThis.localStorage.setItem(this.tourDismissedStorageKey(module), "true");
+      this.markAdvancedOnboardingComplete(module, "completed");
+      this.trackKpiEvent("advanced_tour_completed", { module });
+      this.featureActionResult = module === "stego"
+        ? "Stego walkthrough complete. Try encoding your first hidden message."
+        : "Governance walkthrough complete. Draft your first proposal.";
+      this.render();
+      return;
+    }
+    tour.outerHTML = this.renderAdvancedTourStep(module, step + 1);
+  }
+
+  private skipAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
+    this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`)?.remove();
+    globalThis.localStorage.setItem(this.tourDismissedStorageKey(module), "true");
+    this.markAdvancedOnboardingComplete(module, "skipped");
+    this.trackKpiEvent("advanced_tour_skipped", { module });
+    this.featureActionResult = module === "stego" ? "Stego tour skipped." : "Governance tour skipped.";
+    this.render();
+  }
+
+  private trackAdvancedDiscovery(module: AdvancedModule): void {
     if (!this.hasAdminAccess()) return;
     const dedupe = `${module}:${this.store.getState().activeServerId ?? "none"}`;
     if (this.advancedModuleDiscoveryTracked.has(dedupe)) return;
     this.advancedModuleDiscoveryTracked.add(dedupe);
     this.trackKpiEvent("advanced_module_entered", { module });
     this.trackKpiEvent("kpi_advanced_feature_discovery", { module, eligible_admin: true });
+    if (module === "federation") {
+      this.markAdvancedOnboardingComplete("federation", "completed");
+    }
   }
 
   private renderWorkspace(): string {
@@ -1373,7 +1470,7 @@ export class BlackoutWebApp {
         } catch {
           this.featureActionResult = "Invite ready. Copy the current URL and share it with your team.";
         }
-        globalThis.localStorage.setItem("blackout.onboarding.invite_sent", "true");
+        globalThis.localStorage.setItem(ONBOARDING_INVITE_SENT_STORAGE_KEY, "true");
         this.trackKpiEvent("kpi_invite_completion", { completed: true });
         this.render();
       });
@@ -1382,7 +1479,7 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-thread']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeRightPanel = "threads";
-        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        globalThis.localStorage.setItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY, "true");
         this.featureActionResult = "Thread panel opened. Start your first threaded discussion.";
         this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "thread" });
         this.render();
@@ -1393,10 +1490,49 @@ export class BlackoutWebApp {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "calls";
         this.activeTownhallMode = "standard";
-        globalThis.localStorage.setItem("blackout.onboarding.conversation_started", "true");
+        globalThis.localStorage.setItem(ONBOARDING_CONVERSATION_STARTED_STORAGE_KEY, "true");
         this.featureActionResult = "Call setup ready from the Calls panel.";
         this.trackKpiEvent("kpi_ttfv_checkpoint", { step: 4, path: "call" });
         this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-stego']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-governance']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-open-federation']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activePlatformOpsTab = "federation";
+        this.settingsOpen = true;
+        this.activeSettingsPage = "operations";
+        this.trackAdvancedDiscovery("federation");
+        this.featureActionResult = "Federation panel opened. Review node health and snapshots.";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-tour-next']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const module = button.dataset.tour as "stego" | "governance" | undefined;
+        if (!module) return;
+        this.advanceAdvancedTour(module);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='onboarding-tour-skip']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const module = button.dataset.tour as "stego" | "governance" | undefined;
+        if (!module) return;
+        this.skipAdvancedTour(module);
       });
     });
 
@@ -2441,6 +2577,12 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
+      if (panelName === "stego") {
+        this.maybeShowAdvancedTour("stego");
+      }
+      if (panelName === "governance") {
+        this.maybeShowAdvancedTour("governance");
+      }
     }
     if (shouldRestoreComposerFocus) {
       this.restoreMessageComposerFocus();

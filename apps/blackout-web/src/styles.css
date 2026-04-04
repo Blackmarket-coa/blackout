@@ -2170,6 +2170,27 @@ body {
   color: #fca5a5;
 }
 
+.composer-tour {
+  border: 1px solid #3b4f74;
+  background: #0f1a2d;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.composer-tour p {
+  margin: 0;
+  color: #d9e6ff;
+  font-size: 0.78rem;
+}
+
+.composer-tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
 .composer-channel-editor {
   display: grid;
   gap: 0.42rem;
