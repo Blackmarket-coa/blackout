@@ -14,6 +14,7 @@ import {
   type RightPanelType,
 } from '../../state/navigation';
 import { settingsAtom } from '../../state/settings';
+import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
 import { DeadDropComposer, DeadDropIndicator, DeadDropSettings, useDeadDrop } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
@@ -56,6 +57,8 @@ export const ClientLayout = () => {
   const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
   const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
   const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
+  const [, setComposerCommandPayload] = useAtom(composerCommandPayloadAtom);
+  const [composerCommandStatus, setComposerCommandStatus] = useAtom(composerCommandStatusAtom);
   const { openRoomWithContext } = useMentionNavigation();
 
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
@@ -182,6 +185,54 @@ export const ClientLayout = () => {
     setSettingsOpen(true);
   };
 
+  const queueCommandForComposer = (command: string) => {
+    setComposerCommandPayload({
+      nonce: Date.now(),
+      roomId: selectedRoomId,
+      text: command,
+    });
+    setComposerCommandStatus(`Ready to send ${command}.`);
+  };
+
+  const handleCommandPicked = async (command: string) => {
+    const roomScopedCommands = new Set(['/invite', '/topic', '/me', '/shrug', '/leave']);
+    if (roomScopedCommands.has(command) && !selectedRoomId) {
+      setComposerCommandStatus(`Select a room before using ${command}.`);
+      return;
+    }
+
+    if (command === '/leave') {
+      if (!selectedRoomId) return;
+      try {
+        await client.leave(selectedRoomId);
+        setSelectedRoomId(null);
+        setComposerCommandStatus(`Left room ${selectedRoomId}.`);
+      } catch (error) {
+        setComposerCommandStatus(error instanceof Error ? `Failed to leave room: ${error.message}` : 'Failed to leave room.');
+      }
+      return;
+    }
+
+    if (command === '/join') {
+      const roomAlias = window.prompt('Enter room alias or room ID to join');
+      if (!roomAlias?.trim()) {
+        setComposerCommandStatus('Join cancelled: room alias is required.');
+        return;
+      }
+      try {
+        const joined = await client.joinRoom(roomAlias.trim());
+        setSelectedRoomId(joined.roomId ?? roomAlias.trim());
+        setSelectedSpaceId(null);
+        setComposerCommandStatus(`Joined ${joined.roomId ?? roomAlias.trim()}.`);
+      } catch (error) {
+        setComposerCommandStatus(error instanceof Error ? `Failed to join room: ${error.message}` : 'Failed to join room.');
+      }
+      return;
+    }
+
+    queueCommandForComposer(command);
+  };
+
   const renderRoomContent = () => {
     if (selectedRoomId) {
       return (
@@ -189,6 +240,7 @@ export const ClientLayout = () => {
           <header style={{ display: 'grid', gap: 8 }}>
             <strong>{rooms.find((room) => room.roomId === selectedRoomId)?.name ?? selectedRoomId}</strong>
             <DeadDropIndicator config={deadDrop.data} queueCount={deadDrop.queueCount} />
+            {composerCommandStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{composerCommandStatus}</div> : null}
           </header>
 
           <section style={{ border: '1px solid var(--border-default)', borderRadius: 10, height: 'min(62vh, 760px)', minHeight: 360, overflow: 'hidden' }}>
@@ -213,8 +265,20 @@ export const ClientLayout = () => {
         </div>
       );
     }
-    if (selectedSpaceId) return <div style={{ padding: 16 }}>Space overview: {selectedSpaceId}</div>;
-    return <div style={{ padding: 16 }}>Welcome to Blackout.</div>;
+    if (selectedSpaceId) {
+      return (
+        <div style={{ padding: 16, display: 'grid', gap: 8 }}>
+          {composerCommandStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{composerCommandStatus}</div> : null}
+          <div>Space overview: {selectedSpaceId}</div>
+        </div>
+      );
+    }
+    return (
+      <div style={{ padding: 16, display: 'grid', gap: 8 }}>
+        {composerCommandStatus ? <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{composerCommandStatus}</div> : null}
+        <div>Welcome to Blackout.</div>
+      </div>
+    );
   };
 
   const desktop = !isTablet(viewportWidth);
@@ -222,7 +286,7 @@ export const ClientLayout = () => {
 
   return (
     <section style={{ height: '100vh', width: '100%', display: 'grid', gridTemplateColumns: desktop ? `${layout.spaceColumnWidth}px ${layout.roomColumnWidth}px 1fr` : mobile ? '1fr' : '1fr', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-      <NavigationQuickSwitcher open={quickOpen} onClose={() => setQuickOpen(false)} />
+      <NavigationQuickSwitcher open={quickOpen} onClose={() => setQuickOpen(false)} onCommandPicked={(command) => void handleCommandPicked(command)} />
 
       {(desktop || (!mobile && !selectedRoomId)) ? (
         <aside style={{ borderRight: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 8, background: 'var(--bg-nav)' }}>
