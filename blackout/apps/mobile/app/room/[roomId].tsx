@@ -5,6 +5,7 @@ import {
   FlatList,
   TextInput,
   Pressable,
+  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +15,13 @@ import {
 } from "react-native";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Send, Shield, X } from "lucide-react-native";
-import { EventTypes, useTimeline, useSendMessage, type TimelineMessage } from "@blackout/core";
+import {
+  EventTypes,
+  castVote,
+  useTimeline,
+  useSendMessage,
+  type TimelineMessage,
+} from "@blackout/core";
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
 
@@ -91,11 +98,13 @@ function MessageBubble({
   selection,
   onSelect,
   onOpenOverflow,
+  onAction,
 }: {
   message: TimelineMessage;
   selection: SelectionTarget | null;
   onSelect: (next: SelectionTarget) => void;
   onOpenOverflow: (actions: VineAction[]) => void;
+  onAction: (action: VineAction, target: SelectionTarget) => void;
 }) {
   const timeStr = new Date(message.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
@@ -178,6 +187,7 @@ function MessageBubble({
                 styles.vineAction,
                 hovered && styles.vineActionHovered,
               ]}
+              onPress={() => onAction(action, { kind: "avatar", eventId: message.eventId })}
             >
               <Text style={styles.vineActionLabel}>{action.label}</Text>
             </Pressable>
@@ -221,6 +231,7 @@ function MessageBubble({
                 action.primary && styles.vineActionPrimary,
                 hovered && styles.vineActionHovered,
               ]}
+              onPress={() => onAction(action, { kind: "message", eventId: message.eventId })}
             >
               <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
                 {action.label}
@@ -321,6 +332,38 @@ export default function RoomScreen() {
   const openOverflow = (actions: VineAction[]) => {
     setOverflowActions(actions);
     setOverflowOpen(true);
+  };
+
+  const handleVineAction = async (action: VineAction, target: SelectionTarget) => {
+    const targetMessage = messages.find((item) => item.eventId === target.eventId);
+    if (!targetMessage) return;
+
+    switch (action.label) {
+      case "React":
+        Alert.alert("React", "Open emoji picker");
+        break;
+      case "Thread":
+        if (roomId) {
+          router.push(`/room/${encodeURIComponent(roomId)}/thread/${encodeURIComponent(targetMessage.eventId)}`);
+        }
+        break;
+      case "Vote yes":
+        if (client && roomId) {
+          await castVote(client, roomId, targetMessage.eventId, "approve");
+        }
+        break;
+      case "DM":
+        router.push(`/new-dm?userId=${encodeURIComponent(targetMessage.sender)}`);
+        break;
+      case "View profile":
+        router.push(`/profile/${encodeURIComponent(targetMessage.sender)}`);
+        break;
+      case "Forward":
+        router.push(`/room/${encodeURIComponent(roomId || "")}/forward/${encodeURIComponent(targetMessage.eventId)}`);
+        break;
+      default:
+        break;
+    }
   };
 
   const toggleDomain = (domain: DomainId) => {
@@ -532,6 +575,7 @@ export default function RoomScreen() {
               selection={selectedTarget}
               onSelect={handleSelect}
               onOpenOverflow={openOverflow}
+              onAction={handleVineAction}
             />
           )}
           contentContainerStyle={styles.timeline}
@@ -720,6 +764,11 @@ export default function RoomScreen() {
                     action.primary && styles.vineActionPrimary,
                     hovered && styles.vineActionHovered,
                   ]}
+                  onPress={async () => {
+                    if (!selectedTarget) return;
+                    await handleVineAction(action, selectedTarget);
+                    setOverflowOpen(false);
+                  }}
                 >
                   <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>
                     {action.label}
