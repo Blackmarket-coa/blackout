@@ -16,14 +16,25 @@ import {
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Send, Shield, X } from "lucide-react-native";
 import {
+  DOMAIN_ACTIONS,
   EventTypes,
+  RADIAL_ACTIONS,
   castVote,
+  getAvatarActions,
+  getMessageActions,
+  type DomainId,
+  type RadialAction,
+  type SelectionTarget,
+  type VineAction,
   useTimeline,
   useSendMessage,
   type TimelineMessage,
 } from "@blackout/core";
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
+
+const MAX_VISIBLE_ACTIONS = 5;
+const VINE_ANIMATION_MS = 250;
 
 type VineAction = {
   label: string;
