@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import type { RightPanelType } from '../../state/navigation';
+import { GovernanceDashboard } from '../../features/governance';
 import {
   getEventTimestamp,
   getPinnedEvents,
@@ -122,6 +123,14 @@ export const RightPanelContent = ({ panel, room, events, onJumpToEvent }: RightP
         ))}
       </div>
     );
+  }
+
+  if (panel === 'governance') {
+    if (!room) {
+      return <div style={{ padding: 12, color: 'var(--text-secondary)' }}>Pick a room to view governance.</div>;
+    }
+
+    return <GovernanceDashboard roomId={room.roomId} />;
   }
 
   return (
