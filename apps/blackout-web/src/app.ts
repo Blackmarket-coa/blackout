@@ -317,7 +317,9 @@ export class BlackoutWebApp {
 
   private governanceFeatureEnabled(): boolean {
     const features = this.getActivePresetFeatures();
-    return (features["features.governance.entitlements"] ?? false) || (features["features.bmc.governance"] ?? false);
+    if ((features["features.governance.entitlements"] ?? false) || (features["features.bmc.governance"] ?? false)) return true;
+    if (this.hasAdminAccess()) return true;
+    return this.activeChannelHasCapability("governance");
   }
 
   private canPropose(): boolean {
