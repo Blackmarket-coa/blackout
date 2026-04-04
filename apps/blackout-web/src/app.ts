@@ -430,13 +430,13 @@ export class BlackoutWebApp {
     const governanceExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY) === "true";
     const federationExplored = globalThis.localStorage.getItem(ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY) === "true";
     return [
-      { index: 1, label: "Create or join workspace", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open home</button>' },
-      { index: 2, label: "Create first room (template-first)", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create room</button>' },
-      { index: 3, label: "Invite members", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite</button>' },
-      { index: 4, label: "Start thread or call", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Start thread</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
-      { index: 5, label: "Optional: Try hiding a message (Stego)", done: stegoExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-stego">Open stego</button>' },
-      { index: 6, label: "Optional: Create a proposal", done: governanceExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-governance">Open governance</button>' },
-      { index: 7, label: "Optional: Explore federation", done: federationExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-federation">Open federation</button>' },
+      { index: 1, label: "Join your mission HQ", done: Boolean(state.session), action: '<button type="button" class="ghost-btn" data-action="open-home-panel">Open mission map</button>' },
+      { index: 2, label: "Set up your first operations zone", done: state.channels.length > 0, action: '<button type="button" class="ghost-btn" data-action="create-channel">Create zone</button>' },
+      { index: 3, label: "Recruit your response team", done: inviteSent, action: '<button type="button" class="ghost-btn" data-action="onboarding-send-invite">Invite team</button>' },
+      { index: 4, label: "Launch your first mission brief", done: conversationStarted, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-thread">Open brief</button><button type="button" class="ghost-btn" data-action="onboarding-start-call">Start call</button>' },
+      { index: 5, label: "Optional: Pack the Stego toolkit", done: stegoExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-stego">Open toolkit</button>' },
+      { index: 6, label: "Optional: Open mission governance", done: governanceExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-governance">Open governance</button>' },
+      { index: 7, label: "Optional: Link allied organizations", done: federationExplored, action: '<button type="button" class="ghost-btn" data-action="onboarding-open-federation">Open federation</button>' },
     ];
   }
 
@@ -497,14 +497,14 @@ export class BlackoutWebApp {
   private tourCopy(module: Extract<AdvancedModule, "stego" | "governance">): string[] {
     return module === "stego"
       ? [
-          "This tool lets you hide secret messages inside normal-looking text.",
-          "Enter a hidden message, some cover text, and a passphrase.",
-          "The output looks like regular text — only someone with the passphrase can decode it.",
+          "Toolkit briefing: hide mission notes inside normal-looking text.",
+          "Pack your backpack with a secret note, cover text, and a passphrase.",
+          "Your final message looks ordinary, but only teammates with the passphrase can decode it.",
         ]
       : [
-          "This is how your community makes decisions together.",
-          "Create a proposal, set options and a voting window, then publish.",
-          "When quorum is met, the vote result is recorded for the room.",
+          "Mission control: this is where your organization makes decisions together.",
+          "Create a proposal, set response options and a decision window, then publish.",
+          "When quorum is met, the final decision is logged for your operation room.",
         ];
   }
 
@@ -539,8 +539,8 @@ export class BlackoutWebApp {
       this.markAdvancedOnboardingComplete(module, "completed");
       this.trackKpiEvent("advanced_tour_completed", { module });
       this.featureActionResult = module === "stego"
-        ? "Stego walkthrough complete. Try encoding your first hidden message."
-        : "Governance walkthrough complete. Draft your first proposal.";
+        ? "Stego toolkit complete. Try encoding your first hidden field note."
+        : "Governance mission complete. Draft your first proposal.";
       this.render();
       return;
     }
@@ -552,7 +552,7 @@ export class BlackoutWebApp {
     globalThis.localStorage.setItem(this.tourDismissedStorageKey(module), "true");
     this.markAdvancedOnboardingComplete(module, "skipped");
     this.trackKpiEvent("advanced_tour_skipped", { module });
-    this.featureActionResult = module === "stego" ? "Stego tour skipped." : "Governance tour skipped.";
+    this.featureActionResult = module === "stego" ? "Stego toolkit tour skipped." : "Governance mission tour skipped.";
     this.render();
   }
 
@@ -910,10 +910,10 @@ export class BlackoutWebApp {
     return `
       <section class="panel-card stack" data-testid="first-run-guide">
         <div class="panel-card-header">
-          <h2>First-run guide (4 steps)</h2>
-          <button type="button" class="ghost-btn" data-action="dismiss-onboarding-guide" aria-label="Close first-run guide">Close</button>
+          <h2>Mission launch guide (4 steps)</h2>
+          <button type="button" class="ghost-btn" data-action="dismiss-onboarding-guide" aria-label="Close mission launch guide">Close</button>
         </div>
-        <p class="meta">Start fast with secure chat ${renderGlossaryTip("E2EE")}, then grow with Federation ${renderGlossaryTip("Federation")} and a stronger Reputation Tier ${renderGlossaryTip("Reputation Tier")}.</p>
+        <p class="meta">Build your mission toolkit: secure chat ${renderGlossaryTip("E2EE")}, partner links with Federation ${renderGlossaryTip("Federation")}, and trusted operations with Reputation Tier ${renderGlossaryTip("Reputation Tier")}.</p>
         <ol class="stack">
           ${steps
             .map((step) => `<li><strong>${step.done ? "✅" : "⬜"} ${step.label}</strong><div class="modal-actions">${step.done ? "<span class=\"meta\">Done</span>" : step.action}</div></li>`)
