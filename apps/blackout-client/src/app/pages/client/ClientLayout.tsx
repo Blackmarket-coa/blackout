@@ -29,7 +29,7 @@ import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 
-const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search'];
+const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
 
 const roomKindIcon = (room: Room): string => {
   const type = room.getType?.() ?? '';
