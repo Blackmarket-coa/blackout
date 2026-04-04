@@ -2373,6 +2373,17 @@ textarea {
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
 }
 
+.panel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.panel-card-header h2 {
+  margin: 0;
+}
+
 .badge {
   margin-left: 0.35rem;
   background: var(--accent-danger);
