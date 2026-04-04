@@ -412,6 +412,9 @@ describe("BlackoutWebApp integration", () => {
     expect(overviewTab.classList.contains("settings-page-nav__button--active")).toBe(true);
     expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(false);
     expect(operationsTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(overviewTab.classList.contains("ghost-btn")).toBe(true);
+    expect(monetizationTab.classList.contains("ghost-btn")).toBe(true);
+    expect(operationsTab.classList.contains("ghost-btn")).toBe(true);
     expect(overviewTab.getAttribute("aria-selected")).toBe("true");
     expect(monetizationTab.getAttribute("aria-selected")).toBe("false");
     expect(operationsTab.getAttribute("aria-selected")).toBe("false");
@@ -425,6 +428,8 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(monetizationTab);
     expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(true);
     expect(overviewTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(monetizationTab.className).toContain("settings-page-nav__button--active");
+    expect(overviewTab.className.trim()).toBe("ghost-btn");
     expect(monetizationTab.getAttribute("aria-selected")).toBe("true");
     expect(overviewTab.getAttribute("aria-selected")).toBe("false");
     expect(root.querySelector('[data-testid="subscription-panel"]')).toBeTruthy();
@@ -434,6 +439,8 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(operationsTab);
     expect(operationsTab.classList.contains("settings-page-nav__button--active")).toBe(true);
     expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(operationsTab.className).toContain("settings-page-nav__button--active");
+    expect(monetizationTab.className.trim()).toBe("ghost-btn");
     expect(operationsTab.getAttribute("aria-selected")).toBe("true");
     expect(monetizationTab.getAttribute("aria-selected")).toBe("false");
     expect(operationsTab.textContent?.trim().length).toBeGreaterThan(0);

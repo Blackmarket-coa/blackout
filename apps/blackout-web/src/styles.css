@@ -66,6 +66,9 @@
   --ghost-btn-bg-hover: color-mix(in srgb, var(--teal) 18%, var(--panel-bg-alt) 82%);
   --ghost-btn-bg-active: color-mix(in srgb, var(--teal) 28%, var(--panel-bg-alt) 72%);
   --ghost-btn-disabled-opacity: 0.48;
+  --settings-tab-active-bg: color-mix(in srgb, var(--accent-teal) 72%, var(--bg-elevated) 28%);
+  --settings-tab-active-border: color-mix(in srgb, var(--accent-teal) 78%, #fff 22%);
+  --settings-tab-active-text: var(--text-on-accent);
   --shadow-soft: 0 12px 40px rgba(0,0,0,0.6);
   --glass-bg: rgba(26, 43, 31, 0.75);
   --room-text: #e8efe9;
@@ -103,6 +106,9 @@
   --ghost-btn-bg: color-mix(in srgb, #ffffff 65%, var(--panel-bg-alt) 35%);
   --ghost-btn-bg-hover: color-mix(in srgb, var(--forest) 14%, #ffffff 86%);
   --ghost-btn-bg-active: color-mix(in srgb, var(--forest) 24%, #ffffff 76%);
+  --settings-tab-active-bg: color-mix(in srgb, var(--forest) 68%, #ffffff 32%);
+  --settings-tab-active-border: color-mix(in srgb, var(--forest) 78%, #ffffff 22%);
+  --settings-tab-active-text: #ffffff;
 }
 
 :root[data-theme="amoled_night"] {
@@ -129,6 +135,9 @@
   --ghost-btn-bg: color-mix(in srgb, var(--panel-bg-alt) 78%, #000 22%);
   --ghost-btn-bg-hover: color-mix(in srgb, var(--teal) 18%, #000 82%);
   --ghost-btn-bg-active: color-mix(in srgb, var(--teal) 28%, #000 72%);
+  --settings-tab-active-bg: color-mix(in srgb, var(--accent-teal) 76%, #000 24%);
+  --settings-tab-active-border: color-mix(in srgb, var(--accent-teal) 82%, #dffef4 18%);
+  --settings-tab-active-text: #f8fffb;
 }
 
 *, *::before, *::after {
@@ -2488,9 +2497,9 @@ textarea {
 }
 
 .settings-page-nav__button--active {
-  background: color-mix(in srgb, var(--teal) 72%, var(--bg-elevated) 28%);
-  color: var(--text-on-accent);
-  border-color: color-mix(in srgb, var(--teal) 78%, #fff 22%);
+  background: var(--settings-tab-active-bg);
+  color: var(--settings-tab-active-text);
+  border-color: var(--settings-tab-active-border);
 }
 
 .settings-shell .admin-grid {
