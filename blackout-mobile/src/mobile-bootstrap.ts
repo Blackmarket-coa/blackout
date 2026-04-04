@@ -2,6 +2,7 @@ import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { dispatchNativeBridgeEvent } from '../../apps/blackout-web/src/platform/native-bridge-contract';
 
 /**
  * Initialize all Capacitor native bridges.
@@ -11,6 +12,11 @@ export async function initBlackoutMobileBridge() {
   // ── Deep linking (matrix:// URIs) ──
   App.addListener('appUrlOpen', ({ url }) => {
     if (url?.startsWith('matrix://') || url?.startsWith('blackout://')) {
+      dispatchNativeBridgeEvent({
+        type: 'deep_link_opened',
+        source: 'mobile',
+        url,
+      });
       window.dispatchEvent(
         new CustomEvent('blackout:deep-link', { detail: { url } })
       );
@@ -25,6 +31,10 @@ export async function initBlackoutMobileBridge() {
 
     // When returning to foreground, trigger a Matrix sync
     if (isActive) {
+      dispatchNativeBridgeEvent({
+        type: 'resume_sync',
+        source: 'mobile',
+      });
       window.dispatchEvent(new CustomEvent('blackout:resume-sync'));
     }
   });
@@ -48,6 +58,11 @@ export async function initBlackoutMobileBridge() {
 
       PushNotifications.addListener('registration', ({ value }) => {
         // Send token to the Matrix homeserver via Sygnal push gateway
+        dispatchNativeBridgeEvent({
+          type: 'notification_token',
+          source: 'mobile',
+          token: value,
+        });
         window.dispatchEvent(
           new CustomEvent('blackout:push-token', { detail: { token: value } })
         );
@@ -74,6 +89,11 @@ export async function initBlackoutMobileBridge() {
         // Navigate to the room if the notification contains a room_id
         const data = notification.notification?.data;
         if (data?.room_id) {
+          dispatchNativeBridgeEvent({
+            type: 'notification_interacted',
+            source: 'mobile',
+            roomId: data.room_id,
+          });
           window.dispatchEvent(
             new CustomEvent('blackout:navigate-room', {
               detail: { roomId: data.room_id },
