@@ -25,7 +25,7 @@ import {
   type AttachmentType,
 } from "./utils/attachment-validation";
 import { getDirectMessageChannels } from "./utils/dm-channel";
-import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
+import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
@@ -231,15 +231,37 @@ export class BlackoutWebApp {
     },
   }) {
     this.root = root;
-    this.runtimeConfig = runtimeConfig;
+    this.runtimeConfig = {
+      ...runtimeConfig,
+      simpleMode: runtimeConfig.simpleMode ?? {
+        simple_mode_default: true,
+        show_advanced_admin_modules: false,
+        onboarding_progressive_disclosure: true,
+      },
+      engagement: runtimeConfig.engagement ?? {
+        policy: {
+          notifications: { mode: "balanced" },
+          discover: { enabled: true },
+          streaks: { enabled: false },
+          leaderboards: { enabled: false },
+          wellbeing: {
+            breakPrompts: { enabled: true },
+            maxNudgesPerDay: 3,
+          },
+        },
+        notificationRules: [],
+      },
+    };
     this.telemetry = createTelemetryClient(this.runtimeConfig.rollout.cohort);
-    this.deploymentPreset = runtimeConfig.presets.diagnostics.deploymentPreset;
-    this.appliedPreset = runtimeConfig.presets.activePreset;
-    this.selectedPreset = runtimeConfig.presets.activePreset;
+    const resolvedDeploymentPreset = normalizeFeaturePresetKey(runtimeConfig.presets.diagnostics.deploymentPreset) ?? "starter";
+    const resolvedActivePreset = normalizeFeaturePresetKey(runtimeConfig.presets.activePreset) ?? resolvedDeploymentPreset;
+    this.deploymentPreset = resolvedDeploymentPreset;
+    this.appliedPreset = resolvedActivePreset;
+    this.selectedPreset = resolvedActivePreset;
     this.hasSeenFeatureTooltips = globalThis.localStorage.getItem("blackout.featureTipsSeen") === "true";
     this.appliedFeatures = Object.keys(runtimeConfig.presets.features).length
       ? { ...runtimeConfig.presets.features }
-      : { ...FEATURE_PRESET_BUNDLES[runtimeConfig.presets.activePreset] };
+      : { ...FEATURE_PRESET_BUNDLES[resolvedActivePreset] };
     const storedTheme = globalThis.localStorage.getItem("blackout.theme");
     this.selectedTheme = this.parseTheme(storedTheme);
     this.stegoChannels = this.loadStegoChannels();
@@ -2144,7 +2166,7 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLSelectElement>("[data-action='select-preset']")?.addEventListener("change", (event) => {
-      const value = (event.currentTarget as HTMLSelectElement).value as FeaturePresetKey;
+      const value = normalizeFeaturePresetKey((event.currentTarget as HTMLSelectElement).value) ?? this.appliedPreset;
       this.selectedPreset = value;
       this.render();
     });
