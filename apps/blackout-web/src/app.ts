@@ -394,7 +394,7 @@ export class BlackoutWebApp {
       return;
     }
     this.activeRightPanel = "governance";
-    this.featureActionResult = "No governance-tagged room found. Opened governance vote panel instead.";
+    this.featureActionResult = "No governance-tagged room found. Opened governance dashboard instead.";
   }
 
   private getRoleClass(): string {
@@ -2245,7 +2245,7 @@ export class BlackoutWebApp {
         const panel = button.dataset.panel as RightPanelView | undefined;
         if (!panel) return;
         if (panel === "governance" && !this.governanceFeatureEnabled()) {
-          this.featureActionResult = "Governance vote panel is disabled by feature policy.";
+          this.featureActionResult = "Governance dashboard is disabled by feature policy.";
           this.render();
           return;
         }
