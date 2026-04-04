@@ -219,6 +219,17 @@ export class BlackoutWebApp {
       cohort: this.runtimeConfig.rollout.cohort,
     });
     globalThis.document.addEventListener("keydown", this.handleGlobalKeyDown);
+    globalThis.document.addEventListener("pointerdown", (event) => {
+      const target = event.target as HTMLElement;
+      if (!target) return;
+      const hasOpenPanel = this.root.querySelector(".composer-popover.is-open");
+      if (!hasOpenPanel) return;
+      const insidePanel = target.closest(".composer-popover");
+      const isTrigger = target.closest("[data-action^='composer-toggle-'], [data-action='composer-open-governance'], [data-action='composer-toggle-stego-panel']");
+      if (!insidePanel && !isTrigger) {
+        this.closeComposerPanels();
+      }
+    });
     this.bindMobileBridgeEvents();
     this.applyTheme(this.selectedTheme);
     this.render();
