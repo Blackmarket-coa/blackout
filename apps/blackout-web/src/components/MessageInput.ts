@@ -55,7 +55,7 @@ export function renderMessageInput({
             <button type="button" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Governance</button>
           </div>
           <div class="composer-channel-editor">
-            <p class="composer-popover-title">Attachment library (memes/audio/pictures/videos)</p>
+            <p class="composer-popover-title">Quick Add</p>
             <label class="composer-popover-field">Type
               <select data-action="composer-attachment-type" ${disabled ? "disabled" : ""}>
                 <option value="meme">Meme</option>
@@ -64,20 +64,26 @@ export function renderMessageInput({
                 <option value="audio">Audio</option>
               </select>
             </label>
-            <label class="composer-popover-field">Label
+            <label class="composer-popover-field">Label (optional)
               <input type="text" data-action="composer-attachment-label" placeholder="Sprint retro meme" ${disabled ? "disabled" : ""} />
             </label>
+            <p class="meta" data-testid="composer-attachment-label-helper">Optional: leave blank to auto-generate from the URL.</p>
             <label class="composer-popover-field">URL
               <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
             </label>
             <div class="composer-popover-actions">
-              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add attachment</button>
-              <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
+              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add</button>
             </div>
-            <label class="composer-popover-field">Import attachment JSON
-              <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{"type":"meme","label":"Ship it","url":"https://..."}]' ${disabled ? "disabled" : ""}></textarea>
-            </label>
-            <button type="button" data-action="composer-attachment-import" ${disabled ? "disabled" : ""}>Import attachments</button>
+            <details class="composer-advanced-accordion">
+              <summary>Advanced</summary>
+              <div class="composer-popover-actions">
+                <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
+              </div>
+              <label class="composer-popover-field">Import attachment JSON
+                <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{"type":"meme","label":"Ship it","url":"https://..."}]' ${disabled ? "disabled" : ""}></textarea>
+              </label>
+              <button type="button" data-action="composer-attachment-import" ${disabled ? "disabled" : ""}>Import attachments</button>
+            </details>
             <ul class="composer-channel-list" data-testid="composer-attachment-library-list">
               <li class="meta">No custom attachments yet.</li>
             </ul>

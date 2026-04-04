@@ -2280,6 +2280,20 @@ body {
   border-top: 1px solid #2e3d58;
 }
 
+.composer-advanced-accordion {
+  border: 1px solid #324667;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.composer-advanced-accordion summary {
+  cursor: pointer;
+  color: #d5ddf1;
+  font-size: 0.82rem;
+}
+
 .composer-channel-list {
   list-style: none;
   margin: 0;
