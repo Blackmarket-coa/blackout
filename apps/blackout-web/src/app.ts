@@ -17,6 +17,12 @@ import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { renderBugReportFab } from "./components/BugReportFab";
+import {
+  dispatchNativeBridgeEvent,
+  extractRoomIdFromDeepLinkUrl,
+  listenForNativeBridgeEvents,
+  type NativeBridgeEvent,
+} from "./platform/native-bridge-contract";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import {
   parseAttachmentImport,
@@ -3992,9 +3998,43 @@ export class BlackoutWebApp {
     if (this.mobileBridgeEventsBound) return;
     this.mobileBridgeEventsBound = true;
 
+    listenForNativeBridgeEvents((event: NativeBridgeEvent) => {
+      switch (event.type) {
+        case "deep_link_opened": {
+          const roomId = extractRoomIdFromDeepLinkUrl(event.url);
+          if (!roomId) return;
+          void this.navigateToMobileRoom(roomId);
+          return;
+        }
+        case "notification_interacted": {
+          if (!event.roomId) return;
+          void this.navigateToMobileRoom(event.roomId);
+          return;
+        }
+        case "resume_sync": {
+          this.featureActionResult = "Mobile resume detected. Sync recovery started.";
+          this.render();
+          void this.recoverAfterReconnect();
+          return;
+        }
+        case "notification_token": {
+          if (!event.token) return;
+          globalThis.localStorage.setItem(MOBILE_PUSH_TOKEN_STORAGE_KEY, event.token);
+          this.pendingPushTokenRegistration = event.token;
+          this.featureActionResult = "Mobile push token captured. Registering with backend…";
+          this.render();
+          this.schedulePushTokenRegistration(event.token, 0);
+          return;
+        }
+        case "unread_count_changed":
+          return;
+      }
+    });
+
+    // Legacy mobile bridge event compatibility
     globalThis.addEventListener("blackout:deep-link", (event) => {
       const detail = (event as CustomEvent<{ url?: string }>).detail;
-      const roomId = this.extractRoomIdFromUrl(detail?.url);
+      const roomId = extractRoomIdFromDeepLinkUrl(detail?.url);
       if (!roomId) return;
       void this.navigateToMobileRoom(roomId);
     });
@@ -4087,18 +4127,7 @@ export class BlackoutWebApp {
   }
 
   private extractRoomIdFromUrl(url?: string): string | null {
-    if (!url) return null;
-    try {
-      const parsed = new URL(url);
-      if (!["matrix:", "blackout:"].includes(parsed.protocol)) return null;
-      if (parsed.hostname === "room" && parsed.pathname.length > 1) {
-        return decodeURIComponent(parsed.pathname.slice(1));
-      }
-      const queryRoom = parsed.searchParams.get("room_id") ?? parsed.searchParams.get("roomId");
-      return queryRoom?.trim() || null;
-    } catch {
-      return null;
-    }
+    return extractRoomIdFromDeepLinkUrl(url);
   }
 
   private async navigateToMobileRoom(roomId: string): Promise<void> {
@@ -4217,6 +4246,7 @@ export class BlackoutWebApp {
           [channelId]: 0,
         },
       });
+      this.emitUnreadCountChanged();
       this.governanceTemplates = this.loadGovernanceTemplates(channelId);
       this.markSeen(messages);
     });
@@ -4381,7 +4411,18 @@ export class BlackoutWebApp {
         [event.channelId]: (state.unreadByChannel[event.channelId] ?? 0) + 1,
       },
     });
+    this.emitUnreadCountChanged();
     this.render();
+  }
+
+  private emitUnreadCountChanged(): void {
+    const unreadByChannel = this.store.getState().unreadByChannel;
+    const unread = Object.values(unreadByChannel).reduce((sum, count) => sum + count, 0);
+    dispatchNativeBridgeEvent({
+      type: "unread_count_changed",
+      source: "web",
+      unread,
+    });
   }
 
   private async recoverAfterReconnect(): Promise<void> {

@@ -1,5 +1,6 @@
 import { BlackoutWebApp } from "./app";
 import { blackoutWebConfig } from "./index";
+import { dispatchNativeBridgeEvent, listenForNativeBridgeEvents } from "./platform/native-bridge-contract";
 import "./styles.css";
 
 // ── Capacitor mobile bridge ──
@@ -43,6 +44,40 @@ async function initMobileBridge() {
   }
 }
 
+async function initDesktopBridge() {
+  try {
+    const tauri = (globalThis as { __TAURI__?: unknown }).__TAURI__ as
+      | {
+          event?: { listen?: (eventName: string, handler: (event: { payload?: unknown }) => void) => Promise<() => void> };
+          core?: { invoke?: (command: string, payload?: unknown) => Promise<unknown> };
+        }
+      | undefined;
+
+    if (!tauri?.event?.listen || !tauri?.core?.invoke) return;
+
+    await tauri.event.listen("deep-link://new-url", (event) => {
+      const payload = event.payload;
+      const urls = Array.isArray(payload)
+        ? payload.filter((value): value is string => typeof value === "string")
+        : [];
+      for (const url of urls) {
+        dispatchNativeBridgeEvent({
+          type: "deep_link_opened",
+          source: "desktop",
+          url,
+        });
+      }
+    });
+
+    listenForNativeBridgeEvents((event) => {
+      if (event.type !== "unread_count_changed") return;
+      void tauri.core?.invoke?.("set_unread_count", { unread: event.unread });
+    });
+  } catch {
+    // Not running in Tauri desktop shell.
+  }
+}
+
 const appRoot = document.querySelector<HTMLDivElement>("#app");
 
 if (!appRoot) {
@@ -51,4 +86,5 @@ if (!appRoot) {
 
 // Init mobile bridge in parallel with app mount
 void initMobileBridge();
+void initDesktopBridge();
 void new BlackoutWebApp(appRoot, blackoutWebConfig).mount();

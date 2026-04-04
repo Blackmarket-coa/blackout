@@ -52,15 +52,29 @@ Notifications are platform-native but implemented differently:
 - Desktop: explicit native notification command exposed by Tauri.
 - Web: no equivalent native bridge contract in this repository scope.
 
-## Recommended parity actions
+## Intentional differences vs parity gaps
 
-1. Define a single cross-platform **notification contract** in web layer (event names + payload schema), then adapt mobile/desktop bridges to the same contract.
-2. Decide whether `blackout://` is required on desktop; if yes, extend desktop scheme registration.
-3. Add parity smoke tests that verify shared behavior for:
+### Intentional (native UX/platform behavior)
+
+- Mobile Android back-button minimize behavior and haptics.
+- Desktop system tray, global shortcuts, and minimize-to-tray close interception.
+- Platform-specific notification delivery transports (APNs/FCM vs desktop notification center).
+
+### Gaps addressed in this pass
+
+- Added a shared native-bridge event contract in web layer with typed event payloads.
+- Updated mobile bridge to dispatch shared contract events.
+- Added desktop `blackout://` deep-link scheme registration.
+- Added parity smoke tests for deep-link parsing, unread event emission, and notification interaction routing.
+
+## Follow-up parity actions
+
+1. Verify desktop notification-click payloads can map directly into `notification_interacted` without relying on deep-link fallback.
+2. Add end-to-end shell tests (desktop/mobile harness) to complement unit smoke tests for:
    - deep-link route resolution
    - unread count updates
    - notification click-to-room navigation
-4. Document which differences are **intentional** (native UX) vs **gaps** (missing equivalent behavior).
+3. Track shell-only deltas in release notes to prevent accidental regressions.
 
 ## Bottom line
 
