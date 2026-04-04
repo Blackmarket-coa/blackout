@@ -44,6 +44,7 @@ const QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY = "blackout.quick_actions.collapsed
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night" | "storybook_meadow" | "adventure_spectrum";
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
+type GovernanceRightPanelTab = "active" | "past" | "create" | "my-votes" | "results";
 type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
 type SubscriptionTierMatch = {
   tier: FeaturePresetKey;
@@ -106,6 +107,9 @@ export class BlackoutWebApp {
   private activeWorkspacePanel: WorkspacePanelView = "chat";
   private repoToolsOpen = false;
   private activeRightPanel: RightPanelView | null = null;
+  private activeGovernancePanelTab: GovernanceRightPanelTab = "active";
+  private selectedGovernanceProposalId: string | null = null;
+  private latestGovernanceVoteByProposal: Record<string, "approve" | "block"> = {};
   private activeWidgetFeatureId: string | null = null;
   private governanceTabByChannel: Record<string, GovernanceRoomTab> = {};
   private governanceProposalModalByChannel: Record<string, boolean> = {};
@@ -390,7 +394,7 @@ export class BlackoutWebApp {
       return;
     }
     this.activeRightPanel = "governance";
-    this.featureActionResult = "No governance-tagged room found. Opened governance vote panel instead.";
+    this.featureActionResult = "No governance-tagged room found. Opened governance dashboard instead.";
   }
 
   private getRoleClass(): string {
@@ -730,16 +734,19 @@ export class BlackoutWebApp {
       `;
     }
 
-    const panelTitle: Record<RightPanelView, string> = {
+    if (panel === "governance") {
+      return this.renderGovernanceRightPanel();
+    }
+
+    const panelTitle: Record<Exclude<RightPanelView, "governance">, string> = {
       members: "Member list",
       threads: "Thread view",
       pinned: "Pinned messages",
       search: "Search results",
-      governance: "Governance panel",
       widget: "Widget panel",
     };
 
-    const panelBody: Record<RightPanelView, string> = {
+    const panelBody: Record<Exclude<RightPanelView, "governance">, string> = {
       members: `<ul class="right-panel-list">
           <li><strong>Facilitator</strong><span class="meta">Online • can moderate and propose</span></li>
           <li><strong>Treasury guardian</strong><span class="meta">Online • signer #2</span></li>
@@ -760,16 +767,6 @@ export class BlackoutWebApp {
             <li><strong>Roadmap vote opened</strong><span class="meta">#announcements • 1 result</span></li>
           </ul>
         </div>`,
-      governance: `<div class="right-panel-governance">
-          <p class="meta">Active proposal</p>
-          <strong>Enable coalition quest payouts</strong>
-          <p class="meta">Voting window: 48h • quorum 60%</p>
-          <div class="right-panel-actions">
-            <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${this.canVote() ? "" : "disabled"}>Vote approve</button>
-            <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${this.canVote() ? "" : "disabled"}>Vote block</button>
-          </div>
-          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is unavailable until governance entitlements are enabled.</p>'}
-        </div>`,
       widget: "",
     };
 
@@ -781,6 +778,95 @@ export class BlackoutWebApp {
         </div>
         <p class="meta">Plan-aligned contextual overlay for room collaboration workflows.</p>
         ${panelBody[panel]}
+      </aside>
+    `;
+  }
+
+  private renderGovernanceRightPanel(): string {
+    const state = this.store.getState();
+    const proposals = state.governanceProposals.filter((proposal) => proposal.channelId === state.activeChannelId);
+    const activeProposals = proposals.filter((proposal) => proposal.status === "active");
+    const pastProposals = proposals.filter((proposal) => proposal.status !== "active");
+    const selectedProposal = proposals.find((proposal) => proposal.id === this.selectedGovernanceProposalId);
+
+    const renderProposalCard = (proposal: GovernanceProposal): string => {
+      const myVote = this.latestGovernanceVoteByProposal[proposal.id];
+      return `
+        <article class="governance-proposal-card">
+          <h4>${proposal.title}</h4>
+          <p class="meta">Status: ${proposal.status} • Duration: ${proposal.durationHours}h • Quorum: ${proposal.quorum}%</p>
+          ${myVote ? `<p class="meta">Your vote: ${myVote}</p>` : ""}
+          <button type="button" class="ghost-btn" data-action="governance-open-proposal-detail" data-proposal-id="${proposal.id}">${myVote ? "View / Change Vote" : "Vote"}</button>
+        </article>
+      `;
+    };
+
+    const tabButtons = `
+      <div class="right-panel-actions">
+        <button type="button" class="ghost-btn" data-action="governance-right-panel-tab" data-tab="active" ${this.activeGovernancePanelTab === "active" ? "aria-current='true'" : ""}>Active</button>
+        <button type="button" class="ghost-btn" data-action="governance-right-panel-tab" data-tab="past" ${this.activeGovernancePanelTab === "past" ? "aria-current='true'" : ""}>Past</button>
+        <button type="button" class="ghost-btn" data-action="governance-right-panel-tab" data-tab="create" ${this.activeGovernancePanelTab === "create" ? "aria-current='true'" : ""}>Create</button>
+        <button type="button" class="ghost-btn" data-action="governance-right-panel-tab" data-tab="my-votes" ${this.activeGovernancePanelTab === "my-votes" ? "aria-current='true'" : ""}>My Votes</button>
+        <button type="button" class="ghost-btn" data-action="governance-right-panel-tab" data-tab="results" ${this.activeGovernancePanelTab === "results" ? "aria-current='true'" : ""}>Results</button>
+      </div>
+    `;
+
+    let body = "";
+
+    if (selectedProposal) {
+      const myVote = this.latestGovernanceVoteByProposal[selectedProposal.id];
+      body = `
+        <div class="right-panel-governance">
+          <button type="button" class="ghost-btn" data-action="governance-back-to-list">← Back to proposals</button>
+          <h4>${selectedProposal.title}</h4>
+          <p class="meta">${selectedProposal.description}</p>
+          <p class="meta">Status: ${selectedProposal.status} • Votes use proposal detail as action surface.</p>
+          <div class="right-panel-actions">
+            <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="approve" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to approve" : "Vote approve"}</button>
+            <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="block" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to block" : "Vote block"}</button>
+          </div>
+          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is unavailable until governance entitlements are enabled.</p>'}
+        </div>
+      `;
+    } else if (this.activeGovernancePanelTab === "active") {
+      body = activeProposals.length
+        ? `<section class="right-panel-governance">${activeProposals.map((proposal) => renderProposalCard(proposal)).join("")}</section>`
+        : '<p class="meta">No active proposals.</p>';
+    } else if (this.activeGovernancePanelTab === "past") {
+      body = pastProposals.length
+        ? `<section class="right-panel-governance">${pastProposals.map((proposal) => renderProposalCard(proposal)).join("")}</section>`
+        : '<p class="meta">No past proposals.</p>';
+    } else if (this.activeGovernancePanelTab === "create") {
+      body = `
+        <section class="right-panel-governance">
+          <p class="meta">Create new governance proposals using the standard creation flow.</p>
+          <button type="button" class="ghost-btn" data-action="governance-open-proposal" ${this.canPropose() ? "" : "disabled"}>Create Proposal</button>
+        </section>
+      `;
+    } else if (this.activeGovernancePanelTab === "my-votes") {
+      const voted = proposals.filter((proposal) => this.latestGovernanceVoteByProposal[proposal.id]);
+      body = voted.length
+        ? `<section class="right-panel-governance">${voted.map((proposal) => renderProposalCard(proposal)).join("")}</section>`
+        : '<p class="meta">No votes cast yet in this room.</p>';
+    } else {
+      body = proposals.length
+        ? `<section class="right-panel-governance">${proposals
+            .map(
+              (proposal) =>
+                `<article class="governance-proposal-card"><h4>${proposal.title}</h4><p class="meta">Status: ${proposal.status} • Duration: ${proposal.durationHours}h • Quorum: ${proposal.quorum}%</p></article>`,
+            )
+            .join("")}</section>`
+        : '<p class="meta">No proposal results yet.</p>';
+    }
+
+    return `
+      <aside class="right-panel-overlay" data-testid="right-panel-overlay">
+        <div class="right-panel-header">
+          <h3>Governance Dashboard</h3>
+          <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
+        </div>
+        ${tabButtons}
+        ${body}
       </aside>
     `;
   }
@@ -2159,11 +2245,15 @@ export class BlackoutWebApp {
         const panel = button.dataset.panel as RightPanelView | undefined;
         if (!panel) return;
         if (panel === "governance" && !this.governanceFeatureEnabled()) {
-          this.featureActionResult = "Governance vote panel is disabled by feature policy.";
+          this.featureActionResult = "Governance dashboard is disabled by feature policy.";
           this.render();
           return;
         }
         this.activeRightPanel = panel;
+        if (panel === "governance") {
+          this.activeGovernancePanelTab = "active";
+          this.selectedGovernanceProposalId = null;
+        }
         if (panel !== "widget") {
           this.activeWidgetFeatureId = null;
         }
@@ -2183,6 +2273,32 @@ export class BlackoutWebApp {
         const channelId = this.store.getState().activeChannelId;
         if (!tab || !channelId) return;
         this.governanceTabByChannel[channelId] = tab;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-right-panel-tab']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab as GovernanceRightPanelTab | undefined;
+        if (!tab) return;
+        this.activeGovernancePanelTab = tab;
+        this.selectedGovernanceProposalId = null;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-open-proposal-detail']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const proposalId = button.dataset.proposalId;
+        if (!proposalId) return;
+        this.selectedGovernanceProposalId = proposalId;
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='governance-back-to-list']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.selectedGovernanceProposalId = null;
         this.render();
       });
     });
@@ -2252,6 +2368,10 @@ export class BlackoutWebApp {
         const state = this.store.getState();
         if (!state.activeChannelId || !this.canVote()) return;
         const vote = button.dataset.vote ?? "approve";
+        const proposalId = button.dataset.proposalId;
+        if (proposalId && (vote === "approve" || vote === "block")) {
+          this.latestGovernanceVoteByProposal[proposalId] = vote;
+        }
         this.featureActionResult = `Vote submitted: ${vote}.`;
         this.trackKpiEvent("governance_vote_cast", { channel_id: state.activeChannelId, vote });
         this.render();
