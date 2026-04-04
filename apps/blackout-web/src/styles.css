@@ -2112,6 +2112,12 @@ body {
   padding: 0.26rem 0.56rem;
 }
 
+.composer-segmented-control button.is-active {
+  border-color: #7fa9ff;
+  background: #24395f;
+  color: #f4f7ff;
+}
+
 .composer-popover-field {
   display: grid;
   gap: 0.2rem;
@@ -2162,6 +2168,35 @@ body {
 }
 
 .composer-stego-view.is-active {
+  display: grid;
+}
+
+.composer-segmented-control {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.composer-segmented-control button {
+  width: auto;
+  border-radius: 999px;
+  border: 1px solid #435172;
+  background: #1a2436;
+  color: #d5ddf1;
+  padding: 0.2rem 0.6rem;
+}
+
+.composer-segmented-control button.is-active {
+  border-color: #9FE2BF;
+  background: #22385f;
+}
+
+.composer-attachment-view {
+  display: none;
+  gap: 0.42rem;
+}
+
+.composer-attachment-view.is-active {
   display: grid;
 }
 
@@ -2278,6 +2313,20 @@ body {
   gap: 0.42rem;
   padding-top: 0.2rem;
   border-top: 1px solid #2e3d58;
+}
+
+.composer-advanced-accordion {
+  border: 1px solid #324667;
+  border-radius: 8px;
+  padding: 0.35rem 0.45rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.composer-advanced-accordion summary {
+  cursor: pointer;
+  color: #d5ddf1;
+  font-size: 0.82rem;
 }
 
 .composer-channel-list {
