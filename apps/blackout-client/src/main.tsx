@@ -21,6 +21,10 @@ const router = createBrowserRouter([
     element: <ClientLayout />,
   },
   {
+    path: '/room/:roomId',
+    element: <ClientLayout />,
+  },
+  {
     path: '/moderation/draupnir',
     element: <DraupnirRoutePage />,
   },
