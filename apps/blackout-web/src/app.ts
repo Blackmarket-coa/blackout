@@ -10,6 +10,7 @@ import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/Platfo
 import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
+import { renderGlossaryTip } from "./components/glossary";
 import { renderAuthView } from "./features/auth/auth-view";
 import { createApiClient } from "./services/api";
 import { MatrixGatewayClient } from "./services/matrix-client";
@@ -692,7 +693,7 @@ export class BlackoutWebApp {
     return `
       <section class="panel-card stack" data-testid="first-run-guide">
         <h2>First-run guide (4 steps)</h2>
-        <p class="meta">Start fast: workspace → room → invite → thread/call.</p>
+        <p class="meta">Start fast with secure chat ${renderGlossaryTip("E2EE")}, then grow with Federation ${renderGlossaryTip("Federation")} and a stronger Reputation Tier ${renderGlossaryTip("Reputation Tier")}.</p>
         <ol class="stack">
           ${steps
             .map((step) => `<li><strong>${step.done ? "✅" : "⬜"} ${step.label}</strong><div class="modal-actions">${step.done ? "<span class=\"meta\">Done</span>" : step.action}</div></li>`)

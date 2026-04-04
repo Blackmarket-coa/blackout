@@ -1,3 +1,5 @@
+import { renderGlossaryTip } from "./glossary";
+
 export type GovernanceRoomTab = "feed" | "proposals" | "taskboard";
 
 interface GovernanceRoomPanelProps {
@@ -94,7 +96,7 @@ function renderProposalModal(): string {
           </select>
         </label>
         <label>Duration<select><option>48 hours</option><option>7 days</option><option>14 days</option></select></label>
-        <label>Quorum<input type="number" min="1" max="100" value="60" /></label>
+        <label>Quorum ${renderGlossaryTip("Quorum")}<input type="number" min="1" max="100" value="60" /></label>
         <div class="governance-modal-actions">
           <button type="button" class="ghost-btn" data-action="governance-close-proposal">Cancel</button>
           <button type="button">Create proposal</button>

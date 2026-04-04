@@ -1,3 +1,5 @@
+import { renderGlossaryTip } from "./glossary";
+
 export type FederationTab = "health" | "snapshots" | "recovery";
 
 interface FederationPanelProps {
@@ -9,7 +11,7 @@ export function renderFederationPanel({ channelLabel, activeTab }: FederationPan
   return `
     <section class="federation-panel" data-testid="federation-panel">
       <header class="federation-panel-header">
-        <h2>Federation Health · ${channelLabel}</h2>
+        <h2>Federation Health ${renderGlossaryTip("Federation")} · ${channelLabel}</h2>
         <p class="meta">Mesh status, snapshots, and recovery readiness for self-healing operations.</p>
       </header>
       <nav class="federation-tabs" aria-label="Federation tabs">

@@ -2011,6 +2011,52 @@ body {
   border-top: 1px solid rgba(26,188,156,0.04);
 }
 
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.info-tip__trigger {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 1px solid #4b638d;
+  background: #172238;
+  color: #b5cbff;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0;
+  margin-left: 0.2rem;
+  cursor: pointer;
+}
+
+.info-tip__popover {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.4rem);
+  transform: translateX(-50%);
+  display: none;
+  min-width: 220px;
+  max-width: min(340px, 80vw);
+  padding: 0.42rem 0.52rem;
+  border-radius: 8px;
+  border: 1px solid #3b4f74;
+  background: #0f1829;
+  color: #dbe7ff;
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: normal;
+  z-index: 25;
+  box-shadow: 0 10px 22px rgb(0 0 0 / 30%);
+}
+
+.info-tip:hover .info-tip__popover,
+.info-tip:focus-within .info-tip__popover {
+  display: block;
+}
+
 .composer-popovers {
   display: grid;
   gap: 0.4rem;
