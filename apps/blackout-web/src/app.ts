@@ -2311,6 +2311,11 @@ export class BlackoutWebApp {
           this.render();
           return;
         }
+        if (!this.activeChannelHasCapability("governance")) {
+          this.featureActionResult = "Proposal builder opened in composer because this channel does not run full governance workflows.";
+          this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
+          return;
+        }
         this.governanceProposalModalByChannel[channelId] = true;
         this.render();
       });
