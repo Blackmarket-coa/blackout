@@ -140,6 +140,73 @@
   --settings-tab-active-text: #f8fffb;
 }
 
+:root[data-theme="storybook_meadow"] {
+  color-scheme: light;
+  --bg-deep: #f6f2e7;
+  --bg-primary: #efe8d8;
+  --bg-secondary: #fffdf7;
+  --bg-tertiary: #e8efd9;
+  --bg-elevated: #dbe8c8;
+  --bg-hover: rgba(85, 130, 86, 0.1);
+  --bg-active: rgba(85, 130, 86, 0.16);
+  --teal: #5a8d76;
+  --forest: #4f6f3b;
+  --text-primary: #2a2b22;
+  --text-secondary: #58614b;
+  --text-faint: #7f8c72;
+  --app-bg: #f6f2e7;
+  --workspace-bg: #fffdf7;
+  --workspace-border: #bdcfae;
+  --sidebar-bg: #efe8d8;
+  --panel-bg: #f8f3e5;
+  --panel-bg-alt: #ecf2df;
+  --panel-border: #b8caa9;
+  --text-strong: #2a2b22;
+  --text-muted: #58614b;
+  --accent-teal: #5a8d76;
+  --ghost-btn-border: color-mix(in srgb, var(--forest) 24%, var(--panel-border) 76%);
+  --ghost-btn-bg: color-mix(in srgb, #fff 58%, var(--panel-bg-alt) 42%);
+  --ghost-btn-bg-hover: color-mix(in srgb, var(--forest) 16%, #fff 84%);
+  --ghost-btn-bg-active: color-mix(in srgb, var(--forest) 26%, #fff 74%);
+  --settings-tab-active-bg: color-mix(in srgb, var(--forest) 72%, #fff 28%);
+  --settings-tab-active-border: color-mix(in srgb, var(--forest) 80%, #fff 20%);
+  --settings-tab-active-text: #ffffff;
+}
+
+:root[data-theme="adventure_spectrum"] {
+  color-scheme: dark;
+  --bg-deep: #121521;
+  --bg-primary: #161b2c;
+  --bg-secondary: #1c233a;
+  --bg-tertiary: #232c47;
+  --bg-elevated: #2a3556;
+  --bg-hover: rgba(255, 204, 89, 0.14);
+  --bg-active: rgba(255, 204, 89, 0.22);
+  --teal: #63d1c0;
+  --forest: #4f8cff;
+  --text-primary: #f3f6ff;
+  --text-secondary: #bbc7ec;
+  --text-faint: #7e90bf;
+  --app-bg: #121521;
+  --workspace-bg: #161b2c;
+  --workspace-border: #3a4670;
+  --sidebar-bg: #151a2a;
+  --panel-bg: #1d2440;
+  --panel-bg-alt: #1a2036;
+  --panel-border: #3a4670;
+  --text-strong: #f3f6ff;
+  --text-muted: #bbc7ec;
+  --accent-teal: #63d1c0;
+  --accent-gold: #ffcc59;
+  --ghost-btn-border: color-mix(in srgb, var(--accent-gold) 42%, var(--panel-border) 58%);
+  --ghost-btn-bg: color-mix(in srgb, var(--panel-bg-alt) 82%, black 18%);
+  --ghost-btn-bg-hover: color-mix(in srgb, var(--accent-gold) 16%, var(--panel-bg-alt) 84%);
+  --ghost-btn-bg-active: color-mix(in srgb, var(--accent-gold) 24%, var(--panel-bg-alt) 76%);
+  --settings-tab-active-bg: color-mix(in srgb, var(--accent-gold) 38%, var(--forest) 62%);
+  --settings-tab-active-border: color-mix(in srgb, var(--accent-gold) 60%, #fff 40%);
+  --settings-tab-active-text: #1a2036;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -2486,7 +2553,7 @@ textarea {
   top: 0.45rem;
   z-index: 4;
   padding: 0.35rem;
-  border: 1px solid #2B5D34;
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel-bg) 90%, black 10%);
 }
@@ -2515,10 +2582,10 @@ textarea {
 }
 
 .panel-card {
-  border: 1px solid #2B5D34;
+  border: 1px solid var(--panel-border);
   border-radius: 14px;
   padding: 0.9rem;
-  background: linear-gradient(180deg, #1c2028, #163520);
+  background: linear-gradient(180deg, var(--panel-bg), var(--panel-bg-alt));
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
 }
 
