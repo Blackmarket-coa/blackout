@@ -18,6 +18,7 @@ export interface AppSettings {
   devMode: boolean;
   streamerMode: boolean;
   layout: LayoutSettings;
+  mobileRoomListScope?: 'space' | 'all';
   preferredAudioDeviceId?: string;
   preferredVideoDeviceId?: string;
 }
@@ -35,6 +36,7 @@ const defaultSettings: AppSettings = {
     spaceColumnWidth: 64,
     roomColumnWidth: 260,
   },
+  mobileRoomListScope: 'space',
 };
 
 /**

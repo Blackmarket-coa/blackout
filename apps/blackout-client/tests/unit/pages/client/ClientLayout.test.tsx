@@ -201,8 +201,14 @@ const renderLayout = ({
   return { container, root, store };
 };
 
+const setViewportWidth = (width: number) => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width });
+  window.dispatchEvent(new Event('resize'));
+};
+
 describe('ClientLayout UI wiring', () => {
   beforeEach(() => {
+    setViewportWidth(1280);
     localStorage.clear();
     mockEvents = [];
     mockRoom = null;
@@ -709,5 +715,59 @@ describe('ClientLayout UI wiring', () => {
     });
 
     expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+  });
+
+  it('opens settings on mobile while a room is selected', async () => {
+    setViewportWidth(640);
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    mockRoom = room;
+
+    const { container } = renderLayout({
+      rooms: [room],
+      selectedRoomId: '!room:example.org',
+      selectedSpaceId: null,
+      rightPanel: null,
+    });
+
+    const settingsButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Settings') as HTMLButtonElement;
+    expect(settingsButton).toBeTruthy();
+
+    act(() => settingsButton.click());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Mobile quick settings');
+    expect(container.querySelector('[data-testid="settings-page"]')).toBeTruthy();
+  });
+
+  it('allows mobile room organization preference changes from settings drawer', async () => {
+    setViewportWidth(640);
+    const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
+    mockRoom = room;
+
+    const { container, store } = renderLayout({
+      rooms: [room],
+      selectedRoomId: null,
+      selectedSpaceId: '!space:example.org',
+      rightPanel: null,
+    });
+
+    const settingsButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent === 'Settings') as HTMLButtonElement;
+    act(() => settingsButton.click());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const organizationSelect = container.querySelector('select[aria-label="Room organization"]') as HTMLSelectElement;
+    expect(organizationSelect).toBeTruthy();
+
+    act(() => {
+      organizationSelect.value = 'all';
+      organizationSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(store.get(selectedSpaceIdAtom)).toBe('!space:example.org');
+    expect(container.textContent).toContain('All rooms');
   });
 });
