@@ -1,4 +1,6 @@
-import { atomWithStorage } from 'jotai/utils';
+import type { BlackoutThemeId } from '@blackout/core';
+import { normalizeThemeId } from '@blackout/core';
+import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 
 export type SettingsSectionId =
   | 'account'
@@ -11,7 +13,7 @@ export type SettingsSectionId =
   | 'developer'
   | 'about';
 
-export type ThemeOption = 'dark' | 'light' | 'amoled';
+export type ThemeOption = BlackoutThemeId;
 export type ChatDensityOption = 'compact' | 'cozy';
 export type EmojiStyleOption = 'system' | 'twemoji';
 export type TimestampVisibility = 'always' | 'hover' | 'never';
@@ -54,17 +56,28 @@ export interface PrivacySettingsState {
   showTypingIndicators: boolean;
 }
 
+export const normalizeAppearanceTheme = (theme: string): ThemeOption => normalizeThemeId(theme);
+
+const appearanceStorage = createJSONStorage<AppearanceSettingsState>(() => localStorage, {
+  reviver: (key, value) => {
+    if (key === 'theme' && typeof value === 'string') {
+      return normalizeAppearanceTheme(value);
+    }
+    return value;
+  },
+});
+
 export const settingsPageAtom = atomWithStorage<SettingsSectionId>('blackout.settings.active-section.v1', 'appearance');
 
 export const appearanceSettingsAtom = atomWithStorage<AppearanceSettingsState>('blackout.settings.appearance.v1', {
-  theme: 'dark',
+  theme: 'dark_canopy',
   accentColor: '#4ECDC4',
   fontScale: 100,
   chatDensity: 'cozy',
   emojiStyle: 'twemoji',
   messageGrouping: true,
   showTimestamps: 'hover',
-});
+}, appearanceStorage);
 
 export const notificationSettingsAtom = atomWithStorage<NotificationSettingsState>('blackout.settings.notifications.v1', {
   globalMode: 'mentions',

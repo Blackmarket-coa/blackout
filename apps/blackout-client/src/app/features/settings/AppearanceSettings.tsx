@@ -1,10 +1,14 @@
 import { useAtom } from 'jotai';
+import { BLACKOUT_THEMES } from '@blackout/core';
 import { appearanceSettingsAtom, type ChatDensityOption, type EmojiStyleOption, type ThemeOption, type TimestampVisibility } from './settingsAtoms';
+import { themePreferenceAtom } from '../../state/theme-atoms';
 
-const themePreviews: Array<{ value: ThemeOption; label: string; swatches: [string, string, string] }> = [
-  { value: 'dark', label: 'Dark', swatches: ['#1E1F22', '#2B2D31', '#4ECDC4'] },
-  { value: 'light', label: 'Light', swatches: ['#FFFFFF', '#F2F3F5', '#4ECDC4'] },
-  { value: 'amoled', label: 'AMOLED', swatches: ['#000000', '#121212', '#4ECDC4'] },
+export const themePreviews: Array<{ value: ThemeOption; label: string; swatches: [string, string, string] }> = [
+  { value: 'dark_canopy', label: 'Dark canopy', swatches: ['#0A0A0A', '#163520', '#9FE2BF'] },
+  { value: 'light_grove', label: 'Light grove', swatches: ['#FAFAFA', '#E6F4EA', '#2B5D34'] },
+  { value: 'amoled_night', label: 'AMOLED night', swatches: ['#000000', '#111111', '#9FE2BF'] },
+  { value: 'storybook_meadow', label: 'Storybook meadow', swatches: ['#FFFDF7', '#EFE8D8', '#5A8D76'] },
+  { value: 'adventure_spectrum', label: 'Adventure spectrum', swatches: ['#161B2C', '#1D2440', '#FFCC59'] },
 ];
 
 const Segmented = <T extends string>({
@@ -38,6 +42,7 @@ const Segmented = <T extends string>({
 
 export const AppearanceSettings = () => {
   const [settings, setSettings] = useAtom(appearanceSettingsAtom);
+  const [, setThemePreference] = useAtom(themePreferenceAtom);
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -48,7 +53,10 @@ export const AppearanceSettings = () => {
             <button
               key={theme.value}
               type="button"
-              onClick={() => setSettings((prev) => ({ ...prev, theme: theme.value }))}
+              onClick={() => {
+                setSettings((prev) => ({ ...prev, theme: theme.value }));
+                setThemePreference(theme.value);
+              }}
               style={{
                 border: settings.theme === theme.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
                 borderRadius: 10,
@@ -66,6 +74,9 @@ export const AppearanceSettings = () => {
             </button>
           ))}
         </div>
+        <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+          Available themes: {BLACKOUT_THEMES.map((theme) => theme.label).join(', ')}.
+        </p>
       </section>
 
       <label>

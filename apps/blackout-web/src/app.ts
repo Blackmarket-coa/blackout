@@ -35,6 +35,7 @@ import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKe
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
+import { BLACKOUT_THEMES, normalizeThemeId, type BlackoutThemeId } from "@blackout/core";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
@@ -48,7 +49,7 @@ const ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY = "blackout.onboarding.guide.dismis
 const QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY = "blackout.quick_actions.collapsed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
-type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night" | "storybook_meadow" | "adventure_spectrum";
+type ThemeKey = BlackoutThemeId;
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
 type GovernanceRightPanelTab = "active" | "past" | "create" | "my-votes" | "results";
 type SettingsPageView = "workspace" | "appearance" | "monetization" | "mobile" | "operations";
@@ -1461,14 +1462,6 @@ export class BlackoutWebApp {
   }
 
   private renderThemeManagementSection(): string {
-    const themes: Array<{ id: ThemeKey; label: string; description: string }> = [
-      { id: "dark_canopy", label: "Dark canopy (default)", description: "Deep green and black surfaces for extended low-light sessions." },
-      { id: "light_grove", label: "Light grove", description: "Light green and white surfaces for daylight readability." },
-      { id: "amoled_night", label: "AMOLED night", description: "Pure black OLED surfaces with teal interaction accents." },
-      { id: "storybook_meadow", label: "Storybook meadow", description: "Warm natural tones with soft highlights for calm reading and collaboration." },
-      { id: "adventure_spectrum", label: "Adventure spectrum", description: "Playful high-contrast accents and clear landmarks for color-blind-friendly navigation." },
-    ];
-
     return `
       <section class="stack panel-card theme-panel" data-testid="theme-panel">
         <h2>Theme selection</h2>
@@ -1476,11 +1469,11 @@ export class BlackoutWebApp {
         <label class="theme-select">
           <span>Active theme</span>
           <select data-action="select-theme" data-testid="theme-select">
-            ${themes.map((theme) => `<option value="${theme.id}" ${theme.id === this.selectedTheme ? "selected" : ""}>${theme.label}</option>`).join("")}
+            ${BLACKOUT_THEMES.map((theme) => `<option value="${theme.id}" ${theme.id === this.selectedTheme ? "selected" : ""}>${theme.id === "dark_canopy" ? `${theme.label} (default)` : theme.label}</option>`).join("")}
           </select>
         </label>
         <ul class="theme-list">
-          ${themes.map((theme) => `<li class="meta"><strong>${theme.label}</strong>: ${theme.description}</li>`).join("")}
+          ${BLACKOUT_THEMES.map((theme) => `<li class="meta"><strong>${theme.label}</strong>${theme.id === "dark_canopy" ? " (default)" : ""}: ${theme.description}</li>`).join("")}
         </ul>
       </section>
     `;
@@ -1629,10 +1622,7 @@ export class BlackoutWebApp {
   }
 
   private parseTheme(theme: string | null): ThemeKey {
-    if (theme === "light_grove" || theme === "amoled_night" || theme === "storybook_meadow" || theme === "adventure_spectrum") {
-      return theme;
-    }
-    return "dark_canopy";
+    return normalizeThemeId(theme);
   }
 
   private applyTheme(theme: ThemeKey): void {

@@ -17,6 +17,9 @@ importers:
 
   apps/blackout-client:
     dependencies:
+      '@blackout/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@matrix-org/matrix-sdk-crypto-wasm':
         specifier: ^18.0.0
         version: 18.0.0
