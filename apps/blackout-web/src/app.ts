@@ -32,6 +32,7 @@ const ONBOARDING_ADVANCED_GOVERNANCE_STORAGE_KEY = "blackout.onboarding.advanced
 const ONBOARDING_ADVANCED_FEDERATION_STORAGE_KEY = "blackout.onboarding.advanced.federation";
 const ONBOARDING_TOUR_STEGO_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.stego.dismissed";
 const ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY = "blackout.onboarding.tour.governance.dismissed";
+const ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY = "blackout.onboarding.guide.dismissed";
 
 type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
 type ThemeKey = "dark_canopy" | "light_grove" | "amoled_night";
@@ -139,6 +140,7 @@ export class BlackoutWebApp {
   private readonly viewedOnboardingSteps = new Set<number>();
   private readonly completedOnboardingSteps = new Set<number>();
   private onboardingCompletionTracked = false;
+  private onboardingGuideDismissed = globalThis.localStorage.getItem(ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY) === "true";
   private advancedPanelViewedTracked = false;
   private readonly advancedModuleDiscoveryTracked = new Set<string>();
 
@@ -821,11 +823,14 @@ export class BlackoutWebApp {
     const steps = this.onboardingSteps();
     this.trackOnboardingProgress();
 
-    if (steps.every((step) => step.done)) return "";
+    if (this.onboardingGuideDismissed || steps.every((step) => step.done)) return "";
 
     return `
       <section class="panel-card stack" data-testid="first-run-guide">
-        <h2>First-run guide (4 steps)</h2>
+        <div class="panel-card-header">
+          <h2>First-run guide (4 steps)</h2>
+          <button type="button" class="ghost-btn" data-action="dismiss-onboarding-guide" aria-label="Close first-run guide">Close</button>
+        </div>
         <p class="meta">Start fast with secure chat ${renderGlossaryTip("E2EE")}, then grow with Federation ${renderGlossaryTip("Federation")} and a stronger Reputation Tier ${renderGlossaryTip("Reputation Tier")}.</p>
         <ol class="stack">
           ${steps
@@ -1569,6 +1574,15 @@ export class BlackoutWebApp {
         const module = button.dataset.tour as "stego" | "governance" | undefined;
         if (!module) return;
         this.skipAdvancedTour(module);
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='dismiss-onboarding-guide']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.onboardingGuideDismissed = true;
+        globalThis.localStorage.setItem(ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY, "true");
+        this.trackOnboardingDrop("user_closed_guide");
+        this.render();
       });
     });
 
