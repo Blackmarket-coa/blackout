@@ -155,7 +155,11 @@ export class BlackoutWebApp {
   private readonly completedOnboardingSteps = new Set<number>();
   private onboardingCompletionTracked = false;
   private onboardingGuideDismissed = globalThis.localStorage.getItem(ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY) === "true";
-  private quickActionBarCollapsed = globalThis.localStorage.getItem(QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY) === "true";
+  private quickActionBarCollapsed = (() => {
+    const storedPreference = globalThis.localStorage.getItem(QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY);
+    if (storedPreference !== null) return storedPreference === "true";
+    return globalThis.matchMedia?.("(max-width: 768px)").matches ?? false;
+  })();
   private advancedPanelViewedTracked = false;
   private readonly advancedModuleDiscoveryTracked = new Set<string>();
 
