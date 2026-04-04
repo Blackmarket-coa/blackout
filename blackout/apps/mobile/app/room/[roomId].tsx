@@ -13,7 +13,7 @@ import {
   Easing,
 } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
-import { Send, Shield } from "lucide-react-native";
+import { Send, Shield, X } from "lucide-react-native";
 import { EventTypes, useTimeline, useSendMessage, type TimelineMessage } from "@blackout/core";
 import { useBlackoutAuth } from "../../lib/auth-context";
 import { colors, spacing, radii, typography } from "@blackout/config";
@@ -31,6 +31,10 @@ const MAX_VISIBLE_ACTIONS = 5;
 const VINE_ANIMATION_MS = 250;
 
 type DomainId = "governance" | "trade" | "logistics" | "discover";
+type RadialAction = {
+  label: "Vote" | "People" | "Create" | "Map" | "Events" | "Settings" | "Message" | "Search";
+  angle: number;
+};
 
 const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
   governance: ["Active votes", "Results", "Proposals", "Delegates"],
@@ -38,6 +42,17 @@ const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
   logistics: ["Tracking", "Fleet", "Routing"],
   discover: ["DeepDive", "Communities", "Featured"],
 };
+
+const RADIAL_ACTIONS: RadialAction[] = [
+  { label: "Vote", angle: 0 },
+  { label: "People", angle: 45 },
+  { label: "Create", angle: 90 },
+  { label: "Map", angle: 135 },
+  { label: "Events", angle: 180 },
+  { label: "Settings", angle: 225 },
+  { label: "Message", angle: 270 },
+  { label: "Search", angle: 315 },
+];
 
 function detectMessageKind(message: TimelineMessage): "proposal" | "file" | "plain" {
   const content = message.content.toLowerCase();
@@ -246,9 +261,13 @@ export default function RoomScreen() {
   const [lastActiveDomain, setLastActiveDomain] = useState<DomainId | null>(null);
   const [composerFocused, setComposerFocused] = useState(false);
   const [pendingVoteCount, setPendingVoteCount] = useState(0);
+  const [radialOpen, setRadialOpen] = useState(false);
   const listRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const canopyAnimation = useRef(new Animated.Value(0)).current;
+  const radialScales = useRef(RADIAL_ACTIONS.map(() => new Animated.Value(0))).current;
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const selectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get room name for header
@@ -273,6 +292,7 @@ export default function RoomScreen() {
   useEffect(() => {
     return () => {
       if (selectTimeoutRef.current) clearTimeout(selectTimeoutRef.current);
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     };
   }, []);
 
@@ -304,6 +324,31 @@ export default function RoomScreen() {
 
   const toggleDomain = (domain: DomainId) => {
     setActiveDomain((current) => (current === domain ? null : domain));
+  };
+
+  const collapseContextualUi = () => {
+    setSelectedTarget(null);
+    setActiveDomain(null);
+    setLastActiveDomain(null);
+  };
+
+  const openRadial = () => {
+    collapseContextualUi();
+    radialScales.forEach((value) => value.setValue(0));
+    setRadialOpen(true);
+    RADIAL_ACTIONS.forEach((_, index) => {
+      Animated.spring(radialScales[index], {
+        toValue: 1,
+        delay: index * 40,
+        damping: 12,
+        stiffness: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  const closeRadial = () => {
+    setRadialOpen(false);
   };
 
   useEffect(() => {
@@ -352,6 +397,11 @@ export default function RoomScreen() {
         inputRef.current?.focus();
         return;
       }
+      if (event.key === "Escape" && radialOpen) {
+        event.preventDefault();
+        closeRadial();
+        return;
+      }
       if (isInput) return;
 
       if (event.key === "g" || event.key === "G") {
@@ -368,7 +418,7 @@ export default function RoomScreen() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [radialOpen]);
 
   const handleComposerFocus = () => {
     setComposerFocused(true);
@@ -383,6 +433,31 @@ export default function RoomScreen() {
     if (lastActiveDomain) {
       setActiveDomain(lastActiveDomain);
       setLastActiveDomain(null);
+    }
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+    longPressStartRef.current = null;
+  };
+
+  const handleChatTouchStart = (event: any) => {
+    const { pageX, pageY } = event.nativeEvent;
+    longPressStartRef.current = { x: pageX, y: pageY };
+    longPressTimerRef.current = setTimeout(() => {
+      openRadial();
+      cancelLongPress();
+    }, 500);
+  };
+
+  const handleChatTouchMove = (event: any) => {
+    if (!longPressStartRef.current || !longPressTimerRef.current) return;
+    const { pageX, pageY } = event.nativeEvent;
+    const dx = pageX - longPressStartRef.current.x;
+    const dy = pageY - longPressStartRef.current.y;
+    if (Math.hypot(dx, dy) > 10) {
+      cancelLongPress();
     }
   };
 
@@ -407,7 +482,14 @@ export default function RoomScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
-        <Pressable style={styles.timelinePressArea} onPress={() => setSelectedTarget(null)}>
+        <Pressable
+          style={styles.timelinePressArea}
+          onPress={() => setSelectedTarget(null)}
+          onTouchStart={handleChatTouchStart}
+          onTouchMove={handleChatTouchMove}
+          onTouchEnd={cancelLongPress}
+          onTouchCancel={cancelLongPress}
+        >
         {/* Timeline */}
         <FlatList
           ref={listRef}
@@ -424,6 +506,7 @@ export default function RoomScreen() {
           contentContainerStyle={styles.timeline}
           onStartReached={() => canPaginate && loadMore()}
           onStartReachedThreshold={0.5}
+          onScrollBeginDrag={cancelLongPress}
           ListHeaderComponent={
             isLoading ? (
               <Text style={styles.loadingText}>Loading messages...</Text>
@@ -539,8 +622,52 @@ export default function RoomScreen() {
           >
             <Send size={20} color={text.trim() ? colors.black : colors.textMuted} />
           </Pressable>
+          <Pressable style={styles.bloomButton} onPress={openRadial}>
+            <Text style={styles.bloomGlyph}>✦</Text>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <Modal
+        visible={radialOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeRadial}
+      >
+        <Pressable style={styles.radialOverlay} onPress={closeRadial}>
+          <Text style={styles.radialHint}>Tap outside to close · Esc to dismiss</Text>
+          <Pressable style={styles.radialHub} onPress={() => undefined}>
+            <View style={styles.radialRingCircle} />
+            {RADIAL_ACTIONS.map((action, index) => {
+              const radius = 100;
+              const radians = (action.angle * Math.PI) / 180;
+              const x = radius * Math.cos(radians);
+              const y = radius * Math.sin(radians);
+              return (
+                <Animated.View
+                  key={action.label}
+                  style={[
+                    styles.radialNodeWrap,
+                    {
+                      transform: [
+                        { translateX: x },
+                        { translateY: y },
+                        { scale: radialScales[index] },
+                      ],
+                    },
+                  ]}
+                >
+                  <Pressable style={({ hovered }) => [styles.radialNode, hovered && styles.radialNodeHovered]} onPress={closeRadial}>
+                    <Text style={styles.radialNodeLabel}>{action.label}</Text>
+                  </Pressable>
+                </Animated.View>
+              );
+            })}
+            <Pressable style={styles.radialCenterBtn} onPress={closeRadial}>
+              <X size={20} color="#1ABC9C" />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal
         visible={overflowOpen}
         transparent
@@ -774,6 +901,87 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: colors.surfaceRaised,
+  },
+  bloomButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.full,
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.2)",
+    backgroundColor: "rgba(22,129,61,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  bloomGlyph: {
+    color: "#1ABC9C",
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: -1,
+  },
+  radialOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(5,12,8,0.85)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radialHint: {
+    position: "absolute",
+    top: 16,
+    fontSize: 11,
+    color: "rgba(184,232,200,0.4)",
+  },
+  radialHub: {
+    width: 300,
+    height: 300,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radialRingCircle: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: radii.full,
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.06)",
+  },
+  radialNodeWrap: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    marginLeft: -29,
+    marginTop: -29,
+  },
+  radialNode: {
+    width: 58,
+    height: 58,
+    borderRadius: radii.full,
+    borderWidth: 0.5,
+    borderColor: "rgba(26,188,156,0.25)",
+    backgroundColor: "rgba(22,129,61,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.xs,
+  },
+  radialNodeHovered: {
+    backgroundColor: "rgba(26,188,156,0.3)",
+    borderColor: "#1ABC9C",
+  },
+  radialNodeLabel: {
+    color: "#b0d8c0",
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  radialCenterBtn: {
+    position: "absolute",
+    width: 52,
+    height: 52,
+    borderRadius: radii.full,
+    backgroundColor: "rgba(22,129,61,0.4)",
+    borderWidth: 1.5,
+    borderColor: "#1ABC9C",
+    justifyContent: "center",
+    alignItems: "center",
   },
   vineActions: {
     flexDirection: "row",
