@@ -129,7 +129,7 @@ const renderLayout = ({
   rooms: Room[];
   selectedRoomId: string | null;
   selectedSpaceId: string | null;
-  rightPanel: 'members' | 'threads' | 'pins' | 'search' | null;
+  rightPanel: 'members' | 'threads' | 'pins' | 'search' | 'governance' | null;
 }) => {
   mockClient.getRooms = () => rooms;
 
