@@ -181,6 +181,10 @@ body {
   gap: 0.6rem;
 }
 
+.quick-actions-grid--collapsed {
+  display: none;
+}
+
 .quick-action-select {
   display: grid;
   gap: 0.35rem;
@@ -2371,6 +2375,17 @@ textarea {
   padding: 0.9rem;
   background: linear-gradient(180deg, #1c2028, #163520);
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.panel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.panel-card-header h2 {
+  margin: 0;
 }
 
 .badge {
