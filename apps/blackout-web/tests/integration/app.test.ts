@@ -474,10 +474,8 @@ describe("BlackoutWebApp integration", () => {
     expect(attachmentTrigger).toBeTruthy();
     fireEvent.click(attachmentTrigger as HTMLButtonElement);
     expect((root.querySelector('[data-testid="composer-attachment-panel"]') as HTMLElement).classList.contains("is-open")).toBe(true);
-    fireEvent.click(root.querySelector("[data-action='composer-attach-image']") as HTMLButtonElement);
-    expect(composer.value).toContain("![uploaded image]");
-    fireEvent.click(attachmentTrigger as HTMLButtonElement);
-    fireEvent.change(root.querySelector("[data-action='composer-attachment-type']") as HTMLSelectElement, { target: { value: "video" } });
+    fireEvent.click(root.querySelector("[data-action='composer-select-attachment-type'][data-attachment-type='video']") as HTMLButtonElement);
+    expect(root.querySelector("[data-action='composer-select-attachment-type'][data-attachment-type='video']")?.classList.contains("is-active")).toBe(true);
     fireEvent.input(root.querySelector("[data-action='composer-attachment-label']") as HTMLInputElement, { target: { value: "Launch recap" } });
     fireEvent.input(root.querySelector("[data-action='composer-attachment-url']") as HTMLInputElement, { target: { value: "https://cdn.example.com/videos/launch-recap.mp4" } });
     fireEvent.click(root.querySelector("[data-action='composer-attachment-add']") as HTMLButtonElement);

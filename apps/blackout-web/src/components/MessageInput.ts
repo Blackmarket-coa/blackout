@@ -49,21 +49,19 @@ export function renderMessageInput({
             <p class="composer-popover-title">Add attachment</p>
             <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
           </div>
-          <div class="composer-popover-actions">
-            <button type="button" data-action="composer-attach-image" ${disabled ? "disabled" : ""}>Image</button>
-            <button type="button" data-action="composer-attach-file" ${disabled ? "disabled" : ""}>File</button>
-            <button type="button" data-action="composer-open-governance" ${disabled ? "disabled" : ""}>Governance</button>
-          </div>
           <div class="composer-channel-editor">
-            <p class="composer-popover-title">Attachment library (memes/audio/pictures/videos)</p>
-            <label class="composer-popover-field">Type
-              <select data-action="composer-attachment-type" ${disabled ? "disabled" : ""}>
-                <option value="meme">Meme</option>
-                <option value="picture">Picture</option>
-                <option value="video">Video</option>
-                <option value="audio">Audio</option>
-              </select>
-            </label>
+            <p class="composer-popover-title">Attachment library (images/video/audio/files/governance/memes)</p>
+            <div class="composer-popover-field">
+              <span>Type</span>
+              <div class="composer-popover-actions composer-segmented-control" role="group" aria-label="Attachment type">
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="image" aria-pressed="true" class="is-active" ${disabled ? "disabled" : ""}>Image</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="video" aria-pressed="false" ${disabled ? "disabled" : ""}>Video</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="audio" aria-pressed="false" ${disabled ? "disabled" : ""}>Audio</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="file" aria-pressed="false" ${disabled ? "disabled" : ""}>File</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="governance" aria-pressed="false" ${disabled ? "disabled" : ""}>Governance</button>
+                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="meme" aria-pressed="false" ${disabled ? "disabled" : ""}>Meme</button>
+              </div>
+            </div>
             <label class="composer-popover-field">Label
               <input type="text" data-action="composer-attachment-label" placeholder="Sprint retro meme" ${disabled ? "disabled" : ""} />
             </label>
