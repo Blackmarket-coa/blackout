@@ -37,6 +37,7 @@ export interface MessageRecord {
   channelId: UUID;
   userId: UUID;
   content: string;
+  governance?: { type: 'poll'; data: VoteRecord };
   contentStegoTier: 1 | 2 | 3;
   signature?: string;
   isEncrypted: boolean;

@@ -15,7 +15,14 @@ messages.get('/:channelId', (c) => {
 
 messages.post('/:channelId', async (c) => {
   const { channelId } = c.req.param();
-  const { content, stegoTier = 1, sign = false, userId, matrixRoomId } = await c.req.json();
+  const {
+    content,
+    stegoTier = 1,
+    sign = false,
+    userId,
+    matrixRoomId,
+    governance,
+  } = await c.req.json();
 
   if (!content || !userId) {
     return c.json({ error: 'content and userId are required' }, 400);
@@ -42,6 +49,7 @@ messages.post('/:channelId', async (c) => {
     channelId,
     userId,
     content: transformedContent,
+    governance: governance?.type === 'poll' ? governance : undefined,
     contentStegoTier: stegoTier,
     signature: sign ? signMessage(content, userId) : undefined,
     isEncrypted: stegoTier > 1,

@@ -17,6 +17,18 @@ class InMemoryDb {
   voteEntries = new Map<string, VoteEntryRecord>();
   federationLinks = new Map<string, FederationLinkRecord>();
 
+  constructor() {
+    this.createUser({
+      id: 'demo-user',
+      username: 'demo',
+      email: 'demo@blackout.local',
+      passwordHash: 'demo-password-hash',
+      reputationScore: 100,
+      reputationTier: 'member',
+      pubkeyEd25519: 'demo-pubkey',
+    });
+  }
+
   createUser(input: Omit<UserRecord, 'createdAt'>): UserRecord {
     const record: UserRecord = { ...input, createdAt: nowIso() };
     this.users.set(record.id, record);

@@ -28,6 +28,15 @@ export interface ApiMessage {
   governance?: { type: string; data: any };
 }
 
+export interface CreateVotePayload {
+  communityId: string;
+  proposerId: string;
+  title: string;
+  description?: string;
+  options?: string[];
+  durationHours?: number;
+}
+
 export const api = {
   listMessages(channelId: string): Promise<ApiMessage[]> {
     return request<ApiMessage[]>(`/messages/${channelId}`);
@@ -49,6 +58,13 @@ export const api = {
 
   getVote(voteId: string) {
     return request(`/governance/votes/${voteId}`);
+  },
+
+  createVote(payload: CreateVotePayload) {
+    return request('/governance/votes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   getFederatedCommunities(ids: string[]) {
