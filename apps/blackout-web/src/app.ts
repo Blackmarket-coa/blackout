@@ -60,6 +60,7 @@ type EmojiLibraryItem = { id: string; symbol: string; label: string };
 type QuickActionPopup = { featureId: string; kind: UiEntryKind; name: string };
 type AttachmentLibraryItem = { id: string; type: "meme" | "picture" | "video" | "audio"; label: string; url: string };
 type GovernanceTemplateItem = { id: string; title: string; type: "binary" | "multiple_choice" | "ranked"; options: string[]; durationHours: number };
+type AttachmentPanelMode = "quick" | "manage" | "bulk";
 
 const STEGO_CHANNEL_STORAGE_KEY = "blackout.stego.channels.v1";
 const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
@@ -128,6 +129,7 @@ export class BlackoutWebApp {
   private quickActionPopup: QuickActionPopup | null = null;
   private subscriptionPopupOpen = false;
   private attachmentLibrary: AttachmentLibraryItem[] = [];
+  private activeAttachmentMode: AttachmentPanelMode = "quick";
   private governanceTemplates: GovernanceTemplateItem[] = [];
   private mobileBridgeEventsBound = false;
   private pendingMobileRoomId: string | null = null;
@@ -452,6 +454,7 @@ export class BlackoutWebApp {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${module}']`);
     if (!panel || panel.querySelector("[data-testid^='composer-tour-']")) return;
     panel.insertAdjacentHTML("afterbegin", this.renderAdvancedTourStep(module, 0));
+    panel.scrollIntoView({ block: "nearest" });
     this.trackKpiEvent("onboarding_step_viewed", {
       step: module === "stego" ? 5 : 6,
       module,
@@ -462,6 +465,7 @@ export class BlackoutWebApp {
   private advanceAdvancedTour(module: Extract<AdvancedModule, "stego" | "governance">): void {
     const tour = this.root.querySelector<HTMLElement>(`[data-testid='composer-tour-${module}']`);
     if (!tour) return;
+    tour.scrollIntoView({ block: "nearest" });
     const step = Number.parseInt(tour.dataset.tourStep ?? "0", 10) || 0;
     const finalStep = 2;
     if (step >= finalStep) {
@@ -2245,6 +2249,26 @@ export class BlackoutWebApp {
       });
     });
 
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-mode']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode as AttachmentPanelMode | undefined;
+        if (!mode) return;
+        this.switchAttachmentMode(mode);
+      });
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.addEventListener("input", () => {
+      this.updateAttachmentActionState();
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']")?.addEventListener("input", () => {
+      this.updateAttachmentActionState();
+    });
+
+    this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']")?.addEventListener("input", () => {
+      this.updateAttachmentActionState();
+    });
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attach-image']")?.addEventListener("click", () => {
       this.applyComposerSnippet(" ![uploaded image](https://images.examplecdn.com/uploads/team-update.png)");
       this.closeComposerPanels();
@@ -2255,9 +2279,11 @@ export class BlackoutWebApp {
       this.closeComposerPanels();
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-governance']")?.addEventListener("click", () => {
-      this.toggleComposerPanel("governance", "[data-action='composer-open-governance']");
-      this.trackAdvancedDiscovery("governance");
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-open-governance']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.toggleComposerPanel("governance", button);
+        this.trackAdvancedDiscovery("governance");
+      });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
@@ -2498,7 +2524,9 @@ export class BlackoutWebApp {
       const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
       const label = labelInput?.value.trim() ?? "";
       const url = urlInput?.value.trim() ?? "";
-      if (!label || !url) return;
+      this.updateAttachmentActionState();
+      const quickAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
+      if (quickAddButton?.disabled) return;
       const id = this.normalizeStegoChannelId(`${type}-${label}`);
       const item: AttachmentLibraryItem = { id, type, label, url };
       const existing = this.attachmentLibrary.find((entry) => entry.id === id);
@@ -2509,6 +2537,7 @@ export class BlackoutWebApp {
       this.refreshAttachmentLibraryUi();
       if (labelInput) labelInput.value = "";
       if (urlInput) urlInput.value = "";
+      this.updateAttachmentActionState();
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-export']")?.addEventListener("click", () => {
@@ -2520,7 +2549,9 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']")?.addEventListener("click", () => {
       const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
       const raw = importInput?.value.trim() ?? "";
-      if (!raw) return;
+      this.updateAttachmentActionState();
+      const importButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']");
+      if (!raw || importButton?.disabled) return;
       try {
         const parsed = JSON.parse(raw) as Array<{ type?: string; label?: string; url?: string }>;
         if (!Array.isArray(parsed)) return;
@@ -2535,6 +2566,7 @@ export class BlackoutWebApp {
         this.attachmentLibrary = [...this.attachmentLibrary.filter((entry) => !imported.some((item) => item.id === entry.id)), ...imported];
         this.persistAttachmentLibrary();
         this.refreshAttachmentLibraryUi();
+        this.updateAttachmentActionState();
       } catch {
         return;
       }
@@ -2628,6 +2660,8 @@ export class BlackoutWebApp {
     this.refreshGifLibraryUi();
     this.refreshEmojiLibraryUi();
     this.refreshAttachmentLibraryUi();
+    this.switchAttachmentMode(this.activeAttachmentMode);
+    this.updateAttachmentActionState();
     this.refreshGovernanceTemplateUi();
     this.bindCommandPaletteFocusTrap();
   }
@@ -2690,26 +2724,28 @@ export class BlackoutWebApp {
     textarea.focus();
   }
 
-  private toggleComposerPanel(panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego", triggerSelector: string): void {
+  private toggleComposerPanel(
+    panelName: "attachments" | "governance" | "gif" | "emoji" | "sticker" | "stego",
+    triggerTarget: string | HTMLButtonElement,
+  ): void {
     const panel = this.root.querySelector<HTMLElement>(`[data-panel='${panelName}']`);
-    const trigger = this.root.querySelector<HTMLButtonElement>(triggerSelector);
+    const trigger = typeof triggerTarget === "string"
+      ? this.root.querySelector<HTMLButtonElement>(triggerTarget)
+      : triggerTarget;
     if (!panel || !trigger) return;
-    const shouldRestoreComposerFocus = panelName === "governance" || panelName === "stego";
     const shouldOpen = !panel.classList.contains("is-open");
     this.closeComposerPanels();
     if (shouldOpen) {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
+      panel.scrollIntoView({ block: "nearest" });
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
       }
       if (panelName === "governance") {
         this.maybeShowAdvancedTour("governance");
       }
-    }
-    if (shouldRestoreComposerFocus) {
-      this.restoreMessageComposerFocus();
     }
   }
 
@@ -2741,6 +2777,77 @@ export class BlackoutWebApp {
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-selected", isActive ? "true" : "false");
     });
+  }
+
+  private switchAttachmentMode(mode: AttachmentPanelMode): void {
+    this.activeAttachmentMode = mode;
+    const title = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-panel-title']");
+    if (title) {
+      title.textContent = mode === "quick"
+        ? "Quick Add Attachment"
+        : mode === "manage"
+          ? "Manage Attachment Library"
+          : "Bulk Import Attachments";
+    }
+    this.root.querySelectorAll<HTMLElement>(".composer-attachment-view").forEach((panel) => {
+      const active = panel.dataset.attachmentView === mode;
+      panel.classList.toggle("is-active", active);
+      panel.toggleAttribute("hidden", !active);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-attachment-mode']").forEach((button) => {
+      const active = button.dataset.mode === mode;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this.updateAttachmentActionState();
+  }
+
+  private updateAttachmentActionState(): void {
+    const label = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "";
+    const url = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']")?.value.trim() ?? "";
+    const rawImport = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']")?.value.trim() ?? "";
+
+    const quickReasonOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-quick-reason']");
+    const bulkReasonOutput = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-bulk-reason']");
+    const quickButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
+    const importButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']");
+
+    let quickReason = "";
+    if (!label) quickReason = "Add a label to enable Quick Add.";
+    else if (!url) quickReason = "Add a URL to enable Quick Add.";
+    else {
+      try {
+        // eslint-disable-next-line no-new
+        new URL(url);
+      } catch {
+        quickReason = "Enter a valid URL (including http:// or https://).";
+      }
+    }
+
+    let bulkReason = "";
+    if (!rawImport) {
+      bulkReason = "Paste attachment JSON to enable Bulk Import.";
+    } else {
+      try {
+        const parsed = JSON.parse(rawImport);
+        if (!Array.isArray(parsed)) {
+          bulkReason = "JSON must be an array of attachment objects.";
+        }
+      } catch {
+        bulkReason = "JSON is invalid. Fix syntax to continue.";
+      }
+    }
+
+    if (quickButton) {
+      quickButton.disabled = Boolean(quickReason);
+      quickButton.title = quickReason;
+    }
+    if (importButton) {
+      importButton.disabled = Boolean(bulkReason);
+      importButton.title = bulkReason;
+    }
+    if (quickReasonOutput) quickReasonOutput.textContent = quickReason;
+    if (bulkReasonOutput) bulkReasonOutput.textContent = bulkReason;
   }
 
   private updateStegoPassphraseStrength(): void {
