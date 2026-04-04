@@ -40,7 +40,8 @@
     "guard:preset-complete": "node tools/ci/check-preset-complete-features.mjs",
     "test:guard:preset-complete": "node --test tools/ci/check-preset-complete-features.test.mjs",
     "guard:pr-dod": "node tools/ci/check-pr-dod.mjs",
-    "test:guard:pr-dod": "node --test tools/ci/check-pr-dod.test.mjs"
+    "test:guard:pr-dod": "node --test tools/ci/check-pr-dod.test.mjs",
+    "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
