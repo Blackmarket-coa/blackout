@@ -273,7 +273,10 @@ export class BlackoutWebApp {
 
     this.root.innerHTML = `
       <main class="container">
-        ${!state.session ? `<div class="header-actions"><button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button><button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button></div>` : ""}
+        <div class="header-actions">
+          <button type="button" class="ghost-btn" data-action="toggle-settings" data-testid="toggle-settings-button">${this.settingsOpen ? "Close settings" : "Open settings"}</button>
+          ${!state.session ? `<button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button>` : ""}
+        </div>
         ${this.settingsOpen ? this.renderSettingsWorkspace() : ""}
         ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
 
