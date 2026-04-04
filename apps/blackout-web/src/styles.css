@@ -2165,6 +2165,35 @@ body {
   display: grid;
 }
 
+.composer-segmented-control {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.composer-segmented-control button {
+  width: auto;
+  border-radius: 999px;
+  border: 1px solid #435172;
+  background: #1a2436;
+  color: #d5ddf1;
+  padding: 0.2rem 0.6rem;
+}
+
+.composer-segmented-control button.is-active {
+  border-color: #9FE2BF;
+  background: #22385f;
+}
+
+.composer-attachment-view {
+  display: none;
+  gap: 0.42rem;
+}
+
+.composer-attachment-view.is-active {
+  display: grid;
+}
+
 .composer-stego-preview {
   border: 1px dashed #3d4e6c;
   border-radius: 8px;
