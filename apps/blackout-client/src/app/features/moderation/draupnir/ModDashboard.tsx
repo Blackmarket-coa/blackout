@@ -60,7 +60,25 @@ export const ModDashboard = ({ config }: { config?: DraupnirClientConfig }) => {
   const redactEventIdValid = !redactEventIdTrimmed || isLikelyEventId(redactEventIdTrimmed);
 
   if (!snapshot) {
-    return <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Unable to locate Draupnir management room.</div>;
+    return (
+      <section
+        style={{
+          border: '1px solid var(--border-default)',
+          borderRadius: 10,
+          padding: 12,
+          display: 'grid',
+          gap: 6,
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 16 }}>Draupnir management room unavailable</h2>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+          We could not find a room by configured ID/alias or by a name containing “draupnir”.
+        </p>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+          Ask an admin to set account data <code>co.bmc.draupnir</code> with <code>managementRoomId</code> or <code>managementRoomAlias</code>.
+        </p>
+      </section>
+    );
   }
 
   return (

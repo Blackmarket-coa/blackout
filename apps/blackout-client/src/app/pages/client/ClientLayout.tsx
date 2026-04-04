@@ -2,6 +2,7 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { userIdAtom } from '../../state/auth';
@@ -29,6 +30,7 @@ import { useRoom } from '../../hooks/useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
+import { hasModeratorAccess } from '../../features/moderation/draupnir';
 
 const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
 
@@ -74,6 +76,7 @@ export const ClientLayout = () => {
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
   const callState = useOptionalCall();
   const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
+  const inRouterContext = useInRouterContext();
 
   const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
   const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -166,6 +169,8 @@ export const ClientLayout = () => {
     () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
     [rooms, selectedSpaceId, selectedSpaceRooms],
   );
+
+  const canOpenModerationDashboard = useMemo(() => hasModeratorAccess(rooms, userId), [rooms, userId]);
 
   const persistSpaceOrder = async (next: string[]) => {
     setSpaceOrder(next);
@@ -498,6 +503,23 @@ export const ClientLayout = () => {
         ) : null}
 
         <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+          {canOpenModerationDashboard
+            ? (inRouterContext ? (
+                <Link
+                  to="/moderation/draupnir"
+                  style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px', color: 'var(--text-primary)', textDecoration: 'none', fontSize: 13 }}
+                >
+                  Moderation
+                </Link>
+              ) : (
+                <a
+                  href="/moderation/draupnir"
+                  style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px', color: 'var(--text-primary)', textDecoration: 'none', fontSize: 13 }}
+                >
+                  Moderation
+                </a>
+              ))
+            : null}
           <button type="button" onClick={() => setInboxOpen((prev) => !prev)} style={{ border: '1px solid var(--border-default)', background: 'var(--bg-input)', borderRadius: 8, padding: '4px 8px' }}>
             Inbox {mentionItems.length > 0 ? `(${mentionItems.length})` : ''}
           </button>

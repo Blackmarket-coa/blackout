@@ -11,6 +11,7 @@ import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInb
 import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
+import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,10 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <ClientLayout />,
+  },
+  {
+    path: '/moderation/draupnir',
+    element: <DraupnirRoutePage />,
   },
 ]);
 
