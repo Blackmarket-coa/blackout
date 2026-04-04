@@ -18,6 +18,12 @@ import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { renderBugReportFab } from "./components/BugReportFab";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import {
+  parseAttachmentImport,
+  validateAttachmentInput,
+  validateAttachmentUrl,
+  type AttachmentType,
+} from "./utils/attachment-validation";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
@@ -2505,6 +2511,28 @@ export class BlackoutWebApp {
       }
     });
 
+    const attachmentTypeSelect = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']");
+    const attachmentLabelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
+    const attachmentUrlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
+    const attachmentAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
+    const attachmentImportInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
+    const syncAttachmentDraftUi = (): void => {
+      const url = attachmentUrlInput?.value ?? "";
+      const urlResult = validateAttachmentUrl(url);
+      const urlError = url.length > 0 && !urlResult.valid ? urlResult.error ?? "Invalid URL." : "";
+      const hasLabel = (attachmentLabelInput?.value.trim() ?? "").length > 0;
+      if (attachmentAddButton) attachmentAddButton.disabled = !hasLabel || !urlResult.valid;
+      const urlErrorNode = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-url-error']");
+      if (urlErrorNode) {
+        urlErrorNode.textContent = urlError;
+      }
+      this.refreshAttachmentDraftPreview();
+    };
+    attachmentTypeSelect?.addEventListener("change", syncAttachmentDraftUi);
+    attachmentLabelInput?.addEventListener("input", syncAttachmentDraftUi);
+    attachmentUrlInput?.addEventListener("input", syncAttachmentDraftUi);
+    syncAttachmentDraftUi();
+
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
@@ -2551,8 +2579,7 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-import']")?.addEventListener("click", () => {
-      const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
-      const raw = importInput?.value.trim() ?? "";
+      const raw = attachmentImportInput?.value.trim() ?? "";
       if (!raw) return;
       try {
         const parsed = JSON.parse(raw) as Array<{ type?: string; label?: string; url?: string }>;
@@ -3167,6 +3194,57 @@ export class BlackoutWebApp {
         this.refreshAttachmentLibraryUi();
       });
     });
+  }
+
+  private inferAttachmentMediaType(type: AttachmentType, url: string): string {
+    const lowerUrl = url.toLowerCase();
+    if (type === "audio" || /\.(mp3|wav|ogg|m4a|flac)(\?|#|$)/.test(lowerUrl)) return "audio";
+    if (type === "video" || /\.(mp4|webm|mov|mkv|avi)(\?|#|$)/.test(lowerUrl)) return "video";
+    if (type === "picture" || type === "meme" || /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/.test(lowerUrl)) return "image";
+    return "file";
+  }
+
+  private refreshAttachmentDraftPreview(): void {
+    const previewNode = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-preview']");
+    if (!previewNode) return;
+    const type = this.root.querySelector<HTMLSelectElement>("[data-action='composer-attachment-type']")?.value as AttachmentType | undefined;
+    const label = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "";
+    const url = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']")?.value.trim() ?? "";
+    const parsed = validateAttachmentInput({ type, label, url });
+    if (!parsed.attachment) {
+      previewNode.innerHTML = "";
+      return;
+    }
+    const mediaType = this.inferAttachmentMediaType(parsed.attachment.type, parsed.attachment.url);
+    const icon = mediaType === "image" ? "🖼️" : mediaType === "video" ? "🎬" : mediaType === "audio" ? "🎧" : "📎";
+    const thumbnail = mediaType === "image"
+      ? `<img src="${parsed.attachment.url}" alt="${parsed.attachment.label}" class="composer-attachment-thumb" loading="lazy" />`
+      : `<span class="composer-attachment-icon" aria-hidden="true">${icon}</span>`;
+    previewNode.innerHTML = `
+      <div class="composer-attachment-preview-card">
+        ${thumbnail}
+        <div>
+          <strong>${parsed.attachment.label}</strong>
+          <p class="meta">${mediaType} · ${parsed.attachment.type}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  private updateAttachmentImportFeedback(overrideMessage?: string): void {
+    const feedback = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-import-feedback']");
+    if (!feedback) return;
+    if (overrideMessage) {
+      feedback.textContent = overrideMessage;
+      return;
+    }
+    const raw = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']")?.value ?? "";
+    if (!raw.trim()) {
+      feedback.textContent = "";
+      return;
+    }
+    const result = parseAttachmentImport(raw);
+    feedback.textContent = result.error ?? `${result.parsedCount} attachment(s) ready to import.`;
   }
 
   private refreshGovernanceTemplateUi(): void {

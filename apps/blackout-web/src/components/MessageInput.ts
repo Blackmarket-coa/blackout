@@ -120,6 +120,8 @@ export function renderMessageInput({
             <label class="composer-popover-field">URL
               <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
             </label>
+            <p class="meta" data-testid="composer-attachment-url-error" aria-live="polite"></p>
+            <div class="composer-attachment-preview" data-testid="composer-attachment-preview" aria-live="polite"></div>
             <div class="composer-popover-actions">
               <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add</button>
             </div>
