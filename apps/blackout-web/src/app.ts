@@ -2508,13 +2508,15 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
-      const type = this.selectedAttachmentType;
-      const label = labelInput?.value.trim() ?? "";
+      const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
       const url = urlInput?.value.trim() ?? "";
+      const rawLabel = labelInput?.value.trim() ?? "";
+      this.syncAttachmentLabelHelper(rawLabel);
       if (!url) return;
-      const normalizedLabel = label || this.deriveAttachmentLabel(url, type);
-      const id = this.normalizeStegoChannelId(`${type}-${normalizedLabel}`);
-      const item: AttachmentLibraryItem = { id, type, label: normalizedLabel, url };
+      if (!this.isAttachmentLabelValid(rawLabel)) return;
+      const label = rawLabel || this.deriveAttachmentLabelFromUrl(url, type);
+      const id = this.normalizeStegoChannelId(`${type}-${label}`);
+      const item: AttachmentLibraryItem = { id, type, label, url };
       const existing = this.attachmentLibrary.find((entry) => entry.id === id);
       this.attachmentLibrary = existing
         ? this.attachmentLibrary.map((entry) => (entry.id === id ? item : entry))
@@ -2523,8 +2525,14 @@ export class BlackoutWebApp {
       this.refreshAttachmentLibraryUi();
       if (labelInput) labelInput.value = normalizedLabel;
       if (urlInput) urlInput.value = "";
-      this.switchAttachmentComposerMode("library");
+      this.syncAttachmentLabelHelper("");
     });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.addEventListener("input", (event) => {
+      const input = event.currentTarget as HTMLInputElement;
+      this.syncAttachmentLabelHelper(input.value.trim());
+    });
+    this.syncAttachmentLabelHelper(this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']")?.value.trim() ?? "");
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-export']")?.addEventListener("click", () => {
       const importInput = this.root.querySelector<HTMLTextAreaElement>("[data-action='composer-attachment-import-json']");
@@ -3211,6 +3219,38 @@ export class BlackoutWebApp {
 
   private normalizeStegoChannelId(name: string): string {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "channel";
+  }
+
+  private isAttachmentLabelValid(label: string): boolean {
+    if (!label) return true;
+    return label.length >= 2;
+  }
+
+  private syncAttachmentLabelHelper(label: string): void {
+    const helper = this.root.querySelector<HTMLElement>("[data-testid='composer-attachment-label-helper']");
+    if (!helper) return;
+    if (!label) {
+      helper.hidden = false;
+      helper.textContent = "Optional: leave blank to auto-generate from the URL.";
+      return;
+    }
+    if (!this.isAttachmentLabelValid(label)) {
+      helper.hidden = false;
+      helper.textContent = "Label is too short. Use at least 2 characters, or leave it blank.";
+      return;
+    }
+    helper.hidden = true;
+  }
+
+  private deriveAttachmentLabelFromUrl(url: string, type: AttachmentLibraryItem["type"]): string {
+    try {
+      const parsed = new URL(url);
+      const segment = parsed.pathname.split("/").filter(Boolean).pop()?.trim() ?? "";
+      if (segment) return decodeURIComponent(segment);
+    } catch {
+      return `${type} attachment`;
+    }
+    return `${type} attachment`;
   }
 
   private persistStegoChannels(): void {

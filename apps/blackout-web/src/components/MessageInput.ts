@@ -104,31 +104,38 @@ export function renderMessageInput({
             <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close panel">Close</button>
           </div>
           <div class="composer-channel-editor">
-            <p class="composer-popover-title">Attachment library (images/video/audio/files/governance/memes)</p>
-            <div class="composer-popover-field">
-              <span>Type</span>
-              <div class="composer-popover-actions composer-segmented-control" role="group" aria-label="Attachment type">
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="image" aria-pressed="true" class="is-active" ${disabled ? "disabled" : ""}>Image</button>
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="video" aria-pressed="false" ${disabled ? "disabled" : ""}>Video</button>
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="audio" aria-pressed="false" ${disabled ? "disabled" : ""}>Audio</button>
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="file" aria-pressed="false" ${disabled ? "disabled" : ""}>File</button>
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="governance" aria-pressed="false" ${disabled ? "disabled" : ""}>Governance</button>
-                <button type="button" data-action="composer-select-attachment-type" data-attachment-type="meme" aria-pressed="false" ${disabled ? "disabled" : ""}>Meme</button>
-              </div>
-            </div>
-            <label class="composer-popover-field">Label
+            <p class="composer-popover-title">Quick Add</p>
+            <label class="composer-popover-field">Type
+              <select data-action="composer-attachment-type" ${disabled ? "disabled" : ""}>
+                <option value="meme">Meme</option>
+                <option value="picture">Picture</option>
+                <option value="video">Video</option>
+                <option value="audio">Audio</option>
+              </select>
+            </label>
+            <label class="composer-popover-field">Label (optional)
               <input type="text" data-action="composer-attachment-label" placeholder="Sprint retro meme" ${disabled ? "disabled" : ""} />
             </label>
+            <p class="meta" data-testid="composer-attachment-label-helper">Optional: leave blank to auto-generate from the URL.</p>
             <label class="composer-popover-field">URL
               <input type="url" data-action="composer-attachment-url" placeholder="https://cdn.example.com/media/file.gif" ${disabled ? "disabled" : ""} />
             </label>
             <div class="composer-popover-actions">
-              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add attachment</button>
-              <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
+              <button type="button" data-action="composer-attachment-add" ${disabled ? "disabled" : ""}>Add</button>
             </div>
-            ${renderAttachmentQuickAddSection(disabled)}
-            ${renderAttachmentLibrarySection(disabled)}
-            ${renderAttachmentBulkImportSection(disabled)}
+            <details class="composer-advanced-accordion">
+              <summary>Advanced</summary>
+              <div class="composer-popover-actions">
+                <button type="button" data-action="composer-attachment-export" ${disabled ? "disabled" : ""}>Export attachments</button>
+              </div>
+              <label class="composer-popover-field">Import attachment JSON
+                <textarea rows="2" data-action="composer-attachment-import-json" placeholder='[{"type":"meme","label":"Ship it","url":"https://..."}]' ${disabled ? "disabled" : ""}></textarea>
+              </label>
+              <button type="button" data-action="composer-attachment-import" ${disabled ? "disabled" : ""}>Import attachments</button>
+            </details>
+            <ul class="composer-channel-list" data-testid="composer-attachment-library-list">
+              <li class="meta">No custom attachments yet.</li>
+            </ul>
           </div>
         </section>
         <section class="composer-popover" data-panel="governance" data-testid="composer-governance-panel" aria-hidden="true">
