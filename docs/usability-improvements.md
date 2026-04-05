@@ -2,6 +2,7 @@
 
 > Source: hands-on usability testing session (April 2026)
 > Status: **Active** — prioritized and ready for implementation
+> Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for slice-by-slice delivery and verification.
 
 ---
 

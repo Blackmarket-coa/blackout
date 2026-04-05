@@ -2,6 +2,8 @@
 
 Snapshot date: 2026-03-17
 
+> Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for prioritized sequencing and exit criteria.
+
 ## BLACKOUT-WEB (apps/blackout-web)
 
 | Task | Priority | Status | Notes |
