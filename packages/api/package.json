@@ -7,9 +7,12 @@
   "scripts": {
     "build": "node -e \"console.log('api build scaffold ok')\"",
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
-    "test": "node -e \"console.log('api test scaffold ok')\""
+    "test": "node -e \"console.log('api test scaffold ok')\"",
+    "test:integration": "tsx --test test/**/*.integration.test.ts"
   },
   "dependencies": {
-    "@blackout/core": "workspace:*"
+    "@blackout/core": "workspace:*",
+    "@blackout/contracts": "workspace:*",
+    "hono": "^4.9.6"
   }
 }

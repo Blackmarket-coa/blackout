@@ -41,10 +41,19 @@
     "test:guard:preset-complete": "node --test tools/ci/check-preset-complete-features.test.mjs",
     "guard:pr-dod": "node tools/ci/check-pr-dod.mjs",
     "test:guard:pr-dod": "node --test tools/ci/check-pr-dod.test.mjs",
-    "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs"
+    "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs",
+    "guard:api-v1": "node tools/ci/check-v1-canonical.mjs",
+    "guard:db-migrations": "node tools/ci/check-db-migrations.mjs",
+    "guard:v1-route-coverage": "node tools/ci/check-v1-route-coverage.mjs",
+    "ci:migrations:ephemeral": "node tools/ci/verify-migrations-ephemeral.mjs",
+    "guard:api-freeze": "node tools/ci/enforce-api-freeze.mjs",
+    "contracts:generate": "pnpm --filter @blackout/contracts generate",
+    "contracts:check": "node tools/ci/check-contracts-generated.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "tsx": "^4.20.6",
+    "@electric-sql/pglite": "^0.3.9"
   }
 }
