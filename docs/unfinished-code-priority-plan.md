@@ -36,15 +36,15 @@ Status labels in this section are derived from `docs/unfinished-code-checklist.m
 
 | Tracking issue | Current status | Checklist evidence | Current evidence link |
 | --- | --- | --- | --- |
-| `blackout#uc-001` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
-| `blackout#uc-002` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
-| `blackout#uc-003` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-001` | Complete | Resolved in centralized work-orders batch; no open markers remain | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-002` | Complete | Resolved in centralized work-orders batch; no open markers remain | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-003` | Complete | Resolved in centralized work-orders batch; no open markers remain | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
 | `blackout#uc-004` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-005` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-006` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
-| `blackout#uc-007` | Partial (specific marker resolved; file still has other open marker debt) | `src/components/structures/ScrollPanel.tsx` still appears with an open marker in checklist | `docs/unfinished-code-checklist.md` |
+| `blackout#uc-007` | Complete | Resolved; no open markers remain in checklist | `docs/unfinished-code-checklist.md` |
 | `blackout#uc-008` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
-| `blackout#uc-009` | Partial (resolved in prior batch; not in current “recently resolved” block) | Not listed in open marker sections of current checklist snapshot | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
+| `blackout#uc-009` | Complete | Resolved in centralized work-orders batch; no open markers remain | `docs/operations/evidence/2026-03-14-blackout-centralized-work-orders-1-9.md` |
 | `blackout#uc-010` | Complete | Listed in “Recently resolved high-priority markers” | `docs/unfinished-code-checklist.md` |
 
 
