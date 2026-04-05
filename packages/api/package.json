@@ -10,6 +10,7 @@
     "test": "node -e \"console.log('api test scaffold ok')\""
   },
   "dependencies": {
-    "@blackout/core": "workspace:*"
+    "@blackout/core": "workspace:*",
+    "@blackout/contracts": "workspace:*"
   }
 }

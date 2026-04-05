@@ -1,0 +1,10 @@
+{
+  "name": "@blackout/contracts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared API contracts for Blackout clients and services",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

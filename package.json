@@ -2,7 +2,7 @@
   "name": "@blackout/root",
   "version": "0.0.0",
   "private": true,
-  "description": "Blackout monorepo – secure communication platform",
+  "description": "Blackout monorepo \u2013 secure communication platform",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -41,7 +41,10 @@
     "test:guard:preset-complete": "node --test tools/ci/check-preset-complete-features.test.mjs",
     "guard:pr-dod": "node tools/ci/check-pr-dod.mjs",
     "test:guard:pr-dod": "node --test tools/ci/check-pr-dod.test.mjs",
-    "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs"
+    "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs",
+    "guard:api-v1": "node tools/ci/check-v1-canonical.mjs",
+    "guard:db-migrations": "node tools/ci/check-db-migrations.mjs",
+    "guard:v1-route-coverage": "node tools/ci/check-v1-route-coverage.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
