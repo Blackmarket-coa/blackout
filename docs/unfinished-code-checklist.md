@@ -11,6 +11,7 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 ## Recently resolved high-priority markers
 
+- [x] Utility test-stub closure (2026-04-05): implemented 38 unit tests across `event.test.ts` (14 tests), `room.test.ts` (9 tests), `media.test.ts` (8 tests), and `markdown.test.ts` (7 tests) to close all 27 `it.todo()` stubs in `apps/blackout-client/tests/unit/utils/`. Also reconciled 5 partial-status tracking items (uc-001/002/003/007/009) to Complete in `docs/unfinished-code-priority-plan.md`.
 - [x] Batch-4 next-25 execution (2026-03-18): closed the targeted MatrixChat/Notifier/Notifications/MessageContextMenu/TimelinePanel/BaseDialog/DeactivateAccountDialog marker set with helper refactors, guardrails, and test updates (evidence: `docs/operations/evidence/2026-03-18-p2-batch-4-next-25-execution.md`).
 - [x] Batch-3 next-25 maintainability sweep (2026-03-18): closed 25 selected XXX/hack debt markers across runtime, accessibility, settings, and bootstrap slices without behavior changes (evidence: `docs/operations/evidence/2026-03-18-p2-batch-3-next-25-xxx-closure.md`).
 - [x] Batch-2 next-25 closure (2026-03-18): closed remaining TODO/FIXME backlog items and reconciled stale checklist markers so tracked open item count is now zero (evidence: `docs/operations/evidence/2026-03-18-p2-batch-2-next-25-items-closure.md`).
