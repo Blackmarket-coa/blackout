@@ -351,7 +351,9 @@ export class BlackoutWebApp {
       scrollContainer.scrollTo({ top: Math.max(0, targetTop), left: 0, behavior: "auto" });
       return;
     }
-    prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    if (typeof prompt.scrollIntoView === "function") {
+      prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    }
   }
 
   private centerVisibleOnboardingPrompts(): void {
@@ -3138,7 +3140,9 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
-      panel.scrollIntoView({ block: "center", inline: "nearest" });
+      if (typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ block: "center", inline: "nearest" });
+      }
       panel.scrollTop = 0;
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
