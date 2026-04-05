@@ -217,20 +217,20 @@ body {
   font-family: var(--font-body);
   background: var(--bg-deep);
   color: var(--text-primary);
-  overflow: hidden;
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
 .container {
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .header-environment {
@@ -2549,7 +2549,7 @@ textarea {
 .settings-shell {
   display: grid;
   gap: 0.75rem;
-  max-height: 64vh;
+  min-height: 0;
 }
 
 .settings-page-nav {
@@ -2577,9 +2577,9 @@ textarea {
 }
 
 .settings-shell .admin-grid {
-  overflow: auto;
-  max-height: calc(64vh - 64px);
-  padding-right: 0.25rem;
+  overflow: visible;
+  max-height: none;
+  padding-right: 0;
 }
 
 .preset-feature-list {
@@ -2640,6 +2640,9 @@ progress {
   gap: 0.75rem;
   place-items: center;
   flex: 1;
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  overflow-y: auto;
 }
 
 .auth-card {
