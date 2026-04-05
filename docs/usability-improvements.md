@@ -98,9 +98,11 @@ Evidence: `apps/blackout-web/src/app.ts`, `test/mobile-regression/composer-and-k
 | Cover text | The normal-looking text that carries a hidden message inside it |
 
 **Acceptance criteria:**
-- [ ] Every jargon term in the stego panel has an info tooltip
-- [ ] Tooltips are readable on both desktop and mobile (tap-to-show on mobile)
-- [ ] Glossary is centralized in one file for easy maintenance
+- [x] Every jargon term in the stego panel has an info tooltip
+- [x] Tooltips are readable on both desktop and mobile (tap-to-show on mobile)
+- [x] Glossary is centralized in one file for easy maintenance
+
+Evidence: `apps/blackout-web/src/components/glossary.ts`, `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web/src/components/GovernanceRoomPanel.ts`, `apps/blackout-web/src/components/FederationPanel.ts`, `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (a few days, then ongoing)
 
@@ -124,10 +126,12 @@ Evidence: `apps/blackout-web/src/app.ts`, `test/mobile-regression/composer-and-k
 3. Same pattern for governance: "This is how your community makes decisions together."
 
 **Acceptance criteria:**
-- [ ] First-time stego panel open shows guided walkthrough
-- [ ] First-time governance panel open shows guided walkthrough
-- [ ] Users can skip/dismiss tours permanently
-- [ ] Tour completion triggers telemetry events
+- [x] First-time stego panel open shows guided walkthrough
+- [x] First-time governance panel open shows guided walkthrough
+- [x] Users can skip/dismiss tours permanently
+- [x] Tour completion triggers telemetry events
+
+Evidence: `apps/blackout-web/src/app.ts` (`maybeShowAdvancedTour`, `advanceAdvancedTour`, `skipAdvancedTour`, `trackAdvancedDiscovery`), `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (3-5 days)
 
@@ -150,10 +154,12 @@ Evidence: `apps/blackout-web/src/app.ts`, `test/mobile-regression/composer-and-k
 4. Add inline validation feedback (e.g., passphrase strength indicator).
 
 **Acceptance criteria:**
-- [ ] Stego panel header explains what steganography does in one sentence
-- [ ] Encode view shows before/after preview of output
-- [ ] Advanced options hidden by default behind toggle
-- [ ] Basic encode workflow requires only 3 fields
+- [x] Stego panel header explains what steganography does in one sentence
+- [x] Encode view shows before/after preview of output
+- [x] Advanced options hidden by default behind toggle
+- [x] Basic encode workflow requires only 3 fields
+
+Evidence: `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web/tests/unit/message-input-stego.test.ts`, `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (2-3 days)
 
