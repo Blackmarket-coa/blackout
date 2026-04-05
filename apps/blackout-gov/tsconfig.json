@@ -2,9 +2,10 @@
   "extends": "../../packages/tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": ".",
+    "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src"],
+  "include": ["src", "tests"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/design" },

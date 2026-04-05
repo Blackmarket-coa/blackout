@@ -12,6 +12,11 @@ describe("resolveMatrixHomeserverUrl", () => {
     const url = resolveMatrixHomeserverUrl({});
     expect(url).toBe("https://matrix.blackout.local");
   });
+
+  it("uses BLACKOUT_SERVER_URL when VITE_MATRIX_HOMESERVER_URL is missing", () => {
+    const url = resolveMatrixHomeserverUrl({ BLACKOUT_SERVER_URL: "matrix.blackout.example" });
+    expect(url).toBe("https://matrix.blackout.example");
+  });
 });
 
 describe("resolveBlackoutRuntimeConfig", () => {
