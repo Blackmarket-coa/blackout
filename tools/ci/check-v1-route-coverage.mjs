@@ -10,9 +10,9 @@ if (missing.length) {
   process.exit(1);
 }
 
-if (!source.includes('for (const root of [API_ROOTS.v1, API_ROOTS.legacyApiAlias])')) {
-  console.error('Expected dual namespace mount loop not found.');
+if (!source.includes('legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]')) {
+  console.error('Expected v1 + conditional /api alias mount logic not found.');
   process.exit(1);
 }
 
-console.log('Route namespace coverage checks passed for v1 + /api alias domains.');
+console.log('Route namespace coverage checks passed for v1 + conditional /api alias domains.');

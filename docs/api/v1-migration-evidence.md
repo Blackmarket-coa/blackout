@@ -10,7 +10,8 @@
 ## Canonical decision
 
 - Canonical namespace: `/v1/*`.
-- Legacy compatibility alias: `/api/*`.
+- Legacy compatibility alias: `/api/*` (compatibility window only).
+- `/api/*` freeze date: `2026-05-01`.
 - `/api/*` target removal date: `2026-08-31`.
 
 ## Acceptance notes
@@ -20,3 +21,5 @@
   - `guard:api-v1`
   - `guard:v1-route-coverage`
   - `guard:db-migrations`
+  - `ci:migrations:ephemeral`
+  - `guard:api-freeze`

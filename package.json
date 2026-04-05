@@ -44,10 +44,14 @@
     "guard:duplicate-paths": "node tools/ci/check-duplicate-paths.mjs",
     "guard:api-v1": "node tools/ci/check-v1-canonical.mjs",
     "guard:db-migrations": "node tools/ci/check-db-migrations.mjs",
-    "guard:v1-route-coverage": "node tools/ci/check-v1-route-coverage.mjs"
+    "guard:v1-route-coverage": "node tools/ci/check-v1-route-coverage.mjs",
+    "ci:migrations:ephemeral": "node tools/ci/verify-migrations-ephemeral.mjs",
+    "guard:api-freeze": "node tools/ci/enforce-api-freeze.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "tsx": "^4.20.6",
+    "@electric-sql/pglite": "^0.3.9"
   }
 }

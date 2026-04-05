@@ -3,7 +3,8 @@
 ## Canonical namespace
 
 - Canonical external API namespace is **`/v1/*`**.
-- Legacy alias **`/api/*`** is compatibility-only and emits deprecation headers.
+- Legacy alias **`/api/*`** is compatibility-only and emits deprecation headers before removal.
+- `/api/*` freeze date for new consumers: **2026-05-01**.
 - `/api/*` removal target date: **2026-08-31**.
 
 ## Contract source of truth
@@ -43,4 +44,8 @@ When a deprecated path is used, backend must emit:
 - `Sunset: <RFC3339 date>`
 - `Link: <versioning policy doc>`
 
-Deprecation usage should be observable in logs/telemetry and reviewed weekly until removal.
+Deprecation usage is tracked via weekly `/api` alias telemetry summaries.
+
+## Post-window behavior
+
+- On/after **2026-08-31**, backend disables `/api/*` mounts and serves only `/v1/*` routes.
