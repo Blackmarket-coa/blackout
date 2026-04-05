@@ -188,11 +188,13 @@ Evidence: `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web
 5. Show confirmation toast on submit, then close modal.
 
 **Acceptance criteria:**
-- [ ] FAB visible on all screens (but not blocking critical UI)
-- [ ] Modal opens on tap, submits on send, closes afterward
-- [ ] Auto-metadata attached to every submission
-- [ ] No auth required to submit
-- [ ] Works on both desktop and mobile
+- [x] FAB visible on all screens (but not blocking critical UI)
+- [x] Modal opens on tap, submits on send, closes afterward
+- [x] Auto-metadata attached to every submission
+- [x] No auth required to submit
+- [x] Works on both desktop and mobile
+
+Evidence: `apps/blackout-web/src/components/BugReportFab.ts`, `apps/blackout-web/src/app.ts` (`submitBugReport` + bug report event bindings), `test/mobile-regression/bug-report-and-mobile-layout-guards.test.mjs`.
 
 **Effort:** Small-Medium (1-2 days)
 
@@ -214,10 +216,12 @@ Evidence: `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web
 5. Add CSS breakpoint system (currently none exists).
 
 **Acceptance criteria:**
-- [ ] Composer panels render as bottom sheets on mobile
-- [ ] Sidebar collapses to hamburger on mobile
-- [ ] No floating panels obscure content on mobile
-- [ ] Desktop layout unchanged
+- [x] Composer panels render as bottom sheets on mobile
+- [x] Sidebar collapses to hamburger on mobile
+- [x] No floating panels obscure content on mobile
+- [x] Desktop layout unchanged
+
+Evidence: `apps/blackout-web/src/styles.css` (mobile breakpoints for `.composer-popover.is-open`, `.server-sidebar`, `.mobile-toggle`), `apps/blackout-web/src/app.ts` (drawer toggle wiring), `test/mobile-regression/bug-report-and-mobile-layout-guards.test.mjs`.
 
 **Effort:** Large (1-2 weeks)
 
