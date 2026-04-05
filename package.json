@@ -13,6 +13,7 @@
     "web:dev": "pnpm --filter @blackout/blackout-web dev",
     "web:build": "pnpm --filter @blackout/blackout-web build:web",
     "web:test": "pnpm --filter @blackout/blackout-web test",
+    "web:test:mobile": "pnpm --filter @blackout/blackout-web test:mobile",
     "desktop:dev": "pnpm --dir blackout-desktop dev",
     "desktop:build": "pnpm --dir blackout-desktop build",
     "mobile:dev": "pnpm --filter blackout-mobile dev",
