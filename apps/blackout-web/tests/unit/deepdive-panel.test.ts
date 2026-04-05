@@ -11,4 +11,11 @@ describe("renderDeepDivePanel", () => {
     expect(html).toContain('data-action="deepdive-bookmark"');
     expect(html).toContain('data-testid="deepdive-bookmarked">2<');
   });
+
+  it("renders optional AI recommendation affordances when enabled", () => {
+    const html = renderDeepDivePanel({ cardIndex: 0, bookmarked: 0, aiRecommendationsEnabled: true });
+
+    expect(html).toContain('data-testid="deepdive-ai-rec"');
+    expect(html).toContain('data-action="deepdive-ai-explain"');
+  });
 });

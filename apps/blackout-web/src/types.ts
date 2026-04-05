@@ -31,6 +31,7 @@ export interface ChatMessage {
   sender: string;
   body: string;
   timestamp: string;
+  deliveryStatus?: "sending" | "delivered" | "failed";
 }
 
 export interface GovernanceProposal {
