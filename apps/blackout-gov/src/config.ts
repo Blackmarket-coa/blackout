@@ -22,3 +22,8 @@ export function resolveMatrixHomeserverUrl(env: Record<string, string | undefine
   }
   return normalized;
 }
+
+export interface GovernanceRuntimeConfig {
+  homeserverUrl: string;
+  mode: "governance";
+}

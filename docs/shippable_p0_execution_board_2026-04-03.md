@@ -1,5 +1,7 @@
 # Shippable P0 Execution Board (2026-04-03)
 
+> Companion execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) aligning wave gates with Web/Gov and usability trackers.
+
 ## Lane A — UX Simplification
 **Scope:** P0-1 + P0-2 visibility/order changes.
 

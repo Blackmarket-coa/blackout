@@ -2,6 +2,7 @@
 
 > Source: hands-on usability testing session (April 2026)
 > Status: **Active** — prioritized and ready for implementation
+> Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for slice-by-slice delivery and verification.
 
 ---
 
@@ -19,9 +20,11 @@
 3. Audit `apps/blackout-web/src/components/MessageInput.ts` for any `blur()` calls triggered on resize or scroll events.
 
 **Acceptance criteria:**
-- [ ] User can type a full message on Android without keyboard dismissing
-- [ ] Keyboard persists through viewport resize events
-- [ ] Input retains focus when switching between stego/governance panels
+- [x] User can type a full message on Android without keyboard dismissing
+- [x] Keyboard persists through viewport resize events
+- [x] Input retains focus when switching between stego/governance panels
+
+Evidence: `blackout-mobile/capacitor.config.ts`, `blackout-mobile/android/app/src/main/AndroidManifest.xml`, `test/mobile-regression/composer-and-keyboard-guards.test.mjs`.
 
 **Effort:** Small (hours)
 
@@ -53,10 +56,12 @@ document.addEventListener("pointerdown", (event) => {
 ```
 
 **Acceptance criteria:**
-- [ ] Tapping outside any open composer panel closes it
-- [ ] Tapping inside an open panel does NOT close it
-- [ ] Tapping a different trigger button still switches panels correctly
-- [ ] Escape key also closes open panels (stretch)
+- [x] Tapping outside any open composer panel closes it
+- [x] Tapping inside an open panel does NOT close it
+- [x] Tapping a different trigger button still switches panels correctly
+- [x] Escape key also closes open panels (stretch)
+
+Evidence: `apps/blackout-web/src/app.ts`, `test/mobile-regression/composer-and-keyboard-guards.test.mjs`.
 
 **Effort:** Small (hours)
 
@@ -93,9 +98,11 @@ document.addEventListener("pointerdown", (event) => {
 | Cover text | The normal-looking text that carries a hidden message inside it |
 
 **Acceptance criteria:**
-- [ ] Every jargon term in the stego panel has an info tooltip
-- [ ] Tooltips are readable on both desktop and mobile (tap-to-show on mobile)
-- [ ] Glossary is centralized in one file for easy maintenance
+- [x] Every jargon term in the stego panel has an info tooltip
+- [x] Tooltips are readable on both desktop and mobile (tap-to-show on mobile)
+- [x] Glossary is centralized in one file for easy maintenance
+
+Evidence: `apps/blackout-web/src/components/glossary.ts`, `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web/src/components/GovernanceRoomPanel.ts`, `apps/blackout-web/src/components/FederationPanel.ts`, `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (a few days, then ongoing)
 
@@ -119,10 +126,12 @@ document.addEventListener("pointerdown", (event) => {
 3. Same pattern for governance: "This is how your community makes decisions together."
 
 **Acceptance criteria:**
-- [ ] First-time stego panel open shows guided walkthrough
-- [ ] First-time governance panel open shows guided walkthrough
-- [ ] Users can skip/dismiss tours permanently
-- [ ] Tour completion triggers telemetry events
+- [x] First-time stego panel open shows guided walkthrough
+- [x] First-time governance panel open shows guided walkthrough
+- [x] Users can skip/dismiss tours permanently
+- [x] Tour completion triggers telemetry events
+
+Evidence: `apps/blackout-web/src/app.ts` (`maybeShowAdvancedTour`, `advanceAdvancedTour`, `skipAdvancedTour`, `trackAdvancedDiscovery`), `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (3-5 days)
 
@@ -145,10 +154,12 @@ document.addEventListener("pointerdown", (event) => {
 4. Add inline validation feedback (e.g., passphrase strength indicator).
 
 **Acceptance criteria:**
-- [ ] Stego panel header explains what steganography does in one sentence
-- [ ] Encode view shows before/after preview of output
-- [ ] Advanced options hidden by default behind toggle
-- [ ] Basic encode workflow requires only 3 fields
+- [x] Stego panel header explains what steganography does in one sentence
+- [x] Encode view shows before/after preview of output
+- [x] Advanced options hidden by default behind toggle
+- [x] Basic encode workflow requires only 3 fields
+
+Evidence: `apps/blackout-web/src/components/MessageInput.ts`, `apps/blackout-web/tests/unit/message-input-stego.test.ts`, `test/mobile-regression/onboarding-and-stego-ux-guards.test.mjs`.
 
 **Effort:** Medium (2-3 days)
 
@@ -177,11 +188,13 @@ document.addEventListener("pointerdown", (event) => {
 5. Show confirmation toast on submit, then close modal.
 
 **Acceptance criteria:**
-- [ ] FAB visible on all screens (but not blocking critical UI)
-- [ ] Modal opens on tap, submits on send, closes afterward
-- [ ] Auto-metadata attached to every submission
-- [ ] No auth required to submit
-- [ ] Works on both desktop and mobile
+- [x] FAB visible on all screens (but not blocking critical UI)
+- [x] Modal opens on tap, submits on send, closes afterward
+- [x] Auto-metadata attached to every submission
+- [x] No auth required to submit
+- [x] Works on both desktop and mobile
+
+Evidence: `apps/blackout-web/src/components/BugReportFab.ts`, `apps/blackout-web/src/app.ts` (`submitBugReport` + bug report event bindings), `test/mobile-regression/bug-report-and-mobile-layout-guards.test.mjs`.
 
 **Effort:** Small-Medium (1-2 days)
 
@@ -203,10 +216,12 @@ document.addEventListener("pointerdown", (event) => {
 5. Add CSS breakpoint system (currently none exists).
 
 **Acceptance criteria:**
-- [ ] Composer panels render as bottom sheets on mobile
-- [ ] Sidebar collapses to hamburger on mobile
-- [ ] No floating panels obscure content on mobile
-- [ ] Desktop layout unchanged
+- [x] Composer panels render as bottom sheets on mobile
+- [x] Sidebar collapses to hamburger on mobile
+- [x] No floating panels obscure content on mobile
+- [x] Desktop layout unchanged
+
+Evidence: `apps/blackout-web/src/styles.css` (mobile breakpoints for `.composer-popover.is-open`, `.server-sidebar`, `.mobile-toggle`), `apps/blackout-web/src/app.ts` (drawer toggle wiring), `test/mobile-regression/bug-report-and-mobile-layout-guards.test.mjs`.
 
 **Effort:** Large (1-2 weeks)
 
