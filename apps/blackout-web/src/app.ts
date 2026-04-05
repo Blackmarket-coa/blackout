@@ -320,7 +320,7 @@ export class BlackoutWebApp {
         ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
         ${loading.servers || loading.channels || loading.messages ? '<p class="loading">Syncing workspace…</p>' : ""}
 
-        ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth })}
+        ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth, homeserverUrl: this.runtimeConfig.homeserverUrl })}
         ${state.session ? this.renderFeatureToolbar() : ""}
         ${state.session ? renderMobileTabBar({ activeTab: this.activeMobileTab }) : ""}
       </main>
@@ -351,7 +351,9 @@ export class BlackoutWebApp {
       scrollContainer.scrollTo({ top: Math.max(0, targetTop), left: 0, behavior: "auto" });
       return;
     }
-    prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    if (typeof prompt.scrollIntoView === "function") {
+      prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    }
   }
 
   private centerVisibleOnboardingPrompts(): void {
@@ -3138,7 +3140,9 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
-      panel.scrollIntoView({ block: "center", inline: "nearest" });
+      if (typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ block: "center", inline: "nearest" });
+      }
       panel.scrollTop = 0;
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
@@ -3963,9 +3967,16 @@ export class BlackoutWebApp {
 
   private async handleAuthSubmit(form: HTMLFormElement): Promise<void> {
     const formData = new FormData(form);
+    const homeserverUrl = String(formData.get("homeserverUrl") ?? this.runtimeConfig.homeserverUrl).trim();
     const username = String(formData.get("username") ?? "").trim();
     const password = String(formData.get("password") ?? "").trim();
     const mode = this.store.getState().authMode;
+    const parsedHomeserver = this.validateHomeserverUrl(homeserverUrl);
+    if (!parsedHomeserver) {
+      this.store.patch({ error: "Enter a valid homeserver URL using http:// or https://." });
+      this.render();
+      return;
+    }
 
     await this.withLoading("auth", async () => {
       const session = mode === "login" ? await this.api.login(username, password) : await this.api.register(username, password);
@@ -3982,6 +3993,16 @@ export class BlackoutWebApp {
         this.pendingMobileRoomId = null;
       }
     });
+  }
+
+  private validateHomeserverUrl(input: string): URL | null {
+    try {
+      const parsed = new URL(input);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
   private bindMobileBridgeEvents(): void {

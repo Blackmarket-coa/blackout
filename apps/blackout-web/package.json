@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:mobile": "vitest run tests/mobile",
     "test:e2e": "playwright test",
     "clean": "rimraf dist",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
