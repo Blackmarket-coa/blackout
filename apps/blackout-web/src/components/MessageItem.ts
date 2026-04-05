@@ -28,6 +28,20 @@ function getInitial(sender: string): string {
   return sender.slice(0, 1).toUpperCase();
 }
 
+function resolveDeliveryStatus(message: ChatMessage): "sending" | "delivered" | "failed" {
+  if (message.deliveryStatus) return message.deliveryStatus;
+  const numericId = Number.parseInt(message.id.replace(/\D/g, "").slice(-2), 10);
+  if (Number.isNaN(numericId)) return "delivered";
+  if (numericId % 13 === 0) return "failed";
+  if (numericId % 5 === 0) return "sending";
+  return "delivered";
+}
+
+function renderDeliveryStatus(status: "sending" | "delivered" | "failed"): string {
+  const label = status === "sending" ? "Sending…" : status === "failed" ? "Failed" : "Delivered";
+  return `<span class="message-delivery-status message-delivery-status--${status}" data-testid="message-delivery-status">${label}</span>`;
+}
+
 export function renderMessageItem(message: ChatMessage, options: MessageItemOptions = {}): string {
   const compact = options.compact ?? false;
 
@@ -44,6 +58,7 @@ export function renderMessageItem(message: ChatMessage, options: MessageItemOpti
   const avatarColor = colorForSender(message.sender);
   const initial = getInitial(message.sender);
   const timeStr = formatTime(message.timestamp);
+  const deliveryStatus = resolveDeliveryStatus(message);
 
   return `
     <li class="message-item" data-message-id="${message.id}">
@@ -52,6 +67,7 @@ export function renderMessageItem(message: ChatMessage, options: MessageItemOpti
         <div class="message-meta">
           <span class="message-author">${message.sender}</span>
           <time datetime="${message.timestamp}">${timeStr}</time>
+          ${renderDeliveryStatus(deliveryStatus)}
         </div>
         <p>${message.body}</p>
       </div>

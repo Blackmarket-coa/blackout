@@ -1818,6 +1818,34 @@ body {
   font-family: var(--font-mono);
 }
 
+.message-delivery-status {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: var(--r-pill, 100px);
+  border: 1px solid transparent;
+}
+
+.message-delivery-status--delivered {
+  color: var(--teal);
+  background: rgba(26, 188, 156, 0.12);
+  border-color: rgba(26, 188, 156, 0.2);
+}
+
+.message-delivery-status--sending {
+  color: var(--warning, #f39c12);
+  background: rgba(243, 156, 18, 0.12);
+  border-color: rgba(243, 156, 18, 0.2);
+}
+
+.message-delivery-status--failed {
+  color: var(--accent-danger);
+  background: rgba(231, 76, 60, 0.12);
+  border-color: rgba(231, 76, 60, 0.2);
+}
+
 .message-item p {
   margin: 0;
   font-size: 14px;

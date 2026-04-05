@@ -6,10 +6,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc --build",
-    "dev": "echo 'vite integration pending source import'",
+    "build:web": "vite build",
+    "dev": "vite",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit",
-    "clean": "rimraf dist"
+    "test": "vitest run",
+    "clean": "rimraf dist",
+    "preview": "vite preview --host 0.0.0.0 --port 4174"
   },
   "dependencies": {
     "@blackout/core": "workspace:*",
@@ -17,6 +19,8 @@
     "@blackout/ui": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.4"
   }
 }

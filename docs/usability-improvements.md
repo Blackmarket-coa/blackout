@@ -2,6 +2,7 @@
 
 > Source: hands-on usability testing session (April 2026)
 > Status: **Active** — prioritized and ready for implementation
+> Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for slice-by-slice delivery and verification.
 
 ---
 
@@ -19,9 +20,11 @@
 3. Audit `apps/blackout-web/src/components/MessageInput.ts` for any `blur()` calls triggered on resize or scroll events.
 
 **Acceptance criteria:**
-- [ ] User can type a full message on Android without keyboard dismissing
-- [ ] Keyboard persists through viewport resize events
-- [ ] Input retains focus when switching between stego/governance panels
+- [x] User can type a full message on Android without keyboard dismissing
+- [x] Keyboard persists through viewport resize events
+- [x] Input retains focus when switching between stego/governance panels
+
+Evidence: `blackout-mobile/capacitor.config.ts`, `blackout-mobile/android/app/src/main/AndroidManifest.xml`, `test/mobile-regression/composer-and-keyboard-guards.test.mjs`.
 
 **Effort:** Small (hours)
 
@@ -53,10 +56,12 @@ document.addEventListener("pointerdown", (event) => {
 ```
 
 **Acceptance criteria:**
-- [ ] Tapping outside any open composer panel closes it
-- [ ] Tapping inside an open panel does NOT close it
-- [ ] Tapping a different trigger button still switches panels correctly
-- [ ] Escape key also closes open panels (stretch)
+- [x] Tapping outside any open composer panel closes it
+- [x] Tapping inside an open panel does NOT close it
+- [x] Tapping a different trigger button still switches panels correctly
+- [x] Escape key also closes open panels (stretch)
+
+Evidence: `apps/blackout-web/src/app.ts`, `test/mobile-regression/composer-and-keyboard-guards.test.mjs`.
 
 **Effort:** Small (hours)
 
