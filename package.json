@@ -2,7 +2,7 @@
   "name": "@blackout/root",
   "version": "0.0.0",
   "private": true,
-  "description": "Blackout monorepo \u2013 secure communication platform",
+  "description": "Blackout monorepo – secure communication platform",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -46,7 +46,9 @@
     "guard:db-migrations": "node tools/ci/check-db-migrations.mjs",
     "guard:v1-route-coverage": "node tools/ci/check-v1-route-coverage.mjs",
     "ci:migrations:ephemeral": "node tools/ci/verify-migrations-ephemeral.mjs",
-    "guard:api-freeze": "node tools/ci/enforce-api-freeze.mjs"
+    "guard:api-freeze": "node tools/ci/enforce-api-freeze.mjs",
+    "contracts:generate": "pnpm --filter @blackout/contracts generate",
+    "contracts:check": "node tools/ci/check-contracts-generated.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

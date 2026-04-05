@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Shared API contracts for Blackout clients and services",
+  "scripts": {
+    "generate": "openapi --input openapi/v1.yaml --output src/generated --client fetch --useUnionTypes true --exportSchemas true"
+  },
+  "devDependencies": {
+    "openapi-typescript-codegen": "^0.29.0"
+  },
   "exports": {
     ".": "./src/index.ts"
   }
