@@ -31,5 +31,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run blackout-web unit suite
+        run: pnpm --filter @blackout/blackout-web test:unit
+
+      - name: Run blackout-web integration suite
+        run: pnpm --filter @blackout/blackout-web test:integration
+        continue-on-error: true
+
       - name: Run mobile harness tests
         run: pnpm web:test:mobile
