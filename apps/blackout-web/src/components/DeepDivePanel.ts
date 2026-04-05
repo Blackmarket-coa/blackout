@@ -1,6 +1,7 @@
 interface DeepDivePanelProps {
   cardIndex: number;
   bookmarked: number;
+  aiRecommendationsEnabled?: boolean;
 }
 
 const ROOM_CARDS = [
@@ -9,7 +10,7 @@ const ROOM_CARDS = [
   { title: "mesh-ops", members: 96, preview: "Federation health drills and incident runbooks.", activity: "High" },
 ];
 
-export function renderDeepDivePanel({ cardIndex, bookmarked }: DeepDivePanelProps): string {
+export function renderDeepDivePanel({ cardIndex, bookmarked, aiRecommendationsEnabled = false }: DeepDivePanelProps): string {
   const card = ROOM_CARDS[cardIndex % ROOM_CARDS.length];
 
   return `
@@ -22,11 +23,17 @@ export function renderDeepDivePanel({ cardIndex, bookmarked }: DeepDivePanelProp
         <h3># ${card.title}</h3>
         <p>${card.preview}</p>
         <p class="meta">Members: ${card.members} · Activity: ${card.activity}</p>
+        ${
+          aiRecommendationsEnabled
+            ? '<p class="meta" data-testid="deepdive-ai-rec">AI rec: Similar to rooms where your collaborators are active.</p>'
+            : ""
+        }
       </article>
       <div class="deepdive-actions">
         <button type="button" data-action="deepdive-dismiss">Swipe left</button>
         <button type="button" data-action="deepdive-join">Swipe right</button>
         <button type="button" data-action="deepdive-bookmark">Swipe up</button>
+        ${aiRecommendationsEnabled ? '<button type="button" data-action="deepdive-ai-explain">Why this room?</button>' : ""}
       </div>
       <p class="meta">Bookmarked rooms: <strong data-testid="deepdive-bookmarked">${bookmarked}</strong></p>
     </section>
