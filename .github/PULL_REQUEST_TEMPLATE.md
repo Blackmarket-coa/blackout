@@ -19,6 +19,7 @@
 ## Tests
 - [ ] Unit tests for touched packages.
 - [ ] Integration/e2e checks (if applicable).
+- [ ] If `apps/blackout-client/src/main.tsx` routes changed: update `apps/blackout-web/config/react-client-paths.json` and include a changelog note for route-parity contract updates.
 
 ## KPI impact hypothesis
 - [ ] KPI target statement included (expected directional improvement and band).

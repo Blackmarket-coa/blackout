@@ -1,3 +1,5 @@
 [
-  "/"
+  "/",
+  "/moderation/draupnir",
+  "/room/:roomId"
 ]
