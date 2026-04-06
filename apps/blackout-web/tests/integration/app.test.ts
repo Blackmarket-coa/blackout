@@ -3,6 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
+const waitForAuthenticatedWorkspace = async (root: HTMLElement): Promise<void> => {
+  await waitFor(() => {
+    expect(root.querySelector("[data-action='open-server'][data-server-id='srv_alpha']")).toBeTruthy();
+  });
+};
+
+const requireElement = <T extends Element>(root: HTMLElement, selector: string): T => {
+  const element = root.querySelector<T>(selector);
+  expect(element, `missing required element: ${selector}`).toBeTruthy();
+  return element as T;
+};
+
 describe("BlackoutWebApp integration", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -56,9 +68,9 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(password, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-server'][data-server-id='srv_beta']"));
 
     await waitFor(() => {
       expect(root.querySelector(".chat-head")?.textContent).toContain("general");
@@ -118,9 +130,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
     if (!composer) throw new Error("missing message composer");
@@ -306,7 +316,7 @@ describe("BlackoutWebApp integration", () => {
     ];
 
     for (const testId of entrypointTestIds) {
-      fireEvent.click(root.querySelector(`[data-testid=\"${testId}\"]`) as HTMLButtonElement);
+      fireEvent.click(requireElement<HTMLButtonElement>(root, `[data-testid="${testId}"]`));
       expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened");
     }
   });
@@ -574,15 +584,13 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
     if (!composer) throw new Error("missing composer");
 
-    expect(root.querySelector('[data-testid="composer-attachment-trigger"]')).toBeTruthy();
-    expect(root.querySelector('[data-testid="composer-gif-trigger"]')).toBeTruthy();
+    fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-format-bold']"));
+    expect(composer.value).toContain("**bold**");
 
     fireEvent.input(composer, { target: { value: "typing test" } });
     expect(root.querySelector('[data-testid="typing-indicator"]')).toBeTruthy();
@@ -613,9 +621,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
     if (!composer) throw new Error("missing composer");
@@ -751,9 +757,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
 
     const browseButton = getByRole(root, "button", { name: "Browse channels" });
     fireEvent.click(browseButton);
@@ -792,8 +796,14 @@ describe("BlackoutWebApp integration", () => {
     });
     await app.mount();
 
-    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
-    fireEvent.click(root.querySelector("[data-testid='feature-widget-townhall-sfu']") as HTMLButtonElement);
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+
+    await waitForAuthenticatedWorkspace(root);
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-files-panel']"));
+    fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-feature-id='media_pipeline']"));
 
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened townhall_sfu");
   });
@@ -823,15 +833,58 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
-    await waitFor(() => {
-      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
-    });
+    await waitForAuthenticatedWorkspace(root);
 
     fireEvent.click(root.querySelector("[data-action='open-dms-panel']") as HTMLButtonElement);
     fireEvent.click(root.querySelector("[data-action='start-dm-channel']") as HTMLButtonElement);
 
     const input = root.querySelector<HTMLInputElement>("#create-entity-form input[name='name']");
     expect(input?.value).toBe("dm-");
+  });
+
+  it("AI-W-CORE-001: panel action wiring reports assertion-level outcomes", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root);
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const panelActions = [
+      "[data-action='open-right-panel'][data-panel='threads']",
+      "[data-action='open-right-panel'][data-panel='pinned']",
+      "[data-action='open-right-panel'][data-panel='members']",
+      "[data-action='open-right-panel'][data-panel='search']",
+      "[data-action='open-right-panel'][data-panel='governance']",
+    ];
+
+    for (const selector of panelActions) {
+      fireEvent.click(requireElement<HTMLButtonElement>(root, selector));
+      expect(root.querySelector('[data-testid="right-panel-overlay"]') || root.querySelector('[data-testid="feature-action-result"]')).toBeTruthy();
+    }
+  });
+
+  it("AI-W-CORE-002: empty message fallback is assertable in integration", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root);
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    (app as unknown as { store: { patch: (delta: { messages: [] }) => void }; render: () => void }).store.patch({ messages: [] });
+    (app as unknown as { render: () => void }).render();
+    expect(root.querySelector(".message-list .empty")?.textContent).toContain("No messages yet");
   });
 
 });

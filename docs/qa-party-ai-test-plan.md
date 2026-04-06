@@ -1,0 +1,21 @@
+# QA Party AI Test Plan
+
+This document is a Markdown rendering of `docs/qa-party-ai-test-plan.csv` for easier review.
+
+|test_id|sheet|functional_area|functional_element|what_to_verify|preconditions|steps|expected_result|priority|execution_mode|automation_hint|
+|---|---|---|---|---|---|---|---|---|---|---|
+|AI-M-AUTH-001|Mobile_Auth_Login|Authentication|Invalid credentials handling|API/auth failure surfaces deterministic user-facing error|Seed user exists|Submit login with wrong password|Error state is rendered and auth state remains unauthenticated|P0|AI|Deterministic API fixture + assertion on error text|
+|AI-M-AUTH-002|Mobile_Auth_Login|Validation|Homeserver URL validation|Malformed URL is blocked before request|Malformed URL input|Submit with malformed homeserver|Validation message appears and submit path blocks|P1|AI|Unit/integration form validation assertions|
+|AI-M-TAB-001|Mobile_Tabs_Messages|Navigation|Room list route wiring|Tapping room row navigates to matching room route|Room list fixture with known IDs|Tap room A then room B|Route includes selected roomId each time|P0|AI|Router push/assert path|
+|AI-M-TAB-002|Mobile_Tabs_Messages|States|Empty state|No-room state renders fallback UI|Empty room fixture|Open Messages tab|Fallback text/component present|P1|AI|Snapshot/assert fallback selector|
+|AI-M-RM-001|Mobile_Room_View|Messaging|Composer send enablement|Send action only enabled for non-empty content|Room fixture open|Check button when input empty vs populated|Disabled when empty, enabled when trimmed text exists|P0|AI|Component test on input + button state|
+|AI-M-RM-002|Mobile_Room_View|Messaging|Timeline load marker|Loading marker shows while history fetch in progress|Loading fixture|Open room with pending timeline|Loading indicator visible then removed on data|P1|AI|State transition assertion|
+|AI-M-RM-003|Mobile_Room_View|Navigation|Context action routing|Context menu actions map to expected routes|Message fixture with sender/event IDs|Invoke DM/View profile/Forward actions|Navigation targets match route contract|P1|AI|Route assertion per action|
+|AI-W-CORE-001|Web_Core_Workspace|Header actions|Panel action wiring|Header buttons dispatch expected panel open intents|Chat workspace fixture|Click threads/pinned/members/search/governance buttons|Expected panel identifiers emitted/opened|P0|AI|DOM click + data-panel assertions|
+|AI-W-CORE-002|Web_Core_Workspace|States|Empty message list fallback|Empty channel renders starter fallback row|No-message fixture|Open channel|Fallback row present|P1|AI|Selector assertion in rendered HTML|
+|AI-W-CMP-001|Web_Composer|Composer|Disabled send state|Cannot send while blocked/pending|canSend=false or sendPending=true fixture|Render composer and attempt submit|Submit blocked and disabled UI present|P0|AI|Unit tests on props/state|
+|AI-W-CMP-002|Web_Composer|Rendering|Message grouping heuristic|Adjacent same-sender messages compact per window|Timestamped message fixture|Render grouped messages|Expected compact grouping boundaries|P2|AI|Pure function snapshot/tests|
+|AI-W-MOB-001|Web_MobileTab_Responsive|Navigation|Tab active semantics|Only active tab has aria-current=page|Render mobile tabbar with each active tab value|Iterate activeTab values and inspect output|Single active tab semantic each render|P1|AI|HTML/ARIA assertions|
+|AI-W-MOB-002|Web_MobileTab_Responsive|Badges|Badge conditional rendering|Only configured tabs render badges|Render mobile tabbar|Inspect tab badge nodes|Home/Spaces/Gov show badges; others do not|P2|AI|Snapshot/selector count assertions|
+|AI-X-001|CrossPlatform|Config|Runtime config fallback precedence|Env resolution honors configured precedence|Matrix of env var fixtures|Initialize config with variant env maps|Resolved config matches precedence contract|P0|AI|Config unit tests|
+|AI-X-002|CrossPlatform|Reliability|Session persistence contract|Valid stored session restores auth state|Valid token fixture in storage|Initialize app/auth context|Auth state restores without login prompt|P0|AI|Auth-context initialization test|
