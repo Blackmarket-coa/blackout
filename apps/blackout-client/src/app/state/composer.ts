@@ -1,9 +1,9 @@
 import { atom } from 'jotai';
 
 export interface ComposerCommandPayload {
-  nonce: number;
-  roomId: string | null;
-  text: string;
+    nonce: number;
+    roomId: string | null;
+    text: string;
 }
 
 export const composerCommandPayloadAtom = atom<ComposerCommandPayload | null>(null);

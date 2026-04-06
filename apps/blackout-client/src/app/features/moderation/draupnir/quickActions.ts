@@ -6,12 +6,12 @@ export const isLikelyMxid = (value: string): boolean => MXID_REGEX.test(value.tr
 export const isLikelyEventId = (value: string): boolean => EVENT_ID_REGEX.test(value.trim());
 
 export const buildBanArgs = (target: string, reason: string): string[] => {
-  const normalizedTarget = target.trim();
-  const normalizedReason = reason.trim();
+    const normalizedTarget = target.trim();
+    const normalizedReason = reason.trim();
 
-  if (!normalizedReason) {
-    return [normalizedTarget];
-  }
+    if (!normalizedReason) {
+        return [normalizedTarget];
+    }
 
-  return [normalizedTarget, '--reason', normalizedReason];
+    return [normalizedTarget, '--reason', normalizedReason];
 };

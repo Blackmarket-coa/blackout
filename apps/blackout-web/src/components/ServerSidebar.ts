@@ -38,6 +38,11 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
             <span class="sidebar-nav-glyph">${homeInitials}</span>
           </button>
         </li>
+        ${servers.filter((server) => server.id !== homeServer?.id).map((server) => `<li>
+          <button type="button" class="sidebar-nav-btn ${server.id === activeServerId ? "is-selected" : ""}" data-action="open-server" data-server-id="${server.id}" aria-label="${server.name}">
+            <span class="sidebar-nav-glyph">${getInitials(server.name)}</span>
+          </button>
+        </li>`).join("")}
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "rooms" ? "is-selected" : ""}" data-action="open-rooms-panel" aria-label="Rooms">
             <span class="sidebar-nav-glyph">#</span>
@@ -56,6 +61,11 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
         <li>
           <button type="button" class="sidebar-nav-btn ${activeView === "calls" ? "is-selected" : ""}" data-action="open-calls-panel" aria-label="Calls">
             <span class="sidebar-nav-glyph">📞</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" class="sidebar-nav-btn" data-action="open-files-panel" aria-label="Files">
+            <span class="sidebar-nav-glyph">📁</span>
           </button>
         </li>
         ${showAdminEntry ? `<li>

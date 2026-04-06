@@ -16,105 +16,105 @@ import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 const queryClient = new QueryClient();
 
 const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <ClientLayout />,
-  },
-  {
-    path: '/room/:roomId',
-    element: <ClientLayout />,
-  },
-  {
-    path: '/moderation/draupnir',
-    element: <DraupnirRoutePage />,
-  },
+    {
+        path: '/',
+        element: <ClientLayout />,
+    },
+    {
+        path: '/room/:roomId',
+        element: <ClientLayout />,
+    },
+    {
+        path: '/moderation/draupnir',
+        element: <DraupnirRoutePage />,
+    },
 ]);
 
 // eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
-  const authState = useAtomValue(authStateAtom);
-  const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
+    const authState = useAtomValue(authStateAtom);
+    const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
 
-  if (authState === 'logged_in') {
+    if (authState === 'logged_in') {
+        return (
+            <>
+                <GlobalHeaderInboxLauncher />
+                <RouterProvider router={router} />
+            </>
+        );
+    }
+
+    const title =
+        authState === 'crypto_initializing'
+            ? 'Initializing secure crypto…'
+            : authState === 'crypto_failed'
+              ? 'Secure crypto unavailable'
+              : authState === 'loading'
+                ? 'Restoring session…'
+                : 'Signed out';
+
+    const details =
+        authState === 'crypto_failed'
+            ? (cryptoInitError ?? 'Unable to initialize secure crypto features.')
+            : authState === 'logged_out'
+              ? 'Sign in to start syncing with Matrix.'
+              : 'Please wait while startup completes.';
+
     return (
-      <>
-        <GlobalHeaderInboxLauncher />
-        <RouterProvider router={router} />
-      </>
-    );
-  }
-
-  const title =
-    authState === 'crypto_initializing'
-      ? 'Initializing secure crypto…'
-      : authState === 'crypto_failed'
-        ? 'Secure crypto unavailable'
-        : authState === 'loading'
-          ? 'Restoring session…'
-          : 'Signed out';
-
-  const details =
-    authState === 'crypto_failed'
-      ? cryptoInitError ?? 'Unable to initialize secure crypto features.'
-      : authState === 'logged_out'
-        ? 'Sign in to start syncing with Matrix.'
-        : 'Please wait while startup completes.';
-
-  return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--bg-surface, #111827)',
-        color: 'var(--text-primary, #f8fafc)',
-        padding: 24,
-      }}
-    >
-      <section
-        style={{
-          width: 'min(560px, 100%)',
-          border: '1px solid var(--border-default, #374151)',
-          borderRadius: 12,
-          background: 'var(--bg-input, #0f172a)',
-          padding: 20,
-          display: 'grid',
-          gap: 12,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
-        <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
-        {authState === 'crypto_failed' ? (
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
+        <main
             style={{
-              width: 'fit-content',
-              borderRadius: 8,
-              border: '1px solid var(--border-default, #4b5563)',
-              background: 'var(--bg-nav, #1f2937)',
-              color: 'var(--text-primary, #f8fafc)',
-              padding: '8px 12px',
-              cursor: 'pointer',
+                minHeight: '100vh',
+                display: 'grid',
+                placeItems: 'center',
+                background: 'var(--bg-surface, #111827)',
+                color: 'var(--text-primary, #f8fafc)',
+                padding: 24,
             }}
-          >
-            Retry startup
-          </button>
-        ) : null}
-      </section>
-    </main>
-  );
+        >
+            <section
+                style={{
+                    width: 'min(560px, 100%)',
+                    border: '1px solid var(--border-default, #374151)',
+                    borderRadius: 12,
+                    background: 'var(--bg-input, #0f172a)',
+                    padding: 20,
+                    display: 'grid',
+                    gap: 12,
+                }}
+            >
+                <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
+                <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
+                {authState === 'crypto_failed' ? (
+                    <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        style={{
+                            width: 'fit-content',
+                            borderRadius: 8,
+                            border: '1px solid var(--border-default, #4b5563)',
+                            background: 'var(--bg-nav, #1f2937)',
+                            color: 'var(--text-primary, #f8fafc)',
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Retry startup
+                    </button>
+                ) : null}
+            </section>
+        </main>
+    );
 };
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <JotaiProvider>
-      <ThemeProvider>
-        <MatrixBootstrapper />
-        <QueryClientProvider client={queryClient}>
-          <BootstrapStatus />
-        </QueryClientProvider>
-      </ThemeProvider>
-    </JotaiProvider>
-  </React.StrictMode>,
+    <React.StrictMode>
+        <JotaiProvider>
+            <ThemeProvider>
+                <MatrixBootstrapper />
+                <QueryClientProvider client={queryClient}>
+                    <BootstrapStatus />
+                </QueryClientProvider>
+            </ThemeProvider>
+        </JotaiProvider>
+    </React.StrictMode>,
 );

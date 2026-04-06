@@ -18,7 +18,7 @@ interface ChatWindowProps {
   mediaSpoilersEnabled: boolean;
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
-  attachmentMode: "quick-add" | "library" | "bulk-import";
+  attachmentMode: "quick" | "manage" | "bulk";
   compactMode: boolean;
   compactRecommended: boolean;
 }

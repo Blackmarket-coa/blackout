@@ -1,4 +1,4 @@
 export interface MatrixIdentifier {
-  roomId: string;
-  eventId?: string;
+    roomId: string;
+    eventId?: string;
 }

@@ -9,13 +9,13 @@ Last refreshed: 2026-03-23
 ## Debt buckets
 
 1. **Matrix SDK event typing mismatches**
-   - `StateEvents` / `TimelineEvents` / `AccountDataEvents` strict keys reject custom event types (`co.bmc.*`, `m.room.*`, etc.).
+    - `StateEvents` / `TimelineEvents` / `AccountDataEvents` strict keys reject custom event types (`co.bmc.*`, `m.room.*`, etc.).
 2. **Call and navigation SDK signature drift**
-   - event names and API signatures mismatch current `matrix-js-sdk` declarations.
+    - event names and API signatures mismatch current `matrix-js-sdk` declarations.
 3. **Slate editor type augmentation conflicts**
-   - duplicate `CustomTypes` declarations and outdated Slate prop usage.
+    - duplicate `CustomTypes` declarations and outdated Slate prop usage.
 4. **Space hierarchy and notification count typing drift**
-   - mismatched types for hierarchy room conversion and notification enums.
+    - mismatched types for hierarchy room conversion and notification enums.
 
 ## Follow-up plan
 
