@@ -1,4 +1,4 @@
-const DEFAULT_HOMESERVER_URL = "https://matrix.blackout.local";
+const DEFAULT_HOMESERVER_URL = "https://matrix.theblackout.app";
 
 function normalizeRailwayReference(value: string): string {
   const trimmed = value.trim();
