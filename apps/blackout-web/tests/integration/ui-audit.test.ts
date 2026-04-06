@@ -13,10 +13,10 @@ async function mountAuthenticatedApp(): Promise<HTMLElement> {
     mode: "daily-chat",
     rollout: { cohort: "internal" },
     presets: {
-      activePreset: "tier_enterprise",
+      activePreset: "sovereignty",
       features: {},
       diagnostics: {
-        deploymentPreset: "tier_enterprise",
+        deploymentPreset: "sovereignty",
         tenantPreset: null,
         userOverrideCount: 0,
       },

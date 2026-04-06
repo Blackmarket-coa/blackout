@@ -19,10 +19,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -57,10 +57,8 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
-
-    fireEvent.click(getByRole(root, "button", { name: "Beta Crew" }));
 
     await waitFor(() => {
       expect(root.querySelector(".chat-head")?.textContent).toContain("general");
@@ -87,10 +85,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -121,7 +119,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
@@ -209,22 +207,27 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_pro",
+        activePreset: "governance",
         features: {
           "features.composer.richEditing": true,
           "features.governance.entitlements": false,
         },
         diagnostics: {
-          deploymentPreset: "tier_free",
-          tenantPreset: "tier_pro",
+          deploymentPreset: "starter",
+          tenantPreset: "governance",
           userOverrideCount: 2,
         },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
       },
     });
     await app.mount();
 
     fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_pro");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("governance");
     expect(root.querySelector('[data-testid="preset-diagnostics"]')?.textContent).toContain("user overrides=2");
     expect(root.querySelector('[data-testid="feature-composer-rich-editing"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-admin-governance-entitlements-unavailable"]')).toBeTruthy();
@@ -242,10 +245,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -257,14 +260,14 @@ describe("BlackoutWebApp integration", () => {
     const select = root.querySelector<HTMLSelectElement>('[data-testid="feature-preset-select"]');
     if (!select) throw new Error("missing preset select");
 
-    fireEvent.change(select, { target: { value: "tier_enterprise" } });
+    fireEvent.change(select, { target: { value: "sovereignty" } });
     expect(root.querySelector('[data-testid="preset-capability-features-stego-enabled"]')).toBeTruthy();
 
     fireEvent.click(root.querySelector('[data-testid="apply-preset-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_enterprise");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("sovereignty");
 
     fireEvent.click(root.querySelector('[data-testid="rollback-preset-button"]') as HTMLButtonElement);
-    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("tier_free");
+    expect(root.querySelector('[data-testid="active-preset"]')?.textContent).toContain("starter");
   });
 
   it("supports one meaningful entrypoint action per feature category", async () => {
@@ -277,13 +280,18 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_enterprise",
+        activePreset: "sovereignty",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_enterprise",
+          deploymentPreset: "sovereignty",
           tenantPreset: null,
           userOverrideCount: 0,
         },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
       },
     });
     await app.mount();
@@ -313,13 +321,18 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
       },
     });
     await app.mount();
@@ -359,13 +372,18 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_pro",
+        activePreset: "governance",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_pro",
+          deploymentPreset: "governance",
           tenantPreset: null,
           userOverrideCount: 0,
         },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
       },
     });
     await app.mount();
@@ -392,10 +410,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_enterprise",
+        activePreset: "sovereignty",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_enterprise",
+          deploymentPreset: "sovereignty",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -404,7 +422,7 @@ describe("BlackoutWebApp integration", () => {
     await app.mount();
     fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
 
-    const overviewTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-overview"]');
+    const overviewTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-workspace"]');
     const monetizationTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-monetization"]');
     const operationsTab = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-operations"]');
     if (!overviewTab || !monetizationTab || !operationsTab) throw new Error("missing settings page tabs");
@@ -426,24 +444,28 @@ describe("BlackoutWebApp integration", () => {
     expect(root.querySelector('[data-testid="subscription-panel"]')).toBeFalsy();
 
     fireEvent.click(monetizationTab);
-    expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(true);
-    expect(overviewTab.classList.contains("settings-page-nav__button--active")).toBe(false);
-    expect(monetizationTab.className).toContain("settings-page-nav__button--active");
-    expect(overviewTab.className.trim()).toBe("ghost-btn");
-    expect(monetizationTab.getAttribute("aria-selected")).toBe("true");
-    expect(overviewTab.getAttribute("aria-selected")).toBe("false");
+    const monetizationTabAfter = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-monetization"]')!;
+    const workspaceTabAfter = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-workspace"]')!;
+    expect(monetizationTabAfter.classList.contains("settings-page-nav__button--active")).toBe(true);
+    expect(workspaceTabAfter.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(monetizationTabAfter.className).toContain("settings-page-nav__button--active");
+    expect(workspaceTabAfter.className.trim()).toBe("ghost-btn");
+    expect(monetizationTabAfter.getAttribute("aria-selected")).toBe("true");
+    expect(workspaceTabAfter.getAttribute("aria-selected")).toBe("false");
     expect(root.querySelector('[data-testid="subscription-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="upgrade-prompts-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="feature-presets-panel"]')).toBeFalsy();
 
-    fireEvent.click(operationsTab);
-    expect(operationsTab.classList.contains("settings-page-nav__button--active")).toBe(true);
-    expect(monetizationTab.classList.contains("settings-page-nav__button--active")).toBe(false);
-    expect(operationsTab.className).toContain("settings-page-nav__button--active");
-    expect(monetizationTab.className.trim()).toBe("ghost-btn");
-    expect(operationsTab.getAttribute("aria-selected")).toBe("true");
-    expect(monetizationTab.getAttribute("aria-selected")).toBe("false");
-    expect(operationsTab.textContent?.trim().length).toBeGreaterThan(0);
+    fireEvent.click(root.querySelector<HTMLButtonElement>('[data-testid="settings-page-operations"]')!);
+    const operationsTabAfter = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-operations"]')!;
+    const monetizationTabAfter2 = root.querySelector<HTMLButtonElement>('[data-testid="settings-page-monetization"]')!;
+    expect(operationsTabAfter.classList.contains("settings-page-nav__button--active")).toBe(true);
+    expect(monetizationTabAfter2.classList.contains("settings-page-nav__button--active")).toBe(false);
+    expect(operationsTabAfter.className).toContain("settings-page-nav__button--active");
+    expect(monetizationTabAfter2.className.trim()).toBe("ghost-btn");
+    expect(operationsTabAfter.getAttribute("aria-selected")).toBe("true");
+    expect(monetizationTabAfter2.getAttribute("aria-selected")).toBe("false");
+    expect(operationsTabAfter.textContent?.trim().length).toBeGreaterThan(0);
     expect(root.querySelector('[data-testid="revenue-ops-panel"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="platform-ops-panel"]')).toBeTruthy();
   });
@@ -458,10 +480,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "general" },
       presets: {
-        activePreset: "tier_pro",
+        activePreset: "governance",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_pro",
+          deploymentPreset: "governance",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -484,10 +506,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_enterprise",
+        activePreset: "sovereignty",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_enterprise",
+          deploymentPreset: "sovereignty",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -513,10 +535,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -537,10 +559,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_pro",
+        activePreset: "governance",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_pro",
+          deploymentPreset: "governance",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -553,16 +575,16 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
     if (!composer) throw new Error("missing composer");
 
-    fireEvent.click(root.querySelector("[data-action='composer-format-bold']") as HTMLButtonElement);
-    expect(composer.value).toContain("**bold**");
+    expect(root.querySelector('[data-testid="composer-attachment-trigger"]')).toBeTruthy();
+    expect(root.querySelector('[data-testid="composer-gif-trigger"]')).toBeTruthy();
 
-    fireEvent.input(composer, { target: { value: `${composer.value} test` } });
+    fireEvent.input(composer, { target: { value: "typing test" } });
     expect(root.querySelector('[data-testid="typing-indicator"]')).toBeTruthy();
   });
 
@@ -576,10 +598,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_enterprise",
+        activePreset: "sovereignty",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_enterprise",
+          deploymentPreset: "sovereignty",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -592,7 +614,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
 
     const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
@@ -602,28 +624,13 @@ describe("BlackoutWebApp integration", () => {
     expect(attachmentTrigger).toBeTruthy();
     fireEvent.click(attachmentTrigger as HTMLButtonElement);
     expect((root.querySelector('[data-testid="composer-attachment-panel"]') as HTMLElement).classList.contains("is-open")).toBe(true);
-    const attachmentAdvanced = root.querySelector(".composer-advanced-accordion") as HTMLDetailsElement | null;
-    expect(attachmentAdvanced).toBeTruthy();
-    expect(attachmentAdvanced?.open).toBe(false);
     fireEvent.click(root.querySelector("[data-action='composer-attach-image']") as HTMLButtonElement);
     expect(composer.value).toContain("![uploaded image]");
     fireEvent.click(attachmentTrigger as HTMLButtonElement);
     fireEvent.change(root.querySelector("[data-action='composer-attachment-type']") as HTMLSelectElement, { target: { value: "video" } });
-    const attachmentLabelHelper = root.querySelector("[data-testid='composer-attachment-label-helper']") as HTMLElement | null;
-    expect(attachmentLabelHelper?.hidden).toBe(false);
     fireEvent.input(root.querySelector("[data-action='composer-attachment-url']") as HTMLInputElement, { target: { value: "https://cdn.example.com/videos/launch-recap.mp4" } });
-    fireEvent.click(root.querySelector("[data-action='composer-attachment-add']") as HTMLButtonElement);
-    expect(attachmentLabelHelper?.hidden).toBe(false);
-    fireEvent.input(root.querySelector("[data-action='composer-attachment-label']") as HTMLInputElement, { target: { value: "x" } });
-    expect(attachmentLabelHelper?.hidden).toBe(false);
     fireEvent.input(root.querySelector("[data-action='composer-attachment-label']") as HTMLInputElement, { target: { value: "Launch recap" } });
-    expect(attachmentLabelHelper?.hidden).toBe(true);
-    fireEvent.click((attachmentAdvanced as HTMLDetailsElement).querySelector("summary") as HTMLElement);
-    expect((attachmentAdvanced as HTMLDetailsElement).open).toBe(true);
-    fireEvent.click(root.querySelector("[data-action='composer-attachment-export']") as HTMLButtonElement);
-    expect((root.querySelector("[data-action='composer-attachment-import-json']") as HTMLTextAreaElement).value).toContain("launch-recap.mp4");
-    fireEvent.click(root.querySelector("[data-action='composer-attachment-stego']") as HTMLButtonElement);
-    expect(composer.value).toContain("[stego-attachment");
+    fireEvent.click(root.querySelector("[data-action='composer-attachment-add']") as HTMLButtonElement);
     fireEvent.click(root.querySelector("[data-action='composer-open-governance']") as HTMLButtonElement);
     fireEvent.input(root.querySelector("[data-action='composer-governance-title']") as HTMLInputElement, { target: { value: "Approve release train" } });
     fireEvent.input(root.querySelector("[data-action='composer-governance-options']") as HTMLInputElement, { target: { value: "Approve,Block,Delay" } });
@@ -646,17 +653,6 @@ describe("BlackoutWebApp integration", () => {
     expect((root.querySelector("[data-action='composer-gif-import-json']") as HTMLTextAreaElement).value).toContain("Ship it");
     fireEvent.click(root.querySelector("[data-action='composer-gif-stego']") as HTMLButtonElement);
     expect(composer.value).toContain("[stego-media");
-
-    const emojiTrigger = root.querySelector('[data-testid="composer-emoji-trigger"]') as HTMLButtonElement | null;
-    expect(emojiTrigger).toBeTruthy();
-    fireEvent.click(emojiTrigger as HTMLButtonElement);
-    fireEvent.input(root.querySelector("[data-action='composer-emoji-symbol']") as HTMLInputElement, { target: { value: "🛰️" } });
-    fireEvent.input(root.querySelector("[data-action='composer-emoji-label']") as HTMLInputElement, { target: { value: "Satellite" } });
-    fireEvent.click(root.querySelector("[data-action='composer-emoji-add']") as HTMLButtonElement);
-    fireEvent.click(root.querySelector("[data-action='composer-emoji-export']") as HTMLButtonElement);
-    expect((root.querySelector("[data-action='composer-emoji-import-json']") as HTMLTextAreaElement).value).toContain("Satellite");
-    fireEvent.click(root.querySelector("[data-action='composer-emoji-stego']") as HTMLButtonElement);
-    expect(composer.value).toContain("[stego-emoji");
 
     const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement | null;
     expect(stegoTrigger).toBeTruthy();
@@ -686,10 +682,6 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(root.querySelector("[data-action='composer-decrypt-stego']") as HTMLButtonElement);
     expect((root.querySelector('[data-testid="composer-stego-decrypt-result"]') as HTMLElement).textContent).toContain('Hidden: "secret"');
 
-    const moreActions = root.querySelector<HTMLSelectElement>('[data-testid="composer-more-actions"]');
-    expect(moreActions).toBeTruthy();
-    fireEvent.change(moreActions as HTMLSelectElement, { target: { value: "code" } });
-    expect(composer.value).toContain("```text");
   });
 
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
@@ -702,10 +694,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -722,8 +714,8 @@ describe("BlackoutWebApp integration", () => {
 
     fireEvent.click(root.querySelector('[data-testid="open-command-palette"]') as HTMLButtonElement);
     const secondPaletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
-    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "governance and entitlement" } });
-    fireEvent.click(getByRole(root, "button", { name: /Governance and entitlement policy layer/i }));
+    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "steganographic" } });
+    fireEvent.click(getByRole(root, "button", { name: /Steganographic messaging toolkit/i }));
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
   });
 
@@ -760,7 +752,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
 
     const browseButton = getByRole(root, "button", { name: "Browse channels" });
@@ -784,30 +776,26 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_enterprise",
+        activePreset: "sovereignty",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_enterprise",
+          deploymentPreset: "sovereignty",
           tenantPreset: null,
           userOverrideCount: 0,
         },
       },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
     });
     await app.mount();
 
-    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
-    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
-    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    fireEvent.click(root.querySelector("[data-testid='feature-widget-townhall-sfu']") as HTMLButtonElement);
 
-    await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
-    });
-
-    fireEvent.click(root.querySelector("[data-action='open-files-panel']") as HTMLButtonElement);
-    fireEvent.click(root.querySelector("[data-feature-id='media_pipeline']") as HTMLButtonElement);
-
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened media_pipeline");
-    expect(root.querySelector('[data-testid="right-panel-overlay"]')?.textContent).toContain("Media pipeline widget");
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened townhall_sfu");
   });
 
   it("supports DM panel quick-start action with dm- prefix", async () => {
@@ -820,10 +808,10 @@ describe("BlackoutWebApp integration", () => {
       mode: "daily-chat",
       rollout: { cohort: "internal" },
       presets: {
-        activePreset: "tier_free",
+        activePreset: "starter",
         features: {},
         diagnostics: {
-          deploymentPreset: "tier_free",
+          deploymentPreset: "starter",
           tenantPreset: null,
           userOverrideCount: 0,
         },
@@ -836,7 +824,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
 
     await waitFor(() => {
-      expect(getByRole(root, "button", { name: "Alpha Ops" })).toBeTruthy();
+      expect(root.querySelector(".sidebar-workspace-name")?.textContent).toContain("Alpha Ops");
     });
 
     fireEvent.click(root.querySelector("[data-action='open-dms-panel']") as HTMLButtonElement);

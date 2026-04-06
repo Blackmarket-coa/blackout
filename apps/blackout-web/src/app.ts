@@ -351,7 +351,9 @@ export class BlackoutWebApp {
       scrollContainer.scrollTo({ top: Math.max(0, targetTop), left: 0, behavior: "auto" });
       return;
     }
-    prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    if (typeof prompt.scrollIntoView === "function") {
+      prompt.scrollIntoView({ block: "center", inline: "nearest" });
+    }
   }
 
   private centerVisibleOnboardingPrompts(): void {
@@ -2893,7 +2895,8 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
-      const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const type = (attachmentTypeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const label = labelInput?.value.trim() ?? "";
       const url = urlInput?.value.trim() ?? "";
       this.updateAttachmentActionState();
       const quickAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
@@ -2906,7 +2909,7 @@ export class BlackoutWebApp {
         : [...this.attachmentLibrary, item];
       this.persistAttachmentLibrary();
       this.refreshAttachmentLibraryUi();
-      if (labelInput) labelInput.value = normalizedLabel;
+      if (labelInput) labelInput.value = label;
       if (urlInput) urlInput.value = "";
       this.updateAttachmentActionState();
     });
@@ -3138,7 +3141,9 @@ export class BlackoutWebApp {
       panel.classList.add("is-open");
       panel.setAttribute("aria-hidden", "false");
       trigger.setAttribute("aria-expanded", "true");
-      panel.scrollIntoView({ block: "center", inline: "nearest" });
+      if (typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ block: "center", inline: "nearest" });
+      }
       panel.scrollTop = 0;
       if (panelName === "stego") {
         this.maybeShowAdvancedTour("stego");
