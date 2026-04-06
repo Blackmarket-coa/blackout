@@ -14,7 +14,7 @@ interface MessageInputOptions {
   mediaSpoilersEnabled: boolean;
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
-  attachmentMode: "quick-add" | "library" | "bulk-import";
+  attachmentMode: "quick" | "manage" | "bulk";
 }
 
 function renderAttachmentQuickAddSection(disabled: boolean): string {
@@ -74,7 +74,7 @@ export function renderMessageInput({
   canPropose,
   governanceEnabled,
   compactMode: _compactMode,
-  richEditingEnabled: _richEditingEnabled,
+  richEditingEnabled,
   stegoEnabled,
   composerRepliesEnabled: _composerRepliesEnabled,
   composerEditsEnabled: _composerEditsEnabled,
@@ -88,6 +88,10 @@ export function renderMessageInput({
   return `
     <form id="message-form" class="chat-input">
       <div class="composer-shell ${disabled ? "composer-shell--disabled" : ""}">
+        ${richEditingEnabled ? `<div class="composer-rich-toolbar" role="toolbar" aria-label="Text formatting">
+          <button type="button" class="composer-toolbar-btn" data-action="composer-format-bold" aria-label="Bold" title="Bold" ${disabled ? "disabled" : ""}><strong>B</strong></button>
+          <button type="button" class="composer-toolbar-btn" data-action="composer-format-italic" aria-label="Italic" title="Italic" ${disabled ? "disabled" : ""}><em>I</em></button>
+        </div>` : ""}
         <textarea name="message" rows="1" aria-describedby="composer-hint" placeholder="Message — end-to-end encrypted" ${disabled ? "disabled" : ""}></textarea>
         <div class="composer-shell-actions">
           <button type="button" class="composer-shell-icon" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>📎</button>

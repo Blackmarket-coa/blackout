@@ -1,6 +1,10 @@
 name: Tests
 on:
-    pull_request: {}
+    pull_request:
+        paths:
+            - "_port/**"
+            - "packages/shared-components/**"
+            - "scripts/**"
     merge_group:
         types: [checks_requested]
     push:

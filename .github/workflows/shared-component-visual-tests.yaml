@@ -1,6 +1,8 @@
 name: Shared Component Visual Tests
 on:
-    pull_request: {}
+    pull_request:
+        paths:
+            - "packages/shared-components/**"
     merge_group:
         types: [checks_requested]
     push:

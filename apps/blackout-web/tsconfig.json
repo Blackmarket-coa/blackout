@@ -8,7 +8,6 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/core" },
-    { "path": "../../packages/design" },
-    { "path": "../../packages/ui" }
+    { "path": "../../packages/design" }
   ]
 }

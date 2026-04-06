@@ -805,7 +805,7 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-files-panel']"));
     fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-feature-id='media_pipeline']"));
 
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened townhall_sfu");
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened media_pipeline");
   });
 
   it("supports DM panel quick-start action with dm- prefix", async () => {
