@@ -2895,7 +2895,8 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']")?.addEventListener("click", () => {
       const labelInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-label']");
       const urlInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-attachment-url']");
-      const type = (typeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const type = (attachmentTypeSelect?.value as AttachmentLibraryItem["type"] | undefined) ?? "picture";
+      const label = labelInput?.value.trim() ?? "";
       const url = urlInput?.value.trim() ?? "";
       this.updateAttachmentActionState();
       const quickAddButton = this.root.querySelector<HTMLButtonElement>("[data-action='composer-attachment-add']");
@@ -2908,7 +2909,7 @@ export class BlackoutWebApp {
         : [...this.attachmentLibrary, item];
       this.persistAttachmentLibrary();
       this.refreshAttachmentLibraryUi();
-      if (labelInput) labelInput.value = normalizedLabel;
+      if (labelInput) labelInput.value = label;
       if (urlInput) urlInput.value = "";
       this.updateAttachmentActionState();
     });

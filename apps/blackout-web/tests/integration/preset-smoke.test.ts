@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
 
-const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "tier_enterprise") as "tier_free" | "tier_pro" | "tier_enterprise";
+const preset = (process.env.BLACKOUT_SMOKE_PRESET ?? "sovereignty") as "starter" | "governance" | "sovereignty";
 
 const smokeActionByPreset = {
-  tier_free: "feature-toggle-matrix-client",
-  tier_pro: "feature-composer-rich-editing",
-  tier_enterprise: "feature-admin-governance-entitlements",
+  starter: "feature-toggle-matrix-client",
+  governance: "feature-composer-rich-editing",
+  sovereignty: "feature-admin-governance-entitlements",
 } as const;
 
 describe("Preset smoke flow", () => {
@@ -29,6 +29,11 @@ describe("Preset smoke flow", () => {
           tenantPreset: null,
           userOverrideCount: 0,
         },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
       },
     });
 

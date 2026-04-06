@@ -55,3 +55,6 @@ storybook-static
 
 # TSC incremental compilation information
 *.tsbuildinfo
+
+# Turbo build cache
+**/.turbo
