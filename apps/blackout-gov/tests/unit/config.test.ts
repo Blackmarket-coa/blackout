@@ -22,6 +22,6 @@ describe("resolveMatrixHomeserverUrl", () => {
   it("defaults when both env vars are unset", () => {
     const url = resolveMatrixHomeserverUrl({});
 
-    expect(url).toBe("https://matrix.blackout.local");
+    expect(url).toBe("https://matrix.theblackout.app");
   });
 });
