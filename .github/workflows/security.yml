@@ -1,7 +1,11 @@
 name: Security checks
 
 on:
-    pull_request: {}
+    pull_request:
+        paths:
+            - "_port/**"
+            - "packages/shared-components/**"
+            - "scripts/**"
     push:
         branches: [develop, master]
     merge_group:
