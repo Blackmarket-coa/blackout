@@ -48,6 +48,9 @@ storybook-static
 /packages/design/dist
 /packages/ui/dist
 
+# blackout-client vite output
+/apps/blackout-client/dist
+
 # blackout-web vite output
 /apps/blackout-web/dist
 /apps/blackout-web/test-results
