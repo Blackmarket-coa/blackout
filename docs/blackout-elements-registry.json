@@ -1,0 +1,447 @@
+{
+  "meta": {
+    "generated": "2026-04-07",
+    "branch": "claude/gather-blackout-elements-zgceX",
+    "description": "Consolidated registry of all Blackout elements: legacy features, customized features, user elements, quick actions, themes, presets, and UI entrypoints."
+  },
+
+  "legacyFeatures": {
+    "description": "Legacy feature flags from the ported Element Web module system (_port/src/modules/blackout/featureFlags.ts). DEPRECATED — migrate to the preset-based system.",
+    "enumValues": [
+      { "key": "Governance",              "settingKey": "feature_blackout_governance",              "legacyAlias": "feature_governance" },
+      { "key": "Education",               "settingKey": "feature_blackout_education",               "legacyAlias": "feature_education" },
+      { "key": "MutualAid",               "settingKey": "feature_blackout_mutual_aid",              "legacyAlias": "feature_mutual_aid" },
+      { "key": "DeliberationClustering",  "settingKey": "feature_blackout_deliberation_clustering", "legacyAlias": "feature_deliberation_clustering" },
+      { "key": "IpfsStorage",             "settingKey": "feature_blackout_ipfs_storage",            "legacyAlias": "feature_ipfs_storage" },
+      { "key": "Townhall",                "settingKey": "feature_blackout_townhall",                "legacyAlias": "feature_townhall" }
+    ],
+    "legacyThemes": {
+      "dark":   "dark_canopy",
+      "light":  "light_grove",
+      "amoled": "amoled_night"
+    },
+    "legacyPresets": {
+      "tier_free":       "starter",
+      "tier_pro":        "governance",
+      "tier_enterprise": "sovereignty"
+    }
+  },
+
+  "themes": {
+    "description": "Built-in themes defined in packages/core/src/themes.ts. Legacy IDs are normalised at runtime.",
+    "current": [
+      { "id": "dark_canopy",        "label": "Dark canopy",        "description": "Deep green and black surfaces for extended low-light sessions." },
+      { "id": "light_grove",        "label": "Light grove",        "description": "Light green and white surfaces for daylight readability." },
+      { "id": "amoled_night",       "label": "AMOLED night",       "description": "Pure black OLED surfaces with teal interaction accents." },
+      { "id": "storybook_meadow",   "label": "Storybook meadow",   "description": "Warm natural tones with soft highlights for calm reading and collaboration." },
+      { "id": "adventure_spectrum", "label": "Adventure spectrum", "description": "Playful high-contrast accents and clear landmarks for color-blind-friendly navigation." }
+    ],
+    "default": "dark_canopy"
+  },
+
+  "featurePresets": {
+    "description": "Three deployment tiers defined in apps/blackout-web/src/settings/feature-presets.ts.",
+    "tiers": ["starter", "governance", "sovereignty"],
+    "resolution": "deployment → tenant override → user override (if allowlisted)",
+    "starter": {
+      "legacyAlias": "tier_free",
+      "alwaysOn": [
+        "features.matrix.client",
+        "features.matrix.homeserverDiscovery",
+        "features.security.e2eeDefaults",
+        "features.auth.oidc",
+        "features.matrix.widgetCompat",
+        "features.engagement.wellbeing"
+      ],
+      "alwaysOff": "all other features"
+    },
+    "governance": {
+      "legacyAlias": "tier_pro",
+      "addedVsStarter": [
+        "features.composer.richEditing",
+        "features.composer.typingIndicators",
+        "features.widgets.layouts",
+        "features.timeline.virtualized",
+        "features.nav.spaceHierarchy",
+        "features.nav.dmList",
+        "features.settings.framework",
+        "features.settings.notifications",
+        "features.settings.appearance",
+        "features.settings.account",
+        "features.governance.entitlements"
+      ]
+    },
+    "sovereignty": {
+      "legacyAlias": "tier_enterprise",
+      "addedVsGovernance": [
+        "features.platform.bootstrap",
+        "features.timeline.threads",
+        "features.timeline.readReceipts",
+        "features.timeline.typingIndicators",
+        "features.timeline.pinnedMessages",
+        "features.composer.replies",
+        "features.composer.edits",
+        "features.composer.redactions",
+        "features.media.pipeline",
+        "features.media.spoilers",
+        "features.media.codeBlocks",
+        "features.media.linkPreviews",
+        "features.nav.roomInvites",
+        "features.nav.search",
+        "features.settings.emoji",
+        "features.settings.zoom",
+        "features.call.elementCall",
+        "features.bmc.roles",
+        "features.bmc.welcome",
+        "features.bmc.onboarding",
+        "features.bmc.forum",
+        "features.bmc.soundboard",
+        "features.bmc.templates",
+        "features.bmc.banner",
+        "features.bmc.inviteSplash",
+        "features.bmc.governance",
+        "features.bmc.steganography",
+        "features.bmc.deaddrop",
+        "features.bmc.cellRouting",
+        "features.bmc.numbersStation",
+        "features.bmc.solarpunkTheme",
+        "features.bmc.extendedProfile",
+        "features.bmc.quickSwitcher",
+        "features.bmc.serverFolders",
+        "features.bmc.bookmarks",
+        "features.bmc.streamerMode",
+        "features.bmc.developerMode",
+        "features.bmc.richPresence",
+        "features.bmc.dmPermissions",
+        "features.bmc.stageChannels",
+        "features.bmc.timeout",
+        "features.bmc.automod",
+        "features.bmc.auditLog",
+        "features.bmc.raidProtection",
+        "features.bmc.nsfwGate",
+        "features.bmc.slowmode",
+        "features.stego.enabled",
+        "features.stego.ephemeral",
+        "features.federationBoost.enabled",
+        "features.townhall.enabled",
+        "features.epic.deliveryBlueprint",
+        "features.engagement.discover",
+        "features.engagement.streaks",
+        "features.engagement.leaderboards",
+        "features.engagement.presenceDigest",
+        "features.engagement.recommendations",
+        "features.engagement.experiments",
+        "features.engagement.wellbeing"
+      ]
+    }
+  },
+
+  "featureUiEntries": {
+    "description": "All 92 feature UI entrypoints from apps/blackout-web/src/settings/feature-entrypoints.ts, grouped by surface kind.",
+    "settings_toggle": [
+      { "id": "soft_streaks",          "name": "Opt-in soft streaks",                    "presetKey": "features.engagement.streaks" },
+      { "id": "wellbeing_hard_stops",  "name": "Wellbeing hard-stops and weekly summary", "presetKey": "features.engagement.wellbeing" },
+      { "id": "stego_toolkit",         "name": "Steganographic messaging toolkit",        "presetKey": "features.stego.enabled" },
+      { "id": "matrix_bootstrap",      "name": "Matrix bootstrap and crypto init",        "presetKey": "features.platform.bootstrap" },
+      { "id": "settings_framework",    "name": "Settings framework shell",                "presetKey": "features.settings.framework" },
+      { "id": "settings_notifications","name": "Notification settings",                   "presetKey": "features.settings.notifications" },
+      { "id": "settings_appearance",   "name": "Appearance settings",                     "presetKey": "features.settings.appearance" },
+      { "id": "settings_account",      "name": "Account settings",                        "presetKey": "features.settings.account" },
+      { "id": "settings_emoji",        "name": "Emoji style settings",                    "presetKey": "features.settings.emoji" },
+      { "id": "settings_zoom",         "name": "Page zoom controls",                      "presetKey": "features.settings.zoom" },
+      { "id": "matrix_client_arch",    "name": "Matrix-native client architecture",       "presetKey": "features.matrix.client" },
+      { "id": "homeserver_discovery",  "name": "Homeserver discovery and validation",     "presetKey": "features.matrix.homeserverDiscovery" },
+      { "id": "e2ee_defaults",         "name": "E2EE defaults and policy controls",       "presetKey": "features.security.e2eeDefaults" },
+      { "id": "oidc_delegated_auth",   "name": "OIDC delegated authentication",           "presetKey": "features.auth.oidc" },
+      { "id": "solarpunk_theme",       "name": "Solarpunk theme engine",                  "presetKey": "features.bmc.solarpunkTheme" },
+      { "id": "extended_profile",      "name": "Extended profile system",                 "presetKey": "features.bmc.extendedProfile" },
+      { "id": "streamer_mode",         "name": "Streamer mode",                           "presetKey": "features.bmc.streamerMode" },
+      { "id": "developer_mode",        "name": "Developer mode",                          "presetKey": "features.bmc.developerMode" },
+      { "id": "rich_presence",         "name": "Activity status / rich presence",         "presetKey": "features.bmc.richPresence" },
+      { "id": "dm_permissions",        "name": "DM permission controls",                  "presetKey": "features.bmc.dmPermissions" },
+      { "id": "nsfw_toggle",           "name": "Content warning / NSFW toggle",           "presetKey": "features.bmc.nsfwGate" },
+      { "id": "epic_delivery_blueprint","name": "EPIC delivery blueprint panel",          "presetKey": "features.epic.deliveryBlueprint" }
+    ],
+    "composer_action": [
+      { "id": "rich_composer",         "name": "Rich composer ergonomics",                "presetKey": "features.composer.richEditing" },
+      { "id": "composer_replies",      "name": "Reply composer and quote preview",        "presetKey": "features.composer.replies" },
+      { "id": "composer_edits",        "name": "Message edit flow",                       "presetKey": "features.composer.edits" },
+      { "id": "composer_redactions",   "name": "Message redaction flow",                  "presetKey": "features.composer.redactions" },
+      { "id": "typing_indicators",     "name": "Composer typing indicators",              "presetKey": "features.composer.typingIndicators" },
+      { "id": "steganography_layer",   "name": "Steganography layer",                     "presetKey": "features.bmc.steganography" }
+    ],
+    "room_action": [
+      { "id": "ephemeral_stego_lifecycle","name": "Ephemeral stego lifecycle management", "presetKey": "features.stego.ephemeral" },
+      { "id": "timeline_virtualized",  "name": "Timeline virtualization engine",          "presetKey": "features.timeline.virtualized" },
+      { "id": "timeline_threads",      "name": "Thread panel and m.thread rendering",     "presetKey": "features.timeline.threads" },
+      { "id": "timeline_receipts",     "name": "Read receipts and fully-read marker",     "presetKey": "features.timeline.readReceipts" },
+      { "id": "timeline_typing",       "name": "Typing indicators",                       "presetKey": "features.timeline.typingIndicators" },
+      { "id": "timeline_pins",         "name": "Pinned messages panel",                   "presetKey": "features.timeline.pinnedMessages" },
+      { "id": "space_hierarchy",       "name": "Space hierarchy navigation",              "presetKey": "features.nav.spaceHierarchy" },
+      { "id": "dm_list",               "name": "DM list from m.direct",                   "presetKey": "features.nav.dmList" },
+      { "id": "room_invites",          "name": "Invite inbox and actions",                "presetKey": "features.nav.roomInvites" },
+      { "id": "search_ui",             "name": "Search and jump-to-message",              "presetKey": "features.nav.search" },
+      { "id": "multiplatform_bootstrap","name": "Multi-platform Matrix bootstrap",        "presetKey": "features.platform.bootstrap" },
+      { "id": "welcome_screen",        "name": "Welcome screen (co.bmc.welcome)",         "presetKey": "features.bmc.welcome" },
+      { "id": "onboarding_flow",       "name": "Onboarding flow (co.bmc.onboarding)",     "presetKey": "features.bmc.onboarding" },
+      { "id": "forum_channels",        "name": "Forum channels (co.bmc.forum)",           "presetKey": "features.bmc.forum" },
+      { "id": "server_banner",         "name": "Server banner (co.bmc.banner)",           "presetKey": "features.bmc.banner" },
+      { "id": "invite_splash",         "name": "Custom invite splash",                    "presetKey": "features.bmc.inviteSplash" },
+      { "id": "deaddrop_channels",     "name": "Dead drop channels",                      "presetKey": "features.bmc.deaddrop" },
+      { "id": "quick_switcher",        "name": "Quick switcher (Ctrl+K)",                 "presetKey": "features.bmc.quickSwitcher" },
+      { "id": "server_folders",        "name": "Server folders",                          "presetKey": "features.bmc.serverFolders" },
+      { "id": "bookmark_system",       "name": "Bookmark system",                         "presetKey": "features.bmc.bookmarks" },
+      { "id": "slowmode",              "name": "Slowmode controls",                       "presetKey": "features.bmc.slowmode" }
+    ],
+    "widget_panel": [
+      { "id": "townhall_sfu",          "name": "Townhall SFU sessions and moderation",    "presetKey": "features.townhall.enabled" },
+      { "id": "widget_shell_layouts",  "name": "Widget shell layouts",                    "presetKey": "features.widgets.layouts" },
+      { "id": "media_pipeline",        "name": "Media upload and MXC pipeline",           "presetKey": "features.media.pipeline" },
+      { "id": "media_spoilers",        "name": "Spoiler rendering",                       "presetKey": "features.media.spoilers" },
+      { "id": "media_codeblocks",      "name": "Code block rendering",                    "presetKey": "features.media.codeBlocks" },
+      { "id": "media_link_previews",   "name": "Link preview cards",                      "presetKey": "features.media.linkPreviews" },
+      { "id": "element_call",          "name": "Element Call widget integration",         "presetKey": "features.call.elementCall" },
+      { "id": "matrix_widget_compat",  "name": "Matrix widget state-event compatibility", "presetKey": "features.matrix.widgetCompat" },
+      { "id": "soundboard",            "name": "Soundboard (co.bmc.soundboard)",          "presetKey": "features.bmc.soundboard" },
+      { "id": "numbers_station",       "name": "Numbers station broadcasts",              "presetKey": "features.bmc.numbersStation" },
+      { "id": "stage_channels",        "name": "Stage channels",                          "presetKey": "features.bmc.stageChannels" }
+    ],
+    "admin_console": [
+      { "id": "governance_entitlements","name": "Governance and entitlement policy layer","presetKey": "features.governance.entitlements" },
+      { "id": "federation_boost_policy","name": "Federation boost policy engine",         "presetKey": "features.federationBoost.enabled" },
+      { "id": "recommendation_model",  "name": "Meaningful interaction recommendations",  "presetKey": "features.engagement.recommendations" },
+      { "id": "engagement_experiments","name": "Experiment holdout and ramp controls",    "presetKey": "features.engagement.experiments" },
+      { "id": "named_roles",           "name": "Named role system (co.bmc.roles)",        "presetKey": "features.bmc.roles" },
+      { "id": "space_templates",       "name": "Space templates (co.bmc.template)",       "presetKey": "features.bmc.templates" },
+      { "id": "cooperative_governance","name": "Cooperative governance tools",            "presetKey": "features.bmc.governance" },
+      { "id": "cell_routing",          "name": "Cell-structure routing",                  "presetKey": "features.bmc.cellRouting" },
+      { "id": "timeout_system",        "name": "Timeout system",                          "presetKey": "features.bmc.timeout" },
+      { "id": "automod_panel",         "name": "AutoMod config panel",                    "presetKey": "features.bmc.automod" },
+      { "id": "audit_log",             "name": "Audit log viewer",                        "presetKey": "features.bmc.auditLog" },
+      { "id": "raid_protection",       "name": "Raid protection UI",                      "presetKey": "features.bmc.raidProtection" }
+    ],
+    "command_palette": [
+      { "id": "discover_panel",        "name": "Discover command (bounded top 10)",       "presetKey": "features.engagement.discover" },
+      { "id": "presence_digest",       "name": "Presence digest notifications",           "presetKey": "features.engagement.presenceDigest" },
+      { "id": "community_leaderboards","name": "Optional leaderboards",                   "presetKey": "features.engagement.leaderboards" }
+    ]
+  },
+
+  "quickActions": {
+    "description": "Radial menu and context action system defined in packages/core/src/quick-actions.ts.",
+    "radialMenu": [
+      { "label": "Vote",     "angle": 0   },
+      { "label": "People",   "angle": 45  },
+      { "label": "Create",   "angle": 90  },
+      { "label": "Map",      "angle": 135 },
+      { "label": "Events",   "angle": 180 },
+      { "label": "Settings", "angle": 225 },
+      { "label": "Message",  "angle": 270 },
+      { "label": "Search",   "angle": 315 }
+    ],
+    "domainActions": {
+      "governance": ["Active votes", "Results", "Proposals", "Delegates"],
+      "trade":      ["Marketplace", "Payments", "My orders"],
+      "logistics":  ["Tracking", "Fleet", "Routing"],
+      "discover":   ["DeepDive", "Communities", "Featured"]
+    },
+    "messageContextActions": {
+      "proposal": [
+        { "label": "Vote yes", "primary": true },
+        { "label": "Thread" },
+        { "label": "Share" },
+        { "label": "React" }
+      ],
+      "file": [
+        { "label": "Download" },
+        { "label": "Preview" },
+        { "label": "Share" },
+        { "label": "Pin" }
+      ],
+      "plain": [
+        { "label": "React" },
+        { "label": "Thread" },
+        { "label": "Forward" },
+        { "label": "Pin" },
+        { "label": "Flag" }
+      ]
+    },
+    "avatarActions": ["DM", "View profile", "Trade", "Follow"],
+    "persistedState": {
+      "collapsed": "localStorage: blackout.quick_actions.collapsed",
+      "seen":      "localStorage: blackout.quick_actions.seen"
+    }
+  },
+
+  "userElements": {
+    "appSettings": {
+      "storageKey": "blackout.settings.v1",
+      "source": "apps/blackout-client/src/app/state/settings.ts",
+      "fields": {
+        "theme":                  { "type": "ThemePreference", "default": "dark_canopy" },
+        "pageZoom":               { "type": "number",  "default": 1 },
+        "twitterEmoji":           { "type": "boolean", "default": true },
+        "showNotifications":      { "type": "boolean", "default": true },
+        "isNotificationSounds":   { "type": "boolean", "default": true },
+        "chatDensity":            { "type": "compact|comfortable|cozy", "default": "comfortable" },
+        "devMode":                { "type": "boolean", "default": false },
+        "streamerMode":           { "type": "boolean", "default": false },
+        "layout.spaceColumnWidth":{ "type": "number",  "default": 64 },
+        "layout.roomColumnWidth": { "type": "number",  "default": 260 },
+        "mobileRoomListScope":    { "type": "space|all", "default": "space" },
+        "preferredAudioDeviceId": { "type": "string|undefined" },
+        "preferredVideoDeviceId": { "type": "string|undefined" }
+      }
+    },
+    "appearanceSettings": {
+      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+      "fields": ["theme", "accentColor", "fontScale", "chatDensity", "emojiStyle", "messageGrouping", "showTimestamps"]
+    },
+    "notificationSettings": {
+      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+      "fields": ["globalMode (all|mentions|muted)", "perRoomOverrides", "desktopNotifications", "soundEnabled", "soundVolume", "flashTaskbar"]
+    },
+    "privacySettings": {
+      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+      "fields": ["blockedUsers", "dmPermissions (everyone|friends|mutual-spaces|nobody)", "showReadReceipts", "showTypingIndicators"]
+    },
+    "extendedProfile": {
+      "matrixEventType": "co.bmc.profile",
+      "source": "apps/blackout-client/src/app/features/profile/profileTypes.ts",
+      "fields": {
+        "displayName":   { "type": "string" },
+        "avatarUrl":     { "type": "string" },
+        "banner":        { "type": "string", "description": "Profile banner image URL" },
+        "bio":           { "type": "string", "maxLength": 2000 },
+        "pronouns":      { "type": "string", "maxLength": 60 },
+        "connections":   {
+          "type": "array",
+          "itemFields": ["type (github|website|x|linkedin|matrix|other)", "url", "username", "label"]
+        },
+        "decoration":    { "type": "string", "description": "Avatar decoration ID" },
+        "primaryRole":   { "type": "string" },
+        "roleBadges":    { "type": "string[]" },
+        "mutualSpaces":  { "type": "string[]" },
+        "isFriend":      { "type": "boolean" }
+      }
+    },
+    "roles": {
+      "matrixEventType": "co.bmc.roles",
+      "source": "apps/blackout-client/src/app/features/roles/",
+      "components": ["RoleEditor.tsx", "RolePicker.tsx", "RoleBadge.tsx", "useRoles.ts"]
+    }
+  },
+
+  "uiComponents": {
+    "packages/ui": [
+      { "name": "VineActions",     "path": "packages/ui/src/components/VineActions.tsx",     "description": "Vine-style radial action menu" },
+      { "name": "CanopyBar",       "path": "packages/ui/src/components/CanopyBar.tsx",       "description": "Top navigation/header bar" },
+      { "name": "RadialBloom",     "path": "packages/ui/src/components/RadialBloom.tsx",     "description": "Radial bloom visual effect" },
+      { "name": "OverflowSheet",   "path": "packages/ui/src/components/OverflowSheet.tsx",   "description": "Overflow menu/sheet component" }
+    ],
+    "blackout-client/features": [
+      { "name": "CallProvider",         "feature": "call",         "path": "apps/blackout-client/src/app/features/call/CallProvider.tsx" },
+      { "name": "CallWidget",           "feature": "call",         "path": "apps/blackout-client/src/app/features/call/CallWidget.tsx" },
+      { "name": "DeadDropComposer",     "feature": "deaddrop",     "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropComposer.tsx" },
+      { "name": "DeadDropIndicator",    "feature": "deaddrop",     "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropIndicator.tsx" },
+      { "name": "ForumView",            "feature": "forum",        "path": "apps/blackout-client/src/app/features/forum/ForumView.tsx" },
+      { "name": "GovernanceDashboard",  "feature": "governance",   "path": "apps/blackout-client/src/app/features/governance/GovernanceDashboard.tsx" },
+      { "name": "ProposalCreator",      "feature": "governance",   "path": "apps/blackout-client/src/app/features/governance/ProposalCreator.tsx" },
+      { "name": "AutoModPanel",         "feature": "moderation",   "path": "apps/blackout-client/src/app/features/moderation/AutoModPanel.tsx" },
+      { "name": "DraupnirRoutePage",    "feature": "moderation",   "path": "apps/blackout-client/src/app/features/moderation/draupnir/DraupnirRoutePage.tsx" },
+      { "name": "QuickSwitcher",        "feature": "navigation",   "path": "apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx" },
+      { "name": "GlobalMentionsInbox",  "feature": "navigation",   "path": "apps/blackout-client/src/app/features/navigation/GlobalMentionsInbox.tsx" },
+      { "name": "ProfileModal",         "feature": "profile",      "path": "apps/blackout-client/src/app/features/profile/ProfileModal.tsx" },
+      { "name": "AvatarDecoration",     "feature": "profile",      "path": "apps/blackout-client/src/app/features/profile/AvatarDecoration.tsx" },
+      { "name": "HideMessageDialog",    "feature": "steganography","path": "apps/blackout-client/src/app/features/steganography/HideMessageDialog.tsx" },
+      { "name": "RevealMessagePanel",   "feature": "steganography","path": "apps/blackout-client/src/app/features/steganography/RevealMessagePanel.tsx" },
+      { "name": "SettingsPage",         "feature": "settings",     "path": "apps/blackout-client/src/app/features/settings/SettingsPage.tsx" },
+      { "name": "AppearanceSettings",   "feature": "settings",     "path": "apps/blackout-client/src/app/features/settings/AppearanceSettings.tsx" },
+      { "name": "PrivacySettings",      "feature": "settings",     "path": "apps/blackout-client/src/app/features/settings/PrivacySettings.tsx" }
+    ],
+    "blackout-web/components": [
+      "MobileTabBar", "FederationPanel", "ChannelSidebar", "GovernanceRoomPanel",
+      "PlatformOpsPanel", "RevenueOpsPanel", "TownhallPanel", "EconomicsPanel",
+      "DeepDivePanel", "ChatWindow", "MessageInput", "MessageItem",
+      "ServerSidebar", "CreateEntityModal", "BugReportFab"
+    ]
+  },
+
+  "cryptoAndPrivacy": {
+    "source": "packages/core/src/crypto/index.ts",
+    "primitives": [
+      { "name": "encodeStego",     "description": "XOR-based steganographic encoding" },
+      { "name": "decodeStego",     "description": "XOR-based steganographic decoding" },
+      { "name": "encryptE2E",      "description": "End-to-end encryption wrapper" },
+      { "name": "decryptE2E",      "description": "End-to-end decryption wrapper" },
+      { "name": "signMessage",     "description": "Message signing" },
+      { "name": "verifySignature", "description": "Signature verification" }
+    ]
+  },
+
+  "governance": {
+    "source": "packages/core/src/governance/index.ts",
+    "reputationTiers": [
+      { "tier": "member",      "threshold": 0    },
+      { "tier": "vendor",      "threshold": 100  },
+      { "tier": "coordinator", "threshold": 500  },
+      { "tier": "arbiter",     "threshold": 1000 }
+    ],
+    "voteAggregation": "Tallies per-option with percentage calculations",
+    "apiEndpoints": [
+      "POST /v1/governance/votes",
+      "GET  /v1/governance/votes/{voteId}",
+      "POST /v1/governance/votes/{voteId}/cast"
+    ]
+  },
+
+  "federation": {
+    "source": "packages/core/src/federation/index.ts",
+    "linkTypes": ["zone", "alliance", "supply_chain"],
+    "apiEndpoints": [
+      "POST /v1/federation/links"
+    ]
+  },
+
+  "apiEndpoints": {
+    "source": "packages/contracts/openapi/v1.yaml",
+    "canonical": "/v1",
+    "legacy": "/api (deprecated, scheduled for removal — see API_ALIAS_REMOVAL_DATE)",
+    "endpoints": [
+      "POST /v1/auth/register",
+      "POST /v1/auth/login",
+      "GET  /v1/channels",
+      "POST /v1/channels",
+      "GET  /v1/messages/{channelId}",
+      "POST /v1/messages/{channelId}",
+      "POST /v1/governance/votes",
+      "GET  /v1/governance/votes/{voteId}",
+      "POST /v1/governance/votes/{voteId}/cast",
+      "POST /v1/federation/links"
+    ]
+  },
+
+  "messageTypes": {
+    "standard": ["m.text", "m.image", "m.file", "m.video", "m.audio", "m.sticker"],
+    "custom": [
+      { "type": "app.blackout.proposal", "description": "Governance proposal message" },
+      { "type": "m.room.proposal",       "description": "Room-scoped proposal event" }
+    ]
+  },
+
+  "environmentVariables": {
+    "source": "apps/blackout-web/src/config.ts",
+    "variables": [
+      { "name": "VITE_FEATURE_DEPLOYMENT_DEFAULTS",      "description": "Initial preset (starter|governance|sovereignty)" },
+      { "name": "VITE_FEATURE_TENANT_POLICY",            "description": "Organizational policy overrides (JSON)" },
+      { "name": "VITE_FEATURE_USER_OVERRIDES",           "description": "Per-user feature overrides (JSON)" },
+      { "name": "VITE_SIMPLE_MODE_DEFAULT",              "description": "UI complexity level" },
+      { "name": "VITE_SHOW_ADVANCED_ADMIN_MODULES",      "description": "Toggle admin feature visibility" },
+      { "name": "VITE_ONBOARDING_PROGRESSIVE_DISCLOSURE","description": "Gradual feature reveal during onboarding" },
+      { "name": "VITE_ENGAGEMENT_POLICY_SERVER",         "description": "Server-side engagement configuration" },
+      { "name": "VITE_ENGAGEMENT_POLICY_USER",           "description": "User engagement configuration" },
+      { "name": "VITE_NOTIFICATION_RULES",               "description": "Notification rule overrides" },
+      { "name": "VITE_RELEASE_COHORT",                   "description": "Rollout cohort: internal|beta|general" }
+    ]
+  }
+}
