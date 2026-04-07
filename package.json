@@ -49,7 +49,10 @@
     "ci:migrations:ephemeral": "node tools/ci/verify-migrations-ephemeral.mjs",
     "guard:api-freeze": "node tools/ci/enforce-api-freeze.mjs",
     "contracts:generate": "pnpm --filter @blackout/contracts generate",
-    "contracts:check": "node tools/ci/check-contracts-generated.mjs"
+    "contracts:check": "node tools/ci/check-contracts-generated.mjs",
+    "guard:call-config": "node tools/ci/check-call-config.mjs",
+    "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
+    "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

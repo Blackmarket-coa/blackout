@@ -76,6 +76,14 @@ This plan covers:
 **Acceptance**
 - Service refuses to boot with missing/weak secrets.
 - Rotation can be executed without user-visible auth outage.
+**Implementation status (2026-04-07)**
+- [x] Removed insecure fallback JWT defaults in API auth service.
+- [x] Added startup security preflight for secret/env/token transport validation.
+- [x] Added dual-key rollover support (`JWT_SECRET_PRIMARY` + `JWT_SECRET_ROLLOVER`).
+- [x] Added production cookie/token security validation guardrails.
+- [x] Added CI hardening guard against insecure auth defaults (`pnpm guard:auth-secrets`).
+- [x] Added rotation runbook: `docs/operations/runbooks/auth-secret-rotation-and-rollover.md`.
+
 
 **Repository task split**
 - **blackout**: Enforce secure session handling expectations on the client (cookie/token expiry UX and forced re-auth flow).
@@ -115,6 +123,13 @@ This plan covers:
 **Acceptance**
 - Synthetic call check passes continuously in staging.
 - User-facing error states are actionable and non-blocking.
+**Implementation status (2026-04-07)**
+- [x] Config guard script: `tools/ci/check-call-config.mjs` (`pnpm guard:call-config`).
+- [x] Synthetic probe script: `tools/ci/synthetic-call-probe.mjs` (`pnpm probe:calls:synthetic`).
+- [x] App health endpoint exposes call readiness at `/health/calls`.
+- [x] Degraded-mode user messaging + fallback behavior implemented in `CallProvider`/`VoiceChannel`.
+- [x] Incident runbook published: `docs/operations/runbooks/call-realtime-incident-and-degraded-mode.md`.
+
 
 **Repository task split**
 - **blackout**: Call controls, degraded mode messaging, and client diagnostics surface.
@@ -133,6 +148,14 @@ This plan covers:
 **Acceptance**
 - Event consumers tolerate duplicate/out-of-order delivery.
 - Schema changes are backward compatible or safely migrated.
+**Implementation status (2026-04-07)**
+- [x] Governance event schema/version normalization + legacy migration paths implemented.
+- [x] DeadDrop event schema/version normalization + legacy migration paths implemented.
+- [x] Replay-safe vote handling (duplicate-event dedupe + latest-vote idempotent tally).
+- [x] DeadDrop command idempotency key (`commandId`) added for backend replay safety.
+- [x] Admin diagnostics surfaced in Governance dashboard and DeadDrop settings.
+- [x] Reliability runbook published: `docs/operations/runbooks/governance-event-reliability.md`.
+
 
 **Repository task split**
 - **blackout**: Governance/moderation UI updates for schema versions and operational diagnostics.

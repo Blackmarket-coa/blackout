@@ -165,6 +165,11 @@ export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
             </div>
 
             <small style={{ opacity: 0.8 }}>Current queue count: {deadDrop.queueCount}</small>
+            <small style={{ opacity: 0.8 }}>
+                Schema v{deadDrop.diagnostics.schemaVersion} • migrated:{' '}
+                {String(deadDrop.diagnostics.migrated)} • invalid events:{' '}
+                {deadDrop.diagnostics.invalidStateEvents}
+            </small>
         </section>
     );
 };

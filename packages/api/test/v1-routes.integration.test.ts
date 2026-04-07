@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import app from '../src/index';
+
+process.env.JWT_SECRET_PRIMARY =
+  process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
+process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
+process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
+
+const { default: app } = await import('../src/index');
 
 async function json(res: Response) {
   return (await res.json()) as Record<string, unknown>;

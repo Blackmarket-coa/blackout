@@ -10,6 +10,11 @@ import {
 } from 'react';
 import type { MatrixClient, MatrixEvent, RoomState } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import {
+    getActionableCallMessage,
+    resolveLivekitFocusFromWellKnown,
+    type CallFocusResolution,
+} from './callHealth';
 
 const MSC3401_EVENT_TYPES = ['m.call.member', 'org.matrix.msc3401.call.member'];
 
@@ -25,12 +30,6 @@ export interface AudioLevelState {
     userId: string;
     level: number;
     speaking: boolean;
-}
-
-interface MatrixRtcFocus {
-    type?: string;
-    livekit_service_url?: string;
-    livekit_alias?: string;
 }
 
 interface MatrixRtcSessionLike {
@@ -59,6 +58,9 @@ interface CallContextValue {
     cameraEnabled: boolean;
     screenSharing: boolean;
     focusUrl: string | null;
+    focusStatus: CallFocusResolution['status'];
+    focusReason: string;
+    focusMessage: string;
     membership: Record<string, CallMemberState>;
     audioLevels: Record<string, AudioLevelState>;
     joinCall: (roomId: string) => Promise<void>;
@@ -83,7 +85,6 @@ const parseMembership = (event: MatrixEvent): CallMemberState | null => {
 
     const deviceId = typeof content.device_id === 'string' ? content.device_id : undefined;
     const expiresTs = typeof content.expires_ts === 'number' ? content.expires_ts : undefined;
-
     const membershipRaw = typeof content.membership === 'string' ? content.membership : 'joined';
     const membership = membershipRaw === 'leave' || membershipRaw === 'left' ? 'left' : 'joined';
 
@@ -97,29 +98,29 @@ const parseMembership = (event: MatrixEvent): CallMemberState | null => {
     return { userId, deviceId, expiresTs, membership, fociPreferred };
 };
 
-const readRtcFocus = async (client: MatrixClient): Promise<string | null> => {
+const readRtcFocus = async (client: MatrixClient): Promise<CallFocusResolution> => {
     const homeserverUrl = client.getHomeserverUrl();
     const wellKnownUrl = new URL('/.well-known/matrix/client', homeserverUrl).toString();
 
     try {
         const response = await fetch(wellKnownUrl, { headers: { Accept: 'application/json' } });
-        if (!response.ok) return null;
+        if (!response.ok) {
+            return { focusUrl: null, status: 'degraded', reason: `well-known HTTP ${response.status}` };
+        }
 
         const body = (await response.json()) as Record<string, unknown>;
-        const fociRoot = (body['org.matrix.msc4143.rtc_foci'] ?? body.rtc_foci) as unknown;
+        const focusUrl = resolveLivekitFocusFromWellKnown(body);
+        if (!focusUrl) {
+            return { focusUrl: null, status: 'unconfigured', reason: 'missing rtc_foci livekit entry' };
+        }
 
-        if (!Array.isArray(fociRoot) || fociRoot.length === 0) return null;
-
-        const livekitFocus = fociRoot.find((focus): focus is MatrixRtcFocus => {
-            if (!focus || typeof focus !== 'object') return false;
-            const type = (focus as MatrixRtcFocus).type;
-            return type === 'livekit' || type === 'livekit-service';
-        });
-
-        if (!livekitFocus) return null;
-        return livekitFocus.livekit_service_url ?? livekitFocus.livekit_alias ?? null;
-    } catch {
-        return null;
+        return { focusUrl, status: 'healthy', reason: 'resolved from well-known' };
+    } catch (error) {
+        return {
+            focusUrl: null,
+            status: 'degraded',
+            reason: error instanceof Error ? error.message : 'fetch failed',
+        };
     }
 };
 
@@ -136,6 +137,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const [cameraEnabled, setCameraEnabled] = useState(false);
     const [screenSharing, setScreenSharing] = useState(false);
     const [focusUrl, setFocusUrl] = useState<string | null>(null);
+    const [focusStatus, setFocusStatus] = useState<CallFocusResolution['status']>('unconfigured');
+    const [focusReason, setFocusReason] = useState('not loaded');
     const [preferredAudioDeviceId, setPreferredAudioDeviceId] = useState<string | null>(null);
     const [preferredVideoDeviceId, setPreferredVideoDeviceId] = useState<string | null>(null);
     const [membership, setMembership] = useState<Record<string, CallMemberState>>({});
@@ -148,8 +151,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         let mounted = true;
-        void readRtcFocus(client).then((url) => {
-            if (mounted) setFocusUrl(url);
+        void readRtcFocus(client).then((result) => {
+            if (!mounted) return;
+            setFocusUrl(result.focusUrl);
+            setFocusStatus(result.status);
+            setFocusReason(result.reason);
         });
 
         return () => {
@@ -239,18 +245,26 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
             const matrixRtc = getSessionStarter(client).matrixRTC;
             if (!matrixRtc?.startRoomSession) {
+                setFocusStatus('degraded');
+                setFocusReason('matrixRTC startRoomSession unavailable');
                 setJoined(true);
                 return;
             }
 
-            const session = await matrixRtc.startRoomSession(nextRoomId, {
-                manageMediaKeys: true,
-                focusPreferred: focusUrl ? [focusUrl] : undefined,
-            });
+            try {
+                const session = await matrixRtc.startRoomSession(nextRoomId, {
+                    manageMediaKeys: true,
+                    focusPreferred: focusUrl ? [focusUrl] : undefined,
+                });
 
-            await session.joinRoomSession?.();
-            activeSessionRef.current = session;
-            setJoined(true);
+                await session.joinRoomSession?.();
+                activeSessionRef.current = session;
+                setJoined(true);
+            } catch (error) {
+                setFocusStatus('degraded');
+                setFocusReason(error instanceof Error ? error.message : 'session start failed');
+                setJoined(true);
+            }
         },
         [client, focusUrl, leaveCall, roomId],
     );
@@ -274,6 +288,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             cameraEnabled,
             screenSharing,
             focusUrl,
+            focusStatus,
+            focusReason,
+            focusMessage: getActionableCallMessage(focusStatus, focusReason),
             membership,
             audioLevels,
             joinCall,
@@ -292,6 +309,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             audioLevels,
             cameraEnabled,
             deafened,
+            focusReason,
+            focusStatus,
             focusUrl,
             joinCall,
             joined,
