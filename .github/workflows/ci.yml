@@ -42,6 +42,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/client run typecheck
+      - name: Build workspace dependencies (core, design) for project references
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
       - run: pnpm --filter @blackout/blackout-web exec tsc --noEmit
       - run: pnpm --filter blackout-mobile run preflight
 

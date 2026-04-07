@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace dependencies (core, design) for project references
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
+
       - name: Lint
         run: pnpm --filter @blackout/blackout-web lint
 
