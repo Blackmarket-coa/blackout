@@ -5,6 +5,7 @@ import { useRoom } from '../../hooks/useRoom';
 export const DEAD_DROP_EVENT_TYPE = 'co.bmc.deaddrop';
 export const DEAD_DROP_QUEUE_EVENT_TYPE = 'co.bmc.deaddrop.queue';
 export const DEAD_DROP_COMMAND_EVENT_TYPE = 'co.bmc.deaddrop.command';
+export const DEAD_DROP_SCHEMA_VERSION = 1;
 
 export type DeadDropScheduleType = 'interval' | 'cron' | 'manual';
 
@@ -15,6 +16,7 @@ export interface DeadDropSchedule {
 }
 
 export interface DeadDropConfig {
+    schemaVersion: number;
     enabled: boolean;
     schedule: DeadDropSchedule;
     anonymize: boolean;
@@ -22,7 +24,15 @@ export interface DeadDropConfig {
     retentionHours: number;
 }
 
+export interface DeadDropDiagnostics {
+    schemaVersion: number;
+    migrated: boolean;
+    queueCount: number;
+    invalidStateEvents: number;
+}
+
 const defaultConfig: DeadDropConfig = {
+    schemaVersion: DEAD_DROP_SCHEMA_VERSION,
     enabled: false,
     schedule: {
         type: 'interval',
@@ -55,22 +65,36 @@ const normalizeSchedule = (input: Record<string, unknown> | undefined): DeadDrop
     };
 };
 
-const toDeadDropConfig = (content: Record<string, unknown> | undefined): DeadDropConfig => {
-    if (!content) return defaultConfig;
+const toDeadDropConfig = (
+    content: Record<string, unknown> | undefined,
+): { config: DeadDropConfig; migrated: boolean; invalid: boolean } => {
+    if (!content) return { config: defaultConfig, migrated: false, invalid: false };
 
-    return {
+    const schemaVersionRaw = content.schemaVersion ?? content.schema_version;
+    const schemaVersion =
+        typeof schemaVersionRaw === 'number' ? Math.max(0, Math.floor(schemaVersionRaw)) : 0;
+
+    const config: DeadDropConfig = {
+        schemaVersion: schemaVersion || DEAD_DROP_SCHEMA_VERSION,
         enabled: content.enabled === true,
         schedule: normalizeSchedule(content.schedule as Record<string, unknown> | undefined),
         anonymize: content.anonymize === true,
         maxQueueSize:
             typeof content.maxQueueSize === 'number'
                 ? Math.max(1, Math.floor(content.maxQueueSize))
-                : defaultConfig.maxQueueSize,
+                : typeof content.queue_limit === 'number'
+                  ? Math.max(1, Math.floor(content.queue_limit))
+                  : defaultConfig.maxQueueSize,
         retentionHours:
             typeof content.retentionHours === 'number'
                 ? Math.max(1, Math.floor(content.retentionHours))
-                : defaultConfig.retentionHours,
+                : typeof content.retention_hours === 'number'
+                  ? Math.max(1, Math.floor(content.retention_hours))
+                  : defaultConfig.retentionHours,
     };
+
+    const invalid = !content.schedule || typeof content.enabled !== 'boolean';
+    return { config, migrated: schemaVersion !== DEAD_DROP_SCHEMA_VERSION, invalid };
 };
 
 const toQueueCount = (content: Record<string, unknown> | undefined): number => {
@@ -88,7 +112,6 @@ export const getNextDeliveryDate = (config: DeadDropConfig): Date | null => {
     }
 
     if (config.schedule.type === 'cron') {
-        // Client-side fallback estimate: next hour tick unless appservice publishes exact next run.
         const next = new Date();
         next.setMinutes(0, 0, 0);
         next.setHours(next.getHours() + 1);
@@ -120,15 +143,21 @@ export const useDeadDrop = (roomId: string) => {
         const deadDropEvent = room?.currentState.getStateEvents(DEAD_DROP_EVENT_TYPE, '');
         const queueEvent = room?.currentState.getStateEvents(DEAD_DROP_QUEUE_EVENT_TYPE, '');
 
-        const data = toDeadDropConfig(deadDropEvent?.getContent<Record<string, unknown>>());
+        const normalized = toDeadDropConfig(deadDropEvent?.getContent<Record<string, unknown>>());
         const queueCount = toQueueCount(queueEvent?.getContent<Record<string, unknown>>());
 
         return {
             ...roomState,
-            data,
+            data: normalized.config,
             queueCount,
-            summary: describeDeadDropSchedule(data),
-            nextDelivery: getNextDeliveryDate(data),
+            diagnostics: {
+                schemaVersion: normalized.config.schemaVersion,
+                migrated: normalized.migrated,
+                queueCount,
+                invalidStateEvents: normalized.invalid ? 1 : 0,
+            } satisfies DeadDropDiagnostics,
+            summary: describeDeadDropSchedule(normalized.config),
+            nextDelivery: getNextDeliveryDate(normalized.config),
         };
     }, [roomState]);
 };
@@ -138,7 +167,12 @@ export const useSetDeadDrop = (roomId: string) => {
 
     return useCallback(
         async (config: DeadDropConfig) => {
-            await client.sendStateEvent(roomId, DEAD_DROP_EVENT_TYPE as never, config as never, '');
+            await client.sendStateEvent(
+                roomId,
+                DEAD_DROP_EVENT_TYPE as never,
+                { ...config, schemaVersion: DEAD_DROP_SCHEMA_VERSION } as never,
+                '',
+            );
         },
         [client, roomId],
     );
@@ -153,14 +187,14 @@ export const useDeadDropQueueActions = (roomId: string) => {
                 client.sendStateEvent(
                     roomId,
                     DEAD_DROP_COMMAND_EVENT_TYPE as never,
-                    { action: 'flush', at: Date.now() } as never,
+                    { action: 'flush', at: Date.now(), commandId: crypto.randomUUID() } as never,
                     '',
                 ),
             clear: async () =>
                 client.sendStateEvent(
                     roomId,
                     DEAD_DROP_COMMAND_EVENT_TYPE as never,
-                    { action: 'clear', at: Date.now() } as never,
+                    { action: 'clear', at: Date.now(), commandId: crypto.randomUUID() } as never,
                     '',
                 ),
         }),

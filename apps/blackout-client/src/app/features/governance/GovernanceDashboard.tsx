@@ -4,7 +4,7 @@ import { userIdAtom } from '../../state/auth';
 import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';
-import { useProposalResult, useProposals, useVotes, type ProposalModel } from './useProposals';
+import { useGovernanceDiagnostics, useProposalResult, useProposals, useVotes, type ProposalModel } from './useProposals';
 
 type GovernanceTab = 'active' | 'past' | 'create' | 'my-votes' | 'results';
 
@@ -120,6 +120,7 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
     const proposals = useProposals(roomId);
     const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<GovernanceTab>('active');
+    const diagnostics = useGovernanceDiagnostics(roomId, selectedProposalId ?? undefined);
 
     const activeProposals = useMemo(
         () => proposals.data.filter((proposal) => proposal.status === 'active'),
@@ -172,6 +173,27 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
                     </button>
                 </div>
             </header>
+
+
+            <section
+                style={{
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 12,
+                    background: 'var(--bg-surface)',
+                    padding: 12,
+                    display: 'grid',
+                    gap: 4,
+                }}
+            >
+                <strong style={{ fontSize: 13 }}>Governance event diagnostics</strong>
+                <small style={{ color: 'var(--text-secondary)' }}>
+                    Invalid proposals: {diagnostics.invalidProposalEvents} • Migrated proposals:{' '}
+                    {diagnostics.migratedProposalEvents} • Invalid votes:{' '}
+                    {diagnostics.invalidVoteEvents} • Migrated votes:{' '}
+                    {diagnostics.migratedVoteEvents} • Duplicate votes dropped:{' '}
+                    {diagnostics.duplicateVoteEventsDropped}
+                </small>
+            </section>
 
             {selectedProposalId ? (
                 <section

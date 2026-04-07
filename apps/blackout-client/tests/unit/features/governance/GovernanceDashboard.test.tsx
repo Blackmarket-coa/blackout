@@ -28,6 +28,8 @@ const proposalA: ProposalModel = {
     deadline: '2099-01-01T00:00:00.000Z',
     eligibility: 'all',
     status: 'active',
+    schemaVersion: 1,
+    migrated: false,
 };
 
 const proposalB: ProposalModel = {
@@ -47,6 +49,8 @@ let voteByProposal: Record<string, VoteModel[]> = {
             voterId: '@me:example.org',
             choice: 'no',
             timestamp: 100,
+            schemaVersion: 1,
+            migrated: false,
         },
         {
             eventId: 'vote-new',
@@ -54,6 +58,8 @@ let voteByProposal: Record<string, VoteModel[]> = {
             voterId: '@me:example.org',
             choice: 'yes',
             timestamp: 101,
+            schemaVersion: 1,
+            migrated: false,
         },
     ],
     'proposal-b': [],
@@ -89,6 +95,13 @@ vi.mock('../../../../src/app/features/governance/useProposals', () => ({
         data: voteByProposal[proposalId] ?? [],
         loading: false,
         error: null,
+    }),
+    useGovernanceDiagnostics: () => ({
+        invalidProposalEvents: 0,
+        invalidVoteEvents: 0,
+        migratedProposalEvents: 0,
+        migratedVoteEvents: 0,
+        duplicateVoteEventsDropped: 0,
     }),
     useProposalResult: (proposalId: string) => ({
         data: {
@@ -132,6 +145,8 @@ describe('GovernanceDashboard sections', () => {
                     voterId: '@me:example.org',
                     choice: 'yes',
                     timestamp: 101,
+                    schemaVersion: 1,
+                    migrated: false,
                 },
             ],
             'proposal-b': [],

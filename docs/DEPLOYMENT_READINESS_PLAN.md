@@ -140,6 +140,14 @@ This plan covers:
 **Acceptance**
 - Event consumers tolerate duplicate/out-of-order delivery.
 - Schema changes are backward compatible or safely migrated.
+**Implementation status (2026-04-07)**
+- [x] Governance event schema/version normalization + legacy migration paths implemented.
+- [x] DeadDrop event schema/version normalization + legacy migration paths implemented.
+- [x] Replay-safe vote handling (duplicate-event dedupe + latest-vote idempotent tally).
+- [x] DeadDrop command idempotency key (`commandId`) added for backend replay safety.
+- [x] Admin diagnostics surfaced in Governance dashboard and DeadDrop settings.
+- [x] Reliability runbook published: `docs/operations/runbooks/governance-event-reliability.md`.
+
 
 **Repository task split**
 - **blackout**: Governance/moderation UI updates for schema versions and operational diagnostics.

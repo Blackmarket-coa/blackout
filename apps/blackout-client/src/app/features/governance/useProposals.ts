@@ -2,6 +2,11 @@ import { useCallback, useMemo } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoom } from '../../hooks/useRoom';
 import { useRoomTimeline } from '../../hooks/useTimeline';
+import {
+    GOVERNANCE_SCHEMA_VERSION,
+    normalizeProposalEventContent,
+    normalizeVoteEventContent,
+} from './eventSchemas';
 
 export interface ProposalOption {
     id: string;
@@ -27,6 +32,8 @@ export interface ProposalModel extends ProposalContent {
     stateKey: string;
     authorId: string;
     timestamp: number;
+    schemaVersion: number;
+    migrated: boolean;
 }
 
 export interface VoteContent {
@@ -40,43 +47,20 @@ export interface VoteModel {
     voterId: string;
     choice: string | string[];
     timestamp: number;
+    schemaVersion: number;
+    migrated: boolean;
+}
+
+export interface GovernanceEventDiagnostics {
+    invalidProposalEvents: number;
+    invalidVoteEvents: number;
+    migratedProposalEvents: number;
+    migratedVoteEvents: number;
+    duplicateVoteEventsDropped: number;
 }
 
 const PROPOSAL_EVENT_TYPE = 'co.bmc.proposal';
 const VOTE_EVENT_TYPE = 'co.bmc.vote';
-
-const normalizeProposalContent = (content: Record<string, unknown>): ProposalContent | null => {
-    const type = content.type;
-    const status = content.status;
-
-    if (type !== 'binary' && type !== 'multiple_choice' && type !== 'ranked') return null;
-    if (status !== 'active' && status !== 'passed' && status !== 'failed' && status !== 'cancelled')
-        return null;
-    if (typeof content.title !== 'string' || typeof content.description !== 'string') return null;
-    if (typeof content.deadline !== 'string' || typeof content.quorum !== 'number') return null;
-    if (typeof content.eligibility !== 'string') return null;
-
-    const optionsRaw = Array.isArray(content.options) ? content.options : [];
-    const options = optionsRaw
-        .map((option) => {
-            if (!option || typeof option !== 'object') return null;
-            const item = option as Record<string, unknown>;
-            if (typeof item.id !== 'string' || typeof item.label !== 'string') return null;
-            return { id: item.id, label: item.label };
-        })
-        .filter((item): item is ProposalOption => item !== null);
-
-    return {
-        title: content.title,
-        description: content.description,
-        type,
-        options,
-        quorum: content.quorum,
-        deadline: content.deadline,
-        eligibility: content.eligibility as ProposalContent['eligibility'],
-        status,
-    };
-};
 
 export const useProposals = (roomId: string) => {
     const roomState = useRoom(roomId);
@@ -87,6 +71,13 @@ export const useProposals = (roomId: string) => {
                 data: [] as ProposalModel[],
                 loading: roomState.loading,
                 error: roomState.error,
+                diagnostics: {
+                    invalidProposalEvents: 0,
+                    invalidVoteEvents: 0,
+                    migratedProposalEvents: 0,
+                    migratedVoteEvents: 0,
+                    duplicateVoteEventsDropped: 0,
+                } satisfies GovernanceEventDiagnostics,
             };
         }
 
@@ -97,19 +88,28 @@ export const useProposals = (roomId: string) => {
               ? [proposalEventsRaw]
               : [];
 
+        let invalidProposalEvents = 0;
+        let migratedProposalEvents = 0;
+
         const proposals = proposalEvents
             .map((event) => {
-                const normalized = normalizeProposalContent(
+                const normalized = normalizeProposalEventContent(
                     event.getContent<Record<string, unknown>>(),
                 );
-                if (!normalized) return null;
+                if (!normalized.data) {
+                    invalidProposalEvents += 1;
+                    return null;
+                }
+                if (normalized.migrated) migratedProposalEvents += 1;
 
                 return {
-                    ...normalized,
+                    ...normalized.data,
                     proposalEventId: event.getId() ?? `${roomId}-${event.getStateKey()}`,
                     stateKey: event.getStateKey() || '',
                     authorId: event.getSender() || 'unknown',
                     timestamp: event.getTs(),
+                    schemaVersion: normalized.schemaVersion,
+                    migrated: normalized.migrated,
                 };
             })
             .filter((item): item is ProposalModel => item !== null)
@@ -119,28 +119,55 @@ export const useProposals = (roomId: string) => {
             data: proposals,
             loading: roomState.loading,
             error: roomState.error,
+            diagnostics: {
+                invalidProposalEvents,
+                invalidVoteEvents: 0,
+                migratedProposalEvents,
+                migratedVoteEvents: 0,
+                duplicateVoteEventsDropped: 0,
+            } satisfies GovernanceEventDiagnostics,
         };
     }, [roomId, roomState.data, roomState.error, roomState.loading]);
 };
 
-export const useVotes = (proposalId: string, roomId: string) => {
+export const useVotes = (proposalId: string | null, roomId: string) => {
     const timeline = useRoomTimeline(roomId);
 
     return useMemo(() => {
+        let invalidVoteEvents = 0;
+        let migratedVoteEvents = 0;
+        let duplicateVoteEventsDropped = 0;
+
+        const seenEventIds = new Set<string>();
+
         const votes = timeline.data
             .filter((event) => event.getType() === VOTE_EVENT_TYPE)
             .map((event) => {
-                const content = event.getContent<VoteContent>();
-                if (content.proposalEventId !== proposalId) return null;
-                if (typeof content.choice !== 'string' && !Array.isArray(content.choice))
+                const content = event.getContent<Record<string, unknown>>();
+                const normalized = normalizeVoteEventContent(content);
+                if (!normalized.data) {
+                    invalidVoteEvents += 1;
                     return null;
+                }
+                if (proposalId && normalized.data.proposalEventId !== proposalId) return null;
+
+                const eventId = event.getId() ?? `${event.getTs()}-${event.getSender()}`;
+                if (seenEventIds.has(eventId)) {
+                    duplicateVoteEventsDropped += 1;
+                    return null;
+                }
+                seenEventIds.add(eventId);
+
+                if (normalized.migrated) migratedVoteEvents += 1;
 
                 return {
-                    eventId: event.getId() ?? `${event.getTs()}-${event.getSender()}`,
-                    proposalEventId: content.proposalEventId,
+                    eventId,
+                    proposalEventId: normalized.data.proposalEventId,
                     voterId: event.getSender() ?? 'unknown',
-                    choice: content.choice,
+                    choice: normalized.data.choice,
                     timestamp: event.getTs(),
+                    schemaVersion: normalized.schemaVersion,
+                    migrated: normalized.migrated,
                 } satisfies VoteModel;
             })
             .filter((item): item is VoteModel => item !== null)
@@ -148,7 +175,8 @@ export const useVotes = (proposalId: string, roomId: string) => {
 
         const latestByVoter = new Map<string, VoteModel>();
         votes.forEach((vote) => {
-            if (!latestByVoter.has(vote.voterId)) {
+            const existing = latestByVoter.get(vote.voterId);
+            if (!existing || vote.timestamp > existing.timestamp) {
                 latestByVoter.set(vote.voterId, vote);
             }
         });
@@ -159,6 +187,13 @@ export const useVotes = (proposalId: string, roomId: string) => {
             data: effectiveVotes,
             loading: timeline.loading,
             error: timeline.error,
+            diagnostics: {
+                invalidProposalEvents: 0,
+                invalidVoteEvents,
+                migratedProposalEvents: 0,
+                migratedVoteEvents,
+                duplicateVoteEventsDropped,
+            } satisfies GovernanceEventDiagnostics,
         };
     }, [proposalId, timeline.data, timeline.error, timeline.loading]);
 };
@@ -176,7 +211,12 @@ export const useCastVote = (roomId: string) => {
                         content: Record<string, unknown>,
                     ) => Promise<unknown>;
                 }
-            ).sendEvent(roomId, VOTE_EVENT_TYPE, payload as unknown as Record<string, unknown>);
+            ).sendEvent(roomId, VOTE_EVENT_TYPE, {
+                ...payload,
+                schemaVersion: GOVERNANCE_SCHEMA_VERSION,
+                voteId: crypto.randomUUID(),
+                submittedAt: Date.now(),
+            });
         },
         [client, roomId],
     );
@@ -259,12 +299,25 @@ export const useCreateProposal = (roomId: string) => {
             await client.sendStateEvent(
                 roomId,
                 PROPOSAL_EVENT_TYPE as never,
-                content as never,
+                { ...content, schemaVersion: GOVERNANCE_SCHEMA_VERSION } as never,
                 stateKey,
             );
         },
         [client, roomId],
     );
+};
+
+export const useGovernanceDiagnostics = (roomId: string, selectedProposalId?: string) => {
+    const proposals = useProposals(roomId);
+    const votes = useVotes(selectedProposalId ?? null, roomId);
+
+    return {
+        invalidProposalEvents: proposals.diagnostics.invalidProposalEvents,
+        migratedProposalEvents: proposals.diagnostics.migratedProposalEvents,
+        invalidVoteEvents: votes.diagnostics.invalidVoteEvents,
+        migratedVoteEvents: votes.diagnostics.migratedVoteEvents,
+        duplicateVoteEventsDropped: votes.diagnostics.duplicateVoteEventsDropped,
+    } satisfies GovernanceEventDiagnostics;
 };
 
 export { PROPOSAL_EVENT_TYPE, VOTE_EVENT_TYPE };
