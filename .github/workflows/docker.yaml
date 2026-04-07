@@ -41,6 +41,7 @@ jobs:
               uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
               with:
                   context: .
+                  file: Dockerfile.blackout
                   load: true
 
             - name: Test the image
@@ -151,6 +152,7 @@ jobs:
               if: github.event_name != 'pull_request'
               with:
                   context: .
+                  file: Dockerfile.blackout
                   push: true
                   platforms: linux/amd64,linux/arm64
                   tags: ${{ steps.meta.outputs.tags }}
