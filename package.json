@@ -51,7 +51,8 @@
     "contracts:generate": "pnpm --filter @blackout/contracts generate",
     "contracts:check": "node tools/ci/check-contracts-generated.mjs",
     "guard:call-config": "node tools/ci/check-call-config.mjs",
-    "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs"
+    "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
+    "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

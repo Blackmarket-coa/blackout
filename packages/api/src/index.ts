@@ -9,7 +9,9 @@ import channelRoutes from './routes/channels';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
+import { runSecurityPreflight } from './config/security';
 
+const securityPreflight = runSecurityPreflight();
 const app = new Hono();
 const API_ALIAS_REMOVAL_DATE = '2026-08-31';
 const legacyAliasEnabled = new Date() < new Date(`${API_ALIAS_REMOVAL_DATE}T00:00:00.000Z`);
@@ -41,6 +43,6 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/channels`, channelRoutes);
 }
 
-app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE }));
+app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
 export default app;

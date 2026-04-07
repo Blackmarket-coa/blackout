@@ -76,6 +76,14 @@ This plan covers:
 **Acceptance**
 - Service refuses to boot with missing/weak secrets.
 - Rotation can be executed without user-visible auth outage.
+**Implementation status (2026-04-07)**
+- [x] Removed insecure fallback JWT defaults in API auth service.
+- [x] Added startup security preflight for secret/env/token transport validation.
+- [x] Added dual-key rollover support (`JWT_SECRET_PRIMARY` + `JWT_SECRET_ROLLOVER`).
+- [x] Added production cookie/token security validation guardrails.
+- [x] Added CI hardening guard against insecure auth defaults (`pnpm guard:auth-secrets`).
+- [x] Added rotation runbook: `docs/operations/runbooks/auth-secret-rotation-and-rollover.md`.
+
 
 **Repository task split**
 - **blackout**: Enforce secure session handling expectations on the client (cookie/token expiry UX and forced re-auth flow).
