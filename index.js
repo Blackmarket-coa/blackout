@@ -27,6 +27,23 @@ function resolvePublicBaseUrl() {
   return `http://0.0.0.0:${port}`;
 }
 
+
+function readCallHealth() {
+  const livekitUrl = process.env.LIVEKIT_PUBLIC_URL?.trim() ?? null;
+  const jwtUrl = process.env.LIVEKIT_JWT_URL?.trim() ?? null;
+  const configured = Boolean(livekitUrl && jwtUrl);
+
+  return {
+    configured,
+    provider: configured ? "matrixrtc-livekit" : "widget-fallback",
+    livekitUrl,
+    jwtUrl,
+    message: configured
+      ? "LiveKit call endpoints configured."
+      : "LiveKit call endpoints missing; clients should use widget fallback mode.",
+  };
+}
+
 function resolveFrontendRoot() {
   if (fs.existsSync(frontendBuildRoot) && fs.statSync(frontendBuildRoot).isDirectory()) {
     return frontendBuildRoot;
@@ -76,6 +93,16 @@ const publicBaseUrl = resolvePublicBaseUrl();
 const server = http.createServer((req, res) => {
   const { method = "GET", url = "/" } = req;
 
+  if (method === "GET" && url === "/health/calls") {
+    const callHealth = readCallHealth();
+    sendJson(res, callHealth.configured ? 200 : 206, {
+      ok: callHealth.configured,
+      service: "blackout-monorepo",
+      calls: callHealth,
+    });
+    return;
+  }
+
   if (method === "GET" && (url === "/health" || url === "/ready")) {
     sendJson(res, 200, {
       ok: true,
@@ -85,6 +112,7 @@ const server = http.createServer((req, res) => {
         environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
         service: process.env.RAILWAY_SERVICE_NAME ?? null,
       },
+      calls: readCallHealth(),
     });
     return;
   }

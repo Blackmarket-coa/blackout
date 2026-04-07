@@ -115,6 +115,13 @@ This plan covers:
 **Acceptance**
 - Synthetic call check passes continuously in staging.
 - User-facing error states are actionable and non-blocking.
+**Implementation status (2026-04-07)**
+- [x] Config guard script: `tools/ci/check-call-config.mjs` (`pnpm guard:call-config`).
+- [x] Synthetic probe script: `tools/ci/synthetic-call-probe.mjs` (`pnpm probe:calls:synthetic`).
+- [x] App health endpoint exposes call readiness at `/health/calls`.
+- [x] Degraded-mode user messaging + fallback behavior implemented in `CallProvider`/`VoiceChannel`.
+- [x] Incident runbook published: `docs/operations/runbooks/call-realtime-incident-and-degraded-mode.md`.
+
 
 **Repository task split**
 - **blackout**: Call controls, degraded mode messaging, and client diagnostics surface.

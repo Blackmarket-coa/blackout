@@ -26,6 +26,8 @@ export const VoiceChannel = ({
         leaveCall,
         membership,
         audioLevels,
+        focusStatus,
+        focusMessage,
     } = useCall();
     const [selectedAudioDevice, setSelectedAudioDevice] = useState('');
     const [selectedVideoDevice, setSelectedVideoDevice] = useState('');
@@ -99,8 +101,24 @@ export const VoiceChannel = ({
                 </button>
             </header>
 
+            {focusStatus !== 'healthy' ? (
+                <div
+                    style={{
+                        marginBottom: 10,
+                        border: '1px solid var(--warning-border, #b38b2e)',
+                        background: 'var(--warning-bg, rgba(179, 139, 46, 0.15))',
+                        borderRadius: 8,
+                        padding: '8px 10px',
+                        fontSize: 12,
+                    }}
+                    data-testid="call-provider-degraded"
+                >
+                    {focusMessage}
+                </div>
+            ) : null}
+
             {joined && activeCallRoomId === roomId ? (
-                <CallWidget roomId={roomId} mode="sdk" />
+                <CallWidget roomId={roomId} mode={focusStatus === 'healthy' ? 'sdk' : 'widget'} />
             ) : null}
 
             <div
