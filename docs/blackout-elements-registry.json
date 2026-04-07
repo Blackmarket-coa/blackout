@@ -2,28 +2,316 @@
   "meta": {
     "generated": "2026-04-07",
     "branch": "claude/gather-blackout-elements-zgceX",
-    "description": "Consolidated registry of all Blackout elements: legacy features, customized features, user elements, quick actions, themes, presets, and UI entrypoints."
+    "description": "Code-based inventory of all user-facing Blackout elements: client shell, custom feature modules, quick actions with preset gating, settings/customization, legacy compatibility, and persisted event/data keys."
   },
 
-  "legacyFeatures": {
-    "description": "Legacy feature flags from the ported Element Web module system (_port/src/modules/blackout/featureFlags.ts). DEPRECATED — migrate to the preset-based system.",
-    "enumValues": [
-      { "key": "Governance",              "settingKey": "feature_blackout_governance",              "legacyAlias": "feature_governance" },
-      { "key": "Education",               "settingKey": "feature_blackout_education",               "legacyAlias": "feature_education" },
-      { "key": "MutualAid",               "settingKey": "feature_blackout_mutual_aid",              "legacyAlias": "feature_mutual_aid" },
-      { "key": "DeliberationClustering",  "settingKey": "feature_blackout_deliberation_clustering", "legacyAlias": "feature_deliberation_clustering" },
-      { "key": "IpfsStorage",             "settingKey": "feature_blackout_ipfs_storage",            "legacyAlias": "feature_ipfs_storage" },
-      { "key": "Townhall",                "settingKey": "feature_blackout_townhall",                "legacyAlias": "feature_townhall" }
+  "coreClientShell": {
+    "description": "Primary layout elements of the blackout-client shell (ClientLayout). All surfaces are wired into the main client layout and rendered on both desktop and mobile unless noted.",
+    "elements": [
+      {
+        "name": "RoomTimeline",
+        "path": "apps/blackout-client/src/app/features/room/RoomTimeline.tsx",
+        "description": "Message display and virtualized timeline for the active room."
+      },
+      {
+        "name": "MessageComposer",
+        "path": "apps/blackout-client/src/app/features/room/MessageComposer.tsx",
+        "description": "Rich-text composer with slash-command queue, reply, edit, and reaction support."
+      },
+      {
+        "name": "QuickSwitcher",
+        "path": "apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx",
+        "description": "Cmd/Ctrl+K room/space switcher overlay."
+      },
+      {
+        "name": "GlobalMentionsInbox",
+        "path": "apps/blackout-client/src/app/features/navigation/GlobalMentionsInbox.tsx",
+        "description": "Cross-room mention inbox panel."
+      },
+      {
+        "name": "GlobalHeaderInboxLauncher",
+        "path": "apps/blackout-client/src/app/features/navigation/GlobalHeaderInboxLauncher.tsx",
+        "description": "Header button that toggles the mentions inbox."
+      },
+      {
+        "name": "SettingsPage",
+        "path": "apps/blackout-client/src/app/features/settings/SettingsPage.tsx",
+        "description": "Full-screen settings overlay shell; active section driven by settingsPageAtom."
+      },
+      {
+        "name": "RightPanelContent",
+        "path": "apps/blackout-client/src/app/features/right-panel/RightPanelContent.tsx",
+        "description": "Dynamic right-sidebar host. Surfaces: members list, threads, pinned messages, room search, governance panel.",
+        "surfaces": ["members", "threads", "pins", "search", "governance"]
+      },
+      {
+        "name": "SpaceTree",
+        "path": "apps/blackout-client/src/app/features/spaces/SpaceTree.tsx",
+        "description": "Left-sidebar space/room hierarchy navigator."
+      },
+      {
+        "name": "DeadDropIndicator",
+        "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropIndicator.tsx",
+        "description": "Inline room indicator showing queue count and next delivery time; hooks into useDeadDrop."
+      },
+      {
+        "name": "DeadDropComposer",
+        "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropComposer.tsx",
+        "description": "Composer extension for queuing ephemeral dead-drop messages."
+      },
+      {
+        "name": "DeadDropSettings",
+        "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropSettings.tsx",
+        "description": "Room-level settings panel for schedule, anonymize, queue size, and retention."
+      },
+      {
+        "name": "OnboardingWizard",
+        "path": "apps/blackout-client/src/app/features/welcome/OnboardingWizard.tsx",
+        "description": "Multi-step onboarding wizard shown on first run."
+      },
+      {
+        "name": "WelcomeScreen",
+        "path": "apps/blackout-client/src/app/features/welcome/WelcomeScreen.tsx",
+        "description": "Initial welcome screen rendered before room selection."
+      }
     ],
-    "legacyThemes": {
-      "dark":   "dark_canopy",
-      "light":  "light_grove",
-      "amoled": "amoled_night"
+    "hooks": [
+      { "name": "useMatrixClient",      "path": "apps/blackout-client/src/app/hooks/useMatrixClient.ts" },
+      { "name": "useTimeline",          "path": "apps/blackout-client/src/app/hooks/useTimeline.ts" },
+      { "name": "useRoom",              "path": "apps/blackout-client/src/app/hooks/useRoom.ts" },
+      { "name": "useNotifications",     "path": "apps/blackout-client/src/app/hooks/useNotifications.ts" },
+      { "name": "useSpaceHierarchy",    "path": "apps/blackout-client/src/app/hooks/useSpaceHierarchy.ts" },
+      { "name": "useTyping",            "path": "apps/blackout-client/src/app/hooks/useTyping.ts" },
+      { "name": "usePowerLevels",       "path": "apps/blackout-client/src/app/hooks/usePowerLevels.ts" },
+      { "name": "useMentionNavigation", "path": "apps/blackout-client/src/app/features/navigation/useMentionNavigation.ts" },
+      { "name": "useInboxModel",        "path": "apps/blackout-client/src/app/features/navigation/useInboxModel.ts" },
+      { "name": "useWelcome",           "path": "apps/blackout-client/src/app/features/welcome/useWelcome.ts" }
+    ]
+  },
+
+  "customFeatureModules": {
+    "description": "Blackout-specific feature domains exported from apps/blackout-client/src/app/features/. Each module is independently gated by its preset flag.",
+    "call": {
+      "presetKey": "features.call.elementCall",
+      "components": [
+        { "name": "CallProvider",       "path": "apps/blackout-client/src/app/features/call/CallProvider.tsx",      "description": "Context provider that bootstraps Element Call and manages call lifecycle." },
+        { "name": "CallWidget",         "path": "apps/blackout-client/src/app/features/call/CallWidget.tsx",        "description": "Element Call iframe widget integration." },
+        { "name": "CallControls",       "path": "apps/blackout-client/src/app/features/call/CallControls.tsx",      "description": "Mute/camera/hang-up control bar." },
+        { "name": "VoiceChannel",       "path": "apps/blackout-client/src/app/features/call/VoiceChannel.tsx",      "description": "Persistent voice channel UI (Discord-style always-on)." },
+        { "name": "SpeakingIndicator",  "path": "apps/blackout-client/src/app/features/call/SpeakingIndicator.tsx", "description": "Per-participant speaking ring/pulse indicator." }
+      ]
     },
-    "legacyPresets": {
-      "tier_free":       "starter",
-      "tier_pro":        "governance",
-      "tier_enterprise": "sovereignty"
+    "deaddrop": {
+      "presetKey": "features.bmc.deaddrop",
+      "matrixEventTypes": [
+        { "type": "co.bmc.deaddrop",         "description": "Room state: Dead Drop config (enabled, schedule, anonymize, maxQueueSize, retentionHours)." },
+        { "type": "co.bmc.deaddrop.queue",   "description": "Room state: Current queue count." },
+        { "type": "co.bmc.deaddrop.command", "description": "Room state: Operator commands — flush or clear, with timestamp." }
+      ],
+      "scheduleTypes": ["interval", "cron", "manual"],
+      "defaultConfig": {
+        "enabled": false,
+        "schedule": { "type": "interval", "intervalMinutes": 60 },
+        "anonymize": false,
+        "maxQueueSize": 100,
+        "retentionHours": 48
+      },
+      "components": [
+        { "name": "DeadDropComposer",  "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropComposer.tsx" },
+        { "name": "DeadDropIndicator", "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropIndicator.tsx" },
+        { "name": "DeadDropSettings",  "path": "apps/blackout-client/src/app/features/deaddrop/DeadDropSettings.tsx" }
+      ],
+      "hooks": [
+        { "name": "useDeadDrop",             "description": "Reads config + queue count from room state." },
+        { "name": "useSetDeadDrop",          "description": "Sends co.bmc.deaddrop state event to configure." },
+        { "name": "useDeadDropQueueActions", "description": "Sends flush/clear co.bmc.deaddrop.command events." }
+      ]
+    },
+    "forum": {
+      "presetKey": "features.bmc.forum",
+      "components": [
+        { "name": "ForumView",       "path": "apps/blackout-client/src/app/features/forum/ForumView.tsx",       "description": "Thread-list view for forum-style channels." },
+        { "name": "ForumPost",       "path": "apps/blackout-client/src/app/features/forum/ForumPost.tsx",       "description": "Individual forum post with replies." },
+        { "name": "CreatePostModal", "path": "apps/blackout-client/src/app/features/forum/CreatePostModal.tsx", "description": "New post creation modal." }
+      ],
+      "hooks": [{ "name": "useForum", "path": "apps/blackout-client/src/app/features/forum/useForum.ts" }]
+    },
+    "governance": {
+      "presetKey": "features.bmc.governance",
+      "matrixEventTypes": [
+        { "type": "co.bmc.proposal", "description": "Proposal creation and content." },
+        { "type": "co.bmc.vote",     "description": "Per-user vote cast on a proposal." }
+      ],
+      "reputationTiers": [
+        { "tier": "member",      "threshold": 0    },
+        { "tier": "vendor",      "threshold": 100  },
+        { "tier": "coordinator", "threshold": 500  },
+        { "tier": "arbiter",     "threshold": 1000 }
+      ],
+      "components": [
+        { "name": "GovernanceDashboard", "path": "apps/blackout-client/src/app/features/governance/GovernanceDashboard.tsx", "description": "Overview of all active/closed proposals." },
+        { "name": "ProposalCreator",     "path": "apps/blackout-client/src/app/features/governance/ProposalCreator.tsx",     "description": "Form for drafting and submitting a new proposal." },
+        { "name": "ProposalCard",        "path": "apps/blackout-client/src/app/features/governance/ProposalCard.tsx",        "description": "Summary card used in list views." },
+        { "name": "ProposalDetail",      "path": "apps/blackout-client/src/app/features/governance/ProposalDetail.tsx",      "description": "Full proposal detail with vote breakdown." }
+      ],
+      "hooks": [{ "name": "useProposals", "path": "apps/blackout-client/src/app/features/governance/useProposals.ts" }]
+    },
+    "moderation": {
+      "presetKeys": {
+        "automod":       "features.bmc.automod",
+        "timeout":       "features.bmc.timeout",
+        "auditLog":      "features.bmc.auditLog",
+        "raidProtection":"features.bmc.raidProtection"
+      },
+      "components": [
+        { "name": "AutoModPanel",       "path": "apps/blackout-client/src/app/features/moderation/AutoModPanel.tsx",       "description": "Rule configuration for AutoMod." },
+        { "name": "KeywordFilterEditor","path": "apps/blackout-client/src/app/features/moderation/KeywordFilterEditor.tsx", "description": "Keyword block/allow list editor." },
+        { "name": "TimeoutDialog",      "path": "apps/blackout-client/src/app/features/moderation/TimeoutDialog.tsx",      "description": "User timeout duration picker." },
+        { "name": "ModActionLog",       "path": "apps/blackout-client/src/app/features/moderation/ModActionLog.tsx",       "description": "Paginated audit log of moderation actions." }
+      ],
+      "draupnir": {
+        "description": "Draupnir moderation-bot integration (ban lists, protection status, mod dashboard).",
+        "components": [
+          { "name": "DraupnirRoutePage", "path": "apps/blackout-client/src/app/features/moderation/draupnir/DraupnirRoutePage.tsx", "description": "Top-level Draupnir UI route." },
+          { "name": "ModDashboard",      "path": "apps/blackout-client/src/app/features/moderation/draupnir/ModDashboard.tsx",      "description": "Moderation stats and active-protection overview." },
+          { "name": "ProtectionStatus",  "path": "apps/blackout-client/src/app/features/moderation/draupnir/ProtectionStatus.tsx",  "description": "Active protection/ban-list status panel." },
+          { "name": "BanListViewer",     "path": "apps/blackout-client/src/app/features/moderation/draupnir/BanListViewer.tsx",     "description": "Browse and manage ban lists." }
+        ],
+        "utilities": [
+          { "name": "DraupnirClient", "path": "apps/blackout-client/src/app/features/moderation/draupnir/DraupnirClient.ts", "description": "HTTP client for Draupnir bot API." },
+          { "name": "quickActions",   "path": "apps/blackout-client/src/app/features/moderation/draupnir/quickActions.ts",  "description": "Draupnir-specific quick action definitions." },
+          { "name": "access",         "path": "apps/blackout-client/src/app/features/moderation/draupnir/access.ts",        "description": "Permission/role checks for Draupnir actions." }
+        ]
+      }
+    },
+    "profile": {
+      "presetKey": "features.bmc.extendedProfile",
+      "matrixEventType": "co.bmc.profile",
+      "schema": {
+        "displayName":  { "type": "string" },
+        "avatarUrl":    { "type": "string" },
+        "banner":       { "type": "string", "description": "Profile banner image MXC URL." },
+        "bio":          { "type": "string", "maxLength": 2000 },
+        "pronouns":     { "type": "string", "maxLength": 60 },
+        "connections":  {
+          "type": "array",
+          "itemFields": {
+            "type":     "github | website | x | linkedin | matrix | other",
+            "url":      "string",
+            "username": "string (optional)",
+            "label":    "string (optional)"
+          }
+        },
+        "decoration":   { "type": "string", "description": "Avatar decoration ID; gated by entitlement check." },
+        "primaryRole":  { "type": "string" },
+        "roleBadges":   { "type": "string[]" },
+        "mutualSpaces": { "type": "string[]" },
+        "isFriend":     { "type": "boolean" }
+      },
+      "components": [
+        { "name": "ProfileModal",    "path": "apps/blackout-client/src/app/features/profile/ProfileModal.tsx",    "description": "Full profile view modal." },
+        { "name": "ProfileEditor",   "path": "apps/blackout-client/src/app/features/profile/ProfileEditor.tsx",   "description": "Edit bio, pronouns, connections, banner." },
+        { "name": "MiniProfile",     "path": "apps/blackout-client/src/app/features/profile/MiniProfile.tsx",     "description": "Compact hover/popover profile card." },
+        { "name": "AvatarDecoration","path": "apps/blackout-client/src/app/features/profile/AvatarDecoration.tsx","description": "Renders CSS gradient/glow ring around avatar." }
+      ],
+      "atoms": [
+        { "name": "profileAtoms", "path": "apps/blackout-client/src/app/features/profile/profileAtoms.ts" }
+      ]
+    },
+    "roles": {
+      "presetKey": "features.bmc.roles",
+      "matrixEventType": "co.bmc.roles",
+      "components": [
+        { "name": "RoleEditor", "path": "apps/blackout-client/src/app/features/roles/RoleEditor.tsx", "description": "Create and edit named roles." },
+        { "name": "RolePicker", "path": "apps/blackout-client/src/app/features/roles/RolePicker.tsx", "description": "Assign a role to a room member." },
+        { "name": "RoleBadge",  "path": "apps/blackout-client/src/app/features/roles/RoleBadge.tsx",  "description": "Inline badge rendered next to display name." }
+      ],
+      "hooks": [{ "name": "useRoles", "path": "apps/blackout-client/src/app/features/roles/useRoles.ts" }]
+    },
+    "steganography": {
+      "presetKey": "features.bmc.steganography",
+      "storageKey": "blackout.settings.steganography.v1",
+      "persistedState": {
+        "enabled":           { "type": "boolean", "default": true },
+        "savedPassphrases":  { "type": "StegoPassphraseEntry[]", "default": [] }
+      },
+      "primitives": [
+        { "name": "SteganographyEncoder", "path": "apps/blackout-client/src/app/features/steganography/SteganographyEncoder.ts", "description": "XOR-based carrier encoding." },
+        { "name": "SteganographyDecoder", "path": "apps/blackout-client/src/app/features/steganography/SteganographyDecoder.ts", "description": "XOR-based carrier decoding." }
+      ],
+      "components": [
+        { "name": "HideMessageDialog",  "path": "apps/blackout-client/src/app/features/steganography/HideMessageDialog.tsx",  "description": "Dialog for encoding a hidden message into a carrier." },
+        { "name": "RevealMessagePanel", "path": "apps/blackout-client/src/app/features/steganography/RevealMessagePanel.tsx", "description": "Panel to decode and display a hidden message." },
+        { "name": "StegoSettings",      "path": "apps/blackout-client/src/app/features/steganography/StegoSettings.tsx",      "description": "Manage saved passphrases and toggle stego on/off." }
+      ],
+      "atoms": [{ "name": "stegoSettingsAtom", "path": "apps/blackout-client/src/app/features/steganography/stegoAtoms.ts" }]
+    },
+    "welcome": {
+      "presetKey": "features.bmc.welcome",
+      "onboardingPresetKey": "features.bmc.onboarding",
+      "components": [
+        { "name": "WelcomeScreen",    "path": "apps/blackout-client/src/app/features/welcome/WelcomeScreen.tsx",    "description": "Static welcome screen for first-time users." },
+        { "name": "WelcomeEditor",    "path": "apps/blackout-client/src/app/features/welcome/WelcomeEditor.tsx",    "description": "Admin editor for customizing welcome content." },
+        { "name": "OnboardingWizard", "path": "apps/blackout-client/src/app/features/welcome/OnboardingWizard.tsx", "description": "Step-by-step onboarding flow." }
+      ],
+      "hooks": [{ "name": "useWelcome", "path": "apps/blackout-client/src/app/features/welcome/useWelcome.ts" }]
+    }
+  },
+
+  "legacyCompatibility": {
+    "featureFlags": {
+      "description": "BlackoutFeature enum from _port/src/modules/blackout/featureFlags.ts. DEPRECATED — migrate to preset-based flags. isBlackoutFeatureEnabled() checks primary key then falls back to legacyAlias.",
+      "source": "_port/src/modules/blackout/featureFlags.ts",
+      "flags": [
+        { "key": "Governance",             "settingKey": "feature_blackout_governance",              "legacyAlias": "feature_governance" },
+        { "key": "Education",              "settingKey": "feature_blackout_education",               "legacyAlias": "feature_education" },
+        { "key": "MutualAid",              "settingKey": "feature_blackout_mutual_aid",              "legacyAlias": "feature_mutual_aid" },
+        { "key": "DeliberationClustering", "settingKey": "feature_blackout_deliberation_clustering", "legacyAlias": "feature_deliberation_clustering" },
+        { "key": "IpfsStorage",            "settingKey": "feature_blackout_ipfs_storage",            "legacyAlias": "feature_ipfs_storage" },
+        { "key": "Townhall",               "settingKey": "feature_blackout_townhall",                "legacyAlias": "feature_townhall" }
+      ]
+    },
+    "themeIds": {
+      "description": "Old theme IDs normalised to canonical IDs by normalizeThemeId() in packages/core/src/themes.ts. Theme parity confirmed by apps/blackout-client/src/app/features/settings/theme-parity.test.ts.",
+      "migrationMap": {
+        "dark":   "dark_canopy",
+        "light":  "light_grove",
+        "amoled": "amoled_night"
+      }
+    },
+    "presetNames": {
+      "description": "Old tier-based preset names normalised by normalizeFeaturePresetKey() in apps/blackout-web/src/settings/feature-presets.ts.",
+      "migrationMap": {
+        "tier_free":       "starter",
+        "tier_pro":        "governance",
+        "tier_enterprise": "sovereignty"
+      }
+    },
+    "apiAlias": {
+      "description": "Legacy /api/* route alias for /v1/*. Tracked in packages/api/src/telemetry/api-alias-usage.ts. Removal scheduled via API_ALIAS_REMOVAL_DATE env var.",
+      "legacyRoot": "/api",
+      "canonicalRoot": "/v1"
+    },
+    "legacyCallStack": {
+      "description": "Ported Element Web call UI components in _port/. Being replaced by the new call feature module in blackout-client.",
+      "source": "_port/src/",
+      "components": [
+        { "name": "LegacyCallHandler",          "path": "_port/src/LegacyCallHandler.tsx" },
+        { "name": "LegacyCallView",             "path": "_port/src/components/views/voip/LegacyCallView.tsx" },
+        { "name": "LegacyCallViewButtons",      "path": "_port/src/components/views/voip/LegacyCallView/LegacyCallViewButtons.tsx" },
+        { "name": "LegacyCallViewHeader",       "path": "_port/src/components/views/voip/LegacyCallView/LegacyCallViewHeader.tsx" },
+        { "name": "LegacyCallViewSidebar",      "path": "_port/src/components/views/voip/LegacyCallViewSidebar.tsx" },
+        { "name": "LegacyCallViewForRoom",      "path": "_port/src/components/views/voip/LegacyCallViewForRoom.tsx" },
+        { "name": "LegacyCallEvent",            "path": "_port/src/components/views/messages/LegacyCallEvent.tsx" },
+        { "name": "LegacyCallContextMenu",      "path": "_port/src/components/views/context_menus/LegacyCallContextMenu.tsx" },
+        { "name": "LegacyCallEventGrouper",     "path": "_port/src/components/structures/LegacyCallEventGrouper.ts" },
+        { "name": "LegacyCallHangupEvent",      "path": "_port/src/stores/room-list/previews/LegacyCallHangupEvent.ts" },
+        { "name": "LegacyCallAnswerEventPreview","path": "_port/src/stores/room-list/previews/LegacyCallAnswerEventPreview.ts" },
+        { "name": "LegacyCallInviteEventPreview","path": "_port/src/stores/room-list/previews/LegacyCallInviteEventPreview.ts" },
+        { "name": "LegacySeekBar",              "path": "_port/src/components/views/audio_messages/LegacySeekBar.tsx" },
+        { "name": "LegacyRoomList",             "path": "_port/src/components/views/rooms/LegacyRoomList.tsx" },
+        { "name": "LegacyRoomListHeader",       "path": "_port/src/components/views/rooms/LegacyRoomListHeader.tsx" }
+      ]
     }
   },
 
@@ -228,17 +516,128 @@
   },
 
   "quickActions": {
-    "description": "Radial menu and context action system defined in packages/core/src/quick-actions.ts.",
-    "radialMenu": [
-      { "label": "Vote",     "angle": 0   },
-      { "label": "People",   "angle": 45  },
-      { "label": "Create",   "angle": 90  },
-      { "label": "Map",      "angle": 135 },
-      { "label": "Events",   "angle": 180 },
-      { "label": "Settings", "angle": 225 },
-      { "label": "Message",  "angle": 270 },
-      { "label": "Search",   "angle": 315 }
-    ],
+    "clientActions": {
+      "description": "Quick action IDs, preset gating, and invocation logic from apps/blackout-client/src/app/features/quick-actions/featureEntrypoints.ts.",
+      "source": "apps/blackout-client/src/app/features/quick-actions/featureEntrypoints.ts",
+      "surfaces": ["desktop", "mobile"],
+      "storageKeys": {
+        "collapsed": "blackout.quick_actions.collapsed",
+        "seen":      "blackout.quick_actions.seen"
+      },
+      "firstRunBehavior": "getUnseenQuickActionIds() compares visible entry IDs against the seen set and returns unseen IDs for new-shortcut guidance. markQuickActionsSeen() persists to the seen key.",
+      "collapsedBehavior": "readQuickActionCollapsed() / writeQuickActionCollapsed() control the collapsed remember-state via the collapsed key.",
+      "entries": [
+        {
+          "id": "open-settings",
+          "label": "Settings",
+          "description": "Open appearance and account settings.",
+          "presetKey": "features.settings.appearance",
+          "availableIn": ["governance", "sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.openSettings()"
+        },
+        {
+          "id": "open-devices",
+          "label": "Devices",
+          "description": "Open voice and camera preferences.",
+          "presetKey": "features.settings.account",
+          "availableIn": ["governance", "sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.openDevices()"
+        },
+        {
+          "id": "open-inbox",
+          "label": "Inbox",
+          "description": "Open mention inbox.",
+          "presetKey": "features.settings.account",
+          "availableIn": ["governance", "sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.toggleInbox()"
+        },
+        {
+          "id": "open-threads",
+          "label": "Threads",
+          "description": "Open thread panel for the active room.",
+          "presetKey": "features.timeline.threads",
+          "availableIn": ["sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.openThreads()"
+        },
+        {
+          "id": "open-search",
+          "label": "Search",
+          "description": "Open room search panel.",
+          "presetKey": "features.nav.search",
+          "availableIn": ["sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.openSearch()"
+        },
+        {
+          "id": "compose-join",
+          "label": "/join",
+          "description": "Queue the /join command in composer.",
+          "presetKey": "features.nav.roomInvites",
+          "availableIn": ["sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.queueCommand('/join')"
+        },
+        {
+          "id": "compose-invite",
+          "label": "/invite",
+          "description": "Queue the /invite command in composer.",
+          "presetKey": "features.nav.roomInvites",
+          "availableIn": ["sovereignty"],
+          "surfaces": ["desktop", "mobile"],
+          "invocation": "context.queueCommand('/invite')"
+        }
+      ],
+      "presetFlags": {
+        "starter": {
+          "features.settings.appearance": false,
+          "features.settings.account":    false,
+          "features.nav.roomInvites":      false,
+          "features.nav.search":           false,
+          "features.timeline.threads":     false
+        },
+        "governance": {
+          "features.settings.appearance": true,
+          "features.settings.account":    true,
+          "features.nav.roomInvites":      false,
+          "features.nav.search":           false,
+          "features.timeline.threads":     false
+        },
+        "sovereignty": {
+          "features.settings.appearance": true,
+          "features.settings.account":    true,
+          "features.nav.roomInvites":      true,
+          "features.nav.search":           true,
+          "features.timeline.threads":     true
+        }
+      },
+      "registryApi": [
+        "buildFeatureEntrypointRegistry(options) → FeatureEntrypointRegistry",
+        "getQuickActionEntriesForSurface(registry, surface) → FeatureEntry[]",
+        "invokeQuickAction(actionId, context) → void",
+        "readQuickActionCollapsed() → boolean",
+        "writeQuickActionCollapsed(collapsed) → void",
+        "getUnseenQuickActionIds(visibleEntries) → QuickActionId[]",
+        "markQuickActionsSeen(entryIds) → void"
+      ]
+    },
+    "radialMenu": {
+      "description": "8-item circular radial menu from packages/core/src/quick-actions.ts (VineActions/RadialBloom UI).",
+      "source": "packages/core/src/quick-actions.ts",
+      "items": [
+        { "label": "Vote",     "angle": 0   },
+        { "label": "People",   "angle": 45  },
+        { "label": "Create",   "angle": 90  },
+        { "label": "Map",      "angle": 135 },
+        { "label": "Events",   "angle": 180 },
+        { "label": "Settings", "angle": 225 },
+        { "label": "Message",  "angle": 270 },
+        { "label": "Search",   "angle": 315 }
+      ]
+    },
     "domainActions": {
       "governance": ["Active votes", "Results", "Proposals", "Delegates"],
       "trade":      ["Marketplace", "Payments", "My orders"],
@@ -252,7 +651,7 @@
         { "label": "Share" },
         { "label": "React" }
       ],
-      "file": [
+      "file":  [
         { "label": "Download" },
         { "label": "Preview" },
         { "label": "Share" },
@@ -266,70 +665,98 @@
         { "label": "Flag" }
       ]
     },
-    "avatarActions": ["DM", "View profile", "Trade", "Follow"],
-    "persistedState": {
-      "collapsed": "localStorage: blackout.quick_actions.collapsed",
-      "seen":      "localStorage: blackout.quick_actions.seen"
-    }
+    "avatarActions": ["DM", "View profile", "Trade", "Follow"]
   },
 
-  "userElements": {
-    "appSettings": {
-      "storageKey": "blackout.settings.v1",
-      "source": "apps/blackout-client/src/app/state/settings.ts",
-      "fields": {
-        "theme":                  { "type": "ThemePreference", "default": "dark_canopy" },
-        "pageZoom":               { "type": "number",  "default": 1 },
-        "twitterEmoji":           { "type": "boolean", "default": true },
-        "showNotifications":      { "type": "boolean", "default": true },
-        "isNotificationSounds":   { "type": "boolean", "default": true },
-        "chatDensity":            { "type": "compact|comfortable|cozy", "default": "comfortable" },
-        "devMode":                { "type": "boolean", "default": false },
-        "streamerMode":           { "type": "boolean", "default": false },
-        "layout.spaceColumnWidth":{ "type": "number",  "default": 64 },
-        "layout.roomColumnWidth": { "type": "number",  "default": 260 },
-        "mobileRoomListScope":    { "type": "space|all", "default": "space" },
-        "preferredAudioDeviceId": { "type": "string|undefined" },
-        "preferredVideoDeviceId": { "type": "string|undefined" }
+  "settingsAndCustomization": {
+    "description": "Settings sections and all persisted customization atoms.",
+    "sections": [
+      { "id": "account",       "component": "AccountSettings.tsx",       "description": "Display name, avatar, password, email, connected accounts." },
+      { "id": "appearance",    "component": "AppearanceSettings.tsx",    "description": "Theme, accent color, font scale, chat density, emoji style, timestamp visibility, message grouping." },
+      { "id": "notifications", "component": "NotificationSettings.tsx",  "description": "Global mode, per-room overrides, desktop notifications, sound and volume, taskbar flash." },
+      { "id": "privacy",       "component": "PrivacySettings.tsx",       "description": "Blocked users, DM permissions, read receipts, typing indicators." },
+      { "id": "voice-video",   "component": "VoiceVideoSettings.tsx",    "description": "Preferred audio and video device selection." },
+      { "id": "accessibility", "component": "AccessibilitySettings.tsx", "description": "Reduced motion, high-contrast, and other a11y toggles." },
+      { "id": "keybinds",      "component": "KeybindsSettings.tsx",      "description": "Keyboard shortcut viewer and rebind UI." },
+      { "id": "developer",     "component": "DeveloperSettings.tsx",     "description": "Dev mode, streamer mode, and diagnostic toggles." },
+      { "id": "about",         "component": "AboutSettings.tsx",         "description": "App version, licenses, and build info." }
+    ],
+    "persistedAtoms": [
+      {
+        "atom": "settingsPageAtom",
+        "storageKey": "blackout.settings.active-section.v1",
+        "type": "SettingsSectionId",
+        "default": "appearance",
+        "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts"
+      },
+      {
+        "atom": "appearanceSettingsAtom",
+        "storageKey": "blackout.settings.appearance.v1",
+        "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+        "fields": {
+          "theme":            { "type": "BlackoutThemeId",                        "default": "dark_canopy", "note": "Normalised from legacy IDs on load." },
+          "accentColor":      { "type": "string (hex)",                           "default": "#4ECDC4" },
+          "fontScale":        { "type": "number (percent)",                       "default": 100 },
+          "chatDensity":      { "type": "compact | cozy",                         "default": "cozy" },
+          "emojiStyle":       { "type": "system | twemoji",                       "default": "twemoji" },
+          "messageGrouping":  { "type": "boolean",                               "default": true },
+          "showTimestamps":   { "type": "always | hover | never",                 "default": "hover" }
+        }
+      },
+      {
+        "atom": "notificationSettingsAtom",
+        "storageKey": "blackout.settings.notifications.v1",
+        "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+        "fields": {
+          "globalMode":            { "type": "all | mentions | muted",                "default": "mentions" },
+          "perRoomOverrides":      { "type": "RoomNotificationOverride[]",             "default": [] },
+          "desktopNotifications":  { "type": "boolean",                              "default": true },
+          "soundEnabled":          { "type": "boolean",                              "default": true },
+          "soundVolume":           { "type": "number (0–100)",                        "default": 70 },
+          "flashTaskbar":          { "type": "boolean",                              "default": true }
+        }
+      },
+      {
+        "atom": "privacySettingsAtom",
+        "storageKey": "blackout.settings.privacy.v1",
+        "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
+        "fields": {
+          "blockedUsers":         { "type": "BlockedUser[] ({id, displayName})",      "default": [] },
+          "dmPermissions":        { "type": "everyone | friends | mutual-spaces | nobody", "default": "friends" },
+          "showReadReceipts":     { "type": "boolean",                              "default": true },
+          "showTypingIndicators": { "type": "boolean",                              "default": true }
+        }
+      },
+      {
+        "atom": "stegoSettingsAtom",
+        "storageKey": "blackout.settings.steganography.v1",
+        "source": "apps/blackout-client/src/app/features/steganography/stegoAtoms.ts",
+        "fields": {
+          "enabled":          { "type": "boolean",               "default": true },
+          "savedPassphrases": { "type": "StegoPassphraseEntry[]","default": [] }
+        }
+      },
+      {
+        "atom": "settingsAtom (core client)",
+        "storageKey": "blackout.settings.v1",
+        "source": "apps/blackout-client/src/app/state/settings.ts",
+        "fields": {
+          "theme":                   { "type": "ThemePreference", "default": "dark_canopy" },
+          "pageZoom":                { "type": "number",          "default": 1 },
+          "twitterEmoji":            { "type": "boolean",         "default": true },
+          "showNotifications":       { "type": "boolean",         "default": true },
+          "isNotificationSounds":    { "type": "boolean",         "default": true },
+          "chatDensity":             { "type": "compact | comfortable | cozy", "default": "comfortable" },
+          "devMode":                 { "type": "boolean",         "default": false },
+          "streamerMode":            { "type": "boolean",         "default": false },
+          "layout.spaceColumnWidth": { "type": "number",          "default": 64 },
+          "layout.roomColumnWidth":  { "type": "number",          "default": 260 },
+          "mobileRoomListScope":     { "type": "space | all",     "default": "space" },
+          "preferredAudioDeviceId":  { "type": "string | undefined" },
+          "preferredVideoDeviceId":  { "type": "string | undefined" }
+        }
       }
-    },
-    "appearanceSettings": {
-      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
-      "fields": ["theme", "accentColor", "fontScale", "chatDensity", "emojiStyle", "messageGrouping", "showTimestamps"]
-    },
-    "notificationSettings": {
-      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
-      "fields": ["globalMode (all|mentions|muted)", "perRoomOverrides", "desktopNotifications", "soundEnabled", "soundVolume", "flashTaskbar"]
-    },
-    "privacySettings": {
-      "source": "apps/blackout-client/src/app/features/settings/settingsAtoms.ts",
-      "fields": ["blockedUsers", "dmPermissions (everyone|friends|mutual-spaces|nobody)", "showReadReceipts", "showTypingIndicators"]
-    },
-    "extendedProfile": {
-      "matrixEventType": "co.bmc.profile",
-      "source": "apps/blackout-client/src/app/features/profile/profileTypes.ts",
-      "fields": {
-        "displayName":   { "type": "string" },
-        "avatarUrl":     { "type": "string" },
-        "banner":        { "type": "string", "description": "Profile banner image URL" },
-        "bio":           { "type": "string", "maxLength": 2000 },
-        "pronouns":      { "type": "string", "maxLength": 60 },
-        "connections":   {
-          "type": "array",
-          "itemFields": ["type (github|website|x|linkedin|matrix|other)", "url", "username", "label"]
-        },
-        "decoration":    { "type": "string", "description": "Avatar decoration ID" },
-        "primaryRole":   { "type": "string" },
-        "roleBadges":    { "type": "string[]" },
-        "mutualSpaces":  { "type": "string[]" },
-        "isFriend":      { "type": "boolean" }
-      }
-    },
-    "roles": {
-      "matrixEventType": "co.bmc.roles",
-      "source": "apps/blackout-client/src/app/features/roles/",
-      "components": ["RoleEditor.tsx", "RolePicker.tsx", "RoleBadge.tsx", "useRoles.ts"]
-    }
+    ]
   },
 
   "uiComponents": {
@@ -443,5 +870,80 @@
       { "name": "VITE_NOTIFICATION_RULES",               "description": "Notification rule overrides" },
       { "name": "VITE_RELEASE_COHORT",                   "description": "Rollout cohort: internal|beta|general" }
     ]
+  },
+
+  "otherUserDataKeys": {
+    "description": "Additional localStorage keys, Matrix account-data keys, and custom Matrix event types used across the client.",
+    "localStorage": [
+      {
+        "key": "blackout.space_order",
+        "description": "Account data key for user-defined space ordering in the sidebar.",
+        "type": "string[] (space/room IDs)"
+      },
+      {
+        "key": "blackout.collapsed.<spaceOrHome>",
+        "description": "Per-space collapsed folder state. <spaceOrHome> is the space room ID or 'home'. One key per space.",
+        "type": "boolean"
+      },
+      {
+        "key": "blackout.settings.v1",
+        "description": "Core AppSettings atom (theme, zoom, emoji, notifications, chat density, dev/streamer mode, layout widths, room list scope, A/V device prefs).",
+        "atom": "settingsAtom"
+      },
+      {
+        "key": "blackout.settings.appearance.v1",
+        "description": "Appearance settings atom.",
+        "atom": "appearanceSettingsAtom"
+      },
+      {
+        "key": "blackout.settings.notifications.v1",
+        "description": "Notification settings atom.",
+        "atom": "notificationSettingsAtom"
+      },
+      {
+        "key": "blackout.settings.privacy.v1",
+        "description": "Privacy settings atom.",
+        "atom": "privacySettingsAtom"
+      },
+      {
+        "key": "blackout.settings.active-section.v1",
+        "description": "Active settings section atom (last open settings tab).",
+        "atom": "settingsPageAtom"
+      },
+      {
+        "key": "blackout.settings.steganography.v1",
+        "description": "Stego settings: enabled toggle and saved passphrases.",
+        "atom": "stegoSettingsAtom"
+      },
+      {
+        "key": "blackout.quick_actions.collapsed",
+        "description": "Whether the quick action bar is collapsed."
+      },
+      {
+        "key": "blackout.quick_actions.seen",
+        "description": "JSON array of QuickActionId strings the user has already seen (for first-run guidance)."
+      }
+    ],
+    "matrixEventTypes": {
+      "deaddrop": [
+        { "type": "co.bmc.deaddrop",         "stateKey": "",  "description": "Room state: Dead Drop config — enabled, schedule (interval/cron/manual), anonymize, maxQueueSize, retentionHours." },
+        { "type": "co.bmc.deaddrop.queue",   "stateKey": "",  "description": "Room state: Current queue depth (queueCount integer)." },
+        { "type": "co.bmc.deaddrop.command", "stateKey": "",  "description": "Room state: Operator command — { action: 'flush'|'clear', at: timestamp }." }
+      ],
+      "governance": [
+        { "type": "co.bmc.proposal", "description": "Proposal content and metadata." },
+        { "type": "co.bmc.vote",     "description": "Per-user vote cast on a proposal." }
+      ],
+      "roles": [
+        { "type": "co.bmc.roles", "description": "Named role definitions and assignments for a room." }
+      ],
+      "profile": [
+        { "type": "co.bmc.profile", "description": "Extended user profile: banner, bio, pronouns, connections, decoration, roles." }
+      ],
+      "matrixMessages": [
+        { "type": "app.blackout.proposal", "description": "Custom msgtype for proposal messages in the timeline." },
+        { "type": "m.room.proposal",       "description": "Room-scoped proposal event type." }
+      ]
+    }
   }
 }
