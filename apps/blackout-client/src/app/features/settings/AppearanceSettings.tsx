@@ -6,6 +6,7 @@ import {
     type EmojiStyleOption,
     type TimestampVisibility,
 } from './settingsAtoms';
+import { trackSettingsInteraction } from './settingsTelemetry';
 import { themePreferenceAtom } from '../../state/theme-atoms';
 import { themePreviews } from './theme-previews';
 
@@ -46,6 +47,11 @@ export const AppearanceSettings = () => {
     const [settings, setSettings] = useAtom(appearanceSettingsAtom);
     const [, setThemePreference] = useAtom(themePreferenceAtom);
 
+    const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
+        setSettings((prev) => ({ ...prev, [key]: value }));
+        trackSettingsInteraction('appearance', key, String(value));
+    };
+
     return (
         <div style={{ display: 'grid', gap: 18 }}>
             <section>
@@ -62,7 +68,7 @@ export const AppearanceSettings = () => {
                             key={theme.value}
                             type="button"
                             onClick={() => {
-                                setSettings((prev) => ({ ...prev, theme: theme.value }));
+                                updateSetting('theme', theme.value);
                                 setThemePreference(theme.value);
                             }}
                             style={{
@@ -106,7 +112,7 @@ export const AppearanceSettings = () => {
                         type="color"
                         value={settings.accentColor}
                         onChange={(event) =>
-                            setSettings((prev) => ({ ...prev, accentColor: event.target.value }))
+                            updateSetting('accentColor', event.target.value)
                         }
                     />
                     <code>{settings.accentColor.toUpperCase()}</code>
@@ -121,7 +127,7 @@ export const AppearanceSettings = () => {
                     max={150}
                     value={settings.fontScale}
                     onChange={(event) =>
-                        setSettings((prev) => ({ ...prev, fontScale: Number(event.target.value) }))
+                        updateSetting('fontScale', Number(event.target.value))
                     }
                 />
             </label>
@@ -130,7 +136,7 @@ export const AppearanceSettings = () => {
                 <h3>Chat density</h3>
                 <Segmented<ChatDensityOption>
                     value={settings.chatDensity}
-                    onChange={(chatDensity) => setSettings((prev) => ({ ...prev, chatDensity }))}
+                    onChange={(chatDensity) => updateSetting('chatDensity', chatDensity)}
                     options={[
                         { value: 'compact', label: 'Compact' },
                         { value: 'cozy', label: 'Cozy' },
@@ -142,7 +148,7 @@ export const AppearanceSettings = () => {
                 <h3>Emoji style</h3>
                 <Segmented<EmojiStyleOption>
                     value={settings.emojiStyle}
-                    onChange={(emojiStyle) => setSettings((prev) => ({ ...prev, emojiStyle }))}
+                    onChange={(emojiStyle) => updateSetting('emojiStyle', emojiStyle)}
                     options={[
                         { value: 'system', label: 'System' },
                         { value: 'twemoji', label: 'Twemoji' },
@@ -155,7 +161,7 @@ export const AppearanceSettings = () => {
                     type="checkbox"
                     checked={settings.messageGrouping}
                     onChange={(event) =>
-                        setSettings((prev) => ({ ...prev, messageGrouping: event.target.checked }))
+                        updateSetting('messageGrouping', event.target.checked)
                     }
                 />
                 Message grouping
@@ -166,7 +172,7 @@ export const AppearanceSettings = () => {
                 <Segmented<TimestampVisibility>
                     value={settings.showTimestamps}
                     onChange={(showTimestamps) =>
-                        setSettings((prev) => ({ ...prev, showTimestamps }))
+                        updateSetting('showTimestamps', showTimestamps)
                     }
                     options={[
                         { value: 'always', label: 'Always' },

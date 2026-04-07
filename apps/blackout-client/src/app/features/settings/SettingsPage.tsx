@@ -1,6 +1,7 @@
-import { Suspense, lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { Suspense, lazy, type ComponentType, type LazyExoticComponent, useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
+import { trackSettingsInteraction } from './settingsTelemetry';
 
 const AccountSettings = lazy(() => import('./AccountSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
@@ -65,19 +66,28 @@ const sections: SettingsSection[] = [
     {
         id: 'developer',
         label: 'Developer',
-        summary: 'Developer mode, event inspector, raw state viewer',
+        summary: 'Developer mode, diagnostics bundle export',
         component: DeveloperSettings,
     },
     {
         id: 'about',
         label: 'About',
-        summary: 'Version, links, credits, BMC info',
+        summary: 'Version, support, and contact links',
         component: AboutSettings,
     },
 ];
 
 export const SettingsPage = () => {
     const [activeSection, setActiveSection] = useAtom(settingsPageAtom);
+    const [isMobile, setIsMobile] = useState(
+        typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+    );
+
+    useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth <= 768);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     const active = sections.find((section) => section.id === activeSection) ?? sections[1];
     const ActiveSection = active.component;
@@ -86,7 +96,7 @@ export const SettingsPage = () => {
         <section
             style={{
                 display: 'grid',
-                gridTemplateColumns: '300px minmax(0, 1fr)',
+                gridTemplateColumns: isMobile ? '1fr' : '300px minmax(0, 1fr)',
                 minHeight: '100%',
                 border: '1px solid var(--border-default)',
                 borderRadius: 12,
@@ -97,7 +107,8 @@ export const SettingsPage = () => {
         >
             <aside
                 style={{
-                    borderRight: '1px solid var(--border-default)',
+                    borderRight: isMobile ? 'none' : '1px solid var(--border-default)',
+                    borderBottom: isMobile ? '1px solid var(--border-default)' : 'none',
                     padding: 12,
                     background: 'var(--bg-input)',
                 }}
@@ -108,7 +119,10 @@ export const SettingsPage = () => {
                         <button
                             key={section.id}
                             type="button"
-                            onClick={() => setActiveSection(section.id)}
+                            onClick={() => {
+                                setActiveSection(section.id);
+                                trackSettingsInteraction('settings', 'navigate-section', section.id);
+                            }}
                             style={{
                                 textAlign: 'left',
                                 border:

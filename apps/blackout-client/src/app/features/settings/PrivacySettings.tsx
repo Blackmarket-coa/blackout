@@ -1,5 +1,6 @@
 import { useAtom } from 'jotai';
 import { privacySettingsAtom, type DmPermission } from './settingsAtoms';
+import { trackSettingsInteraction } from './settingsTelemetry';
 
 const dmOptions: Array<{ value: DmPermission; label: string }> = [
     { value: 'everyone', label: 'Everyone' },
@@ -10,6 +11,11 @@ const dmOptions: Array<{ value: DmPermission; label: string }> = [
 
 export const PrivacySettings = () => {
     const [settings, setSettings] = useAtom(privacySettingsAtom);
+    const updateSettings = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
+        setSettings((prev) => ({ ...prev, [key]: value }));
+        trackSettingsInteraction('privacy', key, String(value));
+    };
+
 
     return (
         <div style={{ display: 'grid', gap: 18 }}>
@@ -61,7 +67,7 @@ export const PrivacySettings = () => {
                             key={option.value}
                             type="button"
                             onClick={() =>
-                                setSettings((prev) => ({ ...prev, dmPermissions: option.value }))
+                                updateSettings('dmPermissions', option.value)
                             }
                             style={{
                                 border:
@@ -88,7 +94,7 @@ export const PrivacySettings = () => {
                     type="checkbox"
                     checked={settings.showReadReceipts}
                     onChange={(event) =>
-                        setSettings((prev) => ({ ...prev, showReadReceipts: event.target.checked }))
+                        updateSettings('showReadReceipts', event.target.checked)
                     }
                 />
                 Read receipt visibility
@@ -99,10 +105,7 @@ export const PrivacySettings = () => {
                     type="checkbox"
                     checked={settings.showTypingIndicators}
                     onChange={(event) =>
-                        setSettings((prev) => ({
-                            ...prev,
-                            showTypingIndicators: event.target.checked,
-                        }))
+                        updateSettings('showTypingIndicators', event.target.checked)
                     }
                 />
                 Typing indicator visibility

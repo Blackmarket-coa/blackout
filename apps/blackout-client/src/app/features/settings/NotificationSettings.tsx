@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { notificationSettingsAtom, type NotificationMode } from './settingsAtoms';
+import { trackSettingsInteraction } from './settingsTelemetry';
 
 const modeOptions: Array<{ value: NotificationMode; label: string }> = [
     { value: 'all', label: 'All' },
@@ -10,6 +11,11 @@ const modeOptions: Array<{ value: NotificationMode; label: string }> = [
 
 export const NotificationSettings = () => {
     const [settings, setSettings] = useAtom(notificationSettingsAtom);
+    const updateSettings = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
+        setSettings((prev) => ({ ...prev, [key]: value }));
+        trackSettingsInteraction('notifications', key, String(value));
+    };
+
     const [roomInput, setRoomInput] = useState('');
 
     const upsertRoomOverride = (roomId: string, mode: NotificationMode) => {
@@ -44,7 +50,7 @@ export const NotificationSettings = () => {
                             key={option.value}
                             type="button"
                             onClick={() =>
-                                setSettings((prev) => ({ ...prev, globalMode: option.value }))
+                                updateSettings('globalMode', option.value)
                             }
                             style={{
                                 border:
@@ -153,10 +159,7 @@ export const NotificationSettings = () => {
                     type="checkbox"
                     checked={settings.desktopNotifications}
                     onChange={(event) =>
-                        setSettings((prev) => ({
-                            ...prev,
-                            desktopNotifications: event.target.checked,
-                        }))
+                        updateSettings('desktopNotifications', event.target.checked)
                     }
                 />
                 Desktop notifications
@@ -168,7 +171,7 @@ export const NotificationSettings = () => {
                         type="checkbox"
                         checked={settings.soundEnabled}
                         onChange={(event) =>
-                            setSettings((prev) => ({ ...prev, soundEnabled: event.target.checked }))
+                            updateSettings('soundEnabled', event.target.checked)
                         }
                     />
                     Sound notifications
@@ -182,10 +185,7 @@ export const NotificationSettings = () => {
                         value={settings.soundVolume}
                         disabled={!settings.soundEnabled}
                         onChange={(event) =>
-                            setSettings((prev) => ({
-                                ...prev,
-                                soundVolume: Number(event.target.value),
-                            }))
+                            updateSettings('soundVolume', Number(event.target.value))
                         }
                     />
                 </label>
@@ -196,7 +196,7 @@ export const NotificationSettings = () => {
                     type="checkbox"
                     checked={settings.flashTaskbar}
                     onChange={(event) =>
-                        setSettings((prev) => ({ ...prev, flashTaskbar: event.target.checked }))
+                        updateSettings('flashTaskbar', event.target.checked)
                     }
                 />
                 Flash taskbar on notification
