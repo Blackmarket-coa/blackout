@@ -15,6 +15,8 @@ import { sanitizeMatrixHtml } from '../../utils/markdown';
 import { useRoom } from '../../hooks/useRoom';
 import { useRoomTimeline, useTimelineScroll } from '../../hooks/useTimeline';
 import { useTypingIndicator } from '../../hooks/useTyping';
+import { ProfileModal } from '../../features/profile/ProfileModal';
+import type { MemberProfile } from '../../features/profile/profileTypes';
 import {
     AudioMessage as TimelineAudioMessage,
     FileMessage as TimelineFileMessage,
@@ -309,6 +311,18 @@ const getAvatar = (room: Room | null, userId: string): string | null => {
     return url ?? null;
 };
 
+const buildMinimalProfile = (room: Room | null, userId: string): MemberProfile => {
+    const member = room?.getMember(userId);
+    return {
+        userId,
+        displayName: member?.name ?? userId,
+        avatarUrl: member?.getMxcAvatarUrl?.() ?? undefined,
+        roleBadges: [],
+        mutualSpaces: [],
+        profile: {},
+    };
+};
+
 const getRelation = (event: MatrixEvent): Record<string, unknown> | null => {
     const content = event.getContent<Record<string, unknown>>();
     const relation = content['m.relates_to'];
@@ -480,7 +494,12 @@ const MessageBubble = ({
     receipts = [],
     room,
     roomId,
-}: MessageBubbleProps & { room: Room | null; roomId: string }) => {
+    onOpenProfile,
+}: MessageBubbleProps & {
+    room: Room | null;
+    roomId: string;
+    onOpenProfile?: (userId: string) => void;
+}) => {
     const sender = getEventSender(event);
     const avatar = getAvatar(room, sender);
     const senderName = getDisplayName(room, sender);
@@ -495,17 +514,46 @@ const MessageBubble = ({
         <article style={styles.messageRow} data-event-id={event.getId() ?? undefined}>
             <div>
                 {!groupedWithPrevious ? (
-                    avatar ? (
-                        <img src={avatar} alt={senderName} style={styles.avatar} loading="lazy" />
-                    ) : (
-                        <div style={styles.avatarPlaceholder} />
-                    )
+                    <button
+                        type="button"
+                        onClick={() => onOpenProfile?.(sender)}
+                        style={{
+                            border: 'none',
+                            background: 'transparent',
+                            padding: 0,
+                            cursor: 'pointer',
+                        }}
+                        aria-label={`View profile of ${senderName}`}
+                    >
+                        {avatar ? (
+                            <img
+                                src={avatar}
+                                alt={senderName}
+                                style={styles.avatar}
+                                loading="lazy"
+                            />
+                        ) : (
+                            <div style={styles.avatarPlaceholder} />
+                        )}
+                    </button>
                 ) : null}
             </div>
             <div style={sticker ? styles.stickerBubble : styles.bubble}>
                 {!groupedWithPrevious ? (
                     <div style={styles.header}>
-                        <span style={styles.sender}>{senderName}</span>
+                        <button
+                            type="button"
+                            onClick={() => onOpenProfile?.(sender)}
+                            style={{
+                                ...styles.sender,
+                                border: 'none',
+                                background: 'transparent',
+                                padding: 0,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {senderName}
+                        </button>
                         <span style={styles.timestamp}>{formatEventTime(event)}</span>
                         <EditedIndicator event={event} />
                     </div>
@@ -578,6 +626,11 @@ export const RoomTimeline = ({
     const [scrollTop, setScrollTop] = useState(0);
     const [viewportHeight, setViewportHeight] = useState(600);
     const [isAtBottom, setIsAtBottom] = useState(true);
+    const [profileUserId, setProfileUserId] = useState<string | null>(null);
+
+    const openProfile = useCallback((userId: string) => {
+        setProfileUserId(userId);
+    }, []);
 
     const items = useMemo(() => buildTimelineItems(events, unreadEventId), [events, unreadEventId]);
 
@@ -694,6 +747,7 @@ export const RoomTimeline = ({
                                     room={room}
                                     roomId={roomId}
                                     receipts={getReceipts(item.event)}
+                                    onOpenProfile={openProfile}
                                 />
                             </Fragment>
                         );
@@ -717,6 +771,14 @@ export const RoomTimeline = ({
             ) : null}
 
             <TypingBar members={typingMembers} />
+
+            {profileUserId ? (
+                <ProfileModal
+                    open
+                    profile={buildMinimalProfile(room, profileUserId)}
+                    onClose={() => setProfileUserId(null)}
+                />
+            ) : null}
         </section>
     );
 };

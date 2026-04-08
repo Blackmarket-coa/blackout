@@ -68,6 +68,11 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
             <span class="sidebar-nav-glyph">📁</span>
           </button>
         </li>
+        <li>
+          <button type="button" class="sidebar-nav-btn" data-action="open-widgets-panel" data-testid="open-widgets-panel" aria-label="Widget panels">
+            <span class="sidebar-nav-glyph">🧩</span>
+          </button>
+        </li>
         ${showAdminEntry ? `<li>
           <button type="button" class="sidebar-nav-btn ${activeView === "admin" ? "is-selected" : ""}" data-action="open-admin-panel" aria-label="Admin">
             <span class="sidebar-nav-glyph">🛡</span>

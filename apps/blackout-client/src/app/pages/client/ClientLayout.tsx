@@ -24,6 +24,7 @@ import {
 } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
+import ForumView from '../../features/forum/ForumView';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
@@ -48,7 +49,7 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 
-const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
+const RIGHT_PANELS_BASE: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
 
 const roomKindIcon = (room: Room): string => {
     const type = room.getType?.() ?? '';
@@ -93,6 +94,7 @@ export const ClientLayout = () => {
     const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
     const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>('');
     const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
+    const [forumView, setForumView] = useState(false);
     const callState = useOptionalCall();
     const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
     const inRouterContext = useInRouterContext();
@@ -178,7 +180,8 @@ export const ClientLayout = () => {
         const nextSpaceId = params.get('space');
         const nextPanelParam = params.get('panel');
         const nextJumpTargetEventId = params.get('event');
-        const nextRightPanel = RIGHT_PANELS.includes(nextPanelParam as RightPanelType)
+        const allPanels: RightPanelType[] = [...RIGHT_PANELS_BASE, 'roles'];
+        const nextRightPanel = allPanels.includes(nextPanelParam as RightPanelType)
             ? (nextPanelParam as RightPanelType)
             : null;
         const hasUrlNavigationState = Boolean(
@@ -277,6 +280,16 @@ export const ClientLayout = () => {
         [rooms, userId],
     );
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
+    const rolesEnabled = featureEntrypointRegistry.flags['features.bmc.roles'] ?? false;
+    const forumEnabled = featureEntrypointRegistry.flags['features.bmc.forum'] ?? false;
+    const callEnabled = featureEntrypointRegistry.flags['features.call.elementCall'] ?? false;
+    const rightPanels = useMemo(
+        (): RightPanelType[] =>
+            rolesEnabled
+                ? [...RIGHT_PANELS_BASE, 'roles']
+                : RIGHT_PANELS_BASE,
+        [rolesEnabled],
+    );
     const desktopQuickActions = useMemo(
         () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'),
         [featureEntrypointRegistry],
@@ -388,13 +401,131 @@ export const ClientLayout = () => {
 
     const renderRoomContent = () => {
         if (selectedRoomId) {
+            const activeRoom = rooms.find((room) => room.roomId === selectedRoomId);
+            const isForumRoom =
+                forumEnabled && (activeRoom?.getType?.() ?? '') === 'co.bmc.forum';
+
             return (
                 <div style={{ padding: 16, display: 'grid', gap: 12 }}>
                     <header style={{ display: 'grid', gap: 8 }}>
-                        <strong>
-                            {rooms.find((room) => room.roomId === selectedRoomId)?.name ??
-                                selectedRoomId}
-                        </strong>
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                            }}
+                        >
+                            <strong>{activeRoom?.name ?? selectedRoomId}</strong>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                {callEnabled ? (
+                                    callState?.joined && callState.roomId === selectedRoomId ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => void callState.leaveCall()}
+                                            style={{
+                                                border: '1px solid var(--danger)',
+                                                borderRadius: 8,
+                                                background: 'var(--danger)',
+                                                color: '#fff',
+                                                padding: '4px 10px',
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            📞 End Call
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                void callState?.joinCall(selectedRoomId)
+                                            }
+                                            style={{
+                                                border: '1px solid var(--border-default)',
+                                                borderRadius: 8,
+                                                background: 'var(--bg-input)',
+                                                padding: '4px 10px',
+                                                fontSize: 12,
+                                            }}
+                                            data-testid="start-call-button"
+                                        >
+                                            📞 Start Call
+                                        </button>
+                                    )
+                                ) : null}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {isForumRoom ? (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForumView(false)}
+                                        style={{
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 6,
+                                            background: !forumView
+                                                ? 'var(--accent-primary)'
+                                                : 'var(--bg-input)',
+                                            color: !forumView ? '#fff' : 'var(--text-primary)',
+                                            padding: '3px 10px',
+                                            fontSize: 12,
+                                        }}
+                                        data-testid="room-tab-timeline"
+                                    >
+                                        Timeline
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setForumView(true)}
+                                        style={{
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 6,
+                                            background: forumView
+                                                ? 'var(--accent-primary)'
+                                                : 'var(--bg-input)',
+                                            color: forumView ? '#fff' : 'var(--text-primary)',
+                                            padding: '3px 10px',
+                                            fontSize: 12,
+                                        }}
+                                        data-testid="room-tab-forum"
+                                    >
+                                        Forum
+                                    </button>
+                                    <span
+                                        style={{
+                                            width: 1,
+                                            background: 'var(--border-default)',
+                                            alignSelf: 'stretch',
+                                            margin: '0 2px',
+                                        }}
+                                    />
+                                </>
+                            ) : null}
+                            {rightPanels.map((panel) => (
+                                <button
+                                    key={panel}
+                                    type="button"
+                                    onClick={() =>
+                                        setRightPanel(rightPanel === panel ? null : panel)
+                                    }
+                                    style={{
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 6,
+                                        background:
+                                            rightPanel === panel
+                                                ? 'var(--accent-muted)'
+                                                : 'var(--bg-input)',
+                                        padding: '3px 10px',
+                                        fontSize: 12,
+                                        textTransform: 'capitalize',
+                                    }}
+                                    data-testid={`open-panel-${panel}`}
+                                >
+                                    {panel}
+                                </button>
+                            ))}
+                        </div>
                         <DeadDropIndicator
                             config={deadDrop.data}
                             queueCount={deadDrop.queueCount}
@@ -415,19 +546,23 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
-                        <RoomTimeline
-                            roomId={selectedRoomId}
-                            unreadEventId={unreadMarkerEventId ?? undefined}
-                            jumpToEventId={jumpTargetEventId ?? undefined}
-                            onJumpResolved={(eventId, found) => {
-                                if (eventId === jumpTargetEventId && found) {
-                                    setJumpTargetEventId(null);
-                                }
-                                if (eventId === unreadMarkerEventId && found) {
-                                    setUnreadMarkerEventId(null);
-                                }
-                            }}
-                        />
+                        {isForumRoom && forumView ? (
+                            <ForumView roomId={selectedRoomId} />
+                        ) : (
+                            <RoomTimeline
+                                roomId={selectedRoomId}
+                                unreadEventId={unreadMarkerEventId ?? undefined}
+                                jumpToEventId={jumpTargetEventId ?? undefined}
+                                onJumpResolved={(eventId, found) => {
+                                    if (eventId === jumpTargetEventId && found) {
+                                        setJumpTargetEventId(null);
+                                    }
+                                    if (eventId === unreadMarkerEventId && found) {
+                                        setUnreadMarkerEventId(null);
+                                    }
+                                }}
+                            />
+                        )}
                     </section>
 
                     {deadDrop.data.enabled ? (
@@ -1141,15 +1276,42 @@ export const ClientLayout = () => {
                                 borderBottom: '1px solid var(--border-default)',
                             }}
                         >
-                            <strong>{rightPanel}</strong>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {rightPanels.map((panel) => (
+                                    <button
+                                        key={panel}
+                                        type="button"
+                                        onClick={() => setRightPanel(panel)}
+                                        style={{
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 6,
+                                            background:
+                                                rightPanel === panel
+                                                    ? 'var(--accent-primary)'
+                                                    : 'var(--bg-input)',
+                                            color:
+                                                rightPanel === panel
+                                                    ? '#fff'
+                                                    : 'var(--text-primary)',
+                                            padding: '2px 8px',
+                                            fontSize: 11,
+                                            textTransform: 'capitalize',
+                                        }}
+                                        data-testid={`right-panel-tab-${panel}`}
+                                    >
+                                        {panel}
+                                    </button>
+                                ))}
+                            </div>
                             <button type="button" onClick={() => setRightPanel(null)}>
-                                Close
+                                ✕
                             </button>
                         </div>
                         <RightPanelContent
                             panel={rightPanel}
                             room={activeRoomState.data}
                             events={timelineState.data}
+                            rolesEnabled={rolesEnabled}
                             onJumpToEvent={(eventId) => {
                                 setJumpTargetEventId(eventId);
                                 setRightPanel(null);

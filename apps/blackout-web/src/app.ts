@@ -24,6 +24,8 @@ import {
   type NativeBridgeEvent,
 } from "./platform/native-bridge-contract";
 import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import { renderWidgetPanelHost } from "./components/WidgetPanelHost";
+import { renderCommandPalette } from "./components/CommandPalette";
 import {
   parseAttachmentImport,
   validateAttachmentInput,
@@ -47,7 +49,7 @@ const ONBOARDING_TOUR_GOVERNANCE_DISMISSED_STORAGE_KEY = "blackout.onboarding.to
 const ONBOARDING_GUIDE_DISMISSED_STORAGE_KEY = "blackout.onboarding.guide.dismissed";
 const QUICK_ACTION_BAR_COLLAPSED_STORAGE_KEY = "blackout.quick_actions.collapsed";
 
-type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover";
+type WorkspacePanelView = "chat" | "dms" | "activity" | "calls" | "files" | "repo-tools" | "discover" | "widgets";
 type ThemeKey = BlackoutThemeId;
 type RightPanelView = "members" | "threads" | "pinned" | "search" | "governance" | "widget";
 type GovernanceRightPanelTab = "active" | "past" | "create" | "my-votes" | "results";
@@ -108,6 +110,8 @@ export class BlackoutWebApp {
   private commandPaletteOpen = false;
   private commandPalettePreviouslyFocused: HTMLElement | null = null;
   private commandPalettePreviouslyFocusedSelector: string | null = null;
+  private userCommandPaletteOpen = false;
+  private userCommandPaletteQuery = "";
   private compactModeEnabled = false;
   private settingsOpen = false;
   private activeSettingsPage: SettingsPageView = "workspace";
@@ -328,6 +332,7 @@ export class BlackoutWebApp {
       </main>
       ${modalMode !== "none" ? renderCreateEntityModal({ mode: modalMode, value: state.createName, error: state.createError, busy: loading.channels || loading.servers }) : ""}
       ${this.commandPaletteOpen ? this.renderFeatureCommandPalette() : ""}
+      ${renderCommandPalette({ open: this.userCommandPaletteOpen, query: this.userCommandPaletteQuery, enabledFeatures: this.getActivePresetFeatures() })}
       ${this.quickActionPopup ? this.renderQuickActionPopup() : ""}
       ${this.subscriptionPopupOpen ? this.renderSubscriptionPopup() : ""}
       ${renderBugReportFab({
@@ -676,6 +681,10 @@ export class BlackoutWebApp {
       return this.renderDiscoverRolloutNotice();
     }
 
+    if (this.activeWorkspacePanel === "widgets") {
+      return renderWidgetPanelHost({ enabledFeatures: this.getActivePresetFeatures() });
+    }
+
     const state = this.store.getState();
     const activeChannel = state.channels.find((channel) => channel.id === state.activeChannelId) ?? null;
     const activeChannelName = activeChannel?.name ?? "";
@@ -753,18 +762,17 @@ export class BlackoutWebApp {
 
   private renderRightPanelOverlay(panel: RightPanelView): string {
     if (panel === "widget") {
-      const widget = this.describeWidgetPanel(this.activeWidgetFeatureId);
+      const widgetHostHtml = renderWidgetPanelHost({
+        enabledFeatures: this.getActivePresetFeatures(),
+        activeWidgetId: this.activeWidgetFeatureId ?? undefined,
+      });
       return `
         <aside class="right-panel-overlay" data-testid="right-panel-overlay">
           <div class="right-panel-header">
-            <h3>${widget.title}</h3>
+            <h3>Widget panel</h3>
             <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
           </div>
-          <p class="meta">${widget.subtitle}</p>
-          <div class="right-panel-widget-body">
-            <p><strong>${widget.heading}</strong></p>
-            <p class="meta">${widget.description}</p>
-          </div>
+          ${widgetHostHtml}
         </aside>
       `;
     }
@@ -1638,7 +1646,15 @@ export class BlackoutWebApp {
   private readonly handleGlobalKeyDown = (event: KeyboardEvent): void => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      this.openCommandPalette();
+      this.userCommandPaletteOpen = !this.userCommandPaletteOpen;
+      this.userCommandPaletteQuery = "";
+      this.render();
+      return;
+    }
+
+    if (event.key === "Escape" && this.userCommandPaletteOpen) {
+      this.userCommandPaletteOpen = false;
+      this.render();
       return;
     }
 
@@ -1725,6 +1741,13 @@ export class BlackoutWebApp {
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-calls-panel']").forEach((button) => {
       button.addEventListener("click", () => {
         this.activeWorkspacePanel = "calls";
+        this.render();
+      });
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='open-widgets-panel']").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.activeWorkspacePanel = "widgets";
         this.render();
       });
     });
@@ -1872,6 +1895,32 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLInputElement>("[data-action='filter-command-palette']")?.addEventListener("input", (event) => {
       this.commandPaletteQuery = (event.currentTarget as HTMLInputElement).value;
       this.render();
+    });
+
+    // User-facing command palette (Ctrl+K)
+    this.root.querySelectorAll<HTMLElement>("[data-action='close-user-command-palette']").forEach((element) => {
+      element.addEventListener("click", (event) => {
+        if (element.closest(".command-palette")) {
+          event.stopPropagation();
+        }
+        this.userCommandPaletteOpen = false;
+        this.render();
+      });
+    });
+
+    this.root.querySelector<HTMLInputElement>("[data-action='user-command-palette-query']")?.addEventListener("input", (event) => {
+      this.userCommandPaletteQuery = (event.currentTarget as HTMLInputElement).value;
+      this.render();
+    });
+
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='user-command-select']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const featureId = button.dataset.featureId ?? "";
+        console.log(`[CommandPalette] selected command: ${featureId}`);
+        this.featureActionResult = `Command "${featureId}" triggered.`;
+        this.userCommandPaletteOpen = false;
+        this.render();
+      });
     });
 
     this.root.querySelector<HTMLFormElement>("#auth-form")?.addEventListener("submit", (event) => {
