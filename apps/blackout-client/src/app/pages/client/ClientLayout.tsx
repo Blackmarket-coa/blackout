@@ -24,6 +24,7 @@ import {
 } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
+import ForumView from '../../features/forum/ForumView';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
@@ -48,7 +49,13 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 
-const RIGHT_PANELS: RightPanelType[] = ['members', 'threads', 'pins', 'search', 'governance'];
+const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
+    'members',
+    'threads',
+    'pins',
+    'search',
+    'governance',
+];
 
 const roomKindIcon = (room: Room): string => {
     const type = room.getType?.() ?? '';
@@ -86,6 +93,7 @@ export const ClientLayout = () => {
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
     const previousRoomIdRef = useRef<string | null>(null);
@@ -104,6 +112,15 @@ export const ClientLayout = () => {
     const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
+    const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
+    const featureFlags = featureEntrypointRegistry.flags;
+    const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
+    const callEnabled = featureFlags['features.call.elementCall'] ?? false;
+    const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
+    const rightPanels = useMemo(
+        () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
+        [rolesEnabled],
+    );
 
     useEffect(() => {
         const onResize = () => setViewportWidth(window.innerWidth);
@@ -169,6 +186,7 @@ export const ClientLayout = () => {
     useEffect(() => {
         if (previousRoomIdRef.current && previousRoomIdRef.current !== selectedRoomId) {
             setRightPanel(null);
+            setRoomSurface('timeline');
         }
         previousRoomIdRef.current = selectedRoomId;
     }, [selectedRoomId, setRightPanel]);
@@ -178,7 +196,7 @@ export const ClientLayout = () => {
         const nextSpaceId = params.get('space');
         const nextPanelParam = params.get('panel');
         const nextJumpTargetEventId = params.get('event');
-        const nextRightPanel = RIGHT_PANELS.includes(nextPanelParam as RightPanelType)
+        const nextRightPanel = rightPanels.includes(nextPanelParam as Exclude<RightPanelType, null>)
             ? (nextPanelParam as RightPanelType)
             : null;
         const hasUrlNavigationState = Boolean(
@@ -197,6 +215,7 @@ export const ClientLayout = () => {
         hasHydratedNavigationRef.current = true;
     }, [
         location.search,
+        rightPanels,
         routeRoomId,
         setJumpTargetEventId,
         setRightPanel,
@@ -276,7 +295,6 @@ export const ClientLayout = () => {
         () => hasModeratorAccess(rooms, userId),
         [rooms, userId],
     );
-    const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
     const desktopQuickActions = useMemo(
         () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'),
         [featureEntrypointRegistry],
@@ -386,15 +404,48 @@ export const ClientLayout = () => {
         queueCommandForComposer(command);
     };
 
+    const isForumRoom = useMemo(() => {
+        if (!activeRoomState.data) return false;
+        const room = activeRoomState.data;
+        if (room.getType?.() === 'co.bmc.forum') return true;
+        const createType = room.currentState
+            ?.getStateEvents('m.room.create', '')
+            ?.getContent<Record<string, unknown>>()?.type;
+        return createType === 'co.bmc.forum';
+    }, [activeRoomState.data]);
+
     const renderRoomContent = () => {
         if (selectedRoomId) {
             return (
                 <div style={{ padding: 16, display: 'grid', gap: 12 }}>
                     <header style={{ display: 'grid', gap: 8 }}>
-                        <strong>
-                            {rooms.find((room) => room.roomId === selectedRoomId)?.name ??
-                                selectedRoomId}
-                        </strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <strong>
+                                {rooms.find((room) => room.roomId === selectedRoomId)?.name ??
+                                    selectedRoomId}
+                            </strong>
+                            {callEnabled && callState ? (
+                                <button
+                                    type="button"
+                                    onClick={() => void callState.joinCall(selectedRoomId)}
+                                    style={{
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 8,
+                                        background: 'var(--bg-input)',
+                                        padding: '2px 8px',
+                                    }}
+                                >
+                                    📞 Start call
+                                </button>
+                            ) : (
+                                <small
+                                    data-testid="feature-widget-element-call-unavailable"
+                                    style={{ color: 'var(--text-secondary)' }}
+                                >
+                                    Call unavailable
+                                </small>
+                            )}
+                        </div>
                         <DeadDropIndicator
                             config={deadDrop.data}
                             queueCount={deadDrop.queueCount}
@@ -415,19 +466,23 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
-                        <RoomTimeline
-                            roomId={selectedRoomId}
-                            unreadEventId={unreadMarkerEventId ?? undefined}
-                            jumpToEventId={jumpTargetEventId ?? undefined}
-                            onJumpResolved={(eventId, found) => {
-                                if (eventId === jumpTargetEventId && found) {
-                                    setJumpTargetEventId(null);
-                                }
-                                if (eventId === unreadMarkerEventId && found) {
-                                    setUnreadMarkerEventId(null);
-                                }
-                            }}
-                        />
+                        {forumEnabled && isForumRoom && roomSurface === 'forum' ? (
+                            <ForumView roomId={selectedRoomId} />
+                        ) : (
+                            <RoomTimeline
+                                roomId={selectedRoomId}
+                                unreadEventId={unreadMarkerEventId ?? undefined}
+                                jumpToEventId={jumpTargetEventId ?? undefined}
+                                onJumpResolved={(eventId, found) => {
+                                    if (eventId === jumpTargetEventId && found) {
+                                        setJumpTargetEventId(null);
+                                    }
+                                    if (eventId === unreadMarkerEventId && found) {
+                                        setUnreadMarkerEventId(null);
+                                    }
+                                }}
+                            />
+                        )}
                     </section>
 
                     {deadDrop.data.enabled ? (
@@ -1150,6 +1205,7 @@ export const ClientLayout = () => {
                             panel={rightPanel}
                             room={activeRoomState.data}
                             events={timelineState.data}
+                            rolesEnabled={rolesEnabled}
                             onJumpToEvent={(eventId) => {
                                 setJumpTargetEventId(eventId);
                                 setRightPanel(null);
@@ -1327,7 +1383,48 @@ export const ClientLayout = () => {
                     >
                         Inbox {mentionItems.length > 0 ? `(${mentionItems.length})` : ''}
                     </button>
-                    {RIGHT_PANELS.map((panel) => (
+                    {forumEnabled && isForumRoom ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setRoomSurface('timeline')}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    background:
+                                        roomSurface === 'timeline'
+                                            ? 'var(--accent-muted)'
+                                            : 'var(--bg-input)',
+                                    borderRadius: 8,
+                                    padding: '4px 8px',
+                                }}
+                            >
+                                Timeline
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRoomSurface('forum')}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    background:
+                                        roomSurface === 'forum'
+                                            ? 'var(--accent-muted)'
+                                            : 'var(--bg-input)',
+                                    borderRadius: 8,
+                                    padding: '4px 8px',
+                                }}
+                            >
+                                Forum
+                            </button>
+                        </>
+                    ) : (
+                        <span
+                            data-testid="feature-room-bmc-forum-unavailable"
+                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                        >
+                            Forum unavailable
+                        </span>
+                    )}
+                    {rightPanels.map((panel) => (
                         <button
                             key={panel}
                             type="button"

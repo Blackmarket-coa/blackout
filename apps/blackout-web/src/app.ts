@@ -17,6 +17,8 @@ import { MatrixGatewayClient } from "./services/matrix-client";
 import { createTelemetryClient } from "./services/telemetry";
 import { SessionStore } from "./session/store";
 import { renderBugReportFab } from "./components/BugReportFab";
+import { renderCommandPalette } from "./components/CommandPalette";
+import { renderWidgetPanelHost } from "./components/WidgetPanelHost";
 import {
   dispatchNativeBridgeEvent,
   extractRoomIdFromDeepLinkUrl,
@@ -753,18 +755,13 @@ export class BlackoutWebApp {
 
   private renderRightPanelOverlay(panel: RightPanelView): string {
     if (panel === "widget") {
-      const widget = this.describeWidgetPanel(this.activeWidgetFeatureId);
       return `
         <aside class="right-panel-overlay" data-testid="right-panel-overlay">
           <div class="right-panel-header">
-            <h3>${widget.title}</h3>
+            <h3>Widget panel host</h3>
             <button type="button" class="ghost-btn" data-action="close-right-panel" aria-label="Close right panel">Close</button>
           </div>
-          <p class="meta">${widget.subtitle}</p>
-          <div class="right-panel-widget-body">
-            <p><strong>${widget.heading}</strong></p>
-            <p class="meta">${widget.description}</p>
-          </div>
+          ${renderWidgetPanelHost(this.getActivePresetFeatures())}
         </aside>
       `;
     }
@@ -1272,42 +1269,11 @@ export class BlackoutWebApp {
   }
 
   private renderFeatureCommandPalette(): string {
-    const query = this.commandPaletteQuery.trim().toLowerCase();
-    const activeFeatures = this.getActivePresetFeatures();
-    const showAdvancedModules = this.shouldShowAdvancedAdminModules();
-    const rows = FEATURE_UI_ENTRIES.filter((feature) => {
-      const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-      if (!showAdvancedModules && kind === "admin_console") return false;
-      if (!query) return true;
-      return `${feature.id} ${feature.name} ${feature.uiEntry}`.toLowerCase().includes(query);
-    })
-      .slice(0, 14)
-      .map((feature) => {
-        const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
-        const enabled = activeFeatures[feature.presetKey] ?? false;
-        const category = this.featureKindUi[kind];
-        const tooltip = this.hasSeenFeatureTooltips ? "" : `title="${category.firstUseTooltip}"`;
-        return `
-          <button type="button" class="command-palette-item ${enabled ? "" : "command-palette-item--unavailable"}" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-action-origin="palette" aria-disabled="${enabled ? "false" : "true"}" ${tooltip}>
-            <span class="command-palette-item-main">${category.icon} ${feature.name}</span>
-            <span class="meta">${category.label}${enabled ? "" : " · unavailable"}</span>
-          </button>
-        `;
-      })
-      .join("");
-
-    return `
-      <div class="command-palette-backdrop" data-action="close-command-palette">
-        <section class="command-palette" data-testid="feature-command-palette" role="dialog" aria-modal="true" aria-label="Feature command palette">
-          <div class="command-palette-header">
-            <strong>Feature command palette</strong>
-            <button type="button" class="ghost-btn" data-action="close-command-palette">Close</button>
-          </div>
-          <input type="search" autofocus data-action="filter-command-palette" data-testid="feature-command-palette-input" placeholder="Type a feature, category, or id…" value="${this.commandPaletteQuery}" />
-          <div class="command-palette-list">${rows || '<p class="empty">No matching features.</p>'}</div>
-        </section>
-      </div>
-    `;
+    return renderCommandPalette({
+      open: this.commandPaletteOpen,
+      query: this.commandPaletteQuery,
+      features: this.getActivePresetFeatures(),
+    });
   }
 
   private renderQuickActionPopup(): string {
@@ -3908,32 +3874,6 @@ export class BlackoutWebApp {
     if (!entry) return;
     this.quickActionPopup = { featureId, kind, name: entry.name };
     this.render();
-  }
-
-  private describeWidgetPanel(featureId: string | null): { title: string; subtitle: string; heading: string; description: string } {
-    if (featureId === "media_pipeline") {
-      return {
-        title: "Media pipeline widget",
-        subtitle: "Open media upload/rendering feature entry.",
-        heading: "Media upload and MXC pipeline",
-        description: "Uploads, transforms, and rendering previews are now surfaced in the widget panel.",
-      };
-    }
-    if (featureId === "media_link_previews") {
-      return {
-        title: "Link previews widget",
-        subtitle: "Inspect link preview controls and behavior.",
-        heading: "Link preview cards",
-        description: "Preview card controls are surfaced here so metadata behavior can be verified quickly.",
-      };
-    }
-    const entry = FEATURE_UI_ENTRIES.find((feature) => feature.id === featureId);
-    return {
-      title: "Widget panel",
-      subtitle: "Feature widgets open here from the workspace.",
-      heading: entry?.name ?? "Widget workspace",
-      description: entry ? `Feature id: ${entry.id}.` : "Open a widget entry from quick actions or files browser.",
-    };
   }
 
   private trackDeniedFeature(featureId: string, kind: UiEntryKind): void {
