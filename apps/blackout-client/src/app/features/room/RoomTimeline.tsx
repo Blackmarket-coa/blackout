@@ -23,6 +23,8 @@ import {
     VideoMessage as TimelineVideoMessage,
 } from '../../components/messages';
 import { Reactions } from './Reactions';
+import { ProfileModal } from '../profile/ProfileModal';
+import type { MemberProfile } from '../profile/profileTypes';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -61,6 +63,7 @@ interface MessageBubbleProps {
     event: MatrixEvent;
     groupedWithPrevious?: boolean;
     receipts?: ReadReceipt[];
+    onOpenProfile?: (userId: string) => void;
 }
 
 interface ReadReceipt {
@@ -480,6 +483,7 @@ const MessageBubble = ({
     receipts = [],
     room,
     roomId,
+    onOpenProfile,
 }: MessageBubbleProps & { room: Room | null; roomId: string }) => {
     const sender = getEventSender(event);
     const avatar = getAvatar(room, sender);
@@ -496,7 +500,18 @@ const MessageBubble = ({
             <div>
                 {!groupedWithPrevious ? (
                     avatar ? (
-                        <img src={avatar} alt={senderName} style={styles.avatar} loading="lazy" />
+                        <button
+                            type="button"
+                            onClick={() => onOpenProfile?.(sender)}
+                            style={{ border: 'none', background: 'transparent', padding: 0 }}
+                        >
+                            <img
+                                src={avatar}
+                                alt={senderName}
+                                style={styles.avatar}
+                                loading="lazy"
+                            />
+                        </button>
                     ) : (
                         <div style={styles.avatarPlaceholder} />
                     )
@@ -505,7 +520,19 @@ const MessageBubble = ({
             <div style={sticker ? styles.stickerBubble : styles.bubble}>
                 {!groupedWithPrevious ? (
                     <div style={styles.header}>
-                        <span style={styles.sender}>{senderName}</span>
+                        <button
+                            type="button"
+                            style={{
+                                ...styles.sender,
+                                border: 'none',
+                                background: 'transparent',
+                                padding: 0,
+                                cursor: 'pointer',
+                            }}
+                            onClick={() => onOpenProfile?.(sender)}
+                        >
+                            {senderName}
+                        </button>
                         <span style={styles.timestamp}>{formatEventTime(event)}</span>
                         <EditedIndicator event={event} />
                     </div>
@@ -578,6 +605,18 @@ export const RoomTimeline = ({
     const [scrollTop, setScrollTop] = useState(0);
     const [viewportHeight, setViewportHeight] = useState(600);
     const [isAtBottom, setIsAtBottom] = useState(true);
+    const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
+    const buildProfile = useCallback(
+        (userId: string): MemberProfile => ({
+            userId,
+            displayName: room?.getMember(userId)?.name ?? userId,
+            avatarUrl: room?.getMember(userId)?.getMxcAvatarUrl?.() ?? undefined,
+            roleBadges: [],
+            mutualSpaces: [],
+            profile: {},
+        }),
+        [room],
+    );
 
     const items = useMemo(() => buildTimelineItems(events, unreadEventId), [events, unreadEventId]);
 
@@ -694,6 +733,7 @@ export const RoomTimeline = ({
                                     room={room}
                                     roomId={roomId}
                                     receipts={getReceipts(item.event)}
+                                    onOpenProfile={(userId) => setProfileTarget(buildProfile(userId))}
                                 />
                             </Fragment>
                         );
@@ -717,6 +757,19 @@ export const RoomTimeline = ({
             ) : null}
 
             <TypingBar members={typingMembers} />
+            <ProfileModal
+                open={Boolean(profileTarget)}
+                profile={
+                    profileTarget ?? {
+                        userId: '',
+                        displayName: '',
+                        roleBadges: [],
+                        mutualSpaces: [],
+                        profile: {},
+                    }
+                }
+                onClose={() => setProfileTarget(null)}
+            />
         </section>
     );
 };

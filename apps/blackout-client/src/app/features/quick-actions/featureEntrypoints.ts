@@ -37,6 +37,9 @@ const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
         'features.nav.roomInvites': false,
         'features.nav.search': false,
         'features.timeline.threads': false,
+        'features.bmc.roles': false,
+        'features.call.elementCall': false,
+        'features.bmc.forum': false,
     },
     governance: {
         'features.settings.appearance': true,
@@ -44,6 +47,9 @@ const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
         'features.nav.roomInvites': false,
         'features.nav.search': false,
         'features.timeline.threads': false,
+        'features.bmc.roles': false,
+        'features.call.elementCall': false,
+        'features.bmc.forum': false,
     },
     sovereignty: {
         'features.settings.appearance': true,
@@ -51,6 +57,9 @@ const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
         'features.nav.roomInvites': true,
         'features.nav.search': true,
         'features.timeline.threads': true,
+        'features.bmc.roles': true,
+        'features.call.elementCall': true,
+        'features.bmc.forum': true,
     },
 };
 
