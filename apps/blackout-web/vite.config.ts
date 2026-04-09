@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,15 +9,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@blackout/contracts": path.resolve(__dirname, "../../packages/contracts/src/index.ts"),
-    },
-  },
-  test: {
-    environment: "jsdom",
-    include: ["tests/**/*.test.ts"],
-    setupFiles: ["tests/setup.ts"],
-    coverage: {
-      reporter: ["text", "lcov"],
-      include: ["src/**/*.ts"],
     },
   },
 });
