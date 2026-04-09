@@ -34,6 +34,10 @@ function featureRow(overrides = {}) {
     presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
     uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
     fallbackBehavior: 'shows unavailable state',
+    evidenceType: 'docs',
+    lastVerifiedAt: '2026-04-09',
+    verifiedBy: 'blackout-ci',
+    evidencePaths: ['docs/a.md'],
     ...overrides,
   };
 }
@@ -143,4 +147,48 @@ test('fails when section/global totals do not match unique scoped feature IDs', 
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /does not match unique featureIds/);
   assert.match(res.stderr, /globalTotal=/);
+});
+
+test('fails infra/runtime claims that are not tagged as external-infra', () => {
+  const file = writeFixture([
+    featureRow({
+      notes: 'Cloudflare tunnel count claim pending confirmation.',
+      evidenceType: 'docs',
+    }),
+  ]);
+
+  const res = runScript(file);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /infra\/runtime claims must set evidenceType to "external-infra"/);
+});
+
+test('fails external-infra claims without verifiable evidence when marked verified', () => {
+  const file = writeFixture([
+    featureRow({
+      evidenceType: 'external-infra',
+      evidencePaths: ['docs/misc/non-verifiable.md'],
+      verifiedBy: 'ops-user',
+      lastVerifiedAt: '2026-04-09',
+    }),
+  ]);
+
+  const res = runScript(file);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /must set verifiedBy to "unverified"/);
+  assert.match(res.stderr, /must set lastVerifiedAt to null/);
+});
+
+test('passes external-infra claims with verifiable runbook evidence', () => {
+  const file = writeFixture([
+    featureRow({
+      evidenceType: 'external-infra',
+      notes: 'DL360 host inventory validated through runbook.',
+      evidencePaths: ['docs/operations/runbooks/townhall-observability-runbook.md'],
+      verifiedBy: 'rtc-platform-ops',
+      lastVerifiedAt: '2026-03-16',
+    }),
+  ]);
+
+  const res = runScript(file);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
 });

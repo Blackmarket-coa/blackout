@@ -16,6 +16,10 @@ const REQUIRED_FIELDS = [
   'presetPolicy',
   'uiTestRefs',
   'fallbackBehavior',
+  'evidenceType',
+  'lastVerifiedAt',
+  'verifiedBy',
+  'evidencePaths',
 ];
 
 const VALID_CATEGORIES = new Set(['novel', 'discord_like', 'matrix_like']);
@@ -27,6 +31,16 @@ const VALID_UI_ENTRY_PREFIXES = new Set([
   'widget_panel',
   'admin_console',
 ]);
+const VALID_EVIDENCE_TYPES = new Set(['code', 'docs', 'runtime', 'external-infra']);
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function hasVerifiableInfraEvidence(paths) {
+  return paths.some((pathEntry) =>
+    /^ops-artifact:/.test(pathEntry)
+    || pathEntry.startsWith('docs/operations/runbooks/')
+    || pathEntry.startsWith('docs/operations/evidence/'),
+  );
+}
 
 function getArg(name) {
   const index = process.argv.indexOf(name);
@@ -157,6 +171,42 @@ for (const [index, row] of features.entries()) {
     errors.push(`${prefix}: "sourcePointers" must be a non-empty array.`);
   } else if (!row.sourcePointers.every((pointer) => typeof pointer === 'string' && pointer.trim().length > 0)) {
     errors.push(`${prefix}: all "sourcePointers" entries must be non-empty strings.`);
+  }
+
+  if (typeof row.evidenceType !== 'string' || !VALID_EVIDENCE_TYPES.has(row.evidenceType)) {
+    errors.push(`${prefix}: evidenceType must be one of ${Array.from(VALID_EVIDENCE_TYPES).join(', ')}.`);
+  }
+
+  if (!Array.isArray(row.evidencePaths) || row.evidencePaths.length === 0) {
+    errors.push(`${prefix}: "evidencePaths" must be a non-empty array.`);
+  } else if (!row.evidencePaths.every((evidencePath) => typeof evidencePath === 'string' && evidencePath.trim().length > 0)) {
+    errors.push(`${prefix}: all "evidencePaths" entries must be non-empty strings.`);
+  }
+
+  if (row.lastVerifiedAt != null && (typeof row.lastVerifiedAt !== 'string' || !ISO_DATE_PATTERN.test(row.lastVerifiedAt))) {
+    errors.push(`${prefix}: lastVerifiedAt must be null or an ISO date string (YYYY-MM-DD).`);
+  }
+
+  if (row.verifiedBy != null && (typeof row.verifiedBy !== 'string' || row.verifiedBy.trim().length === 0)) {
+    errors.push(`${prefix}: verifiedBy must be null or a non-empty string.`);
+  }
+
+  const notes = typeof row.notes === 'string' ? row.notes.toLowerCase() : '';
+  const referencesInfraClaim = /\b(dl360|cloudflare|tunnel|infra|infrastructure|host|runtime)\b/.test(notes);
+  if (referencesInfraClaim && row.evidenceType !== 'external-infra') {
+    errors.push(`${prefix}: infra/runtime claims must set evidenceType to "external-infra".`);
+  }
+
+  if (row.evidenceType === 'external-infra') {
+    const hasVerifiableEvidence = Array.isArray(row.evidencePaths) && hasVerifiableInfraEvidence(row.evidencePaths);
+    if (!hasVerifiableEvidence) {
+      if (row.verifiedBy !== 'unverified') {
+        errors.push(`${prefix}: external-infra claims without runbook/evidence artifacts must set verifiedBy to "unverified".`);
+      }
+      if (row.lastVerifiedAt !== null) {
+        errors.push(`${prefix}: external-infra claims without runbook/evidence artifacts must set lastVerifiedAt to null.`);
+      }
+    }
   }
 }
 

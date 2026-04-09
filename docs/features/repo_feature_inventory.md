@@ -53,8 +53,13 @@ Goal: every feature listed above has (1) a discoverable preset/toggle, (2) an in
    - `presetKey` (feature-flag or setting key)
    - `uiEntry` (route/component/test id)
    - `owner`, `testCoverage`, `notes`
+   - `evidenceType` (`code|docs|runtime|external-infra`)
+   - `lastVerifiedAt` (ISO date, nullable for unverified external infra claims)
+   - `verifiedBy` (owner/team identity, or `unverified`)
+   - `evidencePaths` (repo paths and/or `ops-artifact:<id>` references)
 2. Link each registry row to source docs/code pointers.
 3. Add CI check that fails if duplicate `id` or missing required fields.
+4. Require infrastructure/runtime claims (for example host inventory and tunnel counts) to use `evidenceType: external-infra`. If no verifiable runbook/evidence artifact is attached, force `verifiedBy: unverified` and `lastVerifiedAt: null`.
 
 ### Phase 2 — Preset model and configuration plumbing
 
