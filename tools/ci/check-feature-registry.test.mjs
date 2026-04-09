@@ -19,24 +19,27 @@ function writeFixture(content) {
   return file;
 }
 
-test('passes with valid rows', () => {
-  const file = writeFixture([
-    {
-      id: 'feature_a',
-      name: 'Feature A',
-      category: 'novel',
-      status: 'implemented',
-      presetKey: 'features.a',
-      uiEntry: 'settings_toggle:feature-toggle-a',
-      owner: 'team-a',
-      testCoverage: 'unit',
-      notes: 'ok',
-      sourcePointers: ['docs/a.md'],
-      presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
-      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
-      fallbackBehavior: 'shows unavailable state',
-    },
-  ]);
+function featureRow(overrides = {}) {
+  return {
+    id: 'feature_a',
+    name: 'Feature A',
+    category: 'novel',
+    status: 'implemented',
+    presetKey: 'features.a',
+    uiEntry: 'settings_toggle:feature-toggle-a',
+    owner: 'team-a',
+    testCoverage: 'unit',
+    notes: 'ok',
+    sourcePointers: ['docs/a.md'],
+    presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
+    uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
+    fallbackBehavior: 'shows unavailable state',
+    ...overrides,
+  };
+}
+
+test('passes with valid rows (legacy array format)', () => {
+  const file = writeFixture([featureRow()]);
 
   const res = runScript(file);
   assert.equal(res.status, 0, res.stderr || res.stdout);
@@ -45,36 +48,8 @@ test('passes with valid rows', () => {
 
 test('fails with duplicate ids', () => {
   const file = writeFixture([
-    {
-      id: 'dupe',
-      name: 'Feature A',
-      category: 'novel',
-      status: 'implemented',
-      presetKey: 'features.a',
-      uiEntry: 'settings_toggle:feature-toggle-a',
-      owner: 'team-a',
-      testCoverage: 'unit',
-      notes: 'ok',
-      sourcePointers: ['docs/a.md'],
-      presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
-      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
-      fallbackBehavior: 'shows unavailable state',
-    },
-    {
-      id: 'dupe',
-      name: 'Feature B',
-      category: 'matrix_like',
-      status: 'partial',
-      presetKey: 'features.b',
-      uiEntry: 'widget_panel:feature-widget-b',
-      owner: 'team-b',
-      testCoverage: 'integration',
-      notes: 'ok',
-      sourcePointers: ['docs/b.md'],
-      presetPolicy: { baseline_matrix: false, community_plus: true, blackout_full: true },
-      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-widget-b'],
-      fallbackBehavior: 'shows unavailable state',
-    },
+    featureRow({ id: 'dupe', name: 'Feature A' }),
+    featureRow({ id: 'dupe', name: 'Feature B', category: 'matrix_like', presetKey: 'features.b', uiEntry: 'widget_panel:feature-widget-b' }),
   ]);
 
   const res = runScript(file);
@@ -99,7 +74,7 @@ test('fails with missing required fields', () => {
 
 test('fails with invalid uiEntry mapping', () => {
   const file = writeFixture([
-    {
+    featureRow({
       id: 'bad_ui_entry',
       name: 'Feature D',
       category: 'novel',
@@ -112,11 +87,60 @@ test('fails with invalid uiEntry mapping', () => {
       sourcePointers: ['docs/d.md'],
       presetPolicy: { baseline_matrix: false, community_plus: false, blackout_full: true },
       uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-d'],
-      fallbackBehavior: 'shows unavailable state',
-    },
+    }),
   ]);
 
   const res = runScript(file);
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /uiEntry must start with one of/);
+});
+
+test('fails when two features share the same name in a scope', () => {
+  const file = writeFixture({
+    features: [
+      featureRow({ id: 'feature_a', name: 'Shared Name' }),
+      featureRow({
+        id: 'feature_b',
+        name: 'Shared Name',
+        category: 'matrix_like',
+        presetKey: 'features.b',
+        uiEntry: 'widget_panel:feature-widget-b',
+      }),
+    ],
+    scopes: [
+      {
+        id: 'primary',
+        sections: [
+          { id: 'novel', featureIds: ['feature_a'], total: 1 },
+          { id: 'matrix_like', featureIds: ['feature_b'], total: 1 },
+        ],
+        globalTotal: 2,
+      },
+    ],
+  });
+
+  const res = runScript(file);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /duplicate feature name/);
+});
+
+test('fails when section/global totals do not match unique scoped feature IDs', () => {
+  const file = writeFixture({
+    features: [featureRow({ id: 'feature_a' }), featureRow({ id: 'feature_b', name: 'Feature B', category: 'matrix_like', presetKey: 'features.b', uiEntry: 'widget_panel:feature-widget-b' })],
+    scopes: [
+      {
+        id: 'primary',
+        sections: [
+          { id: 'novel', featureIds: ['feature_a', 'feature_a'], total: 2 },
+          { id: 'matrix_like', featureIds: ['feature_b'], total: 1 },
+        ],
+        globalTotal: 5,
+      },
+    ],
+  });
+
+  const res = runScript(file);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /does not match unique featureIds/);
+  assert.match(res.stderr, /globalTotal=/);
 });
