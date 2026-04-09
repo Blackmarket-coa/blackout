@@ -201,3 +201,113 @@ decode(msg, K):
 - Phase 3: per-locale dictionaries + adaptive carrier scoring.
 
 This staged rollout contains risk while validating false-positive and abuse controls.
+
+## 13) UX flows for stego composer + decoder
+
+## 13.1 Composer UX flow
+
+### Entry points
+
+1. **Chat composer overflow menu** → `Hidden metadata` toggle.
+2. **Long-press send button** → `Send with hidden payload` quick action (shown only if stego enabled for conversation).
+3. **Safety-gated prompt** when user pastes text matching a known control format (e.g., imported secure note), offering to attach as hidden payload.
+
+### Step-by-step flow
+
+1. User types normal visible message.
+2. User opens `Hidden metadata` panel.
+3. User enters hidden payload (text only on free tier) and optional purpose label.
+4. Client runs preflight checks:
+   - carrier capacity estimate,
+   - policy guardrails,
+   - language/dictionary availability.
+5. Composer shows **capacity meter** and estimated confidence.
+6. On send, client encodes payload and displays a local success/failure toast.
+
+### User warnings (composer)
+
+- **Pre-send caution banner:** "Hidden metadata may fail after copy/edit/forwarding."
+- **Policy banner:** "Hidden channels cannot be used to bypass community rules."
+- **Lossy transforms warning:** shown when message contains patterns likely to be normalized (autoformat punctuation, unsupported emoji).
+
+## 13.2 Decoder UX flow
+
+### Entry points
+
+1. **Passive decode on message render** for eligible conversations.
+2. **Manual decode action** from message context menu: `Check hidden metadata`.
+3. **Bulk scan action** in conversation debug panel (power-user/dev setting).
+
+### Step-by-step flow
+
+1. Client extracts candidate carriers from incoming message.
+2. Client attempts keyed decode with current day key, then previous day key.
+3. Client computes confidence score and integrity outcomes.
+4. If valid, payload is surfaced in a secondary panel beneath the message.
+5. If invalid/low confidence, UI remains quiet by default; optional subtle indicator in debug mode.
+
+### Confidence indicators
+
+Use a 3-state badge in decoder panel:
+
+- **High (green):** HMAC valid, CRC valid, FEC corrections <= threshold.
+- **Medium (amber):** HMAC valid, CRC valid, but high FEC correction count or carrier anomalies.
+- **Low (gray):** decode attempted but not trustworthy; payload withheld.
+
+Expose details in expandable diagnostics:
+- candidate symbols found,
+- corrected bit count,
+- key epoch used,
+- reason for downgrade.
+
+## 13.3 Error handling
+
+### Composer errors
+
+- **Insufficient capacity:** block send-with-hidden; offer `Send visible only` fallback.
+- **Policy blocked:** disable hidden send and show non-dismissable reason with link to policy doc.
+- **Key unavailable/expired:** prompt key refresh/re-handshake.
+- **Encoding instability risk high:** suggest shortening payload or adding neutral visible text.
+
+### Decoder errors
+
+- **Integrity/auth failure:** return `No hidden metadata detected` (no partial reveal).
+- **Old epoch mismatch:** silent retry with previous epoch, then fail closed.
+- **Repeated hard failures:** trigger per-chat suggestion to reset stego session.
+- **Resource budget exceeded:** abort decode and queue low-priority retry (never block scrolling).
+
+### Recovery UX
+
+- Always provide a one-tap action: `Send/Show without hidden metadata`.
+- Preserve user-visible message draft if hidden encoding fails.
+- Log only privacy-safe diagnostics, not raw decoded payload, by default.
+
+## 13.4 Accessibility notes
+
+- All stego controls must be fully keyboard navigable.
+- Screen readers:
+  - announce toggle state (`Hidden metadata on/off`),
+  - announce confidence badge with semantic wording (not color only),
+  - provide concise decode failure reason.
+- Do not rely on emoji color/shape distinctions alone; include text labels and icons.
+- Ensure warning banners meet WCAG contrast requirements and do not auto-dismiss before being announced.
+- Respect reduced-motion settings for confidence/status transitions.
+
+## 13.5 Localization notes
+
+- Localize all warnings and confidence labels with ICU message formatting.
+- Keep payload-size and timing values locale-aware (number formatting), but protocol values remain invariant.
+- T-channel must be dictionary-gated per locale; if locale unsupported, UI should:
+  1. disable T-channel,
+  2. keep E-channel if supported,
+  3. explain limitation in localized copy.
+- Avoid culturally ambiguous emoji buckets in certain locales; bucket catalog should be locale-scoped.
+- Provide translator notes for security-sensitive strings so tone remains clear and non-alarming.
+
+## 13.6 Recommended UX copy (starter)
+
+- Composer toggle helper: `Attach hidden metadata to this message.`
+- High confidence: `Hidden metadata verified.`
+- Medium confidence: `Hidden metadata verified with minor transmission noise.`
+- Low confidence: `Hidden metadata could not be verified.`
+- Policy block: `Hidden metadata is disabled for this conversation due to safety policy.`
