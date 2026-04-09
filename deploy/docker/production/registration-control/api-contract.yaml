@@ -1,0 +1,353 @@
+openapi: 3.1.0
+info:
+  title: Registration Control API
+  version: 1.0.0
+  description: Invite-only + domain allowlist + anti-abuse registration controls.
+servers:
+  - url: https://api.example.com
+paths:
+  /v1/registration/precheck:
+    post:
+      summary: Pre-validate registration eligibility without creating a user.
+      operationId: registrationPrecheck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationPrecheckRequest'
+      responses:
+        '200':
+          description: Eligibility decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationPrecheckResponse'
+        '429':
+          description: Rate limited or abuse throttled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/registration:
+    post:
+      summary: Register a new account subject to policy controls.
+      operationId: registerAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationCreateRequest'
+      responses:
+        '201':
+          description: Registration accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationCreateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Policy denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Invite exhausted or conflicting state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate or abuse throttle denial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/registration/invite/validate:
+    post:
+      summary: Validate an invite without consuming it.
+      operationId: validateInvite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteValidateRequest'
+      responses:
+        '200':
+          description: Invite validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteValidateResponse'
+  /v1/admin/registration/policy:
+    put:
+      summary: Upsert registration policy.
+      operationId: upsertRegistrationPolicy
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationPolicyUpsertRequest'
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationPolicy'
+  /v1/admin/registration/invites:
+    post:
+      summary: Create one invite token.
+      operationId: createInvite
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateInviteRequest'
+      responses:
+        '201':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCreateInviteResponse'
+  /v1/admin/registration/overrides:
+    post:
+      summary: Create temporary override for registration decisions.
+      operationId: createOverride
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateOverrideRequest'
+      responses:
+        '201':
+          description: Override created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCreateOverrideResponse'
+  /v1/admin/registration/audit:
+    get:
+      summary: Query registration decision audit records.
+      operationId: getRegistrationAudit
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: actor
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Audit query result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RegistrationAuditRecord'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    DecisionErrorCode:
+      type: string
+      enum:
+        - INVITE_REQUIRED
+        - INVITE_INVALID
+        - INVITE_EXHAUSTED
+        - DOMAIN_NOT_ALLOWED
+        - RATE_LIMITED
+        - ABUSE_THROTTLED
+        - CAPTCHA_REQUIRED
+        - ADMIN_DENY
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: '#/components/schemas/DecisionErrorCode'
+            message:
+              type: string
+            retry_after_seconds:
+              type: integer
+              minimum: 0
+            decision_id:
+              type: string
+    RegistrationPrecheckRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        invite_code: { type: string }
+        fingerprint_id: { type: string }
+        tenant_id: { type: string }
+    RegistrationPrecheckResponse:
+      type: object
+      required: [eligible, requirements, limits, decision_id]
+      properties:
+        eligible: { type: boolean }
+        requirements:
+          type: object
+          required: [invite_required, captcha_required, email_domain_allowed]
+          properties:
+            invite_required: { type: boolean }
+            captcha_required: { type: boolean }
+            email_domain_allowed: { type: boolean }
+        limits:
+          type: object
+          required: [retry_after_seconds, remaining_attempts_window]
+          properties:
+            retry_after_seconds: { type: integer, minimum: 0 }
+            remaining_attempts_window: { type: integer, minimum: 0 }
+        decision_id: { type: string }
+    RegistrationCreateRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        invite_code: { type: string }
+        captcha_token: { type: string }
+        fingerprint_id: { type: string }
+        tenant_id: { type: string }
+        decision_id: { type: string }
+    RegistrationCreateResponse:
+      type: object
+      required: [user_id, status, next_step]
+      properties:
+        user_id: { type: string }
+        status:
+          type: string
+          enum: [pending_verification, active]
+        next_step:
+          type: string
+          enum: [verify_email, complete_profile, done]
+    InviteValidateRequest:
+      type: object
+      required: [invite_code, email]
+      properties:
+        invite_code: { type: string }
+        email: { type: string, format: email }
+    InviteValidateResponse:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        invite:
+          type: object
+          properties:
+            max_uses: { type: integer, minimum: 1 }
+            remaining_uses: { type: integer, minimum: 0 }
+            expires_at: { type: string, format: date-time }
+            domain_restrictions:
+              type: array
+              items: { type: string }
+    RegistrationPolicyUpsertRequest:
+      type: object
+      required: [invite_only, domain_allowlist_enabled, default_rate_policy, abuse_policy]
+      properties:
+        tenant_id: { type: [string, 'null'] }
+        invite_only: { type: boolean }
+        domain_allowlist_enabled: { type: boolean }
+        default_rate_policy: { type: string, enum: [strict, standard, relaxed] }
+        abuse_policy: { type: string, enum: [progressive_challenge, strict_block] }
+    RegistrationPolicy:
+      type: object
+      required: [id, invite_only, domain_allowlist_enabled, default_rate_policy, abuse_policy]
+      properties:
+        id: { type: integer }
+        tenant_id: { type: [string, 'null'] }
+        invite_only: { type: boolean }
+        domain_allowlist_enabled: { type: boolean }
+        default_rate_policy: { type: string }
+        abuse_policy: { type: string }
+    AdminCreateInviteRequest:
+      type: object
+      required: [max_uses]
+      properties:
+        tenant_id: { type: [string, 'null'] }
+        max_uses: { type: integer, minimum: 1 }
+        expires_at: { type: string, format: date-time }
+        allowed_domains:
+          type: array
+          items: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+    AdminCreateInviteResponse:
+      type: object
+      required: [invite_id, invite_code, max_uses, used_count]
+      properties:
+        invite_id: { type: integer }
+        invite_code: { type: string }
+        max_uses: { type: integer }
+        used_count: { type: integer }
+        expires_at: { type: [string, 'null'], format: date-time }
+    AdminCreateOverrideRequest:
+      type: object
+      required: [scope, scope_value, action, reason_code, expires_at]
+      properties:
+        tenant_id: { type: [string, 'null'] }
+        scope:
+          type: string
+          enum: [email, domain, ip, fingerprint, tenant]
+        scope_value: { type: string }
+        action:
+          type: string
+          enum: [ALLOW, BYPASS_INVITE, BYPASS_DOMAIN, BYPASS_THROTTLE, DENY]
+        reason_code: { type: string }
+        expires_at: { type: string, format: date-time }
+    AdminCreateOverrideResponse:
+      type: object
+      required: [override_id, scope, action, expires_at]
+      properties:
+        override_id: { type: integer }
+        scope: { type: string }
+        scope_value: { type: string }
+        action: { type: string }
+        expires_at: { type: string, format: date-time }
+    RegistrationAuditRecord:
+      type: object
+      properties:
+        decision_id: { type: string }
+        tenant_id: { type: [string, 'null'] }
+        result: { type: string, enum: [allow, deny, challenge] }
+        reason_codes:
+          type: array
+          items: { type: string }
+        risk_score: { type: integer, minimum: 0, maximum: 100 }
+        created_at: { type: string, format: date-time }

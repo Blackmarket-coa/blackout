@@ -479,3 +479,11 @@ Abuse thresholds:
 - Use data retention policy for audit rows (e.g., 180 days hot, archived after).
 - Ensure override and invite admin endpoints are protected by RBAC + MFA.
 - Add immutable audit export path for incident investigations.
+
+---
+
+## 9) Implementation artifacts
+
+- OpenAPI contract: `registration-control/api-contract.yaml`
+- SQL migration draft: `registration-control/db-schema.sql`
+- Middleware execution design: `registration-control/middleware-design.md`
