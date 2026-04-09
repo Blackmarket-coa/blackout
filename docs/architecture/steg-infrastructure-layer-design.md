@@ -362,3 +362,119 @@ A paid codec phase exits only when all are true:
 5. Incident rollback drill completed successfully in the current quarter.
 
 If any threshold regresses, backend forces automatic rollback to previous phase and marks codec as `degraded` in capability APIs.
+
+---
+
+## 12) Steganographic Whispers (standalone capability)
+
+Steganographic Whispers is a distinct messaging capability focused on low-noise, short-lived, covert communication with explicit user consent and policy controls.
+
+## 12.1 User story
+
+> As a user coordinating sensitive information in a room, I want to send a **Whisper** that appears as normal cover content to non-authorized viewers, while authorized recipients can reveal a hidden payload safely and quickly.
+
+Primary outcomes:
+- Sender can choose "Whisper" mode without leaving the composer.
+- Authorized recipients can reliably detect and reveal the hidden message.
+- Non-authorized recipients see only benign cover content.
+- The system preserves auditability of control-plane actions without exposing secret payloads.
+
+## 12.2 Protocol behavior
+
+Whispers reuse the stego infrastructure primitives but with stricter defaults.
+
+### Whisper envelope profile
+- `mode = whisper`
+- `ttl`: required, default 24h, max 168h.
+- `maxPayloadBytes`: bounded by codec profile and entitlement tier.
+- `audienceHint`: optional, non-sensitive label (e.g., `incident-core`).
+- `revealPolicy`: `manual_only` by default (no auto-reveal on open).
+- `forwardPolicy`: default `deny` (forward/share disabled unless policy allows).
+
+### Delivery semantics
+- Sender must reference a valid indicator (`channelId`, `epoch`, `keyId`) and pass entitlement check.
+- Backend validates policy (TTL, payload size, room capability, moderation state).
+- Clients without compatible whisper support fail closed for reveal but still render cover text/media.
+- On key rotation, whisper decode follows active `epoch` rules; retired epochs are blocked unless break-glass policy allows.
+
+### Reveal semantics
+- Reveal requires explicit local user action and fresh auth if secure storage is locked.
+- Reveal events produce **control-plane telemetry only** (no plaintext, no raw payload).
+- Optional one-time reveal policy can burn local cache immediately after reveal.
+
+## 12.3 UX metaphors
+
+Whispers should feel intentional and understandable, not "magic".
+
+- **Seal metaphor**: sender "seals" a message into ordinary content.
+- **Lantern metaphor**: recipient "lights" the content to reveal hidden text.
+- **Fuse metaphor**: TTL visualized as a fuse countdown for whisper expiry.
+- **Boundary metaphor**: explicit badge differentiates normal encrypted messages vs whispers.
+
+### Core UX components
+- Composer toggle: `Normal | Whisper` with concise explainers.
+- Whisper card preview: shows cover content + hidden payload size, TTL, and audience label.
+- Recipient affordance: "Reveal Whisper" action with passphrase/auth prompt.
+- Safety affordance: report/mute actions available at both cover and whisper context levels.
+
+## 12.4 Moderation and safety implications
+
+Whispers increase abuse and review complexity and require guardrails.
+
+### Abuse risks
+- Covert harassment or grooming signals in hidden payloads.
+- Evasion of keyword-based moderation heuristics.
+- Coordinated abuse using rapidly rotated channels.
+
+### Required controls
+- Policy gating by trust tier, room type, and region.
+- Rate limits for whisper creation and reveal failures.
+- Mandatory metadata-level moderation hooks (without payload decryption by default).
+- Incident workflow for high-confidence abuse patterns (temporary whisper suspension at room/org scope).
+
+### Moderator visibility model
+- By default, moderators see cover content and protocol metadata only.
+- Enhanced review mode (policy-controlled, auditable) may require dual authorization and legal basis to access decrypted evidence if enterprise/governance policy permits.
+- All moderation escalations must preserve chain-of-custody logs.
+
+### Safety UX requirements
+- Clear user-facing disclosures: whispers are private but not guaranteed safe against compromised endpoints.
+- In-context report flow for suspicious whispers.
+- Age/regulated environment policies can disable whisper capability entirely.
+
+## 12.5 Telemetry and success metrics
+
+Track only operational and behavioral signals needed for reliability/safety/product outcomes.
+
+### Privacy-preserving telemetry principles
+- Never collect plaintext hidden payload.
+- Hash/aggregate identifiers where possible.
+- Retain event-level data with strict TTL and role-based access.
+
+### Core metrics
+- Adoption:
+  - whisper send rate per eligible DAU,
+  - whisper reveal rate,
+  - paid codec attach rate in whisper mode.
+- Reliability:
+  - encode/decode success rate,
+  - median reveal latency,
+  - stale-epoch decode failure rate.
+- Safety:
+  - abuse report rate per 1k whispers,
+  - false-positive moderation escalation rate,
+  - compromise-triggered whisper suspension frequency.
+- Business:
+  - conversion uplift from whisper paywalls,
+  - churn among users hitting whisper limits,
+  - entitlement rejection rate at send-time.
+
+### Success criteria (launch + steady state)
+- Launch gate:
+  - >= 99% decode success in supported clients,
+  - < 1% entitlement check failure due to platform faults,
+  - moderation escalation SLA compliance >= 99%.
+- 90-day steady state:
+  - sustained adoption growth in target cohorts,
+  - no statistically significant rise in severe abuse rate versus control cohorts,
+  - paid conversion target met without reliability regression.
