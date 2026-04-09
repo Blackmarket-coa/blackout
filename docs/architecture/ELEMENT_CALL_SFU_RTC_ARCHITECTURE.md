@@ -404,7 +404,99 @@ Failure handling:
 
 ---
 
-## 9) Security and abuse controls
+## 9) Meeting features subsystem
+
+This subsystem defines advanced collaboration capabilities layered on the core SFU architecture.
+
+## 9.1 Breakout room orchestration
+
+Control-plane model:
+- Breakouts are child sessions linked to a parent meeting identifier.
+- Orchestrator service manages assignment, lifecycle, and timed transitions.
+- Role constraints:
+  - Moderator/co-host can create, assign, move, and close breakouts.
+  - Participants can request reassignment if policy allows.
+
+Lifecycle flow:
+1. Moderator creates breakout template (count, duration, auto-return).
+2. Service computes assignments (manual, random, policy-based cohorts).
+3. Clients receive signed room transfer instruction (parent -> breakout).
+4. Client rejoins target SFU session with breakout-scoped token claims.
+5. On timer/close, clients are recalled to parent session.
+
+Operational concerns:
+- Preserve parent meeting metadata (hand raise, role, mute policy) with scoped overrides.
+- Support “broadcast to all breakout rooms” announcements from moderator.
+- Enforce capacity ceilings per breakout and overflow handling.
+- Emit audit events for moves, forced recalls, and policy overrides.
+
+## 9.2 Cloud recording pipeline
+
+Architecture:
+- Recorder workers subscribe as privileged SFU participants.
+- Media is captured as isolated tracks (speaker cam, screen share, room mix).
+- Processing pipeline creates:
+  - Raw track artifacts (for compliance retention when required)
+  - Composed playback artifact (MP4/HLS variants)
+  - Event timeline metadata (mute/unmute, speaker switches, redaction toggles)
+
+Reliability pattern:
+- Queue-based job orchestration with idempotent segment writes.
+- Multi-AZ object storage with lifecycle policies (hot -> warm -> archive).
+- Resume-capable segmenter for transient worker failures.
+- Recorder autoscaling keyed to concurrent-recording count and composition backlog.
+
+Access/control:
+- Recording start/stop gated by role + room policy.
+- Signed, short-lived playback URLs.
+- Retention/deletion enforced per workspace policy and legal hold flags.
+
+## 9.3 Transcription storage and search
+
+Transcription flow:
+1. Audio segments from live or post-process pipeline enter ASR workers.
+2. ASR output includes timestamps, speaker labels (if enabled), and confidence.
+3. Normalized transcript chunks stored in encrypted datastore.
+4. Search index receives chunk text + metadata for full-text retrieval.
+
+Data model guidance:
+- Partition by tenant/workspace + meeting ID + segment time bucket.
+- Store original and redacted transcript variants when policy requires.
+- Attach provenance (`asr_model`, version, language, confidence bands).
+
+Search capabilities:
+- Keyword and phrase search with timestamp jump links.
+- Speaker-filtered queries when diarization is active.
+- Export API with policy checks and redaction enforcement.
+
+Quality/governance controls:
+- Confidence thresholds for highlighting uncertain text.
+- Human correction workflow with immutable edit history.
+- Regional residency controls for transcript at-rest location.
+
+## 9.4 Consent and legal notices by region
+
+Consent/notice behavior must be region-aware at join time and recording/transcription state changes.
+
+Policy engine inputs:
+- User locale + account legal region + meeting-host region policy.
+- Meeting features active (recording, transcription, AI summary, screen capture).
+- Organization compliance profile (education, healthcare, public sector, etc.).
+
+Required UX patterns:
+- Pre-join legal notice banner/dialog with explicit acceptance where mandated.
+- In-call persistent indicator when recording/transcription is active.
+- Re-consent event when feature scope materially changes (e.g., transcription starts mid-call).
+- Localized notice text versioned and auditable.
+
+Enforcement:
+- Deny join or disable sensitive features if consent is required and not granted.
+- Persist consent receipt with timestamp, policy version, and region basis.
+- Ensure exports include legal-notice context for downstream compliance review.
+
+---
+
+## 10) Security and abuse controls
 
 - Ephemeral SFU tokens (short TTL, audience/speaker role claims, room-scoped).
 - Server-side enforcement of publish/subscribe permissions.
@@ -414,7 +506,7 @@ Failure handling:
 
 ---
 
-## 10) Operational runbook essentials
+## 11) Operational runbook essentials
 
 - Pre-event checklist for townhall: host network, backup host, fallback region readiness.
 - Live dashboard: join funnel, active transports, loss/jitter heatmap, top failing ISPs/ASNs.
@@ -423,7 +515,7 @@ Failure handling:
 
 ---
 
-## 11) Implementation blueprint (phased)
+## 12) Implementation blueprint (phased)
 
 1. **Phase 1 (1:1 baseline)**
    - Single SFU tier, regional HA, token service hardening.
