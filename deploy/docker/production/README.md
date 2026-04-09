@@ -103,3 +103,9 @@ For threat model and hardening guidance of Tunnel/TLS/DNS, see:
 For executable migration test steps and pass/fail criteria, see:
 
 - `NETWORK_E2E_TEST_MATRIX.md`
+
+## Registration control architecture
+
+For invite-only/domain-allowlist/rate-limit/abuse-throttle/admin-override design (API + DB + middleware), see:
+
+- `REGISTRATION_CONTROL_ARCHITECTURE.md`
