@@ -97,3 +97,9 @@ For staged Cloudflare Tunnel + TLS + DNS migration (staging then production), se
 For threat model and hardening guidance of Tunnel/TLS/DNS, see:
 
 - `NETWORK_SECURITY_REVIEW.md`
+
+## Networking E2E test matrix
+
+For executable migration test steps and pass/fail criteria, see:
+
+- `NETWORK_E2E_TEST_MATRIX.md`
