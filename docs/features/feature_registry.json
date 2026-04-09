@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "canonicalSource": "docs/features/feature_registry.json",
   "scopes": [
     {
@@ -70,7 +70,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/features/privacy_first_stego_roadmap.md",
+        "docs/features/privacy_first_stego_completion_tracker.md",
+        "docs/features/repo_feature_inventory.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "ephemeral_stego_lifecycle",
@@ -94,7 +102,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/features/privacy_first_stego_roadmap.md",
+        "docs/features/privacy_first_stego_completion_tracker.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "governance_entitlements",
@@ -119,7 +134,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/blackout-governance-build-plan.md",
+        "docs/blackout-governance-migration.md",
+        "docs/features/governance_features_analysis.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "federation_boost_policy",
@@ -143,7 +166,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-admin-federation-boost"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/14-stream-revenue-implementation-plan.md",
+        "docs/features/repo_feature_inventory.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "townhall_sfu",
@@ -168,7 +198,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-widget-townhall-sfu"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "external-infra",
+      "evidencePaths": [
+        "docs/blackout-sfu-townhall-build-plan.md",
+        "docs/operations/runbooks/townhall-observability-runbook.md",
+        "deploy/kubernetes/phase4/element-ha.yaml"
+      ],
+      "lastVerifiedAt": "2026-03-16",
+      "verifiedBy": "rtc-platform-ops"
     },
     {
       "id": "rich_composer",
@@ -193,7 +231,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-composer-rich-editing"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "docs/features/composer.md",
+        "apps/blackout-web/src/components/MessageInput.ts",
+        "apps/blackout-web/tests/integration/app.test.ts"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "typing_indicators",
@@ -217,7 +263,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-composer-typing-indicators"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "docs/features/repo_feature_inventory.md",
+        "apps/blackout-web/src/components/ChatWindow.ts"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "widget_shell_layouts",
@@ -241,7 +294,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-widget-shell-layouts"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/widget-layouts.md",
+        "docs/features/frontend-backend-contract.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "matrix_client_arch",
@@ -266,7 +326,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "apps/blackout-web/src/services/matrix-client.ts",
+        "apps/blackout-web/src/app.ts",
+        "apps/blackout-web/tests/unit/api-client.test.ts"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "homeserver_discovery",
@@ -291,7 +359,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-homeserver-discovery"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "docs/custom-home.md",
+        "apps/blackout-web/src/config.ts",
+        "docs/features/repo_feature_inventory.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "e2ee_defaults",
@@ -315,7 +391,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-e2ee-defaults"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/e2ee.md",
+        "docs/security-phase2-app-hardening.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "oidc_delegated_auth",
@@ -340,7 +423,15 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-oidc-auth"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "docs/oidc.md",
+        "apps/blackout-web/src/features/auth/auth-view.ts",
+        "docs/security-phase3-auth-modernization.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "matrix_widget_compat",
@@ -364,7 +455,14 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-widget-matrix-compat"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/features/repo_feature_inventory.md",
+        "docs/widget-layouts.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "multiplatform_bootstrap",
@@ -388,64 +486,85 @@
       "uiTestRefs": [
         "apps/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
       ],
-      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+      "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
+      "evidenceType": "docs",
+      "evidencePaths": [
+        "docs/install.md",
+        "docs/features/repo_feature_inventory.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
-    "uiTestRefs": [
-      "apps/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
-    ],
-    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
-  },
-  {
-    "id": "ci_cd_pipeline_github_actions",
-    "name": "CI/CD Pipeline (GitHub Actions)",
-    "category": "matrix_like",
-    "status": "partial",
-    "presetKey": "features.platform.ciCdPipeline",
-    "uiEntry": "settings_toggle:feature-toggle-matrix-client",
-    "owner": "platform-infra",
-    "testCoverage": "workflow",
-    "notes": "Workflows exist in .github/workflows/ for lint/test/build/deploy coverage (ci.yml, tests.yml, blackout-web-tests.yml, blackout-mobile.yml, deploy-web.yml). Partial = workflows exist for lint/test/build but incomplete deploy matrix. Implemented = required PR and main-branch gates all enforced and green.",
-    "sourcePointers": [
-      ".github/workflows/ci.yml",
-      ".github/workflows/tests.yml",
-      ".github/workflows/blackout-web-tests.yml",
-      ".github/workflows/blackout-mobile.yml",
-      ".github/workflows/deploy-web.yml"
-    ],
-    "presetPolicy": {
-      "baseline_matrix": true,
-      "community_plus": true,
-      "blackout_full": true
+    {
+      "id": "ci_cd_pipeline_github_actions",
+      "name": "CI/CD Pipeline (GitHub Actions)",
+      "category": "matrix_like",
+      "status": "partial",
+      "presetKey": "features.platform.ciCdPipeline",
+      "uiEntry": "settings_toggle:feature-toggle-matrix-client",
+      "owner": "platform-infra",
+      "testCoverage": "workflow",
+      "notes": "Workflows exist in .github/workflows/ for lint/test/build/deploy coverage (ci.yml, tests.yml, blackout-web-tests.yml, blackout-mobile.yml, deploy-web.yml). Partial = workflows exist for lint/test/build but incomplete deploy matrix. Implemented = required PR and main-branch gates all enforced and green.",
+      "sourcePointers": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/tests.yml",
+        ".github/workflows/blackout-web-tests.yml",
+        ".github/workflows/blackout-mobile.yml",
+        ".github/workflows/deploy-web.yml"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": true,
+        "community_plus": true,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+      ],
+      "fallbackBehavior": "Workflow orchestration remains source-controlled in GitHub Actions; status should not be promoted to implemented until branch protection and required checks are enforced for PR and main branch paths.",
+      "evidenceType": "runtime",
+      "evidencePaths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/tests.yml",
+        ".github/workflows/blackout-web-tests.yml",
+        ".github/workflows/blackout-mobile.yml",
+        ".github/workflows/deploy-web.yml"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
-    "uiTestRefs": [
-      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
-    ],
-    "fallbackBehavior": "Workflow orchestration remains source-controlled in GitHub Actions; status should not be promoted to implemented until branch protection and required checks are enforced for PR and main branch paths."
-  },
-  {
-    "id": "epic_delivery_blueprint",
-    "name": "EPIC delivery blueprint panel",
-    "category": "matrix_like",
-    "status": "implemented",
-    "presetKey": "features.epic.deliveryBlueprint",
-    "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
-    "owner": "blackout-web",
-    "testCoverage": "integration",
-    "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
-    "sourcePointers": [
-      "apps/blackout-web/src/app.ts",
-      "apps/blackout-web/tests/integration/app.test.ts",
-      "docs/features/epic_name_delivery_blueprint.md"
-    ],
-    "presetPolicy": {
-      "baseline_matrix": false,
-      "community_plus": false,
-      "blackout_full": true
-    },
-    "uiTestRefs": [
-      "apps/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
-      "apps/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
-    ],
-    "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings."
-  }
-]
+    {
+      "id": "epic_delivery_blueprint",
+      "name": "EPIC delivery blueprint panel",
+      "category": "matrix_like",
+      "status": "implemented",
+      "presetKey": "features.epic.deliveryBlueprint",
+      "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
+      "owner": "blackout-web",
+      "testCoverage": "integration",
+      "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
+      "sourcePointers": [
+        "apps/blackout-web/src/app.ts",
+        "apps/blackout-web/tests/integration/app.test.ts",
+        "docs/features/epic_name_delivery_blueprint.md"
+      ],
+      "presetPolicy": {
+        "baseline_matrix": false,
+        "community_plus": false,
+        "blackout_full": true
+      },
+      "uiTestRefs": [
+        "apps/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
+        "apps/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
+      ],
+      "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings.",
+      "evidenceType": "code",
+      "evidencePaths": [
+        "apps/blackout-web/src/app.ts",
+        "apps/blackout-web/tests/integration/app.test.ts",
+        "docs/features/epic_name_delivery_blueprint.md"
+      ],
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
+    }
+  ]
+}
