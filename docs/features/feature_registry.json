@@ -390,31 +390,62 @@
       ],
       "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
     },
-    {
-      "id": "epic_delivery_blueprint",
-      "name": "EPIC delivery blueprint panel",
-      "category": "matrix_like",
-      "status": "implemented",
-      "presetKey": "features.epic.deliveryBlueprint",
-      "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
-      "owner": "blackout-web",
-      "testCoverage": "integration",
-      "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
-      "sourcePointers": [
-        "apps/blackout-web/src/app.ts",
-        "apps/blackout-web/tests/integration/app.test.ts",
-        "docs/features/epic_name_delivery_blueprint.md"
-      ],
-      "presetPolicy": {
-        "baseline_matrix": false,
-        "community_plus": false,
-        "blackout_full": true
-      },
-      "uiTestRefs": [
-        "apps/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
-        "apps/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
-      ],
-      "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings."
-    }
-  ]
-}
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-room-multiplatform-bootstrap"
+    ],
+    "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\"."
+  },
+  {
+    "id": "ci_cd_pipeline_github_actions",
+    "name": "CI/CD Pipeline (GitHub Actions)",
+    "category": "matrix_like",
+    "status": "partial",
+    "presetKey": "features.platform.ciCdPipeline",
+    "uiEntry": "settings_toggle:feature-toggle-matrix-client",
+    "owner": "platform-infra",
+    "testCoverage": "workflow",
+    "notes": "Workflows exist in .github/workflows/ for lint/test/build/deploy coverage (ci.yml, tests.yml, blackout-web-tests.yml, blackout-mobile.yml, deploy-web.yml). Partial = workflows exist for lint/test/build but incomplete deploy matrix. Implemented = required PR and main-branch gates all enforced and green.",
+    "sourcePointers": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/tests.yml",
+      ".github/workflows/blackout-web-tests.yml",
+      ".github/workflows/blackout-mobile.yml",
+      ".github/workflows/deploy-web.yml"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": true,
+      "community_plus": true,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-matrix-client"
+    ],
+    "fallbackBehavior": "Workflow orchestration remains source-controlled in GitHub Actions; status should not be promoted to implemented until branch protection and required checks are enforced for PR and main branch paths."
+  },
+  {
+    "id": "epic_delivery_blueprint",
+    "name": "EPIC delivery blueprint panel",
+    "category": "matrix_like",
+    "status": "implemented",
+    "presetKey": "features.epic.deliveryBlueprint",
+    "uiEntry": "settings_toggle:feature-epic-delivery-blueprint",
+    "owner": "blackout-web",
+    "testCoverage": "integration",
+    "notes": "Provides implementation guardrails for E2EE-safe and Matrix-compatible EPIC delivery in settings.",
+    "sourcePointers": [
+      "apps/blackout-web/src/app.ts",
+      "apps/blackout-web/tests/integration/app.test.ts",
+      "docs/features/epic_name_delivery_blueprint.md"
+    ],
+    "presetPolicy": {
+      "baseline_matrix": false,
+      "community_plus": false,
+      "blackout_full": true
+    },
+    "uiTestRefs": [
+      "apps/blackout-web/tests/integration/app.test.ts::renders the EPIC delivery blueprint with E2EE and rollout guardrails",
+      "apps/blackout-web/tests/integration/app.test.ts::hides the EPIC delivery blueprint when feature flag is disabled"
+    ],
+    "fallbackBehavior": "When disabled, the EPIC delivery blueprint panel does not render in settings."
+  }
+]
