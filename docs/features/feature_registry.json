@@ -38,12 +38,13 @@
             "oidc_delegated_auth",
             "matrix_widget_compat",
             "multiplatform_bootstrap",
+            "ci_cd_pipeline_github_actions",
             "epic_delivery_blueprint"
           ],
-          "total": 7
+          "total": 8
         }
       ],
-      "globalTotal": 15
+      "globalTotal": 16
     }
   ],
   "features": [
@@ -55,12 +56,14 @@
       "presetKey": "features.stego.enabled",
       "uiEntry": "settings_toggle:feature-toggle-stego-toolkit",
       "owner": "privacy-eng",
-      "testCoverage": "doc-only",
-      "notes": "Core roadmap is documented but migration into blackout-web is incomplete.",
+      "testCoverage": "integration",
+      "notes": "Full stego composer panel (encode/decrypt/password tabs, channel management) is implemented in MessageInput.ts with integration test coverage. Full migration of remaining codec and backend lifecycle work is still in progress.",
       "sourcePointers": [
         "docs/features/privacy_first_stego_roadmap.md",
         "docs/features/privacy_first_stego_completion_tracker.md",
-        "docs/features/repo_feature_inventory.md"
+        "docs/features/repo_feature_inventory.md",
+        "apps/blackout-web/src/components/MessageInput.ts",
+        "apps/blackout-web/tests/integration/app.test.ts"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -71,11 +74,13 @@
         "apps/blackout-web/tests/integration/app.test.ts::feature-toggle-stego-toolkit"
       ],
       "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
+      "evidenceType": "code",
       "evidencePaths": [
         "docs/features/privacy_first_stego_roadmap.md",
         "docs/features/privacy_first_stego_completion_tracker.md",
-        "docs/features/repo_feature_inventory.md"
+        "docs/features/repo_feature_inventory.md",
+        "apps/blackout-web/src/components/MessageInput.ts",
+        "apps/blackout-web/tests/integration/app.test.ts"
       ],
       "lastVerifiedAt": "2026-04-09",
       "verifiedBy": "blackout-ci"
@@ -84,15 +89,16 @@
       "id": "ephemeral_stego_lifecycle",
       "name": "Ephemeral stego lifecycle management",
       "category": "novel",
-      "status": "planned",
+      "status": "partial",
       "presetKey": "features.stego.ephemeral",
       "uiEntry": "room_action:feature-room-ephemeral-stego",
       "owner": "privacy-eng",
-      "testCoverage": "none",
-      "notes": "Lifecycle and self-destruct semantics are in phase plans and still pending implementation in app flows.",
+      "testCoverage": "partial-integration",
+      "notes": "Ephemeral checkbox and TTL field are implemented in the stego composer panel (MessageInput.ts). Self-destruct lifecycle enforcement in app flows and backend remains pending.",
       "sourcePointers": [
         "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md"
+        "docs/features/privacy_first_stego_completion_tracker.md",
+        "apps/blackout-web/src/components/MessageInput.ts"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -103,10 +109,11 @@
         "apps/blackout-web/tests/integration/app.test.ts::feature-room-ephemeral-stego"
       ],
       "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
+      "evidenceType": "code",
       "evidencePaths": [
         "docs/features/privacy_first_stego_roadmap.md",
-        "docs/features/privacy_first_stego_completion_tracker.md"
+        "docs/features/privacy_first_stego_completion_tracker.md",
+        "apps/blackout-web/src/components/MessageInput.ts"
       ],
       "lastVerifiedAt": "2026-04-09",
       "verifiedBy": "blackout-ci"
@@ -119,12 +126,14 @@
       "presetKey": "features.governance.entitlements",
       "uiEntry": "admin_console:feature-admin-governance-entitlements",
       "owner": "governance-platform",
-      "testCoverage": "doc-only",
-      "notes": "Policy controls and audits are tracked in governance migration/build plans.",
+      "testCoverage": "integration",
+      "notes": "Governance composer panel (proposal creation, voting, templates) is implemented in MessageInput.ts with integration test coverage. Backend policy enforcement and audit controls remain in migration/build plans.",
       "sourcePointers": [
         "docs/blackout-governance-build-plan.md",
         "docs/blackout-governance-migration.md",
-        "docs/features/governance_features_analysis.md"
+        "docs/features/governance_features_analysis.md",
+        "apps/blackout-web/src/components/MessageInput.ts",
+        "apps/blackout-web/tests/integration/app.test.ts"
       ],
       "presetPolicy": {
         "baseline_matrix": false,
@@ -135,11 +144,13 @@
         "apps/blackout-web/tests/integration/app.test.ts::feature-admin-governance-entitlements"
       ],
       "fallbackBehavior": "When disabled by policy or entitlement, the UI renders a \"feature unavailable\" empty state with a stable data-testid suffix \"-unavailable\".",
-      "evidenceType": "docs",
+      "evidenceType": "code",
       "evidencePaths": [
         "docs/blackout-governance-build-plan.md",
         "docs/blackout-governance-migration.md",
-        "docs/features/governance_features_analysis.md"
+        "docs/features/governance_features_analysis.md",
+        "apps/blackout-web/src/components/MessageInput.ts",
+        "apps/blackout-web/tests/integration/app.test.ts"
       ],
       "lastVerifiedAt": "2026-04-09",
       "verifiedBy": "blackout-ci"
@@ -205,8 +216,8 @@
         "docs/operations/runbooks/townhall-observability-runbook.md",
         "deploy/kubernetes/phase4/element-ha.yaml"
       ],
-      "lastVerifiedAt": "2026-03-16",
-      "verifiedBy": "rtc-platform-ops"
+      "lastVerifiedAt": "2026-04-09",
+      "verifiedBy": "blackout-ci"
     },
     {
       "id": "rich_composer",
