@@ -19,3 +19,14 @@
 
 - D) Federation sender backlog and retry metrics visible on dashboards.
 - D) Federation backlog recovery validated after induced outage.
+
+## Feature note — Federation Monitoring Dashboard
+
+- **Status:** Partial
+- **Evidence:** `docs/operations/dashboards/federation_resilience_dashboard.json`
+
+### Completion checklist
+
+- [x] data-source wiring
+- [x] alert thresholds/runbook linkage
+- [ ] production dashboard deployment verification
