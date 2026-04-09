@@ -145,6 +145,9 @@ importers:
 
   apps/blackout-web:
     dependencies:
+      '@blackout/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@blackout/core':
         specifier: workspace:*
         version: link:../../packages/core

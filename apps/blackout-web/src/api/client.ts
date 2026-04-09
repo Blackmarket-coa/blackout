@@ -16,6 +16,7 @@ import type {
   ServerDetailsResponse,
   ServerListResponse,
 } from "../contracts/api-contract";
+import { API_ROOTS } from "@blackout/contracts";
 import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
 
 export class ApiError extends Error {
@@ -65,7 +66,7 @@ export class ApiClient {
       };
     }
 
-    const payload = await this.fetchJson<AuthResponse>("/v1/auth/login", {
+    const payload = await this.fetchJson<AuthResponse>(`${API_ROOTS.v1}/auth/login`, {
       method: "POST",
       body: JSON.stringify({ username, password } satisfies AuthRequest),
       headers: { "content-type": "application/json" },
@@ -79,7 +80,7 @@ export class ApiClient {
       return this.login(username, password);
     }
 
-    const payload = await this.fetchJson<AuthResponse>("/v1/auth/register", {
+    const payload = await this.fetchJson<AuthResponse>(`${API_ROOTS.v1}/auth/register`, {
       method: "POST",
       body: JSON.stringify({ username, password } satisfies AuthRequest),
       headers: { "content-type": "application/json" },
@@ -96,7 +97,7 @@ export class ApiClient {
       ];
     }
 
-    return this.fetchJson<ServerListResponse>("/v1/servers", {
+    return this.fetchJson<ServerListResponse>(`${API_ROOTS.v1}/servers`, {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
   }
@@ -114,7 +115,7 @@ export class ApiClient {
       };
     }
 
-    return this.fetchJson<ServerDetailsResponse>(`/v1/servers/${encodeURIComponent(serverId)}`, {
+    return this.fetchJson<ServerDetailsResponse>(`${API_ROOTS.v1}/servers/${encodeURIComponent(serverId)}`, {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
   }
@@ -124,7 +125,7 @@ export class ApiClient {
       return { id: `srv_${Date.now()}`, name, role: "owner" };
     }
 
-    return this.fetchJson<CreateServerResponse>("/v1/servers", {
+    return this.fetchJson<CreateServerResponse>(`${API_ROOTS.v1}/servers`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
@@ -139,7 +140,7 @@ export class ApiClient {
       return { id: `chn_${Date.now()}`, name };
     }
 
-    return this.fetchJson<CreateChannelResponse>(`/v1/servers/${encodeURIComponent(serverId)}/channels`, {
+    return this.fetchJson<CreateChannelResponse>(`${API_ROOTS.v1}/servers/${encodeURIComponent(serverId)}/channels`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
@@ -161,7 +162,7 @@ export class ApiClient {
       ];
     }
 
-    const payload = await this.fetchJson<MessageListResponse>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+    const payload = await this.fetchJson<MessageListResponse>(`${API_ROOTS.v1}/channels/${encodeURIComponent(channelId)}/messages`, {
       headers: { authorization: `Bearer ${session.jwt}` },
     });
 
@@ -178,7 +179,7 @@ export class ApiClient {
       };
     }
 
-    return this.fetchJson<SendMessageResponse>(`/v1/channels/${encodeURIComponent(channelId)}/messages`, {
+    return this.fetchJson<SendMessageResponse>(`${API_ROOTS.v1}/channels/${encodeURIComponent(channelId)}/messages`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
@@ -191,7 +192,7 @@ export class ApiClient {
   async registerDevicePushToken(session: Session, token: string, platform: "ios" | "android" | "web"): Promise<void> {
     if (this.useMockApi) return;
 
-    await this.fetchJson<PushTokenMutationResponse>("/v1/mobile/push-tokens", {
+    await this.fetchJson<PushTokenMutationResponse>(`${API_ROOTS.v1}/mobile/push-tokens`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${session.jwt}`,
@@ -204,7 +205,7 @@ export class ApiClient {
   async unregisterDevicePushToken(session: Session, token: string): Promise<void> {
     if (this.useMockApi) return;
 
-    await this.fetchJson<PushTokenMutationResponse>("/v1/mobile/push-tokens", {
+    await this.fetchJson<PushTokenMutationResponse>(`${API_ROOTS.v1}/mobile/push-tokens`, {
       method: "DELETE",
       headers: {
         authorization: `Bearer ${session.jwt}`,

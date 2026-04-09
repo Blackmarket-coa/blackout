@@ -23,7 +23,8 @@
     "@blackout/core": "workspace:*",
     "@blackout/design": "workspace:*",
     "@blackout/ui": "workspace:*",
-    "@capacitor/core": "^7.0.0"
+    "@capacitor/core": "^7.0.0",
+    "@blackout/contracts": "workspace:*"
   },
   "optionalDependencies": {
     "@capacitor/keyboard": "^7.0.0",

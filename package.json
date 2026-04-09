@@ -52,7 +52,9 @@
     "contracts:check": "node tools/ci/check-contracts-generated.mjs",
     "guard:call-config": "node tools/ci/check-call-config.mjs",
     "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
-    "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs"
+    "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
+    "guard:runtime-targets": "node tools/ci/check-canonical-runtime-targets.mjs",
+    "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
