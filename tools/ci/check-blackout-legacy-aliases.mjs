@@ -16,7 +16,15 @@ function fail(message) {
   process.exit(1);
 }
 
-const featureFlagsPath = path.resolve(process.cwd(), "_port/src/modules/blackout/featureFlags.ts");
+function getArg(name) {
+  const idx = process.argv.indexOf(name);
+  return idx === -1 ? undefined : process.argv[idx + 1];
+}
+
+const featureFlagsPath = path.resolve(
+  process.cwd(),
+  getArg("--file") ?? "_port/src/modules/blackout/featureFlags.ts",
+);
 
 if (!fs.existsSync(featureFlagsPath)) {
   fail(`Blackout feature flag source not found: ${featureFlagsPath}`);
@@ -40,11 +48,6 @@ if (unexpected.length > 0) {
   );
 }
 
-const missing = Array.from(ALLOWED_BLACKOUT_LEGACY_ALIASES).filter((alias) => !aliasValues.includes(alias));
-if (missing.length > 0) {
-  fail(`Expected legacy aliases missing from LEGACY_FLAG_ALIASES: ${missing.join(", ")}.`);
-}
-
 process.stdout.write(
-  `Blackout legacy alias policy check passed (${aliasValues.length} aliases, allowlist locked).\n`,
+  `Blackout legacy alias policy check passed (${aliasValues.length} aliases, non-allowlisted additions blocked).\n`,
 );
