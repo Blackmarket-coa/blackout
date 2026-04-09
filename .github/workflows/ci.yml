@@ -120,6 +120,16 @@ jobs:
       - name: Run matrix-js-sdk sync mock tests
         run: pnpm --filter @blackout/blackout-web exec vitest run tests/unit tests/integration
 
+  feature-registry-validation:
+    name: Feature registry validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/ci/check-feature-registry.mjs
+
   build-verification:
     name: Build verification
     runs-on: ubuntu-latest

@@ -11,9 +11,10 @@ if (!fs.existsSync(registryPath)) {
   process.exit(1);
 }
 
-const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+const parsedRegistry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+const registry = Array.isArray(parsedRegistry) ? parsedRegistry : parsedRegistry?.features;
 if (!Array.isArray(registry)) {
-  process.stderr.write('Feature registry must be an array.\n');
+  process.stderr.write('Feature registry must be an array or object with a features array.\n');
   process.exit(1);
 }
 

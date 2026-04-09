@@ -38,28 +38,62 @@ function fail(message) {
   process.exit(1);
 }
 
+function toCanonicalRegistry(registry) {
+  if (Array.isArray(registry)) {
+    return {
+      features: registry,
+      scopes: [
+        {
+          id: 'legacy-array-scope',
+          sections: [
+            { id: 'novel', featureIds: registry.filter((row) => row?.category === 'novel').map((row) => row.id) },
+            { id: 'discord_like', featureIds: registry.filter((row) => row?.category === 'discord_like').map((row) => row.id) },
+            { id: 'matrix_like', featureIds: registry.filter((row) => row?.category === 'matrix_like').map((row) => row.id) },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (!registry || typeof registry !== 'object') {
+    return null;
+  }
+
+  if (!Array.isArray(registry.features) || !Array.isArray(registry.scopes)) {
+    return null;
+  }
+
+  return {
+    features: registry.features,
+    scopes: registry.scopes,
+  };
+}
+
 const registryPath = path.resolve(process.cwd(), getArg('--file') ?? 'docs/features/feature_registry.json');
 
 if (!fs.existsSync(registryPath)) {
   fail(`Feature registry not found: ${registryPath}`);
 }
 
-let registry;
+let parsedRegistry;
 try {
   const raw = fs.readFileSync(registryPath, 'utf8');
-  registry = JSON.parse(raw);
+  parsedRegistry = JSON.parse(raw);
 } catch (error) {
   fail(`Invalid JSON in ${registryPath}: ${error.message}`);
 }
 
-if (!Array.isArray(registry)) {
-  fail('Feature registry must be a JSON array.');
+const canonical = toCanonicalRegistry(parsedRegistry);
+if (!canonical) {
+  fail('Feature registry must be a JSON array or an object with "features" and "scopes" arrays.');
 }
 
-const seenIds = new Set();
+const { features, scopes } = canonical;
+
+const featureById = new Map();
 const errors = [];
 
-for (const [index, row] of registry.entries()) {
+for (const [index, row] of features.entries()) {
   const prefix = `Row ${index}`;
 
   if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -79,10 +113,10 @@ for (const [index, row] of registry.entries()) {
   }
 
   if (typeof row.id === 'string') {
-    if (seenIds.has(row.id)) {
+    if (featureById.has(row.id)) {
       errors.push(`${prefix}: duplicate id "${row.id}".`);
     }
-    seenIds.add(row.id);
+    featureById.set(row.id, row);
   }
 
   if (typeof row.category === 'string' && !VALID_CATEGORIES.has(row.category)) {
@@ -116,7 +150,7 @@ for (const [index, row] of registry.entries()) {
   if (!Array.isArray(row.uiTestRefs) || row.uiTestRefs.length === 0) {
     errors.push(`${prefix}: "uiTestRefs" must be a non-empty array.`);
   } else if (!row.uiTestRefs.every((ref) => typeof ref === 'string' && ref.includes('::'))) {
-    errors.push(`${prefix}: each uiTestRefs entry must be a \"path::token\" string.`);
+    errors.push(`${prefix}: each uiTestRefs entry must be a "path::token" string.`);
   }
 
   if (!Array.isArray(row.sourcePointers) || row.sourcePointers.length === 0) {
@@ -126,8 +160,83 @@ for (const [index, row] of registry.entries()) {
   }
 }
 
+for (const [scopeIndex, scope] of scopes.entries()) {
+  const scopeLabel = scope?.id ?? `scope-${scopeIndex}`;
+
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) {
+    errors.push(`Scope ${scopeIndex}: must be an object.`);
+    continue;
+  }
+
+  if (!Array.isArray(scope.sections)) {
+    errors.push(`Scope "${scopeLabel}": "sections" must be an array.`);
+    continue;
+  }
+
+  const seenSectionIds = new Set();
+  const scopeUniqueIds = new Set();
+  const scopeNames = new Map();
+
+  for (const [sectionIndex, section] of scope.sections.entries()) {
+    const sectionLabel = section?.id ?? `${scopeLabel}-section-${sectionIndex}`;
+
+    if (!section || typeof section !== 'object' || Array.isArray(section)) {
+      errors.push(`Scope "${scopeLabel}" section ${sectionIndex}: must be an object.`);
+      continue;
+    }
+
+    if (typeof section.id === 'string') {
+      if (seenSectionIds.has(section.id)) {
+        errors.push(`Scope "${scopeLabel}": duplicate section id "${section.id}".`);
+      }
+      seenSectionIds.add(section.id);
+    }
+
+    if (!Array.isArray(section.featureIds)) {
+      errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": "featureIds" must be an array.`);
+      continue;
+    }
+
+    const sectionUniqueIds = new Set();
+
+    for (const featureId of section.featureIds) {
+      if (typeof featureId !== 'string' || featureId.trim().length === 0) {
+        errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": featureIds must contain non-empty strings.`);
+        continue;
+      }
+
+      if (!featureById.has(featureId)) {
+        errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": unknown feature id "${featureId}".`);
+        continue;
+      }
+
+      sectionUniqueIds.add(featureId);
+      scopeUniqueIds.add(featureId);
+
+      const featureName = String(featureById.get(featureId).name ?? '').trim().toLowerCase();
+      if (featureName.length > 0) {
+        const existingFeatureId = scopeNames.get(featureName);
+        if (existingFeatureId && existingFeatureId !== featureId) {
+          errors.push(`Scope "${scopeLabel}": duplicate feature name "${featureById.get(featureId).name}" in scope.`);
+        }
+        scopeNames.set(featureName, featureId);
+      }
+    }
+
+    if (typeof section.total === 'number' && section.total !== sectionUniqueIds.size) {
+      errors.push(
+        `Scope "${scopeLabel}" section "${sectionLabel}": total=${section.total} does not match unique featureIds=${sectionUniqueIds.size}.`,
+      );
+    }
+  }
+
+  if (typeof scope.globalTotal === 'number' && scope.globalTotal !== scopeUniqueIds.size) {
+    errors.push(`Scope "${scopeLabel}": globalTotal=${scope.globalTotal} does not match unique scoped features=${scopeUniqueIds.size}.`);
+  }
+}
+
 if (errors.length > 0) {
   fail(`Feature registry validation failed:\n- ${errors.join('\n- ')}`);
 }
 
-process.stdout.write(`Feature registry validation passed (${registry.length} rows).\n`);
+process.stdout.write(`Feature registry validation passed (${features.length} rows across ${scopes.length} scope(s)).\n`);
