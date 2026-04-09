@@ -1,4 +1,7 @@
 import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
+export const API_ROOTS = {
+  v1: "/v1",
+} as const;
 
 export interface ApiErrorEnvelope {
   code: string;
