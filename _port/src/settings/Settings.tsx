@@ -232,11 +232,15 @@ export interface Settings {
     "feature_blackout_governance": IFeature;
     "feature_blackout_education": IFeature;
     "feature_blackout_mutual_aid": IFeature;
+    "feature_blackout_deliberation_clustering": IFeature;
+    "feature_blackout_ipfs_storage": IFeature;
+    "feature_blackout_townhall": IFeature;
     "feature_governance": IFeature;
     "feature_education": IFeature;
     "feature_mutual_aid": IFeature;
     "feature_deliberation_clustering": IFeature;
     "feature_ipfs_storage": IFeature;
+    "feature_townhall": IFeature;
     "feature_blackout_p2p_data_plane": IFeature;
     "feature_msc4362_encrypted_state_events": IFeature;
     // These are in the feature namespace but aren't actually features
@@ -820,6 +824,27 @@ export const SETTINGS: Settings = {
         supportedLevelsAreOrdered: true,
         default: false,
     },
+    "feature_blackout_deliberation_clustering": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_ipfs_storage": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_blackout_townhall": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
     // Legacy aliases retained for backwards compatibility with older config keys.
     "feature_governance": {
         isFeature: true,
@@ -853,6 +878,13 @@ export const SETTINGS: Settings = {
         default: false,
     },
     "feature_ipfs_storage": {
+        isFeature: true,
+        labsGroup: LabGroup.Experimental,
+        supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
+        supportedLevelsAreOrdered: true,
+        default: false,
+    },
+    "feature_townhall": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
