@@ -59,7 +59,9 @@
     "lint:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run lint",
     "test:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run test",
     "guard:runtime-scripts": "node tools/ci/check-runtime-scripts.mjs",
-    "test:guard:runtime-scripts": "node --test tools/ci/check-runtime-scripts.test.mjs"
+    "test:guard:runtime-scripts": "node --test tools/ci/check-runtime-scripts.test.mjs",
+    "guard:blackout-legacy-aliases": "node tools/ci/check-blackout-legacy-aliases.mjs",
+    "test:guard:blackout-legacy-aliases": "node --test tools/ci/check-blackout-legacy-aliases.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
