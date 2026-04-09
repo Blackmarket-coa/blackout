@@ -1,0 +1,50 @@
+name: Deploy Compose Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to deploy
+        required: true
+        default: stable
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/docker/production/**'
+      - '.github/workflows/deploy-compose-prod.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+
+      - name: Sync compose bundle
+        run: |
+          rsync -az --delete deploy/docker/production/ "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ secrets.PROD_STACK_DIR }}/"
+
+      - name: Deploy stack
+        run: |
+          ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
+          set -euo pipefail
+          cd "${{ secrets.PROD_STACK_DIR }}"
+          export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+          docker compose -f docker-compose.yml pull app worker
+          docker compose -f docker-compose.yml up -d --remove-orphans
+          docker compose -f docker-compose.yml ps
+          docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/healthz
+          EOSSH
+
+      - name: Trigger backup verification
+        if: success()
+        run: |
+          gh workflow run dr-backup-verification.yml -f environment=production
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
