@@ -29,7 +29,17 @@ This inventory groups features found by reviewing top-level and feature readmes 
 - OIDC delegated authentication support with MSC2965 discovery and dynamic/static client registration paths.
 - Matrix widget/state-event compatibility handling (`m.widget` and legacy widget event compatibility).
 - Multi-platform Matrix client bootstrap (web/PWA/Electron platform selection) and plugin/module loading model.
+- **Tauri v2 Desktop Target** — **Status: Partial**. Evidence exists for desktop CI and app scaffolding via `.github/workflows/blackout-desktop-tauri.yml` and the checked-in desktop wrapper paths under `blackout-desktop/` (including `src-tauri/` configuration and Rust entrypoint).
 - Standard Element/Matrix feature surfaces reflected in docs such as keyboard shortcuts, custom homeserver landing page, and widget layouts.
+
+### Objective completion conditions for Tauri v2 Desktop Target
+
+Promote from **Partial** to complete only when all of the following are true:
+
+1. **Signed binaries are produced and verifiably distributed** for target desktop platforms.
+2. **Auto-update is end-to-end operational** (signed update metadata, hosted artifacts, successful in-app update flow).
+3. **Push-to-talk keybind support is fully implemented** with stable cross-platform behavior and regression coverage.
+4. **Overlay support is implemented** (desktop overlay UX capability defined, shipped, and tested for supported platforms).
 
 ## Build plan: interactive presets + UI usability for all features
 
