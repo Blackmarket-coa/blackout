@@ -315,7 +315,96 @@ Observability:
 
 ---
 
-## 8) Security and abuse controls
+## 8) Screen sharing subsystem (desktop/web/mobile)
+
+Screen sharing must be policy-aware, role-aware, and platform-aware so that behavior is consistent while respecting OS/browser constraints.
+
+## 8.1 Platform support model
+
+- **Desktop app (native shell)**: full-screen, window, and display-source selection where OS allows.
+- **Web**: browser-native `getDisplayMedia` flow; source picker controlled by browser UX and enterprise policy.
+- **Mobile**:
+  - iOS/Android support depends on SDK/runtime capabilities and OS version.
+  - Prefer app-window share or system broadcast extension where available.
+  - If full screen-share is unavailable, fallback to camera/document share workflows.
+
+Capability publication:
+- Client advertises `can_screen_share`, supported source types, and max encode profiles at join.
+- SFU/policy service uses capability flags to enforce allowable publish types by role.
+
+## 8.2 Permission flows
+
+Permission flow sequence:
+1. User requests screen share.
+2. Client checks room policy + role entitlement (host/speaker/moderator).
+3. Client triggers OS/browser picker and capture permission prompt.
+4. Selected source metadata (sanitized) is attached to publish request.
+5. SFU grants publish track if token claims + policy checks pass.
+
+Guardrails:
+- Explicit one-time confirmation when sharing entire display.
+- Visual persistent indicator (“You are sharing”) + quick stop control.
+- Auto-stop share on permission revocation, source end, or app background events (platform-dependent).
+- Re-prompt logic must be rate-limited to avoid dark-pattern behavior.
+
+## 8.3 Bitrate adaptation and encoding policy
+
+Content-aware encoding profiles:
+- **Slides/text**: prioritize sharpness (higher resolution, lower FPS 5-15).
+- **Motion/video demo**: prioritize FPS (15-30) with adaptive resolution.
+- **Hybrid**: dynamic profile switching based on frame-delta heuristics.
+
+Adaptation controls:
+- Simulcast/SVC layers for screen tracks where codec/runtime supports it.
+- Subscriber-driven layer selection (thumbnail vs stage view).
+- Congestion fallback order:
+  1. Reduce FPS
+  2. Drop highest layer
+  3. Reduce resolution cap
+  4. Pause screen video, keep audio + placeholder
+- Separate budget buckets so screen-share bitrate does not starve active speaker audio.
+
+Suggested starting limits:
+- Baseline share: 720p @ 8-15 FPS, 600-1500 kbps.
+- High-detail mode: up to 1080p where CPU/network permit.
+- Mobile thermal/battery constrained mode: 540p/720p with reduced FPS.
+
+## 8.4 Privacy redaction options
+
+Redaction controls must be available before and during share:
+- Share-scope restriction: app/window-only vs entire display.
+- Optional on-device blur/mask regions (static or draggable overlays).
+- “Hide notifications” mode where OS/runtime supports suppression.
+- Exclude known sensitive UI surfaces by policy (password managers, security prompts) where detectable.
+- Watermark overlay (user + timestamp + room) for sensitive sessions.
+
+Operational/privacy requirements:
+- Redaction state changes are auditable (who toggled, when).
+- Default to least exposure (window share preferred over full desktop).
+- Admin policy can enforce redaction/watermark in regulated rooms.
+
+## 8.5 Recording interactions
+
+Screen sharing must interact predictably with recording controls:
+- UI shows clear state when recording is active during screen share.
+- Consent model:
+  - Room-level recording policy check at start.
+  - Additional user confirmation when local screen is about to be captured into recording.
+- Per-track metadata tags indicate `screen_share` source for post-processing and retention policies.
+
+Recording pipeline considerations:
+- Composite layout rules for screen + speaker (picture-in-picture, side-by-side, stage-first).
+- Preserve redaction overlays/watermarks in recorded output (not just local preview).
+- If recording starts mid-share, emit marker event for audit timeline.
+- If redaction is toggled during recording, emit versioned state changes for compliance playback notes.
+
+Failure handling:
+- If recorder degrades, keep live SFU distribution active and surface recording warning non-disruptively.
+- If screen capture ends unexpectedly, recorder should transition to fallback layout without terminating session.
+
+---
+
+## 9) Security and abuse controls
 
 - Ephemeral SFU tokens (short TTL, audience/speaker role claims, room-scoped).
 - Server-side enforcement of publish/subscribe permissions.
@@ -325,7 +414,7 @@ Observability:
 
 ---
 
-## 9) Operational runbook essentials
+## 10) Operational runbook essentials
 
 - Pre-event checklist for townhall: host network, backup host, fallback region readiness.
 - Live dashboard: join funnel, active transports, loss/jitter heatmap, top failing ISPs/ASNs.
@@ -334,7 +423,7 @@ Observability:
 
 ---
 
-## 10) Implementation blueprint (phased)
+## 11) Implementation blueprint (phased)
 
 1. **Phase 1 (1:1 baseline)**
    - Single SFU tier, regional HA, token service hardening.
