@@ -374,6 +374,151 @@ Indexes:
   - burst fanout in high-traffic conversations,
   - WS disconnect storms and replay recovery.
 
+## 11.1 Detailed messaging test cases (happy path + edge cases)
+
+### A) Ordering
+
+#### Happy path
+
+1. **In-order delivery in single conversation**
+   - **Given** users A and B are subscribed to the same conversation.
+   - **When** A sends M1, M2, M3 sequentially.
+   - **Then** B receives `message.created` events in canonical order and timeline renders M1 -> M2 -> M3.
+   - **Checks**:
+     - `createdAt` monotonic non-decreasing in API responses.
+     - deterministic tie-breaker by `messageId` when timestamps collide.
+
+2. **Pagination preserves historical order**
+   - **Given** 200 historical messages.
+   - **When** client loads latest 50 then backscrolls pages.
+   - **Then** no gaps/overlaps; final merged timeline is stable and contiguous.
+
+#### Edge cases
+
+1. **WS/HTTP race**
+   - WS `message.created` arrives before POST response for optimistic send.
+   - Client reconciles by `clientMessageId`/`messageId` without duplicate render or reordering.
+
+2. **Same timestamp collisions**
+   - Two messages share identical `createdAt`.
+   - Verify secondary sort key (`messageId`) is consistently applied across API and client stores.
+
+3. **Reconnect replay ordering**
+   - Disconnect during burst traffic; reconnect from last cursor.
+   - Replay inserts events in strict cursor order with no timeline inversions.
+
+### B) Duplicate handling
+
+#### Happy path
+
+1. **Idempotent resend with same `clientMessageId`**
+   - Client retries POST due to timeout using unchanged `clientMessageId`.
+   - Server returns existing canonical message; client displays single message instance.
+
+2. **At-least-once WS dedupe**
+   - Gateway intentionally redelivers same event.
+   - Client dedupes via `eventId`; unread counts and receipts update once.
+
+#### Edge cases
+
+1. **Different `clientMessageId`, same payload**
+   - User intentionally sends same text twice quickly.
+   - System keeps both distinct messages (no false-positive dedupe).
+
+2. **Out-of-order duplicate receipt events**
+   - `read` receipt arrives before duplicate `delivered` receipt.
+   - Client preserves highest semantic state (`read`) and ignores downgrade.
+
+3. **Duplicate across devices**
+   - Same account active on web + mobile sends same draft independently.
+   - Dedupe must not collapse truly separate sends unless `clientMessageId` matches.
+
+### C) Resend/retry
+
+#### Happy path
+
+1. **Transient network failure then retry success**
+   - Initial send fails with retryable error.
+   - Manual/automatic retry succeeds with same `clientMessageId`.
+   - Message transitions: `sending` -> `failed` -> `sending` -> `sent`.
+
+2. **Offline queue flush**
+   - User composes while offline.
+   - On reconnect, queued messages send in original local enqueue order.
+
+#### Edge cases
+
+1. **Non-retryable validation error**
+   - Message exceeds 16 KB.
+   - Client marks failed terminal state and surfaces actionable error; no automatic retry loop.
+
+2. **Partial success ambiguity**
+   - POST timeout after server commit.
+   - Retry returns canonical existing message; client resolves ghost pending state.
+
+3. **Backoff and jitter compliance**
+   - Repeated 5xx responses trigger capped exponential backoff.
+   - Verify retry budget and user-cancel behavior.
+
+### D) Media failures
+
+#### Happy path
+
+1. **Successful multipart upload + scan + render**
+   - Upload parts, complete session, receive attachment metadata.
+   - Scan transitions `pending -> clean`; media renders with thumbnail and downloadable original.
+
+2. **Signed URL refresh**
+   - Expired download URL is refreshed transparently; media opens without duplicate message creation.
+
+#### Edge cases
+
+1. **Upload part failure**
+   - One part fails checksum/ETag validation.
+   - Client retries failed part only; complete call blocked until all parts valid.
+
+2. **Scan result = infected**
+   - Attachment marked infected/quarantined.
+   - Timeline shows blocked state + safe user messaging; download prevented per policy.
+
+3. **Thumbnail generation failure**
+   - Original file clean, thumbnail pipeline fails.
+   - Client falls back to generic file tile while preserving successful download path.
+
+4. **Interrupted upload resume**
+   - App restart mid-upload.
+   - Resume token restores unfinished session; no orphaned duplicate attachments.
+
+### E) Cross-device sync
+
+#### Happy path
+
+1. **Read receipt convergence**
+   - Account logged into web + mobile.
+   - Reading conversation on mobile updates web unread count and read marker near-real-time.
+
+2. **Edits/deletes propagate**
+   - Message edited/deleted on device A.
+   - Device B reflects updated body/tombstone with consistent revision metadata.
+
+#### Edge cases
+
+1. **Divergent local caches**
+   - Device B is offline during 100-message burst.
+   - On reconnect, cursor replay + HTTP gap repair converge to same state as device A.
+
+2. **Clock skew between devices**
+   - Device clocks differ by +/- 5 minutes.
+   - Ordering remains server-authoritative (no local-time-induced reordering).
+
+3. **Token rotation mid-session**
+   - WS auth token expires on one device.
+   - Re-auth/resubscribe continues from last acked cursor without message loss.
+
+4. **Concurrent edit conflict**
+   - Same message edited nearly simultaneously from two devices.
+   - Conflict policy (e.g., last-write-wins by server version) is deterministic and auditable.
+
 ---
 
 ## 12) Acceptance criteria
