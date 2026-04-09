@@ -234,3 +234,131 @@ Automatic rotation when any of the following happens:
 4. **Phase D**: enable full compromised-key recovery workflow and run game-day validation.
 
 This sequencing minimizes lockout risk while progressively increasing security guarantees.
+
+---
+
+## 11) Phased rollout plan for paid stego codecs
+
+Paid codecs are gated as premium capabilities and roll out in ascending complexity:
+
+- **Phase P1 (Image codec GA first)**: lowest decode risk and broadest hardware support.
+- **Phase P2 (Audio codec limited GA)**: medium complexity, codec/container variability.
+- **Phase P3 (Video codec controlled GA)**: highest anti-detection and performance risk.
+
+Each phase includes launch criteria, per-platform kill switch, and abuse/safety review before expansion.
+
+## 11.1 Common pricing gate contract
+
+All paid codec sends/decodes require entitlement checks against a billing capability service.
+
+- Capability flags:
+  - `features.stego.codec.image.paid`
+  - `features.stego.codec.audio.paid`
+  - `features.stego.codec.video.paid`
+- Entitlement response fields:
+  - `planTier` (`free`, `signal`, `sovereign`, `enterprise`)
+  - `quota` (monthly encode/decode limits by codec)
+  - `maxPayloadBytes` (per codec)
+  - `expiresAt`
+- Hard requirements:
+  - Backend re-validates entitlement at send-time (never trust client gate alone).
+  - Client performs preflight check to avoid failed uploads.
+  - Grace handling: if billing service is degraded, previously validated sessions get short fail-open window (for example 15 minutes) and are fully audited.
+
+## 11.2 Codec-specific rollout details
+
+### A) Paid image stego codec (Phase P1)
+
+**Algorithm choice criteria**
+- Prefer transform-domain embedding (DCT/wavelet) over naive LSB for premium mode to improve robustness through recompression.
+- Must support deterministic payload framing with authenticated encryption.
+- Must preserve acceptable quality at social-share resolutions.
+
+**Quality/performance budget**
+- Encode latency target: <= 250 ms at 1080p on recent devices; <= 600 ms on low-end devices.
+- Decode latency target: <= 150 ms median for 1080p.
+- Visual quality budget: SSIM >= 0.98 and PSNR >= 40 dB versus source.
+- Payload budget: default 2-8 KB hidden data per image, codec/profile dependent.
+
+**Device compatibility**
+- Required: iOS 16+, Android 10+, modern desktop browsers with WASM SIMD fallback path.
+- Fallback: automatic downgrade to free/basic mode or block with user guidance if transform pipeline unsupported.
+- Explicitly test JPEG and PNG ingest/output paths across mobile and web.
+
+**Anti-detection risk notes**
+- Recompression pipelines can expose statistical artifacts; randomize embedding maps per-message nonce.
+- Strip or normalize metadata to avoid side-channel signals (EXIF consistency checks).
+- Rate-limit high-volume similar-carrier uploads to reduce classifier confidence.
+
+**Pricing gate integration**
+- Entry tier: `signal` or higher.
+- Metering unit: successful premium encode.
+- Upsell point: when free-tier user selects advanced image mode, show plan compare + estimated remaining monthly quota.
+
+### B) Paid audio stego codec (Phase P2)
+
+**Algorithm choice criteria**
+- Prefer spread-spectrum/phase coding hybrids resilient to transcoding and normalization.
+- Avoid schemes that break on common voice-note processing chains (AGC, denoise, format conversion).
+- Must provide robust synchronization markers for partial clipping scenarios.
+
+**Quality/performance budget**
+- Encode latency target: <= 400 ms for 30-second clip on mid-range mobile.
+- Decode latency target: <= 300 ms median for 30-second clip.
+- Audio quality budget: PESQ/MOS impact within "imperceptible to slight" threshold for speech/music baselines.
+- Payload budget: default 1-4 KB per 30 seconds with adaptive reduction for noisy sources.
+
+**Device compatibility**
+- Required containers/codecs: AAC-LC (`.m4a`) and Opus (`.ogg`/`.webm`) decode support.
+- Mobile background processing support required for files > 20 seconds.
+- Fallback path: server-assisted transcode normalization for unsupported sources (behind regional cost controls).
+
+**Anti-detection risk notes**
+- Spectral anomalies can be detected in repetitive use; enforce carrier diversity and randomization seeds.
+- Voice pipelines (noise suppression, telephony transcoding) increase decode failure and can leak pattern signatures.
+- Disallow unsafe parameter presets with known high detectability.
+
+**Pricing gate integration**
+- Entry tier: `sovereign` or higher (or `signal` add-on).
+- Metering units: clip-minute processed + successful premium encode.
+- Add overage controls: hard monthly minute cap with admin-configurable soft warning thresholds.
+
+### C) Paid video stego codec (Phase P3)
+
+**Algorithm choice criteria**
+- Prefer motion-aware transform embedding keyed per GOP/frame class.
+- Must survive platform transcode profiles where possible (bitrate/resolution adaptation).
+- Require explicit robustness scorecard per target container (`mp4/h264`, `webm/vp9`, optional `hevc`).
+
+**Quality/performance budget**
+- Encode latency target: <= 1.5x realtime on desktop, <= 2.5x realtime on high-end mobile for <= 60s clips.
+- Decode latency target: <= realtime for review workflows.
+- Visual quality budget: VMAF drop <= 3 points and no persistent visible flicker/block artifacts.
+- Payload budget: default 4-32 KB per minute based on motion and bitrate profile.
+
+**Device compatibility**
+- Initial support: desktop + high-end mobile only; mid/low-end mobile decode-only until optimization complete.
+- Hardware acceleration required where available; software fallback guarded by thermal/battery budget checks.
+- Reject unsupported combinations early (codec/container/profile mismatch) with user-facing remediation.
+
+**Anti-detection risk notes**
+- Video carries strongest forensic signal surface (temporal/statistical fingerprints).
+- Require per-release red-team evaluation with steganalysis baselines before wider rollout.
+- Enable emergency remote kill switch if detection rates exceed policy threshold.
+
+**Pricing gate integration**
+- Entry tier: `enterprise` (or controlled `sovereign` pilot).
+- Metering units: encoded output-minute + storage/egress multiplier.
+- Contract controls: organization-level policy toggles and mandatory audit export for regulated customers.
+
+## 11.3 Phase exit criteria and guardrails
+
+A paid codec phase exits only when all are true:
+
+1. Reliability SLO met for 28 consecutive days.
+2. Anti-detection red-team score remains under policy threshold.
+3. Billing/entitlement reconciliation error rate below threshold.
+4. Support ticket rate per 1k codec operations below threshold.
+5. Incident rollback drill completed successfully in the current quarter.
+
+If any threshold regresses, backend forces automatic rollback to previous phase and marks codec as `degraded` in capability APIs.
