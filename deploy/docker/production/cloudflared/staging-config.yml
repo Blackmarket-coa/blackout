@@ -1,0 +1,15 @@
+tunnel: 11111111-1111-1111-1111-111111111111
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: api-staging.example.com
+    service: https://reverse-proxy:443
+    originRequest:
+      http2Origin: true
+      noTLSVerify: false
+  - hostname: ws-staging.example.com
+    service: https://reverse-proxy:443
+    originRequest:
+      http2Origin: true
+      noTLSVerify: false
+  - service: http_status:404

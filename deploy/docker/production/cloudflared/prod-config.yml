@@ -1,0 +1,15 @@
+tunnel: 22222222-2222-2222-2222-222222222222
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: api.example.com
+    service: https://reverse-proxy:443
+    originRequest:
+      http2Origin: true
+      noTLSVerify: false
+  - hostname: ws.example.com
+    service: https://reverse-proxy:443
+    originRequest:
+      http2Origin: true
+      noTLSVerify: false
+  - service: http_status:404
