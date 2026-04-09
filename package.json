@@ -54,7 +54,12 @@
     "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
     "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
     "guard:runtime-targets": "node tools/ci/check-canonical-runtime-targets.mjs",
-    "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs"
+    "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs",
+    "build:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run build",
+    "lint:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run lint",
+    "test:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run test",
+    "guard:runtime-scripts": "node tools/ci/check-runtime-scripts.mjs",
+    "test:guard:runtime-scripts": "node --test tools/ci/check-runtime-scripts.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
