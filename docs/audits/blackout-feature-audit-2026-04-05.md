@@ -62,6 +62,17 @@ The following numbers are retained from the provided audit input and treated as 
 
 This document does **not** claim those counts were recomputed directly from repo automation in this pass.
 
+
+## Targeted status corrections (Proposal / Voting / Delegation)
+
+For the proposal/voting/delegation rows in the upstream 67-feature tracker, status should be treated as **Partial** (not **Not started**) based on repository evidence in `packages/api/src/routes/governance.ts` and `packages/core/src/governance/index.ts`.
+
+| Entry | Updated status | Notes |
+| --- | --- | --- |
+| Proposal | Partial | **Scaffold endpoints/utilities present:** governance route scaffold exists for vote creation and retrieval (`POST /votes`, `GET /votes/:voteId`) and uses shared tally utility import path. **Persistence/security/compliance readiness incomplete:** current backing store is in-memory and does not indicate production-grade authZ/audit/compliance controls. **UI integration status:** proposal workflows remain fragmented across app surfaces with incomplete end-to-end integration to durable backend state. |
+| Voting | Partial | **Scaffold endpoints/utilities present:** vote casting endpoint (`POST /votes/:voteId/cast`) and `tallyVotes` utility are implemented and wired. **Persistence/security/compliance readiness incomplete:** in-memory persistence and baseline validation only; hardened anti-abuse, compliance evidence paths, and durable controls are not complete. **UI integration status:** baseline voting controls exist in governance shells, but full contract parity and live-data integration are still pending in tracker docs. |
+| Delegation | Partial | **Scaffold endpoints/utilities present:** governance utility scaffolding exists in core package, but no dedicated delegation routes are exposed in current API scaffold. **Persistence/security/compliance readiness incomplete:** delegation persistence and policy enforcement are not production-ready in the `packages/api` path. **UI integration status:** delegation is represented as in-progress UI/ops surface, pending full backend integration and authoritative state flow. |
+
 ## Corrected critical finding
 
 The system currently has three partially overlapping delivery tracks with inconsistent integration boundaries:
