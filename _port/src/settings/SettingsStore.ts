@@ -79,6 +79,15 @@ export const LEVEL_ORDER = [
     SettingLevel.DEFAULT,
 ];
 
+const BLACKOUT_LEGACY_TO_CANONICAL_MIGRATION_MAP: Record<SettingKey, SettingKey> = {
+    feature_governance: "feature_blackout_governance",
+    feature_education: "feature_blackout_education",
+    feature_mutual_aid: "feature_blackout_mutual_aid",
+    feature_deliberation_clustering: "feature_blackout_deliberation_clustering",
+    feature_ipfs_storage: "feature_blackout_ipfs_storage",
+    feature_townhall: "feature_blackout_townhall",
+};
+
 function getLevelOrder(setting: ISetting): SettingLevel[] {
     // Settings which support only a single setting level are inherently ordered
     if (setting.supportedLevelsAreOrdered || setting.supportedLevels.length === 1) {
@@ -736,6 +745,35 @@ export default class SettingsStore {
     }
 
     /**
+     * One-time migration for blackout feature flags: when canonical key is unset but legacy key is set,
+     * copy legacy -> canonical at the same level.
+     */
+    private static async migrateBlackoutLegacyFlagsToCanonical(): Promise<void> {
+        const MIGRATION_DONE_FLAG = "blackout_legacy_flag_alias_migration_done";
+        if (localStorage.getItem(MIGRATION_DONE_FLAG)) return;
+
+        logger.info("Performing one-time settings migration of blackout legacy feature flags to canonical keys");
+
+        for (const [legacyKey, canonicalKey] of Object.entries(BLACKOUT_LEGACY_TO_CANONICAL_MIGRATION_MAP)) {
+            for (const level of LEVEL_ORDER) {
+                if (level === SettingLevel.DEFAULT) continue;
+                if (!SettingsStore.doesSettingSupportLevel(legacyKey as SettingKey, level)) continue;
+                if (!SettingsStore.doesSettingSupportLevel(canonicalKey as SettingKey, level)) continue;
+
+                const canonicalValue = SettingsStore.getValueAt(level, canonicalKey as SettingKey, null, false, true);
+                if (canonicalValue !== undefined) continue;
+
+                const legacyValue = SettingsStore.getValueAt(level, legacyKey as SettingKey, null, false, true);
+                if (legacyValue === undefined) continue;
+
+                await SettingsStore.setValue(canonicalKey as SettingKey, null, level, legacyValue);
+            }
+        }
+
+        localStorage.setItem(MIGRATION_DONE_FLAG, "true");
+    }
+
+    /**
      * Runs or queues any setting migrations needed.
      */
     public static runMigrations(isFreshLogin: boolean): void {
@@ -760,6 +798,13 @@ export default class SettingsStore {
         // media controls for this user will be missing
         SettingsStore.migrateMediaControlsToSetting(isFreshLogin).catch((e) => {
             logger.error("Failed to migrate media config settings", e);
+        });
+
+        // This can be removed one release cycle after legacy blackout keys are fully retired.
+        // The consequences of missing this migration are that legacy-only stored flags will keep
+        // relying on runtime alias fallback until users toggle the canonical setting.
+        SettingsStore.migrateBlackoutLegacyFlagsToCanonical().catch((e) => {
+            logger.error("Failed to migrate blackout legacy feature flags", e);
         });
         // Dev notes: to add your migration, just add a new `migrateMyFeature` function, call it, and
         // add a comment to note when it can be removed.
