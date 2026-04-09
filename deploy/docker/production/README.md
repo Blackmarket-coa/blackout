@@ -91,3 +91,9 @@ Use GitHub environments + required reviewers for gated production releases.
 For staged Cloudflare Tunnel + TLS + DNS migration (staging then production), see:
 
 - `CLOUDFLARE_TUNNEL_MIGRATION_RUNBOOK.md`
+
+## Security review
+
+For threat model and hardening guidance of Tunnel/TLS/DNS, see:
+
+- `NETWORK_SECURITY_REVIEW.md`
