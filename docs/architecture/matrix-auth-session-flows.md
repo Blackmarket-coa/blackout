@@ -533,3 +533,140 @@ Required fields: `user_id_hash`, `session_id`, `device_id`, `homeserver`, `error
 4. Expose multi-device session management UI.
 5. Add revoked-session UX and telemetry dashboards.
 
+
+---
+
+## Frontend Matrix Bootstrap State Machine
+
+This is the runtime bootstrap machine for app launch and reconnect behavior.
+
+### States
+
+- `uninitialized`: app loaded, no Matrix runtime started yet.
+- `connecting`: network checks + homeserver reachability + client construction.
+- `authenticated`: valid access token is available for bootstrap calls.
+- `syncing`: initial sync or catch-up sync in progress.
+- `ready`: app can render timeline/navigation as online-ready.
+- `error`: terminal-for-now state when bootstrap cannot proceed without intervention.
+
+### Events
+
+- `APP_START`
+- `NETWORK_ONLINE`
+- `NETWORK_OFFLINE`
+- `TOKEN_PRESENT`
+- `TOKEN_MISSING`
+- `TOKEN_REFRESH_OK`
+- `TOKEN_REFRESH_FAIL`
+- `CONNECT_OK`
+- `CONNECT_FAIL`
+- `SYNC_OK`
+- `SYNC_FAIL_RETRYABLE`
+- `SYNC_FAIL_FATAL`
+- `USER_RETRY`
+- `USER_LOGOUT`
+
+### Transition Table
+
+| Current | Event | Guard | Next | Action |
+|---|---|---|---|---|
+| `uninitialized` | `APP_START` | online | `connecting` | start bootstrap attempt #0 |
+| `uninitialized` | `APP_START` | offline | `error` | load cached view + mark offline bootstrap deferred |
+| `connecting` | `TOKEN_PRESENT` | token valid | `authenticated` | keep token in memory cache |
+| `connecting` | `TOKEN_PRESENT` | token expiring/expired | `connecting` | run refresh subflow |
+| `connecting` | `TOKEN_REFRESH_OK` | — | `authenticated` | persist rotated token atomically |
+| `connecting` | `TOKEN_REFRESH_FAIL` | retryable | `connecting` | schedule backoff retry |
+| `connecting` | `TOKEN_REFRESH_FAIL` | non-retryable | `error` | move to re-auth required UX |
+| `authenticated` | `CONNECT_OK` | — | `syncing` | start `/sync` with stored since token if any |
+| `authenticated` | `CONNECT_FAIL` | retryable | `connecting` | exponential backoff + jitter |
+| `authenticated` | `CONNECT_FAIL` | fatal | `error` | show homeserver error |
+| `syncing` | `SYNC_OK` | — | `ready` | clear bootstrap retry counters |
+| `syncing` | `SYNC_FAIL_RETRYABLE` | online | `syncing` | retry `/sync` with backoff |
+| `syncing` | `SYNC_FAIL_RETRYABLE` | offline | `error` | enter offline-ready shell |
+| `syncing` | `SYNC_FAIL_FATAL` | — | `error` | emit fatal bootstrap reason |
+| `ready` | `NETWORK_OFFLINE` | — | `ready` | remain ready in offline mode using local cache |
+| `ready` | `NETWORK_ONLINE` | stale connection | `connecting` | silent reconnect bootstrap |
+| `error` | `USER_RETRY` | online | `connecting` | reset transient errors and retry now |
+| `error` | `NETWORK_ONLINE` | auto-retry enabled | `connecting` | background retry if not auth-fatal |
+| any | `USER_LOGOUT` | — | `uninitialized` | clear session + caches per logout policy |
+
+### Sequence Diagram (text) — Bootstrap with Retry/Backoff
+
+```text
+UI Shell        Bootstrap FSM      Session Manager      Matrix HS        Local Cache
+   |                 |                    |                 |                 |
+   |-- APP_START --->|                    |                 |                 |
+   |                 |-- check network -->|                 |                 |
+   |                 |-- load tokens ---->|                 |                 |
+   |                 |<-- token (stale) --|                 |                 |
+   |                 |-- refresh --------------------------->|                 |
+   |                 |<-- 503 retryable --------------------|                 |
+   |                 |-- backoff(1s+jitter)                 |                 |
+   |                 |-- refresh --------------------------->|                 |
+   |                 |<-- refresh ok ------------------------|                 |
+   |                 |-- connect + /sync ------------------->|                 |
+   |                 |<-- /sync ok --------------------------|                 |
+   |<-- render ready-|                    |                 |                 |
+```
+
+### Retry + Backoff Policy
+
+- Use exponential backoff with decorrelated jitter for retryable failures:
+  - attempt 1: `1s ± 20%`
+  - attempt 2: `2s ± 20%`
+  - attempt 3: `4s ± 20%`
+  - attempt 4+: cap at `30s`
+- Reset attempt counter on any successful refresh/connect/sync.
+- Classify retryable errors: network timeout, DNS failure, 5xx, `M_LIMIT_EXCEEDED`, transient proxy failures.
+- Classify non-retryable bootstrap errors: `M_UNKNOWN_TOKEN` after refresh retry, account deactivated, invalid homeserver config.
+
+### Offline-First Behavior
+
+1. On launch while offline, render cached room list/timelines immediately with an offline banner.
+2. Queue outbound user actions (draft sends, reactions, read receipts) in a local durable queue.
+3. Gate sensitive/online-only actions (device list refresh, key backup upload) with explicit “requires connection” status.
+4. When connectivity returns:
+   - transition to `connecting`
+   - refresh token if needed
+   - replay queued operations idempotently
+   - run catch-up `/sync` from last stored `since` token.
+5. If replay fails due to authorization (`401`/revoked), stop replay and route to re-auth.
+
+### Reference Pseudocode
+
+```ts
+type BootstrapState =
+  | "uninitialized"
+  | "connecting"
+  | "authenticated"
+  | "syncing"
+  | "ready"
+  | "error";
+
+async function bootstrap(event: "APP_START" | "USER_RETRY"): Promise<void> {
+  setState("connecting");
+
+  if (!network.isOnline()) {
+    hydrateFromCache();
+    setError("OFFLINE_AT_BOOT");
+    setState("error");
+    return;
+  }
+
+  const session = await sessionManager.restore();
+  if (session === "REVOKED" || session === "HARD_LOGGED_OUT") {
+    setError("AUTH_REQUIRED");
+    setState("error");
+    return;
+  }
+
+  setState("authenticated");
+
+  await retryWithBackoff(async () => {
+    setState("syncing");
+    await matrixClient.startSync({ since: cache.getSinceToken() });
+  });
+
+  setState("ready");
+}
+```
