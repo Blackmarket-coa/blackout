@@ -827,6 +827,7 @@ export const SETTINGS: Settings = {
     "feature_blackout_deliberation_clustering": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_deliberation_clustering"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -834,6 +835,7 @@ export const SETTINGS: Settings = {
     "feature_blackout_ipfs_storage": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_ipfs_storage"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
@@ -841,11 +843,20 @@ export const SETTINGS: Settings = {
     "feature_blackout_townhall": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
+        displayName: _td("labs|blackout_townhall"),
         supportedLevels: LEVELS_DEVICE_ONLY_SETTINGS_WITH_CONFIG_PRIORITISED,
         supportedLevelsAreOrdered: true,
         default: false,
     },
-    // Legacy aliases retained for backwards compatibility with older config keys.
+    // Legacy compatibility aliases retained intentionally (read-only compatibility path).
+    // Phase 4 candidate removals after telemetry + deprecation window:
+    // - feature_governance
+    // - feature_education
+    // - feature_mutual_aid
+    // Additional Phase 5 legacy removals:
+    // - feature_deliberation_clustering
+    // - feature_ipfs_storage
+    // - feature_townhall
     "feature_governance": {
         isFeature: true,
         labsGroup: LabGroup.Experimental,
