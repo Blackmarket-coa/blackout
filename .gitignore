@@ -64,3 +64,6 @@ storybook-static
 
 # API local data
 /packages/api/.blackout
+
+# Cloudflare tunnel credentials
+deploy/docker/production/.cloudflared/

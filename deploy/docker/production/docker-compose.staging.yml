@@ -1,0 +1,13 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.4.0
+    command: tunnel --no-autoupdate run --config /etc/cloudflared/config.yml
+    restart: unless-stopped
+    depends_on:
+      reverse-proxy:
+        condition: service_healthy
+    volumes:
+      - ./cloudflared/staging-config.yml:/etc/cloudflared/config.yml:ro
+      - ./.cloudflared/staging/credentials.json:/etc/cloudflared/credentials.json:ro
+    networks:
+      - edge

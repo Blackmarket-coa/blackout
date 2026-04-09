@@ -85,3 +85,9 @@ See `.github/workflows/deploy-compose-prod.yml` for hooks that:
 6. Trigger backup verification workflow.
 
 Use GitHub environments + required reviewers for gated production releases.
+
+## Cloudflare Tunnel migration runbook
+
+For staged Cloudflare Tunnel + TLS + DNS migration (staging then production), see:
+
+- `CLOUDFLARE_TUNNEL_MIGRATION_RUNBOOK.md`
