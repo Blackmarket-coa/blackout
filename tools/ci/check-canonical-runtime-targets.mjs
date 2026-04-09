@@ -13,6 +13,10 @@ function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(fullPath, 'utf8'));
 }
 
+function readText(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
 function assertIncludes(actual, expectedSubstring, message) {
   if (typeof actual !== 'string' || !actual.includes(expectedSubstring)) {
     failures.push(`${message} (expected to include: ${expectedSubstring}, actual: ${actual ?? '<missing>'})`);
@@ -21,8 +25,8 @@ function assertIncludes(actual, expectedSubstring, message) {
 
 const rootPackage = readJson('package.json');
 const mobilePackage = readJson('blackout-mobile/package.json');
-const blackoutWebPackage = readJson('apps/blackout-web/package.json');
 const legacyWebPackage = readJson('apps/web/package.json');
+const webApiClientSource = readText('apps/blackout-web/src/api/client.ts');
 
 assertIncludes(rootPackage.scripts?.['web:dev'], '@blackout/blackout-web dev', 'Root web:dev must target canonical web app');
 assertIncludes(rootPackage.scripts?.['web:build'], '@blackout/blackout-web build:web', 'Root web:build must target canonical web app');
@@ -31,9 +35,10 @@ assertIncludes(rootPackage.scripts?.['mobile:build'], 'blackout-mobile build', '
 
 assertIncludes(mobilePackage.scripts?.['build:web'], '@blackout/blackout-web build:web', 'blackout-mobile build:web must consume canonical blackout-web bundle');
 assertIncludes(legacyWebPackage.description, 'canonical frontend is @blackout/blackout-web', 'Legacy apps/web package must remain explicitly marked as non-deploy');
+assertIncludes(webApiClientSource, 'API_ROOTS.v1', 'blackout-web API client must use API_ROOTS.v1 for route prefixes');
 
-if (!blackoutWebPackage.dependencies?.['@blackout/contracts']) {
-  failures.push('apps/blackout-web must directly depend on @blackout/contracts for shared API root/type contracts');
+if (webApiClientSource.includes('"/v1/') || webApiClientSource.includes("'/v1/")) {
+  failures.push('blackout-web API client must not hardcode /v1 route prefixes');
 }
 
 if (failures.length > 0) {

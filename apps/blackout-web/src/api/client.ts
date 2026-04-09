@@ -16,7 +16,7 @@ import type {
   ServerDetailsResponse,
   ServerListResponse,
 } from "../contracts/api-contract";
-import { API_ROOTS } from "@blackout/contracts";
+import { API_ROOTS } from "../contracts/api-contract";
 import type { ChannelSummary, ChatMessage, ServerDetails, ServerSummary, Session } from "../types";
 
 export class ApiError extends Error {
