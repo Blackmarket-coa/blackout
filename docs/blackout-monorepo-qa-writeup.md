@@ -310,3 +310,62 @@ After the reorganization:
 - legacy Element code remains available without polluting the new architecture
 
 The system becomes much easier to extend, test, and maintain.
+
+## Repository Reality Check (April 10, 2026)
+
+The checklist above describes the intended target state. Running it against the current repository snapshot on **April 10, 2026** shows several gaps.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Workspace contains `@blackout/client` | ❌ Fail | Current client package name is `cinny`, not `@blackout/client`. |
+| Workspace contains `@blackout/server` | ❌ Fail | No workspace package with this name is present. |
+| Workspace contains `@blackout/protocol` and `@blackout/sdk` | ❌ Fail | Current package names are `@blackout/blackout-protocol` and `@blackout/blackout-sdk`. |
+| `pnpm dev --filter @blackout/client` works | ❌ Fail | Turborepo reports: `No package found with name '@blackout/client' in workspace`. |
+| `pnpm dev --filter @blackout/server` works | ❌ Fail | Turborepo reports: `No package found with name '@blackout/server' in workspace`. |
+| Feature registry is manifest-based | ✅ Pass | `featureRegistry` is built via `buildFeatureRegistry(defaultFeatureFlags)`. |
+| Frontend avoids direct `fetch` calls | ❌ Fail | Direct `fetch` usage still exists in multiple client files. |
+| Legacy Element code isolated under `legacy/element` | ⚠️ Partial | `legacy/element` does not exist; legacy code appears under `_port/element.io`. |
+
+### Commands run for this check
+
+```bash
+pnpm list -r --depth 0
+timeout 25s pnpm dev --filter @blackout/client
+timeout 25s pnpm dev --filter @blackout/server
+rg -n "\\bfetch\\(" apps/blackout-client/src packages
+rg -n "featureRegistry|registry" apps/blackout-client/src/app
+```
+
+### Updated practical checklist for the current repository state
+
+Use this temporary checklist until package naming and runtime targets are fully aligned:
+
+1. Validate workspace package graph:
+
+```bash
+pnpm list -r --depth 0
+```
+
+2. Attempt to start the current web client package (temporary name):
+
+```bash
+pnpm --filter cinny start
+```
+
+Current status: blocked by missing dev dependency `@rollup/plugin-wasm` in the runtime environment.
+
+3. Validate the active API package is wired into the workspace:
+
+```bash
+pnpm --filter @blackout/api test
+```
+
+Current status: passes (`api test scaffold ok`) but this package does not yet expose a `dev` server script.
+
+4. Track migration debt items before declaring QA pass:
+
+- rename `cinny` to `@blackout/client`
+- expose a canonical `@blackout/server` runtime package
+- normalize protocol/SDK package names to the documented targets (or update docs)
+- remove or wrap direct client `fetch` calls through the SDK boundary
+- decide canonical legacy location (`legacy/element` vs `_port/element.io`) and enforce via CI guard
