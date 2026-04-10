@@ -17,8 +17,7 @@
     "paths": {
       "@blackout/core": ["./packages/core/src"],
       "@blackout/config": ["./packages/config"],
-      "@blackout/ui": ["./packages/ui/src"],
-      "@blackout/crypto": ["./packages/crypto/src"]
+      "@blackout/ui": ["./packages/ui/src"]
     }
   },
   "exclude": ["node_modules", "dist", "build", ".expo"]

@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Blackout Hono API scaffold",
   "scripts": {
-    "dev": "JWT_SECRET_PRIMARY='Q7$uN9!vR2#kL5@mT8^pX4&zB1*hC6~w' tsx watch src/index.ts",
-    "start": "JWT_SECRET_PRIMARY='Q7$uN9!vR2#kL5@mT8^pX4&zB1*hC6~w' tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
     "build": "node -e \"console.log('api build scaffold ok')\"",
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
     "test": "node -e \"console.log('api test scaffold ok')\"",
