@@ -1,8 +1,8 @@
 import { useAtom } from 'jotai';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Room, RoomMember } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
 
 interface BaseResult {
     id: string;

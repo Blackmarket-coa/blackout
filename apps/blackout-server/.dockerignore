@@ -1,0 +1,30 @@
+# ignore everything by default
+*
+
+# things to include
+!docker
+!synapse
+!rust
+!README.rst
+!pyproject.toml
+!poetry.lock
+!Cargo.lock
+!Cargo.toml
+!build_rust.py
+!.nixpacks
+!nixpacks.toml
+!railway.json
+!scripts-dev
+!services
+!docker/**
+!synapse/**
+!rust/**
+!services/**
+
+rust/target
+synapse/*.so
+
+**/__pycache__
+
+!.nixpacks/**
+!scripts-dev/**

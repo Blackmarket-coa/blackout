@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom, useRoomMembers } from '../../hooks/useRoom';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom, useRoomMembers } from '../../hooks/bmc-useRoom';
 
 export interface FeaturedChannel {
     roomId: string;

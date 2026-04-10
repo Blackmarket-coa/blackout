@@ -22,13 +22,13 @@ import {
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
-import { useRoomMembers } from '../../hooks/useRoom';
-import { useSpaceTree } from '../../hooks/useSpaceHierarchy';
-import { useSendMessage, useEditMessage } from '../../hooks/useTimeline';
-import { useSendTyping } from '../../hooks/useTyping';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { composerCommandPayloadAtom } from '../../state/composer';
-import { uploadMedia } from '../../utils/media';
+import { useRoomMembers } from '../../hooks/bmc-useRoom';
+import { useSpaceTree } from '../../hooks/bmc-useSpaceHierarchy';
+import { useSendMessage, useEditMessage } from '../../hooks/bmc-useTimeline';
+import { useSendTyping } from '../../hooks/bmc-useTyping';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { composerCommandPayloadAtom } from '../../state/bmc-composer';
+import { uploadMedia } from '../../utils/bmc-media';
 import { HideMessageDialog } from '../steganography';
 
 const MAX_SUGGESTIONS = 8;

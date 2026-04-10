@@ -1,17 +1,12 @@
-import { useAtomValue } from 'jotai';
-import { authStateAtom, matrixClientAtom } from '../state/auth';
+import { createContext, useContext } from 'react';
+import { MatrixClient } from 'matrix-js-sdk';
 
-/**
- * Returns authenticated Matrix client instance from Jotai state.
- * Throws when user is not logged in or client has not been initialized.
- */
-export const useMatrixClient = () => {
-    const authState = useAtomValue(authStateAtom);
-    const client = useAtomValue(matrixClientAtom);
+const MatrixClientContext = createContext<MatrixClient | null>(null);
 
-    if (authState !== 'logged_in' || !client) {
-        throw new Error('Matrix client unavailable: user is not logged in.');
-    }
+export const MatrixClientProvider = MatrixClientContext.Provider;
 
-    return client;
-};
+export function useMatrixClient(): MatrixClient {
+  const mx = useContext(MatrixClientContext);
+  if (!mx) throw new Error('MatrixClient not initialized!');
+  return mx;
+}

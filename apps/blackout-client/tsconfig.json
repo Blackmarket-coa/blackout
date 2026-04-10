@@ -1,21 +1,18 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "useDefineForClassFields": true,
-        "lib": ["DOM", "DOM.Iterable", "ES2022"],
-        "allowJs": false,
-        "skipLibCheck": true,
-        "esModuleInterop": false,
-        "allowSyntheticDefaultImports": true,
-        "strict": true,
-        "forceConsistentCasingInFileNames": true,
-        "module": "ESNext",
-        "moduleResolution": "Bundler",
-        "resolveJsonModule": true,
-        "isolatedModules": true,
-        "noEmit": true,
-        "jsx": "react-jsx"
-    },
-    "include": ["src", "vite.config.ts", "eslint.config.js"],
-    "references": []
+  "compilerOptions": {
+    "sourceMap": true,
+    "jsx": "react",
+    "target": "ES2016",
+    "module": "ES2020",
+    "allowJs": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "skipLibCheck": true,
+    "lib": ["ES2016", "DOM"]
+  },
+  "exclude": ["node_modules", "dist"],
+  "include": ["src"]
 }

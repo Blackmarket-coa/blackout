@@ -1,0 +1,40 @@
+[
+  {
+    "id": "consensus-review",
+    "title": "How to run a high-context consensus review",
+    "summary": "A short explainer that kicks off a discussion about decisions, trade-offs, and linked references.",
+    "references": ["Decision log template", "Facilitation checklist", "Async recap doc"],
+    "publicDiscussion": {
+      "label": "Open public discussion",
+      "roomId": "#general:example.org"
+    },
+    "privateFollowUp": {
+      "label": "Open private follow-up"
+    }
+  },
+  {
+    "id": "incident-playback",
+    "title": "Incident playback: from timeline to learning",
+    "summary": "Walk through a real timeline and capture what should become searchable knowledge for the whole team.",
+    "references": ["Timeline board", "Postmortem notes", "Runbook updates"],
+    "publicDiscussion": {
+      "label": "Open public discussion",
+      "roomId": "#incidents:example.org"
+    },
+    "privateFollowUp": {
+      "label": "Open private follow-up"
+    }
+  },
+  {
+    "id": "research-roundup",
+    "title": "Research roundup: 3 signals worth discussing",
+    "summary": "Curated clips and links meant to spark open conversation and private friend-only follow-ups.",
+    "references": ["Source article set", "Citation tracker", "Action items"],
+    "publicDiscussion": {
+      "label": "Open public discussion"
+    },
+    "privateFollowUp": {
+      "label": "Open private follow-up"
+    }
+  }
+]

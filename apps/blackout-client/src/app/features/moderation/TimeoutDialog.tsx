@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
 
 const POWER_EVENT = 'm.room.power_levels';
 const TIMEOUT_EVENT = 'co.bmc.timeout';

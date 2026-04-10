@@ -1,0 +1,46 @@
+server_name: "${SERVER_NAME}"
+pid_file: /data/homeserver.pid
+public_baseurl: "https://${SERVER_NAME}/"
+listeners:
+  - port: ${PORT:-8008}
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ["0.0.0.0"]
+    resources:
+      - names: [client, health]
+
+# Disable federation for centralized MVP deployment
+federation_domain_whitelist: []
+
+database:
+  name: psycopg2
+  args:
+    database: "${DATABASE_NAME:-blackout}"
+    user: "${DATABASE_USER:-blackout}"
+    password: "${DATABASE_PASSWORD}"
+    host: "${DATABASE_HOST}"
+    port: ${DATABASE_PORT:-5432}
+
+redis:
+  enabled: true
+  host: "${REDIS_HOST}"
+  port: ${REDIS_PORT:-6379}
+
+registration_shared_secret: "${REGISTRATION_SHARED_SECRET}"
+enable_registration: ${ENABLE_REGISTRATION:-false}
+report_stats: false
+
+jwt_config:
+  enabled: ${JWT_ENABLED:-false}
+  secret: "${JWT_SECRET:-}"
+  algorithm: "HS256"
+
+turn_uris:
+  - "${TURN_URIS:-turn:turn.example.org:3478?transport=udp}"
+turn_shared_secret: "${TURN_SHARED_SECRET:-changeme}"
+turn_user_lifetime: 1h
+
+blackout:
+  fbm_api_url: "${FBM_API_URL:-}"
+  ollama_url: "${OLLAMA_URL:-}"

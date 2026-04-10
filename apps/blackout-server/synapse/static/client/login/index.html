@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title> Login </title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <script src="js/jquery-3.4.1.min.js"></script>
+    <script src="js/login.js"></script>
+</head>
+<body onload="matrixLogin.onLoad()">
+    <div id="container">
+        <h1 id="title"></h1>
+
+        <span id="feedback"></span>
+
+        <div id="loading">
+            <img src="spinner.gif" alt="Loading" />
+        </div>
+
+        <div id="flow_selector" style="display: none;" aria-label="Choose login method">
+            <button id="select_password" class="flow_selector_button" type="button">Password</button>
+            <button id="select_sso" class="flow_selector_button" type="button">Single sign-on</button>
+        </div>
+
+        <div id="sso_flow" class="login_flow" style="display: none;">
+            <h2>Single sign-on</h2>
+            <p class="flow_description">Use your organization account to authenticate securely.</p>
+            <form id="sso_form" action="/_matrix/client/r0/login/sso/redirect" method="get">
+                <input id="sso_redirect_url" type="hidden" name="redirectUrl" value=""/>
+                <input type="submit" value="Continue with SSO"/>
+            </form>
+        </div>
+
+        <div id="password_flow" class="login_flow" style="display: none;">
+            <h2>Password login</h2>
+            <p class="flow_description">Enter your Matrix ID and password to sign in.</p>
+            <form onsubmit="matrixLogin.passwordLogin(); return false;">
+                <label class="input_label" for="user_id">Matrix ID</label>
+                <input id="user_id" size="32" type="text" placeholder="e.g. @bob:example.org or bob" autocapitalize="off" autocorrect="off" />
+                <label class="input_label" for="password">Password</label>
+                <input id="password" size="32" type="password" placeholder="Password"/>
+
+                <input type="submit" value="Log in"/>
+            </form>
+        </div>
+
+
+        <div id="post_login_flow" class="login_flow" style="display: none;">
+            <h2>You're signed in</h2>
+            <p class="flow_description">Choose what to do next. These options are grouped for a quick, natural follow-up flow.</p>
+
+            <div class="post_login_options" role="list" aria-label="Post login options">
+                <a class="post_login_option" role="listitem" href="https://matrix.org/ecosystem/clients/" target="_blank" rel="noopener noreferrer">
+                    <span class="option_title">Pick a Matrix client</span>
+                    <span class="option_hint">Find desktop, mobile, and web apps</span>
+                </a>
+                <a id="redirect_action" class="post_login_option" role="listitem" href="#" style="display: none;">
+                    <span class="option_title">Continue to your app</span>
+                    <span class="option_hint">Return to the original destination</span>
+                </a>
+                <a class="post_login_option" role="listitem" href="https://matrix.org/docs/" target="_blank" rel="noopener noreferrer">
+                    <span class="option_title">Explore Matrix guides</span>
+                    <span class="option_hint">Learn setup and best practices</span>
+                </a>
+            </div>
+
+            <p id="post_login_message" class="post_login_message"></p>
+        </div>
+
+        <div id="no_login_types" type="button" class="login_flow" style="display: none;">
+            Log in currently unavailable.
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_signal_stego.schema.json",
+  "title": "Blackout Signal Stego Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["carrier", "payload_hash", "policy_id"],
+  "properties": {
+    "carrier": {
+      "type": "string",
+      "enum": ["image", "audio", "video"]
+    },
+    "payload_hash": {
+      "type": "string",
+      "minLength": 16
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ttl_hours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 72
+    }
+  }
+}

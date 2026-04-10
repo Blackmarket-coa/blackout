@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Descendant, Editor, Transforms, createEditor } from 'slate';
 import { Editable, Slate, withReact } from 'slate-react';
 import { withHistory } from 'slate-history';
-import { useSendMessage } from '../../hooks/useTimeline';
+import { useSendMessage } from '../../hooks/bmc-useTimeline';
 import type { ForumTag } from './useForum';
 
 const toBody = (value: Descendant[]): string => {

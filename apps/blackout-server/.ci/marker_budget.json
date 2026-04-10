@@ -1,0 +1,5 @@
+{
+  "max_total_markers": 503,
+  "updated_at": "2026-02-20",
+  "notes": "Budget applies to TODO/FIXME/TBD/XXX/HACK/NotImplementedError/TODO_test_ markers (excluding inventory artifacts)."
+}

@@ -1,0 +1,850 @@
+py37 create: /workspace/Blackout_server/.tox/py37
+ERROR: InterpreterNotFound: python3.7
+py38 create: /workspace/Blackout_server/.tox/py38
+ERROR: InterpreterNotFound: python3.8
+py39 create: /workspace/Blackout_server/.tox/py39
+ERROR: InterpreterNotFound: python3.9
+py310 create: /workspace/Blackout_server/.tox/py310
+py310 installdeps: python-subunit, junitxml, coverage, coverage-enable-subprocess==1.0, setuptools>=18.5, pip>=10
+py310 develop-inst: /workspace/Blackout_server
+py310 installed: annotated-types==0.7.0,attrs==25.4.0,Authlib==1.6.9,Automat==25.4.16,bcrypt==5.0.0,# Editable Git install with no remote (blackout-server==1.98.0),-e /workspace/Blackout_server,bleach==6.3.0,canonicaljson==2.0.0,certifi==2026.2.25,cffi==2.0.0,charset-normalizer==3.4.6,constantly==23.10.4,coverage==7.13.5,coverage-enable-subprocess==1.0,cryptography==46.0.5,defusedxml==0.7.1,elementpath==4.8.0,hiredis==3.3.1,hyperlink==21.0.0,idna==3.11,ijson==3.5.0,immutabledict==4.3.1,Incremental==24.11.0,iso8601==2.1.0,jaeger-client==4.8.0,Jinja2==3.1.6,jsonschema==4.26.0,jsonschema-specifications==2025.9.1,junitxml==0.7,ldap3==2.9.1,lxml==6.0.2,MarkupSafe==3.0.3,matrix-common==1.3.0,matrix-synapse-ldap3==0.4.0,msgpack==1.1.2,multipart==1.3.1,netaddr==1.3.0,opentracing==2.4.0,packaging==26.0,parameterized==0.9.0,phonenumbers==9.0.26,pillow==12.1.1,prometheus_client==0.20.0,psycopg2==2.9.11,pyasn1==0.6.3,pyasn1_modules==0.4.2,pycparser==3.0,pydantic==2.12.5,pydantic_core==2.41.5,pyicu==2.16.1,pymacaroons==0.13.0,Pympler==1.1,PyNaCl==1.6.2,pyOpenSSL==26.0.0,pysaml2==7.5.0,python-dateutil==2.9.0.post0,python-subunit==1.4.5,pytz==2026.1.post1,PyYAML==6.0.3,referencing==0.37.0,requests==2.32.5,rpds-py==0.30.0,semantic-version==2.10.0,sentry-sdk==2.55.0,service-identity==24.2.0,setuptools-rust==1.12.0,signedjson==1.1.4,six==1.17.0,sortedcontainers==2.4.0,testtools==2.8.7,threadloop==1.0.2,thrift==0.22.0,tomli==2.4.0,tornado==6.5.5,treq==25.5.0,Twisted==25.5.0,txredisapi==1.4.11,typing-inspection==0.4.2,typing_extensions==4.15.0,unpaddedbase64==2.1.0,urllib3==2.6.3,webencodings==0.5.1,xmlschema==2.5.1,zope.interface==8.2
+py310 run-test-pre: PYTHONHASHSEED='1544931288'
+py310 run-test: commands[0] | /usr/bin/env PYTHONPATH=/workspace/Blackout_server COVERAGE_PROCESS_START=/workspace/Blackout_server/.coveragerc /workspace/Blackout_server/.tox/py310/bin/trial tests.blackout_runtime tests.handlers tests.federation
+tests.blackout_runtime.test_module_e2e
+  BlackoutRuntimeModuleE2ETestCase
+    test_governance_and_reputation_synapse_api_endpoints_live ...          [OK]
+    test_vote_uniqueness_and_rate_limiting ...                             [OK]
+tests.handlers.test_admin
+  ExfiltrateData
+    test_account_data ...                                                  [OK]
+    test_connections ...                                                   [OK]
+    test_devices ...                                                       [OK]
+    test_invite ...                                                        [OK]
+    test_knock ...                                                         [OK]
+    test_media_ids ...                                                     [OK]
+    test_profile ...                                                       [OK]
+    test_single_left_rejoined_private_room ...                             [OK]
+    test_single_left_room ...                                              [OK]
+    test_single_private_joined_room ...                                    [OK]
+    test_single_public_joined_room ...                                     [OK]
+tests.handlers.test_appservice
+  AppServiceHandlerTestCase
+    test_get_3pe_protocols_multiple_info ...                               [OK]
+    test_get_3pe_protocols_multiple_protocol ...                           [OK]
+    test_get_3pe_protocols_no_appservices ...                              [OK]
+    test_get_3pe_protocols_no_protocols ...                                [OK]
+    test_get_3pe_protocols_one_protocol ...                                [OK]
+    test_get_3pe_protocols_protocol_no_response ...                        [OK]
+    test_get_3pe_protocols_select_one_protocol ...                         [OK]
+    test_notify_interested_services ...                                    [OK]
+    test_notify_interested_services_ephemeral ...                          [OK]
+    test_notify_interested_services_ephemeral_out_of_order ...             [OK]
+    test_query_room_alias_exists ...                                       [OK]
+    test_query_user_exists_known_user ...                                  [OK]
+    test_query_user_exists_unknown_user ...                                [OK]
+  ApplicationServicesHandlerDeviceListsTestCase
+    test_application_service_receives_device_list_updates_0 ...            [OK]
+    test_application_service_receives_device_list_updates_1 ...            [OK]
+    test_application_service_receives_device_list_updates_2 ...            [OK]
+    test_application_service_receives_device_list_updates_3 ...            [OK]
+  ApplicationServicesHandlerOtkCountsTestCase
+    test_application_services_receive_otk_counts_and_fallback_key_usages_with_pdus ... [OK]
+  ApplicationServicesHandlerSendEventsTestCase
+    test_application_services_receive_bursts_of_to_device ...              [OK]
+    test_application_services_receive_events_sent_by_interesting_local_user ... [OK]
+    test_application_services_receive_local_to_device ...                  [OK]
+    test_application_services_receive_local_to_device_for_many_users ...   [OK]
+    test_match_interesting_room_members_0__local_as_user_test ...          [OK]
+    test_match_interesting_room_members_1__remote_as_user_remote ...       [OK]
+    test_sending_read_receipt_batches_to_application_services ...          [OK]
+tests.handlers.test_auth
+  AuthTestCase
+    test_login_token_default_duration_expires_after_two_minutes ...        [OK]
+    test_login_token_expires ...                                           [OK]
+    test_login_token_gives_auth_provider ...                               [OK]
+    test_login_token_gives_user_id ...                                     [OK]
+    test_login_token_reuse_fails ...                                       [OK]
+    test_macaroon_caveats ...                                              [OK]
+    test_mau_limits_disabled ...                                           [OK]
+    test_mau_limits_exceeded_large ...                                     [OK]
+    test_mau_limits_not_exceeded ...                                       [OK]
+    test_mau_limits_parity ...                                             [OK]
+tests.handlers.test_cas
+  CasHandlerTestCase
+    test_map_cas_user_does_not_register_new_user ...                       [OK]
+    test_map_cas_user_to_existing_user ...                                 [OK]
+    test_map_cas_user_to_invalid_localpart ...                             [OK]
+    test_map_cas_user_to_user ...                                          [OK]
+    test_required_attributes ...                                           [OK]
+tests.handlers.test_deactivate_account
+  DeactivateAccountTestCase
+    test_account_data_deleted_retroactively_by_background_update_if_deactivated ... [OK]
+    test_account_data_preserved_by_background_update_if_not_deactivated ... [OK]
+    test_deactivate_account_needs_auth ...                                 [OK]
+    test_deactivate_account_starts_single_user_parter_loop ...             [OK]
+    test_global_account_data_deleted_upon_deactivation ...                 [OK]
+    test_ignored_users_deleted_upon_deactivation ...                       [OK]
+    test_part_user_propagates_cancellation ...                             [OK]
+    test_push_rules_deleted_upon_account_deactivation ...                  [OK]
+    test_reject_pending_invites_logs_summary ...                           [OK]
+    test_room_account_data_deleted_upon_deactivation ...                   [OK]
+    test_start_user_parting_resets_guard_on_schedule_error ...             [OK]
+    test_threepid_unbind_cancellation_propagates ...                       [OK]
+    test_threepid_unbind_failure_aborts_deactivation ...                   [OK]
+tests.handlers.test_device
+  DehydrationTestCase
+    test_dehydrate_and_rehydrate_device ...                                [OK]
+    test_dehydrate_v2_and_fetch_events ...                                 [OK]
+  DeviceTestCase
+    test_delete_device ...                                                 [OK]
+    test_delete_device_and_big_device_inbox ...                            [OK]
+    test_delete_device_and_device_inbox ...                                [OK]
+    test_device_id_is_made_up_if_unspecified ...                           [OK]
+    test_device_is_created_if_doesnt_exist ...                             [OK]
+    test_device_is_created_with_invalid_name ...                           [OK]
+    test_device_is_preserved_if_exists ...                                 [OK]
+    test_get_device ...                                                    [OK]
+    test_get_devices_by_user ...                                           [OK]
+    test_on_federation_query_user_devices_appservice ...                   [OK]
+    test_on_federation_query_user_devices_includes_revoked_deleted_device ... [OK]
+    test_update_device ...                                                 [OK]
+    test_update_device_too_long_display_name ...                           [OK]
+    test_update_unknown_device ...                                         [OK]
+tests.handlers.test_directory
+  CanonicalAliasTestCase
+    test_remove_alias ...                                                  [OK]
+    test_remove_other_alias ...                                            [OK]
+  DirectoryTestCase
+    test_get_local_association ...                                         [OK]
+    test_get_remote_association ...                                        [OK]
+    test_incoming_fed_query ...                                            [OK]
+  TestCreateAlias
+    test_create_alias_admin ...                                            [OK]
+    test_create_alias_joined_room ...                                      [OK]
+    test_create_alias_other_room ...                                       [OK]
+  TestCreateAliasACL
+    test_allowed ...                                                       [OK]
+    test_allowed_during_creation ...                                       [OK]
+    test_denied ...                                                        [OK]
+    test_denied_during_creation ...                                        [OK]
+  TestCreatePublishedRoomACL
+    test_allowed_when_creating_private_room ...                            [OK]
+    test_allowed_with_publication_permission ...                           [OK]
+    test_can_create_as_private_room_after_rejection ...                    [OK]
+    test_can_create_with_permission_after_rejection ...                    [OK]
+    test_denied_publication_with_invalid_alias ...                         [OK]
+    test_denied_without_publication_permission ...                         [OK]
+  TestDeleteAlias
+    test_delete_alias_admin ...                                            [OK]
+    test_delete_alias_creator ...                                          [OK]
+    test_delete_alias_not_allowed ...                                      [OK]
+    test_delete_alias_sufficient_power ...                                 [OK]
+  TestRoomListSearchDisabled
+    test_disabling_room_list ...                                           [OK]
+tests.handlers.test_e2e_keys
+  E2eKeysHandlerTestCase
+    test_change_one_time_keys ...                                          [OK]
+    test_check_cross_signing_setup ...                                     [OK]
+    test_claim_one_time_key ...                                            [OK]
+    test_claim_one_time_key_bulk ...                                       [OK]
+    test_fallback_key ...                                                  [OK]
+    test_fallback_key_always_returned ...                                  [OK]
+    test_fallback_key_bulk ...                                             [OK]
+    test_query_all_devices_caches_result_0 ...                             [OK]
+    test_query_all_devices_caches_result_1 ...                             [OK]
+    test_query_all_devices_caches_result_2 ...                             [OK]
+    test_query_appservice ...                                              [OK]
+    test_query_appservice_with_fallback ...                                [OK]
+    test_query_devices_remote_no_sync ...                                  [OK]
+    test_query_devices_remote_sync ...                                     [OK]
+    test_query_local_devices_appservice ...                                [OK]
+    test_query_local_devices_no_devices ...                                [OK]
+    test_replace_master_key ...                                            [OK]
+    test_reupload_one_time_keys ...                                        [OK]
+    test_reupload_signatures ...                                           [OK]
+    test_self_signing_key_doesnt_show_up_as_device ...                     [OK]
+    test_upload_signatures ...                                             [OK]
+tests.handlers.test_e2e_room_keys
+  E2eRoomKeysHandlerTestCase
+    test_create_version ...                                                [OK]
+    test_delete_missing_current_version ...                                [OK]
+    test_delete_missing_version ...                                        [OK]
+    test_delete_room_keys ...                                              [OK]
+    test_delete_version ...                                                [OK]
+    test_get_missing_backup ...                                            [OK]
+    test_get_missing_current_version_info ...                              [OK]
+    test_get_missing_room_keys ...                                         [OK]
+    test_get_missing_version_info ...                                      [OK]
+    test_update_bad_version ...                                            [OK]
+    test_update_missing_version ...                                        [OK]
+    test_update_omitted_version ...                                        [OK]
+    test_update_version ...                                                [OK]
+    test_upload_room_keys_bogus_version ...                                [OK]
+    test_upload_room_keys_insert ...                                       [OK]
+    test_upload_room_keys_merge ...                                        [OK]
+    test_upload_room_keys_no_versions ...                                  [OK]
+    test_upload_room_keys_wrong_version ...                                [OK]
+tests.handlers.test_federation
+  EventFromPduTestCase
+    test_invalid_nested ...                                                [OK]
+    test_invalid_numbers ...                                               [OK]
+    test_valid_json ...                                                    [OK]
+  FederationTestCase
+    test_backfill_ignores_known_events ...                                 [OK]
+    test_backfill_with_many_backward_extremities ...                       [OK]
+    test_exchange_revoked_invite ...                                       [OK]
+    test_invite_by_user_ratelimit ...                                      [OK]
+    test_rejected_message_event_state ...                                  [OK]
+    test_rejected_state_event_state ...                                    [OK]
+  PartialJoinTestCase
+    test_duplicate_partial_state_room_syncs ...                            [OK]
+    test_failed_partial_join_is_clean ...                                  [OK]
+    test_partial_state_room_sync_restart ...                               [OK]
+tests.handlers.test_federation_event
+  FederationEventBlackoutRevocationTests
+    test_federation_ingress_allows_unmatched_revocation_records ... blackout mode enabled: forcing enable_media_repo=False
+blackout mode enabled: forcing enable_search=False
+       [OK]
+    test_federation_ingress_rejects_inline_payload_without_offline_markers ... [OK]
+    test_federation_ingress_rejects_invalid_chunk_merkle ...               [OK]
+    test_federation_ingress_rejects_invalid_chunk_merkle_with_replication_factor ... [OK]
+    test_federation_ingress_strips_inline_payload_when_offline_markers_present ... [OK]
+  FederationEventHandlerTests
+    test_backfill_process_previously_failed_pull_attempt_event_in_the_background ... [OK]
+    test_backfill_signature_failure_does_not_fetch_same_prev_event_later ... [OK]
+    test_process_pulled_event_clears_backfill_attempts_after_being_successfully_persisted ... [OK]
+    test_process_pulled_event_records_failed_backfill_attempts ...         [OK]
+    test_process_pulled_event_with_missing_state ...                       [OK]
+    test_process_pulled_event_with_missing_state_where_prev_is_outlier ... [OK]
+    test_process_pulled_event_with_rejected_missing_state ...              [OK]
+tests.handlers.test_message
+  BlackoutEventCreationTestCase
+    test_blackout_signal_accepts_offline_retrieval_and_redundancy_metadata ... [OK]
+    test_blackout_signal_gets_ttl ...                                      [OK]
+    test_blackout_signal_rate_limited ...                                  [OK]
+    test_blackout_signal_records_invalid_redundancy_metadata_metric ...    [OK]
+    test_blackout_signal_rejects_inline_payload_without_external_fetch ... [OK]
+    test_blackout_signal_rejects_inline_payload_without_offline_retrieval ... [OK]
+    test_blackout_signal_rejects_invalid_chunk_hash ...                    [OK]
+    test_blackout_signal_rejects_invalid_ice_candidate_shape ...           [OK]
+    test_blackout_signal_rejects_invalid_merkle_root ...                   [OK]
+    test_blackout_signal_rejects_missing_message_metadata ...              [OK]
+    test_blackout_signal_rejects_non_sha256_chunk_hash ...                 [OK]
+    test_blackout_signal_rejects_revoked_sender_key ...                    [OK]
+    test_blackout_signal_rejects_unknown_fields ...                        [OK]
+    test_non_signal_timeline_event_blocked ...                             [OK]
+    test_room_encrypted_blocked_in_blackout_mode ...                       [OK]
+    test_room_message_blocked_in_blackout_mode ...                         [OK]
+  EventCreationTestCase
+    test_duplicated_txn_id ...                                             [OK]
+    test_duplicated_txn_id_one_call ...                                    [OK]
+    test_when_empty_prev_events_allowed_create_event_with_empty_prev_events ... [OK]
+    test_when_empty_prev_events_allowed_reject_event_with_empty_prev_events_and_auth_events ... [OK]
+    test_when_empty_prev_events_not_allowed_reject_event_with_empty_prev_events ... [OK]
+  ServerAclValidationTestCase
+    test_allow_server_acl ...                                              [OK]
+    test_deny_redact_server_acl ...                                        [OK]
+    test_deny_server_acl_block_outselves ...                               [OK]
+tests.handlers.test_oauth_delegation
+  MSC3861OAuthDelegation
+    test_3pid_endpoints ...                                                [OK]
+    test_account_management_endpoints_removed ...                          [OK]
+    test_active_admin ...                                                  [OK]
+    test_active_admin_highest_privilege ...                                [OK]
+    test_active_admin_not_user ...                                         [OK]
+    test_active_guest_allowed ...                                          [OK]
+    test_active_guest_not_allowed ...                                      [OK]
+    test_active_no_scope ...                                               [OK]
+    test_active_no_user_scope ...                                          [OK]
+    test_active_user ...                                                   [OK]
+    test_active_user_no_subject ...                                        [OK]
+    test_active_user_with_device ...                                       [OK]
+    test_admin_api_endpoints_removed ...                                   [OK]
+    test_admin_token ...                                                   [OK]
+    test_cross_signing ...                                                 [OK]
+    test_device_management_endpoints_removed ...                           [OK]
+    test_inactive_token ...                                                [OK]
+    test_multiple_devices ...                                              [OK]
+    test_openid_endpoints_removed ...                                      [OK]
+    test_registration_endpoints_removed ...                                [OK]
+    test_request_tracking ...                                              [OK]
+    test_session_management_endpoints_removed ...                          [OK]
+    test_uia_endpoints ...                                                 [OK]
+    test_unavailable_introspection_endpoint ...                            [OK]
+tests.handlers.test_oidc
+  OidcHandlerTestCase
+    test_attribute_requirements ...                                        [OK]
+    test_attribute_requirements_contains ...                               [OK]
+    test_attribute_requirements_mismatch ...                               [OK]
+    test_callback ...                                                      [OK]
+    test_callback_error ...                                                [OK]
+    test_callback_session ...                                              [OK]
+    test_config ...                                                        [OK]
+    test_discovery ...                                                     [OK]
+    test_empty_localpart ...                                               [OK]
+    test_exchange_code ...                                                 [OK]
+    test_exchange_code_jwt_key ...                                         [OK]
+    test_exchange_code_no_auth ...                                         [OK]
+    test_extra_attributes ...                                              [OK]
+    test_load_jwks ...                                                     [OK]
+    test_map_userinfo_to_existing_user ...                                 [OK]
+    test_map_userinfo_to_invalid_localpart ...                             [OK]
+    test_map_userinfo_to_user ...                                          [OK]
+    test_map_userinfo_to_user_does_not_register_new_user ...               [OK]
+    test_map_userinfo_to_user_retries ...                                  [OK]
+    test_no_discovery ...                                                  [OK]
+    test_null_localpart ...                                                [OK]
+    test_redirect_request ...                                              [OK]
+    test_redirect_request_with_code_challenge ...                          [OK]
+    test_redirect_request_with_disabled_code_challenge ...                 [OK]
+    test_redirect_request_with_forced_code_challenge ...                   [OK]
+    test_skip_verification ...                                             [OK]
+    test_validate_config ...                                               [OK]
+tests.handlers.test_password_providers
+  PasswordAuthProviderTests
+    test_3pid_allowed ...                                                  [OK]
+    test_custom_auth_no_local_user_fallback ...                            [OK]
+    test_custom_auth_no_local_user_fallback_legacy ...                     [OK]
+    test_custom_auth_password_disabled ...                                 [OK]
+    test_custom_auth_password_disabled_legacy ...                          [OK]
+    test_custom_auth_password_disabled_localdb_enabled ...                 [OK]
+    test_custom_auth_password_disabled_localdb_enabled_legacy ...          [OK]
+    test_custom_auth_provider_callback ...                                 [OK]
+    test_custom_auth_provider_callback_legacy ...                          [OK]
+    test_custom_auth_provider_login ...                                    [OK]
+    test_custom_auth_provider_login_legacy ...                             [OK]
+    test_custom_auth_provider_ui_auth ...                                  [OK]
+    test_custom_auth_provider_ui_auth_legacy ...                           [OK]
+    test_displayname ...                                                   [OK]
+    test_displayname_uia ...                                               [OK]
+    test_local_user_fallback_login_legacy ...                              [OK]
+    test_local_user_fallback_ui_auth_legacy ...                            [OK]
+    test_no_local_user_fallback_login_legacy ...                           [OK]
+    test_no_local_user_fallback_ui_auth_legacy ...                         [OK]
+    test_on_logged_out ...                                                 [OK]
+    test_password_auth_disabled_legacy ...                                 [OK]
+    test_password_custom_auth_password_disabled_login ...                  [OK]
+    test_password_custom_auth_password_disabled_login_legacy ...           [OK]
+    test_password_custom_auth_password_disabled_ui_auth ...                [OK]
+    test_password_custom_auth_password_disabled_ui_auth_legacy ...         [OK]
+    test_password_only_auth_progiver_login_legacy ...                      [OK]
+    test_password_only_auth_provider_ui_auth_legacy ...                    [OK]
+    test_username ...                                                      [OK]
+    test_username_uia ...                                                  [OK]
+tests.handlers.test_presence
+  PresenceFederationQueueTestCase
+    test_clear_queue_all ...                                               [OK]
+    test_partially_clear_queue ...                                         [OK]
+    test_send_and_get ...                                                  [OK]
+    test_send_and_get_split ...                                            [OK]
+  PresenceHandlerInitTestCase
+    test_restored_presence_idles ...                                       [OK]
+    test_restored_presence_online_after_sync_0_org_matrix_msc3026_busy ... [OK]
+    test_restored_presence_online_after_sync_1_online ...                  [OK]
+    test_restored_presence_online_after_sync_2_unavailable ...             [OK]
+    test_restored_presence_online_after_sync_3_offline ...                 [OK]
+  PresenceHandlerTestCase
+    test_external_process_timeout ...                                 [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_00_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_01_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_02_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_03_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_04_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_05_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_06_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_07_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_08_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_09_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_10_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_11_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_12_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_13_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_14_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_15_monolith ...   [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_16_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_17_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_18_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_19_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_20_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_21_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_22_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_23_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_24_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_25_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_26_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_27_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_28_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_29_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_30_workers ...    [SKIPPED]
+    test_set_presence_from_non_syncing_multi_device_31_workers ...    [SKIPPED]
+    test_set_presence_from_syncing_is_set ...                         [SKIPPED]
+    test_set_presence_from_syncing_keeps_busy_0 ...                   [SKIPPED]
+    test_set_presence_from_syncing_keeps_busy_1 ...                   [SKIPPED]
+    test_set_presence_from_syncing_keeps_status ...                   [SKIPPED]
+    test_set_presence_from_syncing_multi_device_00_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_01_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_02_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_03_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_04_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_05_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_06_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_07_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_08_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_09_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_10_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_11_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_12_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_13_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_14_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_15_monolith ...       [SKIPPED]
+    test_set_presence_from_syncing_multi_device_16_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_17_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_18_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_19_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_20_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_21_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_22_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_23_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_24_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_25_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_26_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_27_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_28_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_29_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_30_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_multi_device_31_workers ...        [SKIPPED]
+    test_set_presence_from_syncing_not_set ...                        [SKIPPED]
+    test_set_presence_with_status_msg_none ...                        [SKIPPED]
+    test_untracked_does_not_idle ...                                  [SKIPPED]
+    test_user_goes_offline_by_timeout_status_msg_remain ...           [SKIPPED]
+    test_user_goes_offline_manually_with_no_status_msg ...            [SKIPPED]
+    test_user_goes_offline_manually_with_status_msg ...               [SKIPPED]
+    test_user_reset_online_with_no_status ...                         [SKIPPED]
+  PresenceJoinTestCase
+    test_remote_gets_presence_when_local_user_joins ...                    [OK]
+    test_remote_joins ...                                                  [OK]
+  PresenceTimeoutTestCase
+    test_busy_no_idle ...                                                  [OK]
+    test_federation_ping ...                                               [OK]
+    test_federation_timeout ...                                            [OK]
+    test_idle_timer ...                                                    [OK]
+    test_last_active ...                                                   [OK]
+    test_no_timeout ...                                                    [OK]
+    test_sync_online ...                                                   [OK]
+    test_sync_timeout ...                                                  [OK]
+  PresenceUpdateTestCase
+    test_offline_to_online ...                                             [OK]
+    test_online_to_idle ...                                                [OK]
+    test_online_to_offline ...                                             [OK]
+    test_online_to_online ...                                              [OK]
+    test_online_to_online_last_active ...                                  [OK]
+    test_online_to_online_last_active_noop ...                             [OK]
+    test_override_00_org_matrix_msc3026_busy ...                           [OK]
+    test_override_01_org_matrix_msc3026_busy ...                           [OK]
+    test_override_02_org_matrix_msc3026_busy ...                           [OK]
+    test_override_03_online ...                                            [OK]
+    test_override_04_online ...                                            [OK]
+    test_override_05_online ...                                            [OK]
+    test_override_06_unavailable ...                                       [OK]
+    test_override_07_unavailable ...                                       [OK]
+    test_override_08_unavailable ...                                       [OK]
+    test_override_09_offline ...                                           [OK]
+    test_override_10_offline ...                                           [OK]
+    test_override_11_offline ...                                           [OK]
+    test_persisting_presence_updates ...                                   [OK]
+    test_remote_ping_timer ...                                             [OK]
+tests.handlers.test_profile
+  ProfileTestCase
+    test_avatar_constraint_mime_type ...                                   [OK]
+    test_avatar_constraint_on_local_server_with_port ...                   [OK]
+    test_avatar_constraints_allow_empty_avatar_url ...                     [OK]
+    test_avatar_constraints_file_size ...                                  [OK]
+    test_avatar_constraints_missing ...                                    [OK]
+    test_avatar_constraints_no_config ...                                  [OK]
+    test_check_avatar_on_remote_server_0_remote ...                        [OK]
+    test_check_avatar_on_remote_server_1_remote_1234 ...                   [OK]
+    test_get_my_avatar ...                                                 [OK]
+    test_get_my_name ...                                                   [OK]
+    test_get_other_name ...                                                [OK]
+    test_get_profile_empty_displayname ...                                 [OK]
+    test_incoming_fed_query ...                                            [OK]
+    test_set_my_avatar ...                                                 [OK]
+    test_set_my_avatar_if_disabled ...                                     [OK]
+    test_set_my_name ...                                                   [OK]
+    test_set_my_name_if_disabled ...                                       [OK]
+    test_set_my_name_noauth ...                                            [OK]
+tests.handlers.test_receipts
+  ReceiptsTestCase
+    test_filters_out_event_with_only_private_receipts_and_ignores_the_rest ... [OK]
+    test_filters_out_private_receipt ...                                   [OK]
+    test_filters_out_private_receipt_and_ignores_rest ...                  [OK]
+    test_filters_out_receipt_event_with_only_private_receipt_and_ignores_rest ... [OK]
+    test_handles_empty_event ...                                           [OK]
+    test_handles_string_data ...                                           [OK]
+    test_leaves_our_private_and_their_public ...                           [OK]
+    test_we_do_not_mutate ...                                              [OK]
+tests.handlers.test_register
+  RegistrationTestCase
+    test_auto_create_auto_join_room_preset ...                             [OK]
+    test_auto_create_auto_join_room_preset_guest ...                       [OK]
+    test_auto_create_auto_join_room_preset_invalid_permissions ...         [OK]
+    test_auto_create_auto_join_rooms ...                                   [OK]
+    test_auto_create_auto_join_rooms_federated ...                         [OK]
+    test_auto_create_auto_join_rooms_when_user_is_not_a_real_user ...      [OK]
+    test_auto_create_auto_join_rooms_when_user_is_not_the_first_real_user ... [OK]
+    test_auto_create_auto_join_rooms_when_user_is_the_first_real_user ...  [OK]
+    test_auto_create_auto_join_rooms_with_no_rooms ...                     [OK]
+    test_auto_create_auto_join_where_auto_create_is_false ...              [OK]
+    test_auto_create_auto_join_where_no_consent ...                        [OK]
+    test_auto_create_auto_join_where_room_is_another_domain ...            [OK]
+    test_auto_join_mxid_localpart ...                                      [OK]
+    test_auto_join_rooms_for_guests ...                                    [OK]
+    test_get_or_create_user_mau_blocked ...                                [OK]
+    test_get_or_create_user_mau_not_blocked ...                            [OK]
+    test_if_user_exists ...                                                [OK]
+    test_invalid_user_id ...                                               [OK]
+    test_invalid_user_id_length ...                                        [OK]
+    test_mau_limits_when_disabled ...                                      [OK]
+    test_register_mau_blocked ...                                          [OK]
+    test_register_not_support_user ...                                     [OK]
+    test_register_support_user ...                                         [OK]
+    test_spam_checker_deny ...                                             [OK]
+    test_spam_checker_legacy_allow ...                                     [OK]
+    test_spam_checker_legacy_deny ...                                      [OK]
+    test_spam_checker_receives_sso_type ...                                [OK]
+    test_spam_checker_shadow_ban ...                                       [OK]
+    test_special_chars ...                                                 [OK]
+    test_user_is_created_and_logged_in_if_doesnt_exist ...                 [OK]
+  RemoteAutoJoinTestCase
+    test_auto_create_auto_join_remote_room ...                             [OK]
+tests.handlers.test_room
+  EncryptedByDefaultTestCase
+    test_encrypted_by_default_config_option_all ...                        [OK]
+    test_encrypted_by_default_config_option_invite ...                     [OK]
+    test_encrypted_by_default_config_option_off ...                        [OK]
+tests.handlers.test_room_member
+  RoomMemberMasterHandlerTestCase
+    test_forget_when_not_left ...                                          [OK]
+    test_leave_and_auto_forget ...                                         [OK]
+    test_leave_and_forget ...                                              [OK]
+    test_leave_and_forget_last_user ...                                    [OK]
+    test_leave_and_unforget ...                                            [OK]
+    test_rejoin_forgotten_by_user ...                                      [OK]
+  TestJoinsLimitedByPerRoomRateLimiter
+    test_local_user_local_joins_contribute_to_limit_and_are_limited ...    [OK]
+    test_local_user_profile_edits_dont_contribute_to_limit ...             [OK]
+    test_remote_joins_are_rate_limited_after_a_leave ...                   [OK]
+    test_remote_joins_contribute_to_rate_limit ...                         [OK]
+  TestReplicatedJoinsLimitedByPerRoomRateLimiter
+    test_local_users_joining_on_another_worker_contribute_to_rate_limit ... [SKIPPED]
+tests.handlers.test_room_summary
+  RoomSummaryTestCase
+    test_fed ...                                                           [OK]
+    test_own_room ...                                                      [OK]
+    test_visibility ...                                                    [OK]
+  SpaceSummaryTestCase
+    test_complex_space ...                                                 [OK]
+    test_fed_caching ...                                                   [OK]
+    test_fed_complex ...                                                   [OK]
+    test_fed_filtering ...                                                 [OK]
+    test_fed_invited ...                                                   [OK]
+    test_filtering ...                                                     [OK]
+    test_invalid_pagination_token ...                                      [OK]
+    test_large_space ...                                                   [OK]
+    test_max_depth ...                                                     [OK]
+    test_pagination ...                                                    [OK]
+    test_room_hierarchy_cache ...                                          [OK]
+    test_room_hierarchy_cache_sharing ...                                  [OK]
+    test_simple_space ...                                                  [OK]
+    test_unknown_room_version ...                                          [OK]
+    test_visibility ...                                                    [OK]
+  TestSpaceSummarySort
+    test_invalid_ordering_type ...                                         [OK]
+    test_invalid_ordering_value ...                                        [OK]
+    test_no_order_last ...                                                 [OK]
+    test_order ...                                                         [OK]
+    test_order_origin_server_ts ...                                        [OK]
+    test_order_room_id ...                                                 [OK]
+tests.handlers.test_saml
+  SamlHandlerTestCase
+    test_attribute_requirements ...                                   [SKIPPED]
+    test_map_saml_response_redirect ...                               [SKIPPED]
+    test_map_saml_response_to_existing_user ...                       [SKIPPED]
+    test_map_saml_response_to_invalid_localpart ...                   [SKIPPED]
+    test_map_saml_response_to_user ...                                [SKIPPED]
+    test_map_saml_response_to_user_retries ...                        [SKIPPED]
+tests.handlers.test_send_email
+  SendEmailHandlerTestCaseIPv4
+    test_send_email ...                                                    [OK]
+    test_send_email_force_tls ...                                          [OK]
+  SendEmailHandlerTestCaseIPv6
+    test_send_email ...                                                    [OK]
+    test_send_email_force_tls ...                                          [OK]
+tests.handlers.test_sso
+  TestSSOHandler
+    test_set_avatar ...                                                    [OK]
+    test_set_avatar_incorrect_mime_type ...                                [OK]
+    test_set_avatar_too_big_image ...                                      [OK]
+    test_skip_saving_avatar_when_not_changed ...                           [OK]
+tests.handlers.test_stats
+  StatsRoomTests
+    test_banned ...                                                        [OK]
+    test_create_room ...                                                   [OK]
+    test_create_user ...                                                   [OK]
+    test_incomplete_stats ...                                              [OK]
+    test_initial_background_update ...                                     [OK]
+    test_initial_room ...                                                  [OK]
+    test_invited ...                                                       [OK]
+    test_join_after_invite ...                                             [OK]
+    test_join_after_leave ...                                              [OK]
+    test_join_first_time ...                                               [OK]
+    test_left ...                                                          [OK]
+    test_send_state_event_nonoverwriting ...                               [OK]
+    test_updating_profile_information_does_not_increase_joined_members_count ... [OK]
+tests.handlers.test_sync
+  SyncTestCase
+    test_ban_wins_race_with_join ...                                       [OK]
+    test_generate_sync_result_rejects_appservice_user ...                  [OK]
+    test_unknown_room_version ...                                          [OK]
+    test_wait_for_sync_for_user_auth_blocking ...                          [OK]
+tests.handlers.test_typing
+  TypingNotificationsTestCase
+    test_started_typing_local ...                                          [OK]
+    test_started_typing_remote_recv ...                                    [OK]
+    test_started_typing_remote_recv_not_in_room ...                        [OK]
+    test_started_typing_remote_send ...                                    [OK]
+    test_stopped_typing ...                                                [OK]
+    test_typing_timeout ...                                                [OK]
+tests.handlers.test_user_directory
+  TestUserDirSearchDisabled
+    test_disabling_room_list ...                                           [OK]
+  UserDirectoryRemoteProfileTestCase
+    test_private_rooms_do_not_have_profiles_collected ...                  [OK]
+    test_private_rooms_have_profiles_requested ...                         [OK]
+    test_profile_requests_are_retried ...                                  [OK]
+    test_public_rooms_have_profiles_collected ...                          [OK]
+  UserDirectoryTestCase
+    test_excludes_appservice_sender ...                                    [OK]
+    test_excludes_appservices_user ...                                     [OK]
+    test_excludes_deactivated_user ...                                     [OK]
+    test_excludes_support_user ...                                         [OK]
+    test_excludes_users_when_making_room_public ...                        [OK]
+    test_handle_local_profile_change_with_appservice_sender ...            [OK]
+    test_handle_local_profile_change_with_appservice_user ...              [OK]
+    test_handle_local_profile_change_with_deactivated_user ...             [OK]
+    test_handle_local_profile_change_with_support_user ...                 [OK]
+    test_handle_user_deactivated_regular_user ...                          [OK]
+    test_handle_user_deactivated_support_user ...                          [OK]
+    test_ignore_display_names_with_null_codepoints ...                     [OK]
+    test_initial_share_all_users ...                                       [OK]
+    test_joining_private_room_with_excluded_user ...                       [OK]
+    test_legacy_spam_checker ...                                           [OK]
+    test_local_user_leaving_room_remains_in_user_directory ...             [OK]
+    test_making_room_public_doesnt_alter_directory_entry ...               [OK]
+    test_normal_user_pair ...                                              [OK]
+    test_per_room_profile_doesnt_alter_directory_entry ...                 [OK]
+    test_prefer_local_users ...                                            [OK]
+    test_private_room ...                                                  [OK]
+    test_process_join_after_server_leaves_room ...                         [OK]
+    test_reactivation_makes_regular_user_searchable ...                    [OK]
+    test_search_term_with_colon_in_it_does_not_raise ...                   [OK]
+    test_spam_checker ...                                                  [OK]
+    test_switching_from_private_to_public_to_private ...                   [OK]
+    test_user_not_in_users_table ...                                       [OK]
+tests.handlers.test_worker_lock
+  WorkerLockTestCase
+    test_wait_for_lock_locally ...                                         [OK]
+  WorkerLockWorkersTestCase
+    test_wait_for_lock_worker ...                                     [SKIPPED]
+tests.federation.test_complexity
+  RoomComplexityAdminTests
+    test_join_too_large_admin ...                                          [OK]
+    test_join_too_large_no_admin ...                                       [OK]
+  RoomComplexityTests
+    test_complexity_simple ...                                             [OK]
+    test_join_too_large ...                                                [OK]
+    test_join_too_large_admin ...                                          [OK]
+    test_join_too_large_once_joined ...                                    [OK]
+tests.federation.test_federation_catch_up
+  FederationCatchUpTestCases
+    test_catch_up_destination_rooms_tracking ...                           [OK]
+    test_catch_up_from_blank_state ...                                     [OK]
+    test_catch_up_is_not_blocked_by_remote_event_in_partial_state_room ... [OK]
+    test_catch_up_last_successful_stream_ordering_tracking ...             [OK]
+    test_catch_up_loop ...                                                 [OK]
+    test_catch_up_on_synapse_startup ...                                   [OK]
+    test_not_latest_event ...                                              [OK]
+tests.federation.test_federation_client
+  FederationClientTest
+    test_backfill_invalid_signature_records_failed_pull_attempts ...       [OK]
+    test_get_pdu ...                                                       [OK]
+    test_get_pdu_event_from_cache_is_pristine ...                          [OK]
+    test_get_pdu_propagates_cancellation ...                               [OK]
+    test_get_pdu_returns_nothing_when_event_does_not_exist ...             [OK]
+    test_get_pdu_skips_duplicate_destinations ...                          [OK]
+    test_get_room_state ...                                                [OK]
+    test_get_room_state_ids_rejects_missing_pdu_ids ...                    [OK]
+    test_get_room_state_ids_rejects_non_list_pdu_ids ...                   [OK]
+    test_timestamp_to_event_logs_warning_on_failure ...                    [OK]
+tests.federation.test_federation_sender
+  FederationSenderDevicesTestCases
+    test_delete_devices ...                                                [OK]
+    test_dont_send_device_updates_for_remote_users ...                     [OK]
+    test_prune_outbound_device_pokes1 ...                                  [OK]
+    test_prune_outbound_device_pokes2 ...                                  [OK]
+    test_send_device_updates ...                                           [OK]
+    test_unreachable_server ...                                            [OK]
+    test_upload_signatures ...                                             [OK]
+  FederationSenderNotImplementedRegressionTests
+    test_main_process_federation_ack_is_safe_noop ...                      [OK]
+    test_remote_send_queue_notify_new_events_is_safe_noop ...              [OK]
+  FederationSenderReceiptsTestCases
+    test_send_receipts ...                                                 [OK]
+    test_send_receipts_thread ...                                          [OK]
+    test_send_receipts_with_backoff ...                                    [OK]
+tests.federation.test_federation_server
+  FederationServerTests
+    test_bad_request_0 ...                                                 [OK]
+    test_bad_request_1 ...                                                 [OK]
+    test_bad_request_2 ...                                                 [OK]
+  SendJoinFederationTests
+    test_make_join_respects_room_join_rate_limit ...                       [OK]
+    test_send_join ...                                                     [OK]
+    test_send_join_contributes_to_room_join_rate_limit_and_is_limited ...  [OK]
+    test_send_join_partial_state ...                                       [OK]
+    test_send_join_partial_state_non_empty_auth_chain ...                  [OK]
+  ServerACLsTestCase
+    test_block_ip_literals ...                                             [OK]
+    test_blocked_server ...                                                [OK]
+    test_wildcard_matching ...                                             [OK]
+  StateQueryTests
+    test_needs_to_be_in_room ...                                           [OK]
+    test_state_ids_requires_event_id ...                                   [OK]
+tests.federation.transport.server.test__base
+  BaseFederationAuthorizationTests
+    test_authorization_header ...                                          [OK]
+  BaseFederationServletCancellationTests
+    test_cancellable_disconnect ...                                   [SKIPPED]
+    test_uncancellable_disconnect ...                                 [SKIPPED]
+tests.federation.transport.test_client
+  SendJoinParserTestCase
+    test_errors_closing_coroutines ...                                     [OK]
+    test_partial_state ...                                                 [OK]
+    test_servers_in_room ...                                               [OK]
+    test_two_writes ...                                                    [OK]
+tests.federation.transport.test_knocking
+  FederationKnockingTestCase
+    test_room_state_returned_when_knocking ...                             [OK]
+tests.federation.transport.test_server
+  RoomDirectoryFederationTests
+    test_blocked_public_room_list_over_federation ...                      [OK]
+    test_edu_debugging_doesnt_explode ...                                  [OK]
+    test_open_public_room_list_over_federation ...                         [OK]
+
+===============================================================================
+[SKIPPED]
+Requires Postgres
+
+tests.handlers.test_presence.PresenceHandlerTestCase.test_external_process_timeout
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_00_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_01_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_02_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_03_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_04_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_05_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_06_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_07_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_08_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_09_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_10_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_11_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_12_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_13_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_14_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_15_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_16_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_17_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_18_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_19_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_20_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_21_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_22_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_23_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_24_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_25_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_26_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_27_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_28_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_29_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_30_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_non_syncing_multi_device_31_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_is_set
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_keeps_busy_0
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_keeps_busy_1
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_keeps_status
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_00_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_01_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_02_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_03_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_04_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_05_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_06_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_07_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_08_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_09_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_10_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_11_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_12_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_13_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_14_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_15_monolith
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_16_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_17_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_18_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_19_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_20_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_21_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_22_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_23_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_24_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_25_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_26_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_27_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_28_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_29_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_30_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_multi_device_31_workers
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_from_syncing_not_set
+tests.handlers.test_presence.PresenceHandlerTestCase.test_set_presence_with_status_msg_none
+tests.handlers.test_presence.PresenceHandlerTestCase.test_untracked_does_not_idle
+tests.handlers.test_presence.PresenceHandlerTestCase.test_user_goes_offline_by_timeout_status_msg_remain
+tests.handlers.test_presence.PresenceHandlerTestCase.test_user_goes_offline_manually_with_no_status_msg
+tests.handlers.test_presence.PresenceHandlerTestCase.test_user_goes_offline_manually_with_status_msg
+tests.handlers.test_presence.PresenceHandlerTestCase.test_user_reset_online_with_no_status
+tests.handlers.test_room_member.TestReplicatedJoinsLimitedByPerRoomRateLimiter.test_local_users_joining_on_another_worker_contribute_to_rate_limit
+tests.handlers.test_worker_lock.WorkerLockWorkersTestCase.test_wait_for_lock_worker
+===============================================================================
+[SKIPPED]
+Requires xmlsec1
+
+tests.handlers.test_saml.SamlHandlerTestCase.test_attribute_requirements
+tests.handlers.test_saml.SamlHandlerTestCase.test_map_saml_response_redirect
+tests.handlers.test_saml.SamlHandlerTestCase.test_map_saml_response_to_existing_user
+tests.handlers.test_saml.SamlHandlerTestCase.test_map_saml_response_to_invalid_localpart
+tests.handlers.test_saml.SamlHandlerTestCase.test_map_saml_response_to_user
+tests.handlers.test_saml.SamlHandlerTestCase.test_map_saml_response_to_user_retries
+===============================================================================
+[SKIPPED]
+`BaseFederationServlet` does not support cancellation yet.
+
+tests.federation.transport.server.test__base.BaseFederationServletCancellationTests.test_cancellable_disconnect
+tests.federation.transport.server.test__base.BaseFederationServletCancellationTests.test_uncancellable_disconnect
+-------------------------------------------------------------------------------
+Ran 612 tests in 203.156s
+
+PASSED (skips=86, successes=526)
+___________________________________ summary ____________________________________
+ERROR:  py37: InterpreterNotFound: python3.7
+ERROR:  py38: InterpreterNotFound: python3.8
+ERROR:  py39: InterpreterNotFound: python3.9
+  py310: commands succeeded

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_delegation_grant.schema.json",
+  "title": "Blackout Delegation Grant",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["delegate", "scopes", "expires_at"],
+  "properties": {
+    "delegate": { "type": "string", "minLength": 1 },
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

@@ -1,0 +1,53 @@
+name: Release train gate
+
+on:
+  pull_request:
+  push:
+    branches: ["develop", "release-*"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  verify-release-train-artifacts:
+    name: Verify release checklist/changelog artifacts
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: blackout
+          POSTGRES_PASSWORD: blackout
+          POSTGRES_DB: blackout
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install local package
+        run: pip install .
+      - name: Run release train gate
+        run: python scripts-dev/check_release_train_gate.py
+      - name: Run divergence marker gate
+        run: python scripts-dev/check_divergence_markers.py
+      - name: Run tracker evidence validator
+        run: bash scripts-dev/blackout/validate_tracker_evidence.sh
+      - name: Run hosting profile smoke checks
+        run: python scripts-dev/blackout/ci_hosting_smoke.py
+      - name: Run managed readiness integration smoke
+        env:
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: "5432"
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: "6379"
+          BLACKOUT_READINESS_RETRIES: "5"
+          BLACKOUT_READINESS_TIMEOUT_SEC: "1"
+          BLACKOUT_READINESS_DELAY_SEC: "1"
+        run: python scripts-dev/blackout/managed_readiness_integration_smoke.py
+      - name: Run protocol compatibility smoke check
+        run: python -m pytest tests/rest/client/test_versions.py::VersionsServletTestCase::test_versions_smoke_compatibility

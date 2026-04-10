@@ -1,4 +1,4 @@
-import { mdToHtml, sanitizeMatrixHtml } from '../../utils/markdown';
+import { mdToHtml, sanitizeMatrixHtml } from '../../utils/bmc-markdown';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
 

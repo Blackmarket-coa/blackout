@@ -1,0 +1,9 @@
+{
+  "space_id": "!cell-space:alpha.example",
+  "chapter_id": "chapter-alpha",
+  "visibility": "private",
+  "membership_rule": "invite_only",
+  "allowed_parent_spaces": ["!chapter-root:alpha.example"],
+  "federation_trust_tier": "partner",
+  "moderation_roles_assigned": true
+}

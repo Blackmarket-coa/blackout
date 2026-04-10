@@ -1,0 +1,65 @@
+groups:
+- name: blackout-dr
+  rules:
+  - alert: BlackoutPostgresReplicaReplayLagWarning
+    expr: postgres_replication_replay_lag_seconds > 30
+    for: 3m
+    labels:
+      severity: warning
+    annotations:
+      summary: "PostgreSQL replica replay lag is above warning threshold"
+      description: "Replay lag above 30s for 3m can break RPO objectives."
+
+  - alert: BlackoutPostgresReplicaReplayLagCritical
+    expr: postgres_replication_replay_lag_seconds > 60
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "PostgreSQL replica replay lag is above critical threshold"
+      description: "Replay lag above 60s threatens the 1-minute RPO objective."
+
+  - alert: BlackoutPostgresWalReceiverLagCritical
+    expr: postgres_wal_receiver_lag_seconds > 60
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "WAL receiver lag above 60 seconds"
+      description: "WAL transport lag is above threshold for DR and failover safety."
+
+  - alert: BlackoutPostgresStorageCapacityWarning
+    expr: (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) < 0.20
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "PostgreSQL storage free space below 20%"
+      description: "Capacity pressure may cause WAL/backup failures."
+
+  - alert: BlackoutPostgresStorageCapacityCritical
+    expr: (node_filesystem_avail_bytes{mountpoint="/var/lib/postgresql"} / node_filesystem_size_bytes{mountpoint="/var/lib/postgresql"}) < 0.10
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "PostgreSQL storage free space below 10%"
+      description: "Immediate action required to avoid write outage or backup failure."
+
+  - alert: BlackoutBackupTooOld
+    expr: (time() - blackout_postgres_last_successful_backup_unixtime_seconds) > 93600
+    for: 15m
+    labels:
+      severity: critical
+    annotations:
+      summary: "No successful Postgres backup in last 26 hours"
+      description: "Daily full backup window has been missed."
+
+  - alert: BlackoutBackupVerificationTooOld
+    expr: (time() - blackout_postgres_last_successful_backup_verification_unixtime_seconds) > 93600
+    for: 15m
+    labels:
+      severity: critical
+    annotations:
+      summary: "No successful backup verification in last 26 hours"
+      description: "Automated backup verification pipeline is stale."

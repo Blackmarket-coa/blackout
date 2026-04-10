@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_cell_space.schema.json",
+  "title": "blackout_cell_space",
+  "description": "Compartmentalized governance space policy for chapter/cell operations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "space_id",
+    "chapter_id",
+    "visibility",
+    "membership_rule",
+    "allowed_parent_spaces",
+    "federation_trust_tier"
+  ],
+  "properties": {
+    "space_id": {"type": "string", "minLength": 1},
+    "chapter_id": {"type": "string", "minLength": 1},
+    "visibility": {"type": "string", "enum": ["private"]},
+    "membership_rule": {"type": "string", "enum": ["invite_only"]},
+    "allowed_parent_spaces": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "federation_trust_tier": {
+      "type": "string",
+      "enum": ["local", "partner", "restricted"]
+    },
+    "moderation_roles_assigned": {"type": "boolean", "default": false}
+  }
+}

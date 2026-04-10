@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { userIdAtom } from '../../state/auth';
+import { userIdAtom } from '../../state/bmc-auth';
 import GlobalMentionsInbox from './GlobalMentionsInbox';
 import { useInboxModel } from './useInboxModel';
 

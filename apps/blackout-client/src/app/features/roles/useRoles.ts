@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
-import { getPowerLevel } from '../../utils/room';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
+import { getPowerLevel } from '../../utils/bmc-room';
 
 export interface RoleDefinition {
     name: string;

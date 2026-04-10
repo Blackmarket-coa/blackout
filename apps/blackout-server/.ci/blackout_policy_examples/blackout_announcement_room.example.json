@@ -1,0 +1,11 @@
+{
+  "room_id": "!announce-room:alpha.example",
+  "visibility": "private",
+  "sender_roles": ["announcer", "moderator"],
+  "default_member_power": 0,
+  "read_receipt_policy": "minimized",
+  "fanout_mode": "delayed_window",
+  "delayed_fanout_min_seconds": 5,
+  "delayed_fanout_max_seconds": 30,
+  "rollback_procedure_ref": "runbooks/federation_announcement_rollback.md"
+}

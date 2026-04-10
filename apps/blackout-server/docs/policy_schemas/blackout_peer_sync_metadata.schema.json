@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_peer_sync_metadata.schema.json",
+  "title": "Blackout Peer Sync Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["peer_id", "last_hash", "pending_events", "snapshot_version"],
+  "properties": {
+    "peer_id": { "type": "string", "minLength": 1 },
+    "last_hash": { "type": "string", "minLength": 1 },
+    "pending_events": { "type": "integer", "minimum": 0 },
+    "snapshot_version": { "type": "integer", "minimum": 1 }
+  }
+}
