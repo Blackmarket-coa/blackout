@@ -65,7 +65,12 @@
     "dev:client": "pnpm --filter @blackout/client dev",
     "dev:server": "pnpm --filter @blackout/server dev",
     "guard:dev-filters": "node tools/ci/check-dev-filter-resolution.mjs",
-    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs"
+    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs",
+    "guard:workspace-packages": "node tools/ci/check-workspace-package-assertions.mjs",
+    "guard:sdk-boundary": "node tools/ci/check-sdk-boundary.mjs",
+    "guard:protocol-import-consistency": "node tools/ci/check-protocol-import-consistency.mjs",
+    "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
+    "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
