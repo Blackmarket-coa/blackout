@@ -11,17 +11,15 @@ import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInb
 import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
-import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { featureRegistry } from './app/core/features/registry';
+import { composeFeatureRoutes } from './app/core/features/composition';
 
 const queryClient = new QueryClient();
 
-const featureRoutes = featureRegistry.flatMap((feature) =>
-    (feature.routes ?? []).map((route) => ({
-        path: route.path,
-        element: <route.component />,
-    })),
-);
+const featureRoutes = composeFeatureRoutes(featureRegistry).map((route) => ({
+    path: route.path,
+    element: <route.component />,
+}));
 
 const router = createBrowserRouter([
     {
@@ -33,10 +31,6 @@ const router = createBrowserRouter([
         element: <ClientLayout />,
     },
     ...featureRoutes,
-    {
-        path: '/moderation/draupnir',
-        element: <DraupnirRoutePage />,
-    },
 ]);
 
 // eslint-disable-next-line react-refresh/only-export-components
