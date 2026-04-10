@@ -172,3 +172,33 @@ jobs:
             echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
             exit 1
           fi
+
+  qa-monorepo:
+    name: Monorepo QA conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run monorepo QA suite
+        id: qa_monorepo
+        continue-on-error: ${{ vars.MONOREPO_MIGRATION_THRESHOLD_MET != 'true' }}
+        run: pnpm qa:monorepo
+      - name: Upload monorepo QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-monorepo-artifacts
+          path: artifacts/qa-monorepo
+          if-no-files-found: warn
+      - name: Enforce monorepo QA gate at threshold
+        if: vars.MONOREPO_MIGRATION_THRESHOLD_MET == 'true' && steps.qa_monorepo.outcome != 'success'
+        run: |
+          echo "MONOREPO_MIGRATION_THRESHOLD_MET=true so qa:monorepo is required."
+          exit 1
