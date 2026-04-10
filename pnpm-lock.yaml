@@ -684,6 +684,22 @@ importers:
         specifier: ^4.9.6
         version: 4.12.10
 
+  packages/blackout-protocol:
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/blackout-sdk:
+    dependencies:
+      '@blackout/blackout-protocol':
+        specifier: workspace:*
+        version: link:../blackout-protocol
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/config:
     devDependencies:
       typescript:
@@ -707,6 +723,8 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/server: {}
 
   packages/ui:
     dependencies:

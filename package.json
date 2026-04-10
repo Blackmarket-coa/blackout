@@ -25,7 +25,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "dev": "turbo run dev",
+    "dev": "node tools/dev/run-dev.mjs",
     "clean": "turbo run clean",
     "smoke:aligned": "node tools/ci/run-smoke-aligned-checks.mjs",
     "ci:parity": "node tools/ci/run-centralized-parity.mjs",
@@ -61,7 +61,11 @@
     "guard:runtime-scripts": "node tools/ci/check-runtime-scripts.mjs",
     "test:guard:runtime-scripts": "node --test tools/ci/check-runtime-scripts.test.mjs",
     "guard:blackout-legacy-aliases": "node tools/ci/check-blackout-legacy-aliases.mjs",
-    "test:guard:blackout-legacy-aliases": "node --test tools/ci/check-blackout-legacy-aliases.test.mjs"
+    "test:guard:blackout-legacy-aliases": "node --test tools/ci/check-blackout-legacy-aliases.test.mjs",
+    "dev:client": "pnpm --filter @blackout/client dev",
+    "dev:server": "pnpm --filter @blackout/server dev",
+    "guard:dev-filters": "node tools/ci/check-dev-filter-resolution.mjs",
+    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
