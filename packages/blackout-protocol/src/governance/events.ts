@@ -1,23 +1,12 @@
 import type { EventEnvelope } from '../common/types';
+import type { GovernanceProposalPayload, GovernanceVotePayload } from './contracts';
 
 export type GovernanceProposalCreated = EventEnvelope<
     'blackout.governance.proposal.created',
-    {
-        proposalId: string;
-        title: string;
-        summary: string;
-        options: string[];
-        closesAt: string;
-    }
+    GovernanceProposalPayload
 >;
 
-export type GovernanceVoteCast = EventEnvelope<
-    'blackout.governance.vote.cast',
-    {
-        proposalId: string;
-        vote: string;
-    }
->;
+export type GovernanceVoteCast = EventEnvelope<'blackout.governance.vote.cast', GovernanceVotePayload>;
 
 export const isGovernanceProposalCreated = (
     value: unknown
@@ -29,6 +18,6 @@ export const isGovernanceProposalCreated = (
         typeof candidate.roomId === 'string' &&
         typeof candidate.senderId === 'string' &&
         typeof candidate.occurredAt === 'string' &&
-        typeof candidate.payload?.proposalId === 'string'
+        typeof candidate.payload?.title === 'string'
     );
 };
