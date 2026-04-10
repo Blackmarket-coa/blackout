@@ -1,4 +1,4 @@
-import type { DeadDropCreated, DeadDropOpened } from '@blackout/blackout-protocol';
+import type { DeadDropCreated, DeadDropOpened } from '@blackout/protocol';
 import type { ApiClient } from '../client/types';
 
 export const createDeadDropActions = (client: ApiClient) => ({

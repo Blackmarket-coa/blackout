@@ -1,4 +1,4 @@
-import type { ModerationActionTaken } from '@blackout/blackout-protocol';
+import type { ModerationActionTaken } from '@blackout/protocol';
 import type { ApiClient } from '../client/types';
 
 export const createModerationActions = (client: ApiClient) => ({

@@ -1,4 +1,4 @@
-import type { GovernanceProposalCreated, GovernanceVoteCast } from '@blackout/blackout-protocol';
+import type { GovernanceProposalCreated, GovernanceVoteCast } from '@blackout/protocol';
 import type { ApiClient } from '../client/types';
 
 export const createGovernanceActions = (client: ApiClient) => ({
