@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RoomMember } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { RoleBadge } from '../roles/RoleBadge';
 import { useUserRoles } from '../roles/useRoles';
 import type { ForumPostModel } from './useForum';

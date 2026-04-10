@@ -1,5 +1,5 @@
 import { createTheme, createThemeContract, globalStyle } from '@vanilla-extract/css';
-import { BLACKOUT_THEME_IDS, normalizeThemeId, type BlackoutThemeId } from '@blackout/core';
+import { BLACKOUT_THEME_IDS, normalizeThemeId, type BlackoutThemeId } from '../../lib/bmc-core';
 import {
     applyThemeToRoot as applyThemeToRootEngine,
     themeColorSchemeByPreference,

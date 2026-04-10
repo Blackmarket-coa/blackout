@@ -1,11 +1,11 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import { userIdAtom } from '../../state/auth';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
-import { useRoomTimeline } from '../../hooks/useTimeline';
-import { mxcToUrl } from '../../utils/media';
+import { userIdAtom } from '../../state/bmc-auth';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
+import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
+import { mxcToUrl } from '../../utils/bmc-media';
 
 interface ReactionSummary {
     key: string;

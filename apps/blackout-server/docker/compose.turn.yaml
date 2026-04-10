@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    container_name: blackout-coturn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TURN_REALM: ${TURN_REALM:-blackout.local}
+      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET}
+    command:
+      - -c
+      - /etc/coturn/turnserver.conf
+    volumes:
+      - ./turn/turnserver.conf:/etc/coturn/turnserver.conf:ro

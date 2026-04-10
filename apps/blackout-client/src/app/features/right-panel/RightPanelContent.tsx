@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import type { RightPanelType } from '../../state/navigation';
+import type { RightPanelType } from '../../state/bmc-navigation';
 import { GovernanceDashboard } from '../../features/governance';
 import { RoleEditor } from '../../features/roles/RoleEditor';
 import { RolePicker } from '../../features/roles/RolePicker';

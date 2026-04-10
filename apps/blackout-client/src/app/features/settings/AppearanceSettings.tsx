@@ -1,5 +1,5 @@
 import { useAtom } from 'jotai';
-import { BLACKOUT_THEMES } from '@blackout/core';
+import { BLACKOUT_THEMES } from '../../../lib/bmc-core';
 import {
     appearanceSettingsAtom,
     type ChatDensityOption,

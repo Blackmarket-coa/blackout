@@ -1,5 +1,5 @@
-import type { BlackoutThemeId } from '@blackout/core';
-import { normalizeThemeId } from '@blackout/core';
+import type { BlackoutThemeId } from '../../../lib/bmc-core';
+import { normalizeThemeId } from '../../../lib/bmc-core';
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import { trackSettingsSaveFailure } from './settingsTelemetry';
 

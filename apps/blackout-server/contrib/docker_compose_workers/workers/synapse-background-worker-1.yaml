@@ -1,0 +1,16 @@
+worker_app: synapse.app.generic_worker
+worker_name: synapse-background-worker-1
+
+worker_replication_host: synapse
+worker_replication_http_port: 9093
+
+run_background_tasks_on: synapse-background-worker-1
+
+worker_listeners:
+  - type: http
+    port: 8083
+    x_forwarded: true
+    resources:
+      - names: [health]
+
+worker_log_config: /data/background_worker.log.config

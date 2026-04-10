@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_bootstrap_recovery_envelope.schema.json",
+  "title": "Blackout Bootstrap Recovery Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "events"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["peer_id", "last_hash", "pending_events", "snapshot_version"],
+      "properties": {
+        "peer_id": { "type": "string", "minLength": 1 },
+        "last_hash": { "type": "string", "minLength": 1 },
+        "pending_events": { "type": "integer", "minimum": 0 },
+        "snapshot_version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "event_type",
+          "timestamp",
+          "actor_public_key",
+          "encrypted_payload",
+          "previous_hash",
+          "room_id",
+          "crdt_site",
+          "crdt_counter",
+          "signature"
+        ],
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1 },
+          "event_type": { "type": "string", "minLength": 1 },
+          "timestamp": { "type": "integer" },
+          "actor_public_key": { "type": "string", "minLength": 1 },
+          "encrypted_payload": { "type": "string", "minLength": 1 },
+          "previous_hash": { "type": "string", "minLength": 1 },
+          "room_id": { "type": "string", "minLength": 1 },
+          "crdt_site": { "type": "string", "minLength": 1 },
+          "crdt_counter": { "type": "integer" },
+          "signature": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

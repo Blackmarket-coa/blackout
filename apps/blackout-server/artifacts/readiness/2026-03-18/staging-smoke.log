@@ -1,0 +1,2 @@
+# Staging smoke attempt - 2026-03-18
+env: missing required STAGING_* variables

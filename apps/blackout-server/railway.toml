@@ -1,0 +1,14 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/blackout-server/Dockerfile"
+
+[deploy]
+startCommand = "/entrypoint.sh"
+healthcheckPath = "/_matrix/client/versions"
+healthcheckTimeout = 180
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[environments.production]
+RAILWAY_RUN_ROOT = "services/blackout-server"
+watchPatterns = ["services/blackout-server/**"]

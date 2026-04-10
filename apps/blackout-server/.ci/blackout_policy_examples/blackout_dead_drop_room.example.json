@@ -1,0 +1,11 @@
+{
+  "room_id": "!drop-room:alpha.example",
+  "visibility": "unlisted",
+  "membership_rule": "invite_only",
+  "history_visibility": "joined",
+  "retention_ttl_hours": 24,
+  "purge_mode": "tombstone",
+  "single_use_access_token": true,
+  "max_members": 8,
+  "scheduler_heartbeat_required": true
+}

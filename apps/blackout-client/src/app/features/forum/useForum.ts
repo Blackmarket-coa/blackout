@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
-import { useRoomTimeline } from '../../hooks/useTimeline';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
+import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 
 export interface ForumTag {
     name: string;

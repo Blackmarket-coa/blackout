@@ -11,10 +11,10 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import { sanitizeMatrixHtml } from '../../utils/markdown';
-import { useRoom } from '../../hooks/useRoom';
-import { useRoomTimeline, useTimelineScroll } from '../../hooks/useTimeline';
-import { useTypingIndicator } from '../../hooks/useTyping';
+import { sanitizeMatrixHtml } from '../../utils/bmc-markdown';
+import { useRoom } from '../../hooks/bmc-useRoom';
+import { useRoomTimeline, useTimelineScroll } from '../../hooks/bmc-useTimeline';
+import { useTypingIndicator } from '../../hooks/bmc-useTyping';
 import {
     AudioMessage as TimelineAudioMessage,
     FileMessage as TimelineFileMessage,

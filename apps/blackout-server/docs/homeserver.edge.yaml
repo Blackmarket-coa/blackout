@@ -1,0 +1,28 @@
+# Edge homeserver profile (BO-601)
+# Resource-constrained deployment defaults for intermittent connectivity.
+
+server_name: edge.blackout.local
+report_stats: false
+
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    resources:
+      - names: [client, federation]
+
+caches:
+  global_factor: 0.5
+
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+retention:
+  enabled: true
+
+federation:
+  client_timeout: 20s
+  max_short_retry_delay: 2s
+  max_long_retry_delay: 5m

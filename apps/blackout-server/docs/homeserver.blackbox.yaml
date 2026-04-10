@@ -1,0 +1,47 @@
+# Blackout low-resource preset for ARM/SBC blackbox deployments.
+# Copy values into your active homeserver.yaml and adjust secrets/paths.
+
+server_name: "blackbox.local"
+public_baseurl: "http://blackbox.local:8008/"
+web_client_location: "https://github.com/Blackmarket-coa/blackout"
+
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+
+# keep DB lightweight for single-box and small-community mode
+# switch to PostgreSQL for larger deployments.
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+# conservative media footprint for SD-card deployments
+media_store_path: /data/media_store
+max_upload_size: 10M
+url_preview_enabled: false
+dynamic_thumbnails: false
+
+# keep memory/CPU pressure low
+enable_media_repo: true
+limit_usage_by_mau: false
+
+# avoid public directory exposure by default on appliance nodes
+enable_room_list_search: false
+
+# module wiring for blackout semantics + APIs
+modules:
+  - module: blackout_runtime.module.BlackoutRuntimeModule
+    config:
+      persistence_path: /data/blackout_runtime.sqlite3
+      backfill_room_limit: 1000
+      proposal_rate_limit: 5
+      proposal_rate_window_s: 3600
+      attestation_cooldown_s: 600
+
+# log rotation should be handled by systemd/journald or external logrotate
+log_config: /data/blackbox-log.config

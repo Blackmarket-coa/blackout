@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
 
 export const DEAD_DROP_EVENT_TYPE = 'co.bmc.deaddrop';
 export const DEAD_DROP_QUEUE_EVENT_TYPE = 'co.bmc.deaddrop.queue';

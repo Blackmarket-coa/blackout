@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_governance_attestation.schema.json",
+  "title": "Blackout Governance Attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proposal_id", "decision", "attested_by", "attestation_ref"],
+  "properties": {
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "minLength": 1 },
+    "attested_by": { "type": "string", "minLength": 1 },
+    "attestation_ref": { "type": "string", "minLength": 1 }
+  }
+}

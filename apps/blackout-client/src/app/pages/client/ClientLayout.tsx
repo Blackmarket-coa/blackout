@@ -3,9 +3,9 @@ import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { joinedRoomsAtom } from '../../state/rooms';
-import { userIdAtom } from '../../state/auth';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { joinedRoomsAtom } from '../../state/bmc-rooms';
+import { userIdAtom } from '../../state/bmc-auth';
 import {
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
@@ -13,9 +13,9 @@ import {
     roomJumpTargetEventIdAtom,
     roomUnreadMarkerEventIdAtom,
     type RightPanelType,
-} from '../../state/navigation';
-import { settingsAtom } from '../../state/settings';
-import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
+} from '../../state/bmc-navigation';
+import { settingsAtom } from '../../state/bmc-settings';
+import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/bmc-composer';
 import {
     DeadDropComposer,
     DeadDropIndicator,
@@ -32,8 +32,8 @@ import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
 import { useOptionalCall } from '../../features/call';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
-import { useRoomTimeline } from '../../hooks/useTimeline';
-import { useRoom } from '../../hooks/useRoom';
+import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
+import { useRoom } from '../../hooks/bmc-useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';

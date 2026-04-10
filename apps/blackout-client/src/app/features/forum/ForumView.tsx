@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent, RoomMember } from 'matrix-js-sdk';
-import { useRoomMembers } from '../../hooks/useRoom';
-import { useRoomTimeline, useSendMessage } from '../../hooks/useTimeline';
+import { useRoomMembers } from '../../hooks/bmc-useRoom';
+import { useRoomTimeline, useSendMessage } from '../../hooks/bmc-useTimeline';
 import { CreatePostModal } from './CreatePostModal';
 import { ForumPost } from './ForumPost';
 import { useForumPosts, useForumSettings, type ForumPostModel } from './useForum';

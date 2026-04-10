@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_announcement_room.schema.json",
+  "title": "blackout_announcement_room",
+  "description": "One-to-many broadcast channel policy with constrained senders.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "room_id",
+    "visibility",
+    "sender_roles",
+    "default_member_power",
+    "read_receipt_policy",
+    "fanout_mode"
+  ],
+  "properties": {
+    "room_id": {"type": "string", "minLength": 1},
+    "visibility": {"type": "string", "enum": ["private", "public_scoped"]},
+    "sender_roles": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["announcer", "moderator"]},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "default_member_power": {"type": "integer", "maximum": 49},
+    "read_receipt_policy": {"type": "string", "enum": ["minimized", "standard"]},
+    "fanout_mode": {"type": "string", "enum": ["immediate", "delayed_window"]},
+    "delayed_fanout_min_seconds": {"type": "integer", "minimum": 1},
+    "delayed_fanout_max_seconds": {"type": "integer", "minimum": 1},
+    "rollback_procedure_ref": {"type": "string", "minLength": 1}
+  }
+}

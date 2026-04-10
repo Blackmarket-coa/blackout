@@ -1,62 +1,100 @@
-import { normalizeThemeId } from '@blackout/core';
-import { atomWithStorage, createJSONStorage } from 'jotai/utils';
-import type { ThemePreference } from '../styles/theme.css';
+import { atom } from 'jotai';
 
-export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
-
-export interface LayoutSettings {
-    spaceColumnWidth: number;
-    roomColumnWidth: number;
+const STORAGE_KEY = 'settings';
+export type DateFormat = 'D MMM YYYY' | 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY/MM/DD' | '';
+export type MessageSpacing = '0' | '100' | '200' | '300' | '400' | '500';
+export enum MessageLayout {
+  Modern = 0,
+  Compact = 1,
+  Bubble = 2,
 }
 
-export interface AppSettings {
-    theme: ThemePreference;
-    pageZoom: number;
-    twitterEmoji: boolean;
-    showNotifications: boolean;
-    isNotificationSounds: boolean;
-    chatDensity: ChatDensity;
-    devMode: boolean;
-    streamerMode: boolean;
-    layout: LayoutSettings;
-    mobileRoomListScope?: 'space' | 'all';
-    preferredAudioDeviceId?: string;
-    preferredVideoDeviceId?: string;
+export interface Settings {
+  themeId?: string;
+  useSystemTheme: boolean;
+  lightThemeId?: string;
+  darkThemeId?: string;
+  monochromeMode?: boolean;
+  isMarkdown: boolean;
+  editorToolbar: boolean;
+  twitterEmoji: boolean;
+  pageZoom: number;
+  hideActivity: boolean;
+
+  isPeopleDrawer: boolean;
+  memberSortFilterIndex: number;
+  enterForNewline: boolean;
+  messageLayout: MessageLayout;
+  messageSpacing: MessageSpacing;
+  hideMembershipEvents: boolean;
+  hideNickAvatarEvents: boolean;
+  mediaAutoLoad: boolean;
+  urlPreview: boolean;
+  encUrlPreview: boolean;
+  showHiddenEvents: boolean;
+  legacyUsernameColor: boolean;
+
+  showNotifications: boolean;
+  isNotificationSounds: boolean;
+
+  hour24Clock: boolean;
+  dateFormatString: string;
+
+  developerTools: boolean;
 }
 
-const defaultSettings: AppSettings = {
-    theme: 'dark_canopy',
-    pageZoom: 1,
-    twitterEmoji: true,
-    showNotifications: true,
-    isNotificationSounds: true,
-    chatDensity: 'comfortable',
-    devMode: false,
-    streamerMode: false,
-    layout: {
-        spaceColumnWidth: 64,
-        roomColumnWidth: 260,
-    },
-    mobileRoomListScope: 'space',
+const defaultSettings: Settings = {
+  themeId: undefined,
+  useSystemTheme: true,
+  lightThemeId: undefined,
+  darkThemeId: undefined,
+  monochromeMode: false,
+  isMarkdown: true,
+  editorToolbar: false,
+  twitterEmoji: false,
+  pageZoom: 100,
+  hideActivity: false,
+
+  isPeopleDrawer: true,
+  memberSortFilterIndex: 0,
+  enterForNewline: false,
+  messageLayout: 0,
+  messageSpacing: '400',
+  hideMembershipEvents: false,
+  hideNickAvatarEvents: true,
+  mediaAutoLoad: true,
+  urlPreview: true,
+  encUrlPreview: false,
+  showHiddenEvents: false,
+  legacyUsernameColor: false,
+
+  showNotifications: true,
+  isNotificationSounds: true,
+
+  hour24Clock: false,
+  dateFormatString: 'D MMM YYYY',
+
+  developerTools: false,
 };
 
-export const normalizeAppSettingsTheme = (theme: string): ThemePreference =>
-    normalizeThemeId(theme);
+export const getSettings = () => {
+  const settings = localStorage.getItem(STORAGE_KEY);
+  if (settings === null) return defaultSettings;
+  return {
+    ...defaultSettings,
+    ...(JSON.parse(settings) as Settings),
+  };
+};
 
-const appSettingsStorage = createJSONStorage<AppSettings>(() => localStorage, {
-    reviver: (key, value) => {
-        if (key === 'theme' && typeof value === 'string') {
-            return normalizeAppSettingsTheme(value);
-        }
-        return value;
-    },
-});
+export const setSettings = (settings: Settings) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+};
 
-/**
- * Persisted client settings for appearance, notifications, and developer toggles.
- */
-export const settingsAtom = atomWithStorage<AppSettings>(
-    'blackout.settings.v1',
-    defaultSettings,
-    appSettingsStorage,
+const baseSettings = atom<Settings>(getSettings());
+export const settingsAtom = atom<Settings, [Settings], undefined>(
+  (get) => get(baseSettings),
+  (get, set, update) => {
+    set(baseSettings, update);
+    setSettings(update);
+  }
 );

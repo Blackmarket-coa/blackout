@@ -1,0 +1,1 @@
+Add blackout runtime BO-203/4xx/5xx/6xx hardening updates, including dead-drop invite/join quota guardrails, jitter worker skeleton, and associated ops/security artifacts.

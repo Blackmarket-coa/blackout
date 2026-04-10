@@ -1,0 +1,11 @@
+{
+  "image": "ghcr.io/blackmarket-coa/blackout-server:1.98.0-blackout.1",
+  "source_revision": "9c9ee48e0884b751ec1b59e6bfcf5f3727ca3be8",
+  "upstream_base_revision": "v1.98.0",
+  "build_timestamp_utc": "2026-03-19T00:00:00Z",
+  "builder": "github-actions",
+  "workflow": "blackout-image-lifecycle",
+  "sbom_artifact_uri": "ghcr.io/blackmarket-coa/blackout-server:1.98.0-blackout.1-sbom",
+  "provenance_artifact_uri": "ghcr.io/blackmarket-coa/blackout-server:1.98.0-blackout.1-provenance",
+  "notes": "RC1 pre-promotion artifact metadata"
+}

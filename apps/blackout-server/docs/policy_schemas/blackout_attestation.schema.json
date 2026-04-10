@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_attestation.schema.json",
+  "title": "Blackout Attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["node_id", "subject_user_id", "proof"],
+  "properties": {
+    "node_id": { "type": "string", "minLength": 1 },
+    "subject_user_id": { "type": "string", "minLength": 1 },
+    "proof": { "type": "string", "minLength": 16 }
+  }
+}

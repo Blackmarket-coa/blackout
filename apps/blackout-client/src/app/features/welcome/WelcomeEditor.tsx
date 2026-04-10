@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoom } from '../../hooks/useRoom';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoom } from '../../hooks/bmc-useRoom';
 import { OnboardingWizard } from './OnboardingWizard';
 import { WelcomeScreen } from './WelcomeScreen';
 import {

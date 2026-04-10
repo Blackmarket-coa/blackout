@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackout.local/schemas/blackout_dead_drop_room.schema.json",
+  "title": "blackout_dead_drop_room",
+  "description": "Asynchronous, unlisted, high-retention-discipline room policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "room_id",
+    "visibility",
+    "membership_rule",
+    "history_visibility",
+    "retention_ttl_hours",
+    "purge_mode"
+  ],
+  "properties": {
+    "room_id": {"type": "string", "minLength": 1},
+    "visibility": {"type": "string", "enum": ["private", "unlisted"]},
+    "membership_rule": {"type": "string", "enum": ["invite_only"]},
+    "history_visibility": {"type": "string", "enum": ["joined"]},
+    "retention_ttl_hours": {"type": "integer", "minimum": 1, "maximum": 168},
+    "purge_mode": {"type": "string", "enum": ["hard_delete", "tombstone"]},
+    "single_use_access_token": {"type": "boolean", "default": false},
+    "max_members": {"type": "integer", "minimum": 1},
+    "scheduler_heartbeat_required": {"type": "boolean", "default": true}
+  }
+}

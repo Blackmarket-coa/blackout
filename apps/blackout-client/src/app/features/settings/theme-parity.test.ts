@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BLACKOUT_THEME_IDS } from '@blackout/core';
-import { normalizeAppSettingsTheme } from '../../state/settings';
+import { BLACKOUT_THEME_IDS } from '../../../lib/bmc-core';
+import { normalizeAppSettingsTheme } from '../../state/bmc-settings';
 import { normalizeAppearanceTheme } from './settingsAtoms';
 import { themePreviews } from './theme-previews';
 

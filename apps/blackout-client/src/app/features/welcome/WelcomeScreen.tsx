@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useRoomName } from '../../hooks/useRoom';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useRoomName } from '../../hooks/bmc-useRoom';
 import { useSpaceMemberStats, useWelcomeContent } from './useWelcome';
 
 export const WelcomeScreen = ({

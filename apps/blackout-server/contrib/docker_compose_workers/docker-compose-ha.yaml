@@ -1,0 +1,230 @@
+networks:
+  backend:
+
+volumes:
+  postgres_data_primary:
+  postgres_data_replica:
+  redis_primary:
+  redis_replica:
+
+services:
+  postgres-primary:
+    image: bitnami/postgresql-repmgr:16
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_POSTGRES_PASSWORD: postgres
+      POSTGRESQL_USERNAME: synapse_user
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_DATABASE: synapse
+      REPMGR_PASSWORD: repmgrpassword
+      REPMGR_PRIMARY_HOST: postgres-primary
+      REPMGR_NODE_NAME: postgres-primary
+      REPMGR_NODE_NETWORK_NAME: postgres-primary
+      REPMGR_PARTNER_NODES: postgres-primary,postgres-replica
+    volumes:
+      - postgres_data_primary:/bitnami/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse_user -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  postgres-replica:
+    image: bitnami/postgresql-repmgr:16
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_POSTGRES_PASSWORD: postgres
+      POSTGRESQL_USERNAME: synapse_user
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_DATABASE: synapse
+      REPMGR_PASSWORD: repmgrpassword
+      REPMGR_PRIMARY_HOST: postgres-primary
+      REPMGR_NODE_NAME: postgres-replica
+      REPMGR_NODE_NETWORK_NAME: postgres-replica
+      REPMGR_PARTNER_NODES: postgres-primary,postgres-replica
+    volumes:
+      - postgres_data_replica:/bitnami/postgresql
+    depends_on:
+      - postgres-primary
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse_user -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  postgres-proxy:
+    image: bitnami/pgpool:4
+    restart: unless-stopped
+    environment:
+      PGPOOL_BACKEND_NODES: 0:postgres-primary:5432,1:postgres-replica:5432
+      PGPOOL_SR_CHECK_USER: synapse_user
+      PGPOOL_SR_CHECK_PASSWORD: postgres
+      PGPOOL_POSTGRES_USERNAME: synapse_user
+      PGPOOL_POSTGRES_PASSWORD: postgres
+      PGPOOL_ADMIN_USERNAME: admin
+      PGPOOL_ADMIN_PASSWORD: admin
+      PGPOOL_ENABLE_LOAD_BALANCING: "yes"
+    depends_on:
+      - postgres-primary
+      - postgres-replica
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=postgres psql -h 127.0.0.1 -p 5432 -U synapse_user -d synapse -c 'select 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  redis-primary:
+    image: bitnami/redis:7.2
+    restart: unless-stopped
+    environment:
+      REDIS_REPLICATION_MODE: master
+      REDIS_PASSWORD: redispassword
+    volumes:
+      - redis_primary:/bitnami/redis/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  redis-replica:
+    image: bitnami/redis:7.2
+    restart: unless-stopped
+    environment:
+      REDIS_REPLICATION_MODE: replica
+      REDIS_MASTER_HOST: redis-primary
+      REDIS_MASTER_PORT_NUMBER: 6379
+      REDIS_MASTER_PASSWORD: redispassword
+      REDIS_PASSWORD: redispassword
+    depends_on:
+      - redis-primary
+    volumes:
+      - redis_replica:/bitnami/redis/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  synapse:
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    container_name: synapse
+    restart: unless-stopped
+    volumes:
+      - ${VOLUME_PATH}/data:/data:rw
+    environment:
+      SYNAPSE_CONFIG_DIR: /data
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    depends_on:
+      - postgres-proxy
+      - redis-primary
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:8008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  synapse-generic-worker-1:
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    restart: unless-stopped
+    entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-generic-worker-1.yaml"]
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    volumes:
+      - ${VOLUME_PATH}/data:/data:rw
+    depends_on:
+      - synapse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:8081/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  synapse-background-worker-1:
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    restart: unless-stopped
+    entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-background-worker-1.yaml"]
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    volumes:
+      - ${VOLUME_PATH}/data:/data:rw
+    depends_on:
+      - synapse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:8083/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  synapse-persister-1:
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    restart: unless-stopped
+    entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-persister-1.yaml"]
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    volumes:
+      - ${VOLUME_PATH}/data:/data:rw
+    depends_on:
+      - synapse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:8084/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  synapse-federation-sender-1:
+    image: ${SYNAPSE_IMAGE_OVERRIDE:-matrixdotorg/synapse:latest}
+    restart: unless-stopped
+    entrypoint: ["/start.py", "run", "--config-path=/data/homeserver.yaml", "--config-path=/data/workers/synapse-federation-sender-1.yaml"]
+    environment:
+      SYNAPSE_WORKER: synapse.app.federation_sender
+    volumes:
+      - ${VOLUME_PATH}/data:/data:rw
+    depends_on:
+      - synapse
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'synapse.app.federation_sender' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+    networks:
+      - backend
+
+  reverse-proxy:
+    image: haproxy:3.1
+    restart: unless-stopped
+    depends_on:
+      - synapse
+      - synapse-generic-worker-1
+      - synapse-background-worker-1
+      - synapse-persister-1
+    ports:
+      - 8008:8008
+      - 8448:8448
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    healthcheck:
+      test: ["CMD-SHELL", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    networks:
+      - backend

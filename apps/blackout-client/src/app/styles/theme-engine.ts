@@ -1,4 +1,4 @@
-import { normalizeThemeId, type BlackoutThemeId } from '@blackout/core';
+import { normalizeThemeId, type BlackoutThemeId } from '../../lib/bmc-core';
 
 export const bmcPalette = {
     seafoam: '#9FE2BF',

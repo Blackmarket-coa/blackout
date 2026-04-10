@@ -1,4 +1,4 @@
-import type { BlackoutThemeId } from '@blackout/core';
+import type { BlackoutThemeId } from '../../lib/bmc-core';
 import { themeTokenMap, type ThemeTokens } from './theme-engine';
 
 const hexToRgb = (hex: string) => {

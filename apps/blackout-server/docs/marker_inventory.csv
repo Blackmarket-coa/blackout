@@ -1,0 +1,496 @@
+path,line,marker,classification,reason,excerpt
+contrib/cmdclient/console.py,38,TODO,defer,non-runtime debt marker,# TODO: The concept of trusted identity servers has been deprecated. This option and checks
+contrib/cmdclient/console.py,270,TODO,defer,non-runtime debt marker,# TODO: Update to use v2 Identity Service API endpoint
+contrib/cmdclient/console.py,305,TODO,defer,non-runtime debt marker,# TODO: Update to use v2 Identity Service API endpoint
+contrib/cmdclient/console.py,334,TODO,defer,non-runtime debt marker,# TODO: Update to use v2 Identity Service API endpoint
+contrib/cmdclient/console.py,403,TODO,defer,non-runtime debt marker,# TODO: Update to use v2 Identity Service API endpoint
+contrib/cmdclient/console.py,413,TODO,defer,non-runtime debt marker,# TODO: Update to use v2 Identity Service API endpoint
+contrib/vertobot/bot.pl,125,XXX,defer,non-runtime debt marker,# XXX: compare call IDs
+contrib/vertobot/bot.pl,143,XXX,defer,non-runtime debt marker,# XXX: assumes audio comes first
+contrib/vertobot/bot.pl,279,HACK,defer,non-runtime debt marker,# HACK HACK HACK HACK
+contrib/vertobot/bridge.pl,156,XXX,defer,non-runtime debt marker,#     # XXX: this could fire for both matrix->verto and verto->matrix calls
+contrib/vertobot/bridge.pl,161,XXX,defer,non-runtime debt marker,#     # XXX: compare call IDs
+contrib/vertobot/bridge.pl,169,XXX,defer,non-runtime debt marker,#         # XXX: collate using the right m= line - for now assume audio call
+debian/build_virtualenv,24,TODO,defer,non-runtime debt marker,"# TODO: add similar things for non-amd64, or figure out a more generic way to"
+docker/Dockerfile-dhvirtualenv,40,TODO,defer,non-runtime debt marker,# Debian sid. TODO: Switch back to upstream once https://github.com/spotify/dh-virtualenv/pull/354 has merged.
+docker/Dockerfile-dhvirtualenv,68,TODO,defer,non-runtime debt marker,# TODO: it would be nice to do that automatically.
+docs/changelogs/CHANGES-2022.md,1388,TODO,defer,documentation follow-up,- Faster joins: add issue links to the TODO comments in the code. ([\#13004](https://github.com/matrix-org/synapse/issues/13004))
+docs/development/blackout_backend_plan_tracker.md,202,TODO,defer,documentation follow-up,## 9) Existing code TODO/FIXME alignment map (initial seed)
+docs/development/blackout_backend_plan_tracker.md,206,TODO,defer,documentation follow-up,- [ ] `faster_joins` TODO cluster (federation partial-state behavior)
+docs/development/blackout_backend_plan_tracker.md,208,TODO,defer,documentation follow-up,"- [ ] Sync TODO/FIXME cluster (`compute_state_delta`, summary behavior)"
+docs/development/blackout_backend_plan_tracker.md,210,TODO,defer,documentation follow-up,- [ ] Storage/search/media TODO/FIXME clusters
+docs/development/blackout_backend_plan_tracker.md,212,TODO,defer,documentation follow-up,- [ ] Tracker-tagged TODOs (`TODO(owner)`)
+docs/development/database_schema.md,390,TODO,defer,documentation follow-up,**TODO:** It may be possible to relax this and drop the column straight away as long as the previous version of Synapse detected a rollback occurred and stopped attempting to write to the column. This could possibly be done by checking whether the database's schema compatibility version was `S + 3`.
+docs/development/room-dag-concepts.md,112,TODO,defer,documentation follow-up,TODO: `state_group_edges` is a further optimization...
+docs/development/synapse_architecture/faster_joins.md,180,TODO,defer,documentation follow-up,\[**TODO:** Does Synapse persist a new state group for the full state
+docs/development/synapse_architecture/faster_joins.md,255,TODO,defer,documentation follow-up,**TODO:** needs prose fleshing out.
+docs/development/synapse_architecture/faster_joins.md,260,TODO,defer,documentation follow-up,**TODO** what do we do here if we have full state?
+docs/development/synapse_architecture/faster_joins.md,279,TODO,defer,documentation follow-up,**TODO:** needs prose fleshing out. Liase with Matthieu. Explain why /send_join
+docs/development/synapse_architecture/faster_joins.md,373,TODO,defer,documentation follow-up,**TODO**: what cleanup is necessary? Is it all just nice-to-have to save unused
+docs/project_completion_tracker.md,15,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- No runtime-critical `NotImplementedError` branches remain unresolved.
+docs/project_completion_tracker.md,42,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- **High**: Any production-path `NotImplementedError` handling gaps.
+docs/project_completion_tracker.md,53,TODO,defer,documentation follow-up,- [x] A4. Resolve outdated TODO/FIXME in tests and docs.
+docs/project_completion_tracker.md,58,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- [x] B1. Audit all `NotImplementedError` occurrences.
+docs/project_completion_tracker.md,122,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- Runtime-path `NotImplementedError` risks are eliminated.
+docs/project_completion_tracker.md,145,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- Count of runtime-path-risk `NotImplementedError` branches.
+docs/project_completion_tracker.md,187,TODO,defer,documentation follow-up,- Outdated TODO/FIXME items were removed/implemented in tests and docs (including
+docs/project_completion_tracker.md,195,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- Runtime-path risks identified in the inventory were eliminated by replacing `NotImplementedError` branches in request handlers with explicit `SynapseError` responses in:
+docs/project_completion_tracker.md,203,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- non-presence-worker visibility check path now returns explicit `503` `SynapseError` (no `NotImplementedError`)
+docs/project_completion_tracker.md,204,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,- Runtime-path-risk `NotImplementedError` count is now tracked at **0** for request-serving flows addressed by this tracker.
+docs/project_completion_tracker.md,212,TBD,defer,non-runtime debt marker,- Ownership template is no longer `_TBD_`; accountable roles are now assigned for
+docs/project_scope_alignment_report.md,20,TBD,defer,non-runtime debt marker,8. **Ownership assignments** remain `_TBD_` across all major domains.
+docs/project_scope_alignment_report.md,28,TODO,defer,documentation follow-up,- Resolve stale TODO/FIXME in tests/docs that no longer represent planned work.
+docs/project_scope_alignment_report.md,69,TBD,defer,non-runtime debt marker,- Replace all `_TBD_` roles in tracker ownership template.
+docs/scope_alignment_evidence.md,11,TBD,defer,non-runtime debt marker,The tracker required all `_TBD_` ownership slots to be replaced with explicit
+docs/scope_alignment_evidence.md,17,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,| Runtime correctness (B) | Runtime Reliability Lead | Core Server Maintainers | Owns `NotImplementedError` runtime-path audit policy. |
+pylint.cfg,98,FIXME,defer,non-runtime debt marker,"notes=FIXME,XXX,TODO"
+scripts-dev/check_marker_budget.py,12,TODO,defer,non-runtime debt marker,"MARKER_REGEX = r""TODO|FIXME|TBD|XXX|HACK|NotImplementedError|TODO_test_"""
+scripts-dev/check_pydantic_models.py,159,TODO,defer,non-runtime debt marker,# TODO: this only reports the first bad field. Can we find all bad ones
+scripts-dev/check_pydantic_models.py,199,TODO,defer,non-runtime debt marker,# TODO. FieldHasUnwantedTypeException gives better error messages. Can we ditch the
+scripts-dev/check_pydantic_models.py,234,TODO,defer,non-runtime debt marker,"# TODO: make ""synapse"" an argument so we can target this script at"
+scripts-dev/federation_client.py,360,TODO,defer,non-runtime debt marker,# TODO: check for ipv4 literals
+scripts-dev/make_full_schema.sh,221,TODO,defer,non-runtime debt marker,# TODO: we could derive DROP_COMMON_TABLES from the dump of the common-only DB. But
+scripts-dev/mypy_synapse_plugin.py,195,TODO,defer,non-runtime debt marker,"# TODO Technically a cachedList only needs immutable values, but forcing them"
+scripts-dev/release.py,508,TODO,defer,non-runtime debt marker,# TODO This seemed easier than using GitPython directly
+scripts-dev/release.py,722,TODO,defer,non-runtime debt marker,# TODO Automatically poll until the Debs have made it to packages.matrix.org
+synapse/_scripts/generate_workers_map.py,63,TODO,defer,non-runtime debt marker,# TODO:
+synapse/_scripts/generate_workers_map.py,145,TODO,defer,non-runtime debt marker,TODO Don't require passing in a config
+synapse/_scripts/generate_workers_map.py,149,TODO,defer,non-runtime debt marker,"# TODO We only do this to avoid an error, but don't need the database etc"
+synapse/_scripts/generate_workers_map.py,186,TODO,defer,non-runtime debt marker,# TODO This assumes that all methods have the same servlet.
+synapse/_scripts/generate_workers_map.py,211,TODO,defer,non-runtime debt marker,# TODO it's hard to choose between these two;
+synapse/_scripts/generate_workers_map.py,236,TODO,defer,non-runtime debt marker,# TODO
+synapse/_scripts/generate_workers_map.py,255,TODO,defer,non-runtime debt marker,# TODO SSO endpoints (pick_idp etc) NOT REGISTERED BY THIS SCRIPT
+synapse/_scripts/register_new_matrix_user.py,308,TODO,defer,non-runtime debt marker,# TODO: consider bind_addresses
+synapse/api/auth/base.py,93,XXX,defer,non-runtime debt marker,"# XXX this looks totally bogus. Why do we not allow users who have been banned,"
+synapse/api/auth/base.py,189,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/api/auth/base.py,371,XXX,defer,non-runtime debt marker,# XXX(quenting): I'm 95% confident that we could skip setting the
+synapse/api/auth/msc3861_delegated.py,226,TODO,defer,non-runtime debt marker,# TODO: we probably want to assert the allow_guest inside this call
+synapse/api/auth/msc3861_delegated.py,247,XXX,defer,non-runtime debt marker,# XXX: This is a temporary solution so that the admin API can be called by
+synapse/api/auth/msc3861_delegated.py,251,XXX,defer,non-runtime debt marker,# XXX: that user doesn't exist and won't be provisioned.
+synapse/api/auth/msc3861_delegated.py,268,TODO,defer,non-runtime debt marker,"# TODO: introspection verification should be more extensive, especially:"
+synapse/api/auth/msc3861_delegated.py,297,TODO,defer,non-runtime debt marker,# TODO: claim mapping should be configurable
+synapse/api/auth/msc3861_delegated.py,310,TODO,defer,non-runtime debt marker,# TODO: we could use SCIM to provision users ahead of time and listen
+synapse/api/auth/msc3861_delegated.py,314,TODO,defer,non-runtime debt marker,# TODO: claim mapping should be configurable
+synapse/api/auth/msc3861_delegated.py,366,TODO,defer,non-runtime debt marker,"# TODO: there is a few things missing in the requester here, which still need"
+synapse/api/errors.py,689,TODO,defer,non-runtime debt marker,"TODO: In the future, we should split these usage scenarios into their own error types."
+synapse/api/filtering.py,52,TODO,defer,non-runtime debt marker,# TODO: We don't limit event type values but we probably should...
+synapse/api/filtering.py,164,TODO,defer,non-runtime debt marker,# TODO(paul): surely we should probably add a delete_user_filter or
+synapse/api/filtering.py,401,TODO,defer,non-runtime debt marker,# form. TODO: Check this and probably remove it.
+synapse/api/ratelimiting.py,204,XXX,defer,non-runtime debt marker,# XXX: Why is this -1? This seems to only be used in
+synapse/app/generic_worker.py,107,FIXME,defer,non-runtime debt marker,# FIXME(https://github.com/matrix-org/synapse/issues/3714): We need to add
+synapse/appservice/api.py,349,TODO,defer,non-runtime debt marker,# TODO: Update to stable prefixes once MSC2409 completes FCP merge.
+synapse/appservice/api.py,355,TODO,defer,non-runtime debt marker,# TODO: Update to stable prefixes once MSC3202 completes FCP merge
+synapse/appservice/api.py,471,TODO,defer,non-runtime debt marker,# TODO This places a lot of faith in the response shape being correct.
+synapse/config/_base.py,349,TODO,defer,non-runtime debt marker,# TODO: switch to synapse.util.templates.build_jinja_env
+synapse/config/cas.py,40,TODO,defer,non-runtime debt marker,# TODO Update this to a _synapse URL.
+synapse/config/emailconfig.py,79,TODO,defer,non-runtime debt marker,# TODO: We should separate better the email configuration from the notification
+synapse/config/emailconfig.py,111,TODO,defer,non-runtime debt marker,"# TODO: Rename notif_from to something more generic, or have a separate"
+synapse/config/federation.py,27,FIXME,defer,non-runtime debt marker,# FIXME: federation_domain_whitelist needs sytests
+synapse/config/oembed.py,69,TODO,defer,non-runtime debt marker,# TODO Error checking.
+synapse/config/oembed.py,124,TODO,defer,non-runtime debt marker,TODO: This does not attempt to handle Unicode domain names.
+synapse/config/oembed.py,125,TODO,defer,non-runtime debt marker,TODO: The domain should not allow wildcard TLDs.
+synapse/config/server.py,1032,TODO,defer,non-runtime debt marker,"# TODO: Add in path validation, like if the directory exists and is writable?"
+synapse/config/workers.py,237,FIXME,defer,non-runtime debt marker,# FIXME: Remove this check after a suitable amount of time.
+synapse/config/workers.py,274,TODO,defer,non-runtime debt marker,# TODO: The next 3 condition blocks can be deleted after some time has
+synapse/crypto/context_factory.py,53,TODO,defer,non-runtime debt marker,"TODO: replace this with an implementation of IOpenSSLServerConnectionCreator,"
+synapse/crypto/context_factory.py,58,TODO,defer,non-runtime debt marker,"# TODO: once pyOpenSSL exposes TLS_METHOD and SSL_CTX_set_min_proto_version,"
+synapse/event_auth.py,577,TODO,defer,non-runtime debt marker,# TODO (erikj): We should probably handle this more intelligently
+synapse/event_auth.py,651,TODO,defer,non-runtime debt marker,# TODO (erikj): may_join list
+synapse/event_auth.py,652,TODO,defer,non-runtime debt marker,# TODO (erikj): private rooms
+synapse/event_auth.py,655,TODO,defer,non-runtime debt marker,# TODO (erikj): Implement kicks.
+synapse/events/__init__.py,66,TODO,defer,non-runtime debt marker,# TODO _DictPropertyInstance should not include EventBuilder but due to
+synapse/events/__init__.py,184,TODO,defer,non-runtime debt marker,# reused. TODO: fix that
+synapse/events/__init__.py,210,XXX,defer,non-runtime debt marker,# XXX: These are set by StreamWorkerStore._set_before_and_after.
+synapse/events/__init__.py,328,TODO,defer,non-runtime debt marker,# TODO state_key should be Optional[str]. This is generally asserted in Synapse
+synapse/events/__init__.py,339,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/events/utils.py,418,FIXME,defer,non-runtime debt marker,# FIXME(erikj): To handle the case of presence events and the like
+synapse/federation/federation_client.py,302,TODO,defer,non-runtime debt marker,# TODO Potentially attempt multiple queries and combine the results?
+synapse/federation/federation_client.py,447,TODO,defer,non-runtime debt marker,# TODO: Rate limit the number of times we try and get the same event.
+synapse/federation/federation_client.py,464,TODO,defer,non-runtime debt marker,# TODO: We can probably refactor this to use `_try_destination_list`
+synapse/federation/federation_client.py,1277,FIXME,defer,non-runtime debt marker,# FIXME: We should handle signature failures more gracefully.
+synapse/federation/federation_client.py,1744,TODO,defer,non-runtime debt marker,# TODO: The requested timestamp may lie in a part of the
+synapse/federation/federation_server.py,430,FIXME,defer,non-runtime debt marker,# FIXME (richardv): I don't think this works:
+synapse/federation/federation_server.py,1251,XXX,defer,non-runtime debt marker,# XXX: Ideally we'd inform the remote we failed to process
+synapse/federation/send_queue.py,192,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/send_queue.py,288,TODO,defer,non-runtime debt marker,# TODO: Handle target_row_count.
+synapse/federation/send_queue.py,364,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/send_queue.py,373,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/send_queue.py,385,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,208,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,217,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,228,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,246,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,257,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,266,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,270,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,274,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,280,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/__init__.py,977,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/federation/sender/per_destination_queue.py,130,XXX,defer,non-runtime debt marker,# XXX this is never actually used: see
+synapse/federation/sender/per_destination_queue.py,291,XXX,defer,non-runtime debt marker,# XXX: this can get stuck on by a never-ending
+synapse/federation/sender/transaction_manager.py,65,HACK,defer,non-runtime debt marker,# HACK to get unique tx id
+synapse/federation/transport/client.py,164,TODO,defer,non-runtime debt marker,# TODO: raise?
+synapse/federation/transport/client.py,241,FIXME,defer,non-runtime debt marker,# FIXME: This is only used by the tests. The actual json sent is
+synapse/federation/transport/server/_base.py,296,TODO,defer,non-runtime debt marker,# TODO: Handle other method types? other content types?
+synapse/federation/transport/server/federation.py,423,TODO,defer,non-runtime debt marker,# TODO(paul): assert that event_id parsed from path actually
+synapse/federation/transport/server/federation.py,443,TODO,defer,non-runtime debt marker,# TODO(paul): assert that event_id parsed from path actually
+synapse/federation/transport/server/federation.py,493,TODO,defer,non-runtime debt marker,# TODO(paul): assert that room_id/event_id parsed from path actually
+synapse/handlers/admin.py,307,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,318,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,332,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,346,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,355,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,364,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,373,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,385,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/admin.py,406,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/appservice.py,253,FIXME,defer,non-runtime debt marker,# FIXME: We should use constants for these values.
+synapse/handlers/appservice.py,427,TODO,defer,non-runtime debt marker,# TODO: It'd likely be more efficient to simply fetch the
+synapse/handlers/appservice.py,565,FIXME,defer,non-runtime debt marker,# FIXME: We should do this farther up the call stack. We currently repeat
+synapse/handlers/appservice.py,647,TODO,defer,non-runtime debt marker,"# TODO: Calculate ""left"" users."
+synapse/handlers/auth.py,209,FIXME,defer,non-runtime debt marker,self.hs = hs  # FIXME better possibility to access registrationHandler later?
+synapse/handlers/auth.py,1505,XXX,defer,non-runtime debt marker,# XXX(quenting): This is only needed until the 'set_device_id_for_pushers'
+synapse/handlers/auth.py,1538,XXX,defer,non-runtime debt marker,# XXX(quenting): This is only needed until the 'set_device_id_for_pushers'
+synapse/handlers/auth.py,1850,TODO,defer,non-runtime debt marker,# TODO This should match the amount of time the macaroon is valid for.
+synapse/handlers/deactivate_account.py,91,FIXME,defer,non-runtime debt marker,# FIXME: Theoretically there is a race here wherein user resets
+synapse/handlers/device.py,240,TODO,defer,non-runtime debt marker,# TODO: Check if they actually did or if we were just invited.
+synapse/handlers/device.py,364,TODO,defer,non-runtime debt marker,# TODO Handle cross-signing keys.
+synapse/handlers/device.py,379,TODO,defer,non-runtime debt marker,# TODO(faster_joins): worker mode support
+synapse/handlers/device.py,892,TODO,defer,non-runtime debt marker,"# TODO: when called, this isn't in a logging context."
+synapse/handlers/device.py,1112,TODO,defer,non-runtime debt marker,# TODO: Raise?
+synapse/handlers/device.py,1134,TODO,defer,non-runtime debt marker,# TODO(faster_joins): this fetches and processes a bunch of data that we don't
+synapse/handlers/device.py,1335,TODO,defer,non-runtime debt marker,# TODO(Perf): Actually batch these up
+synapse/handlers/directory.py,85,TODO,defer,non-runtime debt marker,# TODO(erikj): Change this.
+synapse/handlers/directory.py,87,TODO,defer,non-runtime debt marker,# TODO(erikj): Add transactions.
+synapse/handlers/directory.py,88,TODO,defer,non-runtime debt marker,# TODO(erikj): Check if there is a current association.
+synapse/handlers/directory.py,167,TODO,defer,non-runtime debt marker,# reasons why we said no. TODO: Allow configurable error messages
+synapse/handlers/directory.py,503,TODO,defer,non-runtime debt marker,# reasons why we said no. TODO: Allow configurable error messages
+synapse/handlers/e2e_keys.py,73,FIXME,defer,non-runtime debt marker,# FIXME: remove this when enough servers have upgraded
+synapse/handlers/e2e_keys.py,201,TODO,defer,non-runtime debt marker,"# TODO: In practice, this path is hit fairly often in existing"
+synapse/handlers/e2e_keys.py,250,TODO,defer,non-runtime debt marker,# TODO It might make sense to propagate cancellations into the
+synapse/handlers/e2e_keys.py,340,TODO,defer,non-runtime debt marker,# TODO: It's weird that we'll store a failure against a
+synapse/handlers/e2e_keys.py,511,TODO,defer,non-runtime debt marker,# TODO Handle cross-signing keys.
+synapse/handlers/e2e_keys.py,595,TODO,defer,non-runtime debt marker,# TODO Should this query for fallback keys of uploaded OTKs if
+synapse/handlers/e2e_keys.py,777,TODO,defer,non-runtime debt marker,# TODO: Validate the JSON to make sure it has the right keys.
+synapse/handlers/e2e_keys.py,793,TODO,defer,non-runtime debt marker,# TODO: Sign the JSON with the server key
+synapse/handlers/e2e_keys.py,1446,XXX,defer,non-runtime debt marker,# XXX is this necessary?
+synapse/handlers/e2e_room_keys.py,187,TODO,defer,non-runtime debt marker,# TODO: Validate the JSON to make sure it has the right keys.
+synapse/handlers/e2e_room_keys.py,189,XXX,defer,non-runtime debt marker,# XXX: perhaps we should use a finer grained lock here?
+synapse/handlers/e2e_room_keys.py,331,TODO,defer,non-runtime debt marker,# TODO: Validate the JSON to make sure it has the right keys.
+synapse/handlers/federation.py,109,TODO,defer,non-runtime debt marker,# TODO: We can refactor this away now that there is only one backfill point again
+synapse/handlers/federation.py,399,TODO,defer,non-runtime debt marker,# TODO: Correctly handle the case where we are allowed to see the
+synapse/handlers/federation.py,452,TODO,defer,non-runtime debt marker,# TODO: HEURISTIC ALERT.
+synapse/handlers/federation.py,460,TODO,defer,non-runtime debt marker,# TODO: Should we try multiple of these at a time?
+synapse/handlers/federation.py,481,TODO,defer,non-runtime debt marker,# TODO: We can probably do something more intelligent here.
+synapse/handlers/federation.py,550,TODO,defer,non-runtime debt marker,"# TODO: we could also try servers which were previously in the room, but"
+synapse/handlers/federation.py,602,TODO,defer,non-runtime debt marker,"# TODO: We should be able to call this on workers, but the upgrading of"
+synapse/handlers/federation.py,604,TODO,defer,non-runtime debt marker,"# TODO: Before we relax this condition, we need to allow re-syncing of"
+synapse/handlers/federation.py,706,TODO,defer,non-runtime debt marker,# TODO(faster_joins):
+synapse/handlers/federation.py,742,TODO,defer,non-runtime debt marker,# TODO(faster_joins):
+synapse/handlers/federation.py,1171,FIXME,defer,non-runtime debt marker,# FIXME: Do this in a nicer way
+synapse/handlers/federation.py,1712,TODO,defer,non-runtime debt marker,# TODO: make this better
+synapse/handlers/federation.py,1884,TODO,defer,non-runtime debt marker,"# TODO(faster_joins,multiple workers)"
+synapse/handlers/federation.py,1891,TODO,defer,non-runtime debt marker,# TODO(faster_joins): do we need to lock to avoid races? What happens if other
+synapse/handlers/federation.py,1896,TODO,defer,non-runtime debt marker,# TODO(faster_joins): what happens if we leave the room during a resync? if we
+synapse/handlers/federation.py,1919,TODO,defer,non-runtime debt marker,# TODO(faster_joins): notify workers in notify_room_un_partial_stated
+synapse/handlers/federation.py,1978,TODO,defer,non-runtime debt marker,# TODO(faster_joins) giving up isn't the right thing to do
+synapse/handlers/federation.py,1992,TODO,defer,non-runtime debt marker,"# TODO: We should `record_event_failed_pull_attempt` here,"
+synapse/handlers/federation_event.py,209,TODO,defer,non-runtime debt marker,"# TODO: replace this with something more elegant, probably based around the"
+synapse/handlers/federation_event.py,313,FIXME,defer,non-runtime debt marker,# FIXME: Currently we fetch an event again when we already have it
+synapse/handlers/federation_event.py,413,XXX,defer,non-runtime debt marker,# for us not to have all the prev_events. (XXX: apart from
+synapse/handlers/federation_event.py,782,TODO,defer,non-runtime debt marker,TODO: make this more useful to distinguish failures of the remote
+synapse/handlers/federation_event.py,844,XXX,defer,non-runtime debt marker,# XXX: we set timeout to 10s to help workaround
+synapse/handlers/federation_event.py,1355,TODO,defer,non-runtime debt marker,"# TODO: we probably won't actually need all of the auth events, since we"
+synapse/handlers/federation_event.py,1391,TODO,defer,non-runtime debt marker,# TODO: might it be better to have an API which lets us do an aggregate event
+synapse/handlers/federation_event.py,1444,XXX,defer,non-runtime debt marker,# XXX: this doesn't sound right? it means that we'll end up with incomplete
+synapse/handlers/federation_event.py,1776,XXX,defer,non-runtime debt marker,# XXX: it might be possible to kick this process off in parallel with fetching
+synapse/handlers/federation_event.py,1914,TODO,defer,non-runtime debt marker,# TODO: use a different rejected reason here?
+synapse/handlers/federation_event.py,2299,XXX,defer,non-runtime debt marker,# XXX richvdh 2021/10/07: I don't really understand what this
+synapse/handlers/federation_event.py,2444,TODO,defer,non-runtime debt marker,"# TODO retrieve the previous state, and exclude join -> join transitions"
+synapse/handlers/identity.py,219,XXX,defer,non-runtime debt marker,data = json_decoder.decode(e.msg)  # XXX WAT?
+synapse/handlers/identity.py,480,XXX,defer,non-runtime debt marker,# XXX: We shouldn't need to keep wrapping and unwrapping this value
+synapse/handlers/initial_sync.py,419,TODO,defer,non-runtime debt marker,# TODO: These concurrently
+synapse/handlers/message.py,328,XXX,defer,non-runtime debt marker,"# XXX: if the user has subsequently joined and then left again,"
+synapse/handlers/message.py,1882,TODO,defer,non-runtime debt marker,# TODO: check that the original_alt_aliases' entries are all strings
+synapse/handlers/message.py,1910,TODO,defer,non-runtime debt marker,# TODO: Can we add signature from remote server in a nicer
+synapse/handlers/message.py,1919,TODO,defer,non-runtime debt marker,# TODO: Make sure the signatures actually are correct.
+synapse/handlers/oidc.py,647,XXX,defer,non-runtime debt marker,"'e': 'XXXX',"
+synapse/handlers/oidc.py,648,XXX,defer,non-runtime debt marker,"'n': 'XXXX',"
+synapse/handlers/oidc.py,1282,TODO,defer,non-runtime debt marker,"# TODO: this responds with a 400 status code, which is what the OIDC"
+synapse/handlers/oidc.py,1505,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/oidc.py,1518,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/oidc.py,1534,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/pagination.py,544,XXX,defer,non-runtime debt marker,# XXX: It's possible we could tolerate longer gaps if we checked
+synapse/handlers/pagination.py,550,XXX,defer,non-runtime debt marker,# XXX: If we had something like MSC3871 to indicate gaps in the
+synapse/handlers/pagination.py,633,TODO,defer,non-runtime debt marker,# TODO: remove redundant members
+synapse/handlers/pagination.py,635,FIXME,defer,non-runtime debt marker,# FIXME: we also care about invite targets etc.
+synapse/handlers/presence.py,982,TODO,defer,non-runtime debt marker,# TODO: We should probably ensure there are no races hereafter
+synapse/handlers/presence.py,1382,TODO,defer,non-runtime debt marker,# TODO: This is a hack for lack of multi-device support. Unfortunately
+synapse/handlers/presence.py,1464,TODO,defer,non-runtime debt marker,# TODO(markjh): replicate the unpersisted changes.
+synapse/handlers/presence.py,1581,TODO,defer,non-runtime debt marker,# TODO: Only send presence states to remote hosts that don't already
+synapse/handlers/presence.py,1956,TODO,defer,non-runtime debt marker,"# TODO: This feels wildly inefficient, and it's unfortunate we need to ask the"
+synapse/handlers/register.py,929,TODO,defer,non-runtime debt marker,# TODO: 3pid registration can actually happen on the workers. Consider
+synapse/handlers/relations.py,105,TODO,defer,non-runtime debt marker,TODO Accept a PaginationConfig instead of individual pagination parameters.
+synapse/handlers/relations.py,123,TODO,defer,non-runtime debt marker,# TODO Properly handle a user leaving a room.
+synapse/handlers/relations.py,566,TODO,defer,non-runtime debt marker,# TODO Properly handle a user leaving a room.
+synapse/handlers/room.py,608,XXX,defer,non-runtime debt marker,# XXX invites/joins
+synapse/handlers/room.py,609,XXX,defer,non-runtime debt marker,# XXX 3pid invites
+synapse/handlers/room.py,904,TODO,defer,non-runtime debt marker,# reasons why we said no. TODO: Allow configurable error messages
+synapse/handlers/room.py,1513,XXX,defer,non-runtime debt marker,# XXX: why do we return the state as of the last event rather than the
+synapse/handlers/room.py,1658,XXX,defer,non-runtime debt marker,"# XXX: When we see that the remote server is not trustworthy,"
+synapse/handlers/room_member.py,77,TODO,defer,non-runtime debt marker,# TODO(paul): This handler currently contains a messy conflation of
+synapse/handlers/room_member.py,126,TODO,defer,non-runtime debt marker,# TODO: find a better place to keep this Ratelimiter.
+synapse/handlers/room_member.py,210,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/room_member.py,229,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/room_member.py,252,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/room_member.py,273,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/room_member.py,284,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/room_member.py,874,TODO,defer,non-runtime debt marker,# TODO: Refactor into dictionary of explicitly allowed transitions
+synapse/handlers/room_member.py,1921,TODO,defer,non-runtime debt marker,# TODO: We don't yet support rescinding knocks over federation
+synapse/handlers/search.py,275,TODO,defer,non-runtime debt marker,# TODO: Search through left rooms too
+synapse/handlers/search.py,355,TODO,defer,non-runtime debt marker,# TODO: Add a limit
+synapse/handlers/sso.py,130,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/sso.py,647,TODO,defer,non-runtime debt marker,"# TODO: If needed, allow using/looking up an existing session here."
+synapse/handlers/sso.py,662,TODO,defer,non-runtime debt marker,# TODO: Consider letting the user mapping provider specify defaults for
+synapse/handlers/sso.py,1094,TODO,defer,non-runtime debt marker,# TODO: make this less awful.
+synapse/handlers/sync.py,278,TODO,defer,non-runtime debt marker,# TODO: flush cache entries on subsequent sync request.
+synapse/handlers/sync.py,572,FIXME,defer,non-runtime debt marker,# FIXME(faster_joins): We use the partial state here as
+synapse/handlers/sync.py,653,FIXME,defer,non-runtime debt marker,# FIXME(faster_joins): We use the partial state here as
+synapse/handlers/sync.py,764,FIXME,defer,non-runtime debt marker,"# FIXME: This gets the state at the latest event before the stream ordering,"
+synapse/handlers/sync.py,814,FIXME,defer,non-runtime debt marker,# FIXME: we could/should get this from room_stats when matthew/stats lands
+synapse/handlers/sync.py,816,FIXME,defer,non-runtime debt marker,# FIXME: this promulgates https://github.com/matrix-org/synapse/issues/3305
+synapse/handlers/sync.py,841,TODO,defer,non-runtime debt marker,# TODO: only send these when they change.
+synapse/handlers/sync.py,862,FIXME,defer,non-runtime debt marker,# FIXME: only build up a member_ids list for our heroes
+synapse/handlers/sync.py,956,TODO,defer,non-runtime debt marker,# TODO(mjark) Check if the state events were received by the server
+synapse/handlers/sync.py,959,TODO,defer,non-runtime debt marker,# TODO(mjark) Check for new redactions in the state events.
+synapse/handlers/sync.py,998,FIXME,defer,non-runtime debt marker,# FIXME: we also care about invite targets etc.
+synapse/handlers/sync.py,1587,TODO,defer,non-runtime debt marker,# TODO: We should have a way to let clients differentiate between the states of:
+synapse/handlers/sync.py,1716,TODO,defer,non-runtime debt marker,"# TODO: Check that these users are actually new, i.e. either they"
+synapse/handlers/sync.py,2188,TODO,defer,non-runtime debt marker,# TODO: How do we handle ban -> leave in same batch?
+synapse/handlers/sync.py,2535,XXX,defer,non-runtime debt marker,# XXX: this may include false positives in the form of LL
+synapse/handlers/ui_auth/__init__.py,17,TODO,defer,non-runtime debt marker,TODO: move more stuff out of AuthHandler in here.
+synapse/handlers/ui_auth/checkers.py,50,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/ui_auth/checkers.py,66,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/handlers/ui_auth/checkers.py,116,TODO,defer,non-runtime debt marker,# TODO: get this from the homeserver rather than creating a new one for
+synapse/handlers/user_directory.py,187,FIXME,defer,non-runtime debt marker,# FIXME(https://github.com/matrix-org/synapse/issues/3714): We should
+synapse/handlers/user_directory.py,197,FIXME,defer,non-runtime debt marker,# FIXME(https://github.com/matrix-org/synapse/issues/3714): We should
+synapse/handlers/user_directory.py,712,TODO,defer,non-runtime debt marker,# TODO Does this mean we should clear it from our user
+synapse/http/client.py,458,TODO,defer,non-runtime debt marker,# TODO: Do we ever want to log message contents?
+synapse/http/client.py,654,XXX,defer,non-runtime debt marker,# XXX: FIXME: This is horribly copy-pasted from matrixfederationclient.
+synapse/http/client.py,713,TODO,defer,non-runtime debt marker,"# TODO: if our Content-Type is HTML or something, just read the first"
+synapse/http/client.py,788,XXX,defer,non-runtime debt marker,# XXX: The justification for using the cache factor here is that larger
+synapse/http/connectproxyclient.py,46,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/http/federation/matrix_federation_agent.py,301,XXX,defer,non-runtime debt marker,# XXX disabling TLS is really only supported here for the benefit of the
+synapse/http/federation/srv_resolver.py,25,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,"from twisted.names.error import DNSNameError, DNSNotImplementedError, DomainError"
+synapse/http/federation/srv_resolver.py,145,TODO,defer,non-runtime debt marker,"# TODO: cache this. We can get the SOA out of the exception, and use"
+synapse/http/federation/srv_resolver.py,148,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,except DNSNotImplementedError:
+synapse/http/federation/well_known_resolver.py,127,TODO,defer,non-runtime debt marker,# TODO: should we linearise so that we don't end up doing two .well-known
+synapse/http/matrixfederationclient.py,636,XXX,defer,non-runtime debt marker,# XXX: Would be much nicer to retry only at the transaction-layer
+synapse/http/server.py,374,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/http/server.py,382,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/http/server.py,401,TODO,defer,non-runtime debt marker,# TODO: Only enable CORS for the requests that need it.
+synapse/http/servlet.py,876,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,"raise NotImplementedError(""RestServlet must register something."")"
+synapse/logging/context.py,125,FIXME,defer,non-runtime debt marker,"# FIXME: mypy can't infer the types set via reset() above, so specify explicitly for now"
+synapse/logging/opentracing.py,936,TODO,defer,non-runtime debt marker,# TODO: Pass the error details into `scope.__exit__(...)` for
+synapse/logging/opentracing.py,1033,FIXME,defer,non-runtime debt marker,# FIXME: We could update this to handle any type of function by ignoring the
+synapse/media/_base.py,198,XXX,defer,non-runtime debt marker,# XXX: we might want to turn this off for data we don't want to
+synapse/media/_base.py,319,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/media/media_repository.py,1150,TODO,defer,non-runtime debt marker,# TODO: Should we delete from the backup store
+synapse/media/oembed.py,88,TODO,defer,non-runtime debt marker,# TODO Specify max height / width.
+synapse/media/oembed.py,252,TODO,defer,non-runtime debt marker,# TODO Develop of lxml-stubs has this correct.
+synapse/media/preview_html.py,92,TODO,defer,non-runtime debt marker,"# TODO Support <meta http-equiv=""Content-Type"" content=""text/html; charset=utf-8""/>"
+synapse/media/preview_html.py,156,TODO,defer,non-runtime debt marker,# TODO Develop of lxml-stubs has this correct.
+synapse/media/preview_html.py,261,TODO,defer,non-runtime debt marker,"# TODO: Search for properties specific to the different Open Graph types,"
+synapse/media/preview_html.py,313,TODO,defer,non-runtime debt marker,# TODO: consider inlined CSS styles as well as width & height attribs
+synapse/media/preview_html.py,360,TODO,defer,non-runtime debt marker,"# TODO: delete the url downloads to stop diskfilling,"
+synapse/media/preview_html.py,487,TODO,defer,non-runtime debt marker,# TODO: Respect sentences?
+synapse/media/storage_provider.py,108,TODO,defer,non-runtime debt marker,# TODO: Handle errors.
+synapse/media/url_previewer.py,287,TODO,defer,non-runtime debt marker,# TODO: somehow stop a big HTML tree from exploding synapse's RAM
+synapse/media/url_previewer.py,481,FIXME,defer,non-runtime debt marker,# FIXME: pass through 404s and other error messages nicely
+synapse/media/url_previewer.py,498,FIXME,defer,non-runtime debt marker,# FIXME: we should calculate a proper expiration based on the
+synapse/media/url_previewer.py,527,TODO,defer,non-runtime debt marker,# TODO Can this be more efficient.
+synapse/media/url_previewer.py,580,TODO,defer,non-runtime debt marker,# TODO: we should probably honour robots.txt... except in practice
+synapse/media/url_previewer.py,616,TODO,defer,non-runtime debt marker,# TODO: we really ought to delete the downloaded file in this
+synapse/media/url_previewer.py,660,FIXME,defer,non-runtime debt marker,# FIXME: it might be cleaner to use the same flow as the main /preview_url
+synapse/media/url_previewer.py,675,TODO,defer,non-runtime debt marker,# TODO: make sure we don't choke on white-on-transparent images
+synapse/metrics/__init__.py,74,TODO,defer,non-runtime debt marker,# TODO Do something nicer about this.
+synapse/module_api/__init__.py,246,TODO,defer,non-runtime debt marker,# TODO: Fix this type hint once the types for the data stores have been ironed
+synapse/module_api/__init__.py,1800,TODO,defer,non-runtime debt marker,# TODO In the future we should make sure this is persistent.
+synapse/module_api/callbacks/third_party_event_rules_callbacks.py,297,FIXME,defer,non-runtime debt marker,# FIXME: Being able to throw SynapseErrors is relied upon by
+synapse/notifier.py,75,TODO,defer,non-runtime debt marker,# TODO(paul): Should be shared somewhere
+synapse/push/__init__.py,122,XXX,defer,non-runtime debt marker,"# XXX(quenting): The access_token is not persisted anymore for new pushers, but we"
+synapse/push/__init__.py,182,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/push/__init__.py,186,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/push/__init__.py,197,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/push/__init__.py,201,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/push/httppusher.py,171,XXX,defer,non-runtime debt marker,"# XXX as per https://github.com/matrix-org/matrix-doc/issues/2627, this seems"
+synapse/push/httppusher.py,448,HACK,defer,non-runtime debt marker,"# HACK send our push as high priority only if it generates a sound, highlight"
+synapse/push/presentable_names.py,148,FIXME,defer,non-runtime debt marker,# FIXME: no they're not - they look nothing like a member;
+synapse/push/pusherpool.py,134,XXX,defer,non-runtime debt marker,# XXX(quenting): Even though we're not persisting the access_token_id for new
+synapse/push/pusherpool.py,216,XXX,defer,non-runtime debt marker,"# XXX(quenting): This is only needed until the ""set_device_id_for_pushers"""
+synapse/replication/tcp/client.py,195,TODO,defer,non-runtime debt marker,# TODO: Erik said we should exclude rows that came from ex_outliers
+synapse/replication/tcp/client.py,203,TODO,defer,non-runtime debt marker,"# TODO retrieve the previous state, and exclude join -> join transitions"
+synapse/replication/tcp/client.py,487,XXX,defer,non-runtime debt marker,"# XXX this appears to be redundant, since the ReplicationCommandHandler"
+synapse/replication/tcp/handler.py,665,TODO,defer,non-runtime debt marker,# TODO: add some tests for this
+synapse/replication/tcp/protocol.py,339,XXX,defer,non-runtime debt marker,# XXX: should we squawk more loudly?
+synapse/replication/tcp/streams/_base.py,136,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/replication/tcp/streams/_base.py,145,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/rest/admin/media.py,500,XXX,defer,non-runtime debt marker,# XXX DeleteMediaByDateSize must be registered before DeleteMediaByID as
+synapse/rest/admin/rooms.py,290,TODO,defer,non-runtime debt marker,TODO: Add on_POST to allow room creation without joining the room
+synapse/rest/client/account.py,424,TODO,defer,non-runtime debt marker,# TODO: is this error message accurate? Looks like we've only rejected
+synapse/rest/client/account.py,878,TODO,defer,non-runtime debt marker,"# TODO: we could validate that each user id is an mxid here, and/or parse it"
+synapse/rest/client/devices.py,109,TODO,defer,non-runtime debt marker,# TODO: Can/should we remove this fallback now?
+synapse/rest/client/devices.py,187,TODO,defer,non-runtime debt marker,# TODO: can/should we remove this fallback now?
+synapse/rest/client/directory.py,73,TODO,defer,non-runtime debt marker,# TODO: get Pydantic to validate that this is a valid room id?
+synapse/rest/client/initial_sync.py,28,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/keys.py,251,XXX,defer,non-runtime debt marker,"# XXX This does not enforce that ""to"" is passed."
+synapse/rest/client/keys.py,391,XXX,defer,non-runtime debt marker,# XXX: We now have a get-out clause by which MAS can temporarily mark the master
+synapse/rest/client/read_marker.py,73,TODO,defer,non-runtime debt marker,# TODO Add validation to reject non-string event IDs.
+synapse/rest/client/register.py,479,XXX,defer,non-runtime debt marker,# XXX we should check that desired_username is valid. Currently
+synapse/rest/client/register.py,922,XXX,defer,non-runtime debt marker,# XXX we should check that desired_username is valid. Currently
+synapse/rest/client/register.py,946,FIXME,defer,non-runtime debt marker,"# FIXME: need a better error than ""no auth flow found"" for scenarios"
+synapse/rest/client/room.py,181,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing for generic events
+synapse/rest/client/room.py,326,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing for generic events + feedback
+synapse/rest/client/room.py,403,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing for room ID + alias joins
+synapse/rest/client/room.py,466,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/room.py,585,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/room.py,600,TODO,defer,non-runtime debt marker,# TODO support Pagination stream API (limit/tokens)
+synapse/rest/client/room.py,615,XXX,defer,non-runtime debt marker,# XXX: this may not be the best shape for this API - we could pass in a filter
+synapse/rest/client/room.py,663,TODO,defer,non-runtime debt marker,# TODO: Needs better unit testing
+synapse/rest/client/room.py,666,TODO,defer,non-runtime debt marker,# TODO The routing information should be exposed programatically.
+synapse/rest/client/room.py,733,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/room.py,756,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/room.py,976,TODO,defer,non-runtime debt marker,# TODO: Needs unit testing
+synapse/rest/client/versions.py,62,XXX,defer,non-runtime debt marker,# XXX: at some point we need to decide whether we need to include
+synapse/rest/client/versions.py,105,TODO,defer,non-runtime debt marker,"""org.matrix.msc2285.stable"": True,  # TODO: Remove when MSC2285 becomes a part of the spec"
+synapse/rest/client/versions.py,109,TODO,defer,non-runtime debt marker,"""org.matrix.msc3440.stable"": True,  # TODO: remove when ""v1.3"" is added above"
+synapse/rest/client/versions.py,116,TODO,defer,non-runtime debt marker,"""fi.mau.msc2659.stable"": True,  # TODO: remove when ""v1.7"" is added above"
+synapse/rest/consent/consent_resource.py,36,TODO,defer,non-runtime debt marker,# language to use for the templates. TODO: figure this out from Accept-Language
+synapse/rest/consent/consent_resource.py,97,TODO,defer,non-runtime debt marker,# TODO: switch to synapse.util.templates.build_jinja_env
+synapse/rest/key/v2/remote_key_resource.py,206,XXX,defer,non-runtime debt marker,# XXX: why don't we just use a set?
+synapse/rest/media/preview_url_resource.py,65,XXX,defer,non-runtime debt marker,"# XXX: if get_user_by_req fails, what should we do in an async render?"
+synapse/rest/media/thumbnail_resource.py,78,TODO,defer,non-runtime debt marker,# TODO Parse the Accept header to get an prioritised list of thumbnail types.
+synapse/rest/media/thumbnail_resource.py,282,TODO,defer,non-runtime debt marker,# TODO: Don't download the whole remote file
+synapse/rest/media/thumbnail_resource.py,389,TODO,defer,non-runtime debt marker,# TODO: We should refetch the thumbnails for remote media.
+synapse/rest/media/upload_resource.py,90,TODO,defer,non-runtime debt marker,# TODO(markjh): parse content-dispostion
+synapse/rest/synapse/client/unsubscribe.py,76,TODO,defer,non-runtime debt marker,# TODO Assert that the body has a single field
+synapse/state/__init__.py,845,TODO,defer,non-runtime debt marker,"# TODO: We want to create a state group for this set of events, to"
+synapse/state/v2.py,580,TODO,defer,non-runtime debt marker,# TODO: This isn't spec compliant. Events that were previously rejected due
+synapse/storage/_base.py,90,XXX,defer,non-runtime debt marker,# XXX: If you add something to this function make sure you add it to
+synapse/storage/background_updates.py,262,TODO,defer,non-runtime debt marker,# TODO: all these bool flags make me feel icky---can we combine into a status
+synapse/storage/background_updates.py,288,TODO,defer,non-runtime debt marker,"# TODO: a status for ""have seen at least one failure, but haven't aborted yet""."
+synapse/storage/controllers/state.py,548,FIXME,defer,non-runtime debt marker,# FIXME(faster_joins): what do we do here?
+synapse/storage/database.py,375,TODO,defer,non-runtime debt marker,# TODO: is it safe for values to be Iterable[Iterable[Any]] here?
+synapse/storage/database.py,382,TODO,defer,non-runtime debt marker,# TODO: is it safe for values to be Iterable[Iterable[Any]] here?
+synapse/storage/database.py,409,TODO,defer,non-runtime debt marker,# TODO: is it safe for values to be Iterable[Iterable[Any]] here?
+synapse/storage/database.py,432,TODO,defer,non-runtime debt marker,# TODO: we should add a type for *args here. Looking at Cursor.executemany
+synapse/storage/database.py,442,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError(
+synapse/storage/database.py,460,TODO,defer,non-runtime debt marker,# TODO(paul): Maybe use 'info' and 'debug' for values?
+synapse/storage/database.py,576,TODO,defer,non-runtime debt marker,# TODO(paul): These can eventually be removed once the metrics code
+synapse/storage/database.py,704,TODO,defer,non-runtime debt marker,# TODO: raise an exception.
+synapse/storage/databases/__init__.py,48,FIXME,defer,non-runtime debt marker,"main: ""DataStore""  # FIXME: https://github.com/matrix-org/synapse/issues/11165: actually an instance of `main_store_class`"
+synapse/storage/databases/main/appservice.py,373,TODO,defer,non-runtime debt marker,"# TODO: to-device messages, one-time key counts, device list summaries and unused"
+synapse/storage/databases/main/cache.py,289,XXX,defer,non-runtime debt marker,# XXX: If you add something to this function make sure you add it to
+synapse/storage/databases/main/devices.py,478,FIXME,defer,non-runtime debt marker,"# FIXME If this overwrites an older update, this discards the"
+synapse/storage/databases/main/devices.py,507,FIXME,defer,non-runtime debt marker,# FIXME: remove this when enough servers have upgraded
+synapse/storage/databases/main/devices.py,1126,TODO,defer,non-runtime debt marker,# TODO add insertion_values support to simple_upsert_many and use
+synapse/storage/databases/main/devices.py,1216,FIXME,defer,non-runtime debt marker,# FIXME: make sure device ID still exists in devices table
+synapse/storage/databases/main/devices.py,1234,TODO,defer,non-runtime debt marker,# TODO: make keys non-optional once support for msc2697 is dropped
+synapse/storage/databases/main/end_to_end_keys.py,849,FIXME,defer,non-runtime debt marker,# FIXME: make sure that only one key per algorithm is uploaded
+synapse/storage/databases/main/end_to_end_keys.py,934,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/event_federation.py,119,TODO,defer,non-runtime debt marker,# TODO: this attribute comes from EventPushActionWorkerStore. Should we inherit from
+synapse/storage/databases/main/event_push_actions.py,185,TODO,defer,non-runtime debt marker,# TODO This is used as a cached value and is mutable.
+synapse/storage/databases/main/event_push_actions.py,717,TODO,defer,non-runtime debt marker,# TODO If empty summaries are deleted this can be removed.
+synapse/storage/databases/main/events.py,1416,XXX,defer,non-runtime debt marker,# scenario. XXX: does this cause bugs? It will mean we won't send such
+synapse/storage/databases/main/events_worker.py,101,TODO,defer,non-runtime debt marker,# TODO: Make these configurable.
+synapse/storage/databases/main/events_worker.py,315,TODO,defer,non-runtime debt marker,"# TODO(faster_joins, multiple writers) Support multiple writers."
+synapse/storage/databases/main/events_worker.py,1648,TODO,defer,non-runtime debt marker,# TODO: We used to query the _get_event_cache here as a fast-path before
+synapse/storage/databases/main/keys.py,129,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/keys.py,199,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/monthly_active_users.py,305,XXX,defer,non-runtime debt marker,# XXX what is this function trying to achieve?  It upserts into
+synapse/storage/databases/main/presence.py,254,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/presence.py,264,TODO,defer,non-runtime debt marker,"# TODO All these columns are nullable, but we don't expect that:"
+synapse/storage/databases/main/presence.py,403,TODO,defer,non-runtime debt marker,"# TODO All these columns are nullable, but we don't expect that:"
+synapse/storage/databases/main/purge_events.py,304,XXX,defer,non-runtime debt marker,"# XXX: This is racy, since have_seen_events could be called between the"
+synapse/storage/databases/main/pusher.py,316,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/pusher.py,687,XXX,defer,non-runtime debt marker,# XXX(quenting): We're only really persisting the access token ID
+synapse/storage/databases/main/receipts.py,795,TODO,defer,non-runtime debt marker,# TODO: Make this better.
+synapse/storage/databases/main/receipts.py,922,FIXME,defer,non-runtime debt marker,# FIXME: This shouldn't invalidate the whole cache
+synapse/storage/databases/main/registration.py,1368,XXX,defer,non-runtime debt marker,# XXX: This should be simple_delete_one but we failed to put a unique index on
+synapse/storage/databases/main/registration.py,2674,TODO,defer,non-runtime debt marker,# TODO: support that for refresh tokens
+synapse/storage/databases/main/relations.py,534,TODO,defer,non-runtime debt marker,"# TODO: This returns a mutable object, which is generally bad."
+synapse/storage/databases/main/relations.py,624,TODO,defer,non-runtime debt marker,"# TODO: This returns a mutable object, which is generally bad."
+synapse/storage/databases/main/relations.py,647,TODO,defer,non-runtime debt marker,# TODO Should this only allow m.room.message events.
+synapse/storage/databases/main/room.py,164,TODO,defer,non-runtime debt marker,"# TODO(faster_joins, multiple writers) Support multiple writers."
+synapse/storage/databases/main/room.py,1114,TODO,defer,non-runtime debt marker,# TODO: Figure out all remote media a user has referenced in a message
+synapse/storage/databases/main/room.py,1937,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/roommember.py,297,FIXME,defer,non-runtime debt marker,# FIXME: get rid of this when we have room_stats
+synapse/storage/databases/main/roommember.py,1119,TODO,defer,non-runtime debt marker,"# TODO This returns a mutable object, which is generally confusing when using a cache."
+synapse/storage/databases/main/roommember.py,1546,FIXME,defer,non-runtime debt marker,# FIXME: order by stream ordering rather than as returned by SQL
+synapse/storage/databases/main/search.py,816,TODO,defer,non-runtime debt marker,# TODO Pull these out of the dictionary:
+synapse/storage/databases/main/search.py,906,TODO,defer,non-runtime debt marker,# TODO: SQLite treats NOT as a *binary* operator. Hopefully a search
+synapse/storage/databases/main/signatures.py,32,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/databases/main/state.py,316,FIXME,defer,non-runtime debt marker,# FIXME: how should this be cached?
+synapse/storage/databases/main/state_deltas.py,43,TODO,defer,non-runtime debt marker,# attribute. TODO: can we get static analysis to enforce this?
+synapse/storage/databases/main/stream.py,1511,TODO,defer,non-runtime debt marker,# TODO (erikj): We should work out what to do here instead.
+synapse/storage/databases/main/user_directory.py,279,TODO,defer,non-runtime debt marker,# TODO `users_with_profile` above reads from the `user_directory`
+synapse/storage/databases/main/user_directory.py,489,TODO,defer,non-runtime debt marker,# TODO we might want to make this configurable for each app service
+synapse/storage/databases/state/bg_updates.py,221,XXX,defer,non-runtime debt marker,# XXX: We could `WITH RECURSIVE` here since it's supported on SQLite 3.8.3
+synapse/storage/databases/state/store.py,113,TODO,defer,non-runtime debt marker,# TODO: this hasn't been tuned yet
+synapse/storage/roommember.py,48,TODO,defer,non-runtime debt marker,# TODO This is used as a cached value and is mutable.
+synapse/storage/schema/main/delta/68/05partial_state_rooms_triggers.py,72,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,"raise NotImplementedError(""Unknown database engine"")"
+synapse/storage/schema/main/delta/74/04_membership_tables_event_stream_ordering_triggers.py,79,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,"raise NotImplementedError(""Unknown database engine"")"
+synapse/storage/util/id_generators.py,116,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,126,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,134,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,152,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,161,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,170,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/storage/util/id_generators.py,766,TODO,defer,non-runtime debt marker,# TODO Can we call this for just the last position or somehow batch
+synapse/streams/__init__.py,36,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/types/__init__.py,314,TODO,defer,non-runtime debt marker,# TODO: this does not reject an empty localpart or an overly-long string.
+synapse/util/caches/cached_call.py,94,TODO,defer,non-runtime debt marker,"# TODO: consider cancellation semantics. Currently, if the call to get()"
+synapse/util/caches/deferred_cache.py,296,XXX,defer,non-runtime debt marker,# XXX: why don't we invalidate the entry in `self.cache` yet?
+synapse/util/caches/response_cache.py,65,TODO,defer,non-runtime debt marker,"TODO: in attrs 20.1, make it frozen with an on_setattr."
+synapse/util/daemonize.py,54,XXX,defer,non-runtime debt marker,"# XXX better to avoid overwriting it, surely. this looks racey as the pid file"
+synapse/util/distributor.py,49,TODO,defer,non-runtime debt marker,"TODO(paul): It would be nice to give signals stronger object identities,"
+synapse/util/distributor.py,73,TODO,defer,non-runtime debt marker,# TODO: Avoid strong ordering dependency by allowing people to
+synapse/util/gai_resolver.py,67,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+synapse/util/metrics.py,210,TODO,defer,non-runtime debt marker,# TODO: Add other in flight metrics.
+synapse/util/ratelimitutils.py,354,XXX,defer,non-runtime debt marker,# XXX: why is this necessary? this is called before we start
+synapse/util/templates.py,36,XXX,defer,non-runtime debt marker,(XXX: why is that useful??)
+synapse/visibility.py,466,XXX,defer,non-runtime debt marker,"# XXX: if the user has subsequently joined and then left again,"
+synapse/visibility.py,596,TODO,defer,non-runtime debt marker,TODO: state before or state after?
+synapse/visibility.py,767,TODO,defer,non-runtime debt marker,# TODO: this means that we request the entire membership list. If there  are only
+tests/handlers/test_e2e_room_keys.py,323,TODO,defer,test debt cleanup,"# TODO: test the locking semantics when uploading room_keys,"
+tests/handlers/test_e2e_room_keys.py,507,TODO,defer,test debt cleanup,# TODO: check edge cases as well as the common variations here
+tests/handlers/test_federation.py,392,TODO,defer,test debt cleanup,# TODO: Remove this bit when the event cache is properly invalidated.
+tests/handlers/test_password_providers.py,225,XXX,defer,test debt cleanup,"self.assertEqual(channel.code, 401)  # XXX why not a 403?"
+tests/handlers/test_password_providers.py,275,XXX,defer,test debt cleanup,"self.assertEqual(channel.code, 401)  # XXX why not a 403?"
+tests/handlers/test_password_providers.py,348,XXX,defer,test debt cleanup,"self.assertEqual(channel.code, 401)  # XXX why not a 403?"
+tests/handlers/test_register.py,721,XXX,defer,test debt cleanup,"XXX: this used to be in the main codebase, but was only used by this file,"
+tests/handlers/test_register.py,722,TODO,defer,test debt cleanup,"so got moved here. TODO: get rid of it, probably"
+tests/handlers/test_user_directory.py,312,TODO,defer,test debt cleanup,# TODO: Duplicates the same-named method in UserDirectoryInitialPopulationTest.
+tests/handlers/test_user_directory.py,322,HACK,defer,test debt cleanup,# HACK: get the user into these rooms
+tests/handlers/test_user_directory.py,611,TODO,defer,test debt cleanup,# TODO the same should apply when Alice is a remote user.
+tests/push/test_email.py,334,TODO,defer,test debt cleanup,# TODO It seems that two messages are required to trigger an email?
+tests/replication/test_federation_ack.py,50,XXX,defer,test debt cleanup,XXX: it might be nice to do this by pretending to be a synapse master worker
+tests/rest/admin/test_server_notice.py,174,TODO,defer,test debt cleanup,"TODO: Should be checked when reading the configuration."""""""
+tests/rest/client/test_login_token_request.py,33,TODO,defer,test debt cleanup,"versions.register_servlets,  # TODO: remove once unstable revision 0 support is removed"
+tests/rest/client/test_login_token_request.py,146,TODO,defer,test debt cleanup,# TODO: remove support for unstable MSC3882 is no longer needed
+tests/server.py,223,TODO,defer,test debt cleanup,# TODO This should ensure that the IProducer is an IPushProducer or
+tests/server.py,248,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/server.py,251,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/server.py,493,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/server.py,521,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/server.py,524,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/storage/test_appservice.py,66,TODO,defer,test debt cleanup,# TODO: suboptimal that we need to create files for tests!
+tests/storage/test_monthly_active_users.py,80,XXX,defer,test debt cleanup,# XXX why are we doing this here? this function is only run at startup
+tests/storage/test_monthly_active_users.py,107,XXX,defer,test debt cleanup,# XXX some of this is redundant. poking things into the config shouldn't
+tests/storage/test_registration.py,39,TODO,defer,test debt cleanup,"# TODO(paul): Surely this field should be 'user_id', not 'name'"
+tests/storage/test_room_search.py,247,TODO,defer,test debt cleanup,# TODO Test non-ASCII cases.
+tests/storage/test_state.py,601,XXX,defer,test debt cleanup,"self.assertNotIn(event3.event_id, result)  # XXX"
+tests/storage/test_user_directory.py,293,HACK,defer,test debt cleanup,# HACK: get the user into these rooms
+tests/util/test_check_dependencies.py,38,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/util/test_check_dependencies.py,41,NotImplementedError,intentional,abstract/interface placeholder or guarded exceptional path,raise NotImplementedError()
+tests/utils.py,236,TODO,defer,test debt cleanup,# TODO: Make this generic over a ParamSpec?
