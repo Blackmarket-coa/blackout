@@ -1,4 +1,4 @@
-import type { ForumPostCreated } from '@blackout/blackout-protocol';
+import type { ForumPostCreated } from '@blackout/protocol';
 import type { ApiClient } from '../client/types';
 
 export const createForumActions = (client: ApiClient) => ({

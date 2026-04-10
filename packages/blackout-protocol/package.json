@@ -1,5 +1,5 @@
 {
-  "name": "@blackout/blackout-protocol",
+  "name": "@blackout/protocol",
   "version": "0.0.1",
   "private": true,
   "description": "Shared Blackout event contracts for client/server features",

@@ -9,9 +9,7 @@ Scope: Detailed implementation plan to bring the repository from current state t
 Align package and app names with the documented canonical targets so QA and CI commands are stable.
 
 ### Current state
-- Client package is named `cinny`.
-- No workspace package named `@blackout/server`.
-- Protocol/SDK package names are `@blackout/blackout-protocol` and `@blackout/blackout-sdk`.
+- Canonical package names should be maintained at `@blackout/client`, `@blackout/server`, `@blackout/protocol`, and `@blackout/sdk`.
 
 ### Required work
 1. Rename package identities:

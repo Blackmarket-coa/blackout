@@ -24,7 +24,7 @@ Rotate JWT signing secrets without forcing user-visible auth outages.
 6. Redeploy and verify again.
 
 ## Validation checks
-- `pnpm --filter @blackout/api test:integration`
+- `pnpm --filter @blackout/server test:integration`
 - `pnpm guard:auth-secrets`
 - `GET /health` should include security preflight metadata and stay healthy.
 
