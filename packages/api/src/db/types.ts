@@ -79,3 +79,35 @@ export interface FederationLinkRecord {
   isActive: boolean;
   createdAt: string;
 }
+
+
+export interface ForumPostRecord {
+  id: UUID;
+  communityId: UUID;
+  channelId?: UUID;
+  authorId: UUID;
+  title: string;
+  body: string;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface DeadDropRecord {
+  id: UUID;
+  channelId: UUID;
+  senderId: UUID;
+  recipientId: UUID;
+  payload: string;
+  openedAt?: string;
+  createdAt: string;
+}
+
+export interface ModerationActionRecord {
+  id: UUID;
+  communityId: UUID;
+  actorId: UUID;
+  targetId: UUID;
+  action: 'warn' | 'mute' | 'ban' | 'remove_content';
+  reason: string;
+  createdAt: string;
+}

@@ -7,6 +7,9 @@ import type {
   UserRecord,
   VoteEntryRecord,
   VoteRecord,
+  ForumPostRecord,
+  DeadDropRecord,
+  ModerationActionRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -20,6 +23,9 @@ type PersistedState = {
   votes: VoteRecord[];
   voteEntries: VoteEntryRecord[];
   federationLinks: FederationLinkRecord[];
+  forumPosts: ForumPostRecord[];
+  deadDrops: DeadDropRecord[];
+  moderationActions: ModerationActionRecord[];
 };
 
 class InMemoryDb {
@@ -29,6 +35,9 @@ class InMemoryDb {
   votes = new Map<string, VoteRecord>();
   voteEntries = new Map<string, VoteEntryRecord>();
   federationLinks = new Map<string, FederationLinkRecord>();
+  forumPosts = new Map<string, ForumPostRecord>();
+  deadDrops = new Map<string, DeadDropRecord>();
+  moderationActions = new Map<string, ModerationActionRecord>();
 
   constructor() {
     this.createUser({
@@ -123,6 +132,45 @@ class InMemoryDb {
     return record;
   }
 
+  createForumPost(input: Omit<ForumPostRecord, 'createdAt'>): ForumPostRecord {
+    const record: ForumPostRecord = { ...input, createdAt: nowIso() };
+    this.forumPosts.set(record.id, record);
+    return record;
+  }
+
+  listForumPosts(communityId: string): ForumPostRecord[] {
+    return [...this.forumPosts.values()].filter((post) => post.communityId === communityId);
+  }
+
+  createDeadDrop(input: Omit<DeadDropRecord, 'createdAt' | 'openedAt'>): DeadDropRecord {
+    const record: DeadDropRecord = { ...input, createdAt: nowIso() };
+    this.deadDrops.set(record.id, record);
+    return record;
+  }
+
+  openDeadDrop(id: string, recipientId: string): DeadDropRecord | undefined {
+    const existing = this.deadDrops.get(id);
+    if (!existing || existing.recipientId !== recipientId) {
+      return undefined;
+    }
+
+    if (!existing.openedAt) {
+      this.deadDrops.set(id, { ...existing, openedAt: nowIso() });
+    }
+
+    return this.deadDrops.get(id);
+  }
+
+  createModerationAction(input: Omit<ModerationActionRecord, 'createdAt'>): ModerationActionRecord {
+    const record: ModerationActionRecord = { ...input, createdAt: nowIso() };
+    this.moderationActions.set(record.id, record);
+    return record;
+  }
+
+  listModerationActions(communityId: string): ModerationActionRecord[] {
+    return [...this.moderationActions.values()].filter((action) => action.communityId === communityId);
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -148,6 +196,9 @@ class FileBackedDb extends InMemoryDb {
     this.votes = new Map(parsed.votes.map((row) => [row.id, row]));
     this.voteEntries = new Map(parsed.voteEntries.map((row) => [row.id, row]));
     this.federationLinks = new Map(parsed.federationLinks.map((row) => [row.id, row]));
+    this.forumPosts = new Map((parsed.forumPosts ?? []).map((row) => [row.id, row]));
+    this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
+    this.moderationActions = new Map((parsed.moderationActions ?? []).map((row) => [row.id, row]));
   }
 
   private snapshot(): PersistedState {
@@ -158,6 +209,9 @@ class FileBackedDb extends InMemoryDb {
       votes: [...this.votes.values()],
       voteEntries: [...this.voteEntries.values()],
       federationLinks: [...this.federationLinks.values()],
+      forumPosts: [...this.forumPosts.values()],
+      deadDrops: [...this.deadDrops.values()],
+      moderationActions: [...this.moderationActions.values()],
     };
   }
 
@@ -198,6 +252,33 @@ class FileBackedDb extends InMemoryDb {
 
   override createFederationLink(input: Omit<FederationLinkRecord, 'createdAt'>): FederationLinkRecord {
     const created = super.createFederationLink(input);
+    this.persist();
+    return created;
+  }
+
+  override createForumPost(input: Omit<ForumPostRecord, 'createdAt'>): ForumPostRecord {
+    const created = super.createForumPost(input);
+    this.persist();
+    return created;
+  }
+
+  override createDeadDrop(input: Omit<DeadDropRecord, 'createdAt' | 'openedAt'>): DeadDropRecord {
+    const created = super.createDeadDrop(input);
+    this.persist();
+    return created;
+  }
+
+  override openDeadDrop(id: string, recipientId: string): DeadDropRecord | undefined {
+    const opened = super.openDeadDrop(id, recipientId);
+    if (opened) {
+      this.persist();
+    }
+
+    return opened;
+  }
+
+  override createModerationAction(input: Omit<ModerationActionRecord, 'createdAt'>): ModerationActionRecord {
+    const created = super.createModerationAction(input);
     this.persist();
     return created;
   }
