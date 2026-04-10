@@ -19,7 +19,7 @@ export function OverflowSheet({ open, actions, onClose, onAction }: OverflowShee
             {actions.map((action) => (
               <Pressable
                 key={`sheet-${action.label}`}
-                style={({ hovered }) => [styles.vineAction, action.primary && styles.vineActionPrimary, hovered && styles.vineActionHovered]}
+                style={({ pressed }) => [styles.vineAction, action.primary && styles.vineActionPrimary, pressed && styles.vineActionHovered]}
                 onPress={() => onAction(action)}
               >
                 <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>{action.label}</Text>

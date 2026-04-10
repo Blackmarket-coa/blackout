@@ -27,7 +27,7 @@ export function RadialBloom({ open, scales, onClose, onAction }: RadialBloomProp
                 key={action.label}
                 style={[styles.radialNodeWrap, { transform: [{ translateX: x }, { translateY: y }, { scale: scales[index] }] }]}
               >
-                <Pressable style={({ hovered }) => [styles.radialNode, hovered && styles.radialNodeHovered]} onPress={() => onAction(action.label)}>
+                <Pressable style={({ pressed }) => [styles.radialNode, pressed && styles.radialNodeHovered]} onPress={() => onAction(action.label)}>
                   <Text style={styles.radialNodeLabel}>{action.label}</Text>
                 </Pressable>
               </Animated.View>
