@@ -32,6 +32,12 @@ importers:
       '@atlaskit/pragmatic-drag-and-drop-hitbox':
         specifier: 1.0.3
         version: 1.0.3
+      '@blackout/protocol':
+        specifier: workspace:*
+        version: link:../../packages/blackout-protocol
+      '@blackout/sdk':
+        specifier: workspace:*
+        version: link:../../packages/blackout-sdk
       '@fontsource/inter':
         specifier: 4.5.14
         version: 4.5.14
@@ -424,6 +430,9 @@ importers:
       '@blackout/core':
         specifier: workspace:*
         version: link:../core
+      '@blackout/protocol':
+        specifier: workspace:*
+        version: link:../blackout-protocol
       hono:
         specifier: ^4.9.6
         version: 4.12.10
@@ -436,7 +445,7 @@ importers:
 
   packages/blackout-sdk:
     dependencies:
-      '@blackout/blackout-protocol':
+      '@blackout/protocol':
         specifier: workspace:*
         version: link:../blackout-protocol
     devDependencies:
