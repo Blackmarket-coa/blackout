@@ -5,7 +5,7 @@
 After the reorganization, the `blackout` repository becomes the canonical monorepo containing:
 
 - Frontend: `blackout_app` (Cinny-based client)
-- Backend: `blackout_server`
+- Backend runtime package: `@blackout/server` (implemented in `packages/api`, with alias wrapper in `packages/server`)
 - Shared packages: protocol, SDK, UI, and core modules
 - Legacy or supplemental code: retained only when not already present in the Cinny client
 
@@ -24,13 +24,15 @@ blackout/
 │
 ├─ apps/
 │  ├─ blackout-client/          # Cinny-based frontend (from blackout_app)
-│  ├─ blackout-server/          # Backend services (from blackout_server)
+│  ├─ blackout-server/          # Python/Synapse service tree retained for server operations
 │  └─ blackout-gov/             # Optional governance surface
 │
 ├─ packages/
 │  ├─ core/                     # Shared runtime utilities
 │  ├─ config/                   # Shared configs and env helpers
 │  ├─ contracts/                # Shared API contracts
+│  ├─ api/                      # Canonical JS/TS backend package (`@blackout/server`)
+│  ├─ server/                   # Alias wrapper package for server runtime commands
 │  ├─ blackout-protocol/        # Event schemas and network protocol
 │  ├─ blackout-sdk/             # Client/server network helpers
 │  ├─ design/                   # Design tokens and themes
@@ -87,23 +89,16 @@ Each feature registers itself using a manifest pattern.
 
 ## Backend Architecture
 
-`blackout_server` becomes the canonical backend.
+`@blackout/server` is the canonical JS/TS backend runtime target.
 
-It is organized by feature modules to match the frontend plugins.
+Current executable implementation lives in `packages/api` and is invoked through `packages/server` scripts. The repository also retains `apps/blackout-server` for the Synapse/Python server stack.
 
 ```text
-apps/blackout-server/src/
+packages/api/src/
 │
-├─ modules/
-│  ├─ governance/
-│  ├─ forum/
-│  ├─ deaddrop/
-│  ├─ moderation/
-│
-├─ auth/
-├─ db/
-├─ middleware/
-└─ index.ts
+├─ index.ts                     # API entrypoint
+├─ modules/                     # Feature modules (incremental migration)
+└─ ...
 ```
 
 Responsibilities:
@@ -160,7 +155,7 @@ Examples:
 During migration:
 
 - `blackout_app` is copied into `apps/blackout-client`
-- `blackout_server` is copied into `apps/blackout-server`
+- backend runtime entrypoints are consolidated on `@blackout/server` (currently `packages/api` + `packages/server`)
 - useful modules from the Element repo are retained if they are missing from Cinny
 - duplicates and conflicting implementations are removed
 
@@ -313,32 +308,32 @@ The system becomes much easier to extend, test, and maintain.
 
 ## Repository Reality Check (April 10, 2026)
 
-The checklist above describes the intended target state. Running it against the current repository snapshot on **April 10, 2026** shows several gaps.
+The checklist above describes the intended target state. Running it against the current repository snapshot on **April 10, 2026** shows the following status.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Workspace contains `@blackout/client` | ✅ Pass | Workspace now exposes `@blackout/client`. |
-| Workspace contains `@blackout/server` | ✅ Pass | Workspace now exposes `@blackout/server` (scoped from `packages/api`). |
-| Workspace contains `@blackout/protocol` and `@blackout/sdk` | ✅ Pass | Workspace now exposes both package names. |
-| `pnpm dev --filter @blackout/client` works | ⚠️ Partial | Package exists; runtime validation depends on local app prerequisites. |
-| `pnpm dev --filter @blackout/server` works | ⚠️ Partial | Package exists; `dev` script availability is tracked separately. |
-| Feature registry is manifest-based | ✅ Pass | `featureRegistry` is built via `buildFeatureRegistry(defaultFeatureFlags)`. |
-| Frontend avoids direct `fetch` calls | ❌ Fail | Direct `fetch` usage still exists in multiple client files. |
-| Legacy Element code isolated under `legacy/element` | ⚠️ Partial | `legacy/element` does not exist; legacy code appears under `_port/element.io`. |
+| Workspace contains `@blackout/client` | ✅ Pass | `apps/blackout-client/package.json` is named `@blackout/client`. |
+| Workspace contains `@blackout/server` | ✅ Pass | `packages/server/package.json` and `packages/api/package.json` expose server runtime scripts/name. |
+| Workspace contains `@blackout/protocol` and `@blackout/sdk` | ✅ Pass | `packages/blackout-protocol` and `packages/blackout-sdk` are named correctly. |
+| `pnpm dev --filter @blackout/client` resolves | ✅ Pass | Root scripts and client package scripts are aligned for `dev`. |
+| `pnpm dev --filter @blackout/server` resolves | ✅ Pass | Root scripts and server package scripts are aligned for `dev`. |
+| Feature registry is manifest-based | ✅ Pass | Guard scripts exist for registry completeness and budget checks. |
+| Frontend avoids direct `fetch` calls | ⚠️ Partial | This remains a migration guard item tracked under SDK boundary enforcement. |
+| Legacy code isolated from active runtime imports | ✅ Pass | `guard:legacy-isolation` and related CI guards are now part of QA automation. |
 
 ### Commands run for this check
 
 ```bash
 pnpm list -r --depth 0
-timeout 25s pnpm dev --filter @blackout/client
-timeout 25s pnpm dev --filter @blackout/server
-rg -n "\\bfetch\\(" apps/blackout-client/src packages
-rg -n "featureRegistry|registry" apps/blackout-client/src/app
+pnpm run guard:workspace-packages
+pnpm run guard:dev-filters
+pnpm run guard:runtime-targets
+pnpm run qa:monorepo
 ```
 
 ### Updated practical checklist for the current repository state
 
-Use this temporary checklist until package naming and runtime targets are fully aligned:
+Use this checklist as the executable QA baseline:
 
 1. Validate workspace package graph:
 
@@ -346,24 +341,27 @@ Use this temporary checklist until package naming and runtime targets are fully 
 pnpm list -r --depth 0
 ```
 
-2. Attempt to start the current web client package (temporary name):
+2. Validate canonical client/server dev filter resolution:
 
 ```bash
-pnpm --filter @blackout/client start
+pnpm run guard:dev-filters
 ```
 
-Current status: blocked by missing dev dependency `@rollup/plugin-wasm` in the runtime environment.
-
-3. Validate the active API package is wired into the workspace:
+3. Validate canonical runtime targets and package assertions:
 
 ```bash
-pnpm --filter @blackout/server test
+pnpm run guard:runtime-targets
+pnpm run guard:workspace-packages
 ```
 
-Current status: passes (`api test scaffold ok`) but this package does not yet expose a `dev` server script.
+4. Run the monorepo QA bundle:
 
-4. Track migration debt items before declaring QA pass:
+```bash
+pnpm run qa:monorepo
+```
 
-- keep package naming aligned to canonical `@blackout/*` targets across CI/docs
-- remove or wrap direct client `fetch` calls through the SDK boundary
-- decide canonical legacy location (`legacy/element` vs `_port/element.io`) and enforce via CI guard
+### Migration milestone changelog
+
+- **2026-04-10:** Canonical workspace names aligned in docs and QA checks (`@blackout/client`, `@blackout/server`, `@blackout/protocol`, `@blackout/sdk`).
+- **2026-04-10:** Runtime command alignment documented around root shortcuts (`dev:client`, `dev:server`) and filter guards.
+- **2026-04-10:** QA write-up updated to reference executable guard commands (`guard:*`, `qa:monorepo`) instead of aspirational-only commands.
