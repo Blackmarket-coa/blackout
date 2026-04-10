@@ -1,27 +1,7 @@
-import { createElement } from 'react';
-import { useAtomValue } from 'jotai';
-import { selectedRoomIdAtom } from '../../state/navigation';
-import type { BlackoutFeature } from '../../core/features/types';
-import DeadDropSettings from './DeadDropSettings';
-
-const DeadDropRoutePage = () => {
-    const roomId = useAtomValue(selectedRoomIdAtom);
-
-    if (!roomId) {
-        return createElement('p', { style: { padding: 12 } }, 'Select a room to configure Dead Drop.');
-    }
-
-    return createElement(DeadDropSettings, { roomId });
-};
-
-export const deaddropFeature: BlackoutFeature = {
-    id: 'deaddrop',
-    name: 'Dead Drop',
-    routes: [{ path: '/deaddrop', component: DeadDropRoutePage }],
-    navItems: [{ label: 'Dead Drop', to: '/deaddrop' }],
-    settings: [{ section: 'Dead Drop', component: DeadDropRoutePage }],
-    capabilities: ['deaddrop.read', 'deaddrop.write'],
-};
+export { deaddropFeature } from './manifest';
+export { deaddropNavItems } from './nav';
+export { deaddropRoutes } from './routes';
+export { deaddropSettings } from './settings';
 
 export { default as DeadDropIndicator } from './DeadDropIndicator';
 export { default as DeadDropComposer } from './DeadDropComposer';
