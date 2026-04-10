@@ -1,5 +1,10 @@
 # Turborepo Migration Plan (Web + Mobile + Shared Packages)
 
+## Migration plan linkage
+
+- Canonical monorepo work plan: `docs/blackout-monorepo-work-required.md`
+- QA execution baseline: `docs/blackout-monorepo-qa-writeup.md`
+
 ## Goals
 - Consolidate all app and shared package builds into a single Turborepo workspace.
 - Keep delivery risk low by migrating in phases with dual-run compatibility.

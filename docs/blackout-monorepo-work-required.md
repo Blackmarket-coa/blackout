@@ -249,6 +249,11 @@ Keep architecture docs synchronized with implementation reality.
 - No contradictory commands/package names across docs.
 - QA docs reflect executable commands in the current repository.
 
+### Migration changelog (completed milestones)
+- **2026-04-10:** Canonical package naming reflected in docs for `@blackout/client`, `@blackout/server`, `@blackout/protocol`, and `@blackout/sdk`.
+- **2026-04-10:** Runtime command documentation updated to match root scripts (`dev`, `dev:client`, `dev:server`) and QA guards (`guard:*`, `qa:monorepo`).
+- **2026-04-10:** Cross-links added from `README.md` and migration tracker docs to this work plan and the QA write-up.
+
 ---
 
 ## Suggested Execution Order (Phased)

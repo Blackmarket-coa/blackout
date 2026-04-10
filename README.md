@@ -30,6 +30,8 @@ For deeper architecture context:
 - `docs/blackout-reuse-completion-tracker.md`
 - `docs/distributed_self_healing_blueprint.md`
 - `docs/deploying-blackout-fedora-tauri.md`
+- `docs/blackout-monorepo-work-required.md` (active migration work plan)
+- `docs/blackout-monorepo-qa-writeup.md` (QA baseline + migration changelog)
 
 ---
 
