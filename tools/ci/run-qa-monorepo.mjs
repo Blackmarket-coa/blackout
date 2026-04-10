@@ -9,6 +9,7 @@ const checks = [
   { name: 'sdk-boundary', command: ['pnpm', 'guard:sdk-boundary'] },
   { name: 'protocol-import-consistency', command: ['pnpm', 'guard:protocol-import-consistency'] },
   { name: 'legacy-isolation', command: ['pnpm', 'guard:legacy-isolation'] },
+  { name: 'legacy-runtime-imports', command: ['pnpm', 'guard:legacy-runtime-imports'] },
 ];
 
 const outputDir = path.resolve(process.cwd(), 'artifacts', 'qa-monorepo');
