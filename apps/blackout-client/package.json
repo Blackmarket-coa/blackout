@@ -73,7 +73,8 @@
     "slate-dom": "0.112.2",
     "slate-history": "0.110.3",
     "slate-react": "0.112.1",
-    "ua-parser-js": "1.0.35"
+    "ua-parser-js": "1.0.35",
+    "@blackout/sdk": "workspace:*"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "0.2.3",

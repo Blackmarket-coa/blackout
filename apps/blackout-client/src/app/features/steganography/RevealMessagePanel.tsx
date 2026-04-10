@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { fetchBlob } from '@blackout/sdk';
 import { decodeMessageFromImage } from './SteganographyDecoder';
 
 interface RevealMessagePanelProps {
@@ -41,11 +42,7 @@ export const RevealMessagePanel = ({ imageUrl }: RevealMessagePanelProps) => {
                             setError(null);
                             setRevealed(null);
                             try {
-                                const response = await fetch(imageUrl);
-                                if (!response.ok) {
-                                    throw new Error('Unable to fetch image for decode.');
-                                }
-                                const blob = await response.blob();
+                                const blob = await fetchBlob(imageUrl);
                                 const message = await decodeMessageFromImage(blob, passphrase);
                                 if (!message) {
                                     setError('No hidden message found or passphrase is incorrect.');

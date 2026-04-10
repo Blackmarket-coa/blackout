@@ -6,6 +6,15 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
 
+const noDirectFetchRule = [
+    'error',
+    {
+        selector: "CallExpression[callee.name='fetch']",
+        message:
+            'Direct fetch() is blocked in app feature/page layers. Route calls through @blackout/sdk.',
+    },
+];
+
 export default [
     js.configs.recommended,
     {
@@ -30,6 +39,12 @@ export default [
             ...tsPlugin.configs.recommended.rules,
             ...reactHooks.configs.recommended.rules,
             'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+        },
+    },
+    {
+        files: ['src/app/features/**/*.{ts,tsx}', 'src/app/pages/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-syntax': noDirectFetchRule,
         },
     },
     prettier,
