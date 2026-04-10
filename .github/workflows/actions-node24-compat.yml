@@ -1,0 +1,39 @@
+name: Actions Node 24 compatibility check
+
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  action-runtime-smoke:
+    name: JavaScript action runtime smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (Node 24-forced action runtime)
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - name: Setup pnpm (Node 24-forced action runtime)
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Validate pnpm and lockfile readability
+        run: |
+          pnpm --version
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Upload runtime smoke artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: actions-node24-runtime-smoke
+          path: pnpm-lock.yaml
+          if-no-files-found: error

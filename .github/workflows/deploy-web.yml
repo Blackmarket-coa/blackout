@@ -18,8 +18,8 @@ jobs:
     env:
       DEPLOY_PROVIDER: ${{ vars.WEB_DEPLOY_PROVIDER || 'vercel' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4

@@ -24,7 +24,7 @@ jobs:
         name: Dependency vulnerability audit
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
               with:
                   fetch-depth: 0
 
@@ -60,7 +60,7 @@ jobs:
         name: Semgrep SAST
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
             - name: Semgrep
               uses: semgrep/semgrep-action@v1
@@ -73,7 +73,7 @@ jobs:
         name: Gitleaks secret scan
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
               with:
                   fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
         name: Trivy filesystem scan
         runs-on: ubuntu-24.04
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
             - name: Trivy FS scan
               uses: aquasecurity/trivy-action@0.24.0

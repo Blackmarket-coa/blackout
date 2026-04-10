@@ -16,8 +16,8 @@ jobs:
     name: Lint (ESLint + Prettier)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -32,8 +32,8 @@ jobs:
     name: Type check (tsc --noEmit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -53,8 +53,8 @@ jobs:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -69,8 +69,8 @@ jobs:
     name: Component tests (Vitest + Testing Library)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -92,8 +92,8 @@ jobs:
           SYNAPSE_SERVER_NAME: localhost
           SYNAPSE_REPORT_STATS: "no"
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -108,8 +108,8 @@ jobs:
     name: Matrix protocol sync tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -124,7 +124,7 @@ jobs:
     name: Feature registry validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -137,8 +137,8 @@ jobs:
       matrix:
         project: ["@blackout/blackout-web", "@blackout/client", "blackout-mobile"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -154,8 +154,8 @@ jobs:
     env:
       MAX_BUNDLE_KB: 2048
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -177,8 +177,8 @@ jobs:
     name: Monorepo QA conformance
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
           version: 9.15.4
       - uses: actions/setup-node@v4
@@ -192,7 +192,7 @@ jobs:
         run: pnpm qa:monorepo
       - name: Upload monorepo QA artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: qa-monorepo-artifacts
           path: artifacts/qa-monorepo
