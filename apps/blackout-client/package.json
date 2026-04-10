@@ -1,5 +1,5 @@
 {
-  "name": "cinny",
+  "name": "@blackout/client",
   "version": "4.10.5",
   "description": "Yet another matrix client",
   "main": "index.js",

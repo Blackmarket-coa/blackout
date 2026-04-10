@@ -17,7 +17,7 @@ const legacyPackage = readJson('packages/web/package.json');
 const expectedFilters = [
   '@blackout/contracts',
   '@blackout/core',
-  '@blackout/api',
+  '@blackout/server',
   '@blackout/blackout-web',
   'blackout-mobile',
 ];

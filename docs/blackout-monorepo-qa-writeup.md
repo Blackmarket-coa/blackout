@@ -317,11 +317,11 @@ The checklist above describes the intended target state. Running it against the 
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Workspace contains `@blackout/client` | ❌ Fail | Current client package name is `cinny`, not `@blackout/client`. |
-| Workspace contains `@blackout/server` | ❌ Fail | No workspace package with this name is present. |
-| Workspace contains `@blackout/protocol` and `@blackout/sdk` | ❌ Fail | Current package names are `@blackout/blackout-protocol` and `@blackout/blackout-sdk`. |
-| `pnpm dev --filter @blackout/client` works | ❌ Fail | Turborepo reports: `No package found with name '@blackout/client' in workspace`. |
-| `pnpm dev --filter @blackout/server` works | ❌ Fail | Turborepo reports: `No package found with name '@blackout/server' in workspace`. |
+| Workspace contains `@blackout/client` | ✅ Pass | Workspace now exposes `@blackout/client`. |
+| Workspace contains `@blackout/server` | ✅ Pass | Workspace now exposes `@blackout/server` (scoped from `packages/api`). |
+| Workspace contains `@blackout/protocol` and `@blackout/sdk` | ✅ Pass | Workspace now exposes both package names. |
+| `pnpm dev --filter @blackout/client` works | ⚠️ Partial | Package exists; runtime validation depends on local app prerequisites. |
+| `pnpm dev --filter @blackout/server` works | ⚠️ Partial | Package exists; `dev` script availability is tracked separately. |
 | Feature registry is manifest-based | ✅ Pass | `featureRegistry` is built via `buildFeatureRegistry(defaultFeatureFlags)`. |
 | Frontend avoids direct `fetch` calls | ❌ Fail | Direct `fetch` usage still exists in multiple client files. |
 | Legacy Element code isolated under `legacy/element` | ⚠️ Partial | `legacy/element` does not exist; legacy code appears under `_port/element.io`. |
@@ -349,7 +349,7 @@ pnpm list -r --depth 0
 2. Attempt to start the current web client package (temporary name):
 
 ```bash
-pnpm --filter cinny start
+pnpm --filter @blackout/client start
 ```
 
 Current status: blocked by missing dev dependency `@rollup/plugin-wasm` in the runtime environment.
@@ -357,15 +357,13 @@ Current status: blocked by missing dev dependency `@rollup/plugin-wasm` in the r
 3. Validate the active API package is wired into the workspace:
 
 ```bash
-pnpm --filter @blackout/api test
+pnpm --filter @blackout/server test
 ```
 
 Current status: passes (`api test scaffold ok`) but this package does not yet expose a `dev` server script.
 
 4. Track migration debt items before declaring QA pass:
 
-- rename `cinny` to `@blackout/client`
-- expose a canonical `@blackout/server` runtime package
-- normalize protocol/SDK package names to the documented targets (or update docs)
+- keep package naming aligned to canonical `@blackout/*` targets across CI/docs
 - remove or wrap direct client `fetch` calls through the SDK boundary
 - decide canonical legacy location (`legacy/element` vs `_port/element.io`) and enforce via CI guard
