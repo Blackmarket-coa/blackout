@@ -15,6 +15,7 @@ import {
     resolveLivekitFocusFromWellKnown,
     type CallFocusResolution,
 } from './callHealth';
+import { clientQueries } from '../../sdk/client';
 
 const MSC3401_EVENT_TYPES = ['m.call.member', 'org.matrix.msc3401.call.member'];
 
@@ -100,15 +101,8 @@ const parseMembership = (event: MatrixEvent): CallMemberState | null => {
 
 const readRtcFocus = async (client: MatrixClient): Promise<CallFocusResolution> => {
     const homeserverUrl = client.getHomeserverUrl();
-    const wellKnownUrl = new URL('/.well-known/matrix/client', homeserverUrl).toString();
-
     try {
-        const response = await fetch(wellKnownUrl, { headers: { Accept: 'application/json' } });
-        if (!response.ok) {
-            return { focusUrl: null, status: 'degraded', reason: `well-known HTTP ${response.status}` };
-        }
-
-        const body = (await response.json()) as Record<string, unknown>;
+        const body = await clientQueries.getWellKnownMatrixClient(homeserverUrl);
         const focusUrl = resolveLivekitFocusFromWellKnown(body);
         if (!focusUrl) {
             return { focusUrl: null, status: 'unconfigured', reason: 'missing rtc_foci livekit entry' };

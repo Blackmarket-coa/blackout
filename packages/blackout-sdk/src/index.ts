@@ -1,4 +1,7 @@
 export * from './client/types';
+export * from './client/fetchClient';
+export * from './client/queries';
+export * from './client/media';
 export * from './errors/sdkError';
 export * from './governance/actions';
 export * from './forum/actions';

@@ -358,7 +358,7 @@ export const SpaceTree = ({ spaceId }: { spaceId: string | null }) => {
             return;
         }
 
-        const fetch = async () => {
+        const loadHierarchy = async () => {
             setLoading(true);
             try {
                 const response = await client.getRoomHierarchy(spaceId, 50, undefined, undefined);
@@ -403,7 +403,7 @@ export const SpaceTree = ({ spaceId }: { spaceId: string | null }) => {
             }
         };
 
-        void fetch();
+        void loadHierarchy();
         return () => {
             mounted = false;
         };

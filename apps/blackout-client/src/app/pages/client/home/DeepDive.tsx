@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Avatar, Box, Button, Icon, Icons, Text } from 'folds';
 import { useNavigate } from 'react-router-dom';
 import { getDirectCreatePath, getHomeCreatePath, getHomeRoomPath } from '../../pathUtils';
+import { clientQueries } from '../../../sdk/client';
 
 type DeepDiveAction = {
   label: string;
@@ -29,13 +30,7 @@ export function HomeDeepDive() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/deep-dive-feed.json');
-
-      if (!response.ok) {
-        throw new Error(`Failed to load deep dive feed (${response.status})`);
-      }
-
-      const data = (await response.json()) as DeepDiveItem[];
+      const data = await clientQueries.getDeepDiveFeed<DeepDiveItem>();
       setFeed(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load deep dive feed.');
