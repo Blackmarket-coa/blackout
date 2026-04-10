@@ -32,6 +32,12 @@ importers:
       '@atlaskit/pragmatic-drag-and-drop-hitbox':
         specifier: 1.0.3
         version: 1.0.3
+      '@blackout/protocol':
+        specifier: workspace:*
+        version: link:../../packages/blackout-protocol
+      '@blackout/sdk':
+        specifier: workspace:*
+        version: link:../../packages/blackout-sdk
       '@fontsource/inter':
         specifier: 4.5.14
         version: 4.5.14
@@ -424,6 +430,12 @@ importers:
       '@blackout/core':
         specifier: workspace:*
         version: link:../core
+      '@blackout/protocol':
+        specifier: workspace:*
+        version: link:../blackout-protocol
+      '@hono/node-server':
+        specifier: ^1.13.7
+        version: 1.19.13(hono@4.12.10)
       hono:
         specifier: ^4.9.6
         version: 4.12.10
@@ -436,7 +448,7 @@ importers:
 
   packages/blackout-sdk:
     dependencies:
-      '@blackout/blackout-protocol':
+      '@blackout/protocol':
         specifier: workspace:*
         version: link:../blackout-protocol
     devDependencies:
@@ -1591,6 +1603,12 @@ packages:
 
   '@formatjs/intl-localematcher@0.6.2':
     resolution: {integrity: sha512-XOMO2Hupl0wdd172Y06h6kLpBz6Dv+J4okPLl4LPtzbr8f66WbIoy4ev98EBuZ6ZK4h5ydTN6XneT4QVpD7cdA==}
+
+  '@hono/node-server@1.19.13':
+    resolution: {integrity: sha512-TsQLe4i2gvoTtrHje625ngThGBySOgSK3Xo2XRYOdqGN1teR8+I7vchQC46uLJi8OF62YTYA3AhSpumtkhsaKQ==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
 
   '@humanwhocodes/config-array@0.11.14':
     resolution: {integrity: sha512-3T8LkOmg45BV5FICb15QQMsyUSWrQ8AygVfC7ZG32zOalnqrilm018ZVCw0eapXux8FtA33q8PSRSstjee3jSg==}
@@ -6649,6 +6667,10 @@ snapshots:
   '@formatjs/intl-localematcher@0.6.2':
     dependencies:
       tslib: 2.8.1
+
+  '@hono/node-server@1.19.13(hono@4.12.10)':
+    dependencies:
+      hono: 4.12.10
 
   '@humanwhocodes/config-array@0.11.14':
     dependencies:
