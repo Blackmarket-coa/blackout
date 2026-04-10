@@ -1,0 +1,12 @@
+{
+  "name": "@blackout/server",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Canonical server runtime alias package",
+  "scripts": {
+    "dev": "pnpm --filter @blackout/api run dev",
+    "build": "pnpm --filter @blackout/api run build",
+    "lint": "pnpm --filter @blackout/api run lint",
+    "test": "pnpm --filter @blackout/api run test"
+  }
+}

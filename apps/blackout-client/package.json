@@ -1,14 +1,16 @@
 {
   "name": "@blackout/client",
   "version": "4.10.5",
-  "description": "Yet another matrix client",
+  "description": "Client runtime alias package for canonical @blackout/blackout-web app",
   "main": "index.js",
   "type": "module",
   "engines": {
     "node": ">=16.0.0"
   },
   "scripts": {
-    "start": "vite",
+    "dev": "pnpm --filter @blackout/blackout-web dev",
+    "start": "pnpm run dev",
+    "start:alias": "pnpm --filter @blackout/blackout-web dev",
     "build": "vite build",
     "lint": "yarn check:eslint && yarn check:prettier",
     "check:eslint": "eslint src/*",
