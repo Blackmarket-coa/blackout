@@ -1,18 +1,17 @@
 {
   "name": "@blackout/client",
   "version": "4.10.5",
-  "description": "Client runtime alias package for canonical @blackout/blackout-web app",
+  "description": "Blackout web client — Cinny-based main frontend",
   "main": "index.js",
   "type": "module",
   "engines": {
     "node": ">=16.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @blackout/blackout-web dev",
+    "dev": "vite",
     "start": "pnpm run dev",
-    "start:alias": "pnpm --filter @blackout/blackout-web dev",
     "build": "vite build",
-    "lint": "yarn check:eslint && yarn check:prettier",
+    "lint": "pnpm run check:eslint && pnpm run check:prettier",
     "check:eslint": "eslint src/*",
     "check:prettier": "prettier --check .",
     "fix:prettier": "prettier --write .",

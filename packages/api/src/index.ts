@@ -1,3 +1,4 @@
+import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
@@ -44,5 +45,11 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
 }
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
+
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+
+serve({ fetch: app.fetch, port: PORT }, (info) => {
+  console.log(`[blackout-server] listening on http://localhost:${info.port}`);
+});
 
 export default app;
