@@ -71,6 +71,8 @@
     "guard:protocol-import-consistency": "node tools/ci/check-protocol-import-consistency.mjs",
     "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
     "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs"
+    "guard:legacy-runtime-imports": "node tools/ci/check-legacy-runtime-imports.mjs",
+    "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

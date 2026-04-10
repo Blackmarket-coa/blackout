@@ -3,15 +3,6 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const REDACTION_PATTERNS = [
-  /(ghp_[A-Za-z0-9]{20,})/g,
-  /(github_pat_[A-Za-z0-9_]{20,})/g,
-  /(AKIA[0-9A-Z]{16})/g,
-  /((?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,})/g,
-  /((?:xox[abprs]-)[A-Za-z0-9-]{16,})/g,
-  /(-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----)/g,
-];
-
 const checks = [
   { name: 'workspace-package-assertion', command: ['pnpm', 'guard:workspace-packages'] },
   { name: 'canonical-dev-filter-resolution', command: ['pnpm', 'guard:dev-filters'] },
@@ -19,14 +10,6 @@ const checks = [
   { name: 'protocol-import-consistency', command: ['pnpm', 'guard:protocol-import-consistency'] },
   { name: 'legacy-isolation', command: ['pnpm', 'guard:legacy-isolation'] },
 ];
-
-function redactSecrets(input) {
-  let output = input ?? '';
-  for (const pattern of REDACTION_PATTERNS) {
-    output = output.replace(pattern, '[REDACTED_SECRET]');
-  }
-  return output;
-}
 
 const outputDir = path.resolve(process.cwd(), 'artifacts', 'qa-monorepo');
 fs.mkdirSync(outputDir, { recursive: true });
@@ -43,10 +26,10 @@ for (const check of checks) {
     `Exit code: ${result.status ?? 'null'}`,
     '',
     '## stdout',
-    redactSecrets(result.stdout) || '<empty>',
+    result.stdout || '<empty>',
     '',
     '## stderr',
-    redactSecrets(result.stderr) || '<empty>',
+    result.stderr || '<empty>',
     '',
   ].join('\n');
 
