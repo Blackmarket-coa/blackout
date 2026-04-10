@@ -1,4 +1,17 @@
 import { useCallback, useMemo } from 'react';
+import type {
+    GovernanceProposalOption,
+    GovernanceProposalPayload,
+    GovernanceProposalStatus,
+    GovernanceProposalType,
+    GovernanceVotePayload,
+} from '@blackout/protocol';
+
+export type ProposalOption = GovernanceProposalOption;
+export type ProposalContent = GovernanceProposalPayload;
+export type ProposalStatus = GovernanceProposalStatus;
+export type ProposalType = GovernanceProposalType;
+export type VoteContent = GovernanceVotePayload;
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
@@ -8,25 +21,6 @@ import {
     normalizeVoteEventContent,
 } from './eventSchemas';
 
-export interface ProposalOption {
-    id: string;
-    label: string;
-}
-
-export type ProposalType = 'binary' | 'multiple_choice' | 'ranked';
-export type ProposalStatus = 'active' | 'passed' | 'failed' | 'cancelled';
-
-export interface ProposalContent {
-    title: string;
-    description: string;
-    type: ProposalType;
-    options: ProposalOption[];
-    quorum: number;
-    deadline: string;
-    eligibility: 'all' | `role:${string}` | `power:${string}`;
-    status: ProposalStatus;
-}
-
 export interface ProposalModel extends ProposalContent {
     proposalEventId: string;
     stateKey: string;
@@ -34,11 +28,6 @@ export interface ProposalModel extends ProposalContent {
     timestamp: number;
     schemaVersion: number;
     migrated: boolean;
-}
-
-export interface VoteContent {
-    proposalEventId: string;
-    choice: string | string[];
 }
 
 export interface VoteModel {

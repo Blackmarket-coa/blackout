@@ -1,11 +1,23 @@
 import { Hono } from 'hono';
 import { tallyVotes } from '@blackout/core';
 import { db } from '../db/store';
+import type { GovernanceProposalPayload, GovernanceVotePayload } from '@blackout/protocol';
 
 const governance = new Hono();
 
 governance.post('/votes', async (c) => {
-  const { communityId, proposerId, title, description, options = ['yes', 'no'], durationHours = 168 } = await c.req.json();
+  const payload = (await c.req.json()) as GovernanceProposalPayload & { communityId?: string; proposerId?: string; durationHours?: number };
+  const {
+    communityId,
+    proposerId,
+    title,
+    description,
+    options = [
+      { id: 'yes', label: 'Yes' },
+      { id: 'no', label: 'No' },
+    ],
+    durationHours = 168,
+  } = payload;
 
   if (!communityId || !proposerId || !title) {
     return c.json({ error: 'communityId, proposerId and title are required' }, 400);
@@ -18,7 +30,7 @@ governance.post('/votes', async (c) => {
     title,
     description,
     voteType: 'yes_no',
-    options: options.map((text: string, index: number) => ({ id: String(index + 1), text })),
+    options: options.map((option, index) => ({ id: option.id || String(index + 1), text: option.label })),
     requiresQuorum: 50,
     durationHours,
     status: 'active',
@@ -29,9 +41,11 @@ governance.post('/votes', async (c) => {
 
 governance.post('/votes/:voteId/cast', async (c) => {
   const { voteId } = c.req.param();
-  const { userId, choice, weight = 1 } = await c.req.json();
+  const payload = (await c.req.json()) as GovernanceVotePayload & { userId?: string; weight?: number };
+  const { userId, choice, weight = 1 } = payload;
+  const normalizedChoice = Array.isArray(choice) ? choice[0] : choice;
 
-  if (!userId || !choice) {
+  if (!userId || !normalizedChoice) {
     return c.json({ error: 'userId and choice are required' }, 400);
   }
 
@@ -49,7 +63,7 @@ governance.post('/votes/:voteId/cast', async (c) => {
       id: crypto.randomUUID(),
       voteId,
       userId,
-      choice,
+      choice: normalizedChoice,
       weight,
     });
   } catch (error) {
