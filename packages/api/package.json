@@ -16,6 +16,7 @@
     "@blackout/core": "workspace:*",
     "@blackout/contracts": "workspace:*",
     "hono": "^4.9.6",
+    "@hono/node-server": "^1.13.7",
     "@blackout/protocol": "workspace:*"
   }
 }
