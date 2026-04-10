@@ -65,7 +65,9 @@
     "dev:client": "pnpm --filter @blackout/client dev",
     "dev:server": "pnpm --filter @blackout/server dev",
     "guard:dev-filters": "node tools/ci/check-dev-filter-resolution.mjs",
-    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs"
+    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs",
+    "guard:legacy-runtime-imports": "node tools/ci/check-legacy-runtime-imports.mjs",
+    "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
