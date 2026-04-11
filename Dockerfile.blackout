@@ -17,7 +17,7 @@ COPY config.sample.json ./config.json
 
 RUN pnpm install --frozen-lockfile
 
-RUN pnpm web:build
+RUN pnpm client:build
 
 
 
