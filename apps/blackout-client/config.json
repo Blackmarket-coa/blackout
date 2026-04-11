@@ -1,6 +1,7 @@
 {
-  "defaultHomeserver": 1,
+  "defaultHomeserver": 0,
   "homeserverList": [
+    "matrix.theblackout.app",
     "converser.eu",
     "matrix.org",
     "mozilla.org",
