@@ -154,7 +154,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: Fresh install (force relink)
+        run: pnpm install --frozen-lockfile --force
       - run: pnpm --filter "${{ matrix.project }}" run build
 
   bundle-size:
