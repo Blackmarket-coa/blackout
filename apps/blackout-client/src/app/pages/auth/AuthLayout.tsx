@@ -79,6 +79,10 @@ export function AuthLayout() {
     server = defaultServer;
   }
 
+  if (server === 'matrix.org' && defaultServer === 'matrix.theblackout.app') {
+    server = defaultServer;
+  }
+
   const [discoveryState, discoverServer] = useAsyncCallback(
     useCallback(async (serverName: string) => {
       const response = await autoDiscovery(fetch, serverName);
