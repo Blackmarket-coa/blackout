@@ -4,7 +4,7 @@ Last validated: 2026-04-11 (UTC)
 
 ## Verdict
 
-**Mostly yes — deployment-ready for the canonical stack (`apps/blackout-client` + `apps/blackout-server`)**, with one important documentation ambiguity to keep cleaning up: parts of the README still describe `apps/blackout-web` as canonical for some flows.
+**Yes — deployment-ready for the canonical stack (`apps/blackout-client` + `apps/blackout-server`)**, with README guidance now harmonized to the same canonical frontend statement.
 
 ## IAW checklist (requested definition)
 
@@ -14,7 +14,7 @@ Last validated: 2026-04-11 (UTC)
 - [x] **Shared packages are real packages**: `@blackout/protocol` and `@blackout/sdk` each have proper `package.json` metadata and workspace wiring.  
 - [x] **Deployment config committed**: infra topology is committed under `infra/` and server Dockerfiles are in-repo.  
 - [x] **CI validates health**: CI includes lint/type/test/build and deployment-readiness assertions.  
-- [~] **README canonical clarity**: the README contains both `blackout-client` and `blackout-web` canonical statements; this is survivable but should be harmonized to one canonical frontend statement.
+- [x] **README canonical clarity**: README deployment guidance now consistently points to `apps/blackout-client` as canonical frontend while keeping `apps/blackout-web` labeled as legacy quality surface.
 
 ## Canonical bootstrap
 
