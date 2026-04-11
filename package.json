@@ -12,6 +12,7 @@
   "scripts": {
     "web:dev": "pnpm --filter @blackout/blackout-web dev",
     "web:build": "pnpm --filter @blackout/client build",
+    "client:build": "pnpm --filter @blackout/client build",
     "web:test": "pnpm --filter @blackout/blackout-web test",
     "web:test:mobile": "pnpm --filter @blackout/blackout-web test:mobile",
     "desktop:dev": "pnpm --dir blackout-desktop dev",
