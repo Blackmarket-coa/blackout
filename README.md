@@ -448,3 +448,46 @@ Licensed under one of:
 3. Element Commercial License (paid, by agreement)
 
 See `LICENSE` and `LICENSE-GPL-3.0` for details.
+
+---
+
+## Deployment-ready workflow (canonical)
+
+Canonical deployable applications:
+
+- Frontend: `apps/blackout-client`
+- Backend: `apps/blackout-server` (runtime delegates to `@blackout/api`)
+
+Canonical shared runtime packages:
+
+- `packages/blackout-protocol`
+- `packages/blackout-sdk`
+
+### Reproducible local bootstrap
+
+```bash
+git clone <repo>
+cd blackout
+pnpm install
+cp apps/blackout-server/.env.example apps/blackout-server/.env
+cp apps/blackout-client/.env.example apps/blackout-client/.env
+pnpm build
+pnpm dev
+```
+
+### Deployment config locations
+
+- Infrastructure configs and docs: `infra/`
+- Existing production compose and container assets: `deploy/docker/`
+- Kubernetes manifests: `deploy/kubernetes/`
+
+### Health checks expected in CI
+
+At minimum CI should validate install, lint, build, and tests from the monorepo root:
+
+```bash
+pnpm install
+pnpm lint
+pnpm build
+pnpm test
+```
