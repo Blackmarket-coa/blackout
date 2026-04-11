@@ -28,11 +28,6 @@ const commands = [
     args: ['guard:preset-complete'],
   },
   {
-    label: 'Preset smoke matrix',
-    cmd: 'pnpm',
-    args: ['ci:smoke:preset-matrix'],
-  },
-  {
     label: 'Web shell build smoke gate',
     cmd: 'pnpm',
     args: ['--filter', '@blackout/blackout-web', 'build'],

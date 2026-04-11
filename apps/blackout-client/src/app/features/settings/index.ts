@@ -1,4 +1,5 @@
 export { SettingsPage } from './SettingsPage';
+export { Settings, SettingsPages } from './Settings';
 export { AppearanceSettings } from './AppearanceSettings';
 export { NotificationSettings } from './NotificationSettings';
 export { PrivacySettings } from './PrivacySettings';
