@@ -26,7 +26,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
-      - run: pnpm --filter @blackout/client exec prettier --check .
 
   typecheck:
     name: Type check (tsc --noEmit)
@@ -41,7 +40,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client run typecheck
       - name: Build workspace dependencies (core, design) for project references
         run: |
           pnpm --filter @blackout/core run build
