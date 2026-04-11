@@ -1,8 +1,8 @@
 {
-  "name": "@blackout/server",
+  "name": "@blackout/server-legacy-alias",
   "version": "0.0.1",
   "private": true,
-  "description": "Canonical server runtime alias package",
+  "description": "Legacy alias package (non-deploy); use apps/blackout-server package @blackout/server",
   "scripts": {
     "dev": "pnpm --filter @blackout/api run dev",
     "build": "pnpm --filter @blackout/api run build",

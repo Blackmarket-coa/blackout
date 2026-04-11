@@ -1,8 +1,8 @@
 {
-  "name": "@blackout/server-app",
+  "name": "@blackout/server",
   "version": "0.0.1",
   "private": true,
-  "description": "Deployment entrypoint package for the Blackout backend",
+  "description": "Canonical backend app entrypoint for Blackout",
   "scripts": {
     "dev": "pnpm --filter @blackout/api dev",
     "build": "pnpm --filter @blackout/api build",
