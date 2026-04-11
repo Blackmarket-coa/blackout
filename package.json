@@ -25,7 +25,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "dev": "node tools/dev/run-dev.mjs",
+    "dev": "turbo run dev --parallel",
     "clean": "turbo run clean",
     "smoke:aligned": "node tools/ci/run-smoke-aligned-checks.mjs",
     "ci:parity": "node tools/ci/run-centralized-parity.mjs",
@@ -76,8 +76,8 @@
     "guard:deployment-readiness": "node tools/ci/check-deployment-readiness.mjs"
   },
   "devDependencies": {
-    "turbo": "^2.4.0",
-    "typescript": "5.9.3",
+    "turbo": "^2.8.16",
+    "typescript": "^5.9.3",
     "tsx": "^4.20.6",
     "@electric-sql/pglite": "^0.3.9"
   }

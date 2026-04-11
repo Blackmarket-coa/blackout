@@ -67,3 +67,7 @@ storybook-static
 
 # Cloudflare tunnel credentials
 deploy/docker/production/.cloudflared/
+.next
+.env.*
+!.env.example
+.pnpm-store
