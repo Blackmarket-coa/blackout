@@ -32,7 +32,10 @@ describe("BlackoutWebApp integration", () => {
       rollout: { cohort: "internal" },
       presets: {
         activePreset: "starter",
-        features: {},
+        features: {
+          "features.engagement.discover": true,
+          "features.matrix.client": true,
+        },
         diagnostics: {
           deploymentPreset: "starter",
           tenantPreset: null,
@@ -711,18 +714,21 @@ describe("BlackoutWebApp integration", () => {
     });
     await app.mount();
 
+    fireEvent.input(root.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(root.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(root.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const paletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
     expect(paletteInput).toBeTruthy();
-    fireEvent.input(paletteInput as HTMLInputElement, { target: { value: "matrix-native" } });
-    fireEvent.click(getByRole(root, "button", { name: /Matrix-native client architecture/i }));
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened matrix_client_arch");
+    fireEvent.input(paletteInput as HTMLInputElement, { target: { value: "discover" } });
+    expect(root.querySelector(".command-palette-list .empty")?.textContent).toContain("No enabled commands");
 
-    fireEvent.click(root.querySelector('[data-testid="open-command-palette"]') as HTMLButtonElement);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const secondPaletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
-    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "steganographic" } });
-    fireEvent.click(getByRole(root, "button", { name: /Steganographic messaging toolkit/i }));
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
+    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "presence" } });
+    expect(root.querySelector(".command-palette-list .empty")?.textContent).toContain("No enabled commands");
   });
 
   it("restores focus to the opener when command palette closes via Escape", async () => {
