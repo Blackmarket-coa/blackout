@@ -30,9 +30,11 @@ server {
     }
     location /home {
         add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
     }
     location /sites {
         add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
     }
     # covers config.json and config.hostname.json requests as it is prefix.
     location /config {
