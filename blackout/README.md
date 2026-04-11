@@ -6,26 +6,123 @@ A cross-platform Matrix chat client built for the Black Market Coalition ecosyst
 
 ## Architecture
 
+### Monorepo layout (completed target)
+
+```text
+blackout/  (monorepo root)
+│
+├─ apps/
+│  ├─ blackout-client        # main frontend (Cinny-based)
+│  │   ├─ core shell
+│  │   ├─ feature registry
+│  │   ├─ routes/nav/settings
+│  │   └─ feature plugins
+│  │       ├─ chat
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       ├─ moderation
+│  │       └─ steganography
+│  │
+│  ├─ blackout-server        # backend
+│  │   ├─ auth
+│  │   ├─ db
+│  │   ├─ middleware
+│  │   └─ feature modules
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       └─ moderation
+│  │
+│  └─ blackout-gov           # optional separate surface
+│
+├─ packages/
+│  ├─ blackout-protocol      # shared event types + schemas
+│  ├─ blackout-sdk           # shared API/network helpers
+│  ├─ core                   # shared runtime logic
+│  ├─ contracts              # API contracts
+│  ├─ config                 # config/env helpers
+│  ├─ design                 # tokens/themes
+│  ├─ ui                     # shared UI
+│  └─ web                    # web-specific helpers
+│
+├─ blackout-desktop
+├─ blackout-mobile
+│
+├─ legacy/
+│  └─ element                # preserved Element-era code not in active path
+│
+├─ tools/
+├─ test/
+├─ pnpm-workspace.yaml
+├─ turbo.json
+└─ package.json
 ```
-blackout/
-├── apps/
-│   ├── mobile/          # Expo (React Native) → iOS + Android
-│   ├── web/             # Vite + React → browser (coming soon)
-│   └── desktop/         # Tauri wrapper → macOS, Windows, Linux (coming soon)
-├── packages/
-│   ├── core/            # Matrix SDK integration, hooks, governance events
-│   ├── config/          # Design tokens, shared tsconfig, brand identity
-│   ├── ui/              # Shared components (coming soon)
-│   └── crypto/          # E2EE wrapper (coming soon)
+
+### Runtime flow
+
+```text
+User
+  │
+  ▼
+blackout-client
+  │
+  ├─ loads feature plugins from registry
+  │
+  ├─ uses @blackout/sdk for actions
+  │
+  ▼
+@blackout/sdk
+  │
+  ├─ uses shared types from @blackout/protocol
+  │
+  ▼
+blackout-server
+  │
+  ├─ validates/contracts
+  ├─ runs feature module logic
+  ├─ stores data
+  └─ emits/handles feature events
 ```
 
-### How it works
+### Feature-domain flow (governance / forum / deaddrop / moderation / chat)
 
-- **packages/core** wraps `matrix-js-sdk` into React hooks (`useAuth`, `useRooms`, `useTimeline`, `useSendMessage`, `useDeepDive`). All Matrix protocol logic lives here.
-- **packages/config** holds the solarpunk dark theme tokens (colors, spacing, typography).
-- **apps/mobile** is the Expo app that imports from both packages. It connects to your `Blackout_server` (Synapse fork) via HTTPS.
+```text
+Feature Plugin in Client
+   │
+   ├─ UI components
+   ├─ routes
+   ├─ nav items
+   ├─ settings entries
+   └─ capability checks
+        │
+        ▼
+   @blackout/sdk
+        │
+        ▼
+   blackout-server module
+        │
+        ▼
+   shared event/contracts in @blackout/protocol
+```
 
-The server repo (`Blackout_server`) is separate. The mobile app only needs the homeserver URL.
+### Operating rules
+
+- `blackout-client` owns the user-facing experience.
+- `blackout-server` owns backend behavior.
+- `blackout-protocol` owns shared meaning.
+- `blackout-sdk` owns client/server wiring.
+- Legacy Element-era code stays isolated under `legacy/element`.
+
+### Mental model
+
+```text
+Cinny UI shell
+   + modular features
+   + shared sdk
+   + shared protocol
+   + modular backend
+```
 
 ## Prerequisites
 
