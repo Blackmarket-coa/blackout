@@ -306,9 +306,9 @@ After the reorganization:
 
 The system becomes much easier to extend, test, and maintain.
 
-## Repository Reality Check (April 10, 2026)
+## Repository Reality Check (April 11, 2026)
 
-The checklist above describes the intended target state. Running it against the current repository snapshot on **April 10, 2026** shows the following status.
+The checklist above describes the intended target state. Running it against the current repository snapshot on **April 11, 2026** shows the following status.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
@@ -365,3 +365,4 @@ pnpm run qa:monorepo
 - **2026-04-10:** Canonical workspace names aligned in docs and QA checks (`@blackout/client`, `@blackout/server`, `@blackout/protocol`, `@blackout/sdk`).
 - **2026-04-10:** Runtime command alignment documented around root shortcuts (`dev:client`, `dev:server`) and filter guards.
 - **2026-04-10:** QA write-up updated to reference executable guard commands (`guard:*`, `qa:monorepo`) instead of aspirational-only commands.
+- **2026-04-11:** Revalidated monorepo QA command bundle (`guard:workspace-packages`, `guard:dev-filters`, `guard:runtime-targets`, `qa:monorepo`) with passing results.
