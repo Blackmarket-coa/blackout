@@ -1,5 +1,5 @@
 import { useAtomValue } from 'jotai';
-import { authStateAtom, matrixClientAtom } from '../state/bmc-auth';
+import { authStateAtom, matrixClientAtom } from '../state/auth';
 
 /**
  * Returns authenticated Matrix client instance from Jotai state.
@@ -9,7 +9,7 @@ export const useMatrixClient = () => {
     const authState = useAtomValue(authStateAtom);
     const client = useAtomValue(matrixClientAtom);
 
-    if (authState !== 'logged_in' || !client) {
+    if (!client || authState === 'logged_out') {
         throw new Error('Matrix client unavailable: user is not logged in.');
     }
 
