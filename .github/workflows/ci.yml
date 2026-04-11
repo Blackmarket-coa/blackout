@@ -130,6 +130,16 @@ jobs:
           node-version: 22
       - run: node tools/ci/check-feature-registry.mjs
 
+  deployment-readiness:
+    name: Deployment readiness assertions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/ci/check-deployment-readiness.mjs
+
   build-verification:
     name: Build verification
     runs-on: ubuntu-latest
