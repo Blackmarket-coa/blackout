@@ -59,6 +59,118 @@ Implementation status should be tracked in:
 
 ---
 
+## Completed Blackout architecture (mental model)
+
+```text
+blackout/  (monorepo root)
+│
+├─ apps/
+│  ├─ blackout-client        # main frontend (Cinny-based)
+│  │   ├─ core shell
+│  │   ├─ feature registry
+│  │   ├─ routes/nav/settings
+│  │   └─ feature plugins
+│  │       ├─ chat
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       ├─ moderation
+│  │       └─ steganography
+│  │
+│  ├─ blackout-server        # backend
+│  │   ├─ auth
+│  │   ├─ db
+│  │   ├─ middleware
+│  │   └─ feature modules
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       └─ moderation
+│  │
+│  └─ blackout-gov           # optional separate surface
+│
+├─ packages/
+│  ├─ blackout-protocol      # shared event types + schemas
+│  ├─ blackout-sdk           # shared API/network helpers
+│  ├─ core                   # shared runtime logic
+│  ├─ contracts              # API contracts
+│  ├─ config                 # config/env helpers
+│  ├─ design                 # tokens/themes
+│  ├─ ui                     # shared UI
+│  └─ web                    # web-specific helpers
+│
+├─ blackout-desktop
+├─ blackout-mobile
+│
+├─ legacy/
+│  └─ element                # preserved Element-era code not in active path
+│
+├─ tools/
+├─ test/
+├─ pnpm-workspace.yaml
+├─ turbo.json
+└─ package.json
+```
+
+Runtime flow:
+
+```text
+User
+  │
+  ▼
+blackout-client
+  │
+  ├─ loads feature plugins from registry
+  │
+  ├─ uses @blackout/sdk for actions
+  │
+  ▼
+@blackout/sdk
+  │
+  ├─ uses shared types from @blackout/protocol
+  │
+  ▼
+blackout-server
+  │
+  ├─ validates/contracts
+  ├─ runs feature module logic
+  ├─ stores data
+  └─ emits/handles feature events
+```
+
+Feature-level flow:
+
+```text
+Feature Plugin in Client
+   │
+   ├─ UI components
+   ├─ routes
+   ├─ nav items
+   ├─ settings entries
+   └─ capability checks
+        │
+        ▼
+   @blackout/sdk
+        │
+        ▼
+   blackout-server module
+        │
+        ▼
+   shared event/contracts in @blackout/protocol
+```
+
+System ownership rules:
+
+- `blackout-client` owns the user-facing experience.
+- `blackout-server` owns backend behavior.
+- `blackout-protocol` owns shared meaning.
+- `blackout-sdk` owns client/server wiring.
+- Legacy Element code stays isolated under `legacy/element`.
+
+In shorthand: **Cinny UI shell + modular features + shared SDK + shared protocol + modular backend**.
+
+---
+
 ## Quick start
 
 ### Prerequisites
