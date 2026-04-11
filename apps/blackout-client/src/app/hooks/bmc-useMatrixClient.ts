@@ -1,17 +1,9 @@
-import { useAtomValue } from 'jotai';
-import { authStateAtom, matrixClientAtom } from '../state/auth';
+import { useMatrixClient as useCanonicalMatrixClient } from './useMatrixClient';
 
 /**
- * Returns authenticated Matrix client instance from Jotai state.
- * Throws when user is not logged in or client has not been initialized.
+ * BMC compatibility wrapper for Matrix client access.
+ *
+ * Uses the canonical MatrixClient context provided by ClientRoot
+ * instead of legacy auth atoms that are no longer hydrated.
  */
-export const useMatrixClient = () => {
-    const authState = useAtomValue(authStateAtom);
-    const client = useAtomValue(matrixClientAtom);
-
-    if (!client || authState === 'logged_out') {
-        throw new Error('Matrix client unavailable: user is not logged in.');
-    }
-
-    return client;
-};
+export const useMatrixClient = () => useCanonicalMatrixClient();
