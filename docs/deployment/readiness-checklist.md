@@ -2,18 +2,19 @@
 
 Last validated: 2026-04-11 (UTC)
 
-## Status
+## Verdict
 
-**Yes — this repository is deployment-ready for the documented canonical stack** (`apps/blackout-client` + `apps/blackout-server`), with reproducible bootstrap commands and committed infra scaffolding.
+**Yes — deployment-ready for the canonical stack (`apps/blackout-client` + `apps/blackout-server`)**, with README guidance now harmonized to the same canonical frontend statement.
 
-## Evidence
+## IAW checklist (requested definition)
 
-- Canonical frontend and backend entrypoints are explicit and versioned under `apps/`.
-- `.env.example` templates exist for both canonical deployable apps.
-- Root install/build/test commands are executable (`pnpm install`, `pnpm build`, `pnpm test`).
-- Shared protocol/sdk are real workspace packages with package metadata.
-- Infra config location is explicit under `infra/`.
-- CI now includes a deployment-readiness assertion check.
+- [x] **Clear app entrypoints**: canonical frontend and backend package scripts exist (`dev`, `build`, and backend `start`/`migrate` delegation).  
+- [x] **Environment variables explicit**: `.env.example` templates are committed for both canonical deployables.  
+- [x] **Reproducible root build path**: root scripts include `build`, `test`, and `dev`; workspace uses pinned pnpm + turbo scaffolding.  
+- [x] **Shared packages are real packages**: `@blackout/protocol` and `@blackout/sdk` each have proper `package.json` metadata and workspace wiring.  
+- [x] **Deployment config committed**: infra topology is committed under `infra/` and server Dockerfiles are in-repo.  
+- [x] **CI validates health**: CI includes lint/type/test/build and deployment-readiness assertions.  
+- [x] **README canonical clarity**: README deployment guidance now consistently points to `apps/blackout-client` as canonical frontend while keeping `apps/blackout-web` labeled as legacy quality surface.
 
 ## Canonical bootstrap
 
@@ -30,4 +31,5 @@ pnpm dev
 ## Notes
 
 - Legacy Element code remains isolated under `legacy/element` and is not part of canonical runtime startup.
-- Existing deployment assets in `deploy/` remain supported while `infra/` is the canonical organization target going forward.
+- Existing deployment assets in `deploy/` remain supported while `infra/` is the canonical organization target.
+- CI already enforces a minimal deployment-readiness file/script contract via `tools/ci/check-deployment-readiness.mjs`.
