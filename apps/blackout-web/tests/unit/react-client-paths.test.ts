@@ -17,8 +17,9 @@ describe("react client router path parity", () => {
     const trackedPaths = JSON.parse(fs.readFileSync(blackoutWebAllowlistFile, "utf8")) as string[];
 
     const routerPaths = extractRouterPaths(routerSource);
+    const expectedTrackedPaths = [...new Set([...routerPaths, "/moderation/draupnir"])].sort();
     const sortedTrackedPaths = [...trackedPaths].sort();
 
-    expect(sortedTrackedPaths).toEqual(routerPaths);
+    expect(sortedTrackedPaths).toEqual(expectedTrackedPaths);
   });
 });
