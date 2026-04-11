@@ -157,3 +157,27 @@ export const initMatrixFromStoredSession = async (
 export const stopMatrixClient = (client: MatrixClient | null): void => {
     client?.stopClient();
 };
+
+export const initClient = (session: StoredSession): Promise<MatrixClient> =>
+    initClientForSession(session);
+
+export const startClient = async (client: MatrixClient): Promise<void> => {
+    await startSyncWithRetry(client);
+};
+
+export const clearLoginData = (): void => {
+    window.localStorage.clear();
+};
+
+export const logoutClient = async (client: MatrixClient): Promise<void> => {
+    client.stopClient();
+    await client.clearStores();
+    clearLoginData();
+    window.location.reload();
+};
+
+export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {
+    client.stopClient();
+    await client.clearStores();
+    window.location.reload();
+};
