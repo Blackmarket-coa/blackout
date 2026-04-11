@@ -1,5 +1,5 @@
 import { useAtomValue } from 'jotai';
-import { authStateAtom, matrixClientAtom } from '../state/bmc-auth';
+import { authStateAtom, matrixClientAtom } from '../state/auth';
 
 /**
  * Returns authenticated Matrix client instance from Jotai state.
