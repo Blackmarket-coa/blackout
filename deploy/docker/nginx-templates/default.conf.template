@@ -42,6 +42,11 @@ server {
     location /modules {
         alias /modules;
     }
+
+    # SPA fallback so deep links like /home/ are served by index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
     # Health endpoints for Kubernetes/container probes.
 
     location = /health/live {
@@ -60,4 +65,3 @@ server {
     #
     error_page   500 502 503 504  /50x.html;
 }
-
