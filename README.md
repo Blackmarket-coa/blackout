@@ -491,3 +491,7 @@ pnpm lint
 pnpm build
 pnpm test
 ```
+
+Deployment readiness checklist and current status:
+
+- `docs/deployment/readiness-checklist.md`

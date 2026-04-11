@@ -2,7 +2,7 @@
   "name": "@blackout/root",
   "version": "0.0.0",
   "private": true,
-  "description": "Blackout monorepo – secure communication platform",
+  "description": "Blackout monorepo \u2013 secure communication platform",
   "license": "SEE LICENSE IN README.md",
   "type": "module",
   "packageManager": "pnpm@9.15.4",
@@ -72,7 +72,8 @@
     "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
     "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs",
     "guard:legacy-runtime-imports": "node tools/ci/check-legacy-runtime-imports.mjs",
-    "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs"
+    "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs",
+    "guard:deployment-readiness": "node tools/ci/check-deployment-readiness.mjs"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
