@@ -30,9 +30,11 @@ server {
     }
     location /home {
         add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
     }
     location /sites {
         add_header Cache-Control "no-cache";
+        try_files $uri $uri/ /index.html;
     }
     # covers config.json and config.hostname.json requests as it is prefix.
     location /config {
@@ -41,6 +43,11 @@ server {
     }
     location /modules {
         alias /modules;
+    }
+
+    # SPA fallback so deep links like /home/ are served by index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
     }
     # Health endpoints for Kubernetes/container probes.
 
@@ -60,4 +67,3 @@ server {
     #
     error_page   500 502 503 504  /50x.html;
 }
-
