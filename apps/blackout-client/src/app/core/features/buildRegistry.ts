@@ -1,19 +1,26 @@
 import type { FeatureFlags } from './featureFlags';
 import { coreFeatureModules } from './coreModules';
-import { collectFeatureModulesFromPlugins } from './pluginRuntime';
-import type { BlackoutFeature, FeatureModulePlugin } from './types';
+import type { BlackoutFeature, FeatureModule, FeatureModulePlugin } from './types';
+
+const dedupeFeatureModules = (modules: FeatureModule[]): FeatureModule[] => {
+    const seenFeatureIds = new Set<string>();
+
+    return modules.filter((module) => {
+        const { id } = module.feature;
+        if (seenFeatureIds.has(id)) return false;
+        seenFeatureIds.add(id);
+        return true;
+    });
+};
 
 export const buildFeatureRegistry = (
     flags: FeatureFlags,
-    pluginModules: FeatureModulePlugin[] = []
+    plugins: FeatureModulePlugin[] = []
 ): BlackoutFeature[] => {
-    const modules = [
+    const modules = dedupeFeatureModules([
         ...coreFeatureModules,
-        ...collectFeatureModulesFromPlugins(pluginModules).map((module) => ({
-            ...module,
-            source: module.source ?? 'plugin',
-        })),
-    ];
+        ...plugins.flatMap((plugin) => plugin.modules),
+    ]);
 
     return modules
         .filter((module) => (module.flag ? flags[module.flag] : true))
