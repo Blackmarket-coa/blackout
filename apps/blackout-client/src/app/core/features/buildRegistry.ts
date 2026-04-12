@@ -1,14 +1,28 @@
-import { deaddropFeature } from '../../features/deaddrop';
-import { forumFeature } from '../../features/forum';
-import { governanceFeature } from '../../features/governance';
-import { moderationFeature } from '../../features/moderation';
-import type { BlackoutFeature } from './types';
 import type { FeatureFlags } from './featureFlags';
+import { coreFeatureModules } from './coreModules';
+import type { BlackoutFeature, FeatureModule, FeatureModulePlugin } from './types';
 
-export const buildFeatureRegistry = (flags: FeatureFlags): BlackoutFeature[] =>
-    [
-        flags.governance ? governanceFeature : null,
-        flags.forum ? forumFeature : null,
-        flags.deaddrop ? deaddropFeature : null,
-        flags.moderation ? moderationFeature : null,
-    ].filter((feature): feature is BlackoutFeature => feature !== null);
+const dedupeFeatureModules = (modules: FeatureModule[]): FeatureModule[] => {
+    const seenFeatureIds = new Set<string>();
+
+    return modules.filter((module) => {
+        const { id } = module.feature;
+        if (seenFeatureIds.has(id)) return false;
+        seenFeatureIds.add(id);
+        return true;
+    });
+};
+
+export const buildFeatureRegistry = (
+    flags: FeatureFlags,
+    plugins: FeatureModulePlugin[] = []
+): BlackoutFeature[] => {
+    const modules = dedupeFeatureModules([
+        ...coreFeatureModules,
+        ...plugins.flatMap((plugin) => plugin.modules),
+    ]);
+
+    return modules
+        .filter((module) => (module.flag ? flags[module.flag] : true))
+        .map((module) => module.feature);
+};

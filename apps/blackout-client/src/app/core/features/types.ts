@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { FeatureFlags } from './featureFlags';
 
 export type FeatureRoute = {
     path: string;
@@ -24,4 +25,16 @@ export type BlackoutFeature = {
     settings?: FeatureSettingsItem[];
     capabilities?: string[];
     init?: () => void | Promise<void>;
+};
+
+export type FeatureFlagKey = keyof FeatureFlags;
+
+export type FeatureModule = {
+    feature: BlackoutFeature;
+    flag?: FeatureFlagKey;
+};
+
+export type FeatureModulePlugin = {
+    id: string;
+    modules: FeatureModule[];
 };
