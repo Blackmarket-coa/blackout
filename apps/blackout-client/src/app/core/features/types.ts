@@ -25,3 +25,22 @@ export type BlackoutFeature = {
     capabilities?: string[];
     init?: () => void | Promise<void>;
 };
+
+export type FeatureFlagKey =
+    | 'governance'
+    | 'forum'
+    | 'deaddrop'
+    | 'steganography'
+    | 'moderation'
+    | 'logistics';
+
+export type FeatureModule = {
+    feature: BlackoutFeature;
+    flag?: FeatureFlagKey;
+    source?: 'core' | 'plugin';
+};
+
+export type FeatureModulePlugin = {
+    id: string;
+    getFeatureModules: () => FeatureModule[];
+};

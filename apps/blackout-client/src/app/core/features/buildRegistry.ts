@@ -1,14 +1,21 @@
-import { deaddropFeature } from '../../features/deaddrop';
-import { forumFeature } from '../../features/forum';
-import { governanceFeature } from '../../features/governance';
-import { moderationFeature } from '../../features/moderation';
-import type { BlackoutFeature } from './types';
 import type { FeatureFlags } from './featureFlags';
+import { coreFeatureModules } from './coreModules';
+import { collectFeatureModulesFromPlugins } from './pluginRuntime';
+import type { BlackoutFeature, FeatureModulePlugin } from './types';
 
-export const buildFeatureRegistry = (flags: FeatureFlags): BlackoutFeature[] =>
-    [
-        flags.governance ? governanceFeature : null,
-        flags.forum ? forumFeature : null,
-        flags.deaddrop ? deaddropFeature : null,
-        flags.moderation ? moderationFeature : null,
-    ].filter((feature): feature is BlackoutFeature => feature !== null);
+export const buildFeatureRegistry = (
+    flags: FeatureFlags,
+    pluginModules: FeatureModulePlugin[] = []
+): BlackoutFeature[] => {
+    const modules = [
+        ...coreFeatureModules,
+        ...collectFeatureModulesFromPlugins(pluginModules).map((module) => ({
+            ...module,
+            source: module.source ?? 'plugin',
+        })),
+    ];
+
+    return modules
+        .filter((module) => (module.flag ? flags[module.flag] : true))
+        .map((module) => module.feature);
+};
