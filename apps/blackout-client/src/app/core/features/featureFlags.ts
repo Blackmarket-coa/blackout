@@ -5,6 +5,9 @@ export type FeatureFlags = {
     steganography: boolean;
     moderation: boolean;
     logistics: boolean;
+    legacyShellLayout: boolean;
+    legacyThemeOverrides: boolean;
+    legacyRoomSurfaceLayout: boolean;
 };
 
 export const defaultFeatureFlags: FeatureFlags = {
@@ -14,4 +17,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     steganography: false,
     moderation: false,
     logistics: false,
+    legacyShellLayout: false,
+    legacyThemeOverrides: false,
+    legacyRoomSurfaceLayout: false,
 };

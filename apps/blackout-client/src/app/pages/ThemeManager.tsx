@@ -1,49 +1,50 @@
 import React, { ReactNode, useEffect } from 'react';
 import { configClass, varsClass } from 'folds';
 import {
-  DarkTheme,
-  LightTheme,
-  ThemeContextProvider,
-  ThemeKind,
-  useActiveTheme,
-  useSystemThemeKind,
+    DarkTheme,
+    LightTheme,
+    ThemeContextProvider,
+    ThemeKind,
+    useActiveTheme,
+    useSystemThemeKind,
 } from '../hooks/useTheme';
 import { useSetting } from '../state/hooks/settings';
 import { settingsAtom } from '../state/settings';
+import { defaultFeatureFlags } from '../core/features/featureFlags';
 
 export function UnAuthRouteThemeManager() {
-  const systemThemeKind = useSystemThemeKind();
+    const systemThemeKind = useSystemThemeKind();
 
-  useEffect(() => {
-    document.body.className = '';
-    document.body.classList.add(configClass, varsClass);
-    if (systemThemeKind === ThemeKind.Dark) {
-      document.body.classList.add(...DarkTheme.classNames);
-    }
-    if (systemThemeKind === ThemeKind.Light) {
-      document.body.classList.add(...LightTheme.classNames);
-    }
-  }, [systemThemeKind]);
+    useEffect(() => {
+        document.body.className = '';
+        document.body.classList.add(configClass, varsClass);
+        if (systemThemeKind === ThemeKind.Dark) {
+            document.body.classList.add(...DarkTheme.classNames);
+        }
+        if (systemThemeKind === ThemeKind.Light) {
+            document.body.classList.add(...LightTheme.classNames);
+        }
+    }, [systemThemeKind]);
 
-  return null;
+    return null;
 }
 
 export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
-  const activeTheme = useActiveTheme();
-  const [monochromeMode] = useSetting(settingsAtom, 'monochromeMode');
+    const activeTheme = useActiveTheme();
+    const [monochromeMode] = useSetting(settingsAtom, 'monochromeMode');
 
-  useEffect(() => {
-    document.body.className = '';
-    document.body.classList.add(configClass, varsClass);
+    useEffect(() => {
+        document.body.className = '';
+        document.body.classList.add(configClass, varsClass);
 
-    document.body.classList.add(...activeTheme.classNames);
+        document.body.classList.add(...activeTheme.classNames);
 
-    if (monochromeMode) {
-      document.body.style.filter = 'grayscale(1)';
-    } else {
-      document.body.style.filter = '';
-    }
-  }, [activeTheme, monochromeMode]);
+        if (defaultFeatureFlags.legacyThemeOverrides && monochromeMode) {
+            document.body.style.filter = 'grayscale(1)';
+        } else {
+            document.body.style.filter = '';
+        }
+    }, [activeTheme, monochromeMode]);
 
-  return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;
+    return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;
 }
