@@ -175,6 +175,7 @@ Stabilize `apps/blackout-client` by restoring a clean Cinny shell/layout baselin
 
 - `apps/blackout-client/docs/plugin-extension-points.md` (**new**)
 - `apps/blackout-client/docs/cinny-baseline-reset-migration-plan.md` (this plan)
+- `apps/blackout-client/docs/stoat-inspired-ux-plan.md` (**new**, Stoat-inspired UX without Stoat runtime deps)
 
 **Action:** document only approved shell slots and their contracts.
 
