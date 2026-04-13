@@ -10,6 +10,15 @@ export SERVER_NAME="theblackout.app"
 export SHARED_SECRET="<synapse registration_shared_secret>"
 export ADMIN_USER="<existing-admin-username>"
 export ADMIN_PASS="<existing-admin-password>"
+export RECOVERY_EMAIL="noreply@theblackout.app"
+```
+
+If you do **not** want shared-secret user creation during verification, leave `SHARED_SECRET` unset and provide an existing test account:
+
+```bash
+unset SHARED_SECRET
+export TEST_USER="<existing-test-username>"
+export TEST_PASS="<existing-test-password>"
 ```
 
 ## 1) Run the automated verifier

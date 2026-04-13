@@ -16,12 +16,13 @@ SERVER_NAME="${SERVER_NAME:-theblackout.app}"
 SHARED_SECRET="${SHARED_SECRET:-}"
 ADMIN_USER="${ADMIN_USER:-}"
 ADMIN_PASS="${ADMIN_PASS:-}"
-TEST_USER="${TEST_USER:-launchbot}"
-TEST_PASS="${TEST_PASS:-Launchbot-$(date +%s)-A9!}"
-TEST_USER2="${TEST_USER2:-launchpeer}"
-TEST_PASS2="${TEST_PASS2:-Launchpeer-$(date +%s)-B7!}"
+TEST_USER="${TEST_USER:-}"
+TEST_PASS="${TEST_PASS:-}"
+TEST_USER2="${TEST_USER2:-}"
+TEST_PASS2="${TEST_PASS2:-}"
 MAX_UPLOAD_BYTES="${MAX_UPLOAD_BYTES:-104857600}" # 100 MiB
 ENABLE_FEDERATION_TEST="${ENABLE_FEDERATION_TEST:-false}"
+RECOVERY_EMAIL="${RECOVERY_EMAIL:-noreply@theblackout.app}"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -81,6 +82,19 @@ login() {
     -d "$(jq -n --arg user "$user" --arg pass "$pass" \
       '{type:"m.login.password", identifier:{type:"m.id.user", user:$user}, password:$pass}')"
 }
+
+step "0) Preflight"
+if [[ -n "$SHARED_SECRET" ]]; then
+  : "${TEST_USER:=launchbot}"
+  : "${TEST_PASS:=Launchbot-$(date +%s)-A9!}"
+  : "${TEST_USER2:=launchpeer}"
+  : "${TEST_PASS2:=Launchpeer-$(date +%s)-B7!}"
+  ok "shared-secret mode enabled; ephemeral test users will be created"
+else
+  [[ -n "$TEST_USER" && -n "$TEST_PASS" ]] || \
+    fail "set SHARED_SECRET or provide TEST_USER and TEST_PASS for an existing account"
+  ok "credential mode enabled; using existing test account credentials"
+fi
 
 step "1) Registration/login behavior"
 if [[ -n "$ADMIN_USER" && -n "$ADMIN_PASS" ]]; then
@@ -182,7 +196,8 @@ fi
 
 step "6) Account recovery flow endpoint posture"
 recovery_req="$(post_json "$BASE_URL/_matrix/client/v3/account/password/email/requestToken" \
-  -d '{"client_secret":"launch-check","email":"noreply@theblackout.app","send_attempt":1}')"
+  -d "$(jq -n --arg email "$RECOVERY_EMAIL" \
+    '{client_secret:"launch-check",email:$email,send_attempt:1}')")"
 if echo "$recovery_req" | jq -e '.sid or .errcode' >/dev/null; then
   ok "account recovery endpoint is reachable (response captured)"
 else
