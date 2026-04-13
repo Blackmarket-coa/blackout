@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew Let's Encrypt certificates for Blackout stack
+After=blackout-stack.service
+Requires=blackout-stack.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/blackout
+EnvironmentFile=/opt/blackout/.env
+ExecStart=/usr/bin/docker compose run --rm certbot renew --webroot -w /var/www/certbot --quiet
+ExecStartPost=/usr/bin/docker compose exec -T reverse-proxy nginx -s reload

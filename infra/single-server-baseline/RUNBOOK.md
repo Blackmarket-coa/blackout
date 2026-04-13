@@ -65,13 +65,13 @@ chmod 600 synapse/homeserver.yaml coturn/turnserver.conf
 
 ## 3) Initial TLS bootstrap
 
-Start only reverse-proxy and certbot webroot:
+Start reverse-proxy first for ACME challenge responses:
 
 ```bash
-docker compose up -d reverse-proxy certbot
+docker compose up -d reverse-proxy
 ```
 
-Issue certificate once:
+Issue certificate once (manual certbot profile):
 
 ```bash
 docker compose run --rm certbot certonly --webroot \
@@ -100,7 +100,7 @@ Compose startup order (health-gated):
 3. `frontend`
 4. `reverse-proxy`
 5. `coturn`
-6. `certbot` renewal loop
+6. scheduled certbot renewal timer
 
 Validate health:
 
@@ -119,9 +119,12 @@ Install units:
 sudo cp systemd/blackout-stack.service /etc/systemd/system/
 sudo cp systemd/blackout-backup.service /etc/systemd/system/
 sudo cp systemd/blackout-backup.timer /etc/systemd/system/
+sudo cp systemd/blackout-certbot-renew.service /etc/systemd/system/
+sudo cp systemd/blackout-certbot-renew.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now blackout-stack.service
 sudo systemctl enable --now blackout-backup.timer
+sudo systemctl enable --now blackout-certbot-renew.timer
 ```
 
 ## 6) Backup hooks and schedule
@@ -199,7 +202,7 @@ docker compose up -d
 ```bash
 docker compose ps
 ```
-Expected: all services `Up` and `healthy` (except certbot may show long-running loop).
+Expected: core services `Up` and healthy; `certbot` is a manual profile service used by systemd renewal jobs.
 
 ```bash
 docker compose logs --tail=100 synapse api reverse-proxy
