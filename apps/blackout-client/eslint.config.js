@@ -8,6 +8,16 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
 
+
+const noDirectBmcImportsRule = [
+    'error',
+    {
+        selector: "ImportDeclaration[source.value=/bmc-/], ExportNamedDeclaration[source.value=/bmc-/], ExportAllDeclaration[source.value=/bmc-/]",
+        message:
+            'Direct bmc-* imports are blocked in shell/runtime entrypoints. Route customizations through feature plugins.',
+    },
+];
+
 const noDirectFetchRule = [
     'error',
     {
@@ -46,6 +56,19 @@ export default [
             '@typescript-eslint/no-non-null-assertion': 'off',
             'react-refresh/only-export-components': 'off',
             'react-hooks/exhaustive-deps': 'off',
+        },
+    },
+
+    {
+        files: [
+            'src/main.tsx',
+            'src/index.tsx',
+            'src/app/core/features/registry.ts',
+            'src/app/core/features/plugins.ts',
+            'src/app/core/features/composition.ts',
+        ],
+        rules: {
+            'no-restricted-syntax': noDirectBmcImportsRule,
         },
     },
     {

@@ -33,6 +33,7 @@ const VALID_UI_ENTRY_PREFIXES = new Set([
 ]);
 const VALID_EVIDENCE_TYPES = new Set(['code', 'docs', 'runtime', 'external-infra']);
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const STRING_LITERAL_RE = /'([^']+)'/g;
 
 function hasVerifiableInfraEvidence(paths) {
   return paths.some((pathEntry) =>
@@ -81,6 +82,76 @@ function toCanonicalRegistry(registry) {
     features: registry.features,
     scopes: registry.scopes,
   };
+}
+
+function readIfExists(filePath) {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
+}
+
+function parseRegisteredFeatureIds(source) {
+  const match = source.match(/registeredFeatureModuleIds\s*=\s*\[([\s\S]*?)\]/m);
+  if (!match) return null;
+
+  const ids = [];
+  for (const literal of match[1].matchAll(STRING_LITERAL_RE)) {
+    ids.push(literal[1]);
+  }
+
+  return ids;
+}
+
+function parseFlagIdsFromCoreModules(source) {
+  const ids = [];
+  const flagRe = /flag\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(flagRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function parseFeatureIdsFromPlugins(source) {
+  const ids = [];
+  const moduleIdRe = /feature\s*:\s*\{[\s\S]*?id\s*:\s*'([^']+)'[\s\S]*?\}/g;
+  for (const match of source.matchAll(moduleIdRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function validateClientFeatureRegistration(errors) {
+  const registryTs = path.resolve(process.cwd(), getArg('--registry-ts') ?? 'apps/blackout-client/src/app/core/features/registry.ts');
+  const coreModulesTs = path.resolve(process.cwd(), getArg('--core-modules-ts') ?? 'apps/blackout-client/src/app/core/features/coreModules.ts');
+  const pluginsTs = path.resolve(process.cwd(), getArg('--plugins-ts') ?? 'apps/blackout-client/src/app/core/features/plugins.ts');
+
+  const registrySource = readIfExists(registryTs);
+  const coreSource = readIfExists(coreModulesTs);
+  const pluginsSource = readIfExists(pluginsTs);
+
+  if (!registrySource || !coreSource || !pluginsSource) {
+    return;
+  }
+
+  const registeredFeatureIds = parseRegisteredFeatureIds(registrySource);
+  if (!registeredFeatureIds || registeredFeatureIds.length === 0) {
+    errors.push(`Client feature registry missing registeredFeatureModuleIds allowlist in ${path.relative(process.cwd(), registryTs)}.`);
+    return;
+  }
+
+  const registeredSet = new Set(registeredFeatureIds);
+
+  const coreFlagIds = parseFlagIdsFromCoreModules(coreSource);
+  for (const flagId of coreFlagIds) {
+    if (!registeredSet.has(flagId)) {
+      errors.push(`Core feature module flag "${flagId}" is not in registeredFeatureModuleIds.`);
+    }
+  }
+
+  const pluginFeatureIds = parseFeatureIdsFromPlugins(pluginsSource);
+  for (const featureId of pluginFeatureIds) {
+    if (!registeredSet.has(featureId)) {
+      errors.push(`Plugin injects unregistered feature id "${featureId}" in ${path.relative(process.cwd(), pluginsTs)}.`);
+    }
+  }
 }
 
 const registryPath = path.resolve(process.cwd(), getArg('--file') ?? 'docs/features/feature_registry.json');
@@ -260,33 +331,39 @@ for (const [scopeIndex, scope] of scopes.entries()) {
         continue;
       }
 
+      if (sectionUniqueIds.has(featureId)) {
+        errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": duplicate feature id "${featureId}".`);
+      }
       sectionUniqueIds.add(featureId);
       scopeUniqueIds.add(featureId);
 
-      const featureName = String(featureById.get(featureId).name ?? '').trim().toLowerCase();
-      if (featureName.length > 0) {
-        const existingFeatureId = scopeNames.get(featureName);
-        if (existingFeatureId && existingFeatureId !== featureId) {
-          errors.push(`Scope "${scopeLabel}": duplicate feature name "${featureById.get(featureId).name}" in scope.`);
+      const featureName = featureById.get(featureId)?.name;
+      if (typeof featureName === 'string') {
+        const existingForName = scopeNames.get(featureName.toLowerCase());
+        if (existingForName && existingForName !== featureId) {
+          errors.push(`Scope "${scopeLabel}": duplicate feature name "${featureName}" across feature ids "${existingForName}" and "${featureId}".`);
+        } else {
+          scopeNames.set(featureName.toLowerCase(), featureId);
         }
-        scopeNames.set(featureName, featureId);
       }
     }
 
-    if (typeof section.total === 'number' && section.total !== sectionUniqueIds.size) {
-      errors.push(
-        `Scope "${scopeLabel}" section "${sectionLabel}": total=${section.total} does not match unique featureIds=${sectionUniqueIds.size}.`,
-      );
+    if ('total' in section && section.total !== sectionUniqueIds.size) {
+      errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": total=${section.total} does not match unique featureIds=${sectionUniqueIds.size}.`);
     }
   }
 
-  if (typeof scope.globalTotal === 'number' && scope.globalTotal !== scopeUniqueIds.size) {
-    errors.push(`Scope "${scopeLabel}": globalTotal=${scope.globalTotal} does not match unique scoped features=${scopeUniqueIds.size}.`);
+  if ('globalTotal' in scope && scope.globalTotal !== scopeUniqueIds.size) {
+    errors.push(`Scope "${scopeLabel}": globalTotal=${scope.globalTotal} does not match unique featureIds=${scopeUniqueIds.size}.`);
   }
 }
 
+validateClientFeatureRegistration(errors);
+
 if (errors.length > 0) {
-  fail(`Feature registry validation failed:\n- ${errors.join('\n- ')}`);
+  process.stderr.write(`Feature registry validation failed (${errors.length} issue${errors.length === 1 ? '' : 's'}):\n`);
+  errors.forEach((error) => process.stderr.write(`- ${error}\n`));
+  process.exit(1);
 }
 
-process.stdout.write(`Feature registry validation passed (${features.length} rows across ${scopes.length} scope(s)).\n`);
+process.stdout.write(`Feature registry validation passed: ${features.length} features across ${scopes.length} scope(s).\n`);
