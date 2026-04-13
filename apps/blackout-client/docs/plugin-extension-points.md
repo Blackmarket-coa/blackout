@@ -1,46 +1,129 @@
-# Plugin Extension Points (PR-6 hardened)
+# Plugin Extension Points
 
-This document defines the **only approved customization boundaries** for `apps/blackout-client`.
+This document defines the **approved plugin extension model** for `apps/blackout-client` during the Cinny-baseline reset and modular reintroduction program.
 
-## Core allowlist boundaries
+## Scope and intent
 
-1. `src/app/core/features/manifest.ts`
-    - `featureModuleManifest` is the allowlist for feature module IDs.
-    - `runtimePluginManifest` is the allowlist for runtime plugin IDs.
-2. `src/app/core/features/registry.ts`
-    - Core + plugin modules are validated against `featureModuleManifest` before registry build.
-3. `src/app/plugins/manifest.ts`
-    - Runtime plugin declarations are validated against `runtimePluginManifest`.
+- Preserve Matrix client-server compatibility and federation-safe semantics.
+- Keep shell extension points minimal, explicit, and CI-enforced.
+- Require all customizations to map to named feature modules or runtime plugins.
+- Keep rollback additive and reversible via feature flags and manifest edits.
 
-Unknown IDs are rejected in CI and at runtime bootstrap.
+---
 
-## Minimal shell extension points
+## Approved extension slots
 
-Shell/runtime extension points remain intentionally small:
+Only the following slots are approved for customization:
 
--   `bootstrapFeatures(manifest)` (feature registry composition only)
--   Runtime plugin declarations in `src/app/plugins/manifest.ts`
--   Plugin lifecycle contract in `src/app/plugins/contracts.ts` (`register`/`unregister` only)
--   Typed plugin slot API for UI injection:
-    -   `src/app/plugins/right-panel/panelSlots.tsx`
--   Shell/theme runtime adapters:
-    -   `src/app/plugins/shell/shellLayoutPlugin.tsx`
-    -   `src/app/plugins/theme/legacyThemePlugin.ts`
--   Read-only Matrix adapter boundary:
-    -   `src/app/plugins/matrix-adapters/readOnlyMatrixAdapters.ts`
+1. **Feature module allowlist slot**
+   - File: `src/app/core/features/manifest.ts`
+   - Contract: `featureModuleManifest` is the single source of truth for allowed feature IDs.
+   - Enforcement: CI + registry assertion reject unknown IDs.
 
-No direct shell/runtime import path may consume legacy `bmc-*` bridge modules.
+2. **Runtime plugin allowlist slot**
+   - File: `src/app/core/features/manifest.ts`
+   - Contract: `runtimePluginManifest` is the single source of truth for allowed runtime plugin IDs.
+   - Enforcement: CI + runtime declaration checks reject unknown IDs.
 
-## Plugin-only customization policy mapping
+3. **Feature registry composition slot**
+   - File: `src/app/core/features/registry.ts`
+   - Contract: `bootstrapFeatures()` composes core + plugin modules only after manifest validation.
+   - Restriction: no direct legacy `bmc-*` imports in shell/runtime entrypoints.
 
--   Feature ID registration: `tools/ci/check-feature-registry.mjs`
--   Legacy runtime import gate: `tools/ci/check-legacy-runtime-imports.mjs`
--   Frontend consolidation + documentation gates: `tools/ci/check-frontend-consolidation-gates.mjs`
+4. **Runtime plugin declaration slot**
+   - File: `src/app/plugins/manifest.ts`
+   - Contract: plugin declarations must map 1:1 to allowlisted runtime plugin IDs.
+   - Restriction: declaration-only boundary; no ad hoc side-loading.
 
-## Matrix compatibility guardrail
+5. **UI slot injection boundary**
+   - Files: `src/app/plugins/right-panel/panelSlots.tsx` and plugin-specific slot adapters.
+   - Contract: typed slot APIs only; no untyped mutation of shell layout trees.
 
-All plugin customizations are presentation/adaptation-only:
+6. **Theme runtime adapter boundary**
+   - Files: `src/app/plugins/theme/*` and `src/app/plugins/shell/*`.
+   - Contract: presentation-layer transforms only; no Matrix SDK contract rewrites.
 
--   preserve canonical Matrix event payload semantics,
--   avoid federated protocol mutations,
--   use adapters/slot transforms instead of SDK contract rewrites.
+7. **Matrix adapter read-only boundary**
+   - Files: `src/app/plugins/matrix-adapters/*`.
+   - Contract: adapt read/derived state for UI; keep canonical Matrix payload semantics unchanged.
+
+---
+
+## Plugin lifecycle and contracts
+
+### Lifecycle phases
+
+1. **Discover**
+   - Runtime declarations loaded from plugin manifest.
+2. **Validate**
+   - IDs must exist in `runtimePluginManifest`.
+3. **Register**
+   - Plugin `register()` attaches typed handlers/slots.
+4. **Activate**
+   - Feature flag gate enables behavior at runtime.
+5. **Deactivate**
+   - Kill-switch or flag toggle disables plugin behavior without removing code.
+6. **Unregister**
+   - Plugin `unregister()` detaches handlers/slots and cleans up subscriptions.
+
+### Contract requirements
+
+- Plugins must expose explicit lifecycle hooks (`register` / `unregister`).
+- Plugins must be idempotent on repeated registration attempts.
+- Plugins must not mutate Matrix event payloads or protocol contracts.
+- Plugins must fail closed (disabled) when validation or flag checks fail.
+- Plugins must keep side effects bounded to declared slot or adapter boundaries.
+
+---
+
+## Feature flags and kill-switch protocol
+
+### Flag model
+
+- Every reintroduced customization plugin gets a dedicated feature flag.
+- Flags are additive; baseline behavior remains default-safe.
+- Flags are evaluated before plugin activation and at runtime re-evaluation points.
+
+### Kill-switch protocol
+
+1. **Trigger condition**
+   - Regression in timeline/composer/nav behavior, notification drift, or protocol safety concern.
+2. **Immediate action**
+   - Toggle the plugin’s feature flag to `off` in runtime config.
+3. **Verification**
+   - Confirm fallback to Cinny-baseline flow and no shell bootstrap failures.
+4. **Containment**
+   - Keep plugin declarations intact but inactive for quick re-enable after patch.
+5. **Post-incident**
+   - Record incident, owner, affected plugin ID, and rollback timestamp.
+
+---
+
+## Rollback procedure and ownership map
+
+### Standard rollback procedure
+
+1. Disable affected plugin feature flag(s).
+2. Confirm baseline UX parity for login, room list, timeline, and composer.
+3. If needed, remove plugin declaration from `src/app/plugins/manifest.ts`.
+4. If needed, remove runtime plugin ID from `runtimePluginManifest`.
+5. Run CI boundary checks before merge/deploy.
+
+### Ownership map
+
+| Boundary | Primary owner | Backup owner | Responsibility |
+| --- | --- | --- | --- |
+| Feature + plugin allowlists (`core/features/manifest.ts`) | Client Platform | Release Engineering | Allowlist governance and ID review |
+| Feature registry (`core/features/registry.ts`) | Client Platform | Frontend Architecture | Safe composition and bootstrap invariants |
+| Plugin declarations (`plugins/manifest.ts`) | Plugin Maintainers | Client Platform | Declared plugin set and load order |
+| Theme + shell plugin boundaries (`plugins/theme`, `plugins/shell`) | Design Systems | Client Platform | Theme runtime safety and baseline fallback |
+| Matrix adapters (`plugins/matrix-adapters`) | Matrix Integration | Client Platform | Adapter-only transforms, protocol safety |
+| CI policy gates (`tools/ci/*`) | Release Engineering | Client Platform | Enforcement and fail-fast quality gates |
+
+---
+
+## File-level before/after rationale and risk notes (this document)
+
+- **Before:** Extension points were documented but not fully explicit about lifecycle, kill-switch protocol, and ownership assignment.
+- **After:** Added approved slot inventory, lifecycle contracts, kill-switch flow, rollback runbook, and ownership map aligned to plugin-only customization policy.
+- **Risk notes:** Documentation drift risk remains if manifests/contracts evolve without doc updates; mitigate with CI doc-anchor checks and PR checklist enforcement.
