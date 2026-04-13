@@ -7,6 +7,20 @@ import {
 } from '../../../../src/app/core/features/composition';
 import type { FeatureFlags } from '../../../../src/app/core/features/featureFlags';
 
+const capabilityContext = (flags: FeatureFlags) => ({
+    capabilities: [
+        'governance.read',
+        'forum.read',
+        'deaddrop.read',
+        'moderation.read',
+        'governance.write',
+        'forum.write',
+        'deaddrop.write',
+        'moderation.write',
+    ],
+    flags,
+});
+
 describe('feature registry composition surfaces', () => {
     it('builds deterministic route/nav/settings snapshots for default preset', () => {
         const flags: FeatureFlags = {
@@ -19,6 +33,7 @@ describe('feature registry composition surfaces', () => {
         };
 
         const registry = buildFeatureRegistry(flags);
+        const context = capabilityContext(flags);
 
         expect(registry.map((feature) => feature.id)).toMatchInlineSnapshot(`
           [
@@ -27,7 +42,8 @@ describe('feature registry composition surfaces', () => {
             "deaddrop",
           ]
         `);
-        expect(composeFeatureRoutes(registry).map((route) => route.path)).toMatchInlineSnapshot(`
+        expect(composeFeatureRoutes(registry, context).map((route) => route.path))
+            .toMatchInlineSnapshot(`
           [
             "/governance",
             "/governance/new",
@@ -35,14 +51,16 @@ describe('feature registry composition surfaces', () => {
             "/deaddrop",
           ]
         `);
-        expect(composeFeatureNavItems(registry).map((item) => item.to)).toMatchInlineSnapshot(`
+        expect(composeFeatureNavItems(registry, context).map((item) => item.to))
+            .toMatchInlineSnapshot(`
           [
             "/governance",
             "/forum",
             "/deaddrop",
           ]
         `);
-        expect(composeFeatureSettings(registry).map((item) => item.section)).toMatchInlineSnapshot(`
+        expect(composeFeatureSettings(registry, context).map((item) => item.section))
+            .toMatchInlineSnapshot(`
           [
             "Dead Drop",
           ]
@@ -60,6 +78,7 @@ describe('feature registry composition surfaces', () => {
         };
 
         const registry = buildFeatureRegistry(flags);
+        const context = capabilityContext(flags);
 
         expect(registry.map((feature) => feature.id)).toMatchInlineSnapshot(`
           [
@@ -67,19 +86,22 @@ describe('feature registry composition surfaces', () => {
             "moderation",
           ]
         `);
-        expect(composeFeatureRoutes(registry).map((route) => route.path)).toMatchInlineSnapshot(`
+        expect(composeFeatureRoutes(registry, context).map((route) => route.path))
+            .toMatchInlineSnapshot(`
           [
             "/deaddrop",
             "/moderation/draupnir",
           ]
         `);
-        expect(composeFeatureNavItems(registry).map((item) => item.to)).toMatchInlineSnapshot(`
+        expect(composeFeatureNavItems(registry, context).map((item) => item.to))
+            .toMatchInlineSnapshot(`
           [
             "/deaddrop",
             "/moderation/draupnir",
           ]
         `);
-        expect(composeFeatureSettings(registry).map((item) => item.section)).toMatchInlineSnapshot(`
+        expect(composeFeatureSettings(registry, context).map((item) => item.section))
+            .toMatchInlineSnapshot(`
           [
             "Dead Drop",
           ]

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFeatureRegistry } from '../../../../src/app/core/features/buildRegistry';
+import { resolveFeatureCustomizations } from '../../../../src/app/core/features/capabilityGate';
 import type { FeatureFlags } from '../../../../src/app/core/features/featureFlags';
 
 const allEnabled: FeatureFlags = {
@@ -28,21 +29,36 @@ describe('feature metadata contract governance', () => {
             expect(ids.has(feature.id)).toBe(false);
             ids.add(feature.id);
 
-            for (const route of feature.routes ?? []) {
-                expect(route.path.startsWith('/')).toBe(true);
-                expect(route.component).toBeTypeOf('function');
-                expect(routePaths.has(route.path)).toBe(false);
-                routePaths.add(route.path);
-            }
+            const customizations = resolveFeatureCustomizations(feature, {
+                capabilities: feature.capabilities,
+                flags: allEnabled,
+            });
 
-            for (const item of feature.navItems ?? []) {
-                expect(item.to.startsWith('/')).toBe(true);
-                expect(item.label.length).toBeGreaterThan(0);
-            }
+            expect(customizations.length).toBeGreaterThan(0);
 
-            for (const section of feature.settings ?? []) {
-                expect(section.section.length).toBeGreaterThan(0);
-                expect(section.component).toBeTypeOf('function');
+            for (const customization of customizations) {
+                expect(customization.id).toMatch(/^[a-z0-9-]+$/);
+                expect(customization.name.length).toBeGreaterThan(0);
+                expect(customization.category).toMatch(
+                    /^(visual\/layout plugin|interaction plugin|workflow plugin|service-backed plugin)$/
+                );
+
+                for (const route of customization.routes ?? []) {
+                    expect(route.path.startsWith('/')).toBe(true);
+                    expect(route.component).toBeTypeOf('function');
+                    expect(routePaths.has(route.path)).toBe(false);
+                    routePaths.add(route.path);
+                }
+
+                for (const item of customization.navItems ?? []) {
+                    expect(item.to.startsWith('/')).toBe(true);
+                    expect(item.label.length).toBeGreaterThan(0);
+                }
+
+                for (const section of customization.settings ?? []) {
+                    expect(section.section.length).toBeGreaterThan(0);
+                    expect(section.component).toBeTypeOf('function');
+                }
             }
         }
     });

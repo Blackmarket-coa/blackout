@@ -5,7 +5,18 @@ import { moderationRoutes } from './routes';
 export const moderationFeature: BlackoutFeature = {
     id: 'moderation',
     name: 'Moderation',
-    routes: moderationRoutes,
-    navItems: moderationNavItems,
+    customizations: [
+        {
+            id: 'draupnir-console',
+            name: 'Draupnir Console',
+            category: 'service-backed plugin',
+            capabilityGate: {
+                allOf: ['moderation.read'],
+                flags: ['moderation'],
+            },
+            routes: moderationRoutes,
+            navItems: moderationNavItems,
+        },
+    ],
     capabilities: ['moderation.read', 'moderation.write'],
 };
