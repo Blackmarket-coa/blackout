@@ -43,6 +43,9 @@ trusted_key_servers:
   - server_name: "matrix.org"
 
 # TURN (coturn static-auth-secret)
+# Keep this in lock-step with coturn:
+# - turn_shared_secret must match TURN_STATIC_AUTH_SECRET used by coturn static-auth-secret
+# - turn_uris host/ports must match coturn listeners and exposed firewall rules
 turn_uris:
   - "turn:turn.theblackout.app:3478?transport=udp"
   - "turn:turn.theblackout.app:3478?transport=tcp"
