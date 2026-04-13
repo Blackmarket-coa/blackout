@@ -71,3 +71,4 @@ deploy/docker/production/.cloudflared/
 .env.*
 !.env.example
 .pnpm-store
+apps/blackout-client/docs/release/staging-signoff.report.json

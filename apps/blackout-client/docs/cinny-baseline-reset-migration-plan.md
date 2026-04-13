@@ -239,6 +239,24 @@ Release candidate is eligible only if:
 5. Product signoff reports no Sev-1/Sev-2 spacing/location/function regressions.
 6. Elements inventory and quick-actions inventory are 100% mapped to manifest-backed modules.
 
+Execution entrypoint:
+- `pnpm guard:blackout-client-release-gate`
+- Optional override for staged evidence file: `--staging-signoff <path>`
+
+Staging signoff contract:
+- Default source: `apps/blackout-client/docs/release/staging-signoff.report.json`
+- Template source: `apps/blackout-client/docs/release/staging-signoff.template.json`
+- Required assertions:
+  - `buildSha` must be non-placeholder release SHA
+  - `executedAtUtc` must be valid ISO-8601 UTC
+  - `signoff.decision === "GO"`
+  - `summary.sev1 === 0`
+  - `summary.sev2 === 0`
+  - `regressions.spacing === false`
+  - `regressions.location === false`
+  - `regressions.functionality === false`
+  - `evidence.artifacts.length > 0`
+
 ---
 
 ## Notes for implementation sequencing
