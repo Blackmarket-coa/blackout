@@ -1,0 +1,24 @@
+{
+  "buildSha": "REPLACE_WITH_RELEASE_SHA",
+  "environment": "staging",
+  "executedAtUtc": "1970-01-01T00:00:00.000Z",
+  "summary": {
+    "sev1": 0,
+    "sev2": 0,
+    "sev3": 0,
+    "sev4": 0
+  },
+  "regressions": {
+    "spacing": false,
+    "location": false,
+    "functionality": false
+  },
+  "evidence": {
+    "report": "docs/launch-smoke-suite.md",
+    "artifacts": []
+  },
+  "signoff": {
+    "decision": "GO",
+    "owner": "release-manager"
+  }
+}
