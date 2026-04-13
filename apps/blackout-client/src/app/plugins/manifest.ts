@@ -1,4 +1,8 @@
-import { runtimeFeatureFlags, runtimePluginFeatureFlags } from '../core/features/featureFlags';
+import {
+    type FeatureFlags,
+    runtimeFeatureFlags,
+    runtimePluginFeatureFlags,
+} from '../core/features/featureFlags';
 import {
     assertRuntimePluginIdAllowed,
     runtimePluginManifest,
@@ -11,38 +15,29 @@ export type RuntimePluginManifestEntry = {
     enabled: boolean;
 };
 
-const runtimePluginEntries: RuntimePluginManifestEntry[] = [
-    {
-        id: 'shell.legacy-layout',
-        order: 5,
-        enabled: runtimeFeatureFlags.legacyShellLayout,
-    },
-    {
-        id: 'theme.legacy-overrides',
-        order: 8,
-        enabled: runtimeFeatureFlags.legacyThemeOverrides,
-    },
-    {
-        id: 'composer.quick-actions',
-        order: 10,
-        enabled: runtimeFeatureFlags.composerQuickActions,
-    },
-    {
-        id: 'navigation.space-hierarchy',
-        order: 20,
-        enabled: runtimeFeatureFlags.navigationSpaceHierarchy,
-    },
-    {
-        id: 'notifications.adapter',
-        order: 30,
-        enabled: runtimeFeatureFlags.notificationsAdapter,
-    },
-    {
-        id: 'right-panel.slots',
-        order: 40,
-        enabled: runtimeFeatureFlags.rightPanelPlugins,
-    },
+type RuntimePluginManifestSeedEntry = Omit<RuntimePluginManifestEntry, 'enabled'> & {
+    flag: keyof FeatureFlags;
+};
+
+const runtimePluginSeedEntries: RuntimePluginManifestSeedEntry[] = [
+    { id: 'shell.legacy-layout', order: 5, flag: 'legacyShellLayout' },
+    { id: 'theme.legacy-overrides', order: 8, flag: 'legacyThemeOverrides' },
+    { id: 'composer.quick-actions', order: 10, flag: 'composerQuickActions' },
+    { id: 'navigation.space-hierarchy', order: 20, flag: 'navigationSpaceHierarchy' },
+    { id: 'notifications.adapter', order: 30, flag: 'notificationsAdapter' },
+    { id: 'right-panel.slots', order: 40, flag: 'rightPanelPlugins' },
 ];
+
+export const buildRuntimePluginManifest = (
+    flags: FeatureFlags = runtimeFeatureFlags
+): RuntimePluginManifestEntry[] =>
+    runtimePluginSeedEntries.map(({ id, order, flag }) => ({
+        id,
+        order,
+        enabled: flags[flag],
+    }));
+
+const runtimePluginEntries = buildRuntimePluginManifest(runtimeFeatureFlags);
 
 runtimePluginEntries.forEach((plugin) => {
     assertRuntimePluginIdAllowed(plugin.id);
