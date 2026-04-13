@@ -1,5 +1,6 @@
 import { getMessageActions } from '../../../lib/bmc-core/quick-actions';
 import { type MessageSpacing } from '../../state/settings';
+import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 
 interface TimelineMessage {
@@ -31,8 +32,21 @@ const pluginMessageSpacingItems: MessageSpacingItem[] = [
 export const resolveComposerMessageSpacingItems = (pluginEnabled: boolean): MessageSpacingItem[] =>
     pluginEnabled ? pluginMessageSpacingItems : baselineMessageSpacingItems;
 
-export const composerQuickActionsPlugin = {
-    id: 'composer.quick-actions' as const,
+let unregisterLifecycle = (): void => {};
+
+export const composerQuickActionsPlugin: PluginDefinition<'composer.quick-actions'> & {
+    getMessageSpacingItems: () => MessageSpacingItem[];
+    getTimelineQuickActions: (message: TimelineMessage) => ReturnType<typeof getMessageActions>;
+} = {
+    id: 'composer.quick-actions',
+    isEnabled: (): boolean => isRuntimePluginEnabled('composer.quick-actions'),
+    register: () => {
+        unregisterLifecycle = (): void => {};
+        return unregisterLifecycle;
+    },
+    unregister: () => {
+        unregisterLifecycle();
+    },
     getMessageSpacingItems: (): MessageSpacingItem[] =>
         resolveComposerMessageSpacingItems(isRuntimePluginEnabled('composer.quick-actions')),
     getTimelineQuickActions: (message: TimelineMessage) => getMessageActions(message),

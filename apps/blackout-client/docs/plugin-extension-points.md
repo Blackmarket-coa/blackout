@@ -20,10 +20,14 @@ Shell/runtime extension points remain intentionally small:
 
 -   `bootstrapFeatures(manifest)` (feature registry composition only)
 -   Runtime plugin declarations in `src/app/plugins/manifest.ts`
--   Typed plugin slot APIs (composer/navigation/notifications/right-panel)
+-   Plugin lifecycle contract in `src/app/plugins/contracts.ts` (`register`/`unregister` only)
+-   Typed plugin slot API for UI injection:
+    -   `src/app/plugins/right-panel/panelSlots.tsx`
 -   Shell/theme runtime adapters:
     -   `src/app/plugins/shell/shellLayoutPlugin.tsx`
     -   `src/app/plugins/theme/legacyThemePlugin.ts`
+-   Read-only Matrix adapter boundary:
+    -   `src/app/plugins/matrix-adapters/readOnlyMatrixAdapters.ts`
 
 No direct shell/runtime import path may consume legacy `bmc-*` bridge modules.
 

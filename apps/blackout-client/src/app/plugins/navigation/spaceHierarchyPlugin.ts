@@ -1,11 +1,24 @@
 import { useMemo } from 'react';
-import { useSpaceTree as useLegacySpaceTree, type HookResult } from '../../hooks/bmc-useSpaceHierarchy';
+import {
+    useSpaceTree as useLegacySpaceTree,
+    type HookResult,
+} from '../../hooks/bmc-useSpaceHierarchy';
 import type { SpaceNode } from '../../state/bmc-spaces';
+import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 
-export const navigationSpaceHierarchyPlugin = {
-    id: 'navigation.space-hierarchy' as const,
+let unregisterLifecycle = (): void => {};
+
+export const navigationSpaceHierarchyPlugin: PluginDefinition<'navigation.space-hierarchy'> = {
+    id: 'navigation.space-hierarchy',
     isEnabled: () => isRuntimePluginEnabled('navigation.space-hierarchy'),
+    register: () => {
+        unregisterLifecycle = (): void => {};
+        return unregisterLifecycle;
+    },
+    unregister: () => {
+        unregisterLifecycle();
+    },
 };
 
 export const flattenSpaceHierarchyForNav = (spaces: SpaceNode[]): string[] => {

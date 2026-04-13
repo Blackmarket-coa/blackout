@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { flattenSpaceHierarchyForNav, navigationSpaceHierarchyPlugin } from '../../../../../src/app/plugins/navigation';
+import {
+    flattenSpaceHierarchyForNav,
+    navigationSpaceHierarchyPlugin,
+} from '../../../../../src/app/plugins/navigation';
 import { isRuntimePluginEnabled } from '../../../../../src/app/plugins/manifest';
 
 describe('navigation space hierarchy plugin', () => {
@@ -25,9 +28,16 @@ describe('navigation space hierarchy plugin', () => {
         ]);
     });
 
+    it('provides plugin lifecycle registration contract', () => {
+        const unregister = navigationSpaceHierarchyPlugin.register();
+
+        expect(typeof unregister).toBe('function');
+        expect(() => navigationSpaceHierarchyPlugin.unregister()).not.toThrow();
+    });
+
     it('has explicit manifest toggle wiring', () => {
         expect(navigationSpaceHierarchyPlugin.isEnabled()).toBe(
-            isRuntimePluginEnabled('navigation.space-hierarchy'),
+            isRuntimePluginEnabled('navigation.space-hierarchy')
         );
     });
 });

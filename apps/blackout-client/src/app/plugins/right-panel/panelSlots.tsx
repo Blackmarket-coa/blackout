@@ -14,6 +14,7 @@ import {
     groupMembersByPresence,
     searchEvents,
 } from '../../features/right-panel/rightPanelUtils';
+import type { PluginDefinition, UISlotRegistry } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 
 export type RightPanelSlotProps = {
@@ -24,11 +25,10 @@ export type RightPanelSlotProps = {
     rolesEnabled: boolean;
 };
 
+export type RightPanelSlotName = Exclude<RightPanelType, null>;
 export type RightPanelSlotRenderer = (props: RightPanelSlotProps) => JSX.Element;
 
-export type RightPanelSlotRegistry = Partial<
-    Record<Exclude<RightPanelType, null>, RightPanelSlotRenderer>
->;
+export type RightPanelSlotRegistry = UISlotRegistry<RightPanelSlotName, RightPanelSlotProps>;
 
 const buildMemberProfile = (member: RoomMember): MemberProfile => ({
     userId: member.userId,
@@ -286,9 +286,18 @@ const pluginSlots: RightPanelSlotRegistry = {
     roles: ({ room }) => <RoleEditor roomId={room.roomId} />,
 };
 
-export const rightPanelPlugin = {
-    id: 'right-panel.slots' as const,
+let unregisterLifecycle = (): void => {};
+
+export const rightPanelPlugin: PluginDefinition<'right-panel.slots'> = {
+    id: 'right-panel.slots',
     isEnabled: () => isRuntimePluginEnabled('right-panel.slots'),
+    register: () => {
+        unregisterLifecycle = (): void => {};
+        return unregisterLifecycle;
+    },
+    unregister: () => {
+        unregisterLifecycle();
+    },
 };
 
 export const resolveRightPanelSlotRegistry = (

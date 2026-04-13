@@ -23,6 +23,13 @@ describe('notifications adapter plugin', () => {
         );
     });
 
+    it('provides additive lifecycle hooks for reversible migration', () => {
+        const unregister = notificationsAdapterPlugin.register();
+
+        expect(typeof unregister).toBe('function');
+        expect(() => notificationsAdapterPlugin.unregister()).not.toThrow();
+    });
+
     it('resolves distinct baseline and legacy adapters for reversible migration', () => {
         expect(resolveNotificationsAdapter(false)).not.toBe(resolveNotificationsAdapter(true));
     });
