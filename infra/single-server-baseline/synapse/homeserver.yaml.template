@@ -1,4 +1,4 @@
-server_name: "matrix.theblackout.app"
+server_name: "theblackout.app"
 pid_file: /data/homeserver.pid
 public_baseurl: "https://matrix.theblackout.app/"
 listeners:
@@ -28,12 +28,53 @@ redis:
 
 media_store_path: /media
 max_upload_size: 100M
+max_image_pixels: "50M"
+dynamic_thumbnails: true
+
+# Launch posture: private registrations. Create accounts via shared-secret
+# flow only until trust & anti-abuse controls are mature.
+enable_registration: false
+enable_registration_without_verification: false
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
 form_secret: "${SYNAPSE_FORM_SECRET}"
-signing_key_path: /data/matrix.theblackout.app.signing.key
+signing_key_path: /data/theblackout.app.signing.key
 trusted_key_servers:
   - server_name: "matrix.org"
 
+# TURN (coturn static-auth-secret)
+turn_uris:
+  - "turn:turn.theblackout.app:3478?transport=udp"
+  - "turn:turn.theblackout.app:3478?transport=tcp"
+  - "turns:turn.theblackout.app:5349?transport=tcp"
+turn_shared_secret: "${TURN_STATIC_AUTH_SECRET}"
+turn_user_lifetime: 1h
+turn_allow_guests: false
+
+# Abuse resistance defaults tuned for launch day.
+rc_message:
+  per_second: 0.2
+  burst_count: 10
+rc_registration:
+  per_second: 0.003
+  burst_count: 5
+rc_login:
+  address:
+    per_second: 0.003
+    burst_count: 5
+  account:
+    per_second: 0.003
+    burst_count: 5
+  failed_attempts:
+    per_second: 0.1
+    burst_count: 5
+rc_joins:
+  local:
+    per_second: 0.1
+    burst_count: 10
+  remote:
+    per_second: 0.01
+    burst_count: 10
+
 # Keep this mounted at /data for simple backups.
-log_config: "/data/matrix.theblackout.app.log.config"
+log_config: "/data/theblackout.app.log.config"

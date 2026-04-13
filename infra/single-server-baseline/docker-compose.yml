@@ -120,7 +120,7 @@ services:
       - "8008"
     environment:
       - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
-      - SYNAPSE_SERVER_NAME=matrix.theblackout.app
+      - SYNAPSE_SERVER_NAME=theblackout.app
       - SYNAPSE_REPORT_STATS=no
     volumes:
       - ./synapse/homeserver.yaml:/data/homeserver.yaml:ro
