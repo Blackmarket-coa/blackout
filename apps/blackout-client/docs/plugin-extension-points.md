@@ -84,6 +84,14 @@ Only the following slots are approved for customization:
 - Flags are additive; baseline behavior remains default-safe.
 - Flags are evaluated before plugin activation and at runtime re-evaluation points.
 
+
+### Runtime smoke-test mode switch
+
+- Entry point: `src/app/core/features/featureFlags.ts` via `resolveFeatureFlags()`.
+- Input: `BLACKOUT_FEATURE_MODE` with `baseline`, `full`, or omitted (`default`).
+- Scope: only runtime plugin flags are toggled; Matrix SDK contracts and payload semantics remain unchanged.
+- Purpose: keep migration reversible while running parity smoke checks in plugin-disabled and full-feature modes.
+
 ### Kill-switch protocol
 
 1. **Trigger condition**

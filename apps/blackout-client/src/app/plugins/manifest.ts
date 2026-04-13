@@ -1,4 +1,4 @@
-import { defaultFeatureFlags, runtimePluginFeatureFlags } from '../core/features/featureFlags';
+import { runtimeFeatureFlags, runtimePluginFeatureFlags } from '../core/features/featureFlags';
 import {
     assertRuntimePluginIdAllowed,
     runtimePluginManifest,
@@ -15,32 +15,32 @@ const runtimePluginEntries: RuntimePluginManifestEntry[] = [
     {
         id: 'shell.legacy-layout',
         order: 5,
-        enabled: defaultFeatureFlags.legacyShellLayout,
+        enabled: runtimeFeatureFlags.legacyShellLayout,
     },
     {
         id: 'theme.legacy-overrides',
         order: 8,
-        enabled: defaultFeatureFlags.legacyThemeOverrides,
+        enabled: runtimeFeatureFlags.legacyThemeOverrides,
     },
     {
         id: 'composer.quick-actions',
         order: 10,
-        enabled: defaultFeatureFlags.composerQuickActions,
+        enabled: runtimeFeatureFlags.composerQuickActions,
     },
     {
         id: 'navigation.space-hierarchy',
         order: 20,
-        enabled: defaultFeatureFlags.navigationSpaceHierarchy,
+        enabled: runtimeFeatureFlags.navigationSpaceHierarchy,
     },
     {
         id: 'notifications.adapter',
         order: 30,
-        enabled: defaultFeatureFlags.notificationsAdapter,
+        enabled: runtimeFeatureFlags.notificationsAdapter,
     },
     {
         id: 'right-panel.slots',
         order: 40,
-        enabled: defaultFeatureFlags.rightPanelPlugins,
+        enabled: runtimeFeatureFlags.rightPanelPlugins,
     },
 ];
 
@@ -48,7 +48,7 @@ runtimePluginEntries.forEach((plugin) => {
     assertRuntimePluginIdAllowed(plugin.id);
 
     const flagName = runtimePluginFeatureFlags[plugin.id];
-    if (defaultFeatureFlags[flagName] !== plugin.enabled) {
+    if (runtimeFeatureFlags[flagName] !== plugin.enabled) {
         throw new Error(
             `[feature-manifest] Runtime plugin "${plugin.id}" must derive enabled state from feature flag "${flagName}".`
         );

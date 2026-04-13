@@ -8,6 +8,7 @@ import {
     isRuntimePluginEnabled,
     orderedRuntimePlugins,
 } from '../../../../../src/app/plugins/manifest';
+import { runtimeFeatureFlags } from '../../../../../src/app/core/features/featureFlags';
 
 describe('composer quick actions plugin', () => {
     it('uses deterministic manifest ordering and explicit toggle', () => {
@@ -19,7 +20,9 @@ describe('composer quick actions plugin', () => {
             'notifications.adapter',
             'right-panel.slots',
         ]);
-        expect(isRuntimePluginEnabled('composer.quick-actions')).toBe(true);
+        expect(isRuntimePluginEnabled('composer.quick-actions')).toBe(
+            runtimeFeatureFlags.composerQuickActions
+        );
     });
 
     it('supports additive/reversible message spacing behavior', () => {

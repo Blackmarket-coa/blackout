@@ -16,6 +16,8 @@ export type FeatureFlags = {
     rightPanelPlugins: boolean;
 };
 
+export type FeatureMode = 'default' | 'baseline' | 'full';
+
 export const defaultFeatureFlags: FeatureFlags = {
     governance: true,
     forum: true,
@@ -44,3 +46,37 @@ export const runtimePluginFeatureFlags: Record<RuntimePluginId, keyof FeatureFla
     'notifications.adapter': 'notificationsAdapter',
     'right-panel.slots': 'rightPanelPlugins',
 };
+
+const runtimePluginFlagKeys = Object.values(runtimePluginFeatureFlags);
+
+const parseFeatureMode = (rawMode: string | undefined): FeatureMode => {
+    if (!rawMode) return 'default';
+    if (rawMode === 'baseline' || rawMode === 'full' || rawMode === 'default') return rawMode;
+    return 'default';
+};
+
+export const resolveFeatureFlags = (
+    env: Record<string, string | undefined> = {},
+    baseFlags: FeatureFlags = defaultFeatureFlags
+): FeatureFlags => {
+    const mode = parseFeatureMode(env.BLACKOUT_FEATURE_MODE);
+
+    if (mode === 'default') {
+        return { ...baseFlags };
+    }
+
+    const nextFlags = { ...baseFlags };
+
+    runtimePluginFlagKeys.forEach((flagName) => {
+        nextFlags[flagName] = mode === 'full';
+    });
+
+    return nextFlags;
+};
+
+const runtimeEnv =
+    typeof process !== 'undefined' && process.env
+        ? (process.env as Record<string, string | undefined>)
+        : {};
+
+export const runtimeFeatureFlags = resolveFeatureFlags(runtimeEnv);
