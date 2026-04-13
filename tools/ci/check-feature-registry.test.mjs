@@ -192,3 +192,79 @@ test('passes external-infra claims with verifiable runbook evidence', () => {
   const res = runScript(file);
   assert.equal(res.status, 0, res.stderr || res.stdout);
 });
+
+
+function writeFile(dir, relativePath, content) {
+  const filePath = path.join(dir, relativePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content);
+  return filePath;
+}
+
+test('fails when plugin module injects an unregistered feature id', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-client-'));
+  const file = writeFixture([featureRow()]);
+
+  const registryTs = writeFile(
+    dir,
+    'registry.ts',
+    "export const registeredFeatureModuleIds = ['governance', 'forum'] as const;\n"
+  );
+  const coreModulesTs = writeFile(
+    dir,
+    'coreModules.ts',
+    "export const coreFeatureModules = [{ feature: {}, flag: 'governance' }];\n"
+  );
+  const pluginsTs = writeFile(
+    dir,
+    'plugins.ts',
+    "export const featurePlugins = [{ id: 'demo', modules: [{ feature: { id: 'rogue-module' } }] }];\n"
+  );
+
+  const res = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--file', file,
+      '--registry-ts', registryTs,
+      '--core-modules-ts', coreModulesTs,
+      '--plugins-ts', pluginsTs,
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Plugin injects unregistered feature id "rogue-module"/);
+});
+
+test('fails when core module flag is missing from registration allowlist', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-client-core-'));
+  const file = writeFixture([featureRow()]);
+
+  const registryTs = writeFile(
+    dir,
+    'registry.ts',
+    "export const registeredFeatureModuleIds = ['governance'] as const;\n"
+  );
+  const coreModulesTs = writeFile(
+    dir,
+    'coreModules.ts',
+    "export const coreFeatureModules = [{ feature: {}, flag: 'deaddrop' }];\n"
+  );
+  const pluginsTs = writeFile(dir, 'plugins.ts', 'export const featurePlugins = [];\n');
+
+  const res = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--file', file,
+      '--registry-ts', registryTs,
+      '--core-modules-ts', coreModulesTs,
+      '--plugins-ts', pluginsTs,
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Core feature module flag "deaddrop" is not in registeredFeatureModuleIds/);
+});

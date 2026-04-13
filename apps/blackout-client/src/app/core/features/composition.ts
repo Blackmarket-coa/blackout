@@ -1,5 +1,27 @@
 import { resolveFeatureCustomizations, type CapabilityGateContext } from './capabilityGate';
-import type { BlackoutFeature, FeatureNavItem, FeatureRoute, FeatureSettingsItem } from './types';
+import type {
+    BlackoutFeature,
+    FeatureModule,
+    FeatureNavItem,
+    FeatureRoute,
+    FeatureSettingsItem,
+} from './types';
+
+export const assertFeatureModulesRegistered = (
+    modules: FeatureModule[],
+    registeredFeatureModuleIds: readonly string[],
+    source: 'core' | 'plugin'
+): void => {
+    const allowed = new Set(registeredFeatureModuleIds);
+
+    for (const module of modules) {
+        if (!allowed.has(module.feature.id)) {
+            throw new Error(
+                `[feature-registry] ${source} module "${module.feature.id}" is not registered in registeredFeatureModuleIds.`
+            );
+        }
+    }
+};
 
 export const composeFeatureRoutes = (
     registry: BlackoutFeature[],
