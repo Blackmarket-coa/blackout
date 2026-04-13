@@ -42,6 +42,7 @@ Only the following slots are approved for customization:
 6. **Theme runtime adapter boundary**
    - Files: `src/app/plugins/theme/*` and `src/app/plugins/shell/*`.
    - Contract: presentation-layer transforms only; no Matrix SDK contract rewrites.
+   - Shell consumption rule: `src/app/pages/client/ClientLayout.tsx` may consume only documented shell slot adapters (currently `plugins/shell/shellLayoutPlugin`).
 
 7. **Matrix adapter read-only boundary**
    - Files: `src/app/plugins/matrix-adapters/*`.

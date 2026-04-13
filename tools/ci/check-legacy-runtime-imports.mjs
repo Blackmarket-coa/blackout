@@ -16,6 +16,19 @@ const CORE_RUNTIME_PATH_PREFIXES = [
   'apps/blackout-client/src/app/core/',
 ];
 
+const CLIENT_SOURCE_PREFIX = 'apps/blackout-client/src/';
+const STOAT_IMPORT_PATTERNS = [
+  { re: /(^|\/)stoat-(runtime|protocol)(\/|$)/i, reason: 'blocked Stoat runtime/protocol import in client path' },
+  { re: /(^|\/)@stoat\/(runtime|protocol)(\/|$)/i, reason: 'blocked Stoat runtime/protocol import in client path' },
+];
+
+const SHELL_EXTENSION_POINT_FILES = new Set([
+  'apps/blackout-client/src/app/pages/client/ClientLayout.tsx',
+]);
+const ALLOWED_SHELL_EXTENSION_IMPORT_PATTERNS = [
+  /(^|\/)plugins\/shell\/shellLayoutPlugin$/,
+];
+
 const BLOCKED_CORE_RUNTIME_IMPORT_PATTERNS = [
   { re: /(^|\/)bmc-[^/]+/, reason: 'blocked bmc-* shell entrypoint path' },
   { re: /(^|\/)hooks\/bmc-[^/]+/, reason: 'legacy hook bridge import' },
@@ -53,6 +66,8 @@ function collectViolations(filePath, cwd) {
   const violations = [];
   const relativePath = path.relative(cwd, filePath).replace(/\\/g, '/');
   const checkCoreRuntime = isCoreRuntimePath(relativePath);
+  const checkClientPath = relativePath.startsWith(CLIENT_SOURCE_PREFIX);
+  const isShellExtensionPointFile = SHELL_EXTENSION_POINT_FILES.has(relativePath);
 
   for (const match of source.matchAll(IMPORT_RE)) {
     const specifier = match[1];
@@ -62,11 +77,27 @@ function collectViolations(filePath, cwd) {
       matchedReasons.push('blocked legacy path');
     }
 
+    if (checkClientPath) {
+      for (const rule of STOAT_IMPORT_PATTERNS) {
+        if (rule.re.test(specifier)) {
+          matchedReasons.push(rule.reason);
+        }
+      }
+    }
+
     if (checkCoreRuntime) {
       for (const rule of BLOCKED_CORE_RUNTIME_IMPORT_PATTERNS) {
         if (rule.re.test(specifier)) {
           matchedReasons.push(rule.reason);
         }
+      }
+    }
+
+    if (isShellExtensionPointFile && specifier.includes('/plugins/')) {
+      const normalized = specifier.replace(/\\/g, '/');
+      const isAllowed = ALLOWED_SHELL_EXTENSION_IMPORT_PATTERNS.some((re) => re.test(normalized));
+      if (!isAllowed) {
+        matchedReasons.push('undocumented shell extension slot import');
       }
     }
 
