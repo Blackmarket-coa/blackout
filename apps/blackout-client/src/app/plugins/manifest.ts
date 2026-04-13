@@ -1,4 +1,4 @@
-import { defaultFeatureFlags } from '../core/features/featureFlags';
+import { defaultFeatureFlags, runtimePluginFeatureFlags } from '../core/features/featureFlags';
 import {
     assertRuntimePluginIdAllowed,
     runtimePluginManifest,
@@ -44,7 +44,16 @@ const runtimePluginEntries: RuntimePluginManifestEntry[] = [
     },
 ];
 
-runtimePluginEntries.forEach((plugin) => assertRuntimePluginIdAllowed(plugin.id));
+runtimePluginEntries.forEach((plugin) => {
+    assertRuntimePluginIdAllowed(plugin.id);
+
+    const flagName = runtimePluginFeatureFlags[plugin.id];
+    if (defaultFeatureFlags[flagName] !== plugin.enabled) {
+        throw new Error(
+            `[feature-manifest] Runtime plugin "${plugin.id}" must derive enabled state from feature flag "${flagName}".`
+        );
+    }
+});
 
 const declaredIds = new Set(runtimePluginEntries.map((plugin) => plugin.id));
 runtimePluginManifest.forEach((pluginId) => {

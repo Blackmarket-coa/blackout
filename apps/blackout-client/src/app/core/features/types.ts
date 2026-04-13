@@ -58,6 +58,10 @@ export type FeatureModule = {
     flag?: FeatureFlagKey;
 };
 
+/**
+ * Plugin boundary for feature module composition.
+ * Ordering and allowlist validation are applied in core composition helpers.
+ */
 export type FeatureModulePlugin = {
     id: string;
     modules: FeatureModule[];

@@ -10,6 +10,13 @@ export const featureModuleManifest = ['governance', 'forum', 'deaddrop', 'modera
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
 
+/**
+ * Feature-module plugin allowlist. Order in this manifest is canonical runtime order.
+ */
+export const featureModulePluginManifest = ['plugin.alpha', 'plugin.beta'] as const;
+
+export type FeatureModulePluginId = typeof featureModulePluginManifest[number];
+
 export const runtimePluginManifest = [
     'shell.legacy-layout',
     'theme.legacy-overrides',
@@ -27,6 +34,19 @@ export const assertFeatureModuleIdAllowed = (featureId: string): void => {
             `[feature-manifest] Unknown feature module id "${featureId}". Add it to featureModuleManifest first.`
         );
     }
+};
+
+export const assertFeatureModulePluginIdAllowed = (pluginId: string): void => {
+    if (!featureModulePluginManifest.includes(pluginId as FeatureModulePluginId)) {
+        throw new Error(
+            `[feature-manifest] Unknown feature module plugin id "${pluginId}". Add it to featureModulePluginManifest first.`
+        );
+    }
+};
+
+export const getFeatureModulePluginOrder = (pluginId: string): number => {
+    assertFeatureModulePluginIdAllowed(pluginId);
+    return featureModulePluginManifest.indexOf(pluginId as FeatureModulePluginId);
 };
 
 export const assertRuntimePluginIdAllowed = (pluginId: string): void => {

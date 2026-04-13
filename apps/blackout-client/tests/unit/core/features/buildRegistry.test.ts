@@ -16,6 +16,8 @@ describe('buildFeatureRegistry', () => {
             legacyRoomSurfaceLayout: false,
             composerQuickActions: true,
             navigationSpaceHierarchy: true,
+            notificationsAdapter: true,
+            rightPanelPlugins: true,
         };
 
         const registry = buildFeatureRegistry(flags);

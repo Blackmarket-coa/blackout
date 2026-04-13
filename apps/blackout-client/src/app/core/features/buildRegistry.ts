@@ -1,5 +1,6 @@
 import type { FeatureFlags } from './featureFlags';
 import { coreFeatureModules } from './coreModules';
+import { orderFeatureModulePlugins } from './composition';
 import type { BlackoutFeature, FeatureModule, FeatureModulePlugin } from './types';
 
 const dedupeFeatureModules = (modules: FeatureModule[]): FeatureModule[] => {
@@ -17,9 +18,11 @@ export const buildFeatureRegistry = (
     flags: FeatureFlags,
     plugins: FeatureModulePlugin[] = []
 ): BlackoutFeature[] => {
+    const orderedPlugins = orderFeatureModulePlugins(plugins);
+
     const modules = dedupeFeatureModules([
         ...coreFeatureModules,
-        ...plugins.flatMap((plugin) => plugin.modules),
+        ...orderedPlugins.flatMap((plugin) => plugin.modules),
     ]);
 
     return modules

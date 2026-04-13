@@ -15,6 +15,8 @@ const allEnabled: FeatureFlags = {
     legacyRoomSurfaceLayout: false,
     composerQuickActions: true,
     navigationSpaceHierarchy: true,
+    notificationsAdapter: true,
+    rightPanelPlugins: true,
 };
 
 describe('feature metadata contract governance', () => {
