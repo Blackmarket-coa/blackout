@@ -10,6 +10,11 @@ const allEnabled: FeatureFlags = {
     steganography: true,
     moderation: true,
     logistics: true,
+    legacyShellLayout: false,
+    legacyThemeOverrides: false,
+    legacyRoomSurfaceLayout: false,
+    composerQuickActions: true,
+    navigationSpaceHierarchy: true,
 };
 
 describe('feature metadata contract governance', () => {

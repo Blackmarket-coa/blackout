@@ -8,6 +8,8 @@ export type FeatureFlags = {
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
     legacyRoomSurfaceLayout: boolean;
+    composerQuickActions: boolean;
+    navigationSpaceHierarchy: boolean;
 };
 
 export const defaultFeatureFlags: FeatureFlags = {
@@ -20,4 +22,6 @@ export const defaultFeatureFlags: FeatureFlags = {
     legacyShellLayout: false,
     legacyThemeOverrides: false,
     legacyRoomSurfaceLayout: false,
+    composerQuickActions: true,
+    navigationSpaceHierarchy: true,
 };

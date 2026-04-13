@@ -11,6 +11,11 @@ describe('buildFeatureRegistry', () => {
             steganography: false,
             moderation: false,
             logistics: false,
+            legacyShellLayout: false,
+            legacyThemeOverrides: false,
+            legacyRoomSurfaceLayout: false,
+            composerQuickActions: true,
+            navigationSpaceHierarchy: true,
         };
 
         const registry = buildFeatureRegistry(flags);

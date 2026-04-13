@@ -23,7 +23,7 @@ import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
 import { useRoomMembers } from '../../hooks/bmc-useRoom';
-import { useSpaceTree } from '../../hooks/bmc-useSpaceHierarchy';
+import { useNavigationSpaceTree } from '../../plugins/navigation';
 import { useSendMessage, useEditMessage } from '../../hooks/bmc-useTimeline';
 import { useSendTyping } from '../../hooks/bmc-useTyping';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
@@ -441,7 +441,7 @@ export const MessageComposer = ({
     const editableRef = useRef<HTMLDivElement | null>(null);
 
     const { data: members } = useRoomMembers(roomId);
-    const { data: spaces } = useSpaceTree();
+    const { data: spaces } = useNavigationSpaceTree();
     const sendTyping = useSendTyping(roomId);
     const { sendRichText, sendMedia } = useSendMessage(roomId);
     const editMessage = useEditMessage(roomId);

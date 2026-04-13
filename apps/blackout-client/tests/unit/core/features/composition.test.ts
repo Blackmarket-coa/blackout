@@ -30,6 +30,11 @@ describe('feature registry composition surfaces', () => {
             steganography: false,
             moderation: false,
             logistics: false,
+            legacyShellLayout: false,
+            legacyThemeOverrides: false,
+            legacyRoomSurfaceLayout: false,
+            composerQuickActions: true,
+            navigationSpaceHierarchy: true,
         };
 
         const registry = buildFeatureRegistry(flags);
@@ -75,6 +80,11 @@ describe('feature registry composition surfaces', () => {
             steganography: false,
             moderation: true,
             logistics: false,
+            legacyShellLayout: false,
+            legacyThemeOverrides: false,
+            legacyRoomSurfaceLayout: false,
+            composerQuickActions: true,
+            navigationSpaceHierarchy: true,
         };
 
         const registry = buildFeatureRegistry(flags);
