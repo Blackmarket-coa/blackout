@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { mxcToUrl } from '../../utils/media';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { BlackoutSdkError } from '@blackout/sdk';
+import { mediaClient } from '../../sdk/client';
 
 export const formatBytes = (value?: number): string => {
     if (!value || Number.isNaN(value)) return 'Unknown size';
@@ -28,7 +30,7 @@ export const useInViewport = <T extends HTMLElement>() => {
                 const visible = entries.some((entry) => entry.isIntersecting);
                 setInView(visible);
             },
-            { rootMargin: '240px 0px' },
+            { rootMargin: '240px 0px' }
         );
 
         observer.observe(node);
@@ -94,15 +96,12 @@ export const useResolvedMediaSource = (event: MatrixEvent) => {
                     return;
                 }
 
-                const response = await fetch(directUrl);
-                if (!response.ok) throw new Error(`Media download failed (${response.status})`);
-
-                const encryptedBuffer = await response.arrayBuffer();
+                const encryptedBuffer = await mediaClient.fetchArrayBuffer(directUrl);
                 const decrypt = (
                     client as unknown as {
                         decryptMedia?: (
                             data: ArrayBuffer,
-                            file: Record<string, unknown>,
+                            file: Record<string, unknown>
                         ) => Promise<ArrayBuffer>;
                     }
                 ).decryptMedia;
@@ -116,7 +115,11 @@ export const useResolvedMediaSource = (event: MatrixEvent) => {
             } catch (err) {
                 if (active) {
                     setSrc(null);
-                    setError(err instanceof Error ? err.message : 'Failed to load media');
+                    if (err instanceof BlackoutSdkError && err.kind === 'retryable') {
+                        setError(`${err.message} Retrying may succeed.`);
+                    } else {
+                        setError(err instanceof Error ? err.message : 'Failed to load media');
+                    }
                 }
             } finally {
                 if (active) setLoading(false);
