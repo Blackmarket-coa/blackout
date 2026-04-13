@@ -5,7 +5,18 @@ import { forumRoutes } from './routes';
 export const forumFeature: BlackoutFeature = {
     id: 'forum',
     name: 'Forum',
-    routes: forumRoutes,
-    navItems: forumNavItems,
+    customizations: [
+        {
+            id: 'forum-layout-surface',
+            name: 'Forum Layout Surface',
+            category: 'visual/layout plugin',
+            capabilityGate: {
+                allOf: ['forum.read'],
+                flags: ['forum'],
+            },
+            routes: forumRoutes,
+            navItems: forumNavItems,
+        },
+    ],
     capabilities: ['forum.read', 'forum.write'],
 };

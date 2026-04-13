@@ -17,6 +17,31 @@ export type FeatureSettingsItem = {
     component: ComponentType;
 };
 
+export type PluginCategory =
+    | 'visual/layout plugin'
+    | 'interaction plugin'
+    | 'workflow plugin'
+    | 'service-backed plugin';
+
+export type FeatureFlagKey = keyof FeatureFlags;
+
+export type CapabilityGate = {
+    allOf?: string[];
+    anyOf?: string[];
+    not?: string[];
+    flags?: FeatureFlagKey[];
+};
+
+export type FeatureCustomizationManifest = {
+    id: string;
+    name: string;
+    category: PluginCategory;
+    capabilityGate?: CapabilityGate;
+    routes?: FeatureRoute[];
+    navItems?: FeatureNavItem[];
+    settings?: FeatureSettingsItem[];
+};
+
 export type BlackoutFeature = {
     id: string;
     name: string;
@@ -24,10 +49,9 @@ export type BlackoutFeature = {
     navItems?: FeatureNavItem[];
     settings?: FeatureSettingsItem[];
     capabilities?: string[];
+    customizations?: FeatureCustomizationManifest[];
     init?: () => void | Promise<void>;
 };
-
-export type FeatureFlagKey = keyof FeatureFlags;
 
 export type FeatureModule = {
     feature: BlackoutFeature;

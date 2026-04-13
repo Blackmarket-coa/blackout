@@ -6,8 +6,19 @@ import { deaddropSettings } from './settings';
 export const deaddropFeature: BlackoutFeature = {
     id: 'deaddrop',
     name: 'Dead Drop',
-    routes: deaddropRoutes,
-    navItems: deaddropNavItems,
-    settings: deaddropSettings,
+    customizations: [
+        {
+            id: 'deaddrop-interaction',
+            name: 'Dead Drop Controls',
+            category: 'interaction plugin',
+            capabilityGate: {
+                allOf: ['deaddrop.read'],
+                flags: ['deaddrop'],
+            },
+            routes: deaddropRoutes,
+            navItems: deaddropNavItems,
+            settings: deaddropSettings,
+        },
+    ],
     capabilities: ['deaddrop.read', 'deaddrop.write'],
 };
