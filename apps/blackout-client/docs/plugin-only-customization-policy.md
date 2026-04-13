@@ -1,10 +1,12 @@
-# Plugin-Only Customization Policy (PR-1 Freeze Baseline)
+# Plugin-Only Customization Policy (PR-6 Hardened)
 
 ## Status
-- Effective in PR-1 guardrails phase.
-- Runtime behavior is intentionally unchanged in this phase.
+
+-   Effective in PR-6 hardening phase.
+-   Unknown feature/plugin IDs are now rejected by allowlist manifest + CI gates.
 
 ## Policy
+
 1. **No ad hoc shell/runtime customization paths.**
 2. **All custom behavior must map to named feature modules or plugin boundaries.**
 3. **Shell extension points stay minimal:** only feature composition and plugin registration entrypoints are valid injection points.
@@ -12,19 +14,24 @@
 5. **Migration remains additive and reversible through feature flags and registration controls.**
 
 ## Approved extension points
-- `src/app/core/features/registry.ts`
-- `src/app/core/features/plugins.ts`
-- `src/app/core/features/composition.ts`
 
-## Guardrails introduced in PR-1
-- **Registration freeze snapshot:** `registeredFeatureModuleIds` is the allowlist for feature injection.
-- **CI registration check:** unregistered feature IDs in plugin modules fail guard checks.
-- **Legacy import gate expansion:** shell/runtime entrypoints cannot import `bmc-*` modules directly.
-- **Lint guard:** shell/runtime entrypoint files reject direct `bmc-*` imports.
+-   `src/app/core/features/manifest.ts`
+-   `src/app/core/features/registry.ts`
+-   `src/app/core/features/plugins.ts`
+-   `src/app/plugins/manifest.ts`
+
+## Guardrails introduced in PR-6
+
+-   **Registration allowlist manifest:** `featureModuleManifest` and `runtimePluginManifest` are the source of truth for feature/plugin IDs.
+-   **CI registration check:** `tools/ci/check-feature-registry.mjs` fails on unknown feature IDs and unknown runtime plugin IDs.
+-   **Legacy import gate expansion:** `tools/ci/check-legacy-runtime-imports.mjs` blocks direct legacy customization imports in core runtime paths.
+-   **Frontend consolidation gate:** `tools/ci/check-frontend-consolidation-gates.mjs` verifies plugin-only customization documentation inventory.
 
 ## Why this is federation-safe
+
 These guardrails only constrain composition/injection boundaries and static imports. They do not alter Matrix SDK contracts, event payload semantics, or protocol behavior.
 
 ## Rollout / rollback
-- Rollout: keep guards enabled in CI and lint, then migrate custom logic behind plugin modules in later PRs.
-- Rollback: if a guard blocks urgent work, temporarily disable the specific CI script invocation or lint override in one commit, then restore after module registration is corrected.
+
+-   Rollout: keep guards enabled in CI, then migrate any remaining custom logic behind plugin modules.
+-   Rollback: remove/disable the specific guard in a single revert commit while preserving manifest + plugin boundaries.

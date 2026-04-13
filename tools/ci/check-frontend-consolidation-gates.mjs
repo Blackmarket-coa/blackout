@@ -17,6 +17,19 @@ const requiredSurfaces = new Set([
   'legacy/element',
 ]);
 
+
+const pluginPolicyDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-only-customization-policy.md');
+const pluginExtensionPointsDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-extension-points.md');
+const migrationInventoryDoc = path.join(repoRoot, 'apps/blackout-client/docs/migration-inventory.md');
+const featureManifestTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/manifest.ts');
+
+const requiredPluginPolicyAnchors = [
+  'named feature modules or plugin boundaries',
+  'Shell extension points stay minimal',
+  'check-feature-registry.mjs',
+  'check-legacy-runtime-imports.mjs',
+];
+
 const legacyCanonicalRoutePairs = [
   { legacy: '/blackout/governance', canonical: '/governance' },
   { legacy: '/blackout/education', canonical: '/forum' },
@@ -161,6 +174,40 @@ for (const featureId of portedIds) {
   if (!row) {
     const d = dispositionRows.find((r) => r.feature_id === featureId);
     errors.push(`${path.relative(repoRoot, dispositionPath)}:${d?.line ?? '?'} ported feature_id=${featureId} missing from backlog traceability table.`);
+  }
+}
+
+
+for (const requiredDoc of [pluginPolicyDoc, pluginExtensionPointsDoc, migrationInventoryDoc, featureManifestTs]) {
+  if (!fs.existsSync(requiredDoc)) {
+    errors.push(`required plugin hardening artifact missing: ${path.relative(repoRoot, requiredDoc)}.`);
+  }
+}
+
+if (fs.existsSync(pluginPolicyDoc)) {
+  const policy = read(pluginPolicyDoc);
+  for (const anchor of requiredPluginPolicyAnchors) {
+    if (!policy.includes(anchor)) {
+      errors.push(`${path.relative(repoRoot, pluginPolicyDoc)} missing policy anchor: "${anchor}".`);
+    }
+  }
+}
+
+if (fs.existsSync(pluginExtensionPointsDoc)) {
+  const extensionDoc = read(pluginExtensionPointsDoc);
+  for (const requiredSlot of ['bootstrapFeatures(manifest)', 'src/app/core/features/manifest.ts', 'src/app/plugins/manifest.ts']) {
+    if (!extensionDoc.includes(requiredSlot)) {
+      errors.push(`${path.relative(repoRoot, pluginExtensionPointsDoc)} missing extension-point anchor: "${requiredSlot}".`);
+    }
+  }
+}
+
+if (fs.existsSync(migrationInventoryDoc)) {
+  const inventory = read(migrationInventoryDoc);
+  for (const anchor of ['Deprecated bridge shim', 'bmc-useNotifications.ts', 'bmc-event.ts']) {
+    if (!inventory.includes(anchor)) {
+      errors.push(`${path.relative(repoRoot, migrationInventoryDoc)} missing migration inventory anchor: "${anchor}".`);
+    }
   }
 }
 
