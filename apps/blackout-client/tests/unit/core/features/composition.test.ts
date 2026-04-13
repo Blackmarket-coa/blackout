@@ -4,8 +4,10 @@ import {
     composeFeatureNavItems,
     composeFeatureRoutes,
     composeFeatureSettings,
+    orderFeatureModulePlugins,
 } from '../../../../src/app/core/features/composition';
 import type { FeatureFlags } from '../../../../src/app/core/features/featureFlags';
+import type { FeatureModulePlugin } from '../../../../src/app/core/features/types';
 
 const capabilityContext = (flags: FeatureFlags) => ({
     capabilities: [
@@ -35,6 +37,8 @@ describe('feature registry composition surfaces', () => {
             legacyRoomSurfaceLayout: false,
             composerQuickActions: true,
             navigationSpaceHierarchy: true,
+            notificationsAdapter: true,
+            rightPanelPlugins: true,
         };
 
         const registry = buildFeatureRegistry(flags);
@@ -85,6 +89,8 @@ describe('feature registry composition surfaces', () => {
             legacyRoomSurfaceLayout: false,
             composerQuickActions: true,
             navigationSpaceHierarchy: true,
+            notificationsAdapter: true,
+            rightPanelPlugins: true,
         };
 
         const registry = buildFeatureRegistry(flags);
@@ -116,5 +122,20 @@ describe('feature registry composition surfaces', () => {
             "Dead Drop",
           ]
         `);
+    });
+
+    it('orders feature module plugins by allowlist order and rejects unknown ids', () => {
+        const plugins: FeatureModulePlugin[] = [
+            { id: 'plugin.beta', modules: [] },
+            { id: 'plugin.alpha', modules: [] },
+        ];
+
+        expect(orderFeatureModulePlugins(plugins).map((plugin) => plugin.id)).toEqual([
+            'plugin.alpha',
+            'plugin.beta',
+        ]);
+        expect(() => orderFeatureModulePlugins([{ id: 'plugin.rogue', modules: [] }])).toThrow(
+            /Unknown feature module plugin id/
+        );
     });
 });

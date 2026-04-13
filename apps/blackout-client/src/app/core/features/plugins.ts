@@ -1,7 +1,7 @@
 import type { FeatureModulePlugin } from './types';
 
 /**
- * Plugin boundary: runtime customization modules must be registered in
- * `registeredFeatureModuleIds` before they can be added here.
+ * Plugin boundary: feature module plugins must be registered in
+ * `featureModulePluginManifest` and `featureModuleManifest` before being added.
  */
 export const featurePlugins: FeatureModulePlugin[] = [];

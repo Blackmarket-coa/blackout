@@ -1,16 +1,18 @@
 import { buildFeatureRegistry } from './buildRegistry';
 import { coreFeatureModules } from './coreModules';
 import { defaultFeatureFlags } from './featureFlags';
-import { assertFeatureModulesRegistered } from './composition';
+import { assertFeatureModulesRegistered, orderFeatureModulePlugins } from './composition';
 import { featurePlugins } from './plugins';
 
 import { featureModuleManifest } from './manifest';
 
+const orderedFeaturePlugins = orderFeatureModulePlugins(featurePlugins);
+
 assertFeatureModulesRegistered(coreFeatureModules, featureModuleManifest, 'core');
 assertFeatureModulesRegistered(
-    featurePlugins.flatMap((plugin) => plugin.modules),
+    orderedFeaturePlugins.flatMap((plugin) => plugin.modules),
     featureModuleManifest,
     'plugin'
 );
 
-export const featureRegistry = buildFeatureRegistry(defaultFeatureFlags, featurePlugins);
+export const featureRegistry = buildFeatureRegistry(defaultFeatureFlags, orderedFeaturePlugins);

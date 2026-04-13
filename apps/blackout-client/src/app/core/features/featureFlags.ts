@@ -1,3 +1,5 @@
+import type { RuntimePluginId } from './manifest';
+
 export type FeatureFlags = {
     governance: boolean;
     forum: boolean;
@@ -28,4 +30,17 @@ export const defaultFeatureFlags: FeatureFlags = {
     navigationSpaceHierarchy: true,
     notificationsAdapter: true,
     rightPanelPlugins: true,
+};
+
+/**
+ * Minimal shell extension point: runtime plugin enablement is derived from typed
+ * feature flags so migration stays additive and reversible.
+ */
+export const runtimePluginFeatureFlags: Record<RuntimePluginId, keyof FeatureFlags> = {
+    'shell.legacy-layout': 'legacyShellLayout',
+    'theme.legacy-overrides': 'legacyThemeOverrides',
+    'composer.quick-actions': 'composerQuickActions',
+    'navigation.space-hierarchy': 'navigationSpaceHierarchy',
+    'notifications.adapter': 'notificationsAdapter',
+    'right-panel.slots': 'rightPanelPlugins',
 };
