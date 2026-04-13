@@ -62,7 +62,7 @@ test('fails when shell/runtime entrypoints import bmc-* modules directly', () =>
 
 test('allows bmc-* imports outside shell/runtime entrypoint allowlist for freeze phase', () => {
   const cwd = makeWorkspace({
-    'apps/blackout-client/src/app/pages/client/ClientLayout.tsx': "import { useRoom } from '../../hooks/bmc-useRoom';\n",
+    'apps/blackout-client/src/app/features/demo/Widget.tsx': "import { useRoom } from '../../hooks/bmc-useRoom';\n",
   });
   const res = run(cwd);
   assert.equal(res.status, 0, res.stderr || res.stdout);

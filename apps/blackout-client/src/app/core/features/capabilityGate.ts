@@ -43,16 +43,9 @@ export const resolveFeatureCustomizations = (
 ): FeatureCustomizationManifest[] => {
     const customizations = feature.customizations;
     if (!customizations?.length) {
-        return [
-            {
-                id: `${feature.id}-legacy`,
-                name: `${feature.name} Legacy`,
-                category: 'workflow plugin',
-                routes: feature.routes,
-                navItems: feature.navItems,
-                settings: feature.settings,
-            },
-        ];
+        throw new Error(
+            `[feature-registry] Feature "${feature.id}" must define plugin customizations. Legacy top-level routes/nav/settings are not supported.`
+        );
     }
 
     return customizations.filter((customization) =>

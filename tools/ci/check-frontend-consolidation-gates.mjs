@@ -22,6 +22,8 @@ const pluginPolicyDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-on
 const pluginExtensionPointsDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-extension-points.md');
 const migrationInventoryDoc = path.join(repoRoot, 'apps/blackout-client/docs/migration-inventory.md');
 const featureManifestTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/manifest.ts');
+const featurePluginsTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/plugins.ts');
+const capabilityGateTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/capabilityGate.ts');
 
 const requiredPluginPolicyAnchors = [
   'named feature modules or plugin boundaries',
@@ -38,6 +40,27 @@ const legacyCanonicalRoutePairs = [
 
 function read(file) {
   return fs.readFileSync(file, 'utf8');
+}
+
+function parseStringListConst(source, constName) {
+  const pattern = new RegExp(`${constName}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'm');
+  const match = source.match(pattern);
+  if (!match) return [];
+
+  const values = [];
+  for (const literal of match[1].matchAll(/'([^']+)'/g)) {
+    values.push(literal[1]);
+  }
+  return values;
+}
+
+function parseFeaturePluginIds(source) {
+  const values = [];
+  const idRe = /id\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(idRe)) {
+    values.push(match[1]);
+  }
+  return values;
 }
 
 function parseTableRows(markdown, expectedColumns) {
@@ -207,6 +230,29 @@ if (fs.existsSync(migrationInventoryDoc)) {
   for (const anchor of ['Deprecated bridge shim', 'bmc-useNotifications.ts', 'bmc-event.ts']) {
     if (!inventory.includes(anchor)) {
       errors.push(`${path.relative(repoRoot, migrationInventoryDoc)} missing migration inventory anchor: "${anchor}".`);
+    }
+  }
+}
+
+if (fs.existsSync(featureManifestTs) && fs.existsSync(featurePluginsTs)) {
+  const manifestSource = read(featureManifestTs);
+  const featurePluginsSource = read(featurePluginsTs);
+  const allowlistedPluginIds = parseStringListConst(manifestSource, 'featureModulePluginManifest');
+  const declaredPluginIds = parseFeaturePluginIds(featurePluginsSource);
+  const allowlistedSet = new Set(allowlistedPluginIds);
+
+  for (const pluginId of declaredPluginIds) {
+    if (!allowlistedSet.has(pluginId)) {
+      errors.push(`Unknown plugin id "${pluginId}" in ${path.relative(repoRoot, featurePluginsTs)}; add to featureModulePluginManifest first.`);
+    }
+  }
+}
+
+if (fs.existsSync(capabilityGateTs)) {
+  const gate = read(capabilityGateTs);
+  for (const forbidden of ['routes: feature.routes', 'navItems: feature.navItems', 'settings: feature.settings']) {
+    if (gate.includes(forbidden)) {
+      errors.push(`${path.relative(repoRoot, capabilityGateTs)} contains legacy customization fallback "${forbidden}". Plugin-only customization paths are required.`);
     }
   }
 }

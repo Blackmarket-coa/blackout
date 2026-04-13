@@ -205,30 +205,41 @@ test('fails when plugin module injects an unregistered feature id', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-client-'));
   const file = writeFixture([featureRow()]);
 
-  const registryTs = writeFile(
+  const manifestTs = writeFile(
     dir,
-    'registry.ts',
-    "export const registeredFeatureModuleIds = ['governance', 'forum'] as const;\n"
+    'manifest.ts',
+    [
+      "export const featureModuleManifest = ['governance', 'forum'] as const;",
+      "export const featureModulePluginManifest = ['plugin.alpha'] as const;",
+      "export const runtimePluginManifest = ['runtime.alpha'] as const;",
+      '',
+    ].join('\n')
   );
   const coreModulesTs = writeFile(
     dir,
     'coreModules.ts',
-    "export const coreFeatureModules = [{ feature: {}, flag: 'governance' }];\n"
+    "export const coreFeatureModules = [{ feature: { id: 'governance' }, flag: 'governance' }];\n"
   );
   const pluginsTs = writeFile(
     dir,
     'plugins.ts',
     "export const featurePlugins = [{ id: 'demo', modules: [{ feature: { id: 'rogue-module' } }] }];\n"
   );
+  const runtimePluginsTs = writeFile(dir, 'runtimePlugins.ts', "export const runtimePluginEntries = [{ id: 'runtime.alpha' }];\n");
+  const capabilityGateTs = writeFile(dir, 'capabilityGate.ts', 'export const resolveFeatureCustomizations = () => [];\n');
+  writeFile(dir, 'features/governance/manifest.ts', "export const governanceFeature: BlackoutFeature = { id: 'governance', name: 'Governance', customizations: [] };\n");
 
   const res = spawnSync(
     'node',
     [
       scriptPath,
       '--file', file,
-      '--registry-ts', registryTs,
+      '--manifest-ts', manifestTs,
       '--core-modules-ts', coreModulesTs,
       '--plugins-ts', pluginsTs,
+      '--runtime-plugins-ts', runtimePluginsTs,
+      '--capability-gate-ts', capabilityGateTs,
+      '--features-root', path.join(dir, 'features'),
     ],
     { encoding: 'utf8' }
   );
@@ -241,30 +252,127 @@ test('fails when core module flag is missing from registration allowlist', () =>
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-client-core-'));
   const file = writeFixture([featureRow()]);
 
-  const registryTs = writeFile(
+  const manifestTs = writeFile(
     dir,
-    'registry.ts',
-    "export const registeredFeatureModuleIds = ['governance'] as const;\n"
+    'manifest.ts',
+    [
+      "export const featureModuleManifest = ['governance'] as const;",
+      "export const featureModulePluginManifest = ['plugin.alpha'] as const;",
+      "export const runtimePluginManifest = ['runtime.alpha'] as const;",
+      '',
+    ].join('\n')
   );
   const coreModulesTs = writeFile(
     dir,
     'coreModules.ts',
-    "export const coreFeatureModules = [{ feature: {}, flag: 'deaddrop' }];\n"
+    "export const coreFeatureModules = [{ feature: { id: 'governance' }, flag: 'deaddrop' }];\n"
   );
   const pluginsTs = writeFile(dir, 'plugins.ts', 'export const featurePlugins = [];\n');
+  const runtimePluginsTs = writeFile(dir, 'runtimePlugins.ts', "export const runtimePluginEntries = [{ id: 'runtime.alpha' }];\n");
+  const capabilityGateTs = writeFile(dir, 'capabilityGate.ts', 'export const resolveFeatureCustomizations = () => [];\n');
+  writeFile(dir, 'features/governance/manifest.ts', "export const governanceFeature: BlackoutFeature = { id: 'governance', name: 'Governance', customizations: [] };\n");
 
   const res = spawnSync(
     'node',
     [
       scriptPath,
       '--file', file,
-      '--registry-ts', registryTs,
+      '--manifest-ts', manifestTs,
       '--core-modules-ts', coreModulesTs,
       '--plugins-ts', pluginsTs,
+      '--runtime-plugins-ts', runtimePluginsTs,
+      '--capability-gate-ts', capabilityGateTs,
+      '--features-root', path.join(dir, 'features'),
     ],
     { encoding: 'utf8' }
   );
 
   assert.notEqual(res.status, 0);
-  assert.match(res.stderr, /Core feature module flag "deaddrop" is not in registeredFeatureModuleIds/);
+  assert.match(res.stderr, /Core feature module flag "deaddrop" is not in featureModuleManifest/);
+});
+
+test('fails when feature module plugin id is not allowlisted', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-plugins-'));
+  const file = writeFixture([featureRow()]);
+
+  const manifestTs = writeFile(
+    dir,
+    'manifest.ts',
+    [
+      "export const featureModuleManifest = ['governance'] as const;",
+      "export const featureModulePluginManifest = ['plugin.alpha'] as const;",
+      "export const runtimePluginManifest = ['runtime.alpha'] as const;",
+      '',
+    ].join('\n')
+  );
+  const coreModulesTs = writeFile(dir, 'coreModules.ts', "export const coreFeatureModules = [{ feature: { id: 'governance' }, flag: 'governance' }];\n");
+  const pluginsTs = writeFile(dir, 'plugins.ts', "export const featurePlugins = [{ id: 'plugin.rogue', modules: [] }];\n");
+  const runtimePluginsTs = writeFile(dir, 'runtimePlugins.ts', "export const runtimePluginEntries = [{ id: 'runtime.alpha' }];\n");
+  const capabilityGateTs = writeFile(dir, 'capabilityGate.ts', 'export const resolveFeatureCustomizations = () => [];\n');
+  writeFile(dir, 'features/governance/manifest.ts', "export const governanceFeature: BlackoutFeature = { id: 'governance', name: 'Governance', customizations: [] };\n");
+
+  const res = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--file', file,
+      '--manifest-ts', manifestTs,
+      '--core-modules-ts', coreModulesTs,
+      '--plugins-ts', pluginsTs,
+      '--runtime-plugins-ts', runtimePluginsTs,
+      '--capability-gate-ts', capabilityGateTs,
+      '--features-root', path.join(dir, 'features'),
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Unknown feature module plugin id "plugin.rogue"/);
+});
+
+test('fails when plugin-only customization policy is bypassed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-registry-plugin-paths-'));
+  const file = writeFixture([featureRow()]);
+
+  const manifestTs = writeFile(
+    dir,
+    'manifest.ts',
+    [
+      "export const featureModuleManifest = ['governance'] as const;",
+      "export const featureModulePluginManifest = ['plugin.alpha'] as const;",
+      "export const runtimePluginManifest = ['runtime.alpha'] as const;",
+      '',
+    ].join('\n')
+  );
+  const coreModulesTs = writeFile(dir, 'coreModules.ts', "export const coreFeatureModules = [{ feature: { id: 'governance' }, flag: 'governance' }];\n");
+  const pluginsTs = writeFile(dir, 'plugins.ts', 'export const featurePlugins = [];\n');
+  const runtimePluginsTs = writeFile(dir, 'runtimePlugins.ts', "export const runtimePluginEntries = [{ id: 'runtime.alpha' }];\n");
+  const capabilityGateTs = writeFile(
+    dir,
+    'capabilityGate.ts',
+    'export const resolveFeatureCustomizations = () => [{ id: "governance-legacy", routes: feature.routes, navItems: feature.navItems, settings: feature.settings }];\n'
+  );
+  writeFile(
+    dir,
+    'features/governance/manifest.ts',
+    "export const governanceFeature: BlackoutFeature = { id: 'governance', name: 'Governance', routes: [], customizations: [] };\n"
+  );
+
+  const res = spawnSync(
+    'node',
+    [
+      scriptPath,
+      '--file', file,
+      '--manifest-ts', manifestTs,
+      '--core-modules-ts', coreModulesTs,
+      '--plugins-ts', pluginsTs,
+      '--runtime-plugins-ts', runtimePluginsTs,
+      '--capability-gate-ts', capabilityGateTs,
+      '--features-root', path.join(dir, 'features'),
+    ],
+    { encoding: 'utf8' }
+  );
+
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /Plugin-only customization violation/);
 });

@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ReactDOM from 'react-dom/client';
 import { ScreenSize, ScreenSizeProvider } from '../../../../src/app/hooks/useScreenSize';
 import ClientLayout from '../../../../src/app/pages/client/ClientLayout';
+import { shellLayoutPlugin } from '../../../../src/app/plugins/shell/shellLayoutPlugin';
 
 const mountedRoots: ReactDOM.Root[] = [];
 
 afterEach(() => {
     mountedRoots.splice(0).forEach((root) => root.unmount());
     document.body.innerHTML = '';
+    vi.restoreAllMocks();
 });
 
 const renderClientLayout = (screenSize: ScreenSize) => {
@@ -44,5 +46,20 @@ describe('ClientLayout baseline parity', () => {
         expect(container.querySelector('[data-testid="client-nav"]')).toBeTruthy();
         expect(container.querySelector('[data-testid="client-body"]')).toBeTruthy();
         expect(container.querySelector('[data-testid="client-shell-separator"]')).toBeNull();
+    });
+
+    it('uses shell layout plugin boundary when legacy shell plugin is enabled', () => {
+        const isEnabledSpy = vi.spyOn(shellLayoutPlugin, 'isEnabled').mockReturnValue(true);
+        const renderSpy = vi
+            .spyOn(shellLayoutPlugin, 'renderLegacyLayout')
+            .mockImplementation(() => <div data-testid="plugin-shell-layout">Legacy Shell</div>);
+
+        const container = renderClientLayout(ScreenSize.Desktop);
+
+        expect(container.querySelector('[data-testid="plugin-shell-layout"]')).toBeTruthy();
+        expect(container.querySelector('[data-testid="client-shell-separator"]')).toBeNull();
+
+        isEnabledSpy.mockRestore();
+        renderSpy.mockRestore();
     });
 });
