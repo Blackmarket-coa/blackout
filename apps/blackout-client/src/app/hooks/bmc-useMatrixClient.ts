@@ -1,9 +1,7 @@
-import { useMatrixClient as useCanonicalMatrixClient } from './useMatrixClient';
+import { useLegacyMatrixClientAdapter } from '../plugins/matrix-adapters/hooks/useLegacyMatrixClientAdapter';
 
 /**
- * BMC compatibility wrapper for Matrix client access.
- *
- * Uses the canonical MatrixClient context provided by ClientRoot
- * instead of legacy auth atoms that are no longer hydrated.
+ * @deprecated Temporary bridge to preserve legacy imports.
+ * Scheduled for deletion in PR-6 after feature/plugin migration completes.
  */
-export const useMatrixClient = () => useCanonicalMatrixClient();
+export const useMatrixClient = () => useLegacyMatrixClientAdapter();

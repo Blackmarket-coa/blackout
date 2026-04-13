@@ -1,4 +1,4 @@
-import { getMessageActions } from '../../../lib/bmc-core/quick-actions';
+import { getMessageActions } from './quickActionCatalog';
 import { type MessageSpacing } from '../../state/settings';
 import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
