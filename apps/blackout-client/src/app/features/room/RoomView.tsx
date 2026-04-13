@@ -22,6 +22,7 @@ import { settingsAtom } from '../../state/settings';
 import { useSetting } from '../../state/hooks/settings';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
+import { roomViewBaselineControlLayout } from './roomViewLayoutContract';
 
 const FN_KEYS_REGEX = /^F\d+$/;
 const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
@@ -94,7 +95,11 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
   return (
     <Page ref={roomViewRef}>
       <RoomViewHeader />
-      <Box grow="Yes" direction="Column">
+      <Box
+        grow="Yes"
+        direction="Column"
+        data-control-region={roomViewBaselineControlLayout.timelineRegion}
+      >
         <RoomTimeline
           key={roomId}
           room={room}
@@ -104,7 +109,11 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
         />
         <RoomViewTyping room={room} />
       </Box>
-      <Box shrink="No" direction="Column">
+      <Box
+        shrink="No"
+        direction="Column"
+        data-control-region={roomViewBaselineControlLayout.composerRegion}
+      >
         <div style={{ padding: `0 ${config.space.S400}` }}>
           {tombstoneEvent ? (
             <RoomTombstone
