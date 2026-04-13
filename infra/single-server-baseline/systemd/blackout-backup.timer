@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Blackout backup every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+Persistent=true
+Unit=blackout-backup.service
+
+[Install]
+WantedBy=timers.target
