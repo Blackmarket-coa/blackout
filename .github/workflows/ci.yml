@@ -212,3 +212,25 @@ jobs:
         run: |
           echo "MONOREPO_MIGRATION_THRESHOLD_MET=true so qa:monorepo is required."
           exit 1
+
+  frontend-consolidation-safety-gates:
+    name: Frontend consolidation safety gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Anti-drift check for consolidation artifacts
+        run: pnpm guard:frontend-consolidation
+      - name: Legacy docs integrity gate
+        run: node _port/scripts/operations/docs_integrity_check.cjs
+      - name: Keep legacy/migration surfaces green
+        run: |
+          pnpm --filter @blackout/web test
+          pnpm --filter @blackout/blackout-gov test
