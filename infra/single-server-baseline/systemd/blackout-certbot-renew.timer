@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew Let's Encrypt certificates twice daily
+
+[Timer]
+OnCalendar=*-*-* 03,15:00:00
+Persistent=true
+Unit=blackout-certbot-renew.service
+
+[Install]
+WantedBy=timers.target

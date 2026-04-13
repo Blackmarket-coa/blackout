@@ -1,0 +1,39 @@
+server_name: "matrix.theblackout.app"
+pid_file: /data/homeserver.pid
+public_baseurl: "https://matrix.theblackout.app/"
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: true
+    resources:
+      - names: [client, federation, media, keys, consent]
+        compress: false
+
+database:
+  name: psycopg2
+  args:
+    user: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    database: ${POSTGRES_DB}
+    host: postgres
+    cp_min: 5
+    cp_max: 15
+
+redis:
+  enabled: true
+  host: redis
+  port: 6379
+  password: ${REDIS_PASSWORD}
+
+media_store_path: /media
+max_upload_size: 100M
+registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
+macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
+form_secret: "${SYNAPSE_FORM_SECRET}"
+signing_key_path: /data/matrix.theblackout.app.signing.key
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+# Keep this mounted at /data for simple backups.
+log_config: "/data/matrix.theblackout.app.log.config"
