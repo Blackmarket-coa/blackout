@@ -66,5 +66,10 @@ runtimePluginManifest.forEach((pluginId) => {
 
 export const orderedRuntimePlugins = [...runtimePluginEntries].sort((a, b) => a.order - b.order);
 
-export const isRuntimePluginEnabled = (pluginId: RuntimePluginId): boolean =>
-    orderedRuntimePlugins.find((plugin) => plugin.id === pluginId)?.enabled ?? false;
+export const isRuntimePluginEnabled = (pluginId: string): boolean => {
+    assertRuntimePluginIdAllowed(pluginId);
+    return (
+        orderedRuntimePlugins.find((plugin) => plugin.id === (pluginId as RuntimePluginId))
+            ?.enabled ?? false
+    );
+};

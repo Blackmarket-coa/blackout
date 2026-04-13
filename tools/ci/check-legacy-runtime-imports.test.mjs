@@ -67,3 +67,22 @@ test('allows bmc-* imports outside shell/runtime entrypoint allowlist for freeze
   const res = run(cwd);
   assert.equal(res.status, 0, res.stderr || res.stdout);
 });
+
+test('fails when blackout client source imports Stoat runtime/protocol namespaces', () => {
+  const cwd = makeWorkspace({
+    'apps/blackout-client/src/app/features/demo/Widget.tsx': "import { connect } from '@stoat/runtime';\n",
+  });
+  const res = run(cwd);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /blocked Stoat runtime\/protocol import in client path/);
+});
+
+test('fails when shell entrypoint imports an undocumented plugin extension slot', () => {
+  const cwd = makeWorkspace({
+    'apps/blackout-client/src/app/pages/client/ClientLayout.tsx':
+      "import { rightPanelPlugin } from '../../plugins/right-panel/panelSlots';\n",
+  });
+  const res = run(cwd);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /undocumented shell extension slot import/);
+});
