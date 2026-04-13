@@ -1,11 +1,13 @@
 import { useCallback, useMemo } from 'react';
+import {
+    DEAD_DROP_COMMAND_EVENT_TYPE,
+    DEAD_DROP_EVENT_TYPE,
+    DEAD_DROP_QUEUE_EVENT_TYPE,
+    DEAD_DROP_SCHEMA_VERSION,
+} from '@blackout/protocol';
+import { createDeadDropMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoom } from '../../hooks/bmc-useRoom';
-
-export const DEAD_DROP_EVENT_TYPE = 'co.bmc.deaddrop';
-export const DEAD_DROP_QUEUE_EVENT_TYPE = 'co.bmc.deaddrop.queue';
-export const DEAD_DROP_COMMAND_EVENT_TYPE = 'co.bmc.deaddrop.command';
-export const DEAD_DROP_SCHEMA_VERSION = 1;
 
 export type DeadDropScheduleType = 'interval' | 'cron' | 'manual';
 
@@ -164,40 +166,49 @@ export const useDeadDrop = (roomId: string) => {
 
 export const useSetDeadDrop = (roomId: string) => {
     const client = useMatrixClient();
+    const actions = useMemo(
+        () =>
+            createDeadDropMatrixActions({
+                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendStateEvent: (rid, et, content, stateKey) =>
+                    client.sendStateEvent(rid, et as never, content as never, stateKey),
+            }),
+        [client],
+    );
 
     return useCallback(
-        async (config: DeadDropConfig) => {
-            await client.sendStateEvent(
-                roomId,
-                DEAD_DROP_EVENT_TYPE as never,
-                { ...config, schemaVersion: DEAD_DROP_SCHEMA_VERSION } as never,
-                '',
-            );
-        },
-        [client, roomId],
+        async (config: DeadDropConfig) => actions.setDeadDropConfig(roomId, config),
+        [actions, roomId],
     );
 };
 
 export const useDeadDropQueueActions = (roomId: string) => {
     const client = useMatrixClient();
+    const actions = useMemo(
+        () =>
+            createDeadDropMatrixActions({
+                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendStateEvent: (rid, et, content, stateKey) =>
+                    client.sendStateEvent(rid, et as never, content as never, stateKey),
+            }),
+        [client],
+    );
 
     return useMemo(
         () => ({
             flush: async () =>
-                client.sendStateEvent(
-                    roomId,
-                    DEAD_DROP_COMMAND_EVENT_TYPE as never,
-                    { action: 'flush', at: Date.now(), commandId: crypto.randomUUID() } as never,
-                    '',
-                ),
+                actions.sendQueueCommand(roomId, {
+                    action: 'flush',
+                    at: Date.now(),
+                    commandId: crypto.randomUUID(),
+                }),
             clear: async () =>
-                client.sendStateEvent(
-                    roomId,
-                    DEAD_DROP_COMMAND_EVENT_TYPE as never,
-                    { action: 'clear', at: Date.now(), commandId: crypto.randomUUID() } as never,
-                    '',
-                ),
+                actions.sendQueueCommand(roomId, {
+                    action: 'clear',
+                    at: Date.now(),
+                    commandId: crypto.randomUUID(),
+                }),
         }),
-        [client, roomId],
+        [actions, roomId],
     );
 };
