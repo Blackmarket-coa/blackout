@@ -10,6 +10,8 @@ export type FeatureFlags = {
     legacyRoomSurfaceLayout: boolean;
     composerQuickActions: boolean;
     navigationSpaceHierarchy: boolean;
+    notificationsAdapter: boolean;
+    rightPanelPlugins: boolean;
 };
 
 export const defaultFeatureFlags: FeatureFlags = {
@@ -24,4 +26,6 @@ export const defaultFeatureFlags: FeatureFlags = {
     legacyRoomSurfaceLayout: false,
     composerQuickActions: true,
     navigationSpaceHierarchy: true,
+    notificationsAdapter: true,
+    rightPanelPlugins: true,
 };

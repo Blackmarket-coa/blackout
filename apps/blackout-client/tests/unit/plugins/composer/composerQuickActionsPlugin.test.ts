@@ -4,13 +4,18 @@ import {
     composerQuickActionsPlugin,
     resolveComposerMessageSpacingItems,
 } from '../../../../../src/app/plugins/composer';
-import { isRuntimePluginEnabled, orderedRuntimePlugins } from '../../../../../src/app/plugins/manifest';
+import {
+    isRuntimePluginEnabled,
+    orderedRuntimePlugins,
+} from '../../../../../src/app/plugins/manifest';
 
 describe('composer quick actions plugin', () => {
     it('uses deterministic manifest ordering and explicit toggle', () => {
         expect(orderedRuntimePlugins.map((plugin) => plugin.id)).toEqual([
             'composer.quick-actions',
             'navigation.space-hierarchy',
+            'notifications.adapter',
+            'right-panel.slots',
         ]);
         expect(isRuntimePluginEnabled('composer.quick-actions')).toBe(true);
     });
@@ -34,7 +39,7 @@ describe('composer quick actions plugin', () => {
     it('preserves Matrix action payload adapters by delegating to legacy action mapping', () => {
         const message = { msgtype: 'm.text' };
         expect(composerQuickActionsPlugin.getTimelineQuickActions(message)).toEqual(
-            getMessageActions(message),
+            getMessageActions(message)
         );
     });
 });
