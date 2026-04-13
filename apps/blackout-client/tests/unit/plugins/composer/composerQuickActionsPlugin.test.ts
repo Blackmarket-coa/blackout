@@ -38,6 +38,13 @@ describe('composer quick actions plugin', () => {
         ]);
     });
 
+    it('exposes register/unregister lifecycle hooks', () => {
+        const unregister = composerQuickActionsPlugin.register();
+
+        expect(typeof unregister).toBe('function');
+        expect(() => composerQuickActionsPlugin.unregister()).not.toThrow();
+    });
+
     it('preserves Matrix action payload adapters by delegating to legacy action mapping', () => {
         const message = { msgtype: 'm.text' };
         expect(composerQuickActionsPlugin.getTimelineQuickActions(message)).toEqual(

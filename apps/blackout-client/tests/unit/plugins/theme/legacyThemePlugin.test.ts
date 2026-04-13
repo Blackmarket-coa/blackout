@@ -7,6 +7,13 @@ describe('legacy theme override plugin', () => {
         expect(legacyThemePlugin.isEnabled()).toBe(false);
     });
 
+    it('implements plugin lifecycle contract', () => {
+        const unregister = legacyThemePlugin.register();
+
+        expect(typeof unregister).toBe('function');
+        expect(() => legacyThemePlugin.unregister()).not.toThrow();
+    });
+
     it('keeps monochrome filter reversible through plugin gate', () => {
         expect(legacyThemePlugin.applyMonochromeFilter(false)).toBe('');
         expect(legacyThemePlugin.applyMonochromeFilter(true)).toBe('');

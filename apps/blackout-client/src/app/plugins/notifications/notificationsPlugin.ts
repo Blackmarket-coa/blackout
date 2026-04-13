@@ -11,6 +11,7 @@ import {
 } from '../../state/bmc-unreads';
 import { useMatrixClient as useBaselineMatrixClient } from '../../hooks/useMatrixClient';
 import { useMatrixClient as useLegacyMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 
 export interface HookResult<T> {
@@ -108,9 +109,18 @@ const legacyNotificationsAdapter: NotificationModeAdapter = {
     usePushRules: () => usePushRulesFromClient(useLegacyMatrixClient),
 };
 
-export const notificationsAdapterPlugin = {
-    id: 'notifications.adapter' as const,
+let unregisterLifecycle = (): void => {};
+
+export const notificationsAdapterPlugin: PluginDefinition<'notifications.adapter'> = {
+    id: 'notifications.adapter',
     isEnabled: () => isRuntimePluginEnabled('notifications.adapter'),
+    register: () => {
+        unregisterLifecycle = (): void => {};
+        return unregisterLifecycle;
+    },
+    unregister: () => {
+        unregisterLifecycle();
+    },
 };
 
 export const resolveNotificationsAdapter = (pluginEnabled: boolean): NotificationModeAdapter =>

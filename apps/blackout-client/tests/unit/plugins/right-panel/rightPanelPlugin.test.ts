@@ -10,6 +10,13 @@ describe('right panel plugin slots', () => {
         expect(rightPanelPlugin.isEnabled()).toBe(isRuntimePluginEnabled('right-panel.slots'));
     });
 
+    it('exposes slot plugin lifecycle hooks', () => {
+        const unregister = rightPanelPlugin.register();
+
+        expect(typeof unregister).toBe('function');
+        expect(() => rightPanelPlugin.unregister()).not.toThrow();
+    });
+
     it('keeps baseline slots when plugin is disabled', () => {
         const registry = resolveRightPanelSlotRegistry(false, true);
 
