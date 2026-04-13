@@ -244,13 +244,18 @@ Execution entrypoint:
 - Optional override for staged evidence file: `--staging-signoff <path>`
 
 Staging signoff contract:
-- Default source: `apps/blackout-client/docs/release/staging-signoff.json`
+- Default source: `apps/blackout-client/docs/release/staging-signoff.report.json`
+- Template source: `apps/blackout-client/docs/release/staging-signoff.template.json`
 - Required assertions:
+  - `buildSha` must be non-placeholder release SHA
+  - `executedAtUtc` must be valid ISO-8601 UTC
+  - `signoff.decision === "GO"`
   - `summary.sev1 === 0`
   - `summary.sev2 === 0`
   - `regressions.spacing === false`
   - `regressions.location === false`
   - `regressions.functionality === false`
+  - `evidence.artifacts.length > 0`
 
 ---
 

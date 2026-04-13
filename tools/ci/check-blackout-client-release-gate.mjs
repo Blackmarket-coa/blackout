@@ -60,6 +60,10 @@ function readJson(filePath) {
 function validateSignoff(report, sourcePath) {
   const sev1 = Number(report?.summary?.sev1 ?? 0);
   const sev2 = Number(report?.summary?.sev2 ?? 0);
+  const buildSha = String(report?.buildSha ?? '').trim();
+  const executedAtUtc = String(report?.executedAtUtc ?? '').trim();
+  const decision = String(report?.signoff?.decision ?? '').trim().toUpperCase();
+  const artifacts = Array.isArray(report?.evidence?.artifacts) ? report.evidence.artifacts : [];
 
   const regressions = {
     spacing: Boolean(report?.regressions?.spacing),
@@ -71,6 +75,18 @@ function validateSignoff(report, sourcePath) {
 
   if (sev1 > 0) errors.push(`Sev-1 count must be 0 (found ${sev1}).`);
   if (sev2 > 0) errors.push(`Sev-2 count must be 0 (found ${sev2}).`);
+  if (!buildSha || /REPLACE_WITH_/i.test(buildSha)) {
+    errors.push('buildSha must be a real release-candidate SHA (placeholder values are not allowed).');
+  }
+  if (!executedAtUtc || Number.isNaN(Date.parse(executedAtUtc))) {
+    errors.push('executedAtUtc must be a valid ISO-8601 UTC timestamp.');
+  }
+  if (decision !== 'GO') {
+    errors.push(`signoff.decision must be "GO" (found "${report?.signoff?.decision ?? ''}").`);
+  }
+  if (artifacts.length === 0) {
+    errors.push('evidence.artifacts must include at least one staging evidence link/path.');
+  }
 
   for (const [key, value] of Object.entries(regressions)) {
     if (value) {
@@ -82,12 +98,10 @@ function validateSignoff(report, sourcePath) {
     fail(`Release gate staging signoff validation failed for ${sourcePath}:\n- ${errors.join('\n- ')}`);
   }
 
-  process.stdout.write(
-    `\nStaging signoff OK (${sourcePath}): sev1=${sev1}, sev2=${sev2}, spacing/location/functionality regressions all false.\n`
-  );
+  process.stdout.write(`\nStaging signoff OK (${sourcePath}): sev1=${sev1}, sev2=${sev2}, decision=${decision}.\n`);
 }
 
-const defaultSignoffPath = 'apps/blackout-client/docs/release/staging-signoff.json';
+const defaultSignoffPath = 'apps/blackout-client/docs/release/staging-signoff.report.json';
 const signoffPath = getArgValue('--staging-signoff', defaultSignoffPath);
 const skipSmoke = hasArg('--skip-smoke');
 const skipBoundary = hasArg('--skip-boundary');

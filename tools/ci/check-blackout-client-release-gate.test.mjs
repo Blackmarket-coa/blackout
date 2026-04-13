@@ -24,8 +24,12 @@ function run(signoffPath) {
 
 test('passes when signoff has no Sev-1/Sev-2 and no regressions', () => {
   const report = {
+    buildSha: 'de38dfb',
+    executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 0, sev2: 0 },
     regressions: { spacing: false, location: false, functionality: false },
+    evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
+    signoff: { decision: 'GO' },
   };
 
   const signoffPath = writeSignoff(report);
@@ -37,8 +41,12 @@ test('passes when signoff has no Sev-1/Sev-2 and no regressions', () => {
 
 test('fails when Sev-1 is present', () => {
   const report = {
+    buildSha: 'de38dfb',
+    executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 1, sev2: 0 },
     regressions: { spacing: false, location: false, functionality: false },
+    evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
+    signoff: { decision: 'GO' },
   };
 
   const signoffPath = writeSignoff(report);
@@ -50,8 +58,12 @@ test('fails when Sev-1 is present', () => {
 
 test('fails when spacing/location/functionality regression is reported', () => {
   const report = {
+    buildSha: 'de38dfb',
+    executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 0, sev2: 0 },
     regressions: { spacing: true, location: false, functionality: false },
+    evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
+    signoff: { decision: 'GO' },
   };
 
   const signoffPath = writeSignoff(report);
@@ -59,4 +71,22 @@ test('fails when spacing/location/functionality regression is reported', () => {
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Regression flag "spacing" must be false/i);
+});
+
+test('fails when placeholder signoff metadata is used', () => {
+  const report = {
+    buildSha: 'REPLACE_WITH_RELEASE_SHA',
+    executedAtUtc: '1970-01-01T00:00:00.000Z',
+    summary: { sev1: 0, sev2: 0 },
+    regressions: { spacing: false, location: false, functionality: false },
+    evidence: { artifacts: [] },
+    signoff: { decision: 'NO_GO' },
+  };
+
+  const signoffPath = writeSignoff(report);
+  const result = run(signoffPath);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /buildSha must be a real release-candidate SHA/i);
+  assert.match(result.stderr, /signoff.decision must be "GO"/i);
 });
