@@ -10,7 +10,7 @@ import {
 } from '../hooks/useTheme';
 import { useSetting } from '../state/hooks/settings';
 import { settingsAtom } from '../state/settings';
-import { defaultFeatureFlags } from '../core/features/featureFlags';
+import { legacyThemePlugin } from '../plugins/theme/legacyThemePlugin';
 
 export function UnAuthRouteThemeManager() {
     const systemThemeKind = useSystemThemeKind();
@@ -39,11 +39,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
 
         document.body.classList.add(...activeTheme.classNames);
 
-        if (defaultFeatureFlags.legacyThemeOverrides && monochromeMode) {
-            document.body.style.filter = 'grayscale(1)';
-        } else {
-            document.body.style.filter = '';
-        }
+        document.body.style.filter = legacyThemePlugin.applyMonochromeFilter(monochromeMode);
     }, [activeTheme, monochromeMode]);
 
     return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;

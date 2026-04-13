@@ -22,6 +22,8 @@ describe('feature allowlist manifest', () => {
     });
 
     it('accepts known runtime plugin IDs and rejects unknown IDs', () => {
+        expect(runtimePluginManifest).toContain('shell.legacy-layout');
+        expect(runtimePluginManifest).toContain('theme.legacy-overrides');
         expect(runtimePluginManifest).toContain('composer.quick-actions');
         expect(() => assertRuntimePluginIdAllowed('right-panel.slots')).not.toThrow();
         expect(() => assertRuntimePluginIdAllowed('unknown.plugin')).toThrow(

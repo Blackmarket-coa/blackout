@@ -11,6 +11,8 @@ export const featureModuleManifest = ['governance', 'forum', 'deaddrop', 'modera
 export type FeatureModuleId = typeof featureModuleManifest[number];
 
 export const runtimePluginManifest = [
+    'shell.legacy-layout',
+    'theme.legacy-overrides',
     'composer.quick-actions',
     'navigation.space-hierarchy',
     'notifications.adapter',
