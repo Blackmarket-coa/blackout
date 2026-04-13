@@ -20,6 +20,11 @@ describe('capabilityGate', () => {
         expect(fail).toBe(false);
     });
 
+    it('fails closed when gate requirements are not provided in context', () => {
+        expect(isCapabilityGateSatisfied({ allOf: ['a.read'] }, {})).toBe(false);
+        expect(isCapabilityGateSatisfied({ flags: ['governance'] }, {})).toBe(false);
+    });
+
     it('adapts legacy feature surfaces as workflow plugin', () => {
         const legacyFeature: BlackoutFeature = {
             id: 'legacy-feature',

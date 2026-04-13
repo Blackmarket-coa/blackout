@@ -42,8 +42,8 @@ Each `manifest.ts` now contributes `customizations` entries with a strict catego
 ## Capability gate strategy
 
 1. **Feature enrollment**: `buildFeatureRegistry()` still decides which features are loaded by top-level feature flags.
-2. **Customization gating**: `resolveFeatureCustomizations()` evaluates each customization gate (`allOf`, `anyOf`, `not`, `flags`).
-3. **Surface composition**: route/nav/settings composers now flatten only enabled customizations.
+2. **Customization gating**: `resolveFeatureCustomizations()` evaluates each customization gate (`allOf`, `anyOf`, `not`, `flags`) with **fail-closed defaults**.
+3. **Surface composition**: route/nav/settings composers flatten only customizations enabled by runtime gate context (capabilities + flags).
 4. **Compatibility fallback**: if a feature has no `customizations`, legacy `routes/navItems/settings` are adapted as a single workflow customization.
 
 This allows one feature to host multiple plugins with different access requirements without hardcoding route/nav/settings wiring.

@@ -24,13 +24,12 @@ export const isCapabilityGateSatisfied = (
     if (!gate) return true;
 
     const granted = new Set(context.capabilities ?? []);
-    const hasCapabilityContext = Array.isArray(context.capabilities);
 
-    if (hasCapabilityContext && gate.allOf && !hasAll(gate.allOf, granted)) return false;
-    if (hasCapabilityContext && gate.anyOf && !hasAny(gate.anyOf, granted)) return false;
-    if (hasCapabilityContext && gate.not && hasAny(gate.not, granted)) return false;
+    if (gate.allOf && !hasAll(gate.allOf, granted)) return false;
+    if (gate.anyOf && !hasAny(gate.anyOf, granted)) return false;
+    if (gate.not && hasAny(gate.not, granted)) return false;
 
-    if (gate.flags?.length && context.flags) {
+    if (gate.flags?.length) {
         const hasFlags = gate.flags.every((flag) => Boolean(context.flags?.[flag]));
         if (!hasFlags) return false;
     }
