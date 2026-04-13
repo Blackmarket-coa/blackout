@@ -75,7 +75,8 @@
     "guard:legacy-runtime-imports": "node tools/ci/check-legacy-runtime-imports.mjs",
     "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs",
     "guard:deployment-readiness": "node tools/ci/check-deployment-readiness.mjs",
-    "guard:frontend-consolidation": "node tools/ci/check-frontend-consolidation-gates.mjs"
+    "guard:frontend-consolidation": "node tools/ci/check-frontend-consolidation-gates.mjs",
+    "ci:smoke:blackout-client": "node tools/ci/run-blackout-client-smoke-matrix.mjs"
   },
   "devDependencies": {
     "turbo": "^2.8.16",

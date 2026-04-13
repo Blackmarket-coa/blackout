@@ -1,6 +1,6 @@
 import { buildFeatureRegistry } from './buildRegistry';
 import { coreFeatureModules } from './coreModules';
-import { defaultFeatureFlags } from './featureFlags';
+import { runtimeFeatureFlags } from './featureFlags';
 import { assertFeatureModulesRegistered, orderFeatureModulePlugins } from './composition';
 import { featurePlugins } from './plugins';
 
@@ -15,4 +15,4 @@ assertFeatureModulesRegistered(
     'plugin'
 );
 
-export const featureRegistry = buildFeatureRegistry(defaultFeatureFlags, orderedFeaturePlugins);
+export const featureRegistry = buildFeatureRegistry(runtimeFeatureFlags, orderedFeaturePlugins);
