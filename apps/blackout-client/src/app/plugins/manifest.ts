@@ -13,6 +13,16 @@ export type RuntimePluginManifestEntry = {
 
 const runtimePluginEntries: RuntimePluginManifestEntry[] = [
     {
+        id: 'shell.legacy-layout',
+        order: 5,
+        enabled: defaultFeatureFlags.legacyShellLayout,
+    },
+    {
+        id: 'theme.legacy-overrides',
+        order: 8,
+        enabled: defaultFeatureFlags.legacyThemeOverrides,
+    },
+    {
         id: 'composer.quick-actions',
         order: 10,
         enabled: defaultFeatureFlags.composerQuickActions,

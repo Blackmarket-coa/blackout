@@ -12,6 +12,8 @@ import {
 describe('composer quick actions plugin', () => {
     it('uses deterministic manifest ordering and explicit toggle', () => {
         expect(orderedRuntimePlugins.map((plugin) => plugin.id)).toEqual([
+            'shell.legacy-layout',
+            'theme.legacy-overrides',
             'composer.quick-actions',
             'navigation.space-hierarchy',
             'notifications.adapter',

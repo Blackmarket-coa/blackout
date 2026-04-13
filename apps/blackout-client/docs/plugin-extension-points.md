@@ -21,6 +21,9 @@ Shell/runtime extension points remain intentionally small:
 -   `bootstrapFeatures(manifest)` (feature registry composition only)
 -   Runtime plugin declarations in `src/app/plugins/manifest.ts`
 -   Typed plugin slot APIs (composer/navigation/notifications/right-panel)
+-   Shell/theme runtime adapters:
+    -   `src/app/plugins/shell/shellLayoutPlugin.tsx`
+    -   `src/app/plugins/theme/legacyThemePlugin.ts`
 
 No direct shell/runtime import path may consume legacy `bmc-*` bridge modules.
 
