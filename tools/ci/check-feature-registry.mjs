@@ -33,7 +33,6 @@ const VALID_UI_ENTRY_PREFIXES = new Set([
 ]);
 const VALID_EVIDENCE_TYPES = new Set(['code', 'docs', 'runtime', 'external-infra']);
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const STRING_LITERAL_RE = /'([^']+)'/g;
 
 function hasVerifiableInfraEvidence(paths) {
   return paths.some((pathEntry) =>
@@ -88,12 +87,13 @@ function readIfExists(filePath) {
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
 }
 
-function parseRegisteredFeatureIds(source) {
-  const match = source.match(/registeredFeatureModuleIds\s*=\s*\[([\s\S]*?)\]/m);
+function parseStringListConst(source, constName) {
+  const pattern = new RegExp(`${constName}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'm');
+  const match = source.match(pattern);
   if (!match) return null;
 
   const ids = [];
-  for (const literal of match[1].matchAll(STRING_LITERAL_RE)) {
+  for (const literal of match[1].matchAll(/'([^']+)'/g)) {
     ids.push(literal[1]);
   }
 
@@ -118,22 +118,34 @@ function parseFeatureIdsFromPlugins(source) {
   return ids;
 }
 
+
+function parseRuntimePluginIdsFromManifest(source) {
+  const ids = [];
+  const idRe = /id\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(idRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
 function validateClientFeatureRegistration(errors) {
-  const registryTs = path.resolve(process.cwd(), getArg('--registry-ts') ?? 'apps/blackout-client/src/app/core/features/registry.ts');
+  const manifestTs = path.resolve(process.cwd(), getArg('--manifest-ts') ?? 'apps/blackout-client/src/app/core/features/manifest.ts');
   const coreModulesTs = path.resolve(process.cwd(), getArg('--core-modules-ts') ?? 'apps/blackout-client/src/app/core/features/coreModules.ts');
-  const pluginsTs = path.resolve(process.cwd(), getArg('--plugins-ts') ?? 'apps/blackout-client/src/app/core/features/plugins.ts');
+  const featurePluginsTs = path.resolve(process.cwd(), getArg('--plugins-ts') ?? 'apps/blackout-client/src/app/core/features/plugins.ts');
+  const runtimePluginsTs = path.resolve(process.cwd(), getArg('--runtime-plugins-ts') ?? 'apps/blackout-client/src/app/plugins/manifest.ts');
 
-  const registrySource = readIfExists(registryTs);
+  const manifestSource = readIfExists(manifestTs);
   const coreSource = readIfExists(coreModulesTs);
-  const pluginsSource = readIfExists(pluginsTs);
+  const featurePluginsSource = readIfExists(featurePluginsTs);
+  const runtimePluginsSource = readIfExists(runtimePluginsTs);
 
-  if (!registrySource || !coreSource || !pluginsSource) {
+  if (!manifestSource || !coreSource || !featurePluginsSource || !runtimePluginsSource) {
     return;
   }
 
-  const registeredFeatureIds = parseRegisteredFeatureIds(registrySource);
+  const registeredFeatureIds = parseStringListConst(manifestSource, 'featureModuleManifest');
   if (!registeredFeatureIds || registeredFeatureIds.length === 0) {
-    errors.push(`Client feature registry missing registeredFeatureModuleIds allowlist in ${path.relative(process.cwd(), registryTs)}.`);
+    errors.push(`Client feature registry missing featureModuleManifest allowlist in ${path.relative(process.cwd(), manifestTs)}.`);
     return;
   }
 
@@ -142,14 +154,40 @@ function validateClientFeatureRegistration(errors) {
   const coreFlagIds = parseFlagIdsFromCoreModules(coreSource);
   for (const flagId of coreFlagIds) {
     if (!registeredSet.has(flagId)) {
-      errors.push(`Core feature module flag "${flagId}" is not in registeredFeatureModuleIds.`);
+      errors.push(`Core feature module flag "${flagId}" is not in featureModuleManifest.`);
     }
   }
 
-  const pluginFeatureIds = parseFeatureIdsFromPlugins(pluginsSource);
+  const pluginFeatureIds = parseFeatureIdsFromPlugins(featurePluginsSource);
   for (const featureId of pluginFeatureIds) {
     if (!registeredSet.has(featureId)) {
-      errors.push(`Plugin injects unregistered feature id "${featureId}" in ${path.relative(process.cwd(), pluginsTs)}.`);
+      errors.push(`Plugin injects unregistered feature id "${featureId}" in ${path.relative(process.cwd(), featurePluginsTs)}.`);
+    }
+  }
+
+  const allowedRuntimePluginIds = parseStringListConst(manifestSource, 'runtimePluginManifest');
+  const declaredRuntimePluginIds = parseRuntimePluginIdsFromManifest(runtimePluginsSource);
+
+  if (!allowedRuntimePluginIds || allowedRuntimePluginIds.length === 0) {
+    errors.push(`Runtime plugin allowlist missing runtimePluginManifest in ${path.relative(process.cwd(), manifestTs)}.`);
+    return;
+  }
+
+  if (!declaredRuntimePluginIds || declaredRuntimePluginIds.length === 0) {
+    errors.push(`Runtime plugin declarations missing runtimePluginEntries in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    return;
+  }
+
+  const allowedRuntimeSet = new Set(allowedRuntimePluginIds);
+  for (const pluginId of declaredRuntimePluginIds) {
+    if (!allowedRuntimeSet.has(pluginId)) {
+      errors.push(`Unknown runtime plugin id "${pluginId}" declared in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    }
+  }
+
+  for (const pluginId of allowedRuntimePluginIds) {
+    if (!declaredRuntimePluginIds.includes(pluginId)) {
+      errors.push(`Allowlisted runtime plugin id "${pluginId}" is missing in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
     }
   }
 }

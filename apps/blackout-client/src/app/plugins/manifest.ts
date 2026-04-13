@@ -1,10 +1,9 @@
 import { defaultFeatureFlags } from '../core/features/featureFlags';
-
-export type RuntimePluginId =
-    | 'composer.quick-actions'
-    | 'navigation.space-hierarchy'
-    | 'notifications.adapter'
-    | 'right-panel.slots';
+import {
+    assertRuntimePluginIdAllowed,
+    runtimePluginManifest,
+    type RuntimePluginId,
+} from '../core/features/manifest';
 
 export type RuntimePluginManifestEntry = {
     id: RuntimePluginId;
@@ -12,7 +11,7 @@ export type RuntimePluginManifestEntry = {
     enabled: boolean;
 };
 
-const runtimePluginManifest: RuntimePluginManifestEntry[] = [
+const runtimePluginEntries: RuntimePluginManifestEntry[] = [
     {
         id: 'composer.quick-actions',
         order: 10,
@@ -35,7 +34,18 @@ const runtimePluginManifest: RuntimePluginManifestEntry[] = [
     },
 ];
 
-export const orderedRuntimePlugins = [...runtimePluginManifest].sort((a, b) => a.order - b.order);
+runtimePluginEntries.forEach((plugin) => assertRuntimePluginIdAllowed(plugin.id));
+
+const declaredIds = new Set(runtimePluginEntries.map((plugin) => plugin.id));
+runtimePluginManifest.forEach((pluginId) => {
+    if (!declaredIds.has(pluginId)) {
+        throw new Error(
+            `[feature-manifest] Runtime plugin "${pluginId}" is allowlisted but missing from src/app/plugins/manifest.ts.`
+        );
+    }
+});
+
+export const orderedRuntimePlugins = [...runtimePluginEntries].sort((a, b) => a.order - b.order);
 
 export const isRuntimePluginEnabled = (pluginId: RuntimePluginId): boolean =>
     orderedRuntimePlugins.find((plugin) => plugin.id === pluginId)?.enabled ?? false;

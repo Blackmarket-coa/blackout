@@ -5,17 +5,23 @@ import path from 'node:path';
 const ROOTS = ['apps', 'packages'];
 const IMPORT_RE = /(?:import\s+[^'"\n]*?from\s*|import\s*\(|export\s+[^'"\n]*?from\s*)['\"]([^'\"]+)['\"]/g;
 const BLOCKED_LEGACY_RE = /(^|\/)(legacy|_port)(\/|$)/;
-const BLOCKED_BMC_RE = /(^|\/)bmc-[^/]+/;
 const SKIP_PARTS = ['node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.git'];
 const EXT_RE = /\.(?:[cm]?[jt]sx?|mjs|cjs)$/;
 
-const SHELL_RUNTIME_ENTRYPOINTS = new Set([
+const CORE_RUNTIME_PATH_PREFIXES = [
   'apps/blackout-client/src/main.tsx',
   'apps/blackout-client/src/index.tsx',
-  'apps/blackout-client/src/app/core/features/registry.ts',
-  'apps/blackout-client/src/app/core/features/plugins.ts',
-  'apps/blackout-client/src/app/core/features/composition.ts',
-]);
+  'apps/blackout-client/src/app/pages/Router.tsx',
+  'apps/blackout-client/src/app/pages/client/ClientLayout.tsx',
+  'apps/blackout-client/src/app/core/',
+];
+
+const BLOCKED_CORE_RUNTIME_IMPORT_PATTERNS = [
+  { re: /(^|\/)hooks\/bmc-[^/]+/, reason: 'legacy hook bridge import' },
+  { re: /(^|\/)state\/bmc-[^/]+/, reason: 'legacy state bridge import' },
+  { re: /(^|\/)utils\/bmc-[^/]+/, reason: 'legacy utility bridge import' },
+  { re: /(^|\/)lib\/bmc-core(\/|$)/, reason: 'legacy bmc-core import' },
+];
 
 function walk(dir, out) {
   if (!fs.existsSync(dir)) return;
@@ -32,22 +38,42 @@ function walk(dir, out) {
   }
 }
 
+function isCoreRuntimePath(relativePath) {
+  const normalized = relativePath.replace(/\\/g, '/');
+  return CORE_RUNTIME_PATH_PREFIXES.some((prefix) =>
+    prefix.endsWith('.ts') || prefix.endsWith('.tsx')
+      ? normalized === prefix
+      : normalized.startsWith(prefix)
+  );
+}
+
 function collectViolations(filePath, cwd) {
   const source = fs.readFileSync(filePath, 'utf8');
   const violations = [];
-  const relativePath = path.relative(cwd, filePath);
-  const isShellEntrypoint = SHELL_RUNTIME_ENTRYPOINTS.has(relativePath.replace(/\\/g, '/'));
+  const relativePath = path.relative(cwd, filePath).replace(/\\/g, '/');
+  const checkCoreRuntime = isCoreRuntimePath(relativePath);
 
   for (const match of source.matchAll(IMPORT_RE)) {
     const specifier = match[1];
-    const isLegacyViolation = BLOCKED_LEGACY_RE.test(specifier);
-    const isBmcViolation = isShellEntrypoint && BLOCKED_BMC_RE.test(specifier);
-    if (!isLegacyViolation && !isBmcViolation) continue;
+    const matchedReasons = [];
+
+    if (BLOCKED_LEGACY_RE.test(specifier)) {
+      matchedReasons.push('blocked legacy path');
+    }
+
+    if (checkCoreRuntime) {
+      for (const rule of BLOCKED_CORE_RUNTIME_IMPORT_PATTERNS) {
+        if (rule.re.test(specifier)) {
+          matchedReasons.push(rule.reason);
+        }
+      }
+    }
+
+    if (matchedReasons.length === 0) continue;
 
     const start = source.lastIndexOf('\n', match.index ?? 0) + 1;
     const line = source.slice(0, start).split('\n').length;
-    const reason = isLegacyViolation ? 'blocked legacy path' : 'blocked bmc-* shell entrypoint path';
-    violations.push({ line, specifier, reason });
+    violations.push({ line, specifier, reason: matchedReasons.join(', ') });
   }
 
   return violations;
