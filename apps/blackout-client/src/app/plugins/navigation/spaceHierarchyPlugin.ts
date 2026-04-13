@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import {
     useSpaceTree as useLegacySpaceTree,
     type HookResult,
-} from '../../hooks/bmc-useSpaceHierarchy';
+} from './useLegacySpaceHierarchyAdapter';
 import type { SpaceNode } from '../../state/bmc-spaces';
 import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
