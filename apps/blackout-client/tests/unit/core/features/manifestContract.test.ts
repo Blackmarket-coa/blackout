@@ -32,6 +32,9 @@ describe('feature metadata contract governance', () => {
             expect(feature.id).toMatch(/^[a-z0-9-]+$/);
             expect(feature.name.length).toBeGreaterThan(0);
             expect(feature.capabilities?.length ?? 0).toBeGreaterThan(0);
+            expect(feature.routes).toBeUndefined();
+            expect(feature.navItems).toBeUndefined();
+            expect(feature.settings).toBeUndefined();
 
             expect(ids.has(feature.id)).toBe(false);
             ids.add(feature.id);
@@ -49,6 +52,11 @@ describe('feature metadata contract governance', () => {
                 expect(customization.category).toMatch(
                     /^(visual\/layout plugin|interaction plugin|workflow plugin|service-backed plugin)$/
                 );
+                expect(
+                    Boolean(customization.routes?.length) ||
+                        Boolean(customization.navItems?.length) ||
+                        Boolean(customization.settings?.length)
+                ).toBe(true);
 
                 for (const route of customization.routes ?? []) {
                     expect(route.path.startsWith('/')).toBe(true);

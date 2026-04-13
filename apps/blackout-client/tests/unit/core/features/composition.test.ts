@@ -138,4 +138,15 @@ describe('feature registry composition surfaces', () => {
             /Unknown feature module plugin id/
         );
     });
+
+    it('rejects legacy feature composition paths without plugin customizations', () => {
+        expect(() =>
+            composeFeatureRoutes([
+                {
+                    id: 'legacy-feature',
+                    name: 'Legacy Feature',
+                },
+            ])
+        ).toThrow(/must define plugin customizations/);
+    });
 });

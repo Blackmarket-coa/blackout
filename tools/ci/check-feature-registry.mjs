@@ -128,11 +128,111 @@ function parseRuntimePluginIdsFromManifest(source) {
   return ids;
 }
 
+function parseFeatureModulePluginIds(source) {
+  const ids = [];
+  const pluginIdRe = /id\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(pluginIdRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function listFeatureManifestFiles(featuresRoot) {
+  if (!fs.existsSync(featuresRoot)) return [];
+
+  const files = [];
+  const stack = [featuresRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name === 'manifest.ts') {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function parseFeatureObjectTopLevelProps(source) {
+  const props = [];
+  const marker = 'BlackoutFeature';
+  let markerIndex = source.indexOf(marker);
+  while (markerIndex !== -1) {
+    const objectStart = source.indexOf('{', markerIndex);
+    if (objectStart === -1) break;
+
+    let depth = 0;
+    let currentToken = '';
+    let captureProperty = false;
+    for (let i = objectStart; i < source.length; i += 1) {
+      const char = source[i];
+      const prev = source[i - 1];
+      const escaped = prev === '\\';
+
+      if (char === "'" || char === '"' || char === '`') {
+        const quote = char;
+        i += 1;
+        while (i < source.length) {
+          if (source[i] === quote && source[i - 1] !== '\\') break;
+          i += 1;
+        }
+        continue;
+      }
+
+      if (char === '{') {
+        depth += 1;
+        captureProperty = depth === 1;
+        currentToken = '';
+        continue;
+      }
+
+      if (char === '}') {
+        if (depth === 1) {
+          markerIndex = source.indexOf(marker, i);
+          return props;
+        }
+        depth -= 1;
+        continue;
+      }
+
+      if (depth !== 1) continue;
+
+      if (char === ':' && captureProperty) {
+        const prop = currentToken.trim().replace(/^[,\s]+/, '');
+        if (prop) props.push(prop);
+        captureProperty = false;
+        currentToken = '';
+        continue;
+      }
+
+      if (char === ',') {
+        captureProperty = true;
+        currentToken = '';
+        continue;
+      }
+
+      if (captureProperty) {
+        if (!escaped) currentToken += char;
+      }
+    }
+    break;
+  }
+  return props;
+}
+
 function validateClientFeatureRegistration(errors) {
   const manifestTs = path.resolve(process.cwd(), getArg('--manifest-ts') ?? 'apps/blackout-client/src/app/core/features/manifest.ts');
   const coreModulesTs = path.resolve(process.cwd(), getArg('--core-modules-ts') ?? 'apps/blackout-client/src/app/core/features/coreModules.ts');
   const featurePluginsTs = path.resolve(process.cwd(), getArg('--plugins-ts') ?? 'apps/blackout-client/src/app/core/features/plugins.ts');
   const runtimePluginsTs = path.resolve(process.cwd(), getArg('--runtime-plugins-ts') ?? 'apps/blackout-client/src/app/plugins/manifest.ts');
+  const capabilityGateTs = path.resolve(process.cwd(), getArg('--capability-gate-ts') ?? 'apps/blackout-client/src/app/core/features/capabilityGate.ts');
+  const featuresRoot = path.resolve(process.cwd(), getArg('--features-root') ?? 'apps/blackout-client/src/app/features');
 
   const manifestSource = readIfExists(manifestTs);
   const coreSource = readIfExists(coreModulesTs);
@@ -165,6 +265,19 @@ function validateClientFeatureRegistration(errors) {
     }
   }
 
+  const allowedFeatureModulePluginIds = parseStringListConst(manifestSource, 'featureModulePluginManifest');
+  const declaredFeatureModulePluginIds = parseFeatureModulePluginIds(featurePluginsSource);
+  if (!allowedFeatureModulePluginIds || allowedFeatureModulePluginIds.length === 0) {
+    errors.push(`Feature module plugin allowlist missing featureModulePluginManifest in ${path.relative(process.cwd(), manifestTs)}.`);
+  } else {
+    const allowedFeatureModulePluginSet = new Set(allowedFeatureModulePluginIds);
+    for (const pluginId of declaredFeatureModulePluginIds) {
+      if (!allowedFeatureModulePluginSet.has(pluginId)) {
+        errors.push(`Unknown feature module plugin id "${pluginId}" in ${path.relative(process.cwd(), featurePluginsTs)}.`);
+      }
+    }
+  }
+
   const allowedRuntimePluginIds = parseStringListConst(manifestSource, 'runtimePluginManifest');
   const declaredRuntimePluginIds = parseRuntimePluginIdsFromManifest(runtimePluginsSource);
 
@@ -188,6 +301,34 @@ function validateClientFeatureRegistration(errors) {
   for (const pluginId of allowedRuntimePluginIds) {
     if (!declaredRuntimePluginIds.includes(pluginId)) {
       errors.push(`Allowlisted runtime plugin id "${pluginId}" is missing in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    }
+  }
+
+  const capabilityGateSource = readIfExists(capabilityGateTs);
+  if (capabilityGateSource) {
+    const forbiddenFallbackAnchors = ['-legacy', 'routes: feature.routes', 'navItems: feature.navItems', 'settings: feature.settings'];
+    for (const anchor of forbiddenFallbackAnchors) {
+      if (capabilityGateSource.includes(anchor)) {
+        errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), capabilityGateTs)}: remove legacy fallback anchor "${anchor}".`);
+      }
+    }
+  }
+
+  for (const featureManifestFile of listFeatureManifestFiles(featuresRoot)) {
+    const source = readIfExists(featureManifestFile);
+    if (!source) continue;
+
+    const topLevelProps = new Set(parseFeatureObjectTopLevelProps(source));
+    if (topLevelProps.size === 0) continue;
+
+    if (!topLevelProps.has('customizations')) {
+      errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), featureManifestFile)}: feature manifest must declare "customizations".`);
+    }
+
+    for (const forbiddenProp of ['routes', 'navItems', 'settings']) {
+      if (topLevelProps.has(forbiddenProp)) {
+        errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), featureManifestFile)}: top-level "${forbiddenProp}" must move into plugin customizations.`);
+      }
     }
   }
 }

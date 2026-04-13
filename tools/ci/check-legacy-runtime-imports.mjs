@@ -17,6 +17,7 @@ const CORE_RUNTIME_PATH_PREFIXES = [
 ];
 
 const BLOCKED_CORE_RUNTIME_IMPORT_PATTERNS = [
+  { re: /(^|\/)bmc-[^/]+/, reason: 'blocked bmc-* shell entrypoint path' },
   { re: /(^|\/)hooks\/bmc-[^/]+/, reason: 'legacy hook bridge import' },
   { re: /(^|\/)state\/bmc-[^/]+/, reason: 'legacy state bridge import' },
   { re: /(^|\/)utils\/bmc-[^/]+/, reason: 'legacy utility bridge import' },
