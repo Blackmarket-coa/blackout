@@ -36,6 +36,7 @@ import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
+import { rightPanelPlugin } from '../../plugins/right-panel';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -115,11 +116,12 @@ export const ClientLayout = () => {
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
     const featureFlags = featureEntrypointRegistry.flags;
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
+    const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
     const callEnabled = featureFlags['features.call.elementCall'] ?? false;
     const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
     const rightPanels = useMemo(
-        () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
-        [rolesEnabled]
+        () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
+        [rolesPanelEnabled]
     );
 
     useEffect(() => {

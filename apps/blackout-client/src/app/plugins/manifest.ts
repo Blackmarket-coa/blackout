@@ -1,6 +1,10 @@
 import { defaultFeatureFlags } from '../core/features/featureFlags';
 
-export type RuntimePluginId = 'composer.quick-actions' | 'navigation.space-hierarchy';
+export type RuntimePluginId =
+    | 'composer.quick-actions'
+    | 'navigation.space-hierarchy'
+    | 'notifications.adapter'
+    | 'right-panel.slots';
 
 export type RuntimePluginManifestEntry = {
     id: RuntimePluginId;
@@ -18,6 +22,16 @@ const runtimePluginManifest: RuntimePluginManifestEntry[] = [
         id: 'navigation.space-hierarchy',
         order: 20,
         enabled: defaultFeatureFlags.navigationSpaceHierarchy,
+    },
+    {
+        id: 'notifications.adapter',
+        order: 30,
+        enabled: defaultFeatureFlags.notificationsAdapter,
+    },
+    {
+        id: 'right-panel.slots',
+        order: 40,
+        enabled: defaultFeatureFlags.rightPanelPlugins,
     },
 ];
 
