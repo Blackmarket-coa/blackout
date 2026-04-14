@@ -695,6 +695,48 @@ describe("BlackoutWebApp integration", () => {
 
   });
 
+  it("keeps baseline stego send flow working on starter preset while advanced controls stay disabled", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "starter",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "starter",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing composer");
+
+    const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement;
+    fireEvent.click(stegoTrigger);
+    expect((root.querySelector("[data-action='composer-stego-ephemeral']") as HTMLInputElement).disabled).toBe(true);
+    expect((root.querySelector("[data-action='composer-stego-channel-rotation-days']") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "ship at dawn" } });
+    fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all clear" } });
+    fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
+
+    expect(composer.value).toContain('hidden="ship at dawn"');
+    fireEvent.submit(root.querySelector("#message-form") as HTMLFormElement);
+    expect(composer.value).toBe("");
+  });
+
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");

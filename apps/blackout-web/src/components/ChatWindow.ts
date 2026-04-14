@@ -11,6 +11,7 @@ interface ChatWindowProps {
   sendPending: boolean;
   richEditingEnabled: boolean;
   stegoEnabled: boolean;
+  stegoAdvancedEnabled: boolean;
   composerRepliesEnabled: boolean;
   composerEditsEnabled: boolean;
   composerRedactionsEnabled: boolean;
@@ -34,6 +35,7 @@ export function renderChatWindow({
   sendPending,
   richEditingEnabled,
   stegoEnabled,
+  stegoAdvancedEnabled,
   composerRepliesEnabled,
   composerEditsEnabled,
   composerRedactionsEnabled,
@@ -79,6 +81,7 @@ export function renderChatWindow({
         compactMode,
         richEditingEnabled,
         stegoEnabled,
+        stegoAdvancedEnabled,
         composerRepliesEnabled,
         composerEditsEnabled,
         composerRedactionsEnabled,

@@ -91,7 +91,7 @@ const STARTER: FeatureFlagMap = {
   "features.bmc.banner": false,
   "features.bmc.inviteSplash": false,
   "features.bmc.governance": false,
-  "features.bmc.steganography": false,
+  "features.bmc.steganography": true,
   "features.bmc.deaddrop": false,
   "features.bmc.cellRouting": false,
   "features.bmc.numbersStation": false,
@@ -113,7 +113,7 @@ const STARTER: FeatureFlagMap = {
   "features.bmc.slowmode": false,
 
   // Existing feature tracks.
-  "features.stego.enabled": false,
+  "features.stego.enabled": true,
   "features.stego.ephemeral": false,
   "features.governance.entitlements": false,
   "features.federationBoost.enabled": false,

@@ -7,6 +7,7 @@ interface MessageInputOptions {
   compactMode: boolean;
   richEditingEnabled: boolean;
   stegoEnabled: boolean;
+  stegoAdvancedEnabled: boolean;
   composerRepliesEnabled: boolean;
   composerEditsEnabled: boolean;
   composerRedactionsEnabled: boolean;
@@ -76,6 +77,7 @@ export function renderMessageInput({
   compactMode: _compactMode,
   richEditingEnabled,
   stegoEnabled,
+  stegoAdvancedEnabled,
   composerRepliesEnabled: _composerRepliesEnabled,
   composerEditsEnabled: _composerEditsEnabled,
   composerRedactionsEnabled: _composerRedactionsEnabled,
@@ -293,10 +295,10 @@ export function renderMessageInput({
                     </label>
                     <p class="meta" data-testid="composer-stego-preview-reveal-output" hidden></p>
                   </div>
-                  <details class="composer-stego-advanced">
+                  <details class="composer-stego-advanced" ${stegoAdvancedEnabled ? "" : "open"}>
                     <summary>Advanced options</summary>
-                    <label class="composer-popover-field">Codec ${renderGlossaryTip("Codec")}
-                      <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
+                    <label class="composer-popover-field">Codec (Advanced) ${renderGlossaryTip("Codec")}
+                      <select data-action="composer-stego-algorithm" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="basic-lsb-image">Basic LSB (Image)</option>
                         <option value="dct-image" disabled>DCT Image (Signal lock)</option>
                         <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
@@ -305,19 +307,20 @@ export function renderMessageInput({
                       </select>
                     </label>
                     <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
-                    <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
-                    <label class="composer-popover-field">Stego channel
-                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
+                    <label class="composer-popover-field">Stego channel rotation (Advanced)
+                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="">No saved channel</option>
                       </select>
                     </label>
                     <label class="composer-popover-inline">
-                      <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
-                      Ephemeral message ${renderGlossaryTip("Ephemeral")}
+                      <input type="checkbox" data-action="composer-stego-ephemeral" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
+                      Ephemeral lifecycle (Advanced) ${renderGlossaryTip("Ephemeral")}
                     </label>
-                    <label class="composer-popover-field">TTL (hours) ${renderGlossaryTip("TTL")}
-                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
+                    <label class="composer-popover-field">Expiry / remote burn TTL (Advanced) ${renderGlossaryTip("TTL")}
+                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
+                    <p class="meta">Multi-carrier routing + policy audit are Advanced controls available on paid tiers.</p>
+                    <button type="button" class="ghost-btn" data-action="open-upgrade-flow" data-upgrade-source="composer_stego_advanced" ${disabled ? "disabled" : ""}>Upgrade for Advanced stego</button>
                   </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>
@@ -346,11 +349,11 @@ export function renderMessageInput({
                     <label class="composer-popover-field">Shared password
                       <input type="text" data-action="composer-stego-channel-passphrase" placeholder="Set a shared passphrase" ${disabled ? "disabled" : ""} />
                     </label>
-                    <label class="composer-popover-field">Rotate every (days)
-                      <input type="number" min="1" max="90" step="1" value="14" data-action="composer-stego-channel-rotation-days" ${disabled ? "disabled" : ""} />
+                    <label class="composer-popover-field">Rotate every (days) (Advanced)
+                      <input type="number" min="1" max="90" step="1" value="14" data-action="composer-stego-channel-rotation-days" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
                     <div class="composer-popover-actions">
-                      <button type="button" data-action="composer-stego-save-channel" ${disabled ? "disabled" : ""}>Save channel</button>
+                      <button type="button" data-action="composer-stego-save-channel" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>Save channel (Advanced)</button>
                     </div>
                     <ul class="composer-channel-list" data-testid="composer-stego-channel-list">
                       <li class="meta">No saved channels yet.</li>
