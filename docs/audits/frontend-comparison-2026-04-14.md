@@ -336,3 +336,37 @@ Recommended paid capabilities:
 - **Team/Enterprise:** policy/compliance/governance-at-scale controls.
 
 This keeps differentiation strong while ensuring free-tier teams can still coordinate meaningfully.
+
+## Execution workstreams (blackout-client canonical path)
+
+These workstreams implement the free/default + paid model for both stego and governance while preserving UX consistency.
+
+### Workstream A — Entitlement foundation and capability resolver
+
+- Build a single source of truth for feature access decisions.
+- Ensure all UI and API checks consume the same entitlement state.
+
+### Workstream B — Free baseline UX enablement (stego + governance)
+
+- Turn on baseline stego and governance flows by default.
+- Ensure zero paywall friction in core chat and proposal participation paths.
+
+### Workstream C — Advanced paid controls and upgrade surfaces
+
+- Introduce paid-only advanced stego and governance capabilities.
+- Keep advanced controls discoverable with consistent “Advanced” affordances.
+
+### Workstream D — Layout integrity and design-system conformance
+
+- Validate that new controls fit existing client layout slots and do not overload primary chat views.
+- Enforce token/component reuse from shared monorepo packages.
+
+### Workstream E — Contracts/API alignment and telemetry
+
+- Align entitlement contracts across client/sdk/server packages.
+- Add event instrumentation for free usage, upgrade intent, and paid feature adoption.
+
+### Workstream F — QA, migration, and rollout controls
+
+- Add targeted tests for entitlement transitions and panel behavior.
+- Roll out in phases with kill switches and preset-based rollback.
