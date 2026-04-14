@@ -59,19 +59,19 @@ describe('feature entrypoint registry adapter', () => {
     it('resolves entitlement precedence for free/pro/team/enterprise tiers', () => {
         const free = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
-            workspaceTier: 'free',
+            orgTier: 'free',
         });
         const pro = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
-            workspaceTier: 'pro',
+            orgTier: 'pro',
         });
         const team = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
-            workspaceTier: 'team',
+            orgTier: 'team',
         });
         const enterprise = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
-            workspaceTier: 'enterprise',
+            orgTier: 'enterprise',
             userFlags: { 'features.nav.search': false },
         });
 
@@ -81,10 +81,10 @@ describe('feature entrypoint registry adapter', () => {
         expect(isFeatureFlagEnabled('features.nav.search', enterprise)).toBe(false);
     });
 
-    it('falls back to deployment preset when workspace tier is downgraded away', () => {
+    it('falls back to deployment preset when org tier is downgraded away', () => {
         const upgraded = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
-            workspaceTier: 'enterprise',
+            orgTier: 'enterprise',
         });
         const downgraded = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',

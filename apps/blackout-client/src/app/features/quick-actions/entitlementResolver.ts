@@ -1,24 +1,23 @@
 import {
-    resolveSdkEntitlement,
+    type EntitlementAccessPayload,
     type EntitlementKey,
     type EntitlementMap,
-    type EntitlementResolverInput,
     type ResolvedEntitlement,
 } from '@blackout/sdk';
 
-export type WorkspaceTier = 'free' | 'pro' | 'team' | 'enterprise';
+import {
+    resolveCapabilityAccess,
+    resolveCapabilityAccessMap,
+} from '../../resolver/capabilityAccessResolver';
 
-export type QuickActionEntitlementLayers = Omit<EntitlementResolverInput, 'key'>;
+export type QuickActionEntitlementLayers = EntitlementAccessPayload;
 
 export const resolveQuickActionEntitlement = (
     key: EntitlementKey,
-    layers: QuickActionEntitlementLayers
-): ResolvedEntitlement => resolveSdkEntitlement({ key, ...layers });
+    payload: QuickActionEntitlementLayers
+): ResolvedEntitlement => resolveCapabilityAccess(key, payload);
 
 export const resolveQuickActionEntitlementMap = (
     keys: EntitlementKey[],
-    layers: QuickActionEntitlementLayers
-): EntitlementMap =>
-    Object.fromEntries(
-        keys.map((key) => [key, resolveQuickActionEntitlement(key, layers).enabled])
-    );
+    payload: QuickActionEntitlementLayers
+): EntitlementMap => resolveCapabilityAccessMap(keys, payload);

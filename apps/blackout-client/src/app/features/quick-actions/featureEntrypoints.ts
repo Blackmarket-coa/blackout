@@ -1,13 +1,14 @@
-import type { EntitlementKey, EntitlementMap } from '@blackout/sdk';
+import type { EntitlementKey, EntitlementMap, EntitlementTier } from '@blackout/sdk';
 
+import {
+    buildEntitlementAccessPayload,
+    type FeaturePresetKey,
+} from '../../resolver/capabilityAccessResolver';
 import {
     resolveQuickActionEntitlement,
     resolveQuickActionEntitlementMap,
     type QuickActionEntitlementLayers,
-    type WorkspaceTier,
 } from './entitlementResolver';
-
-export type FeaturePresetKey = 'starter' | 'governance' | 'sovereignty';
 
 export type QuickActionSurface = 'desktop' | 'mobile';
 export type UiEntryKind =
@@ -39,14 +40,13 @@ export interface FeatureEntry {
     label: string;
     description: string;
     presetKey: EntitlementKey;
-    presetKey: string;
     uiEntry: `${UiEntryKind}:${string}`;
     surfaces: QuickActionSurface[];
 }
 
 export interface FeatureEntrypointRegistry {
     preset: FeaturePresetKey;
-    flags: Record<string, boolean>;
+    flags: EntitlementMap;
     entries: FeatureEntry[];
     entitlementLayers: QuickActionEntitlementLayers;
 }
@@ -54,57 +54,12 @@ export interface FeatureEntrypointRegistry {
 export interface BuildRegistryOptions {
     preset?: FeaturePresetKey;
     deploymentPreset?: FeaturePresetKey;
-    workspaceTier?: WorkspaceTier;
-    flags?: Record<string, boolean>;
-    workspaceFlags?: EntitlementMap;
+    orgTier?: EntitlementTier;
+    flags?: EntitlementMap;
+    orgTierFlags?: EntitlementMap;
     userFlags?: EntitlementMap;
 }
 
-const PRESET_FLAGS: Record<FeaturePresetKey, EntitlementMap> = {
-    starter: {
-        'features.settings.appearance': false,
-        'features.settings.account': false,
-        'features.nav.roomInvites': false,
-        'features.nav.search': false,
-        'features.timeline.threads': false,
-        'features.bmc.roles': false,
-        'features.call.elementCall': false,
-        'features.bmc.forum': false,
-    },
-    governance: {
-        'features.settings.appearance': true,
-        'features.settings.account': true,
-        'features.nav.roomInvites': false,
-        'features.nav.search': false,
-        'features.timeline.threads': false,
-        'features.bmc.roles': false,
-        'features.call.elementCall': false,
-        'features.bmc.forum': false,
-    },
-    sovereignty: {
-        'features.settings.appearance': true,
-        'features.settings.account': true,
-        'features.nav.roomInvites': true,
-        'features.nav.search': true,
-        'features.timeline.threads': true,
-        'features.bmc.roles': true,
-        'features.call.elementCall': true,
-        'features.bmc.forum': true,
-    },
-};
-
-const WORKSPACE_TIER_FLAGS: Record<WorkspaceTier, EntitlementMap> = {
-    free: PRESET_FLAGS.starter,
-    pro: PRESET_FLAGS.governance,
-    team: {
-        ...PRESET_FLAGS.governance,
-        'features.nav.search': true,
-        'features.timeline.threads': true,
-    },
-    enterprise: PRESET_FLAGS.sovereignty,
-};
-
-const FEATURE_ENTRYPOINTS: FeatureEntry[] = [
 export const FEATURE_UI_ENTRY_PREFIX_BY_KIND: Record<UiEntryKind, string> = {
     settings_toggle: 'feature-toggle-',
     composer_action: 'feature-composer-',
@@ -192,7 +147,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
 ];
 
 const FEATURE_ENTITLEMENT_KEYS = [
-    ...new Set(FEATURE_ENTRYPOINTS.map((entry) => entry.presetKey)),
+    ...new Set(FEATURE_UI_ENTRIES.map((entry) => entry.presetKey)),
 ] as EntitlementKey[];
 
 export const QUICK_ACTION_COLLAPSED_STORAGE_KEY = 'blackout.quick_actions.collapsed';
@@ -210,35 +165,19 @@ export function buildFeatureEntrypointRegistry(
 ): FeatureEntrypointRegistry {
     const deploymentPreset = options.deploymentPreset ?? options.preset ?? 'sovereignty';
     const preset = options.preset ?? deploymentPreset;
-
-    const deploymentPresetFlags = {
-        ...PRESET_FLAGS[deploymentPreset],
-        ...(options.flags ?? {}),
-    };
-
-    const workspaceTierFlags = options.workspaceTier
-        ? {
-              ...WORKSPACE_TIER_FLAGS[options.workspaceTier],
-              ...(options.workspaceFlags ?? {}),
-          }
-        : options.workspaceFlags;
-
-    const entitlementLayers: QuickActionEntitlementLayers = {
-        deploymentPreset: deploymentPresetFlags,
-        workspaceTier: workspaceTierFlags,
+    const entitlementLayers = buildEntitlementAccessPayload({
+        deploymentPreset,
+        orgTier: options.orgTier,
+        presetOverride: options.flags,
+        orgTierOverride: options.orgTierFlags,
         userOverride: options.userFlags,
-    };
+    });
 
     const flags = resolveQuickActionEntitlementMap(FEATURE_ENTITLEMENT_KEYS, entitlementLayers);
-    const entries = FEATURE_ENTRYPOINTS.filter((entry) =>
+    const entries = FEATURE_UI_ENTRIES.filter((entry) =>
         isFeatureFlagEnabled(entry.presetKey, { entitlementLayers })
     );
     return { preset, flags, entries, entitlementLayers };
-    const preset = options.preset ?? 'sovereignty';
-    const base = PRESET_FLAGS[preset];
-    const flags = { ...base, ...(options.flags ?? {}) };
-    const entries = FEATURE_UI_ENTRIES.filter((entry) => flags[entry.presetKey] ?? false);
-    return { preset, flags, entries };
 }
 
 export function getQuickActionEntriesForSurface(
@@ -274,10 +213,7 @@ export function markQuickActionsSeen(entryIds: QuickActionId[]): void {
     globalThis.localStorage?.setItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY, JSON.stringify([...seen]));
 }
 
-export function assertFeatureEntryInApprovedRegion(
-    entry: FeatureEntry,
-    target: Element
-): void {
+export function assertFeatureEntryInApprovedRegion(entry: FeatureEntry, target: Element): void {
     if (target.closest('[data-shell-region="custom"]')) {
         throw new Error(
             `[feature-entrypoints] ${entry.id} attempted mount inside forbidden custom shell region.`
