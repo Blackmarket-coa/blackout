@@ -1,4 +1,5 @@
 import { FEATURE_UI_ENTRIES } from "../settings/feature-entrypoints";
+import { resolveEntitlement, type EntitlementKey } from "../settings/entitlement-resolver";
 
 const COMMAND_ENTRY_IDS = new Set([
   "feature-command-discover",
@@ -20,7 +21,10 @@ export function renderCommandPalette(options: RenderCommandPaletteOptions): stri
     const [kind, uiEntryId] = entry.uiEntry.split(":");
     if (kind !== "command_palette" && uiEntryId !== "feature-widget-leaderboards") return false;
     if (!COMMAND_ENTRY_IDS.has(uiEntryId)) return false;
-    const enabled = options.features[entry.presetKey] ?? false;
+    const enabled = resolveEntitlement({
+      key: entry.presetKey as EntitlementKey,
+      deploymentPreset: options.features,
+    }).enabled;
     const haystack = `${entry.name} ${entry.id} ${uiEntryId}`.toLowerCase();
     return enabled && (!query || haystack.includes(query));
   })
