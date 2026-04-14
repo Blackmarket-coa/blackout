@@ -33,6 +33,7 @@ import {
 } from "./utils/attachment-validation";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKey } from "./settings/feature-presets";
+import { resolveEntitlement, type EntitlementKey } from "./settings/entitlement-resolver";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
@@ -221,6 +222,9 @@ export class BlackoutWebApp {
         tenantPreset: null,
         userOverrideCount: 0,
       },
+      entitlementLayers: {
+        deploymentPreset: {},
+      },
     },
     simpleMode: {
       simple_mode_default: true,
@@ -382,8 +386,7 @@ export class BlackoutWebApp {
   }
 
   private governanceFeatureEnabled(): boolean {
-    const features = this.getActivePresetFeatures();
-    if ((features["features.governance.entitlements"] ?? false) || (features["features.bmc.governance"] ?? false)) return true;
+    if (this.isFeatureEnabled("features.governance.entitlements") || this.isFeatureEnabled("features.bmc.governance")) return true;
     if (this.hasAdminAccess()) return true;
     return this.activeChannelHasCapability("governance");
   }
@@ -730,14 +733,15 @@ export class BlackoutWebApp {
       canPropose: this.canPropose(),
       governanceEnabled: this.governanceFeatureEnabled(),
       sendPending: state.loading.send,
-      richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
-      stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
-      composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
-      composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
-      composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
-      mediaCodeBlocksEnabled: this.getActivePresetFeatures()["features.media.codeBlocks"] ?? false,
-      mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
-      typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
+      richEditingEnabled: this.isFeatureEnabled("features.composer.richEditing"),
+      stegoEnabled: this.isFeatureEnabled("features.stego.enabled") || this.isFeatureEnabled("features.bmc.steganography"),
+      stegoAdvancedEnabled: this.isFeatureEnabled("features.stego.ephemeral"),
+      composerRepliesEnabled: this.isFeatureEnabled("features.composer.replies"),
+      composerEditsEnabled: this.isFeatureEnabled("features.composer.edits"),
+      composerRedactionsEnabled: this.isFeatureEnabled("features.composer.redactions"),
+      mediaCodeBlocksEnabled: this.isFeatureEnabled("features.media.codeBlocks"),
+      mediaSpoilersEnabled: this.isFeatureEnabled("features.media.spoilers"),
+      typingIndicatorsEnabled: this.isFeatureEnabled("features.composer.typingIndicators"),
       showTypingIndicator: this.composerIsTyping,
       attachmentMode: this.activeAttachmentMode,
       compactMode: this.getCompactModeActive(),
@@ -981,9 +985,8 @@ export class BlackoutWebApp {
 
   private renderActivityPanel(): string {
     const state = this.store.getState();
-    const activeFeatures = this.getActivePresetFeatures();
     const items = FEATURE_UI_ENTRIES
-      .filter((entry) => activeFeatures[entry.presetKey] ?? false)
+      .filter((entry) => this.isFeatureEnabled(entry.presetKey as EntitlementKey))
       .slice(0, 8)
       .map((feature) => {
         const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
@@ -1138,7 +1141,7 @@ export class BlackoutWebApp {
       }
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
       if (!showAdvancedModules && kind === "admin_console") continue;
-      const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
+      const enabled = this.isFeatureEnabled(feature.presetKey as EntitlementKey);
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
         : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
@@ -1149,7 +1152,7 @@ export class BlackoutWebApp {
       grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
     }
     const totalEntries = Array.from(grouped.values()).reduce((total, entries) => total + entries.length, 0);
-    const enabledCount = FEATURE_UI_ENTRIES.filter((feature) => this.getActivePresetFeatures()[feature.presetKey] ?? false).length;
+    const enabledCount = FEATURE_UI_ENTRIES.filter((feature) => this.isFeatureEnabled(feature.presetKey as EntitlementKey)).length;
 
     return `
       <section class="stack panel-card" data-testid="feature-entrypoint-registry">
@@ -1183,12 +1186,11 @@ export class BlackoutWebApp {
 
 
   private renderFeatureToolbar(): string {
-    const activeFeatures = this.getActivePresetFeatures();
     const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => {
       const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
       if (!showAdvancedModules && kind === "admin_console") return false;
-      return activeFeatures[feature.presetKey] ?? false;
+      return this.isFeatureEnabled(feature.presetKey as EntitlementKey);
     });
 
     if (!enabledFeatures.length) {
@@ -1323,7 +1325,7 @@ export class BlackoutWebApp {
       return `${this.renderThemeManagementSection()}`;
     }
     if (this.activeSettingsPage === "monetization") {
-      return `${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}`;
+      return `${this.renderSubscriptionPanelSection()}${this.renderStegoAdvancedEntitlementsSection()}${this.renderUpgradePromptSection()}`;
     }
     if (this.activeSettingsPage === "mobile") {
       return `${this.renderMobileGesturesPanel()}`;
@@ -1331,7 +1333,7 @@ export class BlackoutWebApp {
     if (this.activeSettingsPage === "operations") {
       return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
     }
-    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${this.isFeatureEnabled("features.epic.deliveryBlueprint") ? this.renderEpicDeliverySection() : ""}`;
   }
 
   private renderPresetManagementSection(): string {
@@ -1540,6 +1542,35 @@ export class BlackoutWebApp {
             )
             .join("")}
         </div>
+        <div class="modal-actions">
+          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_upgrade_prompts">Upgrade for Advanced features</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderStegoAdvancedEntitlementsSection(): string {
+    const advancedEnabled = this.isFeatureEnabled("features.stego.ephemeral");
+    return `
+      <section class="stack panel-card" data-testid="settings-stego-advanced-entitlements">
+        <h2>Stego advanced controls</h2>
+        <p class="meta">Baseline stego toolkit is available on free tiers. Advanced lifecycle and policy controls are paid.</p>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Ephemeral lifecycle (Advanced)
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Rotation + multi-carrier routing (Advanced)
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Expiry / remote burn + policy audit (Advanced)
+        </label>
+        ${advancedEnabled ? '<p class="meta">Advanced stego controls are enabled for this workspace.</p>' : '<p class="meta">Upgrade to unlock Advanced stego controls in composer and room workflows.</p>'}
+        <div class="modal-actions">
+          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_stego_advanced" ${advancedEnabled ? "disabled" : ""}>Upgrade for Advanced stego</button>
+        </div>
       </section>
     `;
   }
@@ -1593,6 +1624,14 @@ export class BlackoutWebApp {
 
   private parseTheme(theme: string | null): ThemeKey {
     return normalizeThemeId(theme);
+  }
+
+  private openUpgradeFlow(source: string): void {
+    this.subscriptionPopupOpen = true;
+    this.featureActionResult = "Opened shared upgrade flow for Advanced features.";
+    this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
+    this.closeComposerPanels();
+    this.render();
   }
 
   private applyTheme(theme: ThemeKey): void {
@@ -1652,6 +1691,13 @@ export class BlackoutWebApp {
 
   private getActivePresetFeatures(): Record<string, boolean> {
     return this.appliedFeatures;
+  }
+
+  private isFeatureEnabled(key: EntitlementKey): boolean {
+    return resolveEntitlement({
+      key,
+      deploymentPreset: this.getActivePresetFeatures(),
+    }).enabled;
   }
 
   private renderFeatureGroup(kind: UiEntryKind, items: string[]): string {
@@ -2464,17 +2510,15 @@ export class BlackoutWebApp {
       this.trackAdvancedDiscovery("stego");
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
-      this.subscriptionPopupOpen = true;
-      this.featureActionResult = "Opened subscription popup. Upgrade to Signal to unlock advanced codecs and batch mode.";
-      this.closeComposerPanels();
-      this.render();
-    });
-
     this.root.querySelectorAll<HTMLElement>("[data-action='open-subscription-popup']").forEach((element) => {
       element.addEventListener("click", () => {
-        this.subscriptionPopupOpen = true;
-        this.render();
+        this.openUpgradeFlow("subscription_panel");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='open-upgrade-flow']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.openUpgradeFlow(element.getAttribute("data-upgrade-source") ?? "unknown");
       });
     });
 
@@ -2699,6 +2743,11 @@ export class BlackoutWebApp {
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
       this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.telemetry.track("stego_baseline_used", {
+        ...this.telemetryContext(),
+        advanced_enabled: this.isFeatureEnabled("features.stego.ephemeral"),
+        used_ephemeral: ephemeral,
+      });
       this.closeComposerPanels();
     });
 
@@ -2934,6 +2983,10 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-save-channel']")?.addEventListener("click", () => {
+      if (!this.isFeatureEnabled("features.stego.ephemeral")) {
+        this.openUpgradeFlow("composer_stego_channel_save");
+        return;
+      }
       const nameInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-name']");
       const audienceInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-audience']");
       const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-passphrase']");
@@ -3010,7 +3063,7 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']")?.addEventListener("input", (event) => {
-      const canShowTyping = this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false;
+      const canShowTyping = this.isFeatureEnabled("features.composer.typingIndicators");
       if (!canShowTyping) return;
       const value = (event.currentTarget as HTMLTextAreaElement).value.trim();
       this.composerIsTyping = value.length > 0;
@@ -3340,6 +3393,10 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-rotate']").forEach((button) => {
       button.addEventListener("click", () => {
+        if (!this.isFeatureEnabled("features.stego.ephemeral")) {
+          this.openUpgradeFlow("composer_stego_channel_rotate");
+          return;
+        }
         const channelId = button.dataset.channelId;
         if (!channelId) return;
         const nextPassphrase = this.generateStegoPassphrase();
@@ -3807,7 +3864,7 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
-    const enabled = this.getActivePresetFeatures()[entry.presetKey] ?? false;
+    const enabled = this.isFeatureEnabled(entry.presetKey as EntitlementKey);
     if (!enabled) {
       this.featureActionResult = `${entry.id} is unavailable: blocked by policy or entitlement.`;
       this.trackDeniedFeature(entry.id, kind);

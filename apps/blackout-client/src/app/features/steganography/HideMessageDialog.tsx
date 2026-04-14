@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useAtomValue } from 'jotai';
 import { decodeMessageFromImage } from './SteganographyDecoder';
 import { encodeMessageInImage, getSteganographyCapacity } from './SteganographyEncoder';
+import { stegoSettingsAtom } from './stegoAtoms';
+import { openStegoUpgradeFlow, trackStegoBaselineUsage } from './stegoTelemetry';
 
 interface HideMessageDialogProps {
     open: boolean;
@@ -26,6 +29,7 @@ const generatePassphrase = (length: number): string => {
 };
 
 export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialogProps) => {
+    const stegoSettings = useAtomValue(stegoSettingsAtom);
     const [activePanel, setActivePanel] = useState<StegoPanel>('encode');
     const [sourceImage, setSourceImage] = useState<File | null>(null);
     const [message, setMessage] = useState('');
@@ -147,6 +151,65 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                             />
                         </label>
 
+                        <details
+                            open
+                            style={{
+                                marginTop: 10,
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 10,
+                                padding: 8,
+                            }}
+                        >
+                            <summary>Advanced stego controls</summary>
+                            <label style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                                Multi-carrier routing (Advanced)
+                                <select disabled={!stegoSettings.advancedEntitled}>
+                                    <option>Single image carrier</option>
+                                    <option>Image + audio carrier</option>
+                                </select>
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    marginTop: 8,
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={stegoSettings.advancedOptions.expiryRemoteBurn}
+                                    disabled
+                                    readOnly
+                                />
+                                Expiry / remote burn (Advanced)
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    marginTop: 8,
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={stegoSettings.advancedOptions.policyAudit}
+                                    disabled
+                                    readOnly
+                                />
+                                Policy audit trail (Advanced)
+                            </label>
+                            <button
+                                type="button"
+                                style={{ marginTop: 8 }}
+                                disabled={stegoSettings.advancedEntitled}
+                                onClick={() => openStegoUpgradeFlow('composer_advanced_controls')}
+                            >
+                                Upgrade for Advanced
+                            </button>
+                        </details>
+
                         {maxLength !== null ? (
                             <small>
                                 Maximum message length for this image: {maxLength} chars (approx).
@@ -186,6 +249,9 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                                 passphrase,
                                             );
                                             onEncoded(encoded.file);
+                                            trackStegoBaselineUsage(
+                                                stegoSettings.advancedEntitled,
+                                            );
                                             setSourceImage(null);
                                             setMessage('');
                                             setPassphrase('');
@@ -336,6 +402,19 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                 </button>
                             </div>
                         </div>
+                        <div style={{ marginTop: 10, color: 'var(--text-secondary)' }}>
+                            <strong>Channel rotation (Advanced)</strong> and{' '}
+                            <strong>ephemeral lifecycle (Advanced)</strong> require paid
+                            entitlement.
+                        </div>
+                        <button
+                            type="button"
+                            style={{ marginTop: 8 }}
+                            disabled={stegoSettings.advancedEntitled}
+                            onClick={() => openStegoUpgradeFlow('composer_password_panel')}
+                        >
+                            Upgrade for Advanced
+                        </button>
                     </>
                 ) : null}
             </div>

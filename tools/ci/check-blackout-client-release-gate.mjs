@@ -70,6 +70,11 @@ function validateSignoff(report, sourcePath) {
     location: Boolean(report?.regressions?.location),
     functionality: Boolean(report?.regressions?.functionality),
   };
+  const manualVerification = {
+    desktopLayoutIntegrity: report?.manualVerification?.desktopLayoutIntegrity === true,
+    mobileLayoutIntegrity: report?.manualVerification?.mobileLayoutIntegrity === true,
+    entitlementTransitions: report?.manualVerification?.entitlementTransitions === true,
+  };
 
   const errors = [];
 
@@ -91,6 +96,12 @@ function validateSignoff(report, sourcePath) {
   for (const [key, value] of Object.entries(regressions)) {
     if (value) {
       errors.push(`Regression flag "${key}" must be false in staging signoff.`);
+    }
+  }
+
+  for (const [key, value] of Object.entries(manualVerification)) {
+    if (!value) {
+      errors.push(`Manual verification "${key}" must be true in staging signoff.`);
     }
   }
 

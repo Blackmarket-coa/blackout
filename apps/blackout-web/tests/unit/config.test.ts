@@ -26,10 +26,11 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.activePreset).toBe("starter");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
-    expect(config.presets.features["features.stego.enabled"]).toBe(false);
+    expect(config.presets.features["features.stego.enabled"]).toBe(true);
+    expect(config.presets.features["features.bmc.steganography"]).toBe(true);
   });
 
-  it("merges deployment, tenant, and user overrides when allowed", () => {
+  it("resolves deployment, workspace tier, and user overrides in priority order", () => {
     const config = resolveBlackoutRuntimeConfig({
       VITE_FEATURE_DEPLOYMENT_DEFAULTS: JSON.stringify({
         preset: "governance",
@@ -55,7 +56,7 @@ describe("resolveBlackoutRuntimeConfig", () => {
     });
 
     expect(config.presets.activePreset).toBe("sovereignty");
-    expect(config.presets.features["features.matrix.widgetCompat"]).toBe(false);
+    expect(config.presets.features["features.matrix.widgetCompat"]).toBe(true);
     expect(config.presets.features["features.townhall.enabled"]).toBe(false);
     expect(config.presets.features["features.composer.typingIndicators"]).toBe(false);
     expect(config.presets.features["features.stego.enabled"]).toBe(true);

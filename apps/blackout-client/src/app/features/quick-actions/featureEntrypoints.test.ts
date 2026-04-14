@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    assertFeatureEntryInApprovedRegion,
     buildFeatureEntrypointRegistry,
+    FEATURE_PANEL_REGION_BY_KIND,
+    FEATURE_UI_ENTRIES,
+    FEATURE_UI_ENTRY_PREFIX_BY_KIND,
     getQuickActionEntriesForSurface,
     invokeQuickAction,
     QUICK_ACTION_FIRST_RUN_STORAGE_KEY,
@@ -9,6 +13,8 @@ import {
     writeQuickActionCollapsed,
     getUnseenQuickActionIds,
     markQuickActionsSeen,
+    isFeatureFlagEnabled,
+    type UiEntryKind,
 } from './featureEntrypoints';
 
 const createStorage = () => {
@@ -50,6 +56,44 @@ describe('feature entrypoint registry adapter', () => {
         ]);
     });
 
+    it('resolves entitlement precedence for free/pro/team/enterprise tiers', () => {
+        const free = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'free',
+        });
+        const pro = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'pro',
+        });
+        const team = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'team',
+        });
+        const enterprise = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'enterprise',
+            userFlags: { 'features.nav.search': false },
+        });
+
+        expect(isFeatureFlagEnabled('features.settings.appearance', free)).toBe(false);
+        expect(isFeatureFlagEnabled('features.settings.appearance', pro)).toBe(true);
+        expect(isFeatureFlagEnabled('features.timeline.threads', team)).toBe(true);
+        expect(isFeatureFlagEnabled('features.nav.search', enterprise)).toBe(false);
+    });
+
+    it('falls back to deployment preset when workspace tier is downgraded away', () => {
+        const upgraded = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'enterprise',
+        });
+        const downgraded = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+        });
+
+        expect(isFeatureFlagEnabled('features.bmc.forum', upgraded)).toBe(true);
+        expect(isFeatureFlagEnabled('features.bmc.forum', downgraded)).toBe(false);
+    });
+
     it('invokes quick actions via the action adapter', () => {
         const calls: string[] = [];
         const queueCommand = vi.fn((command: '/join' | '/invite') => calls.push(command));
@@ -79,10 +123,10 @@ describe('feature entrypoint registry adapter', () => {
     it('maintains mobile/desktop render parity and first-run guidance behavior', () => {
         const registry = buildFeatureEntrypointRegistry({ preset: 'sovereignty' });
         const desktopIds = getQuickActionEntriesForSurface(registry, 'desktop').map(
-            (entry) => entry.id,
+            (entry) => entry.id
         );
         const mobileIds = getQuickActionEntriesForSurface(registry, 'mobile').map(
-            (entry) => entry.id,
+            (entry) => entry.id
         );
 
         expect(desktopIds).toEqual(mobileIds);
@@ -95,5 +139,48 @@ describe('feature entrypoint registry adapter', () => {
         expect(localStorage.getItem(QUICK_ACTION_COLLAPSED_STORAGE_KEY)).toBe('true');
         expect(readQuickActionCollapsed()).toBe(true);
         expect(localStorage.getItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY)).toContain('open-settings');
+    });
+
+    it('maps each planned module to a stable id, ui kind, and approved panel region', () => {
+        const seen = new Set<string>();
+
+        for (const entry of FEATURE_UI_ENTRIES) {
+            expect(entry.id).toMatch(/^[a-z]+(?:-[a-z]+)+$/);
+            expect(seen.has(entry.id)).toBe(false);
+            seen.add(entry.id);
+            expect(entry.presetKey.length).toBeGreaterThan(0);
+            const [kind, uiEntryId] = entry.uiEntry.split(':') as [UiEntryKind, string];
+            expect(uiEntryId.startsWith(FEATURE_UI_ENTRY_PREFIX_BY_KIND[kind])).toBe(true);
+            expect(FEATURE_PANEL_REGION_BY_KIND[kind]).toBeTruthy();
+        }
+    });
+
+    it('enforces approved panel regions and rejects custom shell roots', () => {
+        const roomTarget = {
+            closest: (selector: string) => {
+                if (selector === '[data-shell-region="room"]') return {};
+                return null;
+            },
+        } as unknown as Element;
+
+        const customTarget = {
+            closest: (selector: string) => {
+                if (selector === '[data-shell-region="custom"]') return {};
+                return null;
+            },
+        } as unknown as Element;
+
+        const roomActionEntry = FEATURE_UI_ENTRIES.find((entry) => entry.id === 'open-search');
+        if (!roomActionEntry) throw new Error('missing open-search entry');
+        expect(() => assertFeatureEntryInApprovedRegion(roomActionEntry, roomTarget)).not.toThrow();
+        expect(() => assertFeatureEntryInApprovedRegion(roomActionEntry, customTarget)).toThrow(
+            /forbidden custom shell region/
+        );
+
+        const settingsEntry = FEATURE_UI_ENTRIES.find((entry) => entry.id === 'open-settings');
+        if (!settingsEntry) throw new Error('missing open-settings entry');
+        expect(() => assertFeatureEntryInApprovedRegion(settingsEntry, roomTarget)).toThrow(
+            /must render only in settings_shell/
+        );
     });
 });

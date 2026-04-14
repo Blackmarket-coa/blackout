@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { stegoSettingsAtom } from './stegoAtoms';
+import { openStegoUpgradeFlow } from './stegoTelemetry';
 
 export const StegoSettings = () => {
     const [settings, setSettings] = useAtom(stegoSettingsAtom);
@@ -90,6 +91,49 @@ export const StegoSettings = () => {
                         Save passphrase
                     </button>
                 </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 10 }}>
+                <strong>Advanced stego controls</strong>
+                <p style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
+                    Advanced lifecycle, rotation, and policy controls are visible for all tiers and
+                    unlock on paid entitlement.
+                </p>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.advancedOptions.multiCarrierRouting}
+                        disabled
+                        readOnly
+                    />
+                    Multi-carrier routing (Advanced)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.advancedOptions.expiryRemoteBurn}
+                        disabled
+                        readOnly
+                    />
+                    Expiry / remote burn (Advanced)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.advancedOptions.policyAudit}
+                        disabled
+                        readOnly
+                    />
+                    Policy audit (Advanced)
+                </label>
+                <button
+                    type="button"
+                    style={{ marginTop: 10 }}
+                    disabled={settings.advancedEntitled}
+                    onClick={() => openStegoUpgradeFlow('settings_advanced_controls')}
+                >
+                    Upgrade for Advanced
+                </button>
             </div>
         </section>
     );

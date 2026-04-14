@@ -1,4 +1,5 @@
 export type UiEntryKind = "settings_toggle" | "composer_action" | "room_action" | "widget_panel" | "admin_console" | "command_palette";
+export type ApprovedFeaturePanelRegion = "settings_shell" | "chat_workspace" | "right_panel_overlay" | "repo_tools_shell" | "command_palette_overlay";
 
 export interface FeatureUiEntry {
   id: string;
@@ -8,12 +9,31 @@ export interface FeatureUiEntry {
   aliasOfId?: string;
 }
 
+export const FEATURE_UI_ENTRY_PREFIX_BY_KIND: Record<UiEntryKind, string> = {
+  settings_toggle: "feature-toggle-",
+  composer_action: "feature-composer-",
+  room_action: "feature-room-",
+  widget_panel: "feature-widget-",
+  admin_console: "feature-admin-",
+  command_palette: "feature-command-",
+};
+
+export const FEATURE_PANEL_REGION_BY_KIND: Record<UiEntryKind, ApprovedFeaturePanelRegion> = {
+  settings_toggle: "settings_shell",
+  composer_action: "chat_workspace",
+  room_action: "chat_workspace",
+  widget_panel: "right_panel_overlay",
+  admin_console: "repo_tools_shell",
+  command_palette: "command_palette_overlay",
+};
+
 export const FEATURE_UI_ENTRIES: FeatureUiEntry[] = [
   // Existing rollout entries.
   // Engagement roadmap entries.
   { id: "discover_panel", name: "Discover command (bounded top 10)", presetKey: "features.engagement.discover", uiEntry: "command_palette:feature-command-discover" },
   { id: "soft_streaks", name: "Opt-in soft streaks", presetKey: "features.engagement.streaks", uiEntry: "settings_toggle:feature-toggle-soft-streaks" },
   { id: "community_leaderboards", name: "Optional leaderboards", presetKey: "features.engagement.leaderboards", uiEntry: "widget_panel:feature-widget-leaderboards" },
+  { id: "community_leaderboards_command", name: "Leaderboards command launcher", presetKey: "features.engagement.leaderboards", uiEntry: "command_palette:feature-command-leaderboards", aliasOfId: "community_leaderboards" },
   { id: "presence_digest", name: "Presence digest notifications", presetKey: "features.engagement.presenceDigest", uiEntry: "command_palette:feature-command-presence-digest" },
   { id: "recommendation_model", name: "Meaningful interaction recommendations", presetKey: "features.engagement.recommendations", uiEntry: "admin_console:feature-admin-recommendations" },
   { id: "engagement_experiments", name: "Experiment holdout and ramp controls", presetKey: "features.engagement.experiments", uiEntry: "admin_console:feature-admin-engagement-experiments" },
