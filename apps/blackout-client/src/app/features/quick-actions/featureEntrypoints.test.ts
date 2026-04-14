@@ -9,6 +9,7 @@ import {
     writeQuickActionCollapsed,
     getUnseenQuickActionIds,
     markQuickActionsSeen,
+    isFeatureFlagEnabled,
 } from './featureEntrypoints';
 
 const createStorage = () => {
@@ -50,6 +51,44 @@ describe('feature entrypoint registry adapter', () => {
         ]);
     });
 
+    it('resolves entitlement precedence for free/pro/team/enterprise tiers', () => {
+        const free = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'free',
+        });
+        const pro = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'pro',
+        });
+        const team = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'team',
+        });
+        const enterprise = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'enterprise',
+            userFlags: { 'features.nav.search': false },
+        });
+
+        expect(isFeatureFlagEnabled('features.settings.appearance', free)).toBe(false);
+        expect(isFeatureFlagEnabled('features.settings.appearance', pro)).toBe(true);
+        expect(isFeatureFlagEnabled('features.timeline.threads', team)).toBe(true);
+        expect(isFeatureFlagEnabled('features.nav.search', enterprise)).toBe(false);
+    });
+
+    it('falls back to deployment preset when workspace tier is downgraded away', () => {
+        const upgraded = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+            workspaceTier: 'enterprise',
+        });
+        const downgraded = buildFeatureEntrypointRegistry({
+            deploymentPreset: 'starter',
+        });
+
+        expect(isFeatureFlagEnabled('features.bmc.forum', upgraded)).toBe(true);
+        expect(isFeatureFlagEnabled('features.bmc.forum', downgraded)).toBe(false);
+    });
+
     it('invokes quick actions via the action adapter', () => {
         const calls: string[] = [];
         const queueCommand = vi.fn((command: '/join' | '/invite') => calls.push(command));
@@ -79,10 +118,10 @@ describe('feature entrypoint registry adapter', () => {
     it('maintains mobile/desktop render parity and first-run guidance behavior', () => {
         const registry = buildFeatureEntrypointRegistry({ preset: 'sovereignty' });
         const desktopIds = getQuickActionEntriesForSurface(registry, 'desktop').map(
-            (entry) => entry.id,
+            (entry) => entry.id
         );
         const mobileIds = getQuickActionEntriesForSurface(registry, 'mobile').map(
-            (entry) => entry.id,
+            (entry) => entry.id
         );
 
         expect(desktopIds).toEqual(mobileIds);

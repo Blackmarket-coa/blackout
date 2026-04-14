@@ -5,3 +5,5 @@ export * from './deaddrop/events';
 export * from './moderation/events';
 
 export * from './governance/contracts';
+
+export * from './entitlements/types';

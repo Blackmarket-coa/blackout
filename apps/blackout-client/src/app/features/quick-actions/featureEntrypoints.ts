@@ -1,3 +1,12 @@
+import type { EntitlementKey, EntitlementMap } from '@blackout/sdk';
+
+import {
+    resolveQuickActionEntitlement,
+    resolveQuickActionEntitlementMap,
+    type QuickActionEntitlementLayers,
+    type WorkspaceTier,
+} from './entitlementResolver';
+
 export type FeaturePresetKey = 'starter' | 'governance' | 'sovereignty';
 
 export type QuickActionSurface = 'desktop' | 'mobile';
@@ -15,7 +24,7 @@ export interface FeatureEntry {
     id: QuickActionId;
     label: string;
     description: string;
-    presetKey: string;
+    presetKey: EntitlementKey;
     surfaces: QuickActionSurface[];
 }
 
@@ -23,14 +32,19 @@ export interface FeatureEntrypointRegistry {
     preset: FeaturePresetKey;
     flags: Record<string, boolean>;
     entries: FeatureEntry[];
+    entitlementLayers: QuickActionEntitlementLayers;
 }
 
 export interface BuildRegistryOptions {
     preset?: FeaturePresetKey;
+    deploymentPreset?: FeaturePresetKey;
+    workspaceTier?: WorkspaceTier;
     flags?: Record<string, boolean>;
+    workspaceFlags?: EntitlementMap;
+    userFlags?: EntitlementMap;
 }
 
-const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
+const PRESET_FLAGS: Record<FeaturePresetKey, EntitlementMap> = {
     starter: {
         'features.settings.appearance': false,
         'features.settings.account': false,
@@ -61,6 +75,17 @@ const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
         'features.call.elementCall': true,
         'features.bmc.forum': true,
     },
+};
+
+const WORKSPACE_TIER_FLAGS: Record<WorkspaceTier, EntitlementMap> = {
+    free: PRESET_FLAGS.starter,
+    pro: PRESET_FLAGS.governance,
+    team: {
+        ...PRESET_FLAGS.governance,
+        'features.nav.search': true,
+        'features.timeline.threads': true,
+    },
+    enterprise: PRESET_FLAGS.sovereignty,
 };
 
 const FEATURE_ENTRYPOINTS: FeatureEntry[] = [
@@ -115,22 +140,54 @@ const FEATURE_ENTRYPOINTS: FeatureEntry[] = [
     },
 ];
 
+const FEATURE_ENTITLEMENT_KEYS = [
+    ...new Set(FEATURE_ENTRYPOINTS.map((entry) => entry.presetKey)),
+] as EntitlementKey[];
+
 export const QUICK_ACTION_COLLAPSED_STORAGE_KEY = 'blackout.quick_actions.collapsed';
 export const QUICK_ACTION_FIRST_RUN_STORAGE_KEY = 'blackout.quick_actions.seen';
 
+export function isFeatureFlagEnabled(
+    featureKey: EntitlementKey,
+    registry: Pick<FeatureEntrypointRegistry, 'entitlementLayers'>
+): boolean {
+    return resolveQuickActionEntitlement(featureKey, registry.entitlementLayers).enabled;
+}
+
 export function buildFeatureEntrypointRegistry(
-    options: BuildRegistryOptions = {},
+    options: BuildRegistryOptions = {}
 ): FeatureEntrypointRegistry {
-    const preset = options.preset ?? 'sovereignty';
-    const base = PRESET_FLAGS[preset];
-    const flags = { ...base, ...(options.flags ?? {}) };
-    const entries = FEATURE_ENTRYPOINTS.filter((entry) => flags[entry.presetKey] ?? false);
-    return { preset, flags, entries };
+    const deploymentPreset = options.deploymentPreset ?? options.preset ?? 'sovereignty';
+    const preset = options.preset ?? deploymentPreset;
+
+    const deploymentPresetFlags = {
+        ...PRESET_FLAGS[deploymentPreset],
+        ...(options.flags ?? {}),
+    };
+
+    const workspaceTierFlags = options.workspaceTier
+        ? {
+              ...WORKSPACE_TIER_FLAGS[options.workspaceTier],
+              ...(options.workspaceFlags ?? {}),
+          }
+        : options.workspaceFlags;
+
+    const entitlementLayers: QuickActionEntitlementLayers = {
+        deploymentPreset: deploymentPresetFlags,
+        workspaceTier: workspaceTierFlags,
+        userOverride: options.userFlags,
+    };
+
+    const flags = resolveQuickActionEntitlementMap(FEATURE_ENTITLEMENT_KEYS, entitlementLayers);
+    const entries = FEATURE_ENTRYPOINTS.filter((entry) =>
+        isFeatureFlagEnabled(entry.presetKey, { entitlementLayers })
+    );
+    return { preset, flags, entries, entitlementLayers };
 }
 
 export function getQuickActionEntriesForSurface(
     registry: FeatureEntrypointRegistry,
-    surface: QuickActionSurface,
+    surface: QuickActionSurface
 ): FeatureEntry[] {
     return registry.entries.filter((entry) => entry.surfaces.includes(surface));
 }
@@ -146,7 +203,7 @@ export function writeQuickActionCollapsed(collapsed: boolean): void {
 export function getUnseenQuickActionIds(visibleEntries: FeatureEntry[]): QuickActionId[] {
     const raw = globalThis.localStorage?.getItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY);
     const seen = new Set<QuickActionId>(
-        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean),
+        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean)
     );
     return visibleEntries.map((entry) => entry.id).filter((id) => !seen.has(id));
 }
@@ -155,7 +212,7 @@ export function markQuickActionsSeen(entryIds: QuickActionId[]): void {
     if (entryIds.length === 0) return;
     const raw = globalThis.localStorage?.getItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY);
     const seen = new Set<QuickActionId>(
-        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean),
+        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean)
     );
     entryIds.forEach((id) => seen.add(id));
     globalThis.localStorage?.setItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY, JSON.stringify([...seen]));
@@ -172,7 +229,7 @@ export interface QuickActionInvocationContext {
 
 export function invokeQuickAction(
     actionId: QuickActionId,
-    context: QuickActionInvocationContext,
+    context: QuickActionInvocationContext
 ): void {
     switch (actionId) {
         case 'open-settings':

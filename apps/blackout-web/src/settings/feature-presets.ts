@@ -1,6 +1,8 @@
 export type FeaturePresetKey = "starter" | "governance" | "sovereignty";
 export type LegacyFeaturePresetKey = "tier_free" | "tier_pro" | "tier_enterprise";
 
+import { resolveEntitlement, type EntitlementKey, type ResolvedEntitlementState } from "./entitlement-resolver";
+
 export type FeatureFlagMap = Record<string, boolean>;
 
 export interface DeploymentPresetConfig {
@@ -27,6 +29,7 @@ export interface ResolvedPresetConfig {
     tenantPreset: FeaturePresetKey | null;
     userOverrideCount: number;
   };
+  entitlementLayers: ResolvedEntitlementState;
 }
 
 const PRESET_MIGRATION_MAP: Record<LegacyFeaturePresetKey, FeaturePresetKey> = {
@@ -215,6 +218,17 @@ function mergeFeatures(base: FeatureFlagMap, overrides?: FeatureFlagMap): Featur
   return { ...base, ...overrides };
 }
 
+function resolveFeatureMapFromLayers(layers: ResolvedEntitlementState): FeatureFlagMap {
+  const keys = new Set<EntitlementKey>();
+  Object.keys(layers.deploymentPreset).forEach((key) => keys.add(key as EntitlementKey));
+  Object.keys(layers.workspaceTier ?? {}).forEach((key) => keys.add(key as EntitlementKey));
+  Object.keys(layers.userOverride ?? {}).forEach((key) => keys.add(key as EntitlementKey));
+
+  return Object.fromEntries(
+    Array.from(keys).map((key) => [key, resolveEntitlement({ ...layers, key }).enabled]),
+  );
+}
+
 export function resolveFeaturePreset(
   deployment: DeploymentPresetConfig,
   tenantPolicy?: TenantPresetPolicy,
@@ -224,28 +238,35 @@ export function resolveFeaturePreset(
   const tenantPreset = normalizeFeaturePresetKey(tenantPolicy?.preset);
   const activePreset = tenantPreset ?? deploymentPreset;
 
-  let features = { ...FEATURE_PRESET_BUNDLES[activePreset] };
-  features = mergeFeatures(features, deployment.defaults);
-  features = mergeFeatures(features, tenantPolicy?.overrides);
+  const deploymentLayer = mergeFeatures(FEATURE_PRESET_BUNDLES[deploymentPreset], deployment.defaults);
+  const workspaceTierLayer = tenantPreset
+    ? mergeFeatures(FEATURE_PRESET_BUNDLES[tenantPreset], tenantPolicy?.overrides)
+    : mergeFeatures({}, tenantPolicy?.overrides);
 
   let userOverrideCount = 0;
+  let userOverrideLayer: FeatureFlagMap | undefined;
   if (tenantPolicy?.allowUserOverrides && userOverrides?.overrides) {
     const allowlist = tenantPolicy.userOverrideAllowlist;
-    const filteredOverrides = Object.fromEntries(
+    userOverrideLayer = Object.fromEntries(
       Object.entries(userOverrides.overrides).filter(([key]) => !allowlist || allowlist.includes(key)),
     );
-
-    userOverrideCount = Object.keys(filteredOverrides).length;
-    features = mergeFeatures(features, filteredOverrides);
+    userOverrideCount = Object.keys(userOverrideLayer).length;
   }
+
+  const entitlementLayers: ResolvedEntitlementState = {
+    deploymentPreset: deploymentLayer,
+    workspaceTier: workspaceTierLayer,
+    userOverride: userOverrideLayer,
+  };
 
   return {
     activePreset,
-    features,
+    features: resolveFeatureMapFromLayers(entitlementLayers),
     diagnostics: {
       deploymentPreset,
       tenantPreset: tenantPreset ?? null,
       userOverrideCount,
     },
+    entitlementLayers,
   };
 }
