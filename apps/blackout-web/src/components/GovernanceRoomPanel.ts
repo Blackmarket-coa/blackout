@@ -11,6 +11,7 @@ interface GovernanceRoomPanelProps {
   proposals: GovernanceProposal[];
   canPropose: boolean;
   canVote: boolean;
+  governanceAdvancedEnabled: boolean;
   actionMessage?: string | null;
 }
 
@@ -22,6 +23,7 @@ export function renderGovernanceRoomPanel({
   proposals,
   canPropose,
   canVote,
+  governanceAdvancedEnabled,
   actionMessage = null,
 }: GovernanceRoomPanelProps): string {
   const activeProposal = proposals.find((proposal) => proposal.status === "active") ?? proposals[0];
@@ -41,7 +43,7 @@ export function renderGovernanceRoomPanel({
         <button type="button" role="tab" aria-selected="${activeTab === "taskboard"}" aria-controls="governance-panel-taskboard" id="governance-tab-taskboard" class="${activeTab === "taskboard" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="taskboard">Execution tasks</button>
       </nav>
       ${actionMessage ? `<p class="meta" role="status" data-testid="governance-action-message">${actionMessage}</p>` : ""}
-      ${activeTab === "feed" ? renderFeedView(activeProposal, canVote) : ""}
+      ${activeTab === "feed" ? renderFeedView(activeProposal, canVote, governanceAdvancedEnabled) : ""}
       ${activeTab === "proposals" ? renderProposalsView(proposals) : ""}
       ${activeTab === "taskboard" ? renderTaskBoardView() : ""}
       ${showProposalModal ? renderProposalModal(canPropose) : ""}
@@ -49,7 +51,11 @@ export function renderGovernanceRoomPanel({
   `;
 }
 
-function renderFeedView(activeProposal: GovernanceProposal | undefined, canVote: boolean): string {
+function renderFeedView(
+  activeProposal: GovernanceProposal | undefined,
+  canVote: boolean,
+  governanceAdvancedEnabled: boolean,
+): string {
   const title = activeProposal?.title ?? "No active proposal";
   const timing = activeProposal ? `${activeProposal.durationHours}h voting window` : "Create one to start governance voting";
 
@@ -67,6 +73,31 @@ function renderFeedView(activeProposal: GovernanceProposal | undefined, canVote:
           <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast an approve vote" : "Voting is currently unavailable"}">Vote approve</button>
           <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast a block vote" : "Voting is currently unavailable"}">Vote block</button>
         </div>
+      </article>
+      <article class="governance-proposal-card governance-advanced-controls" data-testid="governance-advanced-controls">
+        <h3>Advanced governance controls</h3>
+        <p class="meta">Delegation, weighted voting, policy engine automation, and audit exports are paid features.</p>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${governanceAdvancedEnabled ? "checked" : ""} />
+          Advanced · Delegation
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${governanceAdvancedEnabled ? "checked" : ""} />
+          Advanced · Weighted voting
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${governanceAdvancedEnabled ? "checked" : ""} />
+          Advanced · Policy engine
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${governanceAdvancedEnabled ? "checked" : ""} />
+          Advanced · Audit exports
+        </label>
+        ${
+          governanceAdvancedEnabled
+            ? '<p class="meta">Advanced governance controls are enabled for this workspace.</p>'
+            : '<p class="meta">Upgrade to unlock Advanced governance controls.</p><button type="button" class="ghost-btn" data-action="open-upgrade-flow" data-upgrade-source="governance_room_advanced_controls">Upgrade for Advanced governance</button>'
+        }
       </article>
       <p class="meta">Discussion feed remains below with pinned proposal context above the timeline.</p>
     </section>
