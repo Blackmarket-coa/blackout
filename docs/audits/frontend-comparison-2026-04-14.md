@@ -122,3 +122,80 @@ Use paid tiers for high-cost, high-governance, or advanced-opsec capabilities:
 - Most competitors charge for utility/cosmetics; you can offer a unique **opsec-first baseline** by making basic stego free.
 - Paid value then becomes clearly “advanced operational capability” (policy, compliance, lifecycle automation), which organizations will pay for.
 - This keeps the free tier genuinely sticky while preserving clear monetization headroom.
+
+## Implementation guardrails (AI-assisted) to preserve layout integrity and monorepo consistency
+
+Use this as the execution checklist when enabling the free/default vs paid module strategy.
+
+### 1) Keep layout integrity by attaching features to existing UI entry kinds only
+
+- Reuse the existing UI entry taxonomy in `apps/blackout-web/src/settings/feature-entrypoints.ts`:
+  - `settings_toggle`, `composer_action`, `room_action`, `widget_panel`, `admin_console`, `command_palette`.
+- Rule: every new free/default or paid add-on control should map to an existing `UiEntryKind` + stable `id`.
+- Avoid introducing ad-hoc panel containers unless there is no existing slot.
+
+### 2) Prevent feature clashes with capability gates and preset layering
+
+- Keep entitlements as data, not hardcoded conditionals in components.
+- Use a layered evaluation order:
+  1. deployment preset,
+  2. workspace/org subscription tier,
+  3. user override (if allowed).
+- This mirrors existing feature-flag composition patterns in `apps/blackout-client/src/app/core/features/`.
+
+### 3) Keep visual consistency across the monorepo
+
+- Use shared tokens/components first:
+  - design tokens from `packages/design`
+  - shared primitives from `packages/ui`
+  - shared behavior contracts from `packages/core`
+- Do not introduce one-off colors/spacing in app surfaces when equivalent tokens already exist.
+
+### 4) Implement stego monetization without UX friction
+
+- Free baseline (`stego_toolkit` / `steganography_layer`) should render with no paywall interruption in core send flow.
+- Paid features (`ephemeral_stego_lifecycle` and advanced stego options) should:
+  - appear as clearly labeled “Advanced” controls,
+  - keep disabled-state affordances visible,
+  - route to a single upgrade modal/flow (same pattern everywhere).
+
+### 5) Keep API + contract alignment in monorepo
+
+- Centralize entitlement payload types in shared packages (`packages/contracts` or `packages/blackout-protocol`) and consume through `packages/blackout-sdk`.
+- Avoid app-local entitlement type drift.
+- Add a single capability resolver module in each frontend surface instead of checking plan logic in many components.
+
+### 6) AI workflow constraints (recommended for your team)
+
+When prompting AI to implement changes, require it to:
+
+1. name exact files before editing,
+2. reuse existing `FEATURE_UI_ENTRIES` ids when possible,
+3. show the entitlement decision path (preset/tier/override),
+4. list any new token/component additions and why reuse was insufficient,
+5. provide targeted validation commands for touched workspaces only.
+
+### 7) Minimum validation matrix before merge
+
+For each feature touched, verify:
+
+- desktop web: visible and non-overlapping in intended panel,
+- mobile wrapper path: no composer/keyboard regressions,
+- entitlement state transitions: free -> paid -> free fallback behavior,
+- analytics events: free feature usage vs upgrade intent events are distinct.
+
+Suggested command baseline:
+
+- `pnpm --filter @blackout/web lint`
+- `pnpm --filter @blackout/blackout-web test:unit`
+- `pnpm --filter @blackout/blackout-web test:integration`
+- `pnpm --filter @blackout/blackout-web build:web`
+
+## Suggested phased rollout plan
+
+1. **Phase 1 (safe UX):** enable free/default modules only + basic stego baseline.
+2. **Phase 2 (monetization scaffold):** ship upgrade surface + entitlement resolver + telemetry.
+3. **Phase 3 (advanced stego paid):** key rotation, multi-carrier, lifecycle policy controls.
+4. **Phase 4 (ops packs):** governance/federation premium packs with org-level controls.
+
+This sequencing keeps the product intuitive first, then monetizes advanced capabilities without destabilizing core layout.
