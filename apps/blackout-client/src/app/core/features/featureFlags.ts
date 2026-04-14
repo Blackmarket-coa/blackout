@@ -22,7 +22,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     governance: true,
     forum: true,
     deaddrop: true,
-    steganography: false,
+    steganography: true,
     moderation: false,
     logistics: false,
     legacyShellLayout: false,
