@@ -392,7 +392,7 @@ export class BlackoutWebApp {
   }
 
   private canPropose(): boolean {
-    return this.governanceFeatureEnabled() && this.hasAdminAccess();
+    return this.governanceFeatureEnabled();
   }
 
   private canVote(): boolean {
@@ -861,7 +861,7 @@ export class BlackoutWebApp {
             <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="approve" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to approve" : "Vote approve"}</button>
             <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="block" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to block" : "Vote block"}</button>
           </div>
-          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is unavailable until governance entitlements are enabled.</p>'}
+          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is currently unavailable in this room.</p>'}
         </div>
       `;
     } else if (this.activeGovernancePanelTab === "active") {
@@ -2343,7 +2343,7 @@ export class BlackoutWebApp {
       element.addEventListener("click", () => {
         const channelId = this.store.getState().activeChannelId;
         if (!channelId || !this.canPropose()) {
-          this.featureActionResult = "You do not have permission to create proposals in this room.";
+          this.featureActionResult = "Proposal creation is currently unavailable in this room.";
           this.render();
           return;
         }
@@ -2635,7 +2635,7 @@ export class BlackoutWebApp {
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
       if (!this.canPropose()) {
-        this.featureActionResult = "You need proposal permissions to insert governance proposals.";
+        this.featureActionResult = "Proposal insertion is currently unavailable in this room.";
         this.render();
         return;
       }
@@ -2735,14 +2735,15 @@ export class BlackoutWebApp {
       const hidden = hiddenInput?.value.trim() || "hidden-message";
       const cover = coverInput?.value.trim() || "let's sync after standup";
       const passphrase = passphraseInput?.value.trim() || "";
-      const algorithm = algorithmSelect?.value || "lsb-aes-256-cbc";
+      const algorithm = algorithmSelect?.value || "basic-lsb-image";
+      const carrier = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-carrier']")?.value || "text-body";
       const ephemeral = ephemeralCheckbox?.checked ?? false;
       const ttl = Math.max(1, Number.parseInt(ttlInput?.value ?? "24", 10) || 24);
       const keyHint = passphrase ? `${passphrase.slice(0, 2)}***${passphrase.slice(-2)}` : "none";
       const channelId = channelSelect?.value || "";
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
-      this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.applyComposerSnippet(` [stego carrier="${carrier}" algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
       this.telemetry.track("stego_baseline_used", {
         ...this.telemetryContext(),
         advanced_enabled: this.isFeatureEnabled("features.stego.ephemeral"),
@@ -2763,9 +2764,10 @@ export class BlackoutWebApp {
       const hidden = match[2];
       const cover = match[3];
       const algorithm = attrs.match(/algo="([^"]+)"/)?.[1] ?? "unknown";
+      const carrier = attrs.match(/carrier="([^"]+)"/)?.[1] ?? "text-body";
       const keyHint = attrs.match(/keyHint="([^"]+)"/)?.[1] ?? "none";
       const lifecycle = attrs.match(/lifecycle="([^"]+)"/)?.[1] ?? "persistent";
-      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
+      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Carrier: ${carrier} · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-generate-passphrase']")?.addEventListener("click", () => {
