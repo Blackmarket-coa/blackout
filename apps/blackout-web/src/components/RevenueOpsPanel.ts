@@ -1,5 +1,14 @@
 export type RevenueOpsTab = "monetization" | "quests" | "marketplace" | "apps";
 export type QuestStage = "open" | "claimed" | "submitted" | "approved";
+export type FunnelFamily = "stego" | "governance";
+
+export interface RevenueFunnelMetric {
+  family: FunnelFamily;
+  baselineUsage: number;
+  advancedControlOpens: number;
+  upgradeClicks: number;
+  conversions: number;
+}
 
 interface RevenueOpsPanelProps {
   activeTab: RevenueOpsTab;
@@ -7,9 +16,15 @@ interface RevenueOpsPanelProps {
   paymentIssue: boolean;
   questStage: QuestStage;
   installedApps: number;
+  funnelMetrics: RevenueFunnelMetric[];
 }
 
-export function renderRevenueOpsPanel({ activeTab, paymentSheetOpen, paymentIssue, questStage, installedApps }: RevenueOpsPanelProps): string {
+function conversionRate(metric: RevenueFunnelMetric): string {
+  if (metric.upgradeClicks <= 0) return "0%";
+  return `${Math.round((metric.conversions / metric.upgradeClicks) * 100)}%`;
+}
+
+export function renderRevenueOpsPanel({ activeTab, paymentSheetOpen, paymentIssue, questStage, installedApps, funnelMetrics }: RevenueOpsPanelProps): string {
   return `
     <section class="stack panel-card revenue-ops-panel" data-testid="revenue-ops-panel">
       <h2>Revenue & Marketplace Ops</h2>
@@ -29,6 +44,28 @@ export function renderRevenueOpsPanel({ activeTab, paymentSheetOpen, paymentIssu
             <button type="button" data-action="revenue-toggle-payment-issue">Toggle payment issue</button>
           </div>
           ${paymentSheetOpen ? '<div class="ops-inline-sheet"><strong>Stripe payment sheet</strong><p class="meta">Card • Wallet • Bank</p><button type="button" data-action="revenue-close-payment-sheet">Close</button></div>' : ""}
+        </article>
+        <article class="ops-card" data-testid="revenue-funnel-slice">
+          <strong>Free-to-paid funnel by feature family</strong>
+          <p class="meta">Tracks baseline usage, advanced-control opens, upgrade clicks, and paid conversions.</p>
+          <div class="upgrade-prompt-table">
+            <table>
+              <thead>
+                <tr><th>Family</th><th>Baseline</th><th>Advanced opens</th><th>Upgrade clicks</th><th>Conversions</th><th>Click→paid</th></tr>
+              </thead>
+              <tbody>
+                ${funnelMetrics.map((metric) => `
+                  <tr data-testid="funnel-row-${metric.family}">
+                    <td>${metric.family}</td>
+                    <td>${metric.baselineUsage}</td>
+                    <td>${metric.advancedControlOpens}</td>
+                    <td>${metric.upgradeClicks}</td>
+                    <td>${metric.conversions}</td>
+                    <td>${conversionRate(metric)}</td>
+                  </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
         </article>
       ` : ""}
       ${activeTab === "quests" ? `

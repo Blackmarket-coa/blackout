@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import messageRoutes from './routes/messages';
 import federationRoutes from './routes/federation';
 import channelRoutes from './routes/channels';
+import entitlementRoutes from './routes/entitlements';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
@@ -41,6 +42,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/messages`, messageRoutes);
   app.route(`${root}/federation`, federationRoutes);
   app.route(`${root}/channels`, channelRoutes);
+  app.route(`${root}/entitlements`, entitlementRoutes);
   registerFeatureModules(app, root);
 }
 

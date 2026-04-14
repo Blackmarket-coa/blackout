@@ -87,3 +87,52 @@ test('v1 governance proposal create/get works', async () => {
   const body = await json(get);
   assert.equal(body.id, created.id);
 });
+
+test('v1 entitlements read + family filter works', async () => {
+  const payload = {
+    deploymentPreset: 'starter',
+    deploymentPresetEntitlements: {
+      'features.stego.enabled': true,
+      'features.governance.entitlements': false,
+    },
+    orgTier: 'pro',
+    orgTierEntitlements: {
+      'features.stego.ephemeral': true,
+      'features.governance.entitlements': true,
+    },
+    planState: {
+      tier: 'pro',
+      status: 'active',
+      isPaid: true,
+    },
+  };
+
+  const me = await app.request('/v1/entitlements/me', {
+    headers: {
+      'x-blackout-entitlement-payload': JSON.stringify(payload),
+    },
+  });
+  assert.equal(me.status, 200);
+  const meBody = await json(me);
+  assert.equal(meBody.family, 'all');
+
+  const stego = await app.request('/v1/entitlements/stego', {
+    headers: {
+      'x-blackout-entitlement-payload': JSON.stringify(payload),
+    },
+  });
+  assert.equal(stego.status, 200);
+  const stegoBody = await json(stego);
+  const entitlements = ((stegoBody.payload as Record<string, unknown>).deploymentPresetEntitlements ?? {}) as Record<string, unknown>;
+  assert.ok(Object.keys(entitlements).every((key) => key.startsWith('features.stego.')));
+});
+
+test('v1 entitlements returns 400 for invalid payload', async () => {
+  const response = await app.request('/v1/entitlements/me', {
+    headers: {
+      'x-blackout-entitlement-payload': JSON.stringify({ deploymentPreset: 'starter' }),
+    },
+  });
+
+  assert.equal(response.status, 400);
+});

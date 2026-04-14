@@ -7,7 +7,7 @@ import { renderFederationPanel, type FederationTab } from "./components/Federati
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
 import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/PlatformOpsPanel";
-import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
+import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab, type RevenueFunnelMetric } from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderGlossaryTip } from "./components/glossary";
@@ -86,6 +86,11 @@ const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
 const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
 const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
+
+const DEFAULT_REVENUE_FUNNEL_METRICS: RevenueFunnelMetric[] = [
+  { family: "stego", baselineUsage: 0, advancedControlOpens: 0, upgradeClicks: 0, conversions: 0 },
+  { family: "governance", baselineUsage: 0, advancedControlOpens: 0, upgradeClicks: 0, conversions: 0 },
+];
 const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
 const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
@@ -135,6 +140,7 @@ export class BlackoutWebApp {
   private paymentIssue = false;
   private questStage: QuestStage = "open";
   private installedApps = 2;
+  private revenueFunnelMetrics: RevenueFunnelMetric[] = DEFAULT_REVENUE_FUNNEL_METRICS.map((metric) => ({ ...metric }));
   private activePlatformOpsTab: PlatformOpsTab = "federation";
   private readinessScore = 86;
   private vaultUsageGb = 11.5;
@@ -1602,6 +1608,22 @@ export class BlackoutWebApp {
     `;
   }
 
+
+  private incrementFunnelMetric(family: RevenueFunnelMetric["family"], metric: Exclude<keyof RevenueFunnelMetric, "family">): void {
+    this.revenueFunnelMetrics = this.revenueFunnelMetrics.map((row) => (
+      row.family === family ? { ...row, [metric]: row[metric] + 1 } : row
+    ));
+  }
+
+  private trackAdvancedControlOpen(family: RevenueFunnelMetric["family"], source: string): void {
+    this.incrementFunnelMetric(family, "advancedControlOpens");
+    this.telemetry.track("advanced_control_opened", {
+      ...this.telemetryContext(),
+      family,
+      source,
+    });
+  }
+
   private renderRevenueOpsPanelSection(): string {
     return renderRevenueOpsPanel({
       activeTab: this.activeRevenueOpsTab,
@@ -1609,6 +1631,7 @@ export class BlackoutWebApp {
       paymentIssue: this.paymentIssue,
       questStage: this.questStage,
       installedApps: this.installedApps,
+      funnelMetrics: this.revenueFunnelMetrics,
     });
   }
 
@@ -1635,11 +1658,14 @@ export class BlackoutWebApp {
         : "general";
     this.subscriptionPopupOpen = true;
     this.featureActionResult = "Opened shared upgrade flow for Advanced features.";
+    this.telemetry.track("upgrade_click", { ...this.telemetryContext(), source, capability });
     this.telemetry.track("upgrade_intent", { ...this.telemetryContext(), source, capability });
     if (capability === "stego") {
+      this.incrementFunnelMetric("stego", "upgradeClicks");
       this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
     }
     if (capability === "governance") {
+      this.incrementFunnelMetric("governance", "upgradeClicks");
       this.telemetry.track("governance_upgrade_intent", { ...this.telemetryContext(), source });
     }
     this.closeComposerPanels();
@@ -2216,6 +2242,11 @@ export class BlackoutWebApp {
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.selectedPreset] };
       this.appendPresetAuditLog(`${new Date().toISOString()} applied ${previousPreset} → ${this.appliedPreset}`);
       this.telemetry.track("preset_applied", { preset: this.appliedPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
+      if (previousPreset === "starter" && (this.appliedPreset === "governance" || this.appliedPreset === "sovereignty")) {
+        this.incrementFunnelMetric("governance", "conversions");
+        this.incrementFunnelMetric("stego", "conversions");
+        this.telemetry.track("upgrade_conversion", { ...this.telemetryContext(), fromPreset: previousPreset, toPreset: this.appliedPreset });
+      }
       this.render();
     });
 
@@ -2520,6 +2551,7 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
       this.trackAdvancedDiscovery("stego");
+      this.trackAdvancedControlOpen("stego", "composer_stego_panel");
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='open-subscription-popup']").forEach((element) => {
@@ -2642,6 +2674,7 @@ export class BlackoutWebApp {
         }
         this.toggleComposerPanel("governance", button);
         this.trackAdvancedDiscovery("governance");
+        this.trackAdvancedControlOpen("governance", "composer_governance_panel");
       });
     });
 
@@ -2756,6 +2789,7 @@ export class BlackoutWebApp {
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
       this.applyComposerSnippet(` [stego carrier="${carrier}" algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.incrementFunnelMetric("stego", "baselineUsage");
       this.telemetry.track("stego_baseline_used", {
         ...this.telemetryContext(),
         advanced_enabled: this.isFeatureEnabled("features.stego.ephemeral"),
