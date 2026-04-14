@@ -13,6 +13,7 @@ export * from './matrix/types';
 
 export type {
   EntitlementKey,
+  EntitlementAccessPayload,
   EntitlementMap,
   EntitlementResolverInput,
   EntitlementResolutionSource,

@@ -44,12 +44,12 @@ import {
     getQuickActionEntriesForSurface,
     getUnseenQuickActionIds,
     invokeQuickAction,
-    isFeatureFlagEnabled,
     markQuickActionsSeen,
     type QuickActionId,
     readQuickActionCollapsed,
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
+import { resolveCapabilityAccessMap } from '../../resolver/capabilityAccessResolver';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -115,13 +115,18 @@ export const ClientLayout = () => {
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
-    const rolesEnabled = isFeatureFlagEnabled('features.bmc.roles', featureEntrypointRegistry);
-    const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
-    const callEnabled = isFeatureFlagEnabled(
-        'features.call.elementCall',
-        featureEntrypointRegistry
+    const capabilityAccess = useMemo(
+        () =>
+            resolveCapabilityAccessMap(
+                ['features.bmc.roles', 'features.call.elementCall', 'features.bmc.forum'],
+                featureEntrypointRegistry.entitlementLayers
+            ),
+        [featureEntrypointRegistry.entitlementLayers]
     );
-    const forumEnabled = isFeatureFlagEnabled('features.bmc.forum', featureEntrypointRegistry);
+    const rolesEnabled = capabilityAccess['features.bmc.roles'] ?? false;
+    const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
+    const callEnabled = capabilityAccess['features.call.elementCall'] ?? false;
+    const forumEnabled = capabilityAccess['features.bmc.forum'] ?? false;
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
         [rolesPanelEnabled]
