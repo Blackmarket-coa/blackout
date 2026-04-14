@@ -45,7 +45,7 @@ jobs:
 
             - name: pnpm audit (high+ only)
               continue-on-error: true
-              run: pnpm audit --prod --severity high
+              run: pnpm audit --prod --audit-level high
 
             - name: OSV scanner
               uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
