@@ -2,6 +2,8 @@ import { fireEvent, getByRole, waitFor } from "@testing-library/dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
+import { FEATURE_PRESET_BUNDLES } from "../../src/settings/feature-presets";
+import { FEATURE_PANEL_REGION_BY_KIND, FEATURE_UI_ENTRIES, type UiEntryKind } from "../../src/settings/feature-entrypoints";
 
 const waitForAuthenticatedWorkspace = async (root: HTMLElement): Promise<void> => {
   await waitFor(() => {
@@ -693,6 +695,48 @@ describe("BlackoutWebApp integration", () => {
 
   });
 
+  it("keeps baseline stego send flow working on starter preset while advanced controls stay disabled", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "starter",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "starter",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing composer");
+
+    const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement;
+    fireEvent.click(stegoTrigger);
+    expect((root.querySelector("[data-action='composer-stego-ephemeral']") as HTMLInputElement).disabled).toBe(true);
+    expect((root.querySelector("[data-action='composer-stego-channel-rotation-days']") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "ship at dawn" } });
+    fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all clear" } });
+    fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
+
+    expect(composer.value).toContain('hidden="ship at dawn"');
+    fireEvent.submit(root.querySelector("#message-form") as HTMLFormElement);
+    expect(composer.value).toBe("");
+  });
+
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
@@ -812,6 +856,65 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-feature-id='media_pipeline']"));
 
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened media_pipeline");
+  });
+
+  it("renders feature entry flows only in approved shell panel regions", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const approvedRegionChecks: Record<string, () => void> = {
+      settings_shell: () => expect(root.querySelector('[data-testid="settings-shell"]')).toBeTruthy(),
+      chat_workspace: () => expect(root.querySelector(".chat-window")).toBeTruthy(),
+      right_panel_overlay: () => {
+        expect(root.querySelector('[data-testid="right-panel-overlay"]')).toBeTruthy();
+        expect(root.querySelector('[data-testid="widget-panel-host"]')).toBeTruthy();
+      },
+      repo_tools_shell: () => expect(root.querySelector(".repo-tools-page")).toBeTruthy(),
+      command_palette_overlay: () => expect(root.querySelector('[data-testid="feature-command-palette"]')).toBeTruthy(),
+    };
+
+    const enabledEntryByKind = new Map<UiEntryKind, string>();
+    for (const entry of FEATURE_UI_ENTRIES) {
+      const [kind] = entry.uiEntry.split(":") as [UiEntryKind, string];
+      if (enabledEntryByKind.has(kind)) continue;
+      if (!FEATURE_PRESET_BUNDLES.sovereignty[entry.presetKey]) continue;
+      enabledEntryByKind.set(kind, entry.id);
+    }
+
+    for (const [kind, featureId] of enabledEntryByKind.entries()) {
+      const dropdown = requireElement<HTMLSelectElement>(root, '[data-testid="feature-toolbar-dropdown-frequent"]');
+      fireEvent.change(dropdown, { target: { value: `${kind}|${featureId}` } });
+      approvedRegionChecks[FEATURE_PANEL_REGION_BY_KIND[kind]]();
+      expect(root.querySelector('[data-testid="feature-custom-panel-root"]')).toBeFalsy();
+      expect(root.querySelector("[data-feature-root='custom']")).toBeFalsy();
+    }
   });
 
   it("supports DM panel quick-start action with dm- prefix", async () => {

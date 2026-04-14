@@ -304,6 +304,8 @@ Use this section when working with coding agents or AI copilots.
 - Ask the AI to name exact files it plans to modify.
 - Keep changes small and subsystem-focused.
 - Prefer incremental PRs over large mixed refactors.
+- Require an explicit pre-edit file plan (exact relative paths) and reject edits outside that list unless the AI updates the plan first.
+- Require justification whenever the AI proposes creating a new design token or UI component (why reuse was insufficient, where it will be consumed, and why it belongs at that layer).
 
 ### 2) Require explicit validation commands
 
@@ -358,6 +360,16 @@ Before merge, confirm the AI has:
 - Updated docs for behavior/config changes
 - Added or updated tests for new logic
 - Included rollback notes for risky changes
+
+### 8) Reuse shared packages before app-local additions
+
+Before accepting app-local styling or logic in `apps/*`, require AI to explicitly check and document whether reuse is possible from:
+
+- `packages/design` (tokens, themes, primitives)
+- `packages/ui` (shared UI building blocks)
+- `packages/core` (shared business/runtime logic)
+
+Only allow new app-local implementations when those packages cannot satisfy requirements without causing coupling or regressions, and require that rationale in the PR summary.
 
 ---
 

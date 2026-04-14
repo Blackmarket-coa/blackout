@@ -13,6 +13,7 @@ describe("renderChatWindow", () => {
       sendPending: false,
       richEditingEnabled: true,
       stegoEnabled: true,
+      stegoAdvancedEnabled: false,
       composerRepliesEnabled: true,
       composerEditsEnabled: true,
       composerRedactionsEnabled: true,
@@ -20,6 +21,7 @@ describe("renderChatWindow", () => {
       mediaSpoilersEnabled: true,
       typingIndicatorsEnabled: true,
       showTypingIndicator: false,
+      attachmentMode: "quick",
       compactMode: false,
       compactRecommended: false,
     });
