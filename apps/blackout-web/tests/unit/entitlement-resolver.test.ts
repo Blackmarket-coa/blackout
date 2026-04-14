@@ -86,4 +86,41 @@ describe("resolveFeaturePreset downgrade behavior", () => {
     expect(downgraded.diagnostics.tenantPreset).toBeNull();
     expect(downgraded.diagnostics.userOverrideCount).toBe(0);
   });
+
+  it("applies deployment preset kill switches for advanced capabilities", () => {
+    const resolved = resolveFeaturePreset({
+      preset: "sovereignty",
+      presetKillSwitches: {
+        sovereignty: {
+          advanced_stego: true,
+          townhall_sfu: true,
+        },
+      },
+    });
+
+    expect(resolved.features["features.stego.ephemeral"]).toBe(false);
+    expect(resolved.features["features.townhall.enabled"]).toBe(false);
+    expect(resolved.features["features.bmc.deaddrop"]).toBe(false);
+    expect(resolved.diagnostics.killSwitchesApplied).toMatchObject({ preset: 2, tier: 0 });
+  });
+
+  it("preserves tier kill switches after a free -> paid -> free transition", () => {
+    const free = resolveFeaturePreset({ preset: "starter" });
+    const paid = resolveFeaturePreset(
+      { preset: "starter" },
+      {
+        preset: "sovereignty",
+        tierKillSwitches: {
+          sovereignty: {
+            advanced_governance: true,
+          },
+        },
+      },
+    );
+    const backToFree = resolveFeaturePreset({ preset: "starter" });
+
+    expect(free.features["features.governance.entitlements"]).toBe(false);
+    expect(paid.features["features.governance.entitlements"]).toBe(false);
+    expect(backToFree.features["features.governance.entitlements"]).toBe(false);
+  });
 });

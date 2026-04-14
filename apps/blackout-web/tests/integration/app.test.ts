@@ -793,6 +793,67 @@ describe("BlackoutWebApp integration", () => {
     }
   });
 
+  it("handles free -> paid -> free transitions with advanced feature fallback and no compose/governance regressions", async () => {
+    const transitions: Array<{ preset: "starter" | "sovereignty"; advancedEnabled: boolean }> = [
+      { preset: "starter", advancedEnabled: false },
+      { preset: "sovereignty", advancedEnabled: true },
+      { preset: "starter", advancedEnabled: false },
+    ];
+
+    for (const [index, step] of transitions.entries()) {
+      window.localStorage.clear();
+      document.body.innerHTML = `<div id="app"></div>`;
+      const root = document.querySelector("#app");
+      if (!root) throw new Error("missing app root in test");
+
+      const app = new BlackoutWebApp(root, {
+        homeserverUrl: "https://matrix.blackout.local",
+        mode: "daily-chat",
+        rollout: { cohort: "internal" },
+        presets: {
+          activePreset: step.preset,
+          features: {},
+          diagnostics: {
+            deploymentPreset: step.preset,
+            tenantPreset: null,
+            userOverrideCount: 0,
+          },
+        },
+        simpleMode: {
+          simple_mode_default: false,
+          show_advanced_admin_modules: true,
+          onboarding_progressive_disclosure: true,
+        },
+      });
+      await app.mount();
+
+      fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+      fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+      fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+      await waitForAuthenticatedWorkspace(root);
+
+      const composer = requireElement<HTMLTextAreaElement>(root, "textarea[name='message']");
+      fireEvent.input(composer, { target: { value: `transition step ${index + 1}` } });
+      fireEvent.submit(requireElement<HTMLFormElement>(root, "#message-form"));
+      expect(requireElement<HTMLFormElement>(root, "#message-form")).toBeTruthy();
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      expect(root.querySelector("[data-testid='composer-governance-baseline-hint']")).toBeTruthy();
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-right-panel'][data-panel='governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='governance-right-panel-tab'][data-tab='results']"));
+      expect(root.textContent).toContain("No proposal results yet.");
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="toggle-settings-button"]'));
+      const advancedEnabledNode = root.querySelector('[data-testid="feature-widget-townhall-sfu"]');
+      const advancedFallbackNode = root.querySelector('[data-testid="feature-widget-townhall-sfu-unavailable"]');
+      if (step.advancedEnabled) {
+        expect(advancedEnabledNode).toBeTruthy();
+      } else {
+        expect(advancedFallbackNode).toBeTruthy();
+      }
+    }
+  }, 15_000);
+
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
