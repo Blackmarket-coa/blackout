@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    assertFeatureEntryAnchor,
     assertFeatureEntryInApprovedRegion,
     buildFeatureEntrypointRegistry,
+    FEATURE_NAV_ANCHORS,
     FEATURE_PANEL_REGION_BY_KIND,
+    FEATURE_ROUTE_ANCHORS,
+    FEATURE_SETTINGS_ANCHORS,
     FEATURE_UI_ENTRIES,
     FEATURE_UI_ENTRY_PREFIX_BY_KIND,
     getQuickActionEntriesForSurface,
@@ -152,7 +156,35 @@ describe('feature entrypoint registry adapter', () => {
             const [kind, uiEntryId] = entry.uiEntry.split(':') as [UiEntryKind, string];
             expect(uiEntryId.startsWith(FEATURE_UI_ENTRY_PREFIX_BY_KIND[kind])).toBe(true);
             expect(FEATURE_PANEL_REGION_BY_KIND[kind]).toBeTruthy();
+            expect(() => assertFeatureEntryAnchor(entry)).not.toThrow();
         }
+    });
+
+    it('maps quick-action controls only to existing route/nav/settings anchors', () => {
+        expect(FEATURE_ROUTE_ANCHORS.length).toBeGreaterThan(0);
+        expect(FEATURE_NAV_ANCHORS.length).toBeGreaterThan(0);
+        expect(FEATURE_SETTINGS_ANCHORS.length).toBeGreaterThan(0);
+
+        FEATURE_UI_ENTRIES.forEach((entry) => {
+            if (entry.anchor.kind === 'route') {
+                expect(FEATURE_ROUTE_ANCHORS).toContain(entry.anchor.target);
+                return;
+            }
+            if (entry.anchor.kind === 'nav') {
+                expect(FEATURE_NAV_ANCHORS).toContain(entry.anchor.target);
+                return;
+            }
+            expect(FEATURE_SETTINGS_ANCHORS).toContain(entry.anchor.target);
+        });
+    });
+
+    it('keeps controls inside existing shell surfaces and avoids new top-level panel roots', () => {
+        const disallowedTopLevelRegions = new Set(['admin_shell', 'command_palette_shell']);
+
+        FEATURE_UI_ENTRIES.forEach((entry) => {
+            const [kind] = entry.uiEntry.split(':') as [UiEntryKind, string];
+            expect(disallowedTopLevelRegions.has(FEATURE_PANEL_REGION_BY_KIND[kind])).toBe(false);
+        });
     });
 
     it('enforces approved panel regions and rejects custom shell roots', () => {

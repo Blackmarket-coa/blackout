@@ -1,4 +1,6 @@
 import type { EntitlementKey, EntitlementMap, EntitlementTier } from '@blackout/sdk';
+import { HOME_PATH, INBOX_NOTIFICATIONS_PATH, SPACE_SETTINGS_PATH } from '../../pages/paths';
+import type { SettingsSectionId } from '../settings';
 
 import {
     buildEntitlementAccessPayload,
@@ -42,7 +44,40 @@ export interface FeatureEntry {
     presetKey: EntitlementKey;
     uiEntry: `${UiEntryKind}:${string}`;
     surfaces: QuickActionSurface[];
+    anchor: FeatureControlAnchor;
 }
+
+type FeatureRouteAnchor =
+    | typeof HOME_PATH
+    | typeof INBOX_NOTIFICATIONS_PATH
+    | typeof SPACE_SETTINGS_PATH;
+type FeatureNavAnchor = 'room-header-actions' | 'composer-slash-commands';
+
+export type FeatureControlAnchor =
+    | { kind: 'route'; target: FeatureRouteAnchor }
+    | { kind: 'nav'; target: FeatureNavAnchor }
+    | { kind: 'settings'; target: SettingsSectionId };
+
+export const FEATURE_ROUTE_ANCHORS = Object.freeze([
+    HOME_PATH,
+    INBOX_NOTIFICATIONS_PATH,
+    SPACE_SETTINGS_PATH,
+] as const);
+export const FEATURE_NAV_ANCHORS = Object.freeze([
+    'room-header-actions',
+    'composer-slash-commands',
+] as const);
+export const FEATURE_SETTINGS_ANCHORS = Object.freeze([
+    'account',
+    'appearance',
+    'notifications',
+    'privacy',
+    'voice-video',
+    'accessibility',
+    'keybinds',
+    'developer',
+    'about',
+] as const satisfies ReadonlyArray<SettingsSectionId>);
 
 export interface FeatureEntrypointRegistry {
     preset: FeaturePresetKey;
@@ -95,6 +130,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.settings.appearance',
         uiEntry: 'settings_toggle:feature-toggle-open-settings',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'settings', target: 'appearance' },
     },
     {
         id: 'open-devices',
@@ -103,6 +139,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.settings.account',
         uiEntry: 'settings_toggle:feature-toggle-open-devices',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'settings', target: 'voice-video' },
     },
     {
         id: 'open-inbox',
@@ -111,6 +148,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.settings.account',
         uiEntry: 'room_action:feature-room-open-inbox',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'route', target: INBOX_NOTIFICATIONS_PATH },
     },
     {
         id: 'open-threads',
@@ -119,6 +157,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.timeline.threads',
         uiEntry: 'room_action:feature-room-open-threads',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'room-header-actions' },
     },
     {
         id: 'open-search',
@@ -127,6 +166,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.nav.search',
         uiEntry: 'room_action:feature-room-open-search',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'route', target: HOME_PATH },
     },
     {
         id: 'compose-join',
@@ -135,6 +175,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.nav.roomInvites',
         uiEntry: 'composer_action:feature-composer-compose-join',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
     {
         id: 'compose-invite',
@@ -143,8 +184,22 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         presetKey: 'features.nav.roomInvites',
         uiEntry: 'composer_action:feature-composer-compose-invite',
         surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
 ];
+
+export function assertFeatureEntryAnchor(entry: FeatureEntry): void {
+    if (
+        (entry.anchor.kind === 'route' && !FEATURE_ROUTE_ANCHORS.includes(entry.anchor.target)) ||
+        (entry.anchor.kind === 'nav' && !FEATURE_NAV_ANCHORS.includes(entry.anchor.target)) ||
+        (entry.anchor.kind === 'settings' &&
+            !FEATURE_SETTINGS_ANCHORS.includes(entry.anchor.target))
+    ) {
+        throw new Error(
+            `[feature-entrypoints] ${entry.id} has unknown ${entry.anchor.kind} anchor ${entry.anchor.target}.`
+        );
+    }
+}
 
 const FEATURE_ENTITLEMENT_KEYS = [
     ...new Set(FEATURE_UI_ENTRIES.map((entry) => entry.presetKey)),
