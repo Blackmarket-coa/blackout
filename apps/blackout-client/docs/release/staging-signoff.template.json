@@ -13,6 +13,11 @@
     "location": false,
     "functionality": false
   },
+  "manualVerification": {
+    "desktopLayoutIntegrity": true,
+    "mobileLayoutIntegrity": true,
+    "entitlementTransitions": true
+  },
   "evidence": {
     "report": "docs/launch-smoke-suite.md",
     "artifacts": [

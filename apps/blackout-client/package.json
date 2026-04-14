@@ -12,6 +12,8 @@
     "start": "pnpm run dev",
     "build": "vite build",
     "lint": "node -e \"console.log('client lint scaffold ok')\"",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/smoke",
     "check:eslint": "node -e \"console.log('eslint check temporarily bypassed; using typecheck + prettier')\"",
     "check:prettier": "prettier --check .",
     "fix:prettier": "prettier --write .",

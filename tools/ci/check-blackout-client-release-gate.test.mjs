@@ -28,6 +28,7 @@ test('passes when signoff has no Sev-1/Sev-2 and no regressions', () => {
     executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 0, sev2: 0 },
     regressions: { spacing: false, location: false, functionality: false },
+    manualVerification: { desktopLayoutIntegrity: true, mobileLayoutIntegrity: true, entitlementTransitions: true },
     evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
     signoff: { decision: 'GO' },
   };
@@ -45,6 +46,7 @@ test('fails when Sev-1 is present', () => {
     executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 1, sev2: 0 },
     regressions: { spacing: false, location: false, functionality: false },
+    manualVerification: { desktopLayoutIntegrity: true, mobileLayoutIntegrity: true, entitlementTransitions: true },
     evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
     signoff: { decision: 'GO' },
   };
@@ -62,6 +64,7 @@ test('fails when spacing/location/functionality regression is reported', () => {
     executedAtUtc: '2026-04-13T18:10:00.000Z',
     summary: { sev1: 0, sev2: 0 },
     regressions: { spacing: true, location: false, functionality: false },
+    manualVerification: { desktopLayoutIntegrity: true, mobileLayoutIntegrity: true, entitlementTransitions: true },
     evidence: { artifacts: ['artifacts/staging/run-2026-04-13.md'] },
     signoff: { decision: 'GO' },
   };
@@ -79,6 +82,7 @@ test('fails when placeholder signoff metadata is used', () => {
     executedAtUtc: '1970-01-01T00:00:00.000Z',
     summary: { sev1: 0, sev2: 0 },
     regressions: { spacing: false, location: false, functionality: false },
+    manualVerification: { desktopLayoutIntegrity: false, mobileLayoutIntegrity: false, entitlementTransitions: false },
     evidence: { artifacts: [] },
     signoff: { decision: 'NO_GO' },
   };
@@ -89,4 +93,5 @@ test('fails when placeholder signoff metadata is used', () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /buildSha must be a real release-candidate SHA/i);
   assert.match(result.stderr, /signoff.decision must be "GO"/i);
+  assert.match(result.stderr, /Manual verification "desktopLayoutIntegrity" must be true/i);
 });
