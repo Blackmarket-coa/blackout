@@ -277,3 +277,62 @@ To stand out while remaining intuitive:
 - **Discord:** best-in-class mainstream social chat polish.
 - **Stoat:** open-source Discord-like alternative with strong “no paywall on basics” messaging.
 - **Blackout (recommended):** secure, operations-aware collaboration stack where baseline chat is familiar, and the differentiated value is trustworthy stego + governance/federation controls.
+
+## Governance packaging model (mirror stego strategy)
+
+Apply the same pattern used for steganography:
+
+- **Free baseline governance**: enough to make day-to-day coordination useful for every workspace.
+- **Paid advanced governance**: higher-complexity controls, compliance, and org-scale workflows.
+
+### Free + default governance baseline
+
+Recommended to include by default:
+
+1. **Proposal lifecycle essentials**
+   - create proposal
+   - vote (approve/block or basic multi-choice)
+   - view current and closed proposals
+2. **Participation UX basics**
+   - proposal summaries in channel context
+   - vote status visibility for participant trust
+   - lightweight notification/reminder surface
+3. **Basic moderation-linked governance controls**
+   - role-gated proposal creation
+   - minimum quorum/threshold presets (simple presets only)
+
+### Paid advanced governance add-ons
+
+Recommended paid capabilities:
+
+1. **Governance policy engine**
+   - advanced quorum/threshold formulas
+   - weighted/delegated voting rules
+   - conditional execution policies
+2. **Compliance and audit controls**
+   - full governance audit trails
+   - export/reporting workflows
+   - retention and evidence controls
+3. **Organization-scale operations**
+   - multi-workspace policy templates
+   - role delegation matrices
+   - staged approval chains and emergency override workflows
+4. **Advanced analytics**
+   - participation quality and trend analysis
+   - policy effectiveness metrics
+   - governance health scoring dashboards
+
+### UX guardrails (same pattern as stego)
+
+- Keep baseline governance actions fully usable with no paywall interruption.
+- Show advanced governance controls as visible but clearly marked “Advanced”.
+- Use one consistent upgrade entrypoint across proposal, settings, and admin surfaces.
+- Never block reading governance outcomes in free tier; only gate advanced authoring/policy depth.
+
+### Packaging alignment suggestion
+
+- **Free:** baseline governance + baseline stego.
+- **Pro:** advanced stego + advanced governance for creators/community operators.
+- **Team/Enterprise:** policy/compliance/governance-at-scale controls.
+
+This keeps differentiation strong while ensuring free-tier teams can still coordinate meaningfully.
