@@ -31,9 +31,9 @@ export function renderGovernanceRoomPanel({
       <header class="governance-room-header">
         <div>
           <h2>Governance Room · ${channelLabel}</h2>
-          <p class="meta">Feed, proposals, and task board workflows for coalition decision-making.</p>
+          <p class="meta">Feed, proposals, and task board workflows for coalition decision-making. Create a proposal, cast votes, and read outcomes from Results.</p>
         </div>
-        <button type="button" class="ghost-btn" data-action="governance-open-proposal" ${canPropose ? "" : "disabled aria-disabled='true'"} title="${canPropose ? "Create a new governance proposal" : "Insufficient permissions to create proposals"}">+ New Proposal</button>
+        <button type="button" class="ghost-btn" data-action="governance-open-proposal" ${canPropose ? "" : "disabled aria-disabled='true'"} title="${canPropose ? "Create a new governance proposal" : "Proposal creation is currently unavailable"}">+ New Proposal</button>
       </header>
       <nav class="governance-tabs" aria-label="Governance room tabs" role="tablist">
         <button type="button" role="tab" aria-selected="${activeTab === "feed"}" aria-controls="governance-panel-feed" id="governance-tab-feed" class="${activeTab === "feed" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="feed">Decision feed</button>
@@ -64,8 +64,8 @@ function renderFeedView(activeProposal: GovernanceProposal | undefined, canVote:
           <span class="abstain" style="width: 10%"></span>
         </div>
         <div class="governance-modal-actions">
-          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast an approve vote" : "Insufficient permissions to vote"}">Vote approve</button>
-          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast a block vote" : "Insufficient permissions to vote"}">Vote block</button>
+          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="approve" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast an approve vote" : "Voting is currently unavailable"}">Vote approve</button>
+          <button type="button" class="ghost-btn" data-action="governance-vote" data-vote="block" ${canVote ? "" : "disabled aria-disabled='true'"} title="${canVote ? "Cast a block vote" : "Voting is currently unavailable"}">Vote block</button>
         </div>
       </article>
       <p class="meta">Discussion feed remains below with pinned proposal context above the timeline.</p>

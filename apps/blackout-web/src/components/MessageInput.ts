@@ -164,6 +164,7 @@ export function renderMessageInput({
             <p class="composer-popover-title">Governance composer</p>
             <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close governance composer">Close</button>
           </div>
+          <p class="meta" data-testid="composer-governance-baseline-hint">Baseline flow: insert a proposal command, cast votes with <code>/vote</code>, then open Results in the governance panel.</p>
           <label class="composer-popover-field">Proposal title
             <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
           </label>
@@ -184,7 +185,7 @@ export function renderMessageInput({
             <button type="button" data-action="composer-governance-insert-proposal" ${disabled || !canPropose ? "disabled" : ""}>Insert proposal</button>
             <button type="button" data-action="composer-governance-insert-vote" ${disabled ? "disabled" : ""}>Insert vote</button>
           </div>
-          ${!canPropose ? '<p class="meta" role="status">You can vote, but proposal creation requires elevated governance permission.</p>' : ""}
+          ${!canPropose ? '<p class="meta" role="status">Proposal insertion is currently unavailable in this room.</p>' : ""}
           <div class="composer-channel-editor">
             <p class="composer-popover-title">Governance templates</p>
             <div class="composer-popover-actions">
@@ -276,11 +277,15 @@ export function renderMessageInput({
                   <button type="button" data-action="composer-stego-tab-password" data-testid="composer-stego-tab-password" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Password</button>
                 </div>
                 <div class="composer-stego-view is-active" data-stego-view="encode">
+                  <p class="meta" data-testid="composer-stego-baseline-hint">Baseline mode: hide/reveal inside the default text carrier.</p>
                   <label class="composer-popover-field">Hidden text
                     <input type="text" data-action="composer-stego-hidden" value="hidden-message" ${disabled ? "disabled" : ""} />
                   </label>
                   <label class="composer-popover-field">Cover text ${renderGlossaryTip("Cover text")}
                     <input type="text" data-action="composer-stego-cover" value="let's sync after standup" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <label class="composer-popover-field">Carrier (default)
+                    <input type="text" value="text-body" readonly data-action="composer-stego-carrier" />
                   </label>
                   <label class="composer-popover-field">Passphrase
                     <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
@@ -320,7 +325,6 @@ export function renderMessageInput({
                       <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
                     <p class="meta">Multi-carrier routing + policy audit are Advanced controls available on paid tiers.</p>
-                    <button type="button" class="ghost-btn" data-action="open-upgrade-flow" data-upgrade-source="composer_stego_advanced" ${disabled ? "disabled" : ""}>Upgrade for Advanced stego</button>
                   </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>

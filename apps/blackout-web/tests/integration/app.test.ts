@@ -728,13 +728,69 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(stegoTrigger);
     expect((root.querySelector("[data-action='composer-stego-ephemeral']") as HTMLInputElement).disabled).toBe(true);
     expect((root.querySelector("[data-action='composer-stego-channel-rotation-days']") as HTMLInputElement).disabled).toBe(true);
+    expect(root.querySelector("[data-testid='composer-stego-baseline-hint']")).toBeTruthy();
+    expect((root.querySelector("[data-action='composer-stego-carrier']") as HTMLInputElement).value).toBe("text-body");
+    expect(root.querySelector("[data-action='open-upgrade-flow'][data-upgrade-source='composer_stego_advanced']")).toBeFalsy();
     fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "ship at dawn" } });
     fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all clear" } });
     fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
 
+    expect(composer.value).toContain('carrier="text-body"');
     expect(composer.value).toContain('hidden="ship at dawn"');
     fireEvent.submit(root.querySelector("#message-form") as HTMLFormElement);
     expect(composer.value).toBe("");
+  });
+
+  it("keeps baseline governance composer flow discoverable across default presets", async () => {
+    const presets: Array<"starter" | "governance" | "sovereignty"> = ["starter", "governance", "sovereignty"];
+
+    for (const preset of presets) {
+      window.localStorage.clear();
+      document.body.innerHTML = `<div id="app"></div>`;
+      const root = document.querySelector("#app");
+      if (!root) throw new Error("missing app root in test");
+
+      const app = new BlackoutWebApp(root, {
+        homeserverUrl: "https://matrix.blackout.local",
+        mode: "daily-chat",
+        rollout: { cohort: "internal" },
+        presets: {
+          activePreset: preset,
+          features: {},
+          diagnostics: {
+            deploymentPreset: preset,
+            tenantPreset: null,
+            userOverrideCount: 0,
+          },
+        },
+        simpleMode: {
+          simple_mode_default: false,
+          show_advanced_admin_modules: true,
+          onboarding_progressive_disclosure: true,
+        },
+      });
+      await app.mount();
+
+      fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+      fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+      fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+      await waitForAuthenticatedWorkspace(root);
+
+      const composer = requireElement<HTMLTextAreaElement>(root, "textarea[name='message']");
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      expect(root.querySelector("[data-testid='composer-governance-baseline-hint']")).toBeTruthy();
+      fireEvent.input(requireElement<HTMLInputElement>(root, "[data-action='composer-governance-title']"), { target: { value: `Approve plan ${preset}` } });
+      fireEvent.input(requireElement<HTMLInputElement>(root, "[data-action='composer-governance-options']"), { target: { value: "Approve,Block" } });
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-governance-insert-proposal']"));
+      expect(composer.value).toContain(`/proposal "Approve plan ${preset}"`);
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-governance-insert-vote']"));
+      expect(composer.value).toContain('/vote "Approve"');
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-right-panel'][data-panel='governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='governance-right-panel-tab'][data-tab='results']"));
+      expect(root.textContent).toContain("No proposal results yet.");
+    }
   });
 
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
