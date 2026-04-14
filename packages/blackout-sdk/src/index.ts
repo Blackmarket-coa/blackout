@@ -10,3 +10,14 @@ export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
 export * from './moderation/actions';
 export * from './matrix/types';
+
+export type {
+  EntitlementKey,
+  EntitlementMap,
+  EntitlementResolverInput,
+  EntitlementResolutionSource,
+  EntitlementTier,
+  ResolvedEntitlement,
+} from '@blackout/protocol';
+
+export * from './entitlements';
