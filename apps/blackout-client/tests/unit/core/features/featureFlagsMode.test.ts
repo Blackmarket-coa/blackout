@@ -10,6 +10,7 @@ describe('resolveFeatureFlags', () => {
         const flags = resolveFeatureFlags({});
 
         expect(flags).toEqual(defaultFeatureFlags);
+        expect(flags.steganography).toBe(true);
     });
 
     it('disables all runtime plugin flags in baseline mode', () => {

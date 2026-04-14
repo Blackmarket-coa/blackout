@@ -6,9 +6,17 @@ export interface StegoPassphraseEntry {
     passphrase: string;
 }
 
+export interface StegoAdvancedOptions {
+    multiCarrierRouting: boolean;
+    expiryRemoteBurn: boolean;
+    policyAudit: boolean;
+}
+
 export interface StegoSettingsState {
     enabled: boolean;
     savedPassphrases: StegoPassphraseEntry[];
+    advancedEntitled: boolean;
+    advancedOptions: StegoAdvancedOptions;
 }
 
 export const stegoSettingsAtom = atomWithStorage<StegoSettingsState>(
@@ -16,5 +24,11 @@ export const stegoSettingsAtom = atomWithStorage<StegoSettingsState>(
     {
         enabled: true,
         savedPassphrases: [],
+        advancedEntitled: false,
+        advancedOptions: {
+            multiCarrierRouting: false,
+            expiryRemoteBurn: false,
+            policyAudit: false,
+        },
     },
 );
