@@ -4,7 +4,7 @@ import { resolveEntitlement, type EntitlementKey } from "../settings/entitlement
 const COMMAND_ENTRY_IDS = new Set([
   "feature-command-discover",
   "feature-command-presence-digest",
-  "feature-widget-leaderboards",
+  "feature-command-leaderboards",
 ]);
 
 interface RenderCommandPaletteOptions {
@@ -19,7 +19,7 @@ export function renderCommandPalette(options: RenderCommandPaletteOptions): stri
   const query = options.query.trim().toLowerCase();
   const rows = FEATURE_UI_ENTRIES.filter((entry) => {
     const [kind, uiEntryId] = entry.uiEntry.split(":");
-    if (kind !== "command_palette" && uiEntryId !== "feature-widget-leaderboards") return false;
+    if (kind !== "command_palette") return false;
     if (!COMMAND_ENTRY_IDS.has(uiEntryId)) return false;
     const enabled = resolveEntitlement({
       key: entry.presetKey as EntitlementKey,
