@@ -487,85 +487,13 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
 
       {activePage === SettingsPages.AppearancePage && (
 
-        <Page>
-
-          <PageHeader>
-
-            <Box grow="Yes" alignItems="Center" gap="200">
-
-              <Box grow="Yes" alignItems="Center" gap="200">
-
-                <Text size="H3" truncate>Appearance</Text>
-
-              </Box>
-
-              <IconButton onClick={handlePageRequestClose}>
-
-                <Icon src={Icons.Cross} />
-
-              </IconButton>
-
-            </Box>
-
-          </PageHeader>
-
-          <PageContent>
-
-            <Scroll hideTrack visibility="Hover">
-
-              <Box style={{ padding: config.space.S400 }} direction="Column">
-
-                <AppearanceSettings />
-
-              </Box>
-
-            </Scroll>
-
-          </PageContent>
-
-        </Page>
+        <AppearanceSettings requestClose={handlePageRequestClose} />
 
       )}
 
       {activePage === SettingsPages.SteganographyPage && (
 
-        <Page>
-
-          <PageHeader>
-
-            <Box grow="Yes" alignItems="Center" gap="200">
-
-              <Box grow="Yes" alignItems="Center" gap="200">
-
-                <Text size="H3" truncate>Steganography</Text>
-
-              </Box>
-
-              <IconButton onClick={handlePageRequestClose}>
-
-                <Icon src={Icons.Cross} />
-
-              </IconButton>
-
-            </Box>
-
-          </PageHeader>
-
-          <PageContent>
-
-            <Scroll hideTrack visibility="Hover">
-
-              <Box style={{ padding: config.space.S400 }} direction="Column">
-
-                <StegoSettings />
-
-              </Box>
-
-            </Scroll>
-
-          </PageContent>
-
-        </Page>
+        <StegoSettings requestClose={handlePageRequestClose} />
 
       )}
 
