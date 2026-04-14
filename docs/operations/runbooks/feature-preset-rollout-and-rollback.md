@@ -5,10 +5,21 @@
 Use this fixed progression for preset rollouts:
 
 1. **internal** (staff / dogfood)
-2. **beta** (selected external tenants)
-3. **general** (all eligible tenants)
+2. **pilot tenants** (selected external tenants, mapped to `beta`)
+3. **general availability** (all eligible tenants, mapped to `general`)
 
 Set cohort at startup with `VITE_RELEASE_COHORT` (`internal|beta|general`).
+
+### Phase gates (must pass before advancing)
+
+1. **internal → pilot tenants**
+   - No regression in core compose/send success for 7 consecutive days.
+   - No regression in governance participation flows (proposal create + vote cast + results render).
+   - Kill-switch drill validated for each advanced capability (preset and tier paths).
+2. **pilot tenants → general availability**
+   - Pilot tenants remain non-red for 14 consecutive days.
+   - Entitlement transition checks pass (`free → paid → free`) with fallback UI verified.
+   - Rollback criteria and runbook triggers are signed off by Release Manager + On-call.
 
 ## Telemetry instrumentation requirements
 
@@ -52,6 +63,40 @@ Required dimensions:
 - Action: rollback to `tier_pro` first, then `tier_free` if incident persists.
 
 ## High-risk feature rollback notes
+
+## Kill-switch policy (preset + tier)
+
+Each advanced capability must support **both**:
+
+- **Preset kill switch** (deployment-level disable for all tenants on that preset).
+- **Tier kill switch** (tenant/workspace-level disable while leaving baseline features active).
+
+Advanced capability families:
+
+- advanced stego
+- advanced governance
+- federation boost
+- townhall SFU
+- advanced engagement experiments
+
+If either switch is active, feature UI must render fallback/unavailable copy and preserve core chat/governance baseline actions.
+
+## Rollback criteria and runbook triggers
+
+Trigger broad rollback (pause or reverse rollout) when any criterion is hit:
+
+1. **Core chat regression:** compose/send error rate rises above agreed SLO threshold for two consecutive 15-minute windows.
+2. **Governance regression:** proposal or vote actions fail above threshold, or results rendering is incorrect/incomplete.
+3. **Entitlement integrity regression:** free-tier users can access advanced paid capabilities without authorization, or paid users lose entitled baseline capabilities.
+4. **Operational risk:** incident commander declares Sev-1/Sev-2 tied to rollout changes.
+
+Required runbook actions:
+
+1. Freeze cohort expansion.
+2. Apply preset kill switch for impacted capability family.
+3. Apply tier kill switch for affected tenant(s) if blast radius is scoped.
+4. Roll back preset one level (`general`/`beta` tenants to safer baseline), then verify telemetry stabilization before re-enable.
+5. Record incident evidence and owner signoff before resuming rollout.
 
 ### Stego (`stego_toolkit`, `ephemeral_stego_lifecycle`)
 

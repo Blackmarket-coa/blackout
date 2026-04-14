@@ -8,6 +8,7 @@ export type FeatureFlagMap = Record<string, boolean>;
 export interface DeploymentPresetConfig {
   preset?: FeaturePresetKey | LegacyFeaturePresetKey;
   defaults?: FeatureFlagMap;
+  presetKillSwitches?: Partial<Record<FeaturePresetKey, Partial<Record<AdvancedCapabilityKey, boolean>>>>;
 }
 
 export interface TenantPresetPolicy {
@@ -15,6 +16,7 @@ export interface TenantPresetPolicy {
   overrides?: FeatureFlagMap;
   allowUserOverrides?: boolean;
   userOverrideAllowlist?: string[];
+  tierKillSwitches?: Partial<Record<FeaturePresetKey, Partial<Record<AdvancedCapabilityKey, boolean>>>>;
 }
 
 export interface UserPresetOverrides {
@@ -28,9 +30,28 @@ export interface ResolvedPresetConfig {
     deploymentPreset: FeaturePresetKey;
     tenantPreset: FeaturePresetKey | null;
     userOverrideCount: number;
+    killSwitchesApplied?: {
+      preset: number;
+      tier: number;
+    };
   };
   entitlementLayers: ResolvedEntitlementState;
 }
+
+export type AdvancedCapabilityKey =
+  | "advanced_stego"
+  | "advanced_governance"
+  | "federation_boost"
+  | "townhall_sfu"
+  | "advanced_engagement";
+
+const ADVANCED_CAPABILITY_FEATURE_KEYS: Record<AdvancedCapabilityKey, EntitlementKey[]> = {
+  advanced_stego: ["features.stego.ephemeral", "features.bmc.deaddrop", "features.bmc.cellRouting", "features.bmc.numbersStation"],
+  advanced_governance: ["features.bmc.governance", "features.governance.entitlements", "features.bmc.auditLog", "features.bmc.automod"],
+  federation_boost: ["features.federationBoost.enabled"],
+  townhall_sfu: ["features.townhall.enabled"],
+  advanced_engagement: ["features.engagement.recommendations", "features.engagement.experiments", "features.engagement.leaderboards"],
+};
 
 const PRESET_MIGRATION_MAP: Record<LegacyFeaturePresetKey, FeaturePresetKey> = {
   tier_free: "starter",
@@ -218,6 +239,30 @@ function mergeFeatures(base: FeatureFlagMap, overrides?: FeatureFlagMap): Featur
   return { ...base, ...overrides };
 }
 
+function buildKillSwitchOverrides(
+  preset: FeaturePresetKey | undefined,
+  killSwitches: Partial<Record<FeaturePresetKey, Partial<Record<AdvancedCapabilityKey, boolean>>>> | undefined,
+): { overrides: FeatureFlagMap; applied: number } {
+  if (!preset || !killSwitches?.[preset]) {
+    return { overrides: {}, applied: 0 };
+  }
+
+  const scopedSwitches = killSwitches[preset]!;
+  const disabledCapabilities = (Object.keys(scopedSwitches) as AdvancedCapabilityKey[]).filter((key) => scopedSwitches[key]);
+  const overrides: FeatureFlagMap = {};
+
+  for (const capability of disabledCapabilities) {
+    for (const featureKey of ADVANCED_CAPABILITY_FEATURE_KEYS[capability]) {
+      overrides[featureKey] = false;
+    }
+  }
+
+  return {
+    overrides,
+    applied: disabledCapabilities.length,
+  };
+}
+
 function resolveFeatureMapFromLayers(layers: ResolvedEntitlementState): FeatureFlagMap {
   const keys = new Set<EntitlementKey>();
   Object.keys(layers.deploymentPreset).forEach((key) => keys.add(key as EntitlementKey));
@@ -238,9 +283,15 @@ export function resolveFeaturePreset(
   const tenantPreset = normalizeFeaturePresetKey(tenantPolicy?.preset);
   const activePreset = tenantPreset ?? deploymentPreset;
 
-  const deploymentLayer = mergeFeatures(FEATURE_PRESET_BUNDLES[deploymentPreset], deployment.defaults);
+  const presetKillSwitches = buildKillSwitchOverrides(deploymentPreset, deployment.presetKillSwitches);
+  const tierKillSwitches = buildKillSwitchOverrides(tenantPreset, tenantPolicy?.tierKillSwitches);
+
+  const deploymentLayer = mergeFeatures(
+    FEATURE_PRESET_BUNDLES[deploymentPreset],
+    mergeFeatures(deployment.defaults ?? {}, presetKillSwitches.overrides),
+  );
   const workspaceTierLayer = tenantPreset
-    ? mergeFeatures(FEATURE_PRESET_BUNDLES[tenantPreset], tenantPolicy?.overrides)
+    ? mergeFeatures(FEATURE_PRESET_BUNDLES[tenantPreset], mergeFeatures(tenantPolicy?.overrides ?? {}, tierKillSwitches.overrides))
     : mergeFeatures({}, tenantPolicy?.overrides);
 
   let userOverrideCount = 0;
@@ -266,6 +317,10 @@ export function resolveFeaturePreset(
       deploymentPreset,
       tenantPreset: tenantPreset ?? null,
       userOverrideCount,
+      killSwitchesApplied: {
+        preset: presetKillSwitches.applied,
+        tier: tierKillSwitches.applied,
+      },
     },
     entitlementLayers,
   };
