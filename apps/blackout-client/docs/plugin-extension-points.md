@@ -27,7 +27,7 @@ Only the following slots are approved for customization:
 
 3. **Feature registry composition slot**
    - File: `src/app/core/features/registry.ts`
-   - Contract: `bootstrapFeatures()` composes core + plugin modules only after manifest validation.
+   - Contract: `bootstrapFeatures(manifest)` composes core + plugin modules only after manifest validation.
    - Restriction: no direct legacy `bmc-*` imports in shell/runtime entrypoints.
 
 4. **Runtime plugin declaration slot**

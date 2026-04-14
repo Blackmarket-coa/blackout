@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Icon, Icons, Text, config, toRem } from 'folds';
 import { Page, PageHero, PageHeroSection } from '../../components/page';
-import CinnySVG from '../../../../public/res/svg/cinny.svg';
+import BlackoutSVG from '../../../../public/res/svg/blackout.svg';
 
 export function WelcomePage() {
   return (
@@ -14,13 +14,13 @@ export function WelcomePage() {
       >
         <PageHeroSection>
           <PageHero
-            icon={<img width="70" height="70" src={CinnySVG} alt="Cinny Logo" />}
-            title="Welcome to Cinny"
+            icon={<img width="70" height="70" src={BlackoutSVG} alt="Blackout Logo" />}
+            title="Welcome to Blackout"
             subTitle={
               <span>
                 Yet another matrix client.{' '}
                 <a
-                  href="https://github.com/cinnyapp/cinny/releases"
+                  href="https://theblackout.app/changelog"
                   target="_blank"
                   rel="noreferrer noopener"
                 >
@@ -33,7 +33,7 @@ export function WelcomePage() {
               <Box grow="Yes" style={{ maxWidth: toRem(300) }} direction="Column" gap="300">
                 <Button
                   as="a"
-                  href="https://github.com/cinnyapp/cinny"
+                  href="https://github.com/blackout-labs/blackout"
                   target="_blank"
                   rel="noreferrer noopener"
                   before={<Icon size="200" src={Icons.Code} />}
@@ -44,7 +44,7 @@ export function WelcomePage() {
                 </Button>
                 <Button
                   as="a"
-                  href="https://cinny.in/#sponsor"
+                  href="https://theblackout.app/support"
                   target="_blank"
                   rel="noreferrer noopener"
                   fill="Soft"
