@@ -735,6 +735,7 @@ export class BlackoutWebApp {
       sendPending: state.loading.send,
       richEditingEnabled: this.isFeatureEnabled("features.composer.richEditing"),
       stegoEnabled: this.isFeatureEnabled("features.stego.enabled") || this.isFeatureEnabled("features.bmc.steganography"),
+      stegoAdvancedEnabled: this.isFeatureEnabled("features.stego.ephemeral"),
       composerRepliesEnabled: this.isFeatureEnabled("features.composer.replies"),
       composerEditsEnabled: this.isFeatureEnabled("features.composer.edits"),
       composerRedactionsEnabled: this.isFeatureEnabled("features.composer.redactions"),
@@ -1324,7 +1325,7 @@ export class BlackoutWebApp {
       return `${this.renderThemeManagementSection()}`;
     }
     if (this.activeSettingsPage === "monetization") {
-      return `${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}`;
+      return `${this.renderSubscriptionPanelSection()}${this.renderStegoAdvancedEntitlementsSection()}${this.renderUpgradePromptSection()}`;
     }
     if (this.activeSettingsPage === "mobile") {
       return `${this.renderMobileGesturesPanel()}`;
@@ -1541,6 +1542,35 @@ export class BlackoutWebApp {
             )
             .join("")}
         </div>
+        <div class="modal-actions">
+          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_upgrade_prompts">Upgrade for Advanced features</button>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderStegoAdvancedEntitlementsSection(): string {
+    const advancedEnabled = this.isFeatureEnabled("features.stego.ephemeral");
+    return `
+      <section class="stack panel-card" data-testid="settings-stego-advanced-entitlements">
+        <h2>Stego advanced controls</h2>
+        <p class="meta">Baseline stego toolkit is available on free tiers. Advanced lifecycle and policy controls are paid.</p>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Ephemeral lifecycle (Advanced)
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Rotation + multi-carrier routing (Advanced)
+        </label>
+        <label class="composer-popover-inline">
+          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
+          Expiry / remote burn + policy audit (Advanced)
+        </label>
+        ${advancedEnabled ? '<p class="meta">Advanced stego controls are enabled for this workspace.</p>' : '<p class="meta">Upgrade to unlock Advanced stego controls in composer and room workflows.</p>'}
+        <div class="modal-actions">
+          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_stego_advanced" ${advancedEnabled ? "disabled" : ""}>Upgrade for Advanced stego</button>
+        </div>
       </section>
     `;
   }
@@ -1594,6 +1624,14 @@ export class BlackoutWebApp {
 
   private parseTheme(theme: string | null): ThemeKey {
     return normalizeThemeId(theme);
+  }
+
+  private openUpgradeFlow(source: string): void {
+    this.subscriptionPopupOpen = true;
+    this.featureActionResult = "Opened shared upgrade flow for Advanced features.";
+    this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
+    this.closeComposerPanels();
+    this.render();
   }
 
   private applyTheme(theme: ThemeKey): void {
@@ -2472,17 +2510,15 @@ export class BlackoutWebApp {
       this.trackAdvancedDiscovery("stego");
     });
 
-    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
-      this.subscriptionPopupOpen = true;
-      this.featureActionResult = "Opened subscription popup. Upgrade to Signal to unlock advanced codecs and batch mode.";
-      this.closeComposerPanels();
-      this.render();
-    });
-
     this.root.querySelectorAll<HTMLElement>("[data-action='open-subscription-popup']").forEach((element) => {
       element.addEventListener("click", () => {
-        this.subscriptionPopupOpen = true;
-        this.render();
+        this.openUpgradeFlow("subscription_panel");
+      });
+    });
+
+    this.root.querySelectorAll<HTMLElement>("[data-action='open-upgrade-flow']").forEach((element) => {
+      element.addEventListener("click", () => {
+        this.openUpgradeFlow(element.getAttribute("data-upgrade-source") ?? "unknown");
       });
     });
 
@@ -2707,6 +2743,11 @@ export class BlackoutWebApp {
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
       this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.telemetry.track("stego_baseline_used", {
+        ...this.telemetryContext(),
+        advanced_enabled: this.isFeatureEnabled("features.stego.ephemeral"),
+        used_ephemeral: ephemeral,
+      });
       this.closeComposerPanels();
     });
 
@@ -2942,6 +2983,10 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-save-channel']")?.addEventListener("click", () => {
+      if (!this.isFeatureEnabled("features.stego.ephemeral")) {
+        this.openUpgradeFlow("composer_stego_channel_save");
+        return;
+      }
       const nameInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-name']");
       const audienceInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-audience']");
       const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-passphrase']");
@@ -3348,6 +3393,10 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-rotate']").forEach((button) => {
       button.addEventListener("click", () => {
+        if (!this.isFeatureEnabled("features.stego.ephemeral")) {
+          this.openUpgradeFlow("composer_stego_channel_rotate");
+          return;
+        }
         const channelId = button.dataset.channelId;
         if (!channelId) return;
         const nextPassphrase = this.generateStegoPassphrase();

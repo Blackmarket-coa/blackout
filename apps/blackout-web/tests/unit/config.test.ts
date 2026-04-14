@@ -26,7 +26,8 @@ describe("resolveBlackoutRuntimeConfig", () => {
     expect(config.presets.activePreset).toBe("starter");
     expect(config.rollout.cohort).toBe("internal");
     expect(config.presets.features["features.matrix.client"]).toBe(true);
-    expect(config.presets.features["features.stego.enabled"]).toBe(false);
+    expect(config.presets.features["features.stego.enabled"]).toBe(true);
+    expect(config.presets.features["features.bmc.steganography"]).toBe(true);
   });
 
   it("resolves deployment, workspace tier, and user overrides in priority order", () => {
