@@ -2,28 +2,28 @@ export const BLACKOUT_THEMES = [
     {
         id: 'dark_canopy',
         label: 'Dark canopy',
-        description: 'Deep green and black surfaces for extended low-light sessions.',
+        description: 'Coalition dark mode: charcoal canopy, neon-leaf accents, and high-visibility contrast.',
     },
     {
         id: 'light_grove',
         label: 'Light grove',
-        description: 'Light green and white surfaces for daylight readability.',
+        description: 'Solarpunk daylight palette with bright greens and crisp, readable contrast.',
     },
     {
         id: 'amoled_night',
         label: 'AMOLED night',
-        description: 'Pure black OLED surfaces with teal interaction accents.',
+        description: 'Pure black OLED surfaces with lime + mint highlights for night-time clarity.',
     },
     {
         id: 'storybook_meadow',
         label: 'Storybook meadow',
-        description: 'Warm natural tones with soft highlights for calm reading and collaboration.',
+        description: 'Warm solarpunk meadow tones tuned for calm reading without losing visibility.',
     },
     {
         id: 'adventure_spectrum',
         label: 'Adventure spectrum',
         description:
-            'Playful high-contrast accents and clear landmarks for color-blind-friendly navigation.',
+            'Black Market Coalition high-visibility accents with energetic solarpunk wayfinding.',
     },
 ] as const;
 

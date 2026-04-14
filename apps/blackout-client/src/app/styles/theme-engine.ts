@@ -1,15 +1,16 @@
 import { normalizeThemeId, type BlackoutThemeId } from '../../lib/bmc-core';
 
 export const bmcPalette = {
-    seafoam: '#9FE2BF',
-    forest: '#2B5D34',
-    darkForest: '#163520',
-    fallLeaves: '#8D3A2F',
-    black: '#0A0A0A',
-    lightGreen: '#E6F4EA',
-    white: '#FAFAFA',
-    danger: '#CC4444',
-    warning: '#D4830A',
+    neonLeaf: '#D7FF3F',
+    solarMint: '#2EF2C5',
+    forest: '#2A6B3F',
+    darkForest: '#112619',
+    ember: '#C66A2B',
+    black: '#0B0F10',
+    lightGreen: '#EFFFD1',
+    white: '#F7FFF9',
+    danger: '#FF5D5D',
+    warning: '#FFB547',
 } as const;
 
 export type ThemeTokens = {
@@ -43,13 +44,13 @@ export type ThemeTokens = {
 const baseDarkTokens: ThemeTokens = {
     bg: {
         surface: bmcPalette.black,
-        surfaceHover: '#111111',
+        surfaceHover: '#151B1C',
         nav: bmcPalette.darkForest,
-        input: '#1A1A1A',
+        input: '#1A2420',
     },
-    text: { primary: bmcPalette.white, secondary: '#D3E8DA', muted: '#9EB5A6' },
-    accent: { primary: bmcPalette.seafoam, hover: '#B7EED2', muted: '#2C5D46' },
-    border: { default: '#30573D', active: bmcPalette.fallLeaves },
+    text: { primary: bmcPalette.white, secondary: '#DDF6E6', muted: '#9EC4AF' },
+    accent: { primary: bmcPalette.neonLeaf, hover: '#E8FF86', muted: '#2E5A42' },
+    border: { default: '#2E5A42', active: bmcPalette.solarMint },
     status: { danger: bmcPalette.danger, warning: bmcPalette.warning, success: bmcPalette.forest },
 };
 
@@ -65,34 +66,34 @@ const themeDeltas: Record<BlackoutThemeId, ThemeTokenDelta> = {
     dark_canopy: {},
     light_grove: {
         bg: {
-            surface: bmcPalette.white,
-            surfaceHover: bmcPalette.lightGreen,
-            nav: '#DCECD6',
-            input: '#F1F8EE',
+            surface: bmcPalette.lightGreen,
+            surfaceHover: '#E5F9C0',
+            nav: '#D7F2A7',
+            input: '#F4FFD8',
         },
-        text: { primary: bmcPalette.black, secondary: '#2F3F2C', muted: '#5E6E5B' },
-        accent: { primary: bmcPalette.forest, hover: '#1E4625', muted: '#B6D8C0' },
-        border: { default: '#BDD5B8' },
+        text: { primary: '#102017', secondary: '#254132', muted: '#496859' },
+        accent: { primary: '#1E6341', hover: '#154B31', muted: '#A5D5B8' },
+        border: { default: '#9FCB8D', active: '#1E6341' },
     },
     amoled_night: {
-        bg: { surface: '#000000', surfaceHover: '#0D0D0D', nav: '#000000', input: '#111111' },
-        text: { secondary: '#D0D0D0', muted: '#8E8E8E' },
-        accent: { hover: '#BFEFD8', muted: '#244D3A' },
-        border: { default: '#1F1F1F' },
+        bg: { surface: '#000000', surfaceHover: '#0A0D0B', nav: '#000000', input: '#101512' },
+        text: { secondary: '#D9EDE3', muted: '#90AFA0' },
+        accent: { primary: '#BFFF2E', hover: '#D5FF66', muted: '#204635' },
+        border: { default: '#1A2A22', active: '#2EF2C5' },
     },
     storybook_meadow: {
-        bg: { surface: '#fffdf7', surfaceHover: '#f8f3e5', nav: '#efe8d8', input: '#ecf2df' },
-        text: { primary: '#2a2b22', secondary: '#58614b', muted: '#7f8c72' },
-        accent: { primary: '#5a8d76', hover: '#4f6f3b', muted: '#c6d8b7' },
-        border: { default: '#b8caa9', active: '#4f6f3b' },
-        status: { success: '#4f6f3b' },
+        bg: { surface: '#FFFBEF', surfaceHover: '#F6EED7', nav: '#E8F1D0', input: '#EDF7DD' },
+        text: { primary: '#1D2C24', secondary: '#405A4C', muted: '#6D8477' },
+        accent: { primary: '#2A6B3F', hover: '#1E5230', muted: '#C4DEAF' },
+        border: { default: '#A5C38C', active: '#2A6B3F' },
+        status: { success: '#2A6B3F' },
     },
     adventure_spectrum: {
-        bg: { surface: '#161b2c', surfaceHover: '#1d2440', nav: '#151a2a', input: '#1a2036' },
-        text: { primary: '#f3f6ff', secondary: '#bbc7ec', muted: '#7e90bf' },
-        accent: { primary: '#63d1c0', hover: '#ffcc59', muted: '#4f8cff' },
-        border: { default: '#3a4670', active: '#ffcc59' },
-        status: { warning: '#ffcc59', success: '#63d1c0' },
+        bg: { surface: '#121D1A', surfaceHover: '#1A2A25', nav: '#10221B', input: '#193129' },
+        text: { primary: '#F4FFF8', secondary: '#C8F2DD', muted: '#86B8A2' },
+        accent: { primary: '#D7FF3F', hover: '#2EF2C5', muted: '#FFB547' },
+        border: { default: '#2D5E49', active: '#D7FF3F' },
+        status: { warning: '#FFB547', success: '#2EF2C5' },
     },
 };
 
