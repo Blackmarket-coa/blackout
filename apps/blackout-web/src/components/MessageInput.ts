@@ -18,6 +18,10 @@ interface MessageInputOptions {
   attachmentMode: "quick" | "manage" | "bulk";
 }
 
+function renderAdvancedLabel(label: string): string {
+  return `Advanced · ${label}`;
+}
+
 function renderAttachmentQuickAddSection(disabled: boolean): string {
   return `
     <div class="composer-attachment-view" data-attachment-view="quick-add">
@@ -300,9 +304,9 @@ export function renderMessageInput({
                     </label>
                     <p class="meta" data-testid="composer-stego-preview-reveal-output" hidden></p>
                   </div>
-                  <details class="composer-stego-advanced" ${stegoAdvancedEnabled ? "" : "open"}>
+                  <details class="composer-stego-advanced">
                     <summary>Advanced options</summary>
-                    <label class="composer-popover-field">Codec (Advanced) ${renderGlossaryTip("Codec")}
+                    <label class="composer-popover-field">${renderAdvancedLabel("Codec")} ${renderGlossaryTip("Codec")}
                       <select data-action="composer-stego-algorithm" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="basic-lsb-image">Basic LSB (Image)</option>
                         <option value="dct-image" disabled>DCT Image (Signal lock)</option>
@@ -312,19 +316,24 @@ export function renderMessageInput({
                       </select>
                     </label>
                     <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
-                    <label class="composer-popover-field">Stego channel rotation (Advanced)
+                    <label class="composer-popover-field">${renderAdvancedLabel("Stego channel rotation")}
                       <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="">No saved channel</option>
                       </select>
                     </label>
                     <label class="composer-popover-inline">
                       <input type="checkbox" data-action="composer-stego-ephemeral" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
-                      Ephemeral lifecycle (Advanced) ${renderGlossaryTip("Ephemeral")}
+                      ${renderAdvancedLabel("Ephemeral lifecycle")} ${renderGlossaryTip("Ephemeral")}
                     </label>
-                    <label class="composer-popover-field">Expiry / remote burn TTL (Advanced) ${renderGlossaryTip("TTL")}
+                    <label class="composer-popover-field">${renderAdvancedLabel("Expiry / remote burn TTL")} ${renderGlossaryTip("TTL")}
                       <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
                     <p class="meta">Multi-carrier routing + policy audit are Advanced controls available on paid tiers.</p>
+                    ${
+                      stegoAdvancedEnabled
+                        ? ""
+                        : '<button type="button" class="ghost-btn" data-action="open-upgrade-flow" data-upgrade-source="composer_stego_advanced_controls">Upgrade for Advanced stego</button>'
+                    }
                   </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>
@@ -353,11 +362,11 @@ export function renderMessageInput({
                     <label class="composer-popover-field">Shared password
                       <input type="text" data-action="composer-stego-channel-passphrase" placeholder="Set a shared passphrase" ${disabled ? "disabled" : ""} />
                     </label>
-                    <label class="composer-popover-field">Rotate every (days) (Advanced)
+                    <label class="composer-popover-field">${renderAdvancedLabel("Rotate every (days)")}
                       <input type="number" min="1" max="90" step="1" value="14" data-action="composer-stego-channel-rotation-days" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
                     <div class="composer-popover-actions">
-                      <button type="button" data-action="composer-stego-save-channel" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>Save channel (Advanced)</button>
+                      <button type="button" data-action="composer-stego-save-channel" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>${renderAdvancedLabel("Save channel")}</button>
                     </div>
                     <ul class="composer-channel-list" data-testid="composer-stego-channel-list">
                       <li class="meta">No saved channels yet.</li>

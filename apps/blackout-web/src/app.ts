@@ -700,6 +700,7 @@ export class BlackoutWebApp {
         proposals: state.governanceProposals.filter((proposal) => proposal.channelId === activeChannelId),
         canPropose: this.canPropose(),
         canVote: this.canVote(),
+        governanceAdvancedEnabled: this.isFeatureEnabled("features.governance.entitlements"),
         actionMessage: this.featureActionResult,
       });
     }
@@ -1627,9 +1628,20 @@ export class BlackoutWebApp {
   }
 
   private openUpgradeFlow(source: string): void {
+    const capability = source.includes("governance")
+      ? "governance"
+      : source.includes("stego")
+        ? "stego"
+        : "general";
     this.subscriptionPopupOpen = true;
     this.featureActionResult = "Opened shared upgrade flow for Advanced features.";
-    this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
+    this.telemetry.track("upgrade_intent", { ...this.telemetryContext(), source, capability });
+    if (capability === "stego") {
+      this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
+    }
+    if (capability === "governance") {
+      this.telemetry.track("governance_upgrade_intent", { ...this.telemetryContext(), source });
+    }
     this.closeComposerPanels();
     this.render();
   }
