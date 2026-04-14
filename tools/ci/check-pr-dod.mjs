@@ -35,6 +35,9 @@ const requiredCheckedItems = [
   'Rollback toggle(s) documented (exact feature flag/config key).',
   'Blast radius + rollback steps documented.',
   'Unit tests for touched packages.',
+  'Targeted PR checks executed for touched paths:',
+  'Entitlement path review completed (state fetch, gating, and transition behavior validated for changed flows).',
+  'Panel placement review completed (new or changed panel entry points/layout placements validated on intended surfaces).',
   'KPI target statement included (expected directional movement and band).',
   'Query links attached:',
 ];
