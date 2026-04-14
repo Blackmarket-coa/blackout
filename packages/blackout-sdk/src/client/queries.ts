@@ -1,4 +1,6 @@
+import type { EntitlementFamily, EntitlementReadResponse } from '@blackout/protocol';
 import type { ApiClient } from './types';
+import { getEntitlementFamilyPath, getEntitlementSnapshotPath } from './entitlementPaths';
 
 export type WellKnownMatrixClient = Record<string, unknown>;
 
@@ -12,6 +14,16 @@ export const createClientQueries = (client: ApiClient) => ({
         client<TItem[]>({
             method: 'GET',
             path,
+        }),
+    getEntitlementSnapshot: () =>
+        client<EntitlementReadResponse>({
+            method: 'GET',
+            path: getEntitlementSnapshotPath(),
+        }),
+    getEntitlementsByFamily: (family: EntitlementFamily) =>
+        client<EntitlementReadResponse>({
+            method: 'GET',
+            path: getEntitlementFamilyPath(family),
         }),
     // Governance
     getGovernanceProposal: (proposalId: string) =>

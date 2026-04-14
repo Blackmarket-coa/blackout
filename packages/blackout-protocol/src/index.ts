@@ -7,3 +7,5 @@ export * from './moderation/events';
 export * from './governance/contracts';
 
 export * from './entitlements/types';
+
+export * from './entitlements/schema';
