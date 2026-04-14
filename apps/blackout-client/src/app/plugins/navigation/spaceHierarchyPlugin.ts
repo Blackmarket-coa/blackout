@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import {
-    useSpaceTree as useLegacySpaceTree,
+    useLegacySpaceTreeAdapter as useLegacySpaceTree,
     type HookResult,
 } from './useLegacySpaceHierarchyAdapter';
 import type { SpaceNode } from '../../state/bmc-spaces';
