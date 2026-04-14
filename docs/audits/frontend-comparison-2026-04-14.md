@@ -3,61 +3,76 @@
 **Date:** 2026-04-14  
 **Repo checked:** `/workspace/blackout`
 
+## Correction (2026-04-14): canonical frontend selection
+
+Per current product direction, **`apps/blackout-client` is the new/canonical frontend**.
+
+- Treat prior references in this document to `apps/blackout-web` as “new frontend” as historical analysis context only.
+- Updated interpretation for implementation decisions:
+  - **New/canonical:** `apps/blackout-client`
+  - **Previous/legacy tracks:** `apps/blackout-web`, `apps/web`, `packages/web`
+
+### Practical implications of this correction
+
+1. Feature packaging and monetization should be implemented through the `apps/blackout-client` feature registry/composition path.
+2. Layout integrity decisions should anchor to `apps/blackout-client` shell/routes/settings patterns first.
+3. Any `apps/blackout-web` guidance in this file should be treated as migration reference, not source-of-truth for new work.
+
+
 ## Scope and interpretation
 
-To make this comparison concrete, this report treats:
+To make this comparison concrete, this report now treats:
 
-- **New Blackout frontend** as `apps/blackout-web` (the actively developed Vite web client with mobile/desktop bridge hooks).
-- **Previous frontends** as the lighter/skeleton paths `apps/web` and `packages/web`.
-- **Old blackout-client** as `apps/blackout-client` (Cinny-based, Matrix/crypto-heavy, plugin-driven client).
+- **New/canonical Blackout frontend** as `apps/blackout-client` (Cinny-based, Matrix/crypto-heavy, plugin-driven client).
+- **Previous frontends** as `apps/blackout-web`, `apps/web`, and `packages/web`.
 
-This interpretation is based on workspace layout and package metadata.
+This interpretation reflects the updated product direction from the team.
 
 ## High-level snapshot
 
 | Surface | Purpose in repo | Maturity signal | Runtime/UI stack |
 | --- | --- | --- | --- |
-| `apps/blackout-web` | Primary daily chat web shell and bridge target for native wrappers | Broad feature surface, many components/settings/services, Vite + tests | TypeScript app shell + custom render pipeline + Vite |
+| `apps/blackout-web` | Transitional/legacy web shell used in earlier migration phases | Broad feature surface, many components/settings/services, Vite + tests | TypeScript app shell + custom render pipeline + Vite |
 | `apps/web` | Minimal placeholder web entry | Placeholder-only | TS module export scaffold |
 | `packages/web` | Small React page/component prototype surface | Limited scope, simple pages | React + TS components/hooks |
-| `apps/blackout-client` | Legacy/old Cinny-based “full” client | Largest and deepest implementation, plugin/module architecture, Matrix-heavy | React + Jotai + React Query + router + feature registry |
+| `apps/blackout-client` | New/canonical frontend (Cinny-based) | Largest and deepest implementation, plugin/module architecture, Matrix-heavy | React + Jotai + React Query + router + feature registry |
 
 ## Detailed comparison
 
 ### 1) Architecture and extensibility
 
-- **`apps/blackout-web` (new):** central `BlackoutWebApp` class coordinates app state, feature panels, onboarding, settings, telemetry, and bridge events from one imperative app shell. This favors rapid UX iteration but concentrates complexity in one class file. (`src/app.ts`).
+- **`apps/blackout-web` (previous):** central `BlackoutWebApp` class coordinates app state, feature panels, onboarding, settings, telemetry, and bridge events from one imperative app shell. This favors rapid UX iteration but concentrates complexity in one class file. (`src/app.ts`).
 - **`apps/web` (previous):** explicit placeholder entry with no feature wiring.
 - **`packages/web` (previous):** lightweight React composition (`App` -> `ChatPage` + basic page components), useful as a simple prototype but not a full product shell.
-- **`apps/blackout-client` (old):** modular feature architecture with registry/composition pipeline and runtime plugin ordering. This is more extensible and governance-friendly for large feature sets, at cost of higher complexity.
+- **`apps/blackout-client` (new/canonical):** modular feature architecture with registry/composition pipeline and runtime plugin ordering. This is more extensible and governance-friendly for large feature sets, at cost of higher complexity.
 
 ### 2) Feature depth
 
-- **New frontend (`apps/blackout-web`)** has broad UX domains in one surface: governance/economics/federation/townhall/revenue/platform ops panels, command palette, widget host, onboarding, attachment/stego helpers, etc.
+- **Previous frontend (`apps/blackout-web`)** has broad UX domains in one surface: governance/economics/federation/townhall/revenue/platform ops panels, command palette, widget host, onboarding, attachment/stego helpers, etc.
 - **Previous frontends** are thin:
   - `apps/web` has effectively no shipped UI behavior yet.
   - `packages/web` has minimal chat/login/settings placeholders and thin hooks/components.
-- **Old blackout-client** has by far the broadest implementation depth and protocol/client internals (large source tree, Matrix bootstrap/auth/crypto flows, plugin modules).
+- **New/canonical blackout-client** has by far the broadest implementation depth and protocol/client internals (large source tree, Matrix bootstrap/auth/crypto flows, plugin modules).
 
 ### 3) Platform strategy (web/mobile/desktop)
 
-- **New frontend (`apps/blackout-web`)** explicitly initializes both:
+- **Previous frontend (`apps/blackout-web`)** explicitly initializes both:
   - Capacitor mobile bridge (keyboard/status bar/deep-link-like event flow), and
   - Tauri desktop bridge listeners.
 - Mobile wrapper build scripts point directly to `@blackout/blackout-web build:web`, making it the effective shared bundle for mobile packaging.
-- **Old blackout-client** is web-first and rich, but the current wrapper scripts in this repo are aligned to `blackout-web` for packaged mobile flow.
+- **New/canonical blackout-client** is web-first and modular; wrapper alignment for mobile packaging should be treated as migration work if `blackout-client` is now canonical.
 
 ### 4) Operational readiness and testing posture
 
 - `apps/blackout-web` includes targeted scripts for unit/integration/mobile/e2e plus Vite build/preview, indicating release intent for this path.
 - `apps/web` only typecheck-like scripts and no runnable dev server.
 - `packages/web` is still lightweight and not represented as the canonical deploy target in repo docs/scripts.
-- `apps/blackout-client` has mature dev/build/type/lint scaffolding and very broad dependency surface; it remains the deepest “old client” code path.
+- `apps/blackout-client` has mature dev/build/type/lint scaffolding and very broad dependency surface; it is the deepest and now canonical client path.
 
 ### 5) Practical trade-off summary
 
-- If your goal is **fast product iteration aligned with mobile/desktop wrappers in this monorepo**, `apps/blackout-web` is the pragmatic “new frontend” center.
-- If your goal is **maximum Matrix-native depth and long-term modular extensibility**, old `apps/blackout-client` is still technically richer.
+- If your goal is the **current canonical path**, prioritize `apps/blackout-client` for feature delivery and product decisions.
+- If your goal is **maximum Matrix-native depth and long-term modular extensibility**, `apps/blackout-client` remains technically richest.
 - `apps/web` and `packages/web` are better understood as **transition/prototype tracks**, not full production frontends.
 
 ## Evidence appendix (repository facts)
@@ -70,12 +85,12 @@ This interpretation is based on workspace layout and package metadata.
 
 ## Bottom line
 
-Compared to previous frontend experiments (`apps/web`, `packages/web`), the **new frontend (`apps/blackout-web`) is materially more complete and operationally aligned with wrappers**.  
-Compared to the **old blackout-client**, it is currently more wrapper-integrated and product-shell oriented, while the old client remains more modular and deeper on Matrix/client internals.
+Compared to `apps/web` and `packages/web`, both `apps/blackout-web` and `apps/blackout-client` are substantially more complete.  
+Given updated direction, **`apps/blackout-client` should be treated as the canonical product surface**, with `apps/blackout-web` as legacy/transitional reference.
 
 ## Product recommendation: free/default modules vs paid add-ons (to stand out)
 
-This section proposes a monetization split aligned with the current feature entrypoint catalog.
+This section proposes a monetization split aligned with the canonical `apps/blackout-client` delivery model and feature-module approach.
 
 ### Free + default (enable for every workspace)
 
@@ -129,7 +144,7 @@ Use this as the execution checklist when enabling the free/default vs paid modul
 
 ### 1) Keep layout integrity by attaching features to existing UI entry kinds only
 
-- Reuse the existing UI entry taxonomy in `apps/blackout-web/src/settings/feature-entrypoints.ts`:
+- For canonical delivery, map feature controls to stable `apps/blackout-client` feature routes/nav/settings entry points; use `apps/blackout-web/src/settings/feature-entrypoints.ts` only as migration reference taxonomy:
   - `settings_toggle`, `composer_action`, `room_action`, `widget_panel`, `admin_console`, `command_palette`.
 - Rule: every new free/default or paid add-on control should map to an existing `UiEntryKind` + stable `id`.
 - Avoid introducing ad-hoc panel containers unless there is no existing slot.
@@ -170,7 +185,7 @@ Use this as the execution checklist when enabling the free/default vs paid modul
 When prompting AI to implement changes, require it to:
 
 1. name exact files before editing,
-2. reuse existing `FEATURE_UI_ENTRIES` ids when possible,
+2. reuse existing `apps/blackout-client` feature ids/routes/settings anchors when possible,
 3. show the entitlement decision path (preset/tier/override),
 4. list any new token/component additions and why reuse was insufficient,
 5. provide targeted validation commands for touched workspaces only.
@@ -199,3 +214,159 @@ Suggested command baseline:
 4. **Phase 4 (ops packs):** governance/federation premium packs with org-level controls.
 
 This sequencing keeps the product intuitive first, then monetizes advanced capabilities without destabilizing core layout.
+
+## UX/UI comparison: Blackout vs Stoat vs Discord
+
+This section compares current Blackout frontend direction against Stoat and Discord patterns.
+
+### Information basis
+
+- **Blackout evidence:** repository inspection of `apps/blackout-web`, `apps/blackout-client`, `packages/web`, `apps/web`.
+- **Stoat evidence:** Stoat landing page positioning and public `for-web` repository metadata.
+- **Discord evidence:** support docs for roles/permissions, threads, and forum channels.
+
+### 1) Navigation model and information density
+
+- **Discord:** optimized for high-frequency social chat with familiar server/channel hierarchy and low-friction thread/forum pivots.
+- **Stoat:** positions itself as a “better chat app” with Discord-like server/channel model and broad baseline features (voice/files/themes/customization).
+- **Blackout (`apps/blackout-client` canonical, with historical `apps/blackout-web` reference):** combines chat with governance/federation/stego capabilities and modular feature composition.
+
+**Assessment:**
+Blackout is strongest when it embraces an **“ops + secure collaboration”** positioning rather than trying to out-Discord Discord on pure social speed.
+
+### 2) Baseline affordances users expect
+
+- **Discord:** mature role permissions + channel controls, threads, and forum channels are widely established UX expectations.
+- **Stoat:** explicitly markets “don’t pay for basic stuff” and broad baseline chat capabilities.
+- **Blackout:** can be competitive if default presets include complete baseline messaging ergonomics (threads/search/replies/edits/typing) before exposing advanced panels.
+
+**Assessment:**
+To reduce migration friction, Blackout should keep baseline behaviors as close as practical to Discord/Stoat mental models, then layer differentiated features progressively.
+
+### 3) Differentiation surface
+
+- **Discord:** strongest mainstream familiarity and ecosystem momentum.
+- **Stoat:** strongest anti-subscription/open-source value signaling in marketing language.
+- **Blackout:** unique advantage is **steganography + governance + federation operations** in one product shell.
+
+**Assessment:**
+Blackout should lead with “private-by-default collaboration primitives” (basic stego free), while monetizing advanced lifecycle/policy/ops controls.
+
+### 4) UI coherence risk
+
+- **Discord/Stoat:** relatively chat-first interaction framing.
+- **Blackout:** broader module set creates risk of panel clutter and cognitive overload if everything is surfaced at once.
+
+**Assessment:**
+Blackout needs stricter progressive disclosure:
+1. core chat first,
+2. contextual advanced controls second,
+3. admin/ops modules hidden behind role + entitlement + intent.
+
+### 5) Practical target state for Blackout
+
+To stand out while remaining intuitive:
+
+- Keep **chat UX parity** with Discord/Stoat defaults for daily use.
+- Make **basic stego free and obvious** in composer flow.
+- Keep **advanced stego and ops suites paid** but discoverable via consistent “Advanced” affordances.
+- Preserve layout integrity by binding all features to existing `UiEntryKind` slots and shared design tokens.
+
+### Bottom-line positioning statement
+
+- **Discord:** best-in-class mainstream social chat polish.
+- **Stoat:** open-source Discord-like alternative with strong “no paywall on basics” messaging.
+- **Blackout (recommended):** secure, operations-aware collaboration stack where baseline chat is familiar, and the differentiated value is trustworthy stego + governance/federation controls.
+
+## Governance packaging model (mirror stego strategy)
+
+Apply the same pattern used for steganography:
+
+- **Free baseline governance**: enough to make day-to-day coordination useful for every workspace.
+- **Paid advanced governance**: higher-complexity controls, compliance, and org-scale workflows.
+
+### Free + default governance baseline
+
+Recommended to include by default:
+
+1. **Proposal lifecycle essentials**
+   - create proposal
+   - vote (approve/block or basic multi-choice)
+   - view current and closed proposals
+2. **Participation UX basics**
+   - proposal summaries in channel context
+   - vote status visibility for participant trust
+   - lightweight notification/reminder surface
+3. **Basic moderation-linked governance controls**
+   - role-gated proposal creation
+   - minimum quorum/threshold presets (simple presets only)
+
+### Paid advanced governance add-ons
+
+Recommended paid capabilities:
+
+1. **Governance policy engine**
+   - advanced quorum/threshold formulas
+   - weighted/delegated voting rules
+   - conditional execution policies
+2. **Compliance and audit controls**
+   - full governance audit trails
+   - export/reporting workflows
+   - retention and evidence controls
+3. **Organization-scale operations**
+   - multi-workspace policy templates
+   - role delegation matrices
+   - staged approval chains and emergency override workflows
+4. **Advanced analytics**
+   - participation quality and trend analysis
+   - policy effectiveness metrics
+   - governance health scoring dashboards
+
+### UX guardrails (same pattern as stego)
+
+- Keep baseline governance actions fully usable with no paywall interruption.
+- Show advanced governance controls as visible but clearly marked “Advanced”.
+- Use one consistent upgrade entrypoint across proposal, settings, and admin surfaces.
+- Never block reading governance outcomes in free tier; only gate advanced authoring/policy depth.
+
+### Packaging alignment suggestion
+
+- **Free:** baseline governance + baseline stego.
+- **Pro:** advanced stego + advanced governance for creators/community operators.
+- **Team/Enterprise:** policy/compliance/governance-at-scale controls.
+
+This keeps differentiation strong while ensuring free-tier teams can still coordinate meaningfully.
+
+## Execution workstreams (blackout-client canonical path)
+
+These workstreams implement the free/default + paid model for both stego and governance while preserving UX consistency.
+
+### Workstream A — Entitlement foundation and capability resolver
+
+- Build a single source of truth for feature access decisions.
+- Ensure all UI and API checks consume the same entitlement state.
+
+### Workstream B — Free baseline UX enablement (stego + governance)
+
+- Turn on baseline stego and governance flows by default.
+- Ensure zero paywall friction in core chat and proposal participation paths.
+
+### Workstream C — Advanced paid controls and upgrade surfaces
+
+- Introduce paid-only advanced stego and governance capabilities.
+- Keep advanced controls discoverable with consistent “Advanced” affordances.
+
+### Workstream D — Layout integrity and design-system conformance
+
+- Validate that new controls fit existing client layout slots and do not overload primary chat views.
+- Enforce token/component reuse from shared monorepo packages.
+
+### Workstream E — Contracts/API alignment and telemetry
+
+- Align entitlement contracts across client/sdk/server packages.
+- Add event instrumentation for free usage, upgrade intent, and paid feature adoption.
+
+### Workstream F — QA, migration, and rollout controls
+
+- Add targeted tests for entitlement transitions and panel behavior.
+- Roll out in phases with kill switches and preset-based rollback.
