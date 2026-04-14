@@ -44,6 +44,7 @@ import {
     getQuickActionEntriesForSurface,
     getUnseenQuickActionIds,
     invokeQuickAction,
+    isFeatureFlagEnabled,
     markQuickActionsSeen,
     type QuickActionId,
     readQuickActionCollapsed,
@@ -114,11 +115,13 @@ export const ClientLayout = () => {
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
-    const featureFlags = featureEntrypointRegistry.flags;
-    const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
+    const rolesEnabled = isFeatureFlagEnabled('features.bmc.roles', featureEntrypointRegistry);
     const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
-    const callEnabled = featureFlags['features.call.elementCall'] ?? false;
-    const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
+    const callEnabled = isFeatureFlagEnabled(
+        'features.call.elementCall',
+        featureEntrypointRegistry
+    );
+    const forumEnabled = isFeatureFlagEnabled('features.bmc.forum', featureEntrypointRegistry);
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
         [rolesPanelEnabled]
