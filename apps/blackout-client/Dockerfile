@@ -3,8 +3,8 @@ FROM node:24.13.1-alpine AS builder
 
 WORKDIR /src
 
-COPY .npmrc package.json package-lock.json /src/
-RUN npm ci
+COPY .npmrc package*.json /src/
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . /src/
 ENV NODE_OPTIONS=--max_old_space_size=4096
 RUN npm run build
