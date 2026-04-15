@@ -4,7 +4,11 @@ import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
-import { QuickSwitcher } from '../../../../src/app/features/navigation/QuickSwitcher';
+import {
+    QuickSwitcher,
+    buildQuickSwitcherIndex,
+    rankQuickSwitcherResults,
+} from '../../../../src/app/features/navigation/QuickSwitcher';
 
 const mockClient = {
     getRooms: () => [] as Room[],
@@ -13,19 +17,35 @@ const mockClient = {
     off: vi.fn(),
 };
 
-vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
+vi.mock('../../../../src/app/hooks/bmc-useMatrixClient', () => ({
     useMatrixClient: () => mockClient,
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const makeRoom = ({ roomId, name, type }: { roomId: string; name: string; type?: string }): Room =>
+const makeRoom = ({
+    roomId,
+    name,
+    type,
+    unread = 0,
+    lastActive = 0,
+    dm = false,
+}: {
+    roomId: string;
+    name: string;
+    type?: string;
+    unread?: number;
+    lastActive?: number;
+    dm?: boolean;
+}): Room =>
     ({
         roomId,
         name,
         getType: () => type,
+        getDMInviter: () => (dm ? '@inviter:example.org' : undefined),
+        getLastActiveTimestamp: () => lastActive,
         getCanonicalAlias: () => `#${name}:example.org`,
-        getUnreadNotificationCount: () => 0,
+        getUnreadNotificationCount: () => unread,
         getJoinedMembers: () => [],
     }) as unknown as Room;
 
@@ -59,7 +79,7 @@ describe('QuickSwitcher keyboard behavior', () => {
         });
 
         const input = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            'input[placeholder="Search rooms, spaces, DMs, members, settings, actions"]',
         ) as HTMLInputElement;
         expect(input).toBeTruthy();
         expect(document.activeElement).toBe(input);
@@ -116,7 +136,7 @@ describe('QuickSwitcher keyboard behavior', () => {
         });
 
         const input = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            'input[placeholder="Search rooms, spaces, DMs, members, settings, actions"]',
         ) as HTMLInputElement;
         await act(async () => {
             input.value = '/nick';
@@ -137,5 +157,66 @@ describe('QuickSwitcher keyboard behavior', () => {
         act(() => {
             root.unmount();
         });
+    });
+
+    it('supports common actions and emits action callback', async () => {
+        mockClient.getRooms = () => [makeRoom({ roomId: '!room-a:example.org', name: 'Room A' })];
+        const onClose = vi.fn();
+        const onActionPicked = vi.fn();
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        act(() => {
+            root.render(
+                <Provider store={createStore()}>
+                    <QuickSwitcher open onClose={onClose} onActionPicked={onActionPicked} />
+                </Provider>,
+            );
+        });
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const actionButton = Array.from(container.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('Open inbox'),
+        ) as HTMLButtonElement;
+
+        act(() => {
+            actionButton.click();
+        });
+
+        expect(onActionPicked).toHaveBeenCalledWith('open-inbox');
+        expect(onClose).toHaveBeenCalled();
+
+        act(() => {
+            root.unmount();
+        });
+    });
+});
+
+describe('QuickSwitcher ranking model', () => {
+    it('ranks exact > recent > unread > fuzzy and includes route/action entries', () => {
+        const rooms = [
+            makeRoom({ roomId: '!exact:example.org', name: 'Inbox' }),
+            makeRoom({ roomId: '!recent:example.org', name: 'Chat recent', lastActive: 100 }),
+            makeRoom({ roomId: '!unread:example.org', name: 'Unread room', unread: 8 }),
+            makeRoom({ roomId: '!fuzzy:example.org', name: 'Alpha room' }),
+            makeRoom({ roomId: '!dm:example.org', name: 'DM room', dm: true }),
+        ];
+
+        const ranked = rankQuickSwitcherResults(buildQuickSwitcherIndex(rooms), 'inbo');
+        expect(ranked[0]?.title).toBe('Inbox');
+
+        const actions = buildQuickSwitcherIndex(rooms).filter((entry) => entry.category === 'Actions');
+        const settings = buildQuickSwitcherIndex(rooms).filter(
+            (entry) => entry.category === 'Settings' && Boolean(entry.route),
+        );
+
+        expect(actions.map((entry) => entry.title)).toEqual(
+            expect.arrayContaining(['Mark all mentions read', 'Open inbox', 'Jump to mentions']),
+        );
+        expect(settings.length).toBeGreaterThan(0);
     });
 });

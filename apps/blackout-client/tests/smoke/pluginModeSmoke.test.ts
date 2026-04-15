@@ -5,6 +5,7 @@ import { resolveLivekitFocusFromWellKnown, getActionableCallMessage } from '../.
 import { mxcToUrl, getThumbnailUrl } from '../../src/app/utils/media';
 import { getMessageActions } from '../../src/app/plugins/composer/quickActionCatalog';
 import { flattenSpaceHierarchyForNav } from '../../src/app/plugins/navigation/spaceHierarchyPlugin';
+import { buildQuickSwitcherIndex, rankQuickSwitcherResults } from '../../src/app/features/navigation/QuickSwitcher';
 import { resolveFeatureFlags, runtimePluginFeatureFlags } from '../../src/app/core/features/featureFlags';
 import { clearSession, loadSession, saveSessionSnapshot } from '../../src/client/session';
 
@@ -80,6 +81,39 @@ describe('[SMOKE_NAV] navigation/layout (home/direct/space switching, right pane
                 { roomId: '!direct:example.org', children: [] },
             ] as any)
         ).toEqual(['!home:example.org', '!space:example.org', '!direct:example.org']);
+    });
+
+    it('keeps quick switcher ranking buckets and action entries stable', () => {
+        const rooms = [
+            {
+                roomId: '!exact:example.org',
+                name: 'Mentions',
+                getType: () => undefined,
+                getCanonicalAlias: () => '#mentions:example.org',
+                getUnreadNotificationCount: () => 0,
+                getLastActiveTimestamp: () => 0,
+                getDMInviter: () => undefined,
+                getJoinedMembers: () => [],
+            },
+            {
+                roomId: '!recent:example.org',
+                name: 'Navigation',
+                getType: () => undefined,
+                getCanonicalAlias: () => '#navigation:example.org',
+                getUnreadNotificationCount: () => 0,
+                getLastActiveTimestamp: () => 120,
+                getDMInviter: () => undefined,
+                getJoinedMembers: () => [],
+            },
+        ] as any;
+
+        const index = buildQuickSwitcherIndex(rooms);
+        const ranked = rankQuickSwitcherResults(index, 'ment');
+
+        expect(ranked[0]?.title).toBe('Mentions');
+        expect(index.some((entry) => entry.category === 'Actions' && entry.id === 'action-open-inbox')).toBe(
+            true
+        );
     });
 });
 
