@@ -50,7 +50,8 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { resolveCapabilityAccessMap } from '../../resolver/capabilityAccessResolver';
-import { designBreakpoints, designShellLayout, designSpacing } from '../../../../../../packages/design/src';
+import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
+import { isMobileViewport, isTabletViewport } from './layoutMetrics';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -70,9 +71,6 @@ const roomKindIcon = (room: Room): string => {
 };
 
 const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
-
-const isTablet = (width: number): boolean => width <= designBreakpoints.tabletMaxPx;
-const isMobile = (width: number): boolean => width <= designBreakpoints.mobileMaxPx;
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
@@ -459,7 +457,8 @@ export const ClientLayout = () => {
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 8,
                                         background: 'var(--bg-input)',
-                                        padding: '2px 8px',
+                                        padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                        minHeight: designShellLayout.navRailButtonSizePx,
                                     }}
                                 >
                                     📞 Start call
@@ -480,7 +479,8 @@ export const ClientLayout = () => {
                                         fontSize: 11,
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 999,
-                                        padding: '2px 8px',
+                                        padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                        minHeight: designShellLayout.navRailButtonSizePx,
                                         background: 'rgba(83, 240, 117, 0.2)',
                                     }}
                                     data-testid="header-live-voice-badge"
@@ -576,7 +576,7 @@ export const ClientLayout = () => {
     };
 
     const desktop = !isTablet(viewportWidth);
-    const mobile = isMobile(viewportWidth);
+    const mobile = isMobileViewport(viewportWidth);
 
     return (
         <section
@@ -636,6 +636,8 @@ export const ClientLayout = () => {
                             borderRadius: 10,
                             border: '1px solid var(--border-default)',
                             background: 'var(--bg-input)',
+                            minWidth: designShellLayout.navRailButtonSizePx,
+                            minHeight: designShellLayout.navRailButtonSizePx,
                         }}
                     >
                         🏠
@@ -645,7 +647,7 @@ export const ClientLayout = () => {
                             flex: 1,
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: 6,
+                            gap: designSpacing.denseGapPx,
                             overflowY: 'auto',
                         }}
                     >
@@ -731,9 +733,9 @@ export const ClientLayout = () => {
                                     style={{
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 8,
-                                        padding: 6,
+                                        padding: designSpacing.denseGapPx,
                                         display: 'grid',
-                                        gap: 6,
+                                        gap: designSpacing.denseGapPx,
                                     }}
                                 >
                                     <div
@@ -761,7 +763,13 @@ export const ClientLayout = () => {
                                         </button>
                                     </div>
                                     {!quickActionsCollapsed ? (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: designSpacing.denseGapPx,
+                                            }}
+                                        >
                                             {desktopQuickActions.map((entry) => (
                                                 <button
                                                     key={entry.id}
@@ -811,7 +819,7 @@ export const ClientLayout = () => {
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', gap: designSpacing.denseGapPx }}>
                                 <button
                                     type="button"
                                     onClick={() => openSettingsSection('appearance')}
@@ -870,7 +878,13 @@ export const ClientLayout = () => {
                         </strong>
                     </header>
 
-                    <div style={{ padding: designShellLayout.navRailSectionGapPx, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+                    <div
+                        style={{
+                            padding: designShellLayout.navRailSectionGapPx,
+                            overflowY: 'auto',
+                            height: 'calc(100vh - 52px)',
+                        }}
+                    >
                         {groups.map((group) => {
                             const collapsed = collapsedFolders[group.id] ?? false;
                             return (
@@ -938,7 +952,11 @@ export const ClientLayout = () => {
                                                                 : 'transparent',
                                                         color: 'var(--text-primary)',
                                                         borderRadius: 8,
-                                                        padding: '6px 8px',
+                                                        padding: `${designSpacing.denseGapPx}px ${
+                                                            designSpacing.comfortableGapPx - 4
+                                                        }px`,
+                                                        minHeight:
+                                                            designShellLayout.navRailButtonSizePx,
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         gap: designShellLayout.navRailSectionGapPx,
@@ -1054,7 +1072,10 @@ export const ClientLayout = () => {
                                 border: '1px solid var(--border-default)',
                                 borderRadius: 8,
                                 background: 'var(--bg-input)',
-                                padding: '4px 10px',
+                                padding: `${designSpacing.denseGapPx - 2}px ${
+                                    designSpacing.comfortableGapPx - 2
+                                }px`,
+                                minHeight: designShellLayout.navRailButtonSizePx,
                             }}
                         >
                             Settings
@@ -1085,7 +1106,8 @@ export const ClientLayout = () => {
                                     border: '1px solid var(--border-default)',
                                     borderRadius: 8,
                                     background: 'var(--bg-input)',
-                                    padding: '2px 8px',
+                                    padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                    minHeight: designShellLayout.navRailButtonSizePx,
                                 }}
                             >
                                 {quickActionsCollapsed ? 'Expand' : 'Collapse'}
@@ -1103,7 +1125,10 @@ export const ClientLayout = () => {
                                             border: '1px solid var(--border-default)',
                                             borderRadius: 999,
                                             background: 'var(--bg-input)',
-                                            padding: '4px 10px',
+                                            padding: `${designSpacing.denseGapPx - 2}px ${
+                                                designSpacing.comfortableGapPx - 2
+                                            }px`,
+                                            minHeight: designShellLayout.navRailButtonSizePx,
                                         }}
                                     >
                                         {entry.label}
