@@ -7,9 +7,20 @@ import { useInboxModel } from './useInboxModel';
 export const GlobalHeaderInboxLauncher = () => {
     const userId = useAtomValue(userIdAtom);
     const [open, setOpen] = useState(false);
-    const { items, markAllRead, markReadLocal } = useInboxModel();
+    const {
+        prioritySections,
+        snoozedItems,
+        resolvedItems,
+        markAllRead,
+        markReadLocal,
+        toggleResolved,
+        snoozeItem,
+        clearSnooze,
+    } = useInboxModel();
 
     if (!userId) return null;
+
+    const unresolvedCount = prioritySections.reduce((acc, section) => acc + section.items.length, 0);
 
     return (
         <div style={{ position: 'fixed', top: 8, left: 8, zIndex: 120 }}>
@@ -24,14 +35,19 @@ export const GlobalHeaderInboxLauncher = () => {
                     color: 'var(--text-primary)',
                 }}
             >
-                Global Inbox {items.length > 0 ? `(${items.length})` : ''}
+                Global Inbox {unresolvedCount > 0 ? `(${unresolvedCount})` : ''}
             </button>
             {open ? (
                 <GlobalMentionsInbox
-                    items={items}
+                    sections={prioritySections}
+                    snoozedItems={snoozedItems}
+                    resolvedItems={resolvedItems}
                     onClose={() => setOpen(false)}
                     onMarkAllRead={markAllRead}
                     onMarkReadLocal={markReadLocal}
+                    onToggleResolved={toggleResolved}
+                    onSnooze={snoozeItem}
+                    onUnsnooze={clearSnooze}
                 />
             ) : null}
         </div>

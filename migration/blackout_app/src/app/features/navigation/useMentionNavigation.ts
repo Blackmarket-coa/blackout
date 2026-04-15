@@ -13,7 +13,19 @@ import { getUnreadMarkerEventId } from '../right-panel/rightPanelUtils';
 export interface MentionTarget {
     roomId: string;
     eventId: string;
+    sourceEventId?: string;
 }
+
+export const getMentionJumpEventId = (target: MentionTarget): string =>
+    target.sourceEventId ?? target.eventId;
+
+export const buildMentionDeepLink = (target: MentionTarget): string => {
+    const params = new URLSearchParams({ event: getMentionJumpEventId(target) });
+    if (target.sourceEventId && target.sourceEventId !== target.eventId) {
+        params.set('source', target.eventId);
+    }
+    return `/room/${encodeURIComponent(target.roomId)}?${params.toString()}`;
+};
 
 export const useMentionNavigation = () => {
     const client = useMatrixClient();
@@ -50,7 +62,7 @@ export const useMentionNavigation = () => {
 
     const openMentionItem = useCallback(
         async (item: MentionTarget) => {
-            openRoomWithContext(item.roomId, item.eventId);
+            openRoomWithContext(item.roomId, getMentionJumpEventId(item));
             await markEventRead(item.roomId, item.eventId);
         },
         [markEventRead, openRoomWithContext],

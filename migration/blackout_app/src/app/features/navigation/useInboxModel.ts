@@ -1,92 +1,92 @@
 import { useEffect, useMemo } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 import { userIdAtom } from '../../state/bmc-auth';
-import { inboxReadEventIdsAtom, inboxReadLoadedAtom } from '../../state/inbox';
+import { inboxActiveTriageAtom, inboxActiveUserIdAtom, inboxReadLoadedAtom } from '../../state/inbox';
 import { getMentionInboxItems } from '../right-panel/rightPanelUtils';
+import {
+    buildPrioritySections,
+    createInboxTriagePayload,
+    EMPTY_TRIAGE_STATE,
+    getResolvedItems,
+    getSnoozedItems,
+    normalizeInboxTriagePayload,
+} from './inboxTriage';
 import { useMentionNavigation } from './useMentionNavigation';
 
-const INBOX_ACCOUNT_DATA_KEY = 'blackout.inbox.read.v1';
+const INBOX_ACCOUNT_DATA_KEY = 'blackout.inbox.triage.v1';
+const DEFAULT_SNOOZE_MS = 30 * 60 * 1000;
 
 export const useInboxModel = () => {
     const client = useMatrixClient();
     const rooms = useAtomValue(joinedRoomsAtom);
     const userId = useAtomValue(userIdAtom);
-    const [readEventIds, setReadEventIds] = useAtom(inboxReadEventIdsAtom);
+    const [triage, setTriage] = useAtom(inboxActiveTriageAtom);
+    const setActiveUserId = useSetAtom(inboxActiveUserIdAtom);
     const [loaded, setLoaded] = useAtom(inboxReadLoadedAtom);
     const { markEventRead } = useMentionNavigation();
+
+    useEffect(() => {
+        setActiveUserId(userId);
+    }, [setActiveUserId, userId]);
 
     const rawItems = useMemo(() => getMentionInboxItems({ rooms, userId }), [rooms, userId]);
     const items = useMemo(
         () =>
             rawItems.map((item) => ({
                 ...item,
-                unread: item.unread && !readEventIds[item.eventId],
+                unread: item.unread && !triage.readEventIds[item.eventId],
             })),
-        [rawItems, readEventIds],
+        [rawItems, triage.readEventIds],
     );
+
+    const prioritySections = useMemo(
+        () => buildPrioritySections({ items, triage }),
+        [items, triage],
+    );
+    const snoozedItems = useMemo(() => getSnoozedItems({ items, triage }), [items, triage]);
+    const resolvedItems = useMemo(() => getResolvedItems({ items, triage }), [items, triage]);
 
     useEffect(() => {
         if (!userId || loaded) return;
 
         const accountEvent = client.getAccountData(INBOX_ACCOUNT_DATA_KEY as never);
-        const content = accountEvent?.getContent<Record<string, unknown>>() ?? {};
-        const version = typeof content.version === 'number' ? content.version : 1;
-        const readByUser =
-            version >= 2
-                ? (content.users as Record<string, unknown> | undefined)?.[userId]
-                : content[userId];
-
-        if (readByUser && typeof readByUser === 'object' && !Array.isArray(readByUser)) {
-            const next = Object.fromEntries(
-                Object.entries(readByUser as Record<string, unknown>).filter(
-                    ([, isRead]) => isRead === true,
-                ),
-            ) as Record<string, boolean>;
-            setReadEventIds(next);
-
-            if (version < 2) {
-                void client.setAccountData(
-                    INBOX_ACCOUNT_DATA_KEY as never,
-                    {
-                        version: 2,
-                        users: { [userId]: next },
-                        updatedAt: Date.now(),
-                    } as never,
-                );
-            }
-        }
-
+        const content = normalizeInboxTriagePayload(
+            accountEvent?.getContent<Record<string, unknown>>() ?? {},
+        );
+        setTriage(content.users[userId] ?? EMPTY_TRIAGE_STATE);
         setLoaded(true);
-    }, [client, loaded, setLoaded, setReadEventIds, userId]);
+    }, [client, loaded, setLoaded, setTriage, userId]);
 
     useEffect(() => {
         if (!userId || !loaded) return;
         void client.setAccountData(
             INBOX_ACCOUNT_DATA_KEY as never,
-            {
-                version: 2,
-                users: { [userId]: readEventIds },
-                updatedAt: Date.now(),
-            } as never,
+            createInboxTriagePayload({ userId, triage }) as never,
         );
-    }, [client, loaded, readEventIds, userId]);
+    }, [client, loaded, triage, userId]);
 
     useEffect(() => {
         const receiptAlignedIds = rawItems
-            .filter((item) => item.unread === false && !readEventIds[item.eventId])
+            .filter((item) => item.unread === false && !triage.readEventIds[item.eventId])
             .map((item) => item.eventId);
         if (receiptAlignedIds.length === 0) return;
 
-        setReadEventIds((prev) => ({
+        setTriage((prev) => ({
             ...prev,
-            ...Object.fromEntries(receiptAlignedIds.map((eventId) => [eventId, true])),
+            readEventIds: {
+                ...prev.readEventIds,
+                ...Object.fromEntries(receiptAlignedIds.map((eventId) => [eventId, true])),
+            },
         }));
-    }, [rawItems, readEventIds, setReadEventIds]);
+    }, [rawItems, setTriage, triage.readEventIds]);
 
     const markReadLocal = (eventId: string) => {
-        setReadEventIds((prev) => ({ ...prev, [eventId]: true }));
+        setTriage((prev) => ({
+            ...prev,
+            readEventIds: { ...prev.readEventIds, [eventId]: true },
+        }));
     };
 
     const markMentionRead = async (roomId: string, eventId: string) => {
@@ -98,11 +98,57 @@ export const useInboxModel = () => {
         await Promise.all(items.map((item) => markMentionRead(item.roomId, item.eventId)));
     };
 
+    const toggleResolved = (eventId: string, resolved: boolean) => {
+        setTriage((prev) => ({
+            ...prev,
+            events: {
+                ...prev.events,
+                [eventId]: {
+                    ...prev.events[eventId],
+                    resolved,
+                },
+            },
+        }));
+    };
+
+    const snoozeItem = (eventId: string, durationMs = DEFAULT_SNOOZE_MS) => {
+        setTriage((prev) => ({
+            ...prev,
+            events: {
+                ...prev.events,
+                [eventId]: {
+                    ...prev.events[eventId],
+                    snoozedUntil: Date.now() + durationMs,
+                    remindedAt: Date.now(),
+                },
+            },
+        }));
+    };
+
+    const clearSnooze = (eventId: string) => {
+        setTriage((prev) => ({
+            ...prev,
+            events: {
+                ...prev.events,
+                [eventId]: {
+                    ...prev.events[eventId],
+                    snoozedUntil: undefined,
+                },
+            },
+        }));
+    };
+
     return {
         items,
+        prioritySections,
+        snoozedItems,
+        resolvedItems,
         markReadLocal,
         markMentionRead,
         markAllRead,
+        toggleResolved,
+        snoozeItem,
+        clearSnooze,
     };
 };
 
