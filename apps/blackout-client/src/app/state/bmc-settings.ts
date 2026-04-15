@@ -1,4 +1,5 @@
 import { normalizeThemeId } from '../../lib/bmc-core';
+import { designShellLayout } from '../../../../../packages/design/src';
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { ThemePreference } from '../styles/theme.css';
 
@@ -34,8 +35,8 @@ const defaultSettings: AppSettings = {
     devMode: false,
     streamerMode: false,
     layout: {
-        spaceColumnWidth: 64,
-        roomColumnWidth: 260,
+        spaceColumnWidth: designShellLayout.defaultSpaceColumnWidthPx,
+        roomColumnWidth: designShellLayout.defaultRoomColumnWidthPx,
     },
     mobileRoomListScope: 'space',
 };

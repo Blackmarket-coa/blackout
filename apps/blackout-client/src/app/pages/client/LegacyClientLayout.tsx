@@ -50,6 +50,7 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { resolveCapabilityAccessMap } from '../../resolver/capabilityAccessResolver';
+import { designBreakpoints, designShellLayout, designSpacing } from '../../../../../../packages/design/src';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -70,8 +71,8 @@ const roomKindIcon = (room: Room): string => {
 
 const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
 
-const isTablet = (width: number): boolean => width < 1100;
-const isMobile = (width: number): boolean => width < 760;
+const isTablet = (width: number): boolean => width <= designBreakpoints.tabletMaxPx;
+const isMobile = (width: number): boolean => width <= designBreakpoints.mobileMaxPx;
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
@@ -111,7 +112,10 @@ export const ClientLayout = () => {
     const { roomId: routeRoomId } = useParams<{ roomId?: string }>();
     const hasHydratedNavigationRef = useRef(false);
 
-    const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
+    const layout = settings.layout ?? {
+        spaceColumnWidth: designShellLayout.defaultSpaceColumnWidthPx,
+        roomColumnWidth: designShellLayout.defaultRoomColumnWidthPx,
+    };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
@@ -434,7 +438,13 @@ export const ClientLayout = () => {
     const renderRoomContent = () => {
         if (selectedRoomId) {
             return (
-                <div style={{ padding: 16, display: 'grid', gap: 12 }}>
+                <div
+                    style={{
+                        padding: designShellLayout.desktopPanelPaddingPx,
+                        display: 'grid',
+                        gap: designSpacing.comfortableGapPx,
+                    }}
+                >
                     <header style={{ display: 'grid', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <strong>
@@ -609,8 +619,8 @@ export const ClientLayout = () => {
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        padding: '8px 0',
-                        gap: 8,
+                        padding: `${designShellLayout.navRailSectionGapPx}px 0`,
+                        gap: designShellLayout.navRailSectionGapPx,
                         background: 'var(--bg-nav)',
                     }}
                 >
@@ -621,8 +631,8 @@ export const ClientLayout = () => {
                             setSelectedRoomId(null);
                         }}
                         style={{
-                            width: 40,
-                            height: 40,
+                            width: designShellLayout.navRailButtonSizePx,
+                            height: designShellLayout.navRailButtonSizePx,
                             borderRadius: 10,
                             border: '1px solid var(--border-default)',
                             background: 'var(--bg-input)',
@@ -662,8 +672,8 @@ export const ClientLayout = () => {
                                     setSelectedRoomId(null);
                                 }}
                                 style={{
-                                    width: 40,
-                                    height: 40,
+                                    width: designShellLayout.navRailButtonSizePx,
+                                    height: designShellLayout.navRailButtonSizePx,
                                     borderRadius: 12,
                                     border:
                                         selectedSpaceId === space.roomId
@@ -697,8 +707,8 @@ export const ClientLayout = () => {
                     <button
                         type="button"
                         style={{
-                            width: 40,
-                            height: 40,
+                            width: designShellLayout.navRailButtonSizePx,
+                            height: designShellLayout.navRailButtonSizePx,
                             borderRadius: 10,
                             border: '1px dashed var(--border-default)',
                             background: 'var(--bg-input)',
@@ -711,7 +721,7 @@ export const ClientLayout = () => {
                             style={{
                                 width: '100%',
                                 borderTop: '1px solid var(--border-default)',
-                                padding: 8,
+                                padding: designShellLayout.navRailSectionGapPx,
                                 display: 'grid',
                                 gap: 6,
                             }}
@@ -860,7 +870,7 @@ export const ClientLayout = () => {
                         </strong>
                     </header>
 
-                    <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+                    <div style={{ padding: designShellLayout.navRailSectionGapPx, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
                         {groups.map((group) => {
                             const collapsed = collapsedFolders[group.id] ?? false;
                             return (
@@ -931,7 +941,7 @@ export const ClientLayout = () => {
                                                         padding: '6px 8px',
                                                         display: 'flex',
                                                         alignItems: 'center',
-                                                        gap: 8,
+                                                        gap: designShellLayout.navRailSectionGapPx,
                                                     }}
                                                 >
                                                     <span>{roomKindIcon(room)}</span>
@@ -1005,8 +1015,8 @@ export const ClientLayout = () => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            gap: 8,
-                            padding: 8,
+                            gap: designShellLayout.navRailSectionGapPx,
+                            padding: designShellLayout.navRailSectionGapPx,
                             borderBottom: '1px solid var(--border-default)',
                             background: 'var(--bg-surface)',
                         }}
@@ -1055,7 +1065,7 @@ export const ClientLayout = () => {
                     <section
                         style={{
                             borderBottom: '1px solid var(--border-default)',
-                            padding: 8,
+                            padding: designShellLayout.navRailSectionGapPx,
                             display: 'grid',
                             gap: 6,
                         }}
@@ -1238,7 +1248,7 @@ export const ClientLayout = () => {
                                     borderRadius: 10,
                                     padding: 10,
                                     display: 'grid',
-                                    gap: 8,
+                                    gap: designShellLayout.navRailSectionGapPx,
                                 }}
                             >
                                 <strong style={{ fontSize: 13 }}>Mobile quick settings</strong>
@@ -1285,7 +1295,7 @@ export const ClientLayout = () => {
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        gap: 8,
+                                        gap: designShellLayout.navRailSectionGapPx,
                                     }}
                                 >
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -1442,8 +1452,11 @@ export const ClientLayout = () => {
                             const start = layout.spaceColumnWidth;
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
-                                    96,
-                                    Math.max(52, start + (moveEvent.clientX - origin))
+                                    designShellLayout.maxSpaceColumnWidthPx,
+                                    Math.max(
+                                        designShellLayout.minSpaceColumnWidthPx,
+                                        start + (moveEvent.clientX - origin)
+                                    )
                                 );
                                 setSettings((prev) => ({
                                     ...prev,
@@ -1474,8 +1487,11 @@ export const ClientLayout = () => {
                             const start = layout.roomColumnWidth;
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
-                                    360,
-                                    Math.max(220, start + (moveEvent.clientX - origin))
+                                    designShellLayout.maxRoomColumnWidthPx,
+                                    Math.max(
+                                        designShellLayout.minRoomColumnWidthPx,
+                                        start + (moveEvent.clientX - origin)
+                                    )
                                 );
                                 setSettings((prev) => ({
                                     ...prev,

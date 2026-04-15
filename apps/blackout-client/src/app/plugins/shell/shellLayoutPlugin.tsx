@@ -5,10 +5,17 @@ const LegacyClientLayout = lazy(() => import('../../pages/client/LegacyClientLay
 
 export const shellLayoutPlugin = {
     id: 'shell.legacy-layout' as const,
-    isEnabled: (): boolean => isRuntimePluginEnabled('shell.legacy-layout'),
-    renderLegacyLayout: (): JSX.Element => (
+    hasLegacyFallbackEnabled: (): boolean => isRuntimePluginEnabled('shell.legacy-layout'),
+    renderLegacyFallbackLayout: (): JSX.Element => (
         <Suspense fallback={null}>
             <LegacyClientLayout />
         </Suspense>
     ),
+    // Back-compat aliases while call sites migrate to explicit fallback naming.
+    isEnabled(): boolean {
+        return this.hasLegacyFallbackEnabled();
+    },
+    renderLegacyLayout(): JSX.Element {
+        return this.renderLegacyFallbackLayout();
+    },
 };
