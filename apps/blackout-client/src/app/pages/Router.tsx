@@ -44,7 +44,8 @@ import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
 import { Home, HomeDeepDive, HomeRouteRoomProvider, HomeSearch } from './client/home';
 import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
-import { Explore, FeaturedRooms, PublicRooms } from './client/explore';
+import { Explore, FeaturedRooms } from './client/explore';
+import { DiscoverySurface } from '../features/discovery';
 import { Notifications, Inbox, Invites } from './client/inbox';
 import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
@@ -265,7 +266,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             />
           )}
           <Route path={_FEATURED_PATH} element={<FeaturedRooms />} />
-          <Route path={_SERVER_PATH} element={<PublicRooms />} />
+          <Route path={_SERVER_PATH} element={<DiscoverySurface />} />
         </Route>
         <Route path={CREATE_PATH} element={<Create />} />
         <Route
