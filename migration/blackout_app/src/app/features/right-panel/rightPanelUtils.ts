@@ -191,13 +191,17 @@ const eventHighlightsUser = (event: MatrixEvent): boolean => {
     return Boolean((tweaks as Record<string, unknown>).highlight);
 };
 
+export type MentionPriority = 'direct_mention' | 'thread_reply' | 'keyword_hit';
+
 export interface MentionInboxItem {
     roomId: string;
     roomName: string;
     eventId: string;
+    sourceEventId: string;
     body: string;
     timestamp: number;
     unread: boolean;
+    priority: MentionPriority;
 }
 
 export const getMentionInboxItems = ({
@@ -239,9 +243,21 @@ export const getMentionInboxItems = ({
             const mentionAll = Boolean(
                 (content['m.mentions'] as Record<string, unknown> | undefined)?.room,
             );
-            const isMentioned =
-                mentionUsers.includes(userId) || mentionAll || eventHighlightsUser(event);
+            const relation = getTimelineRelation(event);
+            const relationType = relation?.rel_type;
+            const relationEventId =
+                typeof relation?.event_id === 'string' ? (relation.event_id as string) : eventId;
+            const isDirectMention = mentionUsers.includes(userId) || mentionAll;
+            const isThreadReply = relationType === 'm.thread';
+            const isKeywordHit = eventHighlightsUser(event);
+            const isMentioned = isDirectMention || isThreadReply || isKeywordHit;
             if (!isMentioned) return;
+
+            const priority = isDirectMention
+                ? 'direct_mention'
+                : isThreadReply
+                  ? 'thread_reply'
+                  : 'keyword_hit';
 
             const dedupeKey = `${room.roomId}:${body.trim().toLowerCase().slice(0, 64)}:${Math.floor(timestamp / dedupeWindowMs)}`;
             if (dedupeKeys.has(dedupeKey)) return;
@@ -253,9 +269,11 @@ export const getMentionInboxItems = ({
                 roomId: room.roomId,
                 roomName: room.name,
                 eventId,
+                sourceEventId: relationEventId,
                 body,
                 timestamp,
                 unread: timestamp > readUpToTs,
+                priority,
             });
         });
     });
