@@ -11,8 +11,8 @@ type ClientLayoutProps = {
 export function ClientLayout({ nav, children }: ClientLayoutProps) {
     const screenSize = useScreenSizeContext();
 
-    if (shellLayoutPlugin.isEnabled()) {
-        return shellLayoutPlugin.renderLegacyLayout();
+    if (shellLayoutPlugin.hasLegacyFallbackEnabled()) {
+        return shellLayoutPlugin.renderLegacyFallbackLayout();
     }
 
     return (

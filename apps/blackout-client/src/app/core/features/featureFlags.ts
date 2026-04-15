@@ -49,6 +49,10 @@ export const runtimePluginFeatureFlags: Record<RuntimePluginId, keyof FeatureFla
 
 const runtimePluginFlagKeys = Object.values(runtimePluginFeatureFlags);
 
+const modeManagedRuntimePluginFlagKeys = runtimePluginFlagKeys.filter(
+    (flagName) => flagName !== 'legacyShellLayout'
+);
+
 const parseFeatureMode = (rawMode: string | undefined): FeatureMode => {
     if (!rawMode) return 'default';
     if (rawMode === 'baseline' || rawMode === 'full' || rawMode === 'default') return rawMode;
@@ -62,14 +66,22 @@ export const resolveFeatureFlags = (
     const mode = parseFeatureMode(env.BLACKOUT_FEATURE_MODE);
 
     if (mode === 'default') {
-        return { ...baseFlags };
+        const nextFlags = { ...baseFlags };
+        if (env.BLACKOUT_LEGACY_SHELL_FALLBACK === 'true') {
+            nextFlags.legacyShellLayout = true;
+        }
+        return nextFlags;
     }
 
     const nextFlags = { ...baseFlags };
 
-    runtimePluginFlagKeys.forEach((flagName) => {
+    modeManagedRuntimePluginFlagKeys.forEach((flagName) => {
         nextFlags[flagName] = mode === 'full';
     });
+
+    if (env.BLACKOUT_LEGACY_SHELL_FALLBACK === 'true') {
+        nextFlags.legacyShellLayout = true;
+    }
 
     return nextFlags;
 };

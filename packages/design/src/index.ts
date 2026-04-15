@@ -10,3 +10,16 @@ export const designBreakpoints = Object.freeze({
     mobileMaxPx: 750,
     tabletMaxPx: 1124,
 });
+
+export const designShellLayout = Object.freeze({
+    defaultSpaceColumnWidthPx: 64,
+    defaultRoomColumnWidthPx: 260,
+    minSpaceColumnWidthPx: 52,
+    maxSpaceColumnWidthPx: 96,
+    minRoomColumnWidthPx: 220,
+    maxRoomColumnWidthPx: 360,
+    navRailButtonSizePx: 40,
+    navRailSectionGapPx: 8,
+    desktopPanelPaddingPx: 16,
+});
+

@@ -152,11 +152,17 @@ describe('[SMOKE_MEDIA_CALLS] media/calls (send preview + call setup availabilit
 });
 
 describe('mode gate invariants', () => {
-    it('keeps plugin-disabled baseline and full-feature toggles reversible', () => {
+    it('keeps plugin-disabled baseline and full-feature toggles reversible, except explicit shell fallback', () => {
         const baseline = resolveFeatureFlags({ BLACKOUT_FEATURE_MODE: 'baseline' });
         const full = resolveFeatureFlags({ BLACKOUT_FEATURE_MODE: 'full' });
 
-        Object.values(runtimePluginFeatureFlags).forEach((flagName) => {
+        Object.entries(runtimePluginFeatureFlags).forEach(([pluginId, flagName]) => {
+            if (pluginId === 'shell.legacy-layout') {
+                expect(baseline[flagName]).toBe(false);
+                expect(full[flagName]).toBe(false);
+                return;
+            }
+
             expect(baseline[flagName]).toBe(false);
             expect(full[flagName]).toBe(true);
         });
