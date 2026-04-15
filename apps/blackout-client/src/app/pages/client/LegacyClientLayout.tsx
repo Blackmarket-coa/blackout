@@ -561,6 +561,19 @@ export const ClientLayout = () => {
                 open={quickOpen}
                 onClose={() => setQuickOpen(false)}
                 onCommandPicked={(command) => void handleCommandPicked(command)}
+                onActionPicked={(actionId) => {
+                    if (actionId === 'mark-read') {
+                        void markAllMentionsRead();
+                        return;
+                    }
+                    if (actionId === 'open-inbox') {
+                        setInboxOpen(true);
+                        return;
+                    }
+                    if (actionId === 'jump-mentions') {
+                        setInboxOpen(true);
+                    }
+                }}
             />
 
             {desktop || (!mobile && !selectedRoomId) ? (
