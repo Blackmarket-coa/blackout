@@ -35,21 +35,21 @@ describe("ThreadPanel", () => {
     describe("Header", () => {
         it("expect that All filter for ThreadPanelHeader properly renders Show: All threads", () => {
             const { asFragment } = render(
-                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} />,
+                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} unreadThreadCount={0} />,
             );
             expect(asFragment()).toMatchSnapshot();
         });
 
         it("expect that My filter for ThreadPanelHeader properly renders Show: My threads", () => {
             const { asFragment } = render(
-                <ThreadPanelHeader filterOption={ThreadFilterType.My} setFilterOption={() => undefined} />,
+                <ThreadPanelHeader filterOption={ThreadFilterType.My} setFilterOption={() => undefined} unreadThreadCount={0} />,
             );
             expect(asFragment()).toMatchSnapshot();
         });
 
         it("expect that ThreadPanelHeader properly opens a context menu when clicked on the button", () => {
             const { container } = render(
-                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} />,
+                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} unreadThreadCount={0} />,
             );
             const found = container.querySelector(".mx_ThreadPanel_dropdown");
             expect(found).toBeTruthy();
@@ -60,7 +60,7 @@ describe("ThreadPanel", () => {
 
         it("expect that ThreadPanelHeader has the correct option selected in the context menu", () => {
             const { container } = render(
-                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} />,
+                <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} unreadThreadCount={0} />,
             );
             fireEvent.click(container.querySelector(".mx_ThreadPanel_dropdown")!);
             const found = screen.queryAllByRole("menuitemradio");
@@ -83,7 +83,7 @@ describe("ThreadPanel", () => {
             const { container } = render(
                 <ScopedRoomContextProvider {...roomContextObject}>
                     <MatrixClientContext.Provider value={mockClient}>
-                        <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} />
+                        <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} unreadThreadCount={0} />
                     </MatrixClientContext.Provider>
                 </ScopedRoomContextProvider>,
             );
@@ -97,7 +97,7 @@ describe("ThreadPanel", () => {
             const mockClient = createTestClient();
             const { container } = render(
                 <MatrixClientContext.Provider value={mockClient}>
-                    <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} />
+                    <ThreadPanelHeader filterOption={ThreadFilterType.All} setFilterOption={() => undefined} unreadThreadCount={0} />
                 </MatrixClientContext.Provider>,
             );
             fireEvent.click(getByRole(container, "button", { name: "Mark all as read" }));

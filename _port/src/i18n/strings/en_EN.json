@@ -917,6 +917,11 @@
         "widget_screenshots": "Enable widget screenshots on supported widgets"
     },
     "dialog_close_label": "Close dialog",
+    "direct_messages": {
+        "request_approval_action": "Request chat approval",
+        "request_approval_description": "Your homeserver policy requires approval before starting a direct message.",
+        "request_approval_title": "Request direct message approval?"
+    },
     "download_completed": "Download Completed",
     "emoji": {
         "categories": "Categories",
