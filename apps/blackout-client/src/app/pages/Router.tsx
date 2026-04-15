@@ -30,6 +30,8 @@ import {
   _SERVER_PATH,
   _DEEP_DIVE_PATH,
   CREATE_PATH,
+  ONBOARDING_ANALYTICS_PATH,
+  ONBOARDING_PATH,
 } from './paths';
 import {
   getAppPathFromHref,
@@ -70,6 +72,7 @@ import { Create } from './client/create';
 import { CreateSpaceModalRenderer } from '../features/create-space';
 import { SearchModalRenderer } from '../features/search';
 import { getFallbackSession } from '../state/sessions';
+import { OnboardingAnalyticsPage, OnboardingRoutePage } from '../features/onboarding';
 
 export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize) => {
   const { hashRouter } = clientConfig;
@@ -269,6 +272,8 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           <Route path={_SERVER_PATH} element={<DiscoverySurface />} />
         </Route>
         <Route path={CREATE_PATH} element={<Create />} />
+        <Route path={ONBOARDING_PATH} element={<OnboardingRoutePage />} />
+        <Route path={ONBOARDING_ANALYTICS_PATH} element={<OnboardingAnalyticsPage />} />
         <Route
           path={INBOX_PATH}
           element={
