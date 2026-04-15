@@ -30,6 +30,8 @@ import Spinner from "../views/elements/Spinner";
 import { clearRoomNotification } from "../../utils/notifications";
 import EmptyState from "../views/right_panel/EmptyState";
 import { ScopedRoomContextProvider, useScopedRoomContext } from "../../contexts/ScopedRoomContext.tsx";
+import { determineUnreadState } from "../../RoomNotifs";
+import { NotificationLevel } from "../../stores/notifications/NotificationLevel";
 
 interface IProps {
     roomId: string;
@@ -67,7 +69,8 @@ export const ThreadPanelHeaderFilterOptionItem: React.FC<
 export const ThreadPanelHeader: React.FC<{
     filterOption: ThreadFilterType;
     setFilterOption: (filterOption: ThreadFilterType) => void;
-}> = ({ filterOption, setFilterOption }) => {
+    unreadThreadCount: number;
+}> = ({ filterOption, setFilterOption, unreadThreadCount }) => {
     const mxClient = useMatrixClientContext();
     const roomContext = useScopedRoomContext("room");
     const [menuDisplayed, button, openMenu, closeMenu] = useContextMenu<HTMLElement>();
@@ -146,6 +149,7 @@ export const ThreadPanelHeader: React.FC<{
                 }}
             >
                 {`${_t("threads|show_thread_filter")} ${value?.label}`}
+                {unreadThreadCount > 0 && <span className="mx_ThreadPanel_unreadCounter">{unreadThreadCount}</span>}
                 <ChevronDownIcon />
             </ContextMenuButton>
             {contextMenu}
@@ -167,6 +171,11 @@ const ThreadPanel: React.FC<IProps> = ({ roomId, onClose, permalinkCreator }) =>
     const timelineSet: EventTimelineSet | undefined =
         filterOption === ThreadFilterType.My ? room?.threadsTimelineSets[1] : room?.threadsTimelineSets[0];
     const hasThreads = Boolean(room?.threadsTimelineSets?.[0]?.getLiveTimeline()?.getEvents()?.length);
+    const unreadThreadCount =
+        room?.getThreads().reduce((count, thread) => {
+            const unreadState = determineUnreadState(room, thread.id);
+            return unreadState.level > NotificationLevel.None ? count + 1 : count;
+        }, 0) ?? 0;
 
     useEffect(() => {
         const room = mxClient.getRoom(roomId);
@@ -202,7 +211,13 @@ const ThreadPanel: React.FC<IProps> = ({ roomId, onClose, permalinkCreator }) =>
                 ref={card}
                 closeButtonRef={closeButonRef}
             >
-                {hasThreads && <ThreadPanelHeader filterOption={filterOption} setFilterOption={setFilterOption} />}
+                {hasThreads && (
+                    <ThreadPanelHeader
+                        filterOption={filterOption}
+                        setFilterOption={setFilterOption}
+                        unreadThreadCount={unreadThreadCount}
+                    />
+                )}
                 <Measured sensor={card} onMeasurement={setNarrow} />
                 {timelineSet ? (
                     <TimelinePanel

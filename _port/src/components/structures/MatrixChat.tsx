@@ -954,7 +954,14 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
                         initialEventScrollIntoView: scrollIntoView,
                     },
                 };
-                if (push ?? false) {
+                const sourceCard = RightPanelStore.instance.currentCard;
+                const shouldPreserveSourceCard =
+                    !(push ?? false) &&
+                    Boolean(sourceCard.phase) &&
+                    sourceCard.phase !== RightPanelPhases.ThreadView &&
+                    sourceCard.phase !== RightPanelPhases.ThreadPanel;
+
+                if (push ?? false || shouldPreserveSourceCard) {
                     RightPanelStore.instance.pushCard(threadViewCard);
                 } else {
                     RightPanelStore.instance.setCards([{ phase: RightPanelPhases.ThreadPanel }, threadViewCard]);
@@ -1271,6 +1278,26 @@ export default class MatrixChat extends React.PureComponent<IProps, IState> {
                 metricsTrigger: "MessageUser",
             });
         } else {
+            if (SettingsStore.getValue("feature_dm_request_approval")) {
+                const { finished } = Modal.createDialog(QuestionDialog, {
+                    title: _t("direct_messages|request_approval_title"),
+                    description: _t("direct_messages|request_approval_description"),
+                    button: _t("direct_messages|request_approval_action"),
+                    hasCancelButton: true,
+                    cancelButton: _t("action|cancel"),
+                });
+
+                finished.then(([confirmed]) => {
+                    if (confirmed) {
+                        dis.dispatch({
+                            action: "start_chat",
+                            user_id: userId,
+                        });
+                    }
+                });
+                return;
+            }
+
             dis.dispatch({
                 action: "start_chat",
                 user_id: userId,
