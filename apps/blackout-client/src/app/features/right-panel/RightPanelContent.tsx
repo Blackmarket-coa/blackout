@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import type { RightPanelType } from '../../state/bmc-navigation';
 import { rightPanelPlugin, resolveRightPanelSlotRegistry } from '../../plugins/right-panel';
+import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
 
 interface RightPanelContentProps {
     panel: Exclude<RightPanelType, null>;
@@ -25,8 +26,13 @@ export const RightPanelContent = ({
 
     if (!room) {
         return (
-            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>
-                Pick a room to view {panel}.
+            <div
+                style={{
+                    padding: designShellLayout.desktopPanelPaddingPx,
+                    color: 'var(--text-secondary)',
+                }}
+            >
+                Pick a room to view {panel} details.
             </div>
         );
     }
@@ -35,21 +41,28 @@ export const RightPanelContent = ({
 
     if (!Renderer) {
         return (
-            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>
+            <div
+                style={{
+                    padding: designShellLayout.desktopPanelPaddingPx,
+                    color: 'var(--text-secondary)',
+                }}
+            >
                 {panel} is unavailable in this preset.
             </div>
         );
     }
 
     return (
-        <Renderer
-            key={`${panel}:${room.roomId}`}
-            panel={panel}
-            room={room}
-            events={events}
-            rolesEnabled={rolesEnabled}
-            onJumpToEvent={onJumpToEvent}
-        />
+        <div style={{ padding: designSpacing.comfortableGapPx }}>
+            <Renderer
+                key={`${panel}:${room.roomId}`}
+                panel={panel}
+                room={room}
+                events={events}
+                rolesEnabled={rolesEnabled}
+                onJumpToEvent={onJumpToEvent}
+            />
+        </div>
     );
 };
 
