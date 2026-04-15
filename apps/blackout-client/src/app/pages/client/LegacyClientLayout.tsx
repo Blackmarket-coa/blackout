@@ -30,7 +30,7 @@ import { useMentionNavigation } from '../../features/navigation/useMentionNaviga
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
-import { useOptionalCall } from '../../features/call';
+import { VoiceStrip, useOptionalCall } from '../../features/call';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 import { useRoom } from '../../hooks/bmc-useRoom';
@@ -127,6 +127,13 @@ export const ClientLayout = () => {
     const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
     const callEnabled = capabilityAccess['features.call.elementCall'] ?? false;
     const forumEnabled = capabilityAccess['features.bmc.forum'] ?? false;
+    const activeSpeakingCount = useMemo(
+        () =>
+            callState
+                ? Object.values(callState.audioLevels).filter((level) => level.speaking).length
+                : 0,
+        [callState]
+    );
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
         [rolesPanelEnabled]
@@ -455,6 +462,25 @@ export const ClientLayout = () => {
                                     Call unavailable
                                 </small>
                             )}
+                            {callEnabled &&
+                            callState?.joined &&
+                            callState.roomId === selectedRoomId ? (
+                                <span
+                                    style={{
+                                        fontSize: 11,
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 999,
+                                        padding: '2px 8px',
+                                        background: 'rgba(83, 240, 117, 0.2)',
+                                    }}
+                                    data-testid="header-live-voice-badge"
+                                >
+                                    Live room
+                                    {activeSpeakingCount > 0
+                                        ? ` • ${activeSpeakingCount} speaking`
+                                        : ''}
+                                </span>
+                            ) : null}
                         </div>
                         <DeadDropIndicator
                             config={deadDrop.data}
@@ -803,118 +829,6 @@ export const ClientLayout = () => {
                                     Devices
                                 </button>
                             </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setMuted(!callState.muted)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.muted
-                                            ? 'Unmute'
-                                            : 'Mute'
-                                        : 'No Call'}
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setDeafened(!callState.deafened)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.deafened
-                                            ? 'Undeafen'
-                                            : 'Deafen'
-                                        : 'No Call'}
-                                </button>
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                Call:{' '}
-                                {callState?.joined
-                                    ? `Connected (${
-                                          Object.keys(callState.membership).length
-                                      } participants)`
-                                    : 'Idle'}
-                            </div>
-                            <div style={{ display: 'grid', gap: 4 }}>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Mic
-                                    <select
-                                        value={selectedAudioDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedAudioDeviceId(next);
-                                            callState?.setPreferredAudioDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
-                                                preferredAudioDeviceId: next,
-                                            }));
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {audioDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Microphone ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Camera
-                                    <select
-                                        value={selectedVideoDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedVideoDeviceId(next);
-                                            callState?.setPreferredVideoDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
-                                                preferredVideoDeviceId: next,
-                                            }));
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {videoDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Camera ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                            </div>
                         </section>
                     ) : null}
                 </aside>
@@ -1030,6 +944,23 @@ export const ClientLayout = () => {
                                                     >
                                                         {room.name}
                                                     </span>
+                                                    {callEnabled &&
+                                                    callState?.joined &&
+                                                    callState.roomId === room.roomId ? (
+                                                        <span
+                                                            style={{
+                                                                border: '1px solid var(--border-default)',
+                                                                borderRadius: 999,
+                                                                padding: '1px 6px',
+                                                                fontSize: 10,
+                                                                background:
+                                                                    'rgba(83, 240, 117, 0.2)',
+                                                            }}
+                                                            data-testid="room-list-live-badge"
+                                                        >
+                                                            LIVE
+                                                        </span>
+                                                    ) : null}
                                                     {roomUnread(room) > 0 ? (
                                                         <span
                                                             style={{
@@ -1180,6 +1111,32 @@ export const ClientLayout = () => {
                 ) : null}
 
                 {renderRoomContent()}
+
+                <VoiceStrip
+                    enabled={callEnabled && Boolean(callState)}
+                    joined={Boolean(callState?.joined)}
+                    roomId={callState?.roomId ?? null}
+                    selectedRoomId={selectedRoomId}
+                    rooms={rooms}
+                    muted={Boolean(callState?.muted)}
+                    deafened={Boolean(callState?.deafened)}
+                    membership={callState?.membership ?? {}}
+                    audioLevels={callState?.audioLevels ?? {}}
+                    audioDevices={audioDevices}
+                    selectedAudioDeviceId={selectedAudioDeviceId}
+                    onJoin={(roomId) => void callState?.joinCall(roomId)}
+                    onLeave={() => void callState?.leaveCall()}
+                    onToggleMuted={() => callState?.setMuted(!callState.muted)}
+                    onToggleDeafened={() => callState?.setDeafened(!callState.deafened)}
+                    onSelectAudioDevice={(next) => {
+                        setSelectedAudioDeviceId(next);
+                        callState?.setPreferredAudioDeviceId(next);
+                        setSettings((prev) => ({
+                            ...prev,
+                            preferredAudioDeviceId: next,
+                        }));
+                    }}
+                />
 
                 {!selectedRoomId && !onboardingSuppressed ? (
                     <OnboardingWizard
