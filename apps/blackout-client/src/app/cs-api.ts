@@ -111,5 +111,5 @@ export const specVersions = async (
   if (data && typeof data === 'object' && 'versions' in data && Array.isArray(data.versions)) {
     return data as SpecVersions;
   }
-  throw new Error('Homeserver URL does not appear to be a valid Matrix homeserver');
+  throw new Error('Root URL does not appear to be a valid Matrix root');
 };
