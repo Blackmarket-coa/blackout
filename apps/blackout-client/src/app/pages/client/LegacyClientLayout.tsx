@@ -30,7 +30,7 @@ import { useMentionNavigation } from '../../features/navigation/useMentionNaviga
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
-import { useOptionalCall } from '../../features/call';
+import { VoiceStrip, useOptionalCall } from '../../features/call';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 import { useRoom } from '../../hooks/bmc-useRoom';
@@ -50,6 +50,8 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { resolveCapabilityAccessMap } from '../../resolver/capabilityAccessResolver';
+import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
+import { isMobileViewport, isTabletViewport } from './layoutMetrics';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -69,9 +71,6 @@ const roomKindIcon = (room: Room): string => {
 };
 
 const roomUnread = (room: Room): number => room.getUnreadNotificationCount() || 0;
-
-const isTablet = (width: number): boolean => width < 1100;
-const isMobile = (width: number): boolean => width < 760;
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
@@ -111,7 +110,10 @@ export const ClientLayout = () => {
     const { roomId: routeRoomId } = useParams<{ roomId?: string }>();
     const hasHydratedNavigationRef = useRef(false);
 
-    const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
+    const layout = settings.layout ?? {
+        spaceColumnWidth: designShellLayout.defaultSpaceColumnWidthPx,
+        roomColumnWidth: designShellLayout.defaultRoomColumnWidthPx,
+    };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
     const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
@@ -127,6 +129,13 @@ export const ClientLayout = () => {
     const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
     const callEnabled = capabilityAccess['features.call.elementCall'] ?? false;
     const forumEnabled = capabilityAccess['features.bmc.forum'] ?? false;
+    const activeSpeakingCount = useMemo(
+        () =>
+            callState
+                ? Object.values(callState.audioLevels).filter((level) => level.speaking).length
+                : 0,
+        [callState]
+    );
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
         [rolesPanelEnabled]
@@ -427,7 +436,13 @@ export const ClientLayout = () => {
     const renderRoomContent = () => {
         if (selectedRoomId) {
             return (
-                <div style={{ padding: 16, display: 'grid', gap: 12 }}>
+                <div
+                    style={{
+                        padding: designShellLayout.desktopPanelPaddingPx,
+                        display: 'grid',
+                        gap: designSpacing.comfortableGapPx,
+                    }}
+                >
                     <header style={{ display: 'grid', gap: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <strong>
@@ -442,7 +457,8 @@ export const ClientLayout = () => {
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 8,
                                         background: 'var(--bg-input)',
-                                        padding: '2px 8px',
+                                        padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                        minHeight: designShellLayout.navRailButtonSizePx,
                                     }}
                                 >
                                     📞 Start call
@@ -455,6 +471,26 @@ export const ClientLayout = () => {
                                     Call unavailable
                                 </small>
                             )}
+                            {callEnabled &&
+                            callState?.joined &&
+                            callState.roomId === selectedRoomId ? (
+                                <span
+                                    style={{
+                                        fontSize: 11,
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 999,
+                                        padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                        minHeight: designShellLayout.navRailButtonSizePx,
+                                        background: 'rgba(83, 240, 117, 0.2)',
+                                    }}
+                                    data-testid="header-live-voice-badge"
+                                >
+                                    Live room
+                                    {activeSpeakingCount > 0
+                                        ? ` • ${activeSpeakingCount} speaking`
+                                        : ''}
+                                </span>
+                            ) : null}
                         </div>
                         <DeadDropIndicator
                             config={deadDrop.data}
@@ -540,7 +576,7 @@ export const ClientLayout = () => {
     };
 
     const desktop = !isTablet(viewportWidth);
-    const mobile = isMobile(viewportWidth);
+    const mobile = isMobileViewport(viewportWidth);
 
     return (
         <section
@@ -561,6 +597,19 @@ export const ClientLayout = () => {
                 open={quickOpen}
                 onClose={() => setQuickOpen(false)}
                 onCommandPicked={(command) => void handleCommandPicked(command)}
+                onActionPicked={(actionId) => {
+                    if (actionId === 'mark-read') {
+                        void markAllMentionsRead();
+                        return;
+                    }
+                    if (actionId === 'open-inbox') {
+                        setInboxOpen(true);
+                        return;
+                    }
+                    if (actionId === 'jump-mentions') {
+                        setInboxOpen(true);
+                    }
+                }}
             />
 
             {desktop || (!mobile && !selectedRoomId) ? (
@@ -570,8 +619,8 @@ export const ClientLayout = () => {
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        padding: '8px 0',
-                        gap: 8,
+                        padding: `${designShellLayout.navRailSectionGapPx}px 0`,
+                        gap: designShellLayout.navRailSectionGapPx,
                         background: 'var(--bg-nav)',
                     }}
                 >
@@ -582,11 +631,13 @@ export const ClientLayout = () => {
                             setSelectedRoomId(null);
                         }}
                         style={{
-                            width: 40,
-                            height: 40,
+                            width: designShellLayout.navRailButtonSizePx,
+                            height: designShellLayout.navRailButtonSizePx,
                             borderRadius: 10,
                             border: '1px solid var(--border-default)',
                             background: 'var(--bg-input)',
+                            minWidth: designShellLayout.navRailButtonSizePx,
+                            minHeight: designShellLayout.navRailButtonSizePx,
                         }}
                     >
                         🏠
@@ -596,7 +647,7 @@ export const ClientLayout = () => {
                             flex: 1,
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: 6,
+                            gap: designSpacing.denseGapPx,
                             overflowY: 'auto',
                         }}
                     >
@@ -623,8 +674,8 @@ export const ClientLayout = () => {
                                     setSelectedRoomId(null);
                                 }}
                                 style={{
-                                    width: 40,
-                                    height: 40,
+                                    width: designShellLayout.navRailButtonSizePx,
+                                    height: designShellLayout.navRailButtonSizePx,
                                     borderRadius: 12,
                                     border:
                                         selectedSpaceId === space.roomId
@@ -658,8 +709,8 @@ export const ClientLayout = () => {
                     <button
                         type="button"
                         style={{
-                            width: 40,
-                            height: 40,
+                            width: designShellLayout.navRailButtonSizePx,
+                            height: designShellLayout.navRailButtonSizePx,
                             borderRadius: 10,
                             border: '1px dashed var(--border-default)',
                             background: 'var(--bg-input)',
@@ -672,7 +723,7 @@ export const ClientLayout = () => {
                             style={{
                                 width: '100%',
                                 borderTop: '1px solid var(--border-default)',
-                                padding: 8,
+                                padding: designShellLayout.navRailSectionGapPx,
                                 display: 'grid',
                                 gap: 6,
                             }}
@@ -682,9 +733,9 @@ export const ClientLayout = () => {
                                     style={{
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 8,
-                                        padding: 6,
+                                        padding: designSpacing.denseGapPx,
                                         display: 'grid',
-                                        gap: 6,
+                                        gap: designSpacing.denseGapPx,
                                     }}
                                 >
                                     <div
@@ -712,7 +763,13 @@ export const ClientLayout = () => {
                                         </button>
                                     </div>
                                     {!quickActionsCollapsed ? (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: designSpacing.denseGapPx,
+                                            }}
+                                        >
                                             {desktopQuickActions.map((entry) => (
                                                 <button
                                                     key={entry.id}
@@ -762,7 +819,7 @@ export const ClientLayout = () => {
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
+                            <div style={{ display: 'flex', gap: designSpacing.denseGapPx }}>
                                 <button
                                     type="button"
                                     onClick={() => openSettingsSection('appearance')}
@@ -789,118 +846,6 @@ export const ClientLayout = () => {
                                 >
                                     Devices
                                 </button>
-                            </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setMuted(!callState.muted)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.muted
-                                            ? 'Unmute'
-                                            : 'Mute'
-                                        : 'No Call'}
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setDeafened(!callState.deafened)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.deafened
-                                            ? 'Undeafen'
-                                            : 'Deafen'
-                                        : 'No Call'}
-                                </button>
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                Call:{' '}
-                                {callState?.joined
-                                    ? `Connected (${
-                                          Object.keys(callState.membership).length
-                                      } participants)`
-                                    : 'Idle'}
-                            </div>
-                            <div style={{ display: 'grid', gap: 4 }}>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Mic
-                                    <select
-                                        value={selectedAudioDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedAudioDeviceId(next);
-                                            callState?.setPreferredAudioDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
-                                                preferredAudioDeviceId: next,
-                                            }));
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {audioDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Microphone ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Camera
-                                    <select
-                                        value={selectedVideoDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedVideoDeviceId(next);
-                                            callState?.setPreferredVideoDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
-                                                preferredVideoDeviceId: next,
-                                            }));
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {videoDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Camera ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
                             </div>
                         </section>
                     ) : null}
@@ -933,7 +878,13 @@ export const ClientLayout = () => {
                         </strong>
                     </header>
 
-                    <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+                    <div
+                        style={{
+                            padding: designShellLayout.navRailSectionGapPx,
+                            overflowY: 'auto',
+                            height: 'calc(100vh - 52px)',
+                        }}
+                    >
                         {groups.map((group) => {
                             const collapsed = collapsedFolders[group.id] ?? false;
                             return (
@@ -1001,10 +952,14 @@ export const ClientLayout = () => {
                                                                 : 'transparent',
                                                         color: 'var(--text-primary)',
                                                         borderRadius: 8,
-                                                        padding: '6px 8px',
+                                                        padding: `${designSpacing.denseGapPx}px ${
+                                                            designSpacing.comfortableGapPx - 4
+                                                        }px`,
+                                                        minHeight:
+                                                            designShellLayout.navRailButtonSizePx,
                                                         display: 'flex',
                                                         alignItems: 'center',
-                                                        gap: 8,
+                                                        gap: designShellLayout.navRailSectionGapPx,
                                                     }}
                                                 >
                                                     <span>{roomKindIcon(room)}</span>
@@ -1017,6 +972,23 @@ export const ClientLayout = () => {
                                                     >
                                                         {room.name}
                                                     </span>
+                                                    {callEnabled &&
+                                                    callState?.joined &&
+                                                    callState.roomId === room.roomId ? (
+                                                        <span
+                                                            style={{
+                                                                border: '1px solid var(--border-default)',
+                                                                borderRadius: 999,
+                                                                padding: '1px 6px',
+                                                                fontSize: 10,
+                                                                background:
+                                                                    'rgba(83, 240, 117, 0.2)',
+                                                            }}
+                                                            data-testid="room-list-live-badge"
+                                                        >
+                                                            LIVE
+                                                        </span>
+                                                    ) : null}
                                                     {roomUnread(room) > 0 ? (
                                                         <span
                                                             style={{
@@ -1061,8 +1033,8 @@ export const ClientLayout = () => {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            gap: 8,
-                            padding: 8,
+                            gap: designShellLayout.navRailSectionGapPx,
+                            padding: designShellLayout.navRailSectionGapPx,
                             borderBottom: '1px solid var(--border-default)',
                             background: 'var(--bg-surface)',
                         }}
@@ -1100,7 +1072,10 @@ export const ClientLayout = () => {
                                 border: '1px solid var(--border-default)',
                                 borderRadius: 8,
                                 background: 'var(--bg-input)',
-                                padding: '4px 10px',
+                                padding: `${designSpacing.denseGapPx - 2}px ${
+                                    designSpacing.comfortableGapPx - 2
+                                }px`,
+                                minHeight: designShellLayout.navRailButtonSizePx,
                             }}
                         >
                             Settings
@@ -1111,7 +1086,7 @@ export const ClientLayout = () => {
                     <section
                         style={{
                             borderBottom: '1px solid var(--border-default)',
-                            padding: 8,
+                            padding: designShellLayout.navRailSectionGapPx,
                             display: 'grid',
                             gap: 6,
                         }}
@@ -1131,7 +1106,8 @@ export const ClientLayout = () => {
                                     border: '1px solid var(--border-default)',
                                     borderRadius: 8,
                                     background: 'var(--bg-input)',
-                                    padding: '2px 8px',
+                                    padding: `2px ${designSpacing.comfortableGapPx - 4}px`,
+                                    minHeight: designShellLayout.navRailButtonSizePx,
                                 }}
                             >
                                 {quickActionsCollapsed ? 'Expand' : 'Collapse'}
@@ -1149,7 +1125,10 @@ export const ClientLayout = () => {
                                             border: '1px solid var(--border-default)',
                                             borderRadius: 999,
                                             background: 'var(--bg-input)',
-                                            padding: '4px 10px',
+                                            padding: `${designSpacing.denseGapPx - 2}px ${
+                                                designSpacing.comfortableGapPx - 2
+                                            }px`,
+                                            minHeight: designShellLayout.navRailButtonSizePx,
                                         }}
                                     >
                                         {entry.label}
@@ -1167,6 +1146,32 @@ export const ClientLayout = () => {
                 ) : null}
 
                 {renderRoomContent()}
+
+                <VoiceStrip
+                    enabled={callEnabled && Boolean(callState)}
+                    joined={Boolean(callState?.joined)}
+                    roomId={callState?.roomId ?? null}
+                    selectedRoomId={selectedRoomId}
+                    rooms={rooms}
+                    muted={Boolean(callState?.muted)}
+                    deafened={Boolean(callState?.deafened)}
+                    membership={callState?.membership ?? {}}
+                    audioLevels={callState?.audioLevels ?? {}}
+                    audioDevices={audioDevices}
+                    selectedAudioDeviceId={selectedAudioDeviceId}
+                    onJoin={(roomId) => void callState?.joinCall(roomId)}
+                    onLeave={() => void callState?.leaveCall()}
+                    onToggleMuted={() => callState?.setMuted(!callState.muted)}
+                    onToggleDeafened={() => callState?.setDeafened(!callState.deafened)}
+                    onSelectAudioDevice={(next) => {
+                        setSelectedAudioDeviceId(next);
+                        callState?.setPreferredAudioDeviceId(next);
+                        setSettings((prev) => ({
+                            ...prev,
+                            preferredAudioDeviceId: next,
+                        }));
+                    }}
+                />
 
                 {!selectedRoomId && !onboardingSuppressed ? (
                     <OnboardingWizard
@@ -1268,7 +1273,7 @@ export const ClientLayout = () => {
                                     borderRadius: 10,
                                     padding: 10,
                                     display: 'grid',
-                                    gap: 8,
+                                    gap: designShellLayout.navRailSectionGapPx,
                                 }}
                             >
                                 <strong style={{ fontSize: 13 }}>Mobile quick settings</strong>
@@ -1315,7 +1320,7 @@ export const ClientLayout = () => {
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        gap: 8,
+                                        gap: designShellLayout.navRailSectionGapPx,
                                     }}
                                 >
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -1472,8 +1477,11 @@ export const ClientLayout = () => {
                             const start = layout.spaceColumnWidth;
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
-                                    96,
-                                    Math.max(52, start + (moveEvent.clientX - origin))
+                                    designShellLayout.maxSpaceColumnWidthPx,
+                                    Math.max(
+                                        designShellLayout.minSpaceColumnWidthPx,
+                                        start + (moveEvent.clientX - origin)
+                                    )
                                 );
                                 setSettings((prev) => ({
                                     ...prev,
@@ -1504,8 +1512,11 @@ export const ClientLayout = () => {
                             const start = layout.roomColumnWidth;
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
-                                    360,
-                                    Math.max(220, start + (moveEvent.clientX - origin))
+                                    designShellLayout.maxRoomColumnWidthPx,
+                                    Math.max(
+                                        designShellLayout.minRoomColumnWidthPx,
+                                        start + (moveEvent.clientX - origin)
+                                    )
                                 );
                                 setSettings((prev) => ({
                                     ...prev,

@@ -90,3 +90,6 @@ export const INBOX_INVITES_PATH = `/inbox/${_INVITES_PATH}`;
 export const SPACE_SETTINGS_PATH = '/space-settings/';
 
 export const ROOM_SETTINGS_PATH = '/room-settings/';
+
+export const ONBOARDING_PATH = '/onboarding/:spaceIdOrAlias/';
+export const ONBOARDING_ANALYTICS_PATH = '/onboarding/:spaceIdOrAlias/analytics/';

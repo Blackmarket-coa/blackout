@@ -24,6 +24,8 @@ import {
   SPACE_ROOM_PATH,
   SPACE_SEARCH_PATH,
   CREATE_PATH,
+  ONBOARDING_ANALYTICS_PATH,
+  ONBOARDING_PATH,
 } from './paths';
 import { trimLeadingSlash, trimTrailingSlash } from '../utils/common';
 import { HashRouterConfig } from '../hooks/useClientConfig';
@@ -160,3 +162,17 @@ export const getCreatePath = (): string => CREATE_PATH;
 export const getInboxPath = (): string => INBOX_PATH;
 export const getInboxNotificationsPath = (): string => INBOX_NOTIFICATIONS_PATH;
 export const getInboxInvitesPath = (): string => INBOX_INVITES_PATH;
+
+export const getOnboardingPath = (spaceIdOrAlias: string): string => {
+  const params = {
+    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
+  };
+  return generatePath(ONBOARDING_PATH, params);
+};
+
+export const getOnboardingAnalyticsPath = (spaceIdOrAlias: string): string => {
+  const params = {
+    spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
+  };
+  return generatePath(ONBOARDING_ANALYTICS_PATH, params);
+};

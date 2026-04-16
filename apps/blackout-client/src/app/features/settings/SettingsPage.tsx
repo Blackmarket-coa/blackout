@@ -1,5 +1,17 @@
-import { Suspense, lazy, type ComponentType, type LazyExoticComponent, useEffect, useState } from 'react';
+import {
+    Suspense,
+    lazy,
+    type ComponentType,
+    type LazyExoticComponent,
+    useEffect,
+    useState,
+} from 'react';
 import { useAtom } from 'jotai';
+import {
+    designBreakpoints,
+    designShellLayout,
+    designSpacing,
+} from '../../../../../../packages/design/src';
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
 
@@ -19,6 +31,18 @@ interface SettingsSection {
     summary: string;
     component: LazyExoticComponent<ComponentType>;
 }
+
+export const settingsLayoutMetrics = Object.freeze({
+    mobileMaxWidthPx: designBreakpoints.mobileMaxPx,
+    desktopSidebarWidthPx: 300,
+    panelPaddingPx: designShellLayout.desktopPanelPaddingPx,
+    sectionGapPx: designSpacing.comfortableGapPx,
+    itemGapPx: designSpacing.denseGapPx,
+    minTouchTargetPx: designShellLayout.navRailButtonSizePx,
+});
+
+export const isSettingsMobileViewport = (width: number) =>
+    width <= settingsLayoutMetrics.mobileMaxWidthPx;
 
 const sections: SettingsSection[] = [
     {
@@ -80,11 +104,11 @@ const sections: SettingsSection[] = [
 export const SettingsPage = () => {
     const [activeSection, setActiveSection] = useAtom(settingsPageAtom);
     const [isMobile, setIsMobile] = useState(
-        typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false
     );
 
     useEffect(() => {
-        const onResize = () => setIsMobile(window.innerWidth <= 768);
+        const onResize = () => setIsMobile(isSettingsMobileViewport(window.innerWidth));
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
@@ -96,7 +120,9 @@ export const SettingsPage = () => {
         <section
             style={{
                 display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : '300px minmax(0, 1fr)',
+                gridTemplateColumns: isMobile
+                    ? '1fr'
+                    : `${settingsLayoutMetrics.desktopSidebarWidthPx}px minmax(0, 1fr)`,
                 minHeight: '100%',
                 border: '1px solid var(--border-default)',
                 borderRadius: 12,
@@ -109,19 +135,23 @@ export const SettingsPage = () => {
                 style={{
                     borderRight: isMobile ? 'none' : '1px solid var(--border-default)',
                     borderBottom: isMobile ? '1px solid var(--border-default)' : 'none',
-                    padding: 12,
+                    padding: settingsLayoutMetrics.sectionGapPx,
                     background: 'var(--bg-input)',
                 }}
             >
-                <h2 style={{ marginTop: 0, marginBottom: 10 }}>Settings</h2>
-                <nav style={{ display: 'grid', gap: 6 }}>
+                <h2 style={{ marginTop: 0, marginBottom: designSpacing.compactGapPx }}>Settings</h2>
+                <nav style={{ display: 'grid', gap: settingsLayoutMetrics.itemGapPx }}>
                     {sections.map((section) => (
                         <button
                             key={section.id}
                             type="button"
                             onClick={() => {
                                 setActiveSection(section.id);
-                                trackSettingsInteraction('settings', 'navigate-section', section.id);
+                                trackSettingsInteraction(
+                                    'settings',
+                                    'navigate-section',
+                                    section.id
+                                );
                             }}
                             style={{
                                 textAlign: 'left',
@@ -130,13 +160,15 @@ export const SettingsPage = () => {
                                         ? '1px solid var(--accent-primary)'
                                         : '1px solid var(--border-default)',
                                 borderRadius: 8,
-                                padding: '8px 10px',
+                                padding: `${designSpacing.compactGapPx}px ${designSpacing.comfortableGapPx}px`,
+                                minHeight: settingsLayoutMetrics.minTouchTargetPx,
                                 background:
                                     activeSection === section.id
                                         ? 'var(--bg-surface)'
                                         : 'var(--bg-input)',
                                 color: 'var(--text-primary)',
                                 display: 'grid',
+                                alignContent: 'center',
                                 gap: 2,
                             }}
                         >
@@ -147,7 +179,7 @@ export const SettingsPage = () => {
                 </nav>
             </aside>
 
-            <main style={{ padding: 16 }}>
+            <main style={{ padding: settingsLayoutMetrics.panelPaddingPx }}>
                 <Suspense fallback={<p>Loading {active.label} settings…</p>}>
                     <ActiveSection />
                 </Suspense>

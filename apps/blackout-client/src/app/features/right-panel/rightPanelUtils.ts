@@ -29,7 +29,7 @@ export const groupMembersByPresence = (members: RoomMember[]): GroupedMembers =>
             acc[group].push(member);
             return acc;
         },
-        { online: [], away: [], offline: [] },
+        { online: [], away: [], offline: [] }
     );
 };
 
@@ -95,7 +95,7 @@ const collectSpaceGroups = (
     roomById: Map<string, Room>,
     groups: SpaceGroup[],
     parentPath = '',
-    visited = new Set<string>(),
+    visited = new Set<string>()
 ): void => {
     if (visited.has(space.roomId)) return;
     visited.add(space.roomId);
@@ -119,7 +119,7 @@ const collectSpaceGroups = (
         });
 
     childSpaces.forEach((childSpace) =>
-        collectSpaceGroups(childSpace, roomById, groups, label, new Set(visited)),
+        collectSpaceGroups(childSpace, roomById, groups, label, new Set(visited))
     );
 };
 
@@ -191,6 +191,34 @@ const eventHighlightsUser = (event: MatrixEvent): boolean => {
     return Boolean((tweaks as Record<string, unknown>).highlight);
 };
 
+export const getUserSharedRoomCount = (
+    rooms: Room[],
+    userId: string,
+    currentUserId: string | null
+): number =>
+    rooms.filter((room) => {
+        if (!currentUserId) return false;
+        const me = room.getMember(currentUserId);
+        const target = room.getMember(userId);
+        return me?.membership === 'join' && target?.membership === 'join';
+    }).length;
+
+export const getMemberActivitySummary = (member: RoomMember, presenceGroup: string): string => {
+    const currentlyActive = Boolean(
+        (member as RoomMember & { currentlyActive?: boolean }).currentlyActive
+    );
+    const lastActiveAgo = (member as RoomMember & { lastActiveAgo?: number }).lastActiveAgo;
+
+    if (presenceGroup === 'online' && currentlyActive) return 'Active now.';
+    if (typeof lastActiveAgo === 'number' && Number.isFinite(lastActiveAgo)) {
+        const minutesAgo = Math.max(1, Math.round(lastActiveAgo / 60_000));
+        return `Last active ${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago.`;
+    }
+
+    if (presenceGroup === 'away') return 'Away right now.';
+    if (presenceGroup === 'offline') return 'Offline.';
+    return 'Status unavailable.';
+};
 export interface MentionInboxItem {
     roomId: string;
     roomName: string;
@@ -225,7 +253,7 @@ export const getMentionInboxItems = ({
 
         const readUpToEventId = room.getEventReadUpTo(userId, true);
         const readUpToTs = readUpToEventId
-            ? (events.find((event) => event.getId() === readUpToEventId)?.getTs?.() ?? 0)
+            ? events.find((event) => event.getId() === readUpToEventId)?.getTs?.() ?? 0
             : 0;
 
         events.forEach((event) => {
@@ -237,13 +265,16 @@ export const getMentionInboxItems = ({
             const timestamp = event.getTs?.() ?? now;
             const mentionUsers = getMentionedUserIds(content);
             const mentionAll = Boolean(
-                (content['m.mentions'] as Record<string, unknown> | undefined)?.room,
+                (content['m.mentions'] as Record<string, unknown> | undefined)?.room
             );
             const isMentioned =
                 mentionUsers.includes(userId) || mentionAll || eventHighlightsUser(event);
             if (!isMentioned) return;
 
-            const dedupeKey = `${room.roomId}:${body.trim().toLowerCase().slice(0, 64)}:${Math.floor(timestamp / dedupeWindowMs)}`;
+            const dedupeKey = `${room.roomId}:${body
+                .trim()
+                .toLowerCase()
+                .slice(0, 64)}:${Math.floor(timestamp / dedupeWindowMs)}`;
             if (dedupeKeys.has(dedupeKey)) return;
 
             dedupeKeys.add(dedupeKey);
