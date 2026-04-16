@@ -59,6 +59,7 @@ const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'pins',
     'search',
     'governance',
+    'monetization',
 ];
 
 const roomKindIcon = (room: Room): string => {
