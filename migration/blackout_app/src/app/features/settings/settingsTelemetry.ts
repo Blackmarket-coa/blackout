@@ -1,3 +1,5 @@
+export type SettingsStorageOperation = 'get' | 'set' | 'remove';
+
 export type SettingsTelemetryEvent =
     | {
           name: 'settings_interaction';
@@ -6,9 +8,20 @@ export type SettingsTelemetryEvent =
           value?: string | number | boolean;
       }
     | {
+          name: 'settings_navigation';
+          fromSection: string;
+          toSection: string;
+      }
+    | {
+          name: 'settings_save_outcome';
+          key: string;
+          operation: SettingsStorageOperation;
+          success: boolean;
+      }
+    | {
           name: 'settings_save_failed';
           key: string;
-          operation: 'get' | 'set' | 'remove';
+          operation: SettingsStorageOperation;
           reason: string;
       };
 
@@ -26,9 +39,21 @@ export const trackSettingsInteraction = (
     emitTelemetry({ name: 'settings_interaction', section, control, value });
 };
 
+export const trackSettingsNavigation = (fromSection: string, toSection: string) => {
+    emitTelemetry({ name: 'settings_navigation', fromSection, toSection });
+};
+
+export const trackSettingsSaveOutcome = (
+    key: string,
+    operation: SettingsStorageOperation,
+    success: boolean,
+) => {
+    emitTelemetry({ name: 'settings_save_outcome', key, operation, success });
+};
+
 export const trackSettingsSaveFailure = (
     key: string,
-    operation: 'get' | 'set' | 'remove',
+    operation: SettingsStorageOperation,
     error: unknown,
 ) => {
     emitTelemetry({
