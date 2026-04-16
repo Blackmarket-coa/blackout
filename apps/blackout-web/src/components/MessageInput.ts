@@ -109,7 +109,7 @@ export function renderMessageInput({
       </div>
       <div class="composer-e2ee-hint">
         <span>🔒</span>
-        Messages are end-to-end encrypted ${renderGlossaryTip("E2EE")}. Only members of this room can read them.
+        Messages are end-to-end encrypted ${renderGlossaryTip("E2EE")}. Only shadows of this den can read them.
       </div>
       <div class="composer-popovers">
         <section class="composer-popover" data-panel="attachments" data-testid="composer-attachment-panel" aria-hidden="true">
@@ -189,7 +189,7 @@ export function renderMessageInput({
             <button type="button" data-action="composer-governance-insert-proposal" ${disabled || !canPropose ? "disabled" : ""}>Insert proposal</button>
             <button type="button" data-action="composer-governance-insert-vote" ${disabled ? "disabled" : ""}>Insert vote</button>
           </div>
-          ${!canPropose ? '<p class="meta" role="status">Proposal insertion is currently unavailable in this room.</p>' : ""}
+          ${!canPropose ? '<p class="meta" role="status">Proposal insertion is currently unavailable in this den.</p>' : ""}
           <div class="composer-channel-editor">
             <p class="composer-popover-title">Governance templates</p>
             <div class="composer-popover-actions">

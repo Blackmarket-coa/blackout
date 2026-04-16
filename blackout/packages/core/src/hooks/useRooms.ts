@@ -42,7 +42,7 @@ function roomToSummary(room: Room, client: MatrixClient): RoomSummary {
 
   return {
     roomId: room.roomId,
-    name: room.name || "Unnamed Room",
+    name: room.name || "Unnamed Den",
     avatarUrl: room.getAvatarUrl(client.getHomeserverUrl(), 48, 48, "crop") || null,
     topic: room.currentState.getStateEvents("m.room.topic", "")?.getContent()?.topic || null,
     lastMessage,

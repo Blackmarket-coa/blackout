@@ -233,7 +233,7 @@ function RootSpaceProfile({ closed, categoryId, handleClose }: RootSpaceProfileP
     >
       <Box alignItems="Center" gap="200">
         <Text size="H4" truncate>
-          Rooms
+          Dens
         </Text>
       </Box>
     </Chip>
@@ -283,10 +283,10 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
               fill="None"
               onClick={handleCreateRoom}
             >
-              <Text size="T300">New Room</Text>
+              <Text size="T300">New Den</Text>
             </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
-              <Text size="T300">Existing Room</Text>
+              <Text size="T300">Existing Den</Text>
             </MenuItem>
           </Menu>
         </FocusTrap>
@@ -299,7 +299,7 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
         onClick={handleAddRoom}
         aria-pressed={!!cords}
       >
-        <Text size="B300">Add Room</Text>
+        <Text size="B300">Add Den</Text>
       </Chip>
       {addExisting && (
         <AddExistingModal parentId={item.roomId} requestClose={() => setAddExisting(false)} />
@@ -350,10 +350,10 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
               fill="None"
               onClick={handleCreateSpace}
             >
-              <Text size="T300">New Space</Text>
+              <Text size="T300">New Canopy</Text>
             </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
-              <Text size="T300">Existing Space</Text>
+              <Text size="T300">Existing Canopy</Text>
             </MenuItem>
           </Menu>
         </FocusTrap>
@@ -366,7 +366,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
         onClick={handleAddSpace}
         aria-pressed={!!cords}
       >
-        <Text size="B300">Add Space</Text>
+        <Text size="B300">Add Canopy</Text>
       </Chip>
       {addExisting && (
         <AddExistingModal space parentId={item.roomId} requestClose={() => setAddExisting(false)} />

@@ -497,7 +497,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
               >
                 <Icon size="600" src={Icons.File} />
                 <Text size="H4" align="Center">
-                  {`Drop Files in "${room?.name || 'Room'}"`}
+                  {`Drop Files in "${room?.name || 'Den'}"`}
                 </Text>
                 <Text align="Center">Drag and drop files here or click for selection dialog</Text>
               </Box>

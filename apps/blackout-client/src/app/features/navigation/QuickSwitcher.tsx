@@ -21,14 +21,21 @@ interface QuickSwitcherProps {
 }
 
 const COMMANDS = [
-    { cmd: '/invite', desc: 'Invite a user to this room' },
-    { cmd: '/topic', desc: 'Set the room topic' },
+    { cmd: '/invite', desc: 'Invite a user to this den' },
+    { cmd: '/topic', desc: 'Set the den topic' },
     { cmd: '/nick', desc: 'Set your display name' },
     { cmd: '/me', desc: 'Send emote-style message' },
     { cmd: '/shrug', desc: 'Append ¯\\_(ツ)_/¯' },
-    { cmd: '/leave', desc: 'Leave the current room' },
-    { cmd: '/join', desc: 'Join by room alias' },
+    { cmd: '/leave', desc: 'Leave the current den' },
+    { cmd: '/join', desc: 'Join by den alias' },
 ];
+
+const CATEGORY_LABELS: Record<BaseResult['category'], string> = {
+    Rooms: 'Dens',
+    Spaces: 'Canopies',
+    Users: 'Users',
+    Commands: 'Commands',
+};
 
 const fuzzyIncludes = (text: string, query: string): boolean => {
     const hay = text.toLowerCase();
@@ -262,7 +269,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Search rooms, spaces, users, commands"
+                    placeholder="Search dens, canopies, users, commands"
                     style={{
                         width: '100%',
                         border: 'none',
@@ -288,7 +295,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
                                         padding: '4px 8px',
                                     }}
                                 >
-                                    {category}
+                                    {CATEGORY_LABELS[category]}
                                 </div>
                                 {items.map((item) => {
                                     const absoluteIndex = flattened.findIndex(

@@ -67,7 +67,7 @@ export const useMemberEventParser = (): MemberEventParser => {
           body: (
             <>
               <b>{userName}</b>
-              {' request to join room '}
+              {' request to join den '}
               {reason}
             </>
           ),
@@ -80,7 +80,7 @@ export const useMemberEventParser = (): MemberEventParser => {
           body: (
             <>
               <b>{userName}</b>
-              {' joined the room'}
+              {' joined the den'}
             </>
           ),
         };
@@ -150,7 +150,7 @@ export const useMemberEventParser = (): MemberEventParser => {
             senderId === userId ? (
               <>
                 <b>{userName}</b>
-                {' left the room '}
+                {' left the den '}
                 {reason}
               </>
             ) : (

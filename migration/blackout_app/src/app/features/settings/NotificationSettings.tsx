@@ -73,7 +73,7 @@ export const NotificationSettings = () => {
             </section>
 
             <section>
-                <h3>Per-room override list</h3>
+                <h3>Per-den override list</h3>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                     <input
                         value={roomInput}
@@ -99,7 +99,7 @@ export const NotificationSettings = () => {
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
                     {settings.perRoomOverrides.length === 0 ? (
-                        <small>No room overrides yet.</small>
+                        <small>No den overrides yet.</small>
                     ) : null}
                     {settings.perRoomOverrides.map((item) => (
                         <div

@@ -190,7 +190,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Room Settings
+            Den Settings
           </Text>
         </MenuItem>
         <UseStateProvider initial={false}>
@@ -236,7 +236,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 aria-pressed={promptLeave}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Leave Room
+                  Leave Den
                 </Text>
               </MenuItem>
               {promptLeave && (
@@ -449,7 +449,7 @@ export function RoomViewHeader() {
               offset={4}
               tooltip={
                 <Tooltip>
-                  <Text>{peopleDrawer ? 'Hide Members' : 'Show Members'}</Text>
+                  <Text>{peopleDrawer ? 'Hide Shadows' : 'Show Shadows'}</Text>
                 </Tooltip>
               }
             >

@@ -69,10 +69,10 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
       gap="400"
     >
       <SettingTile
-        title="Room Encryption"
+        title="Den Encryption"
         description={
           enabled
-            ? 'Messages in this room are protected by end-to-end encryption.'
+            ? 'Messages in this den are protected by end-to-end encryption.'
             : 'Once enabled, encryption cannot be disabled!'
         }
         after={

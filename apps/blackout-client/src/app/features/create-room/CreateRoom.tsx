@@ -211,7 +211,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
             >
               <SettingTile
                 title="End-to-End Encryption"
-                description="Once this feature is enabled, it can't be disabled after the room is created."
+                description="Once this feature is enabled, it can't be disabled after the den is created."
                 after={
                   <Switch
                     variant="Primary"
@@ -231,7 +231,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
               >
                 <SettingTile
                   title="Knock to Join"
-                  description="Anyone can send request to join this room."
+                  description="Anyone can send request to join this den."
                   after={
                     <Switch
                       variant="Primary"

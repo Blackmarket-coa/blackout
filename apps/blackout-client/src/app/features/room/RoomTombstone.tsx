@@ -44,7 +44,7 @@ export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstone
         {replacementRoom?.getMyMembership() === Membership.Join ||
         joinState.status === AsyncStatus.Success ? (
           <Button onClick={handleOpen} size="300" variant="Success" fill="Solid" radii="300">
-            <Text size="B300">Open New Room</Text>
+            <Text size="B300">Open New Den</Text>
           </Button>
         ) : (
           <Button
@@ -60,7 +60,7 @@ export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstone
             }
             disabled={joinState.status === AsyncStatus.Loading}
           >
-            <Text size="B300">Join New Room</Text>
+            <Text size="B300">Join New Den</Text>
           </Button>
         )}
       </Box>

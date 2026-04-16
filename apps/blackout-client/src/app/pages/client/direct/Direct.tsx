@@ -103,7 +103,7 @@ function DirectHeader() {
         <Box alignItems="Center" grow="Yes" gap="300">
           <Box grow="Yes">
             <Text size="H4" truncate>
-              Direct Messages
+              Locked In
             </Text>
           </Box>
           <Box>
@@ -147,18 +147,18 @@ function DirectEmpty() {
         icon={<Icon size="600" src={Icons.Mention} />}
         title={
           <Text size="H5" align="Center">
-            No Direct Messages
+            No Locked In Chats
           </Text>
         }
         content={
           <Text size="T300" align="Center">
-            You do not have any direct messages yet.
+            You do not have any locked in chats yet.
           </Text>
         }
         options={
           <Button variant="Secondary" size="300" onClick={() => navigate(getDirectCreatePath())}>
             <Text size="B300" truncate>
-              Direct Message
+              Lock In
             </Text>
           </Button>
         }

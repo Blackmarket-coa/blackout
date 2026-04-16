@@ -207,14 +207,14 @@ function InviteCard({
           {invite.isDirect && (
             <Box shrink="No" alignItems="Center" justifyContent="Center">
               <Badge variant="Primary" fill="Solid" size="400" radii="300">
-                <Text size="L400">Direct Message</Text>
+                <Text size="L400">Locked In</Text>
               </Badge>
             </Box>
           )}
           {invite.isSpace && (
             <Box shrink="No" alignItems="Center" justifyContent="Center">
               <Badge variant="Secondary" fill="Soft" size="400" radii="300">
-                <Text size="L400">Space</Text>
+                <Text size="L400">Canopy</Text>
               </Badge>
             </Box>
           )}
@@ -450,7 +450,7 @@ function KnownInvites({
             <PageHero
               icon={<Icon size="600" src={Icons.Mail} />}
               title="No Invites"
-              subTitle="When someone you share a room with sends you an invite, it’ll show up here."
+              subTitle="When someone you share a den with sends you an invite, it’ll show up here."
             />
           </PageHeroSection>
         </PageHeroEmpty>
@@ -523,7 +523,7 @@ function UnknownInvites({
             <PageHero
               icon={<Icon size="600" src={Icons.Info} />}
               title="No Invites"
-              subTitle="Invites from people outside your rooms will appear here."
+              subTitle="Invites from people outside your dens will appear here."
             />
           </PageHeroSection>
         </PageHeroEmpty>

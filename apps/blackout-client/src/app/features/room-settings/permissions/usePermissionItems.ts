@@ -87,21 +87,21 @@ export const usePermissionGroups = (): PermissionGroup[] => {
     };
 
     const roomOverviewGroup: PermissionGroup = {
-      name: 'Room Overview',
+      name: 'Den Overview',
       items: [
         {
           location: {
             state: true,
             key: StateEvent.RoomAvatar,
           },
-          name: 'Room Avatar',
+          name: 'Den Avatar',
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomName,
           },
-          name: 'Room Name',
+          name: 'Den Name',
         },
         {
           location: {

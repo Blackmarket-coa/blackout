@@ -72,7 +72,7 @@ export default function DeepDiveTab() {
           <View style={styles.metaItem}>
             <Users size={14} color={colors.textSecondary} />
             <Text style={styles.metaText}>
-              {currentRoom.memberCount} members
+              {currentRoom.memberCount} shadows
             </Text>
           </View>
           {currentRoom.worldReadable && (

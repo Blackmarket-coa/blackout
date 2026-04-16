@@ -129,8 +129,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Room ID"
-                      description={`Copy room ID to clipboard. ("${room.roomId}")`}
+                      title="Den ID"
+                      description={`Copy den ID to clipboard. ("${room.roomId}")`}
                       after={
                         <Button
                           onClick={() => copyToClipboard(room.roomId ?? '<NO_ROOM_ID_FOUND>')}
@@ -160,7 +160,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   >
                     <SettingTile
                       title="New Message Event"
-                      description="Create and send a new message event within the room."
+                      description="Create and send a new message event within the den."
                       after={
                         <Button
                           onClick={() => setComposeEvent({})}
@@ -182,8 +182,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                     gap="400"
                   >
                     <SettingTile
-                      title="Room State"
-                      description="State events of the room."
+                      title="Den State"
+                      description="State events of the den."
                       after={
                         <Button
                           onClick={() => setExpandState(!expandState)}
@@ -320,7 +320,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   >
                     <SettingTile
                       title="Account Data"
-                      description="Private personalization data stored within room."
+                      description="Private personalization data stored within den."
                       after={
                         <Button
                           onClick={() => setExpandAccountData(!expandAccountData)}

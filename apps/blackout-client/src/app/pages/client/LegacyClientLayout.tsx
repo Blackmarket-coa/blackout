@@ -379,21 +379,21 @@ export const ClientLayout = () => {
             try {
                 await client.leave(selectedRoomId);
                 setSelectedRoomId(null);
-                setComposerCommandStatus(`Left room ${selectedRoomId}.`);
+                setComposerCommandStatus(`Left den ${selectedRoomId}.`);
             } catch (error) {
                 setComposerCommandStatus(
                     error instanceof Error
-                        ? `Failed to leave room: ${error.message}`
-                        : 'Failed to leave room.'
+                        ? `Failed to leave den: ${error.message}`
+                        : 'Failed to leave den.'
                 );
             }
             return;
         }
 
         if (command === '/join') {
-            const roomAlias = window.prompt('Enter room alias or room ID to join');
+            const roomAlias = window.prompt('Enter den alias or den ID to join');
             if (!roomAlias?.trim()) {
-                setComposerCommandStatus('Join cancelled: room alias is required.');
+                setComposerCommandStatus('Join cancelled: den alias is required.');
                 return;
             }
             try {
@@ -404,8 +404,8 @@ export const ClientLayout = () => {
             } catch (error) {
                 setComposerCommandStatus(
                     error instanceof Error
-                        ? `Failed to join room: ${error.message}`
-                        : 'Failed to join room.'
+                        ? `Failed to join den: ${error.message}`
+                        : 'Failed to join den.'
                 );
             }
             return;
@@ -1319,10 +1319,10 @@ export const ClientLayout = () => {
                                     }}
                                 >
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Room organization
+                                        Den organization
                                     </span>
                                     <select
-                                        aria-label="Room organization"
+                                        aria-label="Den organization"
                                         value={settings.mobileRoomListScope ?? 'space'}
                                         onChange={(event) =>
                                             setSettings((prev) => ({
@@ -1339,8 +1339,8 @@ export const ClientLayout = () => {
                                             color: 'var(--text-primary)',
                                         }}
                                     >
-                                        <option value="space">Current space</option>
-                                        <option value="all">All rooms</option>
+                                        <option value="space">Current canopy</option>
+                                        <option value="all">All dens</option>
                                     </select>
                                 </div>
                             </section>
@@ -1458,7 +1458,7 @@ export const ClientLayout = () => {
                 <>
                     <div
                         role="separator"
-                        aria-label="Resize space sidebar"
+                        aria-label="Resize canopy sidebar"
                         style={{
                             position: 'fixed',
                             left: layout.spaceColumnWidth - 2,
@@ -1490,7 +1490,7 @@ export const ClientLayout = () => {
                     />
                     <div
                         role="separator"
-                        aria-label="Resize room sidebar"
+                        aria-label="Resize den sidebar"
                         style={{
                             position: 'fixed',
                             left: layout.spaceColumnWidth + layout.roomColumnWidth - 2,

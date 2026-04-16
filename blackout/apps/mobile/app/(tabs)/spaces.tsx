@@ -4,9 +4,9 @@ import { colors, spacing, typography } from "@blackout/config";
 export default function SpacesTab() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Spaces</Text>
+      <Text style={styles.title}>Canopies</Text>
       <Text style={styles.subtitle}>
-        Community spaces and cooperative groups will appear here.
+        Community canopies and cooperative groups will appear here.
       </Text>
     </View>
   );

@@ -32,12 +32,12 @@ export function renderGovernanceRoomPanel({
     <section class="governance-room" data-testid="governance-room-panel" data-channel-id="${channelId}">
       <header class="governance-room-header">
         <div>
-          <h2>Governance Room · ${channelLabel}</h2>
+          <h2>Governance Den · ${channelLabel}</h2>
           <p class="meta">Feed, proposals, and task board workflows for coalition decision-making. Create a proposal, cast votes, and read outcomes from Results.</p>
         </div>
         <button type="button" class="ghost-btn" data-action="governance-open-proposal" ${canPropose ? "" : "disabled aria-disabled='true'"} title="${canPropose ? "Create a new governance proposal" : "Proposal creation is currently unavailable"}">+ New Proposal</button>
       </header>
-      <nav class="governance-tabs" aria-label="Governance room tabs" role="tablist">
+      <nav class="governance-tabs" aria-label="Governance den tabs" role="tablist">
         <button type="button" role="tab" aria-selected="${activeTab === "feed"}" aria-controls="governance-panel-feed" id="governance-tab-feed" class="${activeTab === "feed" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="feed">Decision feed</button>
         <button type="button" role="tab" aria-selected="${activeTab === "proposals"}" aria-controls="governance-panel-proposals" id="governance-tab-proposals" class="${activeTab === "proposals" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="proposals">Proposal board</button>
         <button type="button" role="tab" aria-selected="${activeTab === "taskboard"}" aria-controls="governance-panel-taskboard" id="governance-tab-taskboard" class="${activeTab === "taskboard" ? "is-active" : ""}" data-action="governance-set-tab" data-tab="taskboard">Execution tasks</button>

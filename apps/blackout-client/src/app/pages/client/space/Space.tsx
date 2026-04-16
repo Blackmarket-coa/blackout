@@ -194,7 +194,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Space Settings
+            Canopy Settings
           </Text>
         </MenuItem>
         {developerTools && (
@@ -225,7 +225,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
                 aria-pressed={promptLeave}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Leave Space
+                  Leave Canopy
                 </Text>
               </MenuItem>
               {promptLeave && (
@@ -338,11 +338,11 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
       gap="300"
     >
       <Box direction="Column" grow="Yes" gap="100">
-        <Text size="L400">Space Upgraded</Text>
-        <Text size="T200">This space has been replaced and is no longer active.</Text>
+        <Text size="L400">Canopy Upgraded</Text>
+        <Text size="T200">This canopy has been replaced and is no longer active.</Text>
         {joinState.status === AsyncStatus.Error && (
           <Text className={BreakWord} style={{ color: color.Critical.Main }} size="T200">
-            {(joinState.error as any)?.message ?? 'Failed to join replacement space!'}
+            {(joinState.error as any)?.message ?? 'Failed to join replacement canopy!'}
           </Text>
         )}
       </Box>
@@ -350,7 +350,7 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
         {replacementRoom?.getMyMembership() === Membership.Join ||
         joinState.status === AsyncStatus.Success ? (
           <Button onClick={handleOpen} size="300" variant="Success" fill="Solid" radii="300">
-            <Text size="B300">Open New Space</Text>
+            <Text size="B300">Open New Canopy</Text>
           </Button>
         ) : (
           <Button
@@ -366,7 +366,7 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
             }
             disabled={joinState.status === AsyncStatus.Loading}
           >
-            <Text size="B300">Join New Space</Text>
+            <Text size="B300">Join New Canopy</Text>
           </Button>
         )}
       </Box>

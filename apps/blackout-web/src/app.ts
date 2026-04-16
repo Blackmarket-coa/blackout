@@ -194,8 +194,8 @@ export class BlackoutWebApp {
     },
     room_action: {
       icon: "💬",
-      label: "Room actions",
-      firstUseTooltip: "Context actions for channels, threads, and room workflows.",
+      label: "Den actions",
+      firstUseTooltip: "Context actions for channels, threads, and den workflows.",
     },
     widget_panel: {
       icon: "🧩",
@@ -935,7 +935,7 @@ export class BlackoutWebApp {
     const dmChannels = getDirectMessageChannels(state.channels, state.unreadByChannel);
     const quickLinks = `
       <li class="dm-hub-shell">
-      <section class="dm-hub-card" aria-label="Direct message hub">
+      <section class="dm-hub-card" aria-label="Locked in hub">
         <button type="button" class="dm-hub-search" data-action="start-dm-channel" aria-label="Find or start a secure conversation">Find or start a secure conversation</button>
         <div class="dm-hub-list" role="list">
           <button type="button" class="dm-hub-item" data-action="dm-open-friends" role="listitem">
@@ -984,8 +984,8 @@ export class BlackoutWebApp {
 
     const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM channel with names like "dm-alex", "pm-sam", or "@alex:matrix.org".</p></div></li>';
     return this.renderWorkspaceUtilityPage(
-      "Direct messages",
-      "A focused panel for quick DM access.",
+      "Locked In",
+      "A focused panel for quick locked in access.",
       `${quickLinks}${starter}${items || fallback}`,
     );
   }
@@ -1529,7 +1529,7 @@ export class BlackoutWebApp {
   private renderUpgradePromptSection(): string {
     const prompts = [
       { trigger: "Select advanced steg codec", location: "Stego panel dropdown", plan: "Signal" },
-      { trigger: "Open Governance room tab", location: "Room header tabs", plan: "Coalition" },
+      { trigger: "Open Governance den tab", location: "Den header tabs", plan: "Coalition" },
       { trigger: "Start Townhall mode", location: "Call modal", plan: "Sovereign" },
       { trigger: "Enable federation dashboard", location: "Admin federation tab", plan: "Sovereign + add-on" },
     ];

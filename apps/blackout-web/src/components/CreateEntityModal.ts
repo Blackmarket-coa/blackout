@@ -9,7 +9,7 @@ interface CreateEntityModalProps {
 
 export function renderCreateEntityModal({ mode, value, error, busy }: CreateEntityModalProps): string {
   const isServer = mode === "server";
-  const title = isServer ? "Create server" : "Create channel";
+  const title = isServer ? "Create root" : "Create den";
   const placeholder = isServer ? "e.g. Product Ops" : "e.g. release-planning";
 
   return `

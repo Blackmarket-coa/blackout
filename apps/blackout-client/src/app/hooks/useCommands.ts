@@ -201,7 +201,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.StartDm]: {
         name: Command.StartDm,
-        description: 'Start direct message with user. Example: /startdm userId1',
+        description: 'Start locked in chat with user. Example: /startdm userId1',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id) && id !== mx.getSafeUserId());
@@ -400,7 +400,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToDm]: {
         name: Command.ConvertToDm,
-        description: 'Convert room to direct message',
+        description: 'Convert den to locked in',
         exe: async () => {
           const dmUserId = guessDmRoomUserId(room, mx.getSafeUserId());
           await addRoomIdToMDirect(mx, room.roomId, dmUserId);
@@ -408,7 +408,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToRoom]: {
         name: Command.ConvertToRoom,
-        description: 'Convert direct message to room',
+        description: 'Convert locked in to den',
         exe: async () => {
           await removeRoomIdFromMDirect(mx, room.roomId);
         },
