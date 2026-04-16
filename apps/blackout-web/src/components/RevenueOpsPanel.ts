@@ -1,3 +1,5 @@
+import { BLACKOUT_THEMES, type BlackoutThemeId } from "@blackout/core";
+
 export type RevenueOpsTab = "monetization" | "quests" | "marketplace" | "apps";
 export type QuestStage = "open" | "claimed" | "submitted" | "approved";
 export type FunnelFamily = "stego" | "governance";
@@ -17,6 +19,7 @@ interface RevenueOpsPanelProps {
   questStage: QuestStage;
   installedApps: number;
   funnelMetrics: RevenueFunnelMetric[];
+  selectedTheme: BlackoutThemeId;
 }
 
 function conversionRate(metric: RevenueFunnelMetric): string {
@@ -24,7 +27,15 @@ function conversionRate(metric: RevenueFunnelMetric): string {
   return `${Math.round((metric.conversions / metric.upgradeClicks) * 100)}%`;
 }
 
-export function renderRevenueOpsPanel({ activeTab, paymentSheetOpen, paymentIssue, questStage, installedApps, funnelMetrics }: RevenueOpsPanelProps): string {
+export function renderRevenueOpsPanel({
+  activeTab,
+  paymentSheetOpen,
+  paymentIssue,
+  questStage,
+  installedApps,
+  funnelMetrics,
+  selectedTheme,
+}: RevenueOpsPanelProps): string {
   return `
     <section class="stack panel-card revenue-ops-panel" data-testid="revenue-ops-panel">
       <h2>Revenue & Marketplace Ops</h2>
@@ -66,6 +77,15 @@ export function renderRevenueOpsPanel({ activeTab, paymentSheetOpen, paymentIssu
               </tbody>
             </table>
           </div>
+        </article>
+        <article class="ops-card" data-testid="revenue-theme-bundles">
+          <strong>BMC theme bundles</strong>
+          <p class="meta">Current theme: <span data-testid="revenue-current-theme">${selectedTheme}</span></p>
+          <p class="meta">Monetize premium appearance packs without fragmenting the core monetization module.</p>
+          <div class="ops-actions">
+            <button type="button" data-action="theme-bundle-open-catalog">Open theme catalog</button>
+          </div>
+          <p class="meta">${BLACKOUT_THEMES.map((theme) => theme.label).join(" · ")}</p>
         </article>
       ` : ""}
       ${activeTab === "quests" ? `

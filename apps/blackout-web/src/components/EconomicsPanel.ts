@@ -1,11 +1,14 @@
+import { BLACKOUT_THEMES, type BlackoutThemeId } from "@blackout/core";
+
 export type EconomicsTab = "boosts" | "subscriptions" | "quests" | "marketplace";
 
 interface EconomicsPanelProps {
   channelLabel: string;
   activeTab: EconomicsTab;
+  selectedTheme: BlackoutThemeId;
 }
 
-export function renderEconomicsPanel({ channelLabel, activeTab }: EconomicsPanelProps): string {
+export function renderEconomicsPanel({ channelLabel, activeTab, selectedTheme }: EconomicsPanelProps): string {
   return `
     <section class="economics-panel" data-testid="economics-panel">
       <header class="economics-panel-header">
@@ -22,6 +25,7 @@ export function renderEconomicsPanel({ channelLabel, activeTab }: EconomicsPanel
       ${activeTab === "subscriptions" ? renderSubscriptionsDashboard() : ""}
       ${activeTab === "quests" ? renderQuestBoard() : ""}
       ${activeTab === "marketplace" ? renderMarketplaceBridge() : ""}
+      ${renderThemeCommerceStrip(selectedTheme)}
     </section>
   `;
 }
@@ -62,6 +66,25 @@ function renderMarketplaceBridge(): string {
       <article class="economics-card"><h3>Product card</h3><p class="meta">Mesh monitoring template · $29 · Buy now</p></article>
       <article class="economics-card"><h3>Seller tools</h3><p class="meta">Inventory manager, payouts, encrypted delivery links</p></article>
       <article class="economics-card"><h3>Room policy</h3><p class="meta">Marketplace enabled for trusted seller role only.</p></article>
+    </section>
+  `;
+}
+
+function renderThemeCommerceStrip(selectedTheme: BlackoutThemeId): string {
+  return `
+    <section class="economics-grid" data-testid="economics-themes-view">
+      <article class="economics-card">
+        <h3>BMC Theme Packs</h3>
+        <p class="meta">Current workspace theme: <strong>${selectedTheme}</strong></p>
+      </article>
+      <article class="economics-card">
+        <h3>Included themes</h3>
+        <p class="meta">${BLACKOUT_THEMES.map((theme) => theme.label).join(" · ")}</p>
+      </article>
+      <article class="economics-card">
+        <h3>Theme commerce rail</h3>
+        <p class="meta">Bundle premium room cosmetics with theme presets for paid communities.</p>
+      </article>
     </section>
   `;
 }

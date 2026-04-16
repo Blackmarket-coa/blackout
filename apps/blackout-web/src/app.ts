@@ -715,6 +715,7 @@ export class BlackoutWebApp {
       return renderEconomicsPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeEconomicsTab,
+        selectedTheme: this.selectedTheme,
       });
     }
 
@@ -1485,6 +1486,7 @@ export class BlackoutWebApp {
           <span>Self-Healing ($19/mo)</span>
           <span>Steg Voting Compliance ($49/mo)</span>
           <span>Bounty Payroll ($9/mo)</span>
+          <span>BMC Theme Packs ($4.99/mo)</span>
         </div>
       </section>
     `;
@@ -1632,6 +1634,7 @@ export class BlackoutWebApp {
       questStage: this.questStage,
       installedApps: this.installedApps,
       funnelMetrics: this.revenueFunnelMetrics,
+      selectedTheme: this.selectedTheme,
     });
   }
 
@@ -2134,6 +2137,12 @@ export class BlackoutWebApp {
     });
     this.root.querySelector<HTMLButtonElement>("[data-action='revenue-toggle-payment-issue']")?.addEventListener("click", () => {
       this.paymentIssue = !this.paymentIssue;
+      this.render();
+    });
+    this.root.querySelector<HTMLButtonElement>("[data-action='theme-bundle-open-catalog']")?.addEventListener("click", () => {
+      this.settingsOpen = true;
+      this.activeSettingsPage = "appearance";
+      this.featureActionResult = "Opened BMC theme catalog in Appearance settings.";
       this.render();
     });
 
