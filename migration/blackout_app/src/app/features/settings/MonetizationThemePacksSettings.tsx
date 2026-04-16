@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { monetizationThemePacksSettingsAtom } from './settingsAtoms';
-import { trackSettingsInteraction } from './settingsTelemetry';
+import { getMonetizationRouteMetadata } from './monetizationTelemetry';
+import { trackMonetizationTelemetry, trackSettingsInteraction } from './settingsTelemetry';
 
 const MonetizationThemePacksSettings = () => {
     const [settings, setSettings] = useAtom(monetizationThemePacksSettingsAtom);
+
+    useEffect(() => {
+        const route = getMonetizationRouteMetadata('monetization-theme-packs');
+        trackMonetizationTelemetry({ name: 'monetization_theme_bundle_catalog_view', route, bundleScope: 'featured' });
+        trackMonetizationTelemetry({ name: 'monetization_theme_bundle_open', route, bundleScope: 'featured' });
+    }, []);
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>

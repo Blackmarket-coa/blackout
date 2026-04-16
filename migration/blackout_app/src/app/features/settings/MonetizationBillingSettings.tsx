@@ -1,9 +1,19 @@
+import { useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { monetizationBillingSettingsAtom } from './settingsAtoms';
-import { trackSettingsInteraction } from './settingsTelemetry';
+import { getMonetizationRouteMetadata } from './monetizationTelemetry';
+import { trackMonetizationTelemetry, trackSettingsInteraction } from './settingsTelemetry';
 
 const MonetizationBillingSettings = () => {
     const [settings, setSettings] = useAtom(monetizationBillingSettingsAtom);
+
+    useEffect(() => {
+        const route = getMonetizationRouteMetadata('monetization-billing');
+        trackMonetizationTelemetry({ name: 'monetization_checkout_open', route, checkoutSurface: 'settings' });
+        return () => {
+            trackMonetizationTelemetry({ name: 'monetization_checkout_close', route, checkoutSurface: 'settings' });
+        };
+    }, []);
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>
