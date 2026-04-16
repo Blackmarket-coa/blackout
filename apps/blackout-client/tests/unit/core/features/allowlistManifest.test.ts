@@ -10,11 +10,21 @@ import {
 
 describe('feature allowlist manifest', () => {
     it('exposes stable feature module IDs for registry composition', () => {
-        expect(featureModuleManifest).toEqual(['governance', 'forum', 'deaddrop', 'moderation']);
+        expect(featureModuleManifest).toEqual([
+            'governance',
+            'forum',
+            'deaddrop',
+            'moderation',
+            'monetization',
+        ]);
     });
 
     it('exposes stable feature module plugin IDs for deterministic ordering', () => {
-        expect(featureModulePluginManifest).toEqual(['plugin.alpha', 'plugin.beta']);
+        expect(featureModulePluginManifest).toEqual([
+            'plugin.alpha',
+            'plugin.beta',
+            'plugin.monetization',
+        ]);
     });
 
     it('accepts known feature module IDs', () => {
