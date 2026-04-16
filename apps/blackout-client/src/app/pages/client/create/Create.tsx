@@ -23,8 +23,8 @@ export function Create() {
                 <Box direction="Column" gap="700">
                   <PageHero
                     icon={<Icon size="600" src={Icons.Space} />}
-                    title="Create Space"
-                    subTitle="Build a space for your community."
+                    title="Create Canopy"
+                    subTitle="Build a canopy for your community."
                   />
                   <CreateSpaceForm onCreate={navigateSpace} />
                 </Box>
