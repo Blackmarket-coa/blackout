@@ -44,7 +44,10 @@ const COMMANDS = [
 const CATEGORY_LABELS: Record<BaseResult['category'], string> = {
     Rooms: 'Dens',
     Spaces: 'Canopies',
-    Users: 'Users',
+    DMs: 'DMs',
+    Members: 'Shadows',
+    Settings: 'Settings',
+    Actions: 'Actions',
     Commands: 'Commands',
 };
 const SETTINGS_ROUTES: Array<Pick<BaseResult, 'id' | 'title' | 'subtitle' | 'route' | 'keywords' | 'hint'>> = [
