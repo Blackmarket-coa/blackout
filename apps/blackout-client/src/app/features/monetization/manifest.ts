@@ -1,29 +1,95 @@
 import type { BlackoutFeature } from '../../core/features/types';
 import { monetizationNavItems } from './nav';
-import { monetizationRoutes } from './routes';
+import {
+    monetizationBoostsGate,
+    monetizationCapabilityCatalog,
+    monetizationMarketplaceGate,
+    monetizationOverviewGate,
+    monetizationPayoutsAnalyticsGate,
+    monetizationQuestsGate,
+    monetizationSubscriptionsGate,
+    monetizationThemePacksGate,
+} from './gates';
+import {
+    monetizationAppMarketplaceRoutes,
+    monetizationBoostsRoutes,
+    monetizationMarketplaceRoutes,
+    monetizationOverviewRoutes,
+    monetizationPayoutsRevenueAnalyticsRoutes,
+    monetizationQuestsRoutes,
+    monetizationSubscriptionsRoutes,
+    monetizationThemePacksRoutes,
+} from './routes';
 
 export const monetizationFeature: BlackoutFeature = {
     id: 'monetization',
     name: 'Monetization',
     customizations: [
         {
-            id: 'monetization-suite',
-            name: 'Monetization Suite',
+            id: 'monetization-suite-overview',
+            name: 'Monetization Suite Overview',
             category: 'service-backed plugin',
-            capabilityGate: {
-                flags: ['monetization'],
-            },
-            routes: monetizationRoutes,
+            capabilityGate: monetizationOverviewGate,
+            routes: monetizationOverviewRoutes,
             navItems: monetizationNavItems,
             settings: [],
         },
+        {
+            id: 'monetization-suite-subscriptions',
+            name: 'Monetization Suite Subscriptions',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationSubscriptionsGate,
+            routes: monetizationSubscriptionsRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-boosts',
+            name: 'Monetization Suite Boosts',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationBoostsGate,
+            routes: monetizationBoostsRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-quests',
+            name: 'Monetization Suite Quests',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationQuestsGate,
+            routes: monetizationQuestsRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-marketplace',
+            name: 'Monetization Suite Marketplace',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationMarketplaceGate,
+            routes: monetizationMarketplaceRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-app-marketplace',
+            name: 'Monetization Suite App Marketplace',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationMarketplaceGate,
+            routes: monetizationAppMarketplaceRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-payouts-analytics',
+            name: 'Monetization Suite Payouts and Revenue Analytics',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationPayoutsAnalyticsGate,
+            routes: monetizationPayoutsRevenueAnalyticsRoutes,
+            settings: [],
+        },
+        {
+            id: 'monetization-suite-theme-packs',
+            name: 'Monetization Suite Theme Packs',
+            category: 'service-backed plugin',
+            capabilityGate: monetizationThemePacksGate,
+            routes: monetizationThemePacksRoutes,
+            settings: [],
+        },
     ],
-    capabilities: [
-        'monetization.subscriptions',
-        'monetization.boosts',
-        'monetization.marketplace',
-        'monetization.quests',
-        'monetization.payouts',
-        'monetization.analytics',
-    ],
+    capabilities: [...monetizationCapabilityCatalog],
 };
