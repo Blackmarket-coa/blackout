@@ -4,6 +4,7 @@ import { themePreviews } from '../../settings/theme-previews';
 import { appearanceSettingsAtom } from '../../settings/settingsAtoms';
 import { BLACKOUT_THEMES } from '../../../plugins/theme/themeCatalog';
 import { themeTokenMap } from '../../../styles/theme-engine';
+import { monetizationThemeBundleAppearanceCtaPath } from './themeBundleCta';
 
 const previewById = new Map(themePreviews.map((preview) => [preview.value, preview]));
 
@@ -17,6 +18,18 @@ export const ThemesSlice = () => {
             'p',
             { style: { margin: 0, color: 'var(--text-secondary)' } },
             `BMC theme bundles are linked to the shared theme catalog and current appearance state (active: ${appearance.theme}).`,
+        ),
+        createElement(
+            'a',
+            {
+                href: monetizationThemeBundleAppearanceCtaPath,
+                style: {
+                    color: 'var(--accent-primary)',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                },
+            },
+            'Open appearance settings',
         ),
         createElement(
             'div',
