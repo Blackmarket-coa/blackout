@@ -6,6 +6,13 @@ export type FeatureFlags = {
     deaddrop: boolean;
     steganography: boolean;
     moderation: boolean;
+    monetization: boolean;
+    monetizationSubscriptions: boolean;
+    monetizationBoosts: boolean;
+    monetizationMarketplace: boolean;
+    monetizationQuests: boolean;
+    monetizationPayouts: boolean;
+    monetizationAnalytics: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -24,6 +31,13 @@ export const defaultFeatureFlags: FeatureFlags = {
     deaddrop: true,
     steganography: true,
     moderation: false,
+    monetization: false,
+    monetizationSubscriptions: false,
+    monetizationBoosts: false,
+    monetizationMarketplace: false,
+    monetizationQuests: false,
+    monetizationPayouts: false,
+    monetizationAnalytics: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,

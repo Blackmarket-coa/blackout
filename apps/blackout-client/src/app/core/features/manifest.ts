@@ -6,14 +6,14 @@
  * - then wire modules/plugins,
  * - then update CI/docs/tests.
  */
-export const featureModuleManifest = ['governance', 'forum', 'deaddrop', 'moderation'] as const;
+export const featureModuleManifest = ['governance', 'forum', 'deaddrop', 'moderation', 'monetization'] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
 
 /**
  * Feature-module plugin allowlist. Order in this manifest is canonical runtime order.
  */
-export const featureModulePluginManifest = ['plugin.alpha', 'plugin.beta'] as const;
+export const featureModulePluginManifest = ['plugin.alpha', 'plugin.beta', 'plugin.monetization'] as const;
 
 export type FeatureModulePluginId = typeof featureModulePluginManifest[number];
 
