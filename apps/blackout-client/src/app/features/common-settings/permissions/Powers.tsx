@@ -128,7 +128,7 @@ export function Powers({ powerLevels, permissionGroups, onEdit }: PowersProps) {
         >
           <SettingTile
             title="Founders"
-            description="Founding members has all permissions and can only be changed during upgrade."
+            description="Founding shadows have all permissions and can only be changed during upgrade."
           />
 
           <SettingTile>

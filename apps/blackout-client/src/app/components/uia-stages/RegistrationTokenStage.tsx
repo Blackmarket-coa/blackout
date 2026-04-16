@@ -106,7 +106,7 @@ export function RegistrationTokenStageDialog({
       <RegistrationTokenErrorDialog
         defaultToken={token}
         title="Registration Token"
-        message="Please submit registration token provided by you homeserver admin."
+        message="Please submit registration token provided by your root admin."
         onRetry={handleSubmit}
         onCancel={onCancel}
       />

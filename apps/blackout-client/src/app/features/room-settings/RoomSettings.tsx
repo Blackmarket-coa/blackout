@@ -34,7 +34,7 @@ const useRoomSettingsMenuItems = (): RoomSettingsMenuItem[] =>
       },
       {
         page: RoomSettingsPage.MembersPage,
-        name: 'Members',
+        name: 'Shadows',
         icon: Icons.User,
       },
       {

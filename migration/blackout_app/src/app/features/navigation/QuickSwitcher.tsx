@@ -21,13 +21,13 @@ interface QuickSwitcherProps {
 }
 
 const COMMANDS = [
-    { cmd: '/invite', desc: 'Invite a user to this room' },
-    { cmd: '/topic', desc: 'Set the room topic' },
+    { cmd: '/invite', desc: 'Invite a user to this den' },
+    { cmd: '/topic', desc: 'Set the den topic' },
     { cmd: '/nick', desc: 'Set your display name' },
     { cmd: '/me', desc: 'Send emote-style message' },
     { cmd: '/shrug', desc: 'Append ¯\\_(ツ)_/¯' },
-    { cmd: '/leave', desc: 'Leave the current room' },
-    { cmd: '/join', desc: 'Join by room alias' },
+    { cmd: '/leave', desc: 'Leave the current den' },
+    { cmd: '/join', desc: 'Join by den alias' },
 ];
 
 const fuzzyIncludes = (text: string, query: string): boolean => {

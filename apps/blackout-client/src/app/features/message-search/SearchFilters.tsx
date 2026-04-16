@@ -238,8 +238,8 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
                     paddingRight: 0,
                   }}
                 >
-                  {!searchResult && <Text size="L400">Rooms</Text>}
-                  {searchResult && <Text size="L400">{`Rooms for "${searchResult.query}"`}</Text>}
+                  {!searchResult && <Text size="L400">Dens</Text>}
+                  {searchResult && <Text size="L400">{`Dens for "${searchResult.query}"`}</Text>}
                   {searchResult && searchResult.items.length === 0 && (
                     <Text style={{ padding: config.space.S400 }} size="T300" align="Center">
                       No match found!

@@ -252,7 +252,7 @@ export const RoomCard = as<'div', RoomCardProps>(
         {typeof joinedMemberCount === 'number' && (
           <Box gap="100">
             <Icon size="50" src={Icons.User} />
-            <Text size="T200">{`${millify(joinedMemberCount)} Members`}</Text>
+            <Text size="T200">{`${millify(joinedMemberCount)} Shadows`}</Text>
           </Box>
         )}
         {typeof joinedRoomId === 'string' && (

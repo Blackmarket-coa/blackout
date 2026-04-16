@@ -299,13 +299,11 @@ const resolveStateCopy = (event: MatrixEvent, room: Room | null): string => {
             return `${sender} ${membership}`;
         }
         case 'm.room.name':
-            return `Room name changed to “${
-                typeof content.name === 'string' ? content.name : 'Unknown'
-            }”`;
+            return `Den name changed to “${typeof content.name === 'string' ? content.name : 'Unknown'}”`;
         case 'm.room.topic':
             return `Topic changed: ${typeof content.topic === 'string' ? content.topic : ''}`;
         case 'm.room.avatar':
-            return `${sender} changed the room avatar`;
+            return `${sender} changed the den avatar`;
         case 'm.room.encryption':
             return 'Encryption is now enabled';
         default:

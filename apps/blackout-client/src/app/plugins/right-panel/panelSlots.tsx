@@ -350,7 +350,7 @@ const SearchPanel: RightPanelSlotRenderer = ({ events, onJumpToEvent }) => {
             <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search this room"
+                placeholder="Search this den"
                 style={{
                     border: '1px solid var(--border-default)',
                     borderRadius: 8,
@@ -361,7 +361,7 @@ const SearchPanel: RightPanelSlotRenderer = ({ events, onJumpToEvent }) => {
             />
             {searchQuery.trim().length === 0 ? (
                 <small style={{ color: 'var(--text-secondary)' }}>
-                    Type to search room messages.
+                    Type to search den messages.
                 </small>
             ) : null}
             {searchResults.map((event, index) => (

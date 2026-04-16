@@ -57,7 +57,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="spaces"
         options={{
-          title: "Spaces",
+          title: "Canopies",
           tabBarIcon: ({ color, size }) => (
             <Users color={color} size={size} strokeWidth={2} />
           ),

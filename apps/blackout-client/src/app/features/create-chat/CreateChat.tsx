@@ -107,7 +107,7 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
         >
           <SettingTile
             title="End-to-End Encryption"
-            description="Once this feature is enabled, it can't be disabled after the room is created."
+            description="Once this feature is enabled, it can't be disabled after the den is created."
             after={
               <Switch
                 variant="Primary"

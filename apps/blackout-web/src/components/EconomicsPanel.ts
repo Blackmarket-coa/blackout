@@ -34,7 +34,7 @@ function renderBoostDashboard(): string {
   return `
     <section class="economics-grid" data-testid="economics-boosts-view">
       <article class="economics-card"><h3>Boost level</h3><p class="meta">Level 2 · 7/14 boosts to Level 3</p><progress max="14" value="7"></progress></article>
-      <article class="economics-card"><h3>Perks unlocked</h3><ul><li>256kbps voice</li><li>100MB uploads</li><li>Animated Space icon</li></ul></article>
+      <article class="economics-card"><h3>Perks unlocked</h3><ul><li>256kbps voice</li><li>100MB uploads</li><li>Animated Canopy icon</li></ul></article>
       <article class="economics-card"><h3>Current boosters</h3><p class="meta">@lina · @ops · @finance · @mesh</p></article>
     </section>
   `;
@@ -44,8 +44,8 @@ function renderSubscriptionsDashboard(): string {
   return `
     <section class="economics-grid" data-testid="economics-subscriptions-view">
       <article class="economics-card"><h3>Tier builder</h3><p class="meta">Supporter $5 · Member+ $12 · Patron $25</p></article>
-      <article class="economics-card"><h3>Gated rooms</h3><p class="meta">#insiders, #strategy, #townhall-recordings</p></article>
-      <article class="economics-card"><h3>Paywall preview</h3><p class="meta">Branded card with room list + subscribe CTA.</p></article>
+      <article class="economics-card"><h3>Gated dens</h3><p class="meta">#insiders, #strategy, #townhall-recordings</p></article>
+      <article class="economics-card"><h3>Paywall preview</h3><p class="meta">Branded card with den list + subscribe CTA.</p></article>
     </section>
   `;
 }
@@ -65,7 +65,7 @@ function renderMarketplaceBridge(): string {
     <section class="economics-grid" data-testid="economics-marketplace-view">
       <article class="economics-card"><h3>Product card</h3><p class="meta">Mesh monitoring template · $29 · Buy now</p></article>
       <article class="economics-card"><h3>Seller tools</h3><p class="meta">Inventory manager, payouts, encrypted delivery links</p></article>
-      <article class="economics-card"><h3>Room policy</h3><p class="meta">Marketplace enabled for trusted seller role only.</p></article>
+      <article class="economics-card"><h3>Den policy</h3><p class="meta">Marketplace enabled for trusted seller role only.</p></article>
     </section>
   `;
 }

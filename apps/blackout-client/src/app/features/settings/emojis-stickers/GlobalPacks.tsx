@@ -429,7 +429,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         >
           <SettingTile
             title="Select Pack"
-            description="Pick emojis and stickers pack from rooms to use in all rooms."
+            description="Pick emojis and stickers pack from dens to use in all dens."
             after={
               <>
                 <Button

@@ -70,8 +70,8 @@ function MemberDrawerHeader({ room }: MemberDrawerHeaderProps) {
     <Header className={css.MembersDrawerHeader} variant="Background" size="600">
       <Box grow="Yes" alignItems="Center" gap="200">
         <Box grow="Yes" alignItems="Center" gap="200">
-          <Text title={`${room.getJoinedMemberCount()} Members`} size="H5" truncate>
-            {`${millify(room.getJoinedMemberCount())} Members`}
+          <Text title={`${room.getJoinedMemberCount()} Shadows`} size="H5" truncate>
+            {`${millify(room.getJoinedMemberCount())} Shadows`}
           </Text>
         </Box>
         <Box shrink="No" alignItems="Center">
@@ -372,7 +372,7 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
 
             {!fetchingMembers && !result && processMembers.length === 0 && (
               <Text style={{ padding: config.space.S300 }} align="Center">
-                {`No "${membershipFilter.name}" Members`}
+                {`No "${membershipFilter.name}" Shadows`}
               </Text>
             )}
 

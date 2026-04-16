@@ -7,12 +7,12 @@ export const WelcomeScreen = ({
     spaceId,
     onPickChannel,
     onJoinOrExplore,
-    actionLabel = 'Join Space',
+    actionLabel = 'Join Canopy',
 }: {
     spaceId: string;
     onPickChannel?: (roomId: string) => void;
     onJoinOrExplore?: () => void;
-    actionLabel?: 'Join Space' | 'Explore';
+    actionLabel?: 'Join Canopy' | 'Explore';
 }) => {
     const client = useMatrixClient();
     const welcome = useWelcomeContent(spaceId);

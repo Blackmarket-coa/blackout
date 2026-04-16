@@ -28,7 +28,7 @@ const normalizeAuthError = (error: unknown): MatrixInitError => {
         case 'M_LIMIT_EXCEEDED':
             return new MatrixInitError('rate_limited', 'Too many requests. Try again later.');
         case 'M_CAPTCHA_NEEDED':
-            return new MatrixInitError('captcha_required', 'CAPTCHA required by homeserver.');
+            return new MatrixInitError('captcha_required', 'CAPTCHA required by root.');
         default:
             if (error instanceof MatrixInitError) return error;
             return new MatrixInitError(

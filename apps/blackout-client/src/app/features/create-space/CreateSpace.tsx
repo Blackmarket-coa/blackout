@@ -211,7 +211,7 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
           >
             <SettingTile
               title="Knock to Join"
-              description="Anyone can send request to join this space."
+              description="Anyone can send request to join this canopy."
               after={
                 <Switch variant="Primary" value={knock} onChange={setKnock} disabled={disabled} />
               }

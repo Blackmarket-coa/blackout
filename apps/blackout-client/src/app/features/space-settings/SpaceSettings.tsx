@@ -34,7 +34,7 @@ const useSpaceSettingsMenuItems = (): SpaceSettingsMenuItem[] =>
       },
       {
         page: SpaceSettingsPage.MembersPage,
-        name: 'Members',
+        name: 'Shadows',
         icon: Icons.User,
       },
       {
