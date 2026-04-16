@@ -40,7 +40,7 @@ export function CreateTab() {
 
   return (
     <SidebarItem active={createSelected}>
-      <SidebarItemTooltip tooltip="Add Space">
+      <SidebarItemTooltip tooltip="Add Canopy">
         {(triggerRef) => (
           <PopOut
             anchor={menuCords}
@@ -73,9 +73,9 @@ export function CreateTab() {
                       onClick={handleCreateSpace}
                     >
                       <SettingTile before={<Icon size="400" src={Icons.Space} />}>
-                        <Text size="H6">Create Space</Text>
+                        <Text size="H6">Create Canopy</Text>
                         <Text size="T300" priority="300">
-                          Build a space for your community.
+                          Build a canopy for your community.
                         </Text>
                       </SettingTile>
                     </SequenceCard>
