@@ -1,4 +1,6 @@
 import type { BlackoutFeature } from '../../core/features/types';
+import { monetizationNavItems } from './nav';
+import { monetizationRoutes } from './routes';
 
 export const monetizationFeature: BlackoutFeature = {
     id: 'monetization',
@@ -11,8 +13,8 @@ export const monetizationFeature: BlackoutFeature = {
             capabilityGate: {
                 flags: ['monetization'],
             },
-            routes: [],
-            navItems: [],
+            routes: monetizationRoutes,
+            navItems: monetizationNavItems,
             settings: [],
         },
     ],
