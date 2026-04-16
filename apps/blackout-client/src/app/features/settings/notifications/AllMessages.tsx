@@ -126,7 +126,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Rooms"
+          title="Dens"
           after={<AllMessagesModeSwitcher pushRules={pushRules} ruleId={RuleId.Message} />}
         />
       </SequenceCard>
@@ -137,7 +137,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Rooms (Encrypted)"
+          title="Dens (Encrypted)"
           after={
             <AllMessagesModeSwitcher
               pushRules={pushRules}

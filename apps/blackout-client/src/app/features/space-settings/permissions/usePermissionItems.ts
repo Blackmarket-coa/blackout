@@ -12,7 +12,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.SpaceChild,
           },
-          name: 'Manage space rooms',
+          name: 'Manage canopy dens',
         },
         {
           location: {},
@@ -49,28 +49,28 @@ export const usePermissionGroups = (): PermissionGroup[] => {
     };
 
     const roomOverviewGroup: PermissionGroup = {
-      name: 'Space Overview',
+      name: 'Canopy Overview',
       items: [
         {
           location: {
             state: true,
             key: StateEvent.RoomAvatar,
           },
-          name: 'Space Avatar',
+          name: 'Canopy Avatar',
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomName,
           },
-          name: 'Space Name',
+          name: 'Canopy Name',
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomTopic,
           },
-          name: 'Space Topic',
+          name: 'Canopy Topic',
         },
       ],
     };
@@ -83,7 +83,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomJoinRules,
           },
-          name: 'Change Space Access',
+          name: 'Change Canopy Access',
         },
         {
           location: {
@@ -111,7 +111,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomTombstone,
           },
-          name: 'Upgrade Space',
+          name: 'Upgrade Canopy',
         },
         {
           location: {
@@ -137,7 +137,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomServerAcl,
           },
-          name: 'Change Server ACLs',
+          name: 'Change Root ACLs',
         },
       ],
     };

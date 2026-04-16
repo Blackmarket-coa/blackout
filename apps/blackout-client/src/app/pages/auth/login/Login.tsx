@@ -15,10 +15,6 @@ import { LoginPathSearchParams } from '../../paths';
 import { useClientConfig } from '../../../hooks/useClientConfig';
 
 const getLoginTokenSearchParam = () => {
-  // when using hasRouter query params in existing route
-  // gets ignored by react-router, so we need to read it ourself
-  // we only need to read loginToken as it's the only param that
-  // is provided by external entity. example: SSO login
   const parmas = new URLSearchParams(window.location.search);
   const loginToken = parmas.get('loginToken');
   return loginToken ?? undefined;
@@ -86,7 +82,7 @@ export function Login() {
       {!parsedFlows.password && !parsedFlows.sso && (
         <>
           <Text style={{ color: color.Critical.Main }}>
-            {`This client does not support login on "${server}" homeserver. Password and SSO based login method not found.`}
+            {`This client does not support login on "${server}" root. Password and SSO based login method not found.`}
           </Text>
           <span data-spacing-node />
         </>
