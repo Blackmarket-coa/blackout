@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { monetizationMarketplaceSettingsAtom } from './settingsAtoms';
-import { trackSettingsInteraction } from './settingsTelemetry';
+import { getMonetizationRouteMetadata } from './monetizationTelemetry';
+import { trackMonetizationTelemetry, trackSettingsInteraction } from './settingsTelemetry';
 
 const MonetizationMarketplaceSettings = () => {
     const [settings, setSettings] = useAtom(monetizationMarketplaceSettingsAtom);
+
+    useEffect(() => {
+        const route = getMonetizationRouteMetadata('monetization-marketplace');
+        trackMonetizationTelemetry({ name: 'monetization_marketplace_listing_view', route, listingScope: 'featured' });
+        trackMonetizationTelemetry({ name: 'monetization_marketplace_open', route, listingScope: 'featured' });
+    }, []);
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>

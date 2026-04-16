@@ -1,3 +1,8 @@
+import {
+    toSafeMonetizationTelemetryEvent,
+    type MonetizationTelemetryEvent,
+} from './monetizationTelemetry';
+
 export type SettingsStorageOperation = 'get' | 'set' | 'remove';
 
 export type SettingsTelemetryEvent =
@@ -25,7 +30,9 @@ export type SettingsTelemetryEvent =
           reason: string;
       };
 
-const emitTelemetry = (event: SettingsTelemetryEvent) => {
+export type BlackoutTelemetryEvent = SettingsTelemetryEvent | MonetizationTelemetryEvent;
+
+const emitTelemetry = (event: BlackoutTelemetryEvent) => {
     if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('blackout:telemetry', { detail: event }));
     }
@@ -62,4 +69,13 @@ export const trackSettingsSaveFailure = (
         operation,
         reason: error instanceof Error ? error.message : String(error),
     });
+};
+
+export const trackMonetizationTelemetry = (event: MonetizationTelemetryEvent) => {
+    const safeEvent = toSafeMonetizationTelemetryEvent(event);
+    if (!safeEvent) {
+        return;
+    }
+
+    emitTelemetry(safeEvent);
 };

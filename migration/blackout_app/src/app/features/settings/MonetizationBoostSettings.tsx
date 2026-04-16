@@ -1,9 +1,20 @@
+import { useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { monetizationBoostSettingsAtom } from './settingsAtoms';
-import { trackSettingsInteraction } from './settingsTelemetry';
+import { getMonetizationRouteMetadata } from './monetizationTelemetry';
+import { trackMonetizationTelemetry, trackSettingsInteraction } from './settingsTelemetry';
 
 const MonetizationBoostSettings = () => {
     const [settings, setSettings] = useAtom(monetizationBoostSettingsAtom);
+
+    useEffect(() => {
+        trackMonetizationTelemetry({
+            name: 'monetization_quest_state_transition',
+            route: getMonetizationRouteMetadata('monetization-boost'),
+            previousState: 'available',
+            nextState: 'in_progress',
+        });
+    }, []);
 
     return (
         <section style={{ display: 'grid', gap: 12 }}>
