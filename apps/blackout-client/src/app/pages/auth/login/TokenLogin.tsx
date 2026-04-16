@@ -77,7 +77,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
             <LoginTokenError message="Failed to login. Part of your request data is invalid." />
           )}
           {loginState.error.errcode === LoginError.RateLimited && (
-            <LoginTokenError message="Failed to login. Your login request has been rate-limited by server, Please try after some time." />
+            <LoginTokenError message="Failed to login. Your login request has been rate-limited by root, Please try after some time." />
           )}
           {loginState.error.errcode === LoginError.Unknown && (
             <LoginTokenError message="Failed to login. Unknown reason." />
