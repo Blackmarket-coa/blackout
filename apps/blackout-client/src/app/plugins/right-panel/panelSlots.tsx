@@ -25,6 +25,10 @@ import {
 } from '../../features/right-panel/rightPanelUtils';
 import type { PluginDefinition, UISlotRegistry } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
+import {
+    buildShellMonetizationSlotProps,
+    resolveShellMonetizationSlotRegistry,
+} from '../shell/shellLayoutPlugin';
 
 export type RightPanelSlotProps = {
     panel: Exclude<RightPanelType, null>;
@@ -386,6 +390,30 @@ const SearchPanel: RightPanelSlotRenderer = ({ events, onJumpToEvent }) => {
     );
 };
 
+const MonetizationPanel: RightPanelSlotRenderer = ({ room }) => {
+    const slotProps = buildShellMonetizationSlotProps(room.roomId);
+    const slots = resolveShellMonetizationSlotRegistry();
+    const Summary = slots.summary;
+    const Actions = slots.actions;
+
+    return (
+        <section
+            aria-label="Monetization panel"
+            style={{
+                padding: slotProps.panelPaddingPx,
+                display: 'grid',
+                gap: slotProps.sectionGapPx,
+            }}
+        >
+            <header style={{ display: 'grid', gap: slotProps.itemGapPx }}>
+                <h3 style={{ margin: 0 }}>Monetization</h3>
+                {Summary ? <Summary {...slotProps} /> : null}
+            </header>
+            {Actions ? <Actions {...slotProps} /> : null}
+        </section>
+    );
+};
+
 const baselineSlotRegistry: RightPanelSlotRegistry = {
     members: MembersPanel,
     threads: ({ events, onJumpToEvent }) => (
@@ -406,6 +434,7 @@ const baselineSlotRegistry: RightPanelSlotRegistry = {
     ),
     search: SearchPanel,
     governance: ({ room }) => <GovernanceDashboard roomId={room.roomId} />,
+    monetization: MonetizationPanel,
 };
 
 const pluginSlots: RightPanelSlotRegistry = {
