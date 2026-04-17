@@ -350,10 +350,10 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
               fill="None"
               onClick={handleCreateSpace}
             >
-              <Text size="T300">New Canopy</Text>
+              <Text size="T300">New Den</Text>
             </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
-              <Text size="T300">Existing Canopy</Text>
+              <Text size="T300">Existing Den</Text>
             </MenuItem>
           </Menu>
         </FocusTrap>
