@@ -29,6 +29,11 @@ function minimalWorkspace() {
     '| surface-web | apps/web | / | misc | planned | ok |',
     '| surface-gov | apps/blackout-gov | / | misc | planned | ok |',
     '| surface-port | _port | /legacy-port | misc | partial | ok |',
+    '| security.auth.matrix_client_arch | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | ok |',
+    '| security.auth.homeserver_discovery | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | ok |',
+    '| security.auth.e2ee_defaults | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | ok |',
+    '| security.auth.oidc_delegated_auth | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | ok |',
+    '| security.auth.matrix_bootstrap | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | ok |',
   ].join('\n');
 
   const disposition = [
@@ -44,6 +49,11 @@ function minimalWorkspace() {
     '| surface-web | apps/web | / | misc | planned | planned | tracked | misc | team |',
     '| surface-gov | apps/blackout-gov | / | misc | planned | planned | tracked | misc | team |',
     '| surface-port | _port | /legacy-port | misc | partial | deprecated | tracked | misc | team |',
+    '| security.auth.matrix_client_arch | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | kept | tracked | security | team |',
+    '| security.auth.homeserver_discovery | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | kept | tracked | security | team |',
+    '| security.auth.e2ee_defaults | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | kept | tracked | security | team |',
+    '| security.auth.oidc_delegated_auth | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | kept | tracked | security | team |',
+    '| security.auth.matrix_bootstrap | apps/blackout-client | security workflow controls | Auth/session/recovery/security flows | kept | kept | tracked | security | team |',
   ].join('\n');
 
   const backlog = [
@@ -89,6 +99,27 @@ function minimalWorkspace() {
   );
   writeFile(dir, 'apps/blackout-client/src/app/core/features/plugins.ts', "export const featurePlugins = [{ id: 'plugin.alpha', modules: [] }];\n");
   writeFile(dir, 'apps/blackout-client/src/app/core/features/capabilityGate.ts', 'export const resolveFeatureCustomizations = () => [];\n');
+  writeFile(
+    dir,
+    'apps/blackout-client/src/app/core/features/securityWorkflowControls.ts',
+    [
+      "export const ids = ['matrix_client_arch', 'homeserver_discovery', 'e2ee_defaults', 'oidc_delegated_auth', 'matrix_bootstrap'];",
+      'export const resolve = () => ids;',
+    ].join('\n')
+  );
+  writeFile(
+    dir,
+    'apps/blackout-client/src/app/core/features/securityWorkflowControls.test.ts',
+    [
+      'describe("security workflow controls", () => {',
+      "  it('keeps baseline auth/session flows stable when premium bundle is disabled', () => {});",
+      "  it('makes all security-core controls executable only when bundle and gate are enabled', () => {});",
+      "  it('enforces capability + release gate checks for on/off behavior', () => {});",
+      "  const required = ['matrix_client_arch', 'homeserver_discovery', 'e2ee_defaults', 'oidc_delegated_auth', 'matrix_bootstrap'];",
+      '  void required;',
+      '});',
+    ].join('\n')
+  );
 
   return dir;
 }
