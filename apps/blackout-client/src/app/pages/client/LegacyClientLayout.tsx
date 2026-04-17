@@ -874,7 +874,7 @@ export const ClientLayout = () => {
                         <strong>
                             {selectedSpaceId
                                 ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
-                                  'Space'
+                                  'Canopy'
                                 : 'Home'}
                         </strong>
                     </header>
