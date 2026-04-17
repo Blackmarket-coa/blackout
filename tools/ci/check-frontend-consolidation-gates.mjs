@@ -17,6 +17,13 @@ const requiredSurfaces = new Set([
   'legacy/element',
 ]);
 
+const requiredSecurityCoreWorkflowIds = [
+  'security.auth.matrix_client_arch',
+  'security.auth.homeserver_discovery',
+  'security.auth.e2ee_defaults',
+  'security.auth.oidc_delegated_auth',
+  'security.auth.matrix_bootstrap',
+];
 
 const pluginPolicyDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-only-customization-policy.md');
 const pluginExtensionPointsDoc = path.join(repoRoot, 'apps/blackout-client/docs/plugin-extension-points.md');
@@ -24,6 +31,8 @@ const migrationInventoryDoc = path.join(repoRoot, 'apps/blackout-client/docs/mig
 const featureManifestTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/manifest.ts');
 const featurePluginsTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/plugins.ts');
 const capabilityGateTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/capabilityGate.ts');
+const securityWorkflowControlsTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/securityWorkflowControls.ts');
+const securityWorkflowControlsTestTs = path.join(repoRoot, 'apps/blackout-client/src/app/core/features/securityWorkflowControls.test.ts');
 
 const requiredPluginPolicyAnchors = [
   'named feature modules or plugin boundaries',
@@ -165,6 +174,7 @@ for (const pair of legacyCanonicalRoutePairs) {
 
 // Matrix/disposition freshness + exact row traceability
 const matrixById = new Map(matrixRows.map((r) => [r.feature_id, r]));
+const dispositionById = new Map(dispositionRows.map((r) => [r.feature_id, r]));
 for (const d of dispositionRows) {
   const m = matrixById.get(d.feature_id);
   if (!m) {
@@ -185,6 +195,22 @@ for (const d of dispositionRows) {
 for (const m of matrixRows) {
   if (!dispositionRows.find((d) => d.feature_id === m.feature_id)) {
     errors.push(`${path.relative(repoRoot, matrixPath)}:${m.line} feature_id=${m.feature_id} missing in disposition table.`);
+  }
+}
+
+for (const featureId of requiredSecurityCoreWorkflowIds) {
+  const matrixRow = matrixById.get(featureId);
+  const dispositionRow = dispositionById.get(featureId);
+  if (!matrixRow) {
+    errors.push(`missing security-core workflow control ${featureId} in ${path.relative(repoRoot, matrixPath)}.`);
+    continue;
+  }
+  if (!dispositionRow) {
+    errors.push(`missing security-core workflow control ${featureId} in ${path.relative(repoRoot, dispositionPath)}.`);
+    continue;
+  }
+  if (!['kept', 'ported'].includes(dispositionRow.disposition)) {
+    errors.push(`security-core workflow control ${featureId} must be kept/ported (found disposition=${dispositionRow.disposition}).`);
   }
 }
 
@@ -255,6 +281,37 @@ if (fs.existsSync(capabilityGateTs)) {
       errors.push(`${path.relative(repoRoot, capabilityGateTs)} contains legacy customization fallback "${forbidden}". Plugin-only customization paths are required.`);
     }
   }
+}
+
+if (fs.existsSync(securityWorkflowControlsTs)) {
+  const controlsSource = read(securityWorkflowControlsTs);
+  for (const controlId of ['matrix_client_arch', 'homeserver_discovery', 'e2ee_defaults', 'oidc_delegated_auth', 'matrix_bootstrap']) {
+    if (!controlsSource.includes(`'${controlId}'`)) {
+      errors.push(`${path.relative(repoRoot, securityWorkflowControlsTs)} missing executable control id "${controlId}".`);
+    }
+  }
+} else {
+  errors.push(`required security workflow control module missing: ${path.relative(repoRoot, securityWorkflowControlsTs)}.`);
+}
+
+if (fs.existsSync(securityWorkflowControlsTestTs)) {
+  const controlsTestSource = read(securityWorkflowControlsTestTs);
+  for (const requiredAnchor of [
+    'bundle is disabled',
+    'bundle and gate are enabled',
+    'on/off behavior',
+    'matrix_client_arch',
+    'homeserver_discovery',
+    'e2ee_defaults',
+    'oidc_delegated_auth',
+    'matrix_bootstrap',
+  ]) {
+    if (!controlsTestSource.includes(requiredAnchor)) {
+      errors.push(`${path.relative(repoRoot, securityWorkflowControlsTestTs)} missing coverage anchor "${requiredAnchor}".`);
+    }
+  }
+} else {
+  errors.push(`required security workflow control tests missing: ${path.relative(repoRoot, securityWorkflowControlsTestTs)}.`);
 }
 
 console.log(`Frontend consolidation gates OK: matrix=${matrixRows.length} rows, disposition=${dispositionRows.length} rows, ported=${portedIds.length}, traced=${traceability.length}.`);
