@@ -1,533 +1,220 @@
-
-import React, { useState } from 'react';
-
+import { useState } from 'react';
 import { useAtom } from 'jotai';
-
-import {
-
-  Box,
-
-  Text,
-
-  Icon,
-
-  Icons,
-
-  IconButton,
-
-  Switch,
-
-  Input,
-
-  Button,
-
-  Scroll,
-
-  config,
-
-} from 'folds';
-
-import { Page, PageContent, PageHeader } from '../../components/page';
-
-import { SequenceCard } from '../../components/sequence-card';
-
-import { SequenceCardStyle } from '../settings/styles.css';
-
-import { SettingTile } from '../../components/setting-tile';
-
-import { stegoSettingsAtom } from './stegoAtoms';
-
+import { stegoEnterprisePolicyAtom, stegoSettingsAtom } from './stegoAtoms';
 import { openStegoUpgradeFlow } from './stegoTelemetry';
-
-
+import {
+    applyStegoPolicyLifecycleAction,
+    canExecuteStegoPolicyAction,
+    type StegoPolicyLifecycleAction,
+} from './stegoPolicyLifecycle';
 
 type StegoSettingsProps = {
-
-  requestClose: () => void;
-
+    requestClose?: () => void;
 };
 
-export function StegoSettings({ requestClose }: StegoSettingsProps) {
-
-  const [settings, setSettings] = useAtom(stegoSettingsAtom);
-
-  const [label, setLabel] = useState('');
-
-  const [passphrase, setPassphrase] = useState('');
-
-
-
-  const handleAddPassphrase = () => {
-
-    if (!label.trim() || !passphrase.trim()) return;
-
-    setSettings((prev) => ({
-
-      ...prev,
-
-      savedPassphrases: [
-
-        ...prev.savedPassphrases,
-
-        {
-
-          id: `${Date.now()}`,
-
-          label: label.trim(),
-
-          passphrase: passphrase.trim(),
-
-        },
-
-      ],
-
-    }));
-
-    setLabel('');
-
-    setPassphrase('');
-
-  };
-
-
-
-  const handleRemovePassphrase = (id: string) => {
-
-    setSettings((prev) => ({
-
-      ...prev,
-
-      savedPassphrases: prev.savedPassphrases.filter((item) => item.id !== id),
-
-    }));
-
-  };
-
-
-
-  return (
-
-    <Page>
-
-      <PageHeader outlined={false}>
-
-        <Box grow="Yes" gap="200">
-
-          <Box grow="Yes" alignItems="Center" gap="200">
-
-            <Text size="H3" truncate>
-
-              Steganography
-
-            </Text>
-
-          </Box>
-
-          <Box shrink="No">
-
-            <IconButton onClick={requestClose} variant="Surface">
-
-              <Icon src={Icons.Cross} />
-
-            </IconButton>
-
-          </Box>
-
-        </Box>
-
-      </PageHeader>
-
-      <Box grow="Yes">
-
-        <Scroll hideTrack visibility="Hover">
-
-          <PageContent>
-
-            <Box direction="Column" gap="700">
-
-              <Box direction="Column" gap="100">
-
-                <Text size="L400">Detection</Text>
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                >
-
-                  <SettingTile
-
-                    title="Enable Hidden Message Detection"
-
-                    description="Automatically scan incoming images for hidden steganographic content."
-
-                    after={
-
-                      <Switch
-
-                        variant="Primary"
-
-                        value={settings.enabled}
-
-                        onChange={(v) => setSettings((prev) => ({ ...prev, enabled: v }))}
-
-                      />
-
+export function StegoSettings({ requestClose }: StegoSettingsProps = {}) {
+    const [settings, setSettings] = useAtom(stegoSettingsAtom);
+    const [enterprisePolicy, setEnterprisePolicy] = useAtom(stegoEnterprisePolicyAtom);
+    const [label, setLabel] = useState('');
+    const [passphrase, setPassphrase] = useState('');
+    const [policyReason, setPolicyReason] = useState('Governance lifecycle update');
+    const lifecycleActions: StegoPolicyLifecycleAction[] = [
+        'activate',
+        'suspend',
+        'rotate_keys',
+        'revoke',
+        'archive',
+    ];
+
+    return (
+        <section style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>Steganography</h3>
+                {requestClose ? (
+                    <button type="button" onClick={requestClose}>
+                        Close
+                    </button>
+                ) : null}
+            </div>
+
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                    type="checkbox"
+                    checked={settings.enabled}
+                    onChange={(event) =>
+                        setSettings((prev) => ({ ...prev, enabled: event.target.checked }))
                     }
+                />
+                Enable hidden message detection
+            </label>
 
-                  />
-
-                </SequenceCard>
-
-              </Box>
-
-
-
-              <Box direction="Column" gap="100">
-
-                <Text size="L400">Saved Passphrases</Text>
-
-                {settings.savedPassphrases.length === 0 ? (
-
-                  <SequenceCard
-
-                    className={SequenceCardStyle}
-
-                    variant="SurfaceVariant"
-
-                    direction="Column"
-
-                  >
-
-                    <SettingTile
-
-                      title="No saved passphrases"
-
-                      description="Add a passphrase below to decode hidden messages."
-
+            <div
+                style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 10 }}
+            >
+                <strong>Saved passphrases</strong>
+                <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                    {settings.savedPassphrases.length === 0 ? (
+                        <small>No saved passphrases yet.</small>
+                    ) : null}
+                    {settings.savedPassphrases.map((entry) => (
+                        <div
+                            key={entry.id}
+                            style={{ display: 'flex', justifyContent: 'space-between' }}
+                        >
+                            <span>{entry.label}</span>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setSettings((prev) => ({
+                                        ...prev,
+                                        savedPassphrases: prev.savedPassphrases.filter(
+                                            (item) => item.id !== entry.id
+                                        ),
+                                    }))
+                                }
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                    <input
+                        value={label}
+                        onChange={(event) => setLabel(event.target.value)}
+                        placeholder="Passphrase label"
                     />
-
-                  </SequenceCard>
-
-                ) : (
-
-                  settings.savedPassphrases.map((entry) => (
-
-                    <SequenceCard
-
-                      key={entry.id}
-
-                      className={SequenceCardStyle}
-
-                      variant="SurfaceVariant"
-
-                      direction="Column"
-
+                    <input
+                        value={passphrase}
+                        onChange={(event) => setPassphrase(event.target.value)}
+                        placeholder="Passphrase"
+                        type="password"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (!label.trim() || !passphrase.trim()) return;
+                            setSettings((prev) => ({
+                                ...prev,
+                                savedPassphrases: [
+                                    ...prev.savedPassphrases,
+                                    {
+                                        id: `${Date.now()}`,
+                                        label: label.trim(),
+                                        passphrase: passphrase.trim(),
+                                    },
+                                ],
+                            }));
+                            setLabel('');
+                            setPassphrase('');
+                        }}
                     >
+                        Save passphrase
+                    </button>
+                </div>
+            </div>
 
-                      <SettingTile
+            <div
+                style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 10 }}
+            >
+                <strong>Advanced stego controls</strong>
+                <label style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                    Multi-carrier routing (Advanced)
+                    <select disabled={!settings.advancedEntitled}>
+                        <option>Single image carrier</option>
+                        <option>Image + audio carrier</option>
+                    </select>
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.advancedOptions.expiryRemoteBurn}
+                        disabled
+                        readOnly
+                    />
+                    Expiry / remote burn (Advanced)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.advancedOptions.policyAudit}
+                        disabled
+                        readOnly
+                    />
+                    Policy audit trail (Advanced)
+                </label>
+                <button
+                    type="button"
+                    style={{ marginTop: 8 }}
+                    disabled={settings.advancedEntitled}
+                    onClick={() => openStegoUpgradeFlow('settings_advanced_controls')}
+                >
+                    Upgrade for Advanced
+                </button>
+            </div>
 
-                        title={entry.label}
-
-                        after={
-
-                          <Button
-
-                            size="300"
-
-                            variant="Critical"
-
-                            fill="None"
-
-                            radii="300"
-
-                            onClick={() => handleRemovePassphrase(entry.id)}
-
-                          >
-
-                            <Text size="B300">Remove</Text>
-
-                          </Button>
-
+            <div
+                style={{ border: '1px solid var(--border-default)', borderRadius: 10, padding: 10 }}
+            >
+                <strong>Enterprise policy lifecycle</strong>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={enterprisePolicy.enabled}
+                        onChange={(event) =>
+                            setEnterprisePolicy((prev) => ({
+                                ...prev,
+                                enabled: event.target.checked,
+                            }))
                         }
-
-                      />
-
-                    </SequenceCard>
-
-                  ))
-
-                )}
-
-
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                  gap="300"
-
-                >
-
-                  <SettingTile title="Add Passphrase" />
-
-                  <Box direction="Column" gap="200">
-
-                    <Input
-
-                      size="300"
-
-                      radii="300"
-
-                      variant="Secondary"
-
-                      value={label}
-
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLabel(e.target.value)}
-
-                      placeholder="Passphrase label"
-
-                      outlined
-
                     />
-
-                    <Input
-
-                      size="300"
-
-                      radii="300"
-
-                      variant="Secondary"
-
-                      type="password"
-
-                      value={passphrase}
-
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassphrase(e.target.value)}
-
-                      placeholder="Passphrase"
-
-                      outlined
-
-                    />
-
-                    <Box justifyContent="End">
-
-                      <Button
-
-                        size="300"
-
-                        variant="Primary"
-
-                        fill="Solid"
-
-                        radii="300"
-
-                        onClick={handleAddPassphrase}
-
-                      >
-
-                        <Text size="B300">Save</Text>
-
-                      </Button>
-
-                    </Box>
-
-                  </Box>
-
-                </SequenceCard>
-
-              </Box>
-
-
-
-              <Box direction="Column" gap="100">
-
-                <Text size="L400">Advanced Controls</Text>
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                  gap="400"
-
-                >
-
-                  <SettingTile
-
-                    title="Multi-Carrier Routing"
-
-                    description="Distribute hidden payloads across multiple carrier images."
-
-                    after={
-
-                      <Switch
-
-                        variant="Primary"
-
-                        value={settings.advancedOptions.multiCarrierRouting}
-
-                        disabled
-
-                        onChange={() => {}}
-
-                      />
-
-                    }
-
-                  />
-
-                </SequenceCard>
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                >
-
-                  <SettingTile
-
-                    title="Expiry / Remote Burn"
-
-                    description="Set hidden messages to expire or be remotely destroyed."
-
-                    after={
-
-                      <Switch
-
-                        variant="Primary"
-
-                        value={settings.advancedOptions.expiryRemoteBurn}
-
-                        disabled
-
-                        onChange={() => {}}
-
-                      />
-
-                    }
-
-                  />
-
-                </SequenceCard>
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                >
-
-                  <SettingTile
-
-                    title="Policy Audit"
-
-                    description="Enable audit logging for steganographic operations."
-
-                    after={
-
-                      <Switch
-
-                        variant="Primary"
-
-                        value={settings.advancedOptions.policyAudit}
-
-                        disabled
-
-                        onChange={() => {}}
-
-                      />
-
-                    }
-
-                  />
-
-                </SequenceCard>
-
-                <SequenceCard
-
-                  className={SequenceCardStyle}
-
-                  variant="SurfaceVariant"
-
-                  direction="Column"
-
-                >
-
-                  <SettingTile
-
-                    title="Upgrade to Advanced"
-
-                    description="Unlock multi-carrier routing, expiry, and audit controls."
-
-                    after={
-
-                      <Button
-
-                        size="300"
-
-                        variant="Primary"
-
-                        fill="Solid"
-
-                        radii="300"
-
-                        disabled={settings.advancedEntitled}
-
-                        onClick={() => openStegoUpgradeFlow('settings_advanced_controls')}
-
-                      >
-
-                        <Text size="B300">
-
-                          {settings.advancedEntitled ? 'Unlocked' : 'Upgrade'}
-
-                        </Text>
-
-                      </Button>
-
-                    }
-
-                  />
-
-                </SequenceCard>
-
-              </Box>
-
-            </Box>
-
-          </PageContent>
-
-        </Scroll>
-
-      </Box>
-
-    </Page>
-
-  );
-
+                    Enable enterprise stego policy plugin
+                </label>
+                <small style={{ display: 'block', marginTop: 8, color: 'var(--text-secondary)' }}>
+                    Status: {enterprisePolicy.status} · Governance approvals:{' '}
+                    {enterprisePolicy.governance.approvals.length}/
+                    {enterprisePolicy.governance.requiredApprovals}
+                </small>
+                <input
+                    style={{ marginTop: 8, width: '100%' }}
+                    value={policyReason}
+                    onChange={(event) => setPolicyReason(event.target.value)}
+                    placeholder="Lifecycle reason"
+                    disabled={!enterprisePolicy.enabled}
+                />
+                <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {lifecycleActions.map((action) => {
+                        const decision = canExecuteStegoPolicyAction(enterprisePolicy, action);
+                        return (
+                            <button
+                                key={action}
+                                type="button"
+                                disabled={!decision.allowed}
+                                title={decision.reason}
+                                onClick={() => {
+                                    try {
+                                        const { next } = applyStegoPolicyLifecycleAction(
+                                            enterprisePolicy,
+                                            action,
+                                            policyReason
+                                        );
+                                        setEnterprisePolicy(next);
+                                    } catch {
+                                        // no-op
+                                    }
+                                }}
+                            >
+                                {action.replace('_', ' ')}
+                            </button>
+                        );
+                    })}
+                </div>
+                <small style={{ display: 'block', marginTop: 8, color: 'var(--text-secondary)' }}>
+                    Auditable events captured: {enterprisePolicy.auditLog.length}
+                </small>
+            </div>
+        </section>
+    );
 }
 
-
-
 export default StegoSettings;
-

@@ -50,6 +50,7 @@ export type QuickActionId =
     | 'compose-redactions'
     | 'compose-typing-indicators'
     | 'compose-steganography-layer'
+    | 'compose-stego-policy-lifecycle'
     | 'open-widget-townhall-sfu'
     | 'open-widget-widget-shell-layouts'
     | 'open-widget-media-pipeline'
@@ -265,6 +266,15 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         surfaces: ['desktop', 'mobile'],
         anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
+    {
+        id: 'compose-stego-policy-lifecycle',
+        label: 'Stego policy lifecycle',
+        description: 'Queue stego enterprise policy lifecycle controls in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-stego-policy-lifecycle',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
     ...WIDGET_PANEL_INVENTORY_IDS.map((inventoryId) => ({
         id: `open-widget-${inventoryId.replace(/_/g, '-')}` as QuickActionId,
         label: inventoryId.replace(/_/g, ' '),
@@ -431,6 +441,9 @@ export function invokeQuickAction(
             return;
         case 'compose-steganography-layer':
             invokeComposerCapability('steganography_layer', context.queueCommand);
+            return;
+        case 'compose-stego-policy-lifecycle':
+            invokeComposerCapability('stego_policy_lifecycle', context.queueCommand);
             return;
         case 'open-widget-townhall-sfu':
             context.openWidgetPanel('townhall_sfu');
