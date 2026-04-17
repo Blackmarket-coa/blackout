@@ -3,10 +3,11 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'r
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
+import type { QuickActionId } from '../quick-actions/featureEntrypoints';
 
 interface BaseResult {
     id: string;
-    category: 'Rooms' | 'Spaces' | 'Users' | 'Commands';
+    category: 'Rooms' | 'Spaces' | 'Users' | 'Commands' | 'Actions';
     title: string;
     subtitle?: string;
     avatarUrl?: string;
@@ -18,6 +19,8 @@ interface QuickSwitcherProps {
     open: boolean;
     onClose: () => void;
     onCommandPicked?: (command: string) => void;
+    quickActions?: Array<{ id: QuickActionId; label: string; description: string }>;
+    onQuickActionPicked?: (actionId: QuickActionId) => void;
 }
 
 const COMMANDS = [
@@ -42,7 +45,10 @@ const fuzzyIncludes = (text: string, query: string): boolean => {
     return hay.includes(needle);
 };
 
-const buildIndex = (rooms: Room[]): BaseResult[] => {
+const buildIndex = (
+    rooms: Room[],
+    quickActions: Array<{ id: QuickActionId; label: string; description: string }>,
+): BaseResult[] => {
     const list: BaseResult[] = [];
     const seenUsers = new Set<string>();
 
@@ -82,11 +88,26 @@ const buildIndex = (rooms: Room[]): BaseResult[] => {
             keywords: `${command.cmd} ${command.desc}`,
         });
     });
+    quickActions.forEach((action) => {
+        list.push({
+            id: action.id,
+            category: 'Actions',
+            title: action.label,
+            subtitle: action.description,
+            keywords: `${action.label} ${action.description} ${action.id}`,
+        });
+    });
 
     return list;
 };
 
-export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherProps) => {
+export const QuickSwitcher = ({
+    open,
+    onClose,
+    onCommandPicked,
+    quickActions = [],
+    onQuickActionPicked,
+}: QuickSwitcherProps) => {
     const client = useMatrixClient();
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
@@ -102,7 +123,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
     }, [search]);
 
     useEffect(() => {
-        const rebuild = () => setIndex(buildIndex(client.getRooms()));
+        const rebuild = () => setIndex(buildIndex(client.getRooms(), quickActions));
         rebuild();
 
         const emitter = client as unknown as {
@@ -126,7 +147,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
             emitter.off('RoomState.events', onRoomUpdate);
             emitter.off('RoomMember.name', onRoomUpdate);
         };
-    }, [client]);
+    }, [client, quickActions]);
 
     const grouped = useMemo(() => {
         const filtered = index.filter((entry) => fuzzyIncludes(entry.keywords, debouncedSearch));
@@ -135,6 +156,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
             Spaces: [],
             Users: [],
             Commands: [],
+            Actions: [],
         };
 
         filtered.forEach((entry) => {
@@ -188,9 +210,15 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
             if (result.category === 'Commands') {
                 onCommandPicked?.(result.id);
                 onClose();
+                return;
+            }
+
+            if (result.category === 'Actions') {
+                onQuickActionPicked?.(result.id as QuickActionId);
+                onClose();
             }
         },
-        [client, onClose, onCommandPicked, setSelectedRoomId, setSelectedSpaceId],
+        [client, onClose, onCommandPicked, onQuickActionPicked, setSelectedRoomId, setSelectedSpaceId],
     );
 
     const handleSelectionKey = useCallback(

@@ -1,6 +1,15 @@
 import { atom } from 'jotai';
 
-export type RightPanelType = 'members' | 'threads' | 'pins' | 'search' | 'governance' | 'roles' | null;
+export type RightPanelType =
+    | 'members'
+    | 'threads'
+    | 'pins'
+    | 'search'
+    | 'governance'
+    | 'roles'
+    | 'discover'
+    | 'leaderboards'
+    | null;
 
 /**
  * Current room selection for timeline context.
