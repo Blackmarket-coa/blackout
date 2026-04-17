@@ -411,8 +411,8 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       >
         <Text size="B300">
           {mutualRoomsState.status === AsyncStatus.Success &&
-            `${mutualRoomsState.data.length} Mutual Rooms`}
-          {mutualRoomsState.status === AsyncStatus.Loading && 'Mutual Rooms'}
+            `${mutualRoomsState.data.length} Mutual Dens`}
+          {mutualRoomsState.status === AsyncStatus.Loading && 'Mutual Dens'}
         </Text>
       </Chip>
     </PopOut>
