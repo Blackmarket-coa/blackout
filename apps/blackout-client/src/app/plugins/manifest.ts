@@ -26,6 +26,7 @@ const runtimePluginSeedEntries: RuntimePluginManifestSeedEntry[] = [
     { id: 'navigation.space-hierarchy', order: 20, flag: 'navigationSpaceHierarchy' },
     { id: 'notifications.adapter', order: 30, flag: 'notificationsAdapter' },
     { id: 'right-panel.slots', order: 40, flag: 'rightPanelPlugins' },
+    { id: 'live-interaction.bundle', order: 50, flag: 'liveInteractionBundle' },
 ];
 
 export const buildRuntimePluginManifest = (

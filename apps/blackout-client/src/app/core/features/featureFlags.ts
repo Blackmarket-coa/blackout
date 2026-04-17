@@ -21,6 +21,7 @@ export type FeatureFlags = {
     navigationSpaceHierarchy: boolean;
     notificationsAdapter: boolean;
     rightPanelPlugins: boolean;
+    liveInteractionBundle: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -46,6 +47,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     navigationSpaceHierarchy: true,
     notificationsAdapter: true,
     rightPanelPlugins: true,
+    liveInteractionBundle: true,
 };
 
 /**
@@ -59,6 +61,7 @@ export const runtimePluginFeatureFlags: Record<RuntimePluginId, keyof FeatureFla
     'navigation.space-hierarchy': 'navigationSpaceHierarchy',
     'notifications.adapter': 'notificationsAdapter',
     'right-panel.slots': 'rightPanelPlugins',
+    'live-interaction.bundle': 'liveInteractionBundle',
 };
 
 const runtimePluginFlagKeys = Object.values(runtimePluginFeatureFlags);
@@ -84,6 +87,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_LEGACY_SHELL_FALLBACK === 'true') {
             nextFlags.legacyShellLayout = true;
         }
+        if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'true') {
+            nextFlags.liveInteractionBundle = true;
+        }
+        if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
+            nextFlags.liveInteractionBundle = false;
+        }
         return nextFlags;
     }
 
@@ -95,6 +104,12 @@ export const resolveFeatureFlags = (
 
     if (env.BLACKOUT_LEGACY_SHELL_FALLBACK === 'true') {
         nextFlags.legacyShellLayout = true;
+    }
+    if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'true') {
+        nextFlags.liveInteractionBundle = true;
+    }
+    if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
+        nextFlags.liveInteractionBundle = false;
     }
 
     return nextFlags;
