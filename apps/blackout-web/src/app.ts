@@ -25,7 +25,7 @@ import {
   listenForNativeBridgeEvents,
   type NativeBridgeEvent,
 } from "./platform/native-bridge-contract";
-import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
+import { FEATURE_UI_ENTRIES, PREMIUM_ADMIN_CONSOLE_FEATURE_IDS, type UiEntryKind } from "./settings/feature-entrypoints";
 import {
   parseAttachmentImport,
   validateAttachmentInput,
@@ -3928,6 +3928,12 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
+    if (kind === "admin_console" && !this.canOpenAdminConsoleFeature(entry.id)) {
+      this.featureActionResult = `${entry.id} requires moderator or admin permissions.`;
+      this.trackDeniedFeature(entry.id, kind);
+      this.render();
+      return;
+    }
     const destination = this.routeFeatureToWorkflow(entry.id, kind);
     this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
@@ -3968,6 +3974,30 @@ export class BlackoutWebApp {
         this.activeWidgetFeatureId = featureId;
         return "chat widget panel";
       case "admin_console":
+        if (featureId === "federation_boost_policy") {
+          this.settingsOpen = true;
+          this.activeSettingsPage = "operations";
+          this.activePlatformOpsTab = "federation";
+          return "operations › federation boost policy controls";
+        }
+        if (featureId === "engagement_experiments") {
+          this.settingsOpen = true;
+          this.activeSettingsPage = "operations";
+          this.activeRevenueOpsTab = "monetization";
+          return "operations › engagement experiments controls";
+        }
+        if (featureId === "space_templates") {
+          this.settingsOpen = true;
+          this.activeSettingsPage = "workspace";
+          this.featureFilter = "space_templates";
+          return "workspace settings › space template controls";
+        }
+        if (featureId === "cell_routing") {
+          this.settingsOpen = true;
+          this.activeSettingsPage = "workspace";
+          this.featureFilter = "cell_routing";
+          return "workspace settings › cell routing controls";
+        }
         this.settingsOpen = true;
         this.activeWorkspacePanel = "repo-tools";
         this.repoToolsOpen = true;
@@ -3981,6 +4011,15 @@ export class BlackoutWebApp {
         this.repoToolsOpen = false;
         return "chat";
     }
+  }
+
+  private canOpenAdminConsoleFeature(featureId: string): boolean {
+    if (!PREMIUM_ADMIN_CONSOLE_FEATURE_IDS.includes(featureId as (typeof PREMIUM_ADMIN_CONSOLE_FEATURE_IDS)[number])) {
+      return true;
+    }
+    const state = this.store.getState();
+    if (!state.activeServerId) return true;
+    return this.hasAdminAccess();
   }
 
   private showQuickActionPopup(featureId: string, kind: UiEntryKind): void {

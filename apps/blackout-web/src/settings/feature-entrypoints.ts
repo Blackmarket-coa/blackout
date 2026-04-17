@@ -112,3 +112,15 @@ export const FEATURE_UI_ENTRIES: FeatureUiEntry[] = [
   { id: "nsfw_toggle", name: "Content warning / NSFW toggle", presetKey: "features.bmc.nsfwGate", uiEntry: "settings_toggle:feature-toggle-bmc-nsfw-gate" },
   { id: "slowmode", name: "Slowmode controls", presetKey: "features.bmc.slowmode", uiEntry: "room_action:feature-room-bmc-slowmode" },
 ];
+
+/**
+ * Advanced admin-console controls that should resolve to concrete policy/control surfaces.
+ * Baseline governance workflows (proposal feed, voting, basic composer flow) remain outside
+ * paid admin upsell and are intentionally not listed here.
+ */
+export const PREMIUM_ADMIN_CONSOLE_FEATURE_IDS = [
+  "federation_boost_policy",
+  "engagement_experiments",
+  "space_templates",
+  "cell_routing",
+] as const;

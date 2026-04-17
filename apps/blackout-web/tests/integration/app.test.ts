@@ -326,6 +326,91 @@ describe("BlackoutWebApp integration", () => {
     }
   });
 
+  it("routes premium admin controls to concrete advanced destinations", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-federation-boost"]'));
+    expect(root.querySelector('[data-testid="settings-page-operations"][aria-selected="true"]')).toBeTruthy();
+    expect(root.querySelector('[data-action="platform-tab"][data-tab="federation"].is-active')).toBeTruthy();
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="settings-page-workspace"]'));
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-engagement-experiments"]'));
+    expect(root.querySelector('[data-action="revenue-tab"][data-tab="monetization"].is-active')).toBeTruthy();
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="settings-page-workspace"]'));
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-bmc-templates"]'));
+    expect(root.querySelector<HTMLInputElement>('[data-testid="feature-filter-input"]')?.value).toBe("space_templates");
+
+    fireEvent.input(requireElement<HTMLInputElement>(root, '[data-testid="feature-filter-input"]'), { target: { value: "" } });
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-bmc-cell-routing"]'));
+    expect(root.querySelector<HTMLInputElement>('[data-testid="feature-filter-input"]')?.value).toBe("cell_routing");
+  });
+
+  it("denies premium admin controls for non-admin server roles", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+    (
+      app as unknown as {
+        store: { patch: (delta: { servers: Array<{ id: string; name: string; role: string }>; activeServerId: string }) => void };
+        render: () => void;
+      }
+    ).store.patch({
+      servers: [{ id: "srv_member", name: "Member Workspace", role: "member" }],
+      activeServerId: "srv_member",
+    });
+    (app as unknown as { render: () => void }).render();
+
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-federation-boost"]'));
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("requires moderator or admin permissions");
+  });
+
   it("renders a ui entrypoint hook for every feature registry row", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
