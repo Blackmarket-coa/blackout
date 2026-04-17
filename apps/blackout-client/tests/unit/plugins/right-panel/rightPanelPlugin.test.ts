@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     rightPanelPlugin,
     resolveRightPanelSlotRegistry,
-} from '../../../../../src/app/plugins/right-panel';
-import { isRuntimePluginEnabled } from '../../../../../src/app/plugins/manifest';
+} from '../../../../src/app/plugins/right-panel';
+import { isRuntimePluginEnabled } from '../../../../src/app/plugins/manifest';
 
 describe('right panel plugin slots', () => {
     it('maps kill-switch wiring to runtime manifest', () => {
@@ -31,5 +31,23 @@ describe('right panel plugin slots', () => {
 
         expect(typeof registry.roles).toBe('function');
         expect(withoutRoles.roles).toBeUndefined();
+    });
+
+    it('gates live interaction widget surfaces behind bundle toggle', () => {
+        const registry = resolveRightPanelSlotRegistry(true, false, true, true);
+        const withoutLiveBundle = resolveRightPanelSlotRegistry(true, false, true, false);
+
+        expect(typeof registry.townhall_sfu).toBe('function');
+        expect(typeof registry.element_call).toBe('function');
+        expect(typeof registry.soundboard).toBe('function');
+        expect(typeof registry.numbers_station).toBe('function');
+        expect(typeof registry.stage_channels).toBe('function');
+
+        expect(withoutLiveBundle.townhall_sfu).toBeUndefined();
+        expect(withoutLiveBundle.element_call).toBeUndefined();
+        expect(withoutLiveBundle.soundboard).toBeUndefined();
+        expect(withoutLiveBundle.numbers_station).toBeUndefined();
+        expect(withoutLiveBundle.stage_channels).toBeUndefined();
+        expect(typeof withoutLiveBundle.media_pipeline).toBe('function');
     });
 });

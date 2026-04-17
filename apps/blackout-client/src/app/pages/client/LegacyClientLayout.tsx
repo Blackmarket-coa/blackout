@@ -31,6 +31,10 @@ import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
 import { VoiceStrip, useOptionalCall } from '../../features/call';
+import {
+    getLiveInteractionDiagnostics,
+    isLiveInteractionWidgetPanelId,
+} from '../../features/call/liveInteractionBundle';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 import { useRoom } from '../../hooks/bmc-useRoom';
@@ -38,6 +42,7 @@ import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { rightPanelPlugin } from '../../plugins/right-panel';
 import { WIDGET_PANEL_INVENTORY_IDS } from '../../plugins/right-panel/panelSlots';
+import { isRuntimePluginEnabled } from '../../plugins/manifest';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -129,6 +134,7 @@ export const ClientLayout = () => {
     );
     const rolesEnabled = capabilityAccess['features.bmc.roles'] ?? false;
     const rightPanelPluginEnabled = rightPanelPlugin.isEnabled();
+    const liveInteractionBundleEnabled = isRuntimePluginEnabled('live-interaction.bundle');
     const rolesPanelEnabled = rolesEnabled && rightPanelPluginEnabled;
     const widgetPackEnabled = rightPanelPluginEnabled;
     const callEnabled = capabilityAccess['features.call.elementCall'] ?? false;
@@ -144,9 +150,23 @@ export const ClientLayout = () => {
         () => [
             ...BASE_RIGHT_PANELS,
             ...(rolesPanelEnabled ? (['roles'] as const) : []),
-            ...(widgetPackEnabled ? WIDGET_PANEL_INVENTORY_IDS : []),
+            ...(widgetPackEnabled
+                ? WIDGET_PANEL_INVENTORY_IDS.filter(
+                      (panelId) =>
+                          !isLiveInteractionWidgetPanelId(panelId) || liveInteractionBundleEnabled
+                  )
+                : []),
         ],
-        [rolesPanelEnabled, widgetPackEnabled]
+        [liveInteractionBundleEnabled, rolesPanelEnabled, widgetPackEnabled]
+    );
+    const liveInteractionDiagnostics = useMemo(
+        () =>
+            getLiveInteractionDiagnostics({
+                rightPanelPluginEnabled,
+                bundlePluginEnabled: liveInteractionBundleEnabled,
+                callCapabilityEnabled: callEnabled,
+            }),
+        [callEnabled, liveInteractionBundleEnabled, rightPanelPluginEnabled]
     );
 
     useEffect(() => {
@@ -480,7 +500,7 @@ export const ClientLayout = () => {
                                     data-testid="feature-widget-element-call-unavailable"
                                     style={{ color: 'var(--text-secondary)' }}
                                 >
-                                    Call unavailable
+                                    Call unavailable. {liveInteractionDiagnostics.failures[0]?.message ?? 'Capability is disabled.'}
                                 </small>
                             )}
                             {callEnabled &&

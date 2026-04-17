@@ -18,6 +18,7 @@ describe('runtime plugin manifest enforcement', () => {
                 navigationSpaceHierarchy: false,
                 notificationsAdapter: false,
                 rightPanelPlugins: false,
+                liveInteractionBundle: false,
             };
 
             if (pluginId === 'shell.legacy-layout') isolatedFlags.legacyShellLayout = true;
@@ -27,6 +28,7 @@ describe('runtime plugin manifest enforcement', () => {
                 isolatedFlags.navigationSpaceHierarchy = true;
             if (pluginId === 'notifications.adapter') isolatedFlags.notificationsAdapter = true;
             if (pluginId === 'right-panel.slots') isolatedFlags.rightPanelPlugins = true;
+            if (pluginId === 'live-interaction.bundle') isolatedFlags.liveInteractionBundle = true;
 
             const entries = buildRuntimePluginManifest(isolatedFlags);
 
@@ -46,6 +48,7 @@ describe('runtime plugin manifest enforcement', () => {
                 navigationSpaceHierarchy: true,
                 notificationsAdapter: true,
                 rightPanelPlugins: true,
+                liveInteractionBundle: true,
             };
 
             if (pluginId === 'shell.legacy-layout') allEnabledFlags.legacyShellLayout = false;
@@ -55,6 +58,9 @@ describe('runtime plugin manifest enforcement', () => {
                 allEnabledFlags.navigationSpaceHierarchy = false;
             if (pluginId === 'notifications.adapter') allEnabledFlags.notificationsAdapter = false;
             if (pluginId === 'right-panel.slots') allEnabledFlags.rightPanelPlugins = false;
+            if (pluginId === 'live-interaction.bundle') {
+                allEnabledFlags.liveInteractionBundle = false;
+            }
 
             const entries = buildRuntimePluginManifest(allEnabledFlags);
             const disabledEntry = entries.find((entry) => entry.id === pluginId);

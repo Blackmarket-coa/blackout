@@ -29,6 +29,11 @@ import {
     buildShellMonetizationSlotProps,
     resolveShellMonetizationSlotRegistry,
 } from '../shell/shellLayoutPlugin';
+import {
+    getLiveInteractionDiagnostics,
+    isLiveInteractionWidgetPanelId,
+    LIVE_INTERACTION_WIDGET_PANEL_IDS,
+} from '../../features/call/liveInteractionBundle';
 
 export type RightPanelSlotProps = {
     panel: Exclude<RightPanelType, null>;
@@ -459,33 +464,80 @@ const pluginSlots: RightPanelSlotRegistry = {
     roles: ({ room }) => <RoleEditor roomId={room.roomId} />,
 };
 
-const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => (
-    <section
-        aria-label={`${panel} widget panel`}
-        style={{
-            display: 'grid',
-            gap: 8,
-            border: '1px solid var(--border-default)',
-            borderRadius: 10,
-            padding: 12,
-            background: 'var(--bg-input)',
-        }}
-    >
-        <header style={{ display: 'grid', gap: 4 }}>
-            <strong style={{ textTransform: 'capitalize' }}>{panel.replace(/_/g, ' ')}</strong>
-            <small style={{ color: 'var(--text-secondary)' }}>
-                Installable widget inventory ID: <code>{panel}</code>
-            </small>
-        </header>
-        <small style={{ color: 'var(--text-secondary)' }}>
-            Mounted through right-panel plugin slots for room <code>{room.roomId}</code>.
-        </small>
-    </section>
-);
+const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => {
+    const rightPanelPluginEnabled = isRuntimePluginEnabled('right-panel.slots');
+    const liveInteractionBundleEnabled = isRuntimePluginEnabled('live-interaction.bundle');
+    const diagnostics =
+        isLiveInteractionWidgetPanelId(panel) && liveInteractionBundleEnabled
+            ? getLiveInteractionDiagnostics({
+                  rightPanelPluginEnabled,
+                  bundlePluginEnabled: liveInteractionBundleEnabled,
+              })
+            : null;
 
-const widgetSlots: RightPanelSlotRegistry = Object.fromEntries(
-    WIDGET_PANEL_INVENTORY_IDS.map((inventoryId) => [inventoryId, WidgetInventoryPanel])
-) as RightPanelSlotRegistry;
+    return (
+        <section
+            aria-label={`${panel} widget panel`}
+            style={{
+                display: 'grid',
+                gap: 8,
+                border: '1px solid var(--border-default)',
+                borderRadius: 10,
+                padding: 12,
+                background: 'var(--bg-input)',
+            }}
+        >
+            <header style={{ display: 'grid', gap: 4 }}>
+                <strong style={{ textTransform: 'capitalize' }}>{panel.replace(/_/g, ' ')}</strong>
+                <small style={{ color: 'var(--text-secondary)' }}>
+                    Installable widget inventory ID: <code>{panel}</code>
+                </small>
+            </header>
+            <small style={{ color: 'var(--text-secondary)' }}>
+                Mounted through right-panel plugin slots for room <code>{room.roomId}</code>.
+            </small>
+            {diagnostics ? (
+                <section
+                    aria-label={`${panel} dependency diagnostics`}
+                    data-testid={`widget-${panel}-dependency-diagnostics`}
+                    style={{
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 8,
+                        padding: 8,
+                        display: 'grid',
+                        gap: 4,
+                    }}
+                >
+                    <strong style={{ fontSize: 12 }}>Dependency health: {diagnostics.status}</strong>
+                    {diagnostics.failures.length === 0 ? (
+                        <small style={{ color: 'var(--text-secondary)' }}>
+                            All live interaction dependencies are available.
+                        </small>
+                    ) : (
+                        <ul style={{ margin: 0, paddingLeft: 16, display: 'grid', gap: 4 }}>
+                            {diagnostics.failures.map((failure) => (
+                                <li key={failure.id} style={{ fontSize: 12 }}>
+                                    {failure.message} Admin action: {failure.adminHint}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+            ) : null}
+        </section>
+    );
+};
+
+const buildWidgetSlots = (liveInteractionBundleEnabled: boolean): RightPanelSlotRegistry => {
+    const allowedWidgetInventory = WIDGET_PANEL_INVENTORY_IDS.filter(
+        (inventoryId) =>
+            !isLiveInteractionWidgetPanelId(inventoryId) || liveInteractionBundleEnabled
+    );
+
+    return Object.fromEntries(
+        allowedWidgetInventory.map((inventoryId) => [inventoryId, WidgetInventoryPanel])
+    ) as RightPanelSlotRegistry;
+};
 
 let unregisterLifecycle = (): void => {};
 
@@ -504,13 +556,14 @@ export const rightPanelPlugin: PluginDefinition<'right-panel.slots'> = {
 export const resolveRightPanelSlotRegistry = (
     pluginEnabled: boolean,
     rolesEnabled: boolean,
-    widgetPackEnabled = pluginEnabled
+    widgetPackEnabled = pluginEnabled,
+    liveInteractionBundleEnabled = isRuntimePluginEnabled('live-interaction.bundle')
 ): RightPanelSlotRegistry => {
     if (!pluginEnabled) return baselineSlotRegistry;
 
     return {
         ...baselineSlotRegistry,
         ...(rolesEnabled ? pluginSlots : {}),
-        ...(widgetPackEnabled ? widgetSlots : {}),
+        ...(widgetPackEnabled ? buildWidgetSlots(liveInteractionBundleEnabled) : {}),
     };
 };

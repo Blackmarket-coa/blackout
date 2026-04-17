@@ -24,6 +24,7 @@ export const runtimePluginManifest = [
     'navigation.space-hierarchy',
     'notifications.adapter',
     'right-panel.slots',
+    'live-interaction.bundle',
 ] as const;
 
 export type RuntimePluginId = typeof runtimePluginManifest[number];
