@@ -7,6 +7,10 @@ import {
     type FeaturePresetKey,
 } from '../../resolver/capabilityAccessResolver';
 import {
+    invokeComposerCapability,
+    type ComposerCapabilityCommand,
+} from '../../plugins/composer/quickActionCatalog';
+import {
     resolveQuickActionEntitlement,
     resolveQuickActionEntitlementMap,
     type QuickActionEntitlementLayers,
@@ -35,7 +39,13 @@ export type QuickActionId =
     | 'open-threads'
     | 'open-search'
     | 'compose-join'
-    | 'compose-invite';
+    | 'compose-invite'
+    | 'compose-rich-composer'
+    | 'compose-replies'
+    | 'compose-edits'
+    | 'compose-redactions'
+    | 'compose-typing-indicators'
+    | 'compose-steganography-layer';
 
 export interface FeatureEntry {
     id: QuickActionId;
@@ -186,6 +196,60 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         surfaces: ['desktop', 'mobile'],
         anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
+    {
+        id: 'compose-rich-composer',
+        label: 'Rich composer',
+        description: 'Open rich composer controls in the active room.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-rich-composer',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
+    {
+        id: 'compose-replies',
+        label: 'Reply assist',
+        description: 'Prime contextual reply action in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-replies',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
+    {
+        id: 'compose-edits',
+        label: 'Edit latest',
+        description: 'Queue latest-message edit workflow in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-edits',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
+    {
+        id: 'compose-redactions',
+        label: 'Redact latest',
+        description: 'Queue latest-message redaction workflow in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-redactions',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
+    {
+        id: 'compose-typing-indicators',
+        label: 'Typing controls',
+        description: 'Queue typing indicator controls in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-typing-indicators',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
+    {
+        id: 'compose-steganography-layer',
+        label: 'Steganography',
+        description: 'Queue steganography layer controls in composer.',
+        presetKey: 'features.nav.roomInvites',
+        uiEntry: 'composer_action:feature-composer-compose-steganography-layer',
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'composer-slash-commands' },
+    },
 ];
 
 export function assertFeatureEntryAnchor(entry: FeatureEntry): void {
@@ -295,7 +359,7 @@ export interface QuickActionInvocationContext {
     toggleInbox: () => void;
     openThreads: () => void;
     openSearch: () => void;
-    queueCommand: (command: '/join' | '/invite') => void;
+    queueCommand: (command: ComposerCapabilityCommand) => void;
 }
 
 export function invokeQuickAction(
@@ -323,6 +387,24 @@ export function invokeQuickAction(
             return;
         case 'compose-invite':
             context.queueCommand('/invite');
+            return;
+        case 'compose-rich-composer':
+            invokeComposerCapability('rich_composer', context.queueCommand);
+            return;
+        case 'compose-replies':
+            invokeComposerCapability('composer_replies', context.queueCommand);
+            return;
+        case 'compose-edits':
+            invokeComposerCapability('composer_edits', context.queueCommand);
+            return;
+        case 'compose-redactions':
+            invokeComposerCapability('composer_redactions', context.queueCommand);
+            return;
+        case 'compose-typing-indicators':
+            invokeComposerCapability('typing_indicators', context.queueCommand);
+            return;
+        case 'compose-steganography-layer':
+            invokeComposerCapability('steganography_layer', context.queueCommand);
             return;
         default: {
             const exhaustive: never = actionId;

@@ -4,6 +4,43 @@ interface TimelineMessage {
     eventType?: string;
 }
 
+export type ComposerCapabilityKey =
+    | 'rich_composer'
+    | 'composer_replies'
+    | 'composer_edits'
+    | 'composer_redactions'
+    | 'typing_indicators'
+    | 'steganography_layer';
+
+export type ComposerCapabilityCommand =
+    | '/join'
+    | '/invite'
+    | '/composer-rich'
+    | '/reply-latest'
+    | '/edit-last'
+    | '/redact-last'
+    | '/typing-status'
+    | '/steg-hide';
+
+export const COMPOSER_CAPABILITY_COMMANDS: Record<
+    ComposerCapabilityKey,
+    ComposerCapabilityCommand
+> = {
+    rich_composer: '/composer-rich',
+    composer_replies: '/reply-latest',
+    composer_edits: '/edit-last',
+    composer_redactions: '/redact-last',
+    typing_indicators: '/typing-status',
+    steganography_layer: '/steg-hide',
+};
+
+export const invokeComposerCapability = (
+    key: ComposerCapabilityKey,
+    queueCommand: (command: ComposerCapabilityCommand) => void
+): void => {
+    queueCommand(COMPOSER_CAPABILITY_COMMANDS[key]);
+};
+
 export type VineAction = {
     label: string;
     primary?: boolean;
