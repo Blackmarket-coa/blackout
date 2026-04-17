@@ -226,7 +226,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Join]: {
         name: Command.Join,
-        description: 'Join room with address. Example: /join address1 address2',
+        description: 'Join den with address. Example: /join address1 address2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const roomIdOrAliases = rawIds.filter(
