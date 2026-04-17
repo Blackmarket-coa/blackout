@@ -20,6 +20,7 @@ import {
     isFeatureFlagEnabled,
     type UiEntryKind,
 } from './featureEntrypoints';
+import type { ComposerCapabilityCommand } from '../../plugins/composer/quickActionCatalog';
 
 const createStorage = () => {
     const map = new Map<string, string>();
@@ -100,7 +101,7 @@ describe('feature entrypoint registry adapter', () => {
 
     it('invokes quick actions via the action adapter', () => {
         const calls: string[] = [];
-        const queueCommand = vi.fn((command: '/join' | '/invite') => calls.push(command));
+        const queueCommand = vi.fn((command: ComposerCapabilityCommand) => calls.push(command));
 
         invokeQuickAction('open-settings', {
             openSettings: () => calls.push('settings'),
@@ -120,8 +121,18 @@ describe('feature entrypoint registry adapter', () => {
             queueCommand,
         });
 
-        expect(calls).toEqual(['settings', '/join']);
+        invokeQuickAction('compose-steganography-layer', {
+            openSettings: () => calls.push('settings'),
+            openDevices: () => calls.push('devices'),
+            toggleInbox: () => calls.push('inbox'),
+            openThreads: () => calls.push('threads'),
+            openSearch: () => calls.push('search'),
+            queueCommand,
+        });
+
+        expect(calls).toEqual(['settings', '/join', '/steg-hide']);
         expect(queueCommand).toHaveBeenCalledWith('/join');
+        expect(queueCommand).toHaveBeenCalledWith('/steg-hide');
     });
 
     it('maintains mobile/desktop render parity and first-run guidance behavior', () => {
