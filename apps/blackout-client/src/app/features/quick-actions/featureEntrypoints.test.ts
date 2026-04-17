@@ -58,6 +58,16 @@ describe('feature entrypoint registry adapter', () => {
             'open-devices',
             'open-inbox',
             'open-search',
+            'open-widget-townhall-sfu',
+            'open-widget-widget-shell-layouts',
+            'open-widget-media-pipeline',
+            'open-widget-media-spoilers',
+            'open-widget-media-codeblocks',
+            'open-widget-media-link-previews',
+            'open-widget-matrix-widget-compat',
+            'open-widget-soundboard',
+            'open-widget-numbers-station',
+            'open-widget-stage-channels',
         ]);
     });
 
@@ -109,6 +119,7 @@ describe('feature entrypoint registry adapter', () => {
             toggleInbox: () => calls.push('inbox'),
             openThreads: () => calls.push('threads'),
             openSearch: () => calls.push('search'),
+            openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
         });
 
@@ -118,6 +129,7 @@ describe('feature entrypoint registry adapter', () => {
             toggleInbox: () => calls.push('inbox'),
             openThreads: () => calls.push('threads'),
             openSearch: () => calls.push('search'),
+            openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
         });
 
@@ -127,10 +139,21 @@ describe('feature entrypoint registry adapter', () => {
             toggleInbox: () => calls.push('inbox'),
             openThreads: () => calls.push('threads'),
             openSearch: () => calls.push('search'),
+            openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
         });
 
-        expect(calls).toEqual(['settings', '/join', '/steg-hide']);
+        invokeQuickAction('open-widget-media-pipeline', {
+            openSettings: () => calls.push('settings'),
+            openDevices: () => calls.push('devices'),
+            toggleInbox: () => calls.push('inbox'),
+            openThreads: () => calls.push('threads'),
+            openSearch: () => calls.push('search'),
+            openWidgetPanel: (widgetId) => calls.push(widgetId),
+            queueCommand,
+        });
+
+        expect(calls).toEqual(['settings', '/join', '/steg-hide', 'media_pipeline']);
         expect(queueCommand).toHaveBeenCalledWith('/join');
         expect(queueCommand).toHaveBeenCalledWith('/steg-hide');
     });

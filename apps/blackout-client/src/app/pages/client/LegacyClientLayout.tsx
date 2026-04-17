@@ -37,6 +37,7 @@ import { useRoom } from '../../hooks/bmc-useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { rightPanelPlugin } from '../../plugins/right-panel';
+import { WIDGET_PANEL_INVENTORY_IDS } from '../../plugins/right-panel/panelSlots';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -127,7 +128,9 @@ export const ClientLayout = () => {
         [featureEntrypointRegistry.entitlementLayers]
     );
     const rolesEnabled = capabilityAccess['features.bmc.roles'] ?? false;
-    const rolesPanelEnabled = rolesEnabled && rightPanelPlugin.isEnabled();
+    const rightPanelPluginEnabled = rightPanelPlugin.isEnabled();
+    const rolesPanelEnabled = rolesEnabled && rightPanelPluginEnabled;
+    const widgetPackEnabled = rightPanelPluginEnabled;
     const callEnabled = capabilityAccess['features.call.elementCall'] ?? false;
     const forumEnabled = capabilityAccess['features.bmc.forum'] ?? false;
     const activeSpeakingCount = useMemo(
@@ -138,8 +141,12 @@ export const ClientLayout = () => {
         [callState]
     );
     const rightPanels = useMemo(
-        () => [...BASE_RIGHT_PANELS, ...(rolesPanelEnabled ? (['roles'] as const) : [])],
-        [rolesPanelEnabled]
+        () => [
+            ...BASE_RIGHT_PANELS,
+            ...(rolesPanelEnabled ? (['roles'] as const) : []),
+            ...(widgetPackEnabled ? WIDGET_PANEL_INVENTORY_IDS : []),
+        ],
+        [rolesPanelEnabled, widgetPackEnabled]
     );
 
     useEffect(() => {
@@ -371,6 +378,10 @@ export const ClientLayout = () => {
             toggleInbox: () => setInboxOpen((prev) => !prev),
             openThreads: () => setRightPanel('threads'),
             openSearch: () => setRightPanel('search'),
+            openWidgetPanel: (widgetId) => {
+                if (!rightPanelPluginEnabled) return;
+                setRightPanel(widgetId);
+            },
             queueCommand: (command) => {
                 void handleCommandPicked(command);
             },

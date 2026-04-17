@@ -11,6 +11,10 @@ import {
     type ComposerCapabilityCommand,
 } from '../../plugins/composer/quickActionCatalog';
 import {
+    WIDGET_PANEL_INVENTORY_IDS,
+    type WidgetPanelInventoryId,
+} from '../../plugins/right-panel/panelSlots';
+import {
     resolveQuickActionEntitlement,
     resolveQuickActionEntitlementMap,
     type QuickActionEntitlementLayers,
@@ -45,7 +49,18 @@ export type QuickActionId =
     | 'compose-edits'
     | 'compose-redactions'
     | 'compose-typing-indicators'
-    | 'compose-steganography-layer';
+    | 'compose-steganography-layer'
+    | 'open-widget-townhall-sfu'
+    | 'open-widget-widget-shell-layouts'
+    | 'open-widget-media-pipeline'
+    | 'open-widget-media-spoilers'
+    | 'open-widget-media-codeblocks'
+    | 'open-widget-media-link-previews'
+    | 'open-widget-element-call'
+    | 'open-widget-matrix-widget-compat'
+    | 'open-widget-soundboard'
+    | 'open-widget-numbers-station'
+    | 'open-widget-stage-channels';
 
 export interface FeatureEntry {
     id: QuickActionId;
@@ -250,6 +265,16 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         surfaces: ['desktop', 'mobile'],
         anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
+    ...WIDGET_PANEL_INVENTORY_IDS.map((inventoryId) => ({
+        id: `open-widget-${inventoryId.replace(/_/g, '-')}` as QuickActionId,
+        label: inventoryId.replace(/_/g, ' '),
+        description: `Open installable widget panel ${inventoryId}.`,
+        presetKey:
+            inventoryId === 'element_call' ? 'features.call.elementCall' : 'features.nav.search',
+        uiEntry: `widget_panel:feature-widget-${inventoryId}`,
+        surfaces: ['desktop', 'mobile'],
+        anchor: { kind: 'nav', target: 'room-header-actions' },
+    })),
 ];
 
 export function assertFeatureEntryAnchor(entry: FeatureEntry): void {
@@ -359,6 +384,7 @@ export interface QuickActionInvocationContext {
     toggleInbox: () => void;
     openThreads: () => void;
     openSearch: () => void;
+    openWidgetPanel: (widgetId: WidgetPanelInventoryId) => void;
     queueCommand: (command: ComposerCapabilityCommand) => void;
 }
 
@@ -405,6 +431,39 @@ export function invokeQuickAction(
             return;
         case 'compose-steganography-layer':
             invokeComposerCapability('steganography_layer', context.queueCommand);
+            return;
+        case 'open-widget-townhall-sfu':
+            context.openWidgetPanel('townhall_sfu');
+            return;
+        case 'open-widget-widget-shell-layouts':
+            context.openWidgetPanel('widget_shell_layouts');
+            return;
+        case 'open-widget-media-pipeline':
+            context.openWidgetPanel('media_pipeline');
+            return;
+        case 'open-widget-media-spoilers':
+            context.openWidgetPanel('media_spoilers');
+            return;
+        case 'open-widget-media-codeblocks':
+            context.openWidgetPanel('media_codeblocks');
+            return;
+        case 'open-widget-media-link-previews':
+            context.openWidgetPanel('media_link_previews');
+            return;
+        case 'open-widget-element-call':
+            context.openWidgetPanel('element_call');
+            return;
+        case 'open-widget-matrix-widget-compat':
+            context.openWidgetPanel('matrix_widget_compat');
+            return;
+        case 'open-widget-soundboard':
+            context.openWidgetPanel('soundboard');
+            return;
+        case 'open-widget-numbers-station':
+            context.openWidgetPanel('numbers_station');
+            return;
+        case 'open-widget-stage-channels':
+            context.openWidgetPanel('stage_channels');
             return;
         default: {
             const exhaustive: never = actionId;

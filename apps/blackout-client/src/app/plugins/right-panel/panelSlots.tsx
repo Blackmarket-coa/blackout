@@ -42,6 +42,24 @@ export type RightPanelSlotName = Exclude<RightPanelType, null>;
 export type RightPanelSlotRenderer = (props: RightPanelSlotProps) => JSX.Element;
 
 export type RightPanelSlotRegistry = UISlotRegistry<RightPanelSlotName, RightPanelSlotProps>;
+export const WIDGET_PANEL_INVENTORY_IDS = [
+    'townhall_sfu',
+    'widget_shell_layouts',
+    'media_pipeline',
+    'media_spoilers',
+    'media_codeblocks',
+    'media_link_previews',
+    'element_call',
+    'matrix_widget_compat',
+    'soundboard',
+    'numbers_station',
+    'stage_channels',
+] as const;
+
+export type WidgetPanelInventoryId = (typeof WIDGET_PANEL_INVENTORY_IDS)[number];
+
+export const isWidgetPanelInventoryId = (panel: RightPanelSlotName): panel is WidgetPanelInventoryId =>
+    WIDGET_PANEL_INVENTORY_IDS.some((inventoryId) => inventoryId === panel);
 
 const buildMemberProfile = (member: RoomMember): MemberProfile => ({
     userId: member.userId,
@@ -441,6 +459,34 @@ const pluginSlots: RightPanelSlotRegistry = {
     roles: ({ room }) => <RoleEditor roomId={room.roomId} />,
 };
 
+const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => (
+    <section
+        aria-label={`${panel} widget panel`}
+        style={{
+            display: 'grid',
+            gap: 8,
+            border: '1px solid var(--border-default)',
+            borderRadius: 10,
+            padding: 12,
+            background: 'var(--bg-input)',
+        }}
+    >
+        <header style={{ display: 'grid', gap: 4 }}>
+            <strong style={{ textTransform: 'capitalize' }}>{panel.replace(/_/g, ' ')}</strong>
+            <small style={{ color: 'var(--text-secondary)' }}>
+                Installable widget inventory ID: <code>{panel}</code>
+            </small>
+        </header>
+        <small style={{ color: 'var(--text-secondary)' }}>
+            Mounted through right-panel plugin slots for room <code>{room.roomId}</code>.
+        </small>
+    </section>
+);
+
+const widgetSlots: RightPanelSlotRegistry = Object.fromEntries(
+    WIDGET_PANEL_INVENTORY_IDS.map((inventoryId) => [inventoryId, WidgetInventoryPanel])
+) as RightPanelSlotRegistry;
+
 let unregisterLifecycle = (): void => {};
 
 export const rightPanelPlugin: PluginDefinition<'right-panel.slots'> = {
@@ -457,13 +503,14 @@ export const rightPanelPlugin: PluginDefinition<'right-panel.slots'> = {
 
 export const resolveRightPanelSlotRegistry = (
     pluginEnabled: boolean,
-    rolesEnabled: boolean
+    rolesEnabled: boolean,
+    widgetPackEnabled = pluginEnabled
 ): RightPanelSlotRegistry => {
     if (!pluginEnabled) return baselineSlotRegistry;
-    if (!rolesEnabled) return baselineSlotRegistry;
 
     return {
         ...baselineSlotRegistry,
-        ...pluginSlots,
+        ...(rolesEnabled ? pluginSlots : {}),
+        ...(widgetPackEnabled ? widgetSlots : {}),
     };
 };
