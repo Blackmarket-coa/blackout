@@ -10,9 +10,13 @@ export type FeatureFlags = {
     monetizationSubscriptions: boolean;
     monetizationBoosts: boolean;
     monetizationMarketplace: boolean;
+    monetizationApps: boolean;
+    monetizationThemes: boolean;
     monetizationQuests: boolean;
     monetizationPayouts: boolean;
     monetizationAnalytics: boolean;
+    monetizationPayoutAnalytics: boolean;
+    monetizationSuite: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -36,9 +40,13 @@ export const defaultFeatureFlags: FeatureFlags = {
     monetizationSubscriptions: false,
     monetizationBoosts: false,
     monetizationMarketplace: false,
+    monetizationApps: false,
+    monetizationThemes: false,
     monetizationQuests: false,
     monetizationPayouts: false,
     monetizationAnalytics: false,
+    monetizationPayoutAnalytics: false,
+    monetizationSuite: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -76,6 +84,90 @@ const parseFeatureMode = (rawMode: string | undefined): FeatureMode => {
     return 'default';
 };
 
+type MonetizationFlagKey =
+    | 'monetization'
+    | 'monetizationSubscriptions'
+    | 'monetizationBoosts'
+    | 'monetizationMarketplace'
+    | 'monetizationApps'
+    | 'monetizationThemes'
+    | 'monetizationQuests'
+    | 'monetizationPayouts'
+    | 'monetizationAnalytics'
+    | 'monetizationPayoutAnalytics'
+    | 'monetizationSuite';
+
+const monetizationFlagEnvMap: Record<MonetizationFlagKey, string> = {
+    monetization: 'BLACKOUT_MONETIZATION',
+    monetizationSubscriptions: 'BLACKOUT_MONETIZATION_SUBSCRIPTIONS',
+    monetizationBoosts: 'BLACKOUT_MONETIZATION_BOOSTS',
+    monetizationMarketplace: 'BLACKOUT_MONETIZATION_MARKETPLACE',
+    monetizationApps: 'BLACKOUT_MONETIZATION_APPS',
+    monetizationThemes: 'BLACKOUT_MONETIZATION_THEMES',
+    monetizationQuests: 'BLACKOUT_MONETIZATION_QUESTS',
+    monetizationPayouts: 'BLACKOUT_MONETIZATION_PAYOUTS',
+    monetizationAnalytics: 'BLACKOUT_MONETIZATION_ANALYTICS',
+    monetizationPayoutAnalytics: 'BLACKOUT_MONETIZATION_PAYOUT_ANALYTICS',
+    monetizationSuite: 'BLACKOUT_MONETIZATION_SUITE',
+};
+
+const monetizationSliceFlags: MonetizationFlagKey[] = [
+    'monetizationSubscriptions',
+    'monetizationBoosts',
+    'monetizationMarketplace',
+    'monetizationApps',
+    'monetizationThemes',
+    'monetizationQuests',
+    'monetizationPayoutAnalytics',
+];
+
+const parseBooleanFlag = (raw: string | undefined): boolean | undefined => {
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    return undefined;
+};
+
+const applyMonetizationEnvOverrides = (
+    env: Record<string, string | undefined>,
+    flags: FeatureFlags
+): void => {
+    (Object.keys(monetizationFlagEnvMap) as MonetizationFlagKey[]).forEach((flagName) => {
+        const parsed = parseBooleanFlag(env[monetizationFlagEnvMap[flagName]]);
+        if (parsed !== undefined) {
+            flags[flagName] = parsed;
+        }
+    });
+};
+
+const validateMonetizationSkuDependencies = (flags: FeatureFlags): void => {
+    if (flags.monetizationSuite) {
+        flags.monetization = true;
+        monetizationSliceFlags.forEach((flagName) => {
+            flags[flagName] = true;
+        });
+    }
+
+    if (flags.monetizationPayoutAnalytics) {
+        flags.monetizationPayouts = true;
+        flags.monetizationAnalytics = true;
+    }
+
+    const hasEnabledSlice = monetizationSliceFlags.some((flagName) => flags[flagName]);
+
+    if (flags.monetization && hasEnabledSlice) {
+        return;
+    }
+
+    if (!flags.monetization) {
+        flags.monetizationSuite = false;
+        monetizationSliceFlags.forEach((flagName) => {
+            flags[flagName] = false;
+        });
+        flags.monetizationPayouts = false;
+        flags.monetizationAnalytics = false;
+    }
+};
+
 export const resolveFeatureFlags = (
     env: Record<string, string | undefined> = {},
     baseFlags: FeatureFlags = defaultFeatureFlags
@@ -84,6 +176,8 @@ export const resolveFeatureFlags = (
 
     if (mode === 'default') {
         const nextFlags = { ...baseFlags };
+        applyMonetizationEnvOverrides(env, nextFlags);
+        validateMonetizationSkuDependencies(nextFlags);
         if (env.BLACKOUT_LEGACY_SHELL_FALLBACK === 'true') {
             nextFlags.legacyShellLayout = true;
         }
@@ -111,6 +205,9 @@ export const resolveFeatureFlags = (
     if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
         nextFlags.liveInteractionBundle = false;
     }
+
+    applyMonetizationEnvOverrides(env, nextFlags);
+    validateMonetizationSkuDependencies(nextFlags);
 
     return nextFlags;
 };
