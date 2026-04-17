@@ -10,3 +10,14 @@ export {
     type StegoPassphraseEntry,
     type StegoAdvancedOptions,
 } from './stegoAtoms';
+
+export { stegoEnterprisePolicyAtom } from './stegoAtoms';
+export {
+    applyStegoPolicyLifecycleAction,
+    canExecuteStegoPolicyAction,
+    enforceStegoPolicyConstraints,
+    DEFAULT_STEGO_ENTERPRISE_POLICY_STATE,
+    type StegoEnterprisePolicyState,
+    type StegoPolicyLifecycleAction,
+    type StegoPolicyLifecycleStatus,
+} from './stegoPolicyLifecycle';

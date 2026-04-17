@@ -1,4 +1,8 @@
 import { atomWithStorage } from 'jotai/utils';
+import {
+    DEFAULT_STEGO_ENTERPRISE_POLICY_STATE,
+    type StegoEnterprisePolicyState,
+} from './stegoPolicyLifecycle';
 
 export interface StegoPassphraseEntry {
     id: string;
@@ -30,5 +34,10 @@ export const stegoSettingsAtom = atomWithStorage<StegoSettingsState>(
             expiryRemoteBurn: false,
             policyAudit: false,
         },
-    },
+    }
+);
+
+export const stegoEnterprisePolicyAtom = atomWithStorage<StegoEnterprisePolicyState>(
+    'blackout.settings.steganography.enterprise-policy.v1',
+    DEFAULT_STEGO_ENTERPRISE_POLICY_STATE
 );

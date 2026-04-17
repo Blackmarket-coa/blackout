@@ -142,6 +142,15 @@ describe('feature entrypoint registry adapter', () => {
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
         });
+        invokeQuickAction('compose-stego-policy-lifecycle', {
+            openSettings: () => calls.push('settings'),
+            openDevices: () => calls.push('devices'),
+            toggleInbox: () => calls.push('inbox'),
+            openThreads: () => calls.push('threads'),
+            openSearch: () => calls.push('search'),
+            openWidgetPanel: (widgetId) => calls.push(widgetId),
+            queueCommand,
+        });
 
         invokeQuickAction('open-widget-media-pipeline', {
             openSettings: () => calls.push('settings'),
@@ -153,9 +162,16 @@ describe('feature entrypoint registry adapter', () => {
             queueCommand,
         });
 
-        expect(calls).toEqual(['settings', '/join', '/steg-hide', 'media_pipeline']);
+        expect(calls).toEqual([
+            'settings',
+            '/join',
+            '/steg-hide',
+            '/steg-policy',
+            'media_pipeline',
+        ]);
         expect(queueCommand).toHaveBeenCalledWith('/join');
         expect(queueCommand).toHaveBeenCalledWith('/steg-hide');
+        expect(queueCommand).toHaveBeenCalledWith('/steg-policy');
     });
 
     it('maintains mobile/desktop render parity and first-run guidance behavior', () => {

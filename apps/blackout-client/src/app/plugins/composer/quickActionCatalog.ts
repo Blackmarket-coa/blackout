@@ -10,7 +10,8 @@ export type ComposerCapabilityKey =
     | 'composer_edits'
     | 'composer_redactions'
     | 'typing_indicators'
-    | 'steganography_layer';
+    | 'steganography_layer'
+    | 'stego_policy_lifecycle';
 
 export type ComposerCapabilityCommand =
     | '/join'
@@ -20,7 +21,8 @@ export type ComposerCapabilityCommand =
     | '/edit-last'
     | '/redact-last'
     | '/typing-status'
-    | '/steg-hide';
+    | '/steg-hide'
+    | '/steg-policy';
 
 export const COMPOSER_CAPABILITY_COMMANDS: Record<
     ComposerCapabilityKey,
@@ -32,6 +34,7 @@ export const COMPOSER_CAPABILITY_COMMANDS: Record<
     composer_redactions: '/redact-last',
     typing_indicators: '/typing-status',
     steganography_layer: '/steg-hide',
+    stego_policy_lifecycle: '/steg-policy',
 };
 
 export const invokeComposerCapability = (
