@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     buildFeatureEntrypointRegistry,
+    getQuickActionEntriesForPackage,
     getQuickActionEntriesForSurface,
     invokeQuickAction,
     QUICK_ACTION_FIRST_RUN_STORAGE_KEY,
@@ -46,7 +47,36 @@ describe('feature entrypoint registry adapter', () => {
             'open-settings',
             'open-devices',
             'open-inbox',
+            'discover_panel',
+            'presence_digest',
+            'soft_streaks',
+            'wellbeing_hard_stops',
             'open-search',
+        ]);
+    });
+
+    it('applies entitlement gating for sellable growth pack entries', () => {
+        const registry = buildFeatureEntrypointRegistry({
+            preset: 'sovereignty',
+            entitlements: {
+                'entitlements.growthPack.engagement.presenceDigest': false,
+                'entitlements.growthPack.engagement.softStreaks': false,
+            },
+        });
+        expect(registry.entries.some((entry) => entry.id === 'presence_digest')).toBe(false);
+        expect(registry.entries.some((entry) => entry.id === 'soft_streaks')).toBe(false);
+        expect(registry.entries.some((entry) => entry.id === 'community_leaderboards')).toBe(true);
+    });
+
+    it('returns package-scoped entry lists without legacy quick-action duplication', () => {
+        const registry = buildFeatureEntrypointRegistry({ preset: 'sovereignty' });
+        const packaged = getQuickActionEntriesForPackage(registry, 'growth_pack_engagement_v1');
+        expect(packaged.map((entry) => entry.id)).toEqual([
+            'discover_panel',
+            'presence_digest',
+            'community_leaderboards',
+            'soft_streaks',
+            'wellbeing_hard_stops',
         ]);
     });
 
@@ -61,6 +91,11 @@ describe('feature entrypoint registry adapter', () => {
             openThreads: () => calls.push('threads'),
             openSearch: () => calls.push('search'),
             queueCommand,
+            openDiscoverPanel: () => calls.push('discover'),
+            openPresenceDigest: () => calls.push('presence'),
+            openCommunityLeaderboards: () => calls.push('leaderboards'),
+            runSoftStreaks: () => calls.push('soft_streaks'),
+            openWellbeingHardStops: () => calls.push('wellbeing'),
         });
 
         invokeQuickAction('compose-join', {
@@ -70,9 +105,28 @@ describe('feature entrypoint registry adapter', () => {
             openThreads: () => calls.push('threads'),
             openSearch: () => calls.push('search'),
             queueCommand,
+            openDiscoverPanel: () => calls.push('discover'),
+            openPresenceDigest: () => calls.push('presence'),
+            openCommunityLeaderboards: () => calls.push('leaderboards'),
+            runSoftStreaks: () => calls.push('soft_streaks'),
+            openWellbeingHardStops: () => calls.push('wellbeing'),
         });
 
-        expect(calls).toEqual(['settings', '/join']);
+        invokeQuickAction('presence_digest', {
+            openSettings: () => calls.push('settings'),
+            openDevices: () => calls.push('devices'),
+            toggleInbox: () => calls.push('inbox'),
+            openThreads: () => calls.push('threads'),
+            openSearch: () => calls.push('search'),
+            queueCommand,
+            openDiscoverPanel: () => calls.push('discover'),
+            openPresenceDigest: () => calls.push('presence'),
+            openCommunityLeaderboards: () => calls.push('leaderboards'),
+            runSoftStreaks: () => calls.push('soft_streaks'),
+            openWellbeingHardStops: () => calls.push('wellbeing'),
+        });
+
+        expect(calls).toEqual(['settings', '/join', 'presence']);
         expect(queueCommand).toHaveBeenCalledWith('/join');
     });
 

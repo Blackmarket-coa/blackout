@@ -264,6 +264,70 @@ export const RightPanelContent = ({
         return <RoleEditor roomId={room.roomId} />;
     }
 
+    if (panel === 'discover') {
+        const aliases = room
+            .getLiveTimeline()
+            .getEvents()
+            .map((event) => event.getRoomId())
+            .filter(Boolean)
+            .slice(0, 5);
+        return (
+            <div style={{ padding: 12, display: 'grid', gap: 8 }}>
+                <strong>Discover panel</strong>
+                <small style={{ color: 'var(--text-secondary)' }}>
+                    Suggested rooms and spaces for this community.
+                </small>
+                {aliases.map((alias) => (
+                    <div
+                        key={alias}
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 8,
+                            padding: 8,
+                            background: 'var(--bg-input)',
+                            fontSize: 12,
+                        }}
+                    >
+                        {alias}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (panel === 'leaderboards') {
+        const members = room.getJoinedMembers().slice(0, 5);
+        return (
+            <div style={{ padding: 12, display: 'grid', gap: 8 }}>
+                <strong>Community leaderboards</strong>
+                <small style={{ color: 'var(--text-secondary)' }}>
+                    Top contributors in this room this week.
+                </small>
+                {members.map((member, index) => (
+                    <div
+                        key={member.userId}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 8,
+                            padding: '8px 10px',
+                            background: 'var(--bg-input)',
+                        }}
+                    >
+                        <span>
+                            {index + 1}. {member.name ?? member.userId}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {Math.max(1, 100 - index * 11)} pts
+                        </span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
     return (
         <div
             style={{

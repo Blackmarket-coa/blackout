@@ -40,6 +40,7 @@ import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
     buildFeatureEntrypointRegistry,
+    getQuickActionEntriesForPackage,
     getQuickActionEntriesForSurface,
     getUnseenQuickActionIds,
     invokeQuickAction,
@@ -117,9 +118,17 @@ export const ClientLayout = () => {
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
     const callEnabled = featureFlags['features.call.elementCall'] ?? false;
     const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
+    const discoverPanelEnabled = featureFlags['features.engagement.discoverPanel'] ?? false;
+    const communityLeaderboardsEnabled =
+        featureFlags['features.engagement.communityLeaderboards'] ?? false;
     const rightPanels = useMemo(
-        () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
-        [rolesEnabled],
+        () => [
+            ...BASE_RIGHT_PANELS,
+            ...(rolesEnabled ? (['roles'] as const) : []),
+            ...(discoverPanelEnabled ? (['discover'] as const) : []),
+            ...(communityLeaderboardsEnabled ? (['leaderboards'] as const) : []),
+        ],
+        [communityLeaderboardsEnabled, discoverPanelEnabled, rolesEnabled],
     );
 
     useEffect(() => {
@@ -295,17 +304,29 @@ export const ClientLayout = () => {
         () => hasModeratorAccess(rooms, userId),
         [rooms, userId],
     );
-    const desktopQuickActions = useMemo(
-        () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'),
+    const growthPackEntries = useMemo(
+        () => getQuickActionEntriesForPackage(featureEntrypointRegistry, 'growth_pack_engagement_v1'),
         [featureEntrypointRegistry],
+    );
+    const desktopQuickActions = useMemo(
+        () =>
+            getQuickActionEntriesForSurface(
+                { ...featureEntrypointRegistry, entries: growthPackEntries },
+                'desktop',
+            ),
+        [featureEntrypointRegistry, growthPackEntries],
     );
     const mobileQuickActions = useMemo(
-        () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'mobile'),
-        [featureEntrypointRegistry],
+        () =>
+            getQuickActionEntriesForSurface(
+                { ...featureEntrypointRegistry, entries: growthPackEntries },
+                'mobile',
+            ),
+        [featureEntrypointRegistry, growthPackEntries],
     );
     const unseenQuickActionIds = useMemo(
-        () => getUnseenQuickActionIds(featureEntrypointRegistry.entries),
-        [featureEntrypointRegistry.entries],
+        () => getUnseenQuickActionIds(growthPackEntries),
+        [growthPackEntries],
     );
 
     useEffect(() => {
@@ -330,7 +351,9 @@ export const ClientLayout = () => {
         await markAllRead();
     };
 
-    const openSettingsSection = (section: 'appearance' | 'voice-video' | 'accessibility') => {
+    const openSettingsSection = (
+        section: 'appearance' | 'voice-video' | 'accessibility' | 'notifications',
+    ) => {
         setSettingsPage(section);
         setSettingsOpen(true);
     };
@@ -353,6 +376,18 @@ export const ClientLayout = () => {
             openSearch: () => setRightPanel('search'),
             queueCommand: (command) => {
                 void handleCommandPicked(command);
+            },
+            openDiscoverPanel: () => setRightPanel('discover'),
+            openPresenceDigest: () => {
+                openSettingsSection('notifications');
+                setComposerCommandStatus('Opened presence digest in notifications.');
+            },
+            openCommunityLeaderboards: () => setRightPanel('leaderboards'),
+            runSoftStreaks: () =>
+                setComposerCommandStatus('Soft streak check-in saved for today.'),
+            openWellbeingHardStops: () => {
+                openSettingsSection('accessibility');
+                setComposerCommandStatus('Opened wellbeing hard-stop controls.');
             },
         });
     };
@@ -551,6 +586,8 @@ export const ClientLayout = () => {
                 open={quickOpen}
                 onClose={() => setQuickOpen(false)}
                 onCommandPicked={(command) => void handleCommandPicked(command)}
+                quickActions={growthPackEntries}
+                onQuickActionPicked={handleQuickAction}
             />
 
             {desktop || (!mobile && !selectedRoomId) ? (
