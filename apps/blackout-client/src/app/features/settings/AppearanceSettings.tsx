@@ -19,7 +19,13 @@ import {
 
   Input,
 
+  Menu,
+
   MenuItem,
+
+  PopOut,
+
+  RectCords,
 
   Scroll,
 
@@ -40,10 +46,6 @@ import { SequenceCardStyle } from './styles.css';
 import { SettingTile } from '../../components/setting-tile';
 
 import { stopPropagation } from '../../utils/keyboard';
-
-import { PopOut, RectCords } from '../../components/pop-out';
-
-import { Menu } from '../../components/menu';
 
 import { BLACKOUT_THEMES } from '../../../lib/bmc-core';
 
@@ -815,11 +817,11 @@ function FontScaleInput() {
 
 type AppearanceSettingsProps = {
 
-  requestClose: () => void;
+  requestClose?: () => void;
 
 };
 
-export function AppearanceSettings({ requestClose }: AppearanceSettingsProps) {
+export function AppearanceSettings({ requestClose }: AppearanceSettingsProps = {}) {
 
   const [settings, setSettings] = useAtom(appearanceSettingsAtom);
 
@@ -843,15 +845,17 @@ export function AppearanceSettings({ requestClose }: AppearanceSettingsProps) {
 
           </Box>
 
-          <Box shrink="No">
+          {requestClose ? (
+            <Box shrink="No">
 
-            <IconButton onClick={requestClose} variant="Surface">
+              <IconButton onClick={requestClose} variant="Surface">
 
-              <Icon src={Icons.Cross} />
+                <Icon src={Icons.Cross} />
 
-            </IconButton>
+              </IconButton>
 
-          </Box>
+            </Box>
+          ) : null}
 
         </Box>
 

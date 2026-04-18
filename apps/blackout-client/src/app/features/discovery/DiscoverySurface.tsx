@@ -45,7 +45,7 @@ export function DiscoverySurface() {
   const rootSpaceId = joinedSpaces[0] ?? '__blackout_discovery__';
   const childRoomScopeFactory = useChildRoomScopeFactory(mx, mDirects, roomToParents);
   const spaceChildren = useSpaceChildren(allRoomsAtom, rootSpaceId, childRoomScopeFactory);
-  const hierarchy = useSpaceHierarchy(rootSpaceId, new Set(joinedSpaces), (roomId) => mx.getRoom(roomId), () => false);
+  const hierarchy = useSpaceHierarchy(rootSpaceId, new Set(joinedSpaces), (roomId) => mx.getRoom(roomId) ?? undefined, () => false);
 
   const [searchParams] = useSearchParams();
   const searchTerm = searchParams.get('term') ?? undefined;
@@ -199,7 +199,7 @@ export function DiscoverySurface() {
             )}
 
             <Box gap="300" alignItems="Start">
-              <Box basis="2/3" direction="Column" gap="100">
+              <Box direction="Column" gap="100" style={{ flex: '2 1 0', minWidth: 0 }}>
                 <Scroll hideTrack visibility="Hover" size="0">
                   <Box direction="Column" gap="100" role="listbox" aria-label="Discovery results">
                     {isLoading && <Text>Loading discovery…</Text>}
@@ -211,7 +211,7 @@ export function DiscoverySurface() {
                         aria-selected={selectedItem?.roomId === item.roomId}
                         variant={selectedItem?.roomId === item.roomId ? 'Primary' : 'Secondary'}
                         fill={selectedItem?.roomId === item.roomId ? 'Soft' : 'None'}
-                        justifyContent="Start"
+                        style={{ justifyContent: 'flex-start' }}
                         onKeyDown={onItemKeyDown(index)}
                         onClick={() => setSelectedRoomId(item.roomId)}
                       >
@@ -231,7 +231,7 @@ export function DiscoverySurface() {
                 </Scroll>
               </Box>
 
-              <Box basis="1/3" direction="Column" gap="200">
+              <Box direction="Column" gap="200" style={{ flex: '1 1 0', minWidth: 0 }}>
                 <Text size="L400">Inline join preview</Text>
                 {selectedItem ? (
                   <Box direction="Column" gap="100">

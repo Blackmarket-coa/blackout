@@ -607,7 +607,7 @@ export const ClientLayout = () => {
         );
     };
 
-    const desktop = !isTablet(viewportWidth);
+    const desktop = !isTabletViewport(viewportWidth);
     const mobile = isMobileViewport(viewportWidth);
 
     return (

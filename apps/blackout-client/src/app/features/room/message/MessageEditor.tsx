@@ -153,7 +153,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           },
         };
 
-        return mx.sendMessage(roomId, content);
+        return mx.sendMessage(roomId, content as never);
       }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody])
     );
 
@@ -202,7 +202,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     }, [editor]);
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode));
+      editor.insertNode(createEmoticonElement(key, shortcode) as never);
       moveCursor(editor);
     };
 

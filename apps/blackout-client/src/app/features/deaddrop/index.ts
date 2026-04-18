@@ -11,6 +11,8 @@ export {
     DEAD_DROP_EVENT_TYPE,
     DEAD_DROP_QUEUE_EVENT_TYPE,
     DEAD_DROP_SCHEMA_VERSION,
+} from '@blackout/protocol';
+export {
     describeDeadDropSchedule,
     getNextDeliveryDate,
     useDeadDrop,

@@ -55,7 +55,7 @@ export function CommandAutocomplete({
 
   const handleAutocomplete: CommandAutoCompleteHandler = (commandName) => {
     const cmdEl = createCommandElement(commandName);
-    replaceWithElement(editor, query.range, cmdEl);
+    replaceWithElement(editor, query.range, cmdEl as never);
     moveCursor(editor, true);
     requestClose();
   };

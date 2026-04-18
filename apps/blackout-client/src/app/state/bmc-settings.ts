@@ -44,14 +44,17 @@ const defaultSettings: AppSettings = {
 export const normalizeAppSettingsTheme = (theme: string): ThemePreference =>
     normalizeThemeId(theme);
 
-const appSettingsStorage = createJSONStorage<AppSettings>(() => localStorage, {
-    reviver: (key, value) => {
-        if (key === 'theme' && typeof value === 'string') {
-            return normalizeAppSettingsTheme(value);
+const baseAppSettingsStorage = createJSONStorage<AppSettings>(() => localStorage);
+const appSettingsStorage: typeof baseAppSettingsStorage = {
+    ...baseAppSettingsStorage,
+    getItem: (key, initialValue) => {
+        const value = baseAppSettingsStorage.getItem(key, initialValue);
+        if (value && typeof value === 'object' && typeof value.theme === 'string') {
+            return { ...value, theme: normalizeAppSettingsTheme(value.theme) };
         }
         return value;
     },
-});
+};
 
 /**
  * Persisted client settings for appearance, notifications, and developer toggles.

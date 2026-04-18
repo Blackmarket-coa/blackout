@@ -48,6 +48,7 @@ import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
 import { Explore, FeaturedRooms } from './client/explore';
 import { DiscoverySurface } from '../features/discovery';
+import { JoinBeforeNavigate } from '../features/join-before-navigate';
 import { Notifications, Inbox, Invites } from './client/inbox';
 import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
@@ -170,7 +171,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
         >
           {mobile ? null : <Route index element={<WelcomePage />} />}
           <Route path={_CREATE_PATH} element={<HomeCreateRoom />} />
-          <Route path={_JOIN_PATH} element={<p>join</p>} />
+          <Route path={_JOIN_PATH} element={<JoinBeforeNavigate roomIdOrAlias="" />} />
           <Route path={_SEARCH_PATH} element={<HomeSearch />} />
           <Route path={_DEEP_DIVE_PATH} element={<HomeDeepDive />} />
           <Route

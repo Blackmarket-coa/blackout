@@ -1,17 +1,18 @@
 {
   "compilerOptions": {
     "sourceMap": true,
-    "jsx": "react",
-    "target": "ES2016",
+    "jsx": "react-jsx",
+    "target": "ES2020",
     "module": "ES2020",
     "allowJs": true,
     "strict": true,
     "esModuleInterop": true,
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "outDir": "dist",
     "skipLibCheck": true,
-    "lib": ["ES2016", "DOM"]
+    "ignoreDeprecations": "5.0",
+    "lib": ["ES2021", "DOM", "DOM.Iterable"]
   },
   "exclude": ["node_modules", "dist"],
   "include": ["src"]

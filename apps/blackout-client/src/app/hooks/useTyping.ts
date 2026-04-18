@@ -3,7 +3,6 @@ import type { RoomMember } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../state/auth';
 import { useMatrixClient } from './useMatrixClient';
-import { useRoom } from './useRoom';
 
 export interface HookResult<T> {
     data: T;
@@ -13,13 +12,13 @@ export interface HookResult<T> {
 
 /** Returns reactive list of currently typing members in room (excluding me). */
 export const useTypingIndicator = (roomId: string): HookResult<RoomMember[]> => {
-    const roomState = useRoom(roomId);
+    const client = useMatrixClient();
     const myUserId = useAtomValue(userIdAtom);
     const [typing, setTyping] = useState<RoomMember[]>([]);
 
     useEffect(() => {
+        const room = roomId ? client.getRoom(roomId) : null;
         const update = () => {
-            const room = roomState.data;
             if (!room) {
                 setTyping([]);
                 return;
@@ -27,15 +26,14 @@ export const useTypingIndicator = (roomId: string): HookResult<RoomMember[]> => 
 
             const typingMembers = room
                 .getMembers()
-                .filter((member) => member.typing)
-                .filter((member) => member.userId !== myUserId);
+                .filter((member: RoomMember) => member.typing)
+                .filter((member: RoomMember) => member.userId !== myUserId);
 
             setTyping(typingMembers);
         };
 
         update();
 
-        const room = roomState.data;
         const emitter = room as unknown as {
             on?: (event: string, cb: () => void) => void;
             off?: (event: string, cb: () => void) => void;
@@ -47,15 +45,15 @@ export const useTypingIndicator = (roomId: string): HookResult<RoomMember[]> => 
             emitter?.off?.('RoomMember.typing', update);
             emitter?.off?.('RoomState.events', update);
         };
-    }, [myUserId, roomState.data]);
+    }, [client, myUserId, roomId]);
 
     return useMemo(
         () => ({
             data: typing,
-            loading: roomState.loading,
-            error: roomState.error,
+            loading: false,
+            error: null,
         }),
-        [roomState.error, roomState.loading, typing],
+        [typing],
     );
 };
 

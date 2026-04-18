@@ -4,7 +4,7 @@ import { useAccountDataCallback } from './useAccountDataCallback';
 
 export function useAccountData(eventType: string) {
   const mx = useMatrixClient();
-  const [event, setEvent] = useState(() => mx.getAccountData(eventType));
+  const [event, setEvent] = useState(() => mx.getAccountData(eventType as never));
 
   useAccountDataCallback(
     mx,

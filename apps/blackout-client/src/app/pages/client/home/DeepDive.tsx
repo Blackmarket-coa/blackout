@@ -151,7 +151,7 @@ export function HomeDeepDive() {
                     <Avatar size="300" radii="400">
                       <Icon src={Icons.Play} />
                     </Avatar>
-                    <Box direction="Column" gap="50" grow="Yes">
+                    <Box direction="Column" gap="100" grow="Yes">
                       <Text size="L400">{video.title}</Text>
                       <Text size="T300">{video.summary}</Text>
                     </Box>
@@ -180,7 +180,8 @@ export function HomeDeepDive() {
                     </Button>
                     <Button
                       size="300"
-                      variant="Surface"
+                      variant="Secondary"
+                      fill="Soft"
                       onClick={() => setOpenReferencesId(referencesOpen ? null : video.id)}
                     >
                       {referencesOpen ? 'Hide references' : 'Open references'}
@@ -188,7 +189,7 @@ export function HomeDeepDive() {
                   </Box>
 
                   {referencesOpen && (
-                    <Box direction="Column" gap="50">
+                    <Box direction="Column" gap="100">
                       <Text size="B300">References</Text>
                       {video.references.map((reference) => (
                         <Text key={reference} size="T200">
@@ -214,8 +215,8 @@ export function HomeDeepDive() {
         }}
       >
         <Box alignItems="Center" gap="200" style={{ padding: 'var(--sp-normal)' }}>
-          <Icon src={Icons.Chat} />
-          <Box direction="Column" gap="50" grow="Yes">
+          <Icon src={Icons.Message} />
+          <Box direction="Column" gap="100" grow="Yes">
             <Text size="L400">Need a private follow-up?</Text>
             <Text size="T300">
               Start a direct chat for friend-only discussion and keep the public comments focused.

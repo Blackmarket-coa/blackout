@@ -61,7 +61,6 @@ export default [
 
     {
         files: [
-            'src/main.tsx',
             'src/index.tsx',
             'src/app/core/features/registry.ts',
             'src/app/core/features/plugins.ts',
