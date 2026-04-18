@@ -1,6 +1,6 @@
 import { atom } from 'jotai';
 import type { ThemePreference } from '../styles/theme.css';
-import { settingsAtom } from './settings';
+import { settingsAtom } from './bmc-settings';
 
 export const themePreferenceAtom = atom<ThemePreference, [ThemePreference], void>(
     (get) => get(settingsAtom).theme,

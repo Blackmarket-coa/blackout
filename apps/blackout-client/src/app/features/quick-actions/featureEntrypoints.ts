@@ -275,7 +275,7 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         surfaces: ['desktop', 'mobile'],
         anchor: { kind: 'nav', target: 'composer-slash-commands' },
     },
-    ...WIDGET_PANEL_INVENTORY_IDS.map((inventoryId) => ({
+    ...WIDGET_PANEL_INVENTORY_IDS.map((inventoryId): FeatureEntry => ({
         id: `open-widget-${inventoryId.replace(/_/g, '-')}` as QuickActionId,
         label: inventoryId.replace(/_/g, ' '),
         description: `Open installable widget panel ${inventoryId}.`,

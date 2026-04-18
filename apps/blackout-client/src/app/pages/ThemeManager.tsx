@@ -39,7 +39,7 @@ export function AuthRouteThemeManager({ children }: { children: ReactNode }) {
 
         document.body.classList.add(...activeTheme.classNames);
 
-        document.body.style.filter = legacyThemePlugin.applyMonochromeFilter(monochromeMode);
+        document.body.style.filter = legacyThemePlugin.applyMonochromeFilter(monochromeMode ?? false);
     }, [activeTheme, monochromeMode]);
 
     return <ThemeContextProvider value={activeTheme}>{children}</ThemeContextProvider>;

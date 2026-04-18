@@ -44,7 +44,17 @@ const createSafeStorage = () => ({
 const createSafeJsonStorage = <T>() => createJSONStorage<T>(createSafeStorage);
 
 export const normalizeAppearanceTheme = (theme: string): ThemeOption => normalizeThemeId(theme);
-const appearanceStorage = createJSONStorage<AppearanceSettingsState>(createSafeStorage, { reviver: (key, value) => (key === 'theme' && typeof value === 'string' ? normalizeAppearanceTheme(value) : value) });
+const baseAppearanceStorage = createJSONStorage<AppearanceSettingsState>(createSafeStorage);
+const appearanceStorage: typeof baseAppearanceStorage = {
+    ...baseAppearanceStorage,
+    getItem: (key, initialValue) => {
+        const value = baseAppearanceStorage.getItem(key, initialValue);
+        if (value && typeof value === 'object' && typeof value.theme === 'string') {
+            return { ...value, theme: normalizeAppearanceTheme(value.theme) };
+        }
+        return value;
+    },
+};
 const getOnInit = { getOnInit: true };
 
 export const settingsPageAtom = atomWithStorage<SettingsSectionId>('blackout.settings.active-section.v1', 'appearance', createSafeJsonStorage<SettingsSectionId>(), getOnInit);

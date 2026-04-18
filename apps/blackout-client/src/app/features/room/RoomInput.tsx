@@ -426,7 +426,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     }, [editor]);
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode));
+      editor.insertNode(createEmoticonElement(key, shortcode) as never);
       moveCursor(editor);
     };
 

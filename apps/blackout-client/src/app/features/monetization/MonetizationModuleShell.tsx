@@ -22,7 +22,7 @@ type MonetizationModuleShellProps = {
     active: MonetizationModuleKey;
     title: string;
     subtitle: string;
-    children: ReactNode;
+    children?: ReactNode;
 };
 
 const navItems: Array<{ key: MonetizationModuleKey; label: string; href: string }> = [

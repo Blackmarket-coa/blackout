@@ -13,7 +13,7 @@ export function UserImagePack() {
 
   const handleUpdate = useCallback(
     async (packContent: PackContent) => {
-      await mx.setAccountData(AccountDataEvent.PoniesUserEmotes, packContent);
+      await mx.setAccountData(AccountDataEvent.PoniesUserEmotes as never, packContent as never);
     },
     [mx]
   );

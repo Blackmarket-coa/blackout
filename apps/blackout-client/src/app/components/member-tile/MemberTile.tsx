@@ -58,7 +58,7 @@ export const MemberTile = as<'button', MemberTileProps>(
                             fallbackName={`PL ${userRoles.powerLevel}`}
                             compact
                         />
-                        <Text as="span" size="T100" priority="300">
+                        <Text as="span" size="T200" priority="300">
                             Role
                         </Text>
                     </Box>
