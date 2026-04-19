@@ -33,7 +33,7 @@ export function extractDirectMessageDisplayName(name: string): string | null {
     if (!pattern.test(lowerName)) continue;
 
     const target = normalized.replace(pattern, "").trim();
-    if (!target) return "Locked in";
+    if (!target) return "Direct message";
     return target;
   }
 
