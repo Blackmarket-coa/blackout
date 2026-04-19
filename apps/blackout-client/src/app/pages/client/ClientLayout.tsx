@@ -2,6 +2,7 @@ import React, { ReactNode, useCallback, useEffect, useMemo, useState } from 'rea
 import { useAtom } from 'jotai';
 import { useSetAtom } from 'jotai';
 import { Box, Line } from 'folds';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
 import { useInboxModel } from '../../features/navigation/useInboxModel';
@@ -18,6 +19,7 @@ import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../sta
 import { rightPanelAtom, selectedRoomIdAtom } from '../../state/bmc-navigation';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { rightPanelPlugin } from '../../plugins/right-panel';
+import { LegacyOverlayHost, openLegacyOverlaySearch } from './LegacyOverlayHost';
 
 type ClientLayoutProps = {
     nav?: ReactNode;
@@ -31,6 +33,8 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setRightPanel] = useAtom(rightPanelAtom);
     const setSettingsPage = useSetAtom(settingsPageAtom);
+    const navigate = useNavigate();
+    const location = useLocation();
     const setComposerCommandPayload = useSetAtom(composerCommandPayloadAtom);
     const setComposerCommandStatus = useSetAtom(composerCommandStatusAtom);
     const { items: mentionItems, markReadLocal, markAllRead } = useInboxModel();
@@ -73,8 +77,20 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
     const handleQuickAction = useCallback(
         (actionId: QuickActionId) => {
             invokeQuickAction(actionId, {
-                openSettings: () => setSettingsPage('appearance'),
-                openDevices: () => setSettingsPage('voice-video'),
+                openSettings: () => {
+                    setSettingsPage('appearance');
+                    void navigate({
+                        pathname: location.pathname,
+                        search: openLegacyOverlaySearch(location.search, 'settings'),
+                    });
+                },
+                openDevices: () => {
+                    setSettingsPage('voice-video');
+                    void navigate({
+                        pathname: location.pathname,
+                        search: openLegacyOverlaySearch(location.search, 'settings'),
+                    });
+                },
                 toggleInbox: () => setInboxOpen((prev) => !prev),
                 openThreads: () => setRightPanel('threads'),
                 openSearch: () => setRightPanel('search'),
@@ -85,7 +101,14 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
                 queueCommand: queueCommandForComposer,
             });
         },
-        [queueCommandForComposer, setRightPanel, setSettingsPage]
+        [
+            location.pathname,
+            location.search,
+            navigate,
+            queueCommandForComposer,
+            setRightPanel,
+            setSettingsPage,
+        ]
     );
 
     return (
@@ -127,6 +150,7 @@ export function ClientLayout({ nav, children }: ClientLayoutProps) {
                     onMarkReadLocal={markReadLocal}
                 />
             ) : null}
+            <LegacyOverlayHost />
         </Box>
     );
 }
