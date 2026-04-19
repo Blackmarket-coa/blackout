@@ -30,13 +30,19 @@ import {
   _SERVER_PATH,
   _DEEP_DIVE_PATH,
   CREATE_PATH,
+  LEGACY_DIRECT_PATH,
+  LEGACY_INBOX_PATH,
   ONBOARDING_ANALYTICS_PATH,
   ONBOARDING_PATH,
 } from './paths';
 import {
   getAppPathFromHref,
+  getDirectCreatePath,
+  getDirectPath,
+  getDirectRoomPath,
   getExploreFeaturedPath,
   getHomePath,
+  getInboxInvitesPath,
   getInboxNotificationsPath,
   getLoginPath,
   getOriginBaseUrl,
@@ -44,12 +50,12 @@ import {
 } from './pathUtils';
 import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
 import { Home, HomeDeepDive, HomeRouteRoomProvider, HomeSearch } from './client/home';
-import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
+import { DirectCreate, DirectRouteRoomProvider } from './client/direct';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
 import { Explore, FeaturedRooms } from './client/explore';
 import { DiscoverySurface } from '../features/discovery';
 import { JoinBeforeNavigate } from '../features/join-before-navigate';
-import { Notifications, Inbox, Invites } from './client/inbox';
+import { Notifications, Invites } from './client/inbox';
 import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
 import { Lobby } from '../features/lobby';
@@ -74,6 +80,7 @@ import { CreateSpaceModalRenderer } from '../features/create-space';
 import { SearchModalRenderer } from '../features/search';
 import { getFallbackSession } from '../state/sessions';
 import { OnboardingAnalyticsPage, OnboardingRoutePage } from '../features/onboarding';
+import { MessagingHub } from './client/MessagingHub';
 
 export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize) => {
   const { hashRouter } = clientConfig;
@@ -189,7 +196,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             <PageRoot
               nav={
                 <MobileFriendlyPageNav path={DIRECT_PATH}>
-                  <Direct />
+                  <MessagingHub />
                 </MobileFriendlyPageNav>
               }
             >
@@ -281,7 +288,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
             <PageRoot
               nav={
                 <MobileFriendlyPageNav path={INBOX_PATH}>
-                  <Inbox />
+                  <MessagingHub />
                 </MobileFriendlyPageNav>
               }
             >
@@ -299,6 +306,32 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           <Route path={_NOTIFICATIONS_PATH} element={<Notifications />} />
           <Route path={_INVITES_PATH} element={<Invites />} />
         </Route>
+        <Route
+          path={LEGACY_DIRECT_PATH}
+          loader={() => redirect(getDirectPath())}
+        />
+        <Route
+          path={`${LEGACY_DIRECT_PATH}${_CREATE_PATH}`}
+          loader={() => redirect(getDirectCreatePath())}
+        />
+        <Route
+          path={`${LEGACY_DIRECT_PATH}${_ROOM_PATH}`}
+          loader={({ params }) =>
+            redirect(getDirectRoomPath(params.roomIdOrAlias ?? '', params.eventId))
+          }
+        />
+        <Route
+          path={LEGACY_INBOX_PATH}
+          loader={() => redirect(getInboxNotificationsPath())}
+        />
+        <Route
+          path={`${LEGACY_INBOX_PATH}${_NOTIFICATIONS_PATH}`}
+          loader={() => redirect(getInboxNotificationsPath())}
+        />
+        <Route
+          path={`${LEGACY_INBOX_PATH}${_INVITES_PATH}`}
+          loader={() => redirect(getInboxInvitesPath())}
+        />
       </Route>
       <Route path="/*" element={<p>Page not found</p>} />
     </Route>

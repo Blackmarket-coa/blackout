@@ -2,17 +2,21 @@ import { useMatch } from 'react-router-dom';
 import {
   getInboxInvitesPath,
   getInboxNotificationsPath,
-  getInboxPath,
 } from '../../pages/pathUtils';
 
 export const useInboxSelected = (): boolean => {
-  const match = useMatch({
-    path: getInboxPath(),
+  const notificationsMatch = useMatch({
+    path: getInboxNotificationsPath(),
+    caseSensitive: true,
+    end: false,
+  });
+  const invitesMatch = useMatch({
+    path: getInboxInvitesPath(),
     caseSensitive: true,
     end: false,
   });
 
-  return !!match;
+  return !!notificationsMatch || !!invitesMatch;
 };
 
 export const useInboxNotificationsSelected = (): boolean => {
