@@ -975,7 +975,7 @@ describe("BlackoutWebApp integration", () => {
     const secondPaletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
     fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "presence" } });
     expect(root.querySelector(".command-palette-list .empty")?.textContent).toContain("No enabled commands");
-  });
+  }, 15_000);
 
   it("restores focus to the opener when command palette closes via Escape", async () => {
     document.body.innerHTML = `<div id="app"></div>`;

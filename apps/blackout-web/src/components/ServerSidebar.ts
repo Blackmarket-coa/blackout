@@ -44,12 +44,12 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
           </button>
         </li>`).join("")}
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "rooms" ? "is-selected" : ""}" data-action="open-rooms-panel" aria-label="Dens">
+          <button type="button" class="sidebar-nav-btn ${activeView === "rooms" ? "is-selected" : ""}" data-action="open-rooms-panel" aria-label="Rooms">
             <span class="sidebar-nav-glyph">#</span>
           </button>
         </li>
         <li>
-          <button type="button" class="sidebar-nav-btn ${activeView === "dms" ? "is-selected" : ""}" data-action="open-dms-panel" aria-label="Locked in">
+          <button type="button" class="sidebar-nav-btn ${activeView === "dms" ? "is-selected" : ""}" data-action="open-dms-panel" aria-label="Direct messages">
             <span class="sidebar-nav-glyph">💬</span>
           </button>
         </li>

@@ -19,7 +19,7 @@ interface MessageInputOptions {
 }
 
 function renderAdvancedLabel(label: string): string {
-  return `Advanced · ${label}`;
+  return `${label} (Advanced)`;
 }
 
 function renderAttachmentQuickAddSection(disabled: boolean): string {

@@ -13,11 +13,11 @@ interface ChannelSidebarProps {
 type ChannelKind = "text" | "voice" | "governance" | "forum" | "announcement";
 
 const CHANNEL_KIND_META: Record<ChannelKind, { icon: string; label: string }> = {
-  text: { icon: "#", label: "Text den" },
-  voice: { icon: "🔊", label: "Voice den" },
-  governance: { icon: "🗳️", label: "Governance den" },
-  forum: { icon: "🧵", label: "Forum den" },
-  announcement: { icon: "📣", label: "Announcement den" },
+  text: { icon: "#", label: "Text room" },
+  voice: { icon: "🔊", label: "Voice room" },
+  governance: { icon: "🗳️", label: "Governance room" },
+  forum: { icon: "🧵", label: "Forum room" },
+  announcement: { icon: "📣", label: "Announcement room" },
 };
 
 function inferChannelKind(channelName: string): ChannelKind {
@@ -118,7 +118,7 @@ export function renderChannelSidebar({
       <div class="channel-list-scroll">
         ${channels.length === 0 ? '<p class="empty" style="padding: 12px 16px; font-size: 13px;">No channels yet.</p>' : ""}
         ${section("General", generalChannels)}
-        ${!showAdvancedModules ? '<p class="meta" style="padding: 0 16px;">Advanced dens are hidden in simple mode.</p>' : ""}
+        ${!showAdvancedModules ? '<p class="meta" style="padding: 0 16px;">Advanced rooms are hidden in simple mode.</p>' : ""}
         ${showAdvancedModules ? section("Governance", governanceChannels) : ""}
         ${section("Voice", voiceChannels)}
         <li style="list-style: none;">
