@@ -117,7 +117,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
-import { composerCommandPayloadAtom } from '../../state/bmc-composer';
+import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/bmc-composer';
 import { applyComposerPayloadToEditor, isComposerPayloadForRoom } from './composerCommandPayload';
 
 interface RoomInputProps {
@@ -144,6 +144,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [msgDraft, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(roomId));
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(roomId));
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
+    const [, setComposerCommandStatus] = useAtom(composerCommandStatusAtom);
     const replyUserID = replyDraft?.userId;
 
     const powerLevelTags = usePowerLevelTags(room, powerLevels);
@@ -341,7 +342,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       } else if (commandName) {
         const commandContent = commands[commandName as Command];
         if (commandContent) {
+          setComposerCommandStatus(null);
           commandContent.exe(plainText);
+        } else {
+          setComposerCommandStatus(
+            `Unsupported command "/${commandName}". Try /steg-hide, /steg-policy, /join, or /invite.`
+          );
+          return;
         }
         resetEditor(editor);
         resetEditorHistory(editor);
@@ -388,7 +395,17 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       resetEditorHistory(editor);
       setReplyDraft(undefined);
       sendTypingStatus(false);
-    }, [mx, roomId, editor, replyDraft, sendTypingStatus, setReplyDraft, isMarkdown, commands]);
+    }, [
+      mx,
+      roomId,
+      editor,
+      replyDraft,
+      sendTypingStatus,
+      setReplyDraft,
+      isMarkdown,
+      commands,
+      setComposerCommandStatus,
+    ]);
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
       (evt) => {

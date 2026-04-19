@@ -174,6 +174,27 @@ describe('feature entrypoint registry adapter', () => {
         expect(queueCommand).toHaveBeenCalledWith('/steg-policy');
     });
 
+    it('queues stego quick-actions to slash commands supported by composer command registry', () => {
+        const queuedCommands: ComposerCapabilityCommand[] = [];
+        const queueCommand = vi.fn((command: ComposerCapabilityCommand) => {
+            queuedCommands.push(command);
+        });
+        const context = {
+            openSettings: vi.fn(),
+            openDevices: vi.fn(),
+            toggleInbox: vi.fn(),
+            openThreads: vi.fn(),
+            openSearch: vi.fn(),
+            openWidgetPanel: vi.fn(),
+            queueCommand,
+        };
+
+        invokeQuickAction('compose-steganography-layer', context);
+        invokeQuickAction('compose-stego-policy-lifecycle', context);
+
+        expect(queuedCommands).toEqual(['/steg-hide', '/steg-policy']);
+    });
+
     it('maintains mobile/desktop render parity and first-run guidance behavior', () => {
         const registry = buildFeatureEntrypointRegistry({ preset: 'sovereignty' });
         const desktopIds = getQuickActionEntriesForSurface(registry, 'desktop').map(

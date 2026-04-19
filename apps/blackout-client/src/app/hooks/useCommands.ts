@@ -159,6 +159,8 @@ export enum Command {
   UnFlip = 'unflip',
   Delete = 'delete',
   Acl = 'acl',
+  StegHide = 'steg-hide',
+  StegPolicy = 'steg-policy',
 }
 
 export type CommandContent = {
@@ -530,6 +532,16 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
 
           await mx.sendStateEvent(room.roomId, StateEvent.RoomServerAcl as any, aclContent);
         },
+      },
+      [Command.StegHide]: {
+        name: Command.StegHide,
+        description: 'Open steganography hide-message flow in composer.',
+        exe: async () => undefined,
+      },
+      [Command.StegPolicy]: {
+        name: Command.StegPolicy,
+        description: 'Open steganography policy lifecycle flow in composer.',
+        exe: async () => undefined,
       },
     }),
     [mx, room, navigateRoom]
