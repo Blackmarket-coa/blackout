@@ -117,6 +117,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
+import { composerCommandPayloadAtom } from '../../state/bmc-composer';
+import { applyComposerPayloadToEditor, isComposerPayloadForRoom } from './composerCommandPayload';
 
 interface RoomInputProps {
   editor: Editor;
@@ -141,6 +143,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
     const [msgDraft, setMsgDraft] = useAtom(roomIdToMsgDraftAtomFamily(roomId));
     const [replyDraft, setReplyDraft] = useAtom(roomIdToReplyDraftAtomFamily(roomId));
+    const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
     const replyUserID = replyDraft?.userId;
 
     const powerLevelTags = usePowerLevelTags(room, powerLevels);
@@ -228,6 +231,14 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     useEffect(() => {
       Transforms.insertFragment(editor, msgDraft);
     }, [editor, msgDraft]);
+
+    useEffect(() => {
+      if (!commandPayload) return;
+      if (!isComposerPayloadForRoom(commandPayload, roomId)) return;
+
+      applyComposerPayloadToEditor(editor, commandPayload.text);
+      setCommandPayload(null);
+    }, [commandPayload, editor, roomId, setCommandPayload]);
 
     useEffect(
       () => () => {
