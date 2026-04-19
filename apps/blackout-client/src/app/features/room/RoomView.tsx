@@ -1,5 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import { Box, Text, config } from 'folds';
+import { useAtomValue } from 'jotai';
 import { EventType, Room } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { isKeyHotkey } from 'is-hotkey';
@@ -23,6 +24,7 @@ import { useSetting } from '../../state/hooks/settings';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { roomViewBaselineControlLayout, roomViewLayoutRhythm } from './roomViewLayoutContract';
+import { composerCommandStatusAtom } from '../../state/bmc-composer';
 
 const FN_KEYS_REGEX = /^F\d+$/;
 const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
@@ -74,6 +76,7 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
 
     const permissions = useRoomPermissions(creators, powerLevels);
     const canMessage = permissions.event(EventType.RoomMessage, mx.getSafeUserId());
+    const composerStatusMessage = useAtomValue(composerCommandStatusAtom);
 
     useKeyDown(
         window,
@@ -118,6 +121,15 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
                         minHeight: roomViewLayoutRhythm.minTouchTargetPx,
                     }}
                 >
+                    {composerStatusMessage ? (
+                        <Text
+                            size="T200"
+                            style={{ padding: `${config.space.S100} ${config.space.S200}` }}
+                            aria-live="polite"
+                        >
+                            {composerStatusMessage}
+                        </Text>
+                    ) : null}
                     {tombstoneEvent ? (
                         <RoomTombstone
                             roomId={roomId}
