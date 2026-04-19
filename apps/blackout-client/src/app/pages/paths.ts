@@ -50,12 +50,15 @@ export const HOME_SEARCH_PATH = `/home/${_SEARCH_PATH}`;
 export const HOME_DEEP_DIVE_PATH = `/home/${_DEEP_DIVE_PATH}`;
 export const HOME_ROOM_PATH = `/home/${_ROOM_PATH}`;
 
-export const DIRECT_PATH = '/direct/';
+export const LEGACY_DIRECT_PATH = '/direct/';
 export type DirectCreateSearchParams = {
     userId?: string;
 };
-export const DIRECT_CREATE_PATH = `/direct/${_CREATE_PATH}`;
-export const DIRECT_ROOM_PATH = `/direct/${_ROOM_PATH}`;
+export const MESSAGING_PATH = '/messages/';
+export const _LOCKED_IN_PATH = 'locked-in/';
+export const DIRECT_CREATE_PATH = `/messages/${_LOCKED_IN_PATH}${_CREATE_PATH}`;
+export const DIRECT_ROOM_PATH = `/messages/${_LOCKED_IN_PATH}${_ROOM_PATH}`;
+export const DIRECT_PATH = `/messages/${_LOCKED_IN_PATH}`;
 
 export const SPACE_PATH = '/:spaceIdOrAlias/';
 export const SPACE_LOBBY_PATH = `/:spaceIdOrAlias/${_LOBBY_PATH}`;
@@ -80,12 +83,13 @@ export const CREATE_PATH = '/create';
 
 export const _NOTIFICATIONS_PATH = 'notifications/';
 export const _INVITES_PATH = 'invites/';
-export const INBOX_PATH = '/inbox/';
+export const LEGACY_INBOX_PATH = '/inbox/';
 export type InboxNotificationsPathSearchParams = {
     only?: string;
 };
-export const INBOX_NOTIFICATIONS_PATH = `/inbox/${_NOTIFICATIONS_PATH}`;
-export const INBOX_INVITES_PATH = `/inbox/${_INVITES_PATH}`;
+export const INBOX_PATH = MESSAGING_PATH;
+export const INBOX_NOTIFICATIONS_PATH = `/messages/${_NOTIFICATIONS_PATH}`;
+export const INBOX_INVITES_PATH = `/messages/${_INVITES_PATH}`;
 
 export const SPACE_SETTINGS_PATH = '/space-settings/';
 
