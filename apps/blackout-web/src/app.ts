@@ -1996,8 +1996,10 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='dm-open-shop']").forEach((button) => {
       button.addEventListener("click", () => {
-        globalThis.open("https://freeblackmarket.com/digital-products", "_blank", "noopener,noreferrer");
-        this.featureActionResult = "Black Market opened digital products at freeblackmarket.com.";
+        this.settingsOpen = true;
+        this.activeRevenueOpsTab = "marketplace";
+        this.featureActionResult =
+          "Opened the federated Blackout marketplace (freeblackmarket, Blamazon, Mayhem Marketplaze, Antin Amazon).";
         this.render();
       });
     });

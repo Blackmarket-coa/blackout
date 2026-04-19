@@ -5,3 +5,4 @@ export * from './federation';
 export * from './quick-actions';
 
 export * from './themes';
+export * from './marketplace';
