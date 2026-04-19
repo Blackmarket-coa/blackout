@@ -56,6 +56,13 @@ storybook-static
 /apps/blackout-web/test-results
 /apps/blackout-web/playwright-report
 
+# Workspace package build outputs
+/apps/blackout-gov/dist
+/apps/web/dist
+/packages/blackout-protocol/dist
+/packages/blackout-sdk/dist
+/packages/config/dist
+
 # TSC incremental compilation information
 *.tsbuildinfo
 
