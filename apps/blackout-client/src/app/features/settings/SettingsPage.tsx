@@ -1,7 +1,15 @@
-import { Suspense, lazy, type ComponentType, type LazyExoticComponent, useEffect, useState } from 'react';
+import React, {
+    Suspense,
+    lazy,
+    type ComponentType,
+    type LazyExoticComponent,
+    useEffect,
+    useState,
+} from 'react';
 import { useAtom } from 'jotai';
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const AccountSettings = lazy(() => import('./AccountSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
@@ -36,7 +44,7 @@ const sections: SettingsSection[] = [
     {
         id: 'notifications',
         label: 'Notifications',
-        summary: 'Global rules, per-room overrides, sounds',
+        summary: `Global rules, per-${BLACKOUT_TERMS.den.singular} overrides, sounds`,
         component: NotificationSettings,
     },
     {

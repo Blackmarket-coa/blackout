@@ -35,6 +35,7 @@ import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -369,7 +370,9 @@ export const ClientLayout = () => {
     const handleCommandPicked = async (command: string) => {
         const roomScopedCommands = new Set(['/invite', '/topic', '/me', '/shrug', '/leave']);
         if (roomScopedCommands.has(command) && !selectedRoomId) {
-            setComposerCommandStatus(`Select a room before using ${command}.`);
+            setComposerCommandStatus(
+                `Select a ${BLACKOUT_TERMS.den.singular} before using ${command}.`,
+            );
             return;
         }
 
@@ -378,21 +381,25 @@ export const ClientLayout = () => {
             try {
                 await client.leave(selectedRoomId);
                 setSelectedRoomId(null);
-                setComposerCommandStatus(`Left room ${selectedRoomId}.`);
+                setComposerCommandStatus(`Left ${BLACKOUT_TERMS.den.singular} ${selectedRoomId}.`);
             } catch (error) {
                 setComposerCommandStatus(
                     error instanceof Error
-                        ? `Failed to leave room: ${error.message}`
-                        : 'Failed to leave room.',
+                        ? `Failed to leave ${BLACKOUT_TERMS.den.singular}: ${error.message}`
+                        : `Failed to leave ${BLACKOUT_TERMS.den.singular}.`,
                 );
             }
             return;
         }
 
         if (command === '/join') {
-            const roomAlias = window.prompt('Enter room alias or room ID to join');
+            const roomAlias = window.prompt(
+                `Enter a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID to join`,
+            );
             if (!roomAlias?.trim()) {
-                setComposerCommandStatus('Join cancelled: room alias is required.');
+                setComposerCommandStatus(
+                    `Join cancelled: a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID is required.`,
+                );
                 return;
             }
             try {
@@ -403,8 +410,8 @@ export const ClientLayout = () => {
             } catch (error) {
                 setComposerCommandStatus(
                     error instanceof Error
-                        ? `Failed to join room: ${error.message}`
-                        : 'Failed to join room.',
+                        ? `Failed to join ${BLACKOUT_TERMS.den.singular}: ${error.message}`
+                        : `Failed to join ${BLACKOUT_TERMS.den.singular}.`,
                 );
             }
             return;
@@ -514,7 +521,7 @@ export const ClientLayout = () => {
                     ) : null}
                     <WelcomeScreen
                         spaceId={selectedSpaceId}
-                        actionLabel="Explore"
+                        actionLabel={`Explore ${BLACKOUT_TERMS.den.plural}`}
                         onPickChannel={(roomId) => openRoom(roomId)}
                         onJoinOrExplore={() => setSelectedRoomId(null)}
                     />
@@ -530,7 +537,7 @@ export const ClientLayout = () => {
                 ) : null}
                 <WelcomeScreen
                     spaceId={onboardingSpaceId}
-                    actionLabel="Explore"
+                    actionLabel={`Explore ${BLACKOUT_TERMS.den.plural}`}
                     onPickChannel={(roomId) => openRoom(roomId)}
                     onJoinOrExplore={() => setSelectedRoomId(null)}
                 />
@@ -925,7 +932,7 @@ export const ClientLayout = () => {
                         <strong>
                             {selectedSpaceId
                                 ? (rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
-                                  'Space')
+                                  BLACKOUT_TERMS.canopy.title)
                                 : 'Home'}
                         </strong>
                     </header>
@@ -980,7 +987,7 @@ export const ClientLayout = () => {
                                                         display: 'block',
                                                     }}
                                                 >
-                                                    No rooms
+                                                    No {BLACKOUT_TERMS.den.plural}
                                                 </small>
                                             ) : null}
                                             {group.rooms.map((room) => (
@@ -1316,10 +1323,10 @@ export const ClientLayout = () => {
                                     }}
                                 >
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Room organization
+                                        Den organization
                                     </span>
                                     <select
-                                        aria-label="Room organization"
+                                        aria-label="Den organization"
                                         value={settings.mobileRoomListScope ?? 'space'}
                                         onChange={(event) =>
                                             setSettings({
@@ -1336,8 +1343,12 @@ export const ClientLayout = () => {
                                             color: 'var(--text-primary)',
                                         }}
                                     >
-                                        <option value="space">Current space</option>
-                                        <option value="all">All rooms</option>
+                                        <option value="space">
+                                            Current {BLACKOUT_TERMS.canopy.singular}
+                                        </option>
+                                        <option value="all">
+                                            All {BLACKOUT_TERMS.den.plural}
+                                        </option>
                                     </select>
                                 </div>
                             </section>
@@ -1455,7 +1466,7 @@ export const ClientLayout = () => {
                 <>
                     <div
                         role="separator"
-                        aria-label="Resize space sidebar"
+                        aria-label="Resize canopy rail"
                         style={{
                             position: 'fixed',
                             left: layout.spaceColumnWidth - 2,
@@ -1487,7 +1498,7 @@ export const ClientLayout = () => {
                     />
                     <div
                         role="separator"
-                        aria-label="Resize room sidebar"
+                        aria-label="Resize den list"
                         style={{
                             position: 'fixed',
                             left: layout.spaceColumnWidth + layout.roomColumnWidth - 2,

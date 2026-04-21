@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useAtom } from 'jotai';
 import { notificationSettingsAtom, type NotificationMode } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const modeOptions: Array<{ value: NotificationMode; label: string }> = [
     { value: 'all', label: 'All' },
@@ -73,12 +74,12 @@ export const NotificationSettings = () => {
             </section>
 
             <section>
-                <h3>Per-room override list</h3>
+                <h3>Per-{BLACKOUT_TERMS.den.singular} override list</h3>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                     <input
                         value={roomInput}
                         onChange={(event) => setRoomInput(event.target.value)}
-                        placeholder="!room:server"
+                        placeholder={BLACKOUT_TERMS.matrixDenIdHint}
                         style={{
                             borderRadius: 8,
                             border: '1px solid var(--border-default)',
@@ -99,7 +100,7 @@ export const NotificationSettings = () => {
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
                     {settings.perRoomOverrides.length === 0 ? (
-                        <small>No room overrides yet.</small>
+                        <small>No {BLACKOUT_TERMS.den.singular} overrides yet.</small>
                     ) : null}
                     {settings.perRoomOverrides.map((item) => (
                         <div

@@ -1,18 +1,19 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoomName } from '../../hooks/bmc-useRoom';
 import { useSpaceMemberStats, useWelcomeContent } from './useWelcome';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export const WelcomeScreen = ({
     spaceId,
     onPickChannel,
     onJoinOrExplore,
-    actionLabel = 'Join Space',
+    actionLabel = `Join ${BLACKOUT_TERMS.canopy.title}`,
 }: {
     spaceId: string;
     onPickChannel?: (roomId: string) => void;
     onJoinOrExplore?: () => void;
-    actionLabel?: 'Join Space' | 'Explore';
+    actionLabel?: string;
 }) => {
     const client = useMatrixClient();
     const welcome = useWelcomeContent(spaceId);
@@ -37,7 +38,7 @@ export const WelcomeScreen = ({
                 {bannerUrl ? (
                     <img
                         src={bannerUrl}
-                        alt={`${spaceName.data} banner`}
+                        alt={`${spaceName.data} ${BLACKOUT_TERMS.canopy.singular} banner`}
                         style={{ width: '100%', height: 240, objectFit: 'cover' }}
                     />
                 ) : (
@@ -103,7 +104,7 @@ export const WelcomeScreen = ({
                     padding: 12,
                 }}
             >
-                <h3 style={{ marginTop: 0 }}>Featured channels</h3>
+                <h3 style={{ marginTop: 0 }}>Featured {BLACKOUT_TERMS.den.plural}</h3>
                 <div
                     style={{
                         display: 'grid',
@@ -139,7 +140,7 @@ export const WelcomeScreen = ({
 
                     {!welcome.loading && welcome.data.featuredChannels.length === 0 ? (
                         <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                            No featured channels configured yet.
+                            No featured {BLACKOUT_TERMS.den.plural} configured yet.
                         </div>
                     ) : null}
                 </div>

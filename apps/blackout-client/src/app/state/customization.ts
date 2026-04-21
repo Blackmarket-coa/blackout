@@ -5,7 +5,7 @@ import {
     type FeatureFlagMap,
     type FeaturePresetKey,
 } from '../../lib/bmc-core';
-import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { atomWithStorage } from 'jotai/utils';
 
 export interface ClientCustomizationState {
     activePreset: FeaturePresetKey;
@@ -23,14 +23,42 @@ const defaultCustomizationState: ClientCustomizationState = {
     importedAt: null,
 };
 
-const customizationStorage = createJSONStorage<ClientCustomizationState>(() => localStorage, {
-    reviver: (key, value) => {
-        if (key === 'activePreset' && typeof value === 'string') {
-            return value in FEATURE_PRESET_BUNDLES ? value : 'sovereignty';
+const customizationStorage = {
+    getItem: (
+        key: string,
+        initialValue: ClientCustomizationState,
+    ): ClientCustomizationState => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return initialValue;
+
+        try {
+            const parsed = JSON.parse(raw) as Partial<ClientCustomizationState>;
+            const activePreset =
+                typeof parsed.activePreset === 'string' &&
+                parsed.activePreset in FEATURE_PRESET_BUNDLES
+                    ? (parsed.activePreset as FeaturePresetKey)
+                    : initialValue.activePreset;
+
+            return {
+                ...initialValue,
+                ...parsed,
+                activePreset,
+                features: {
+                    ...FEATURE_PRESET_BUNDLES[activePreset],
+                    ...(parsed.features ?? {}),
+                },
+            };
+        } catch {
+            return initialValue;
         }
-        return value;
     },
-});
+    setItem: (key: string, value: ClientCustomizationState) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    },
+    removeItem: (key: string) => {
+        localStorage.removeItem(key);
+    },
+};
 
 export const customizationAtom = atomWithStorage<ClientCustomizationState>(
     'blackout.customization.v1',
