@@ -1,4 +1,20 @@
 import { useCallback, useMemo } from 'react';
+import {
+    GOVERNANCE_PROPOSAL_EVENT_TYPE,
+    GOVERNANCE_VOTE_EVENT_TYPE,
+    type GovernanceProposalOption,
+    type GovernanceProposalPayload,
+    type GovernanceProposalStatus,
+    type GovernanceProposalType,
+    type GovernanceVotePayload,
+} from '@blackout/protocol';
+import { createGovernanceMatrixActions } from '@blackout/sdk';
+
+export type ProposalOption = GovernanceProposalOption;
+export type ProposalContent = GovernanceProposalPayload;
+export type ProposalStatus = GovernanceProposalStatus;
+export type ProposalType = GovernanceProposalType;
+export type VoteContent = GovernanceVotePayload;
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
@@ -8,25 +24,6 @@ import {
     normalizeVoteEventContent,
 } from './eventSchemas';
 
-export interface ProposalOption {
-    id: string;
-    label: string;
-}
-
-export type ProposalType = 'binary' | 'multiple_choice' | 'ranked';
-export type ProposalStatus = 'active' | 'passed' | 'failed' | 'cancelled';
-
-export interface ProposalContent {
-    title: string;
-    description: string;
-    type: ProposalType;
-    options: ProposalOption[];
-    quorum: number;
-    deadline: string;
-    eligibility: 'all' | `role:${string}` | `power:${string}`;
-    status: ProposalStatus;
-}
-
 export interface ProposalModel extends ProposalContent {
     proposalEventId: string;
     stateKey: string;
@@ -34,11 +31,6 @@ export interface ProposalModel extends ProposalContent {
     timestamp: number;
     schemaVersion: number;
     migrated: boolean;
-}
-
-export interface VoteContent {
-    proposalEventId: string;
-    choice: string | string[];
 }
 
 export interface VoteModel {
@@ -59,8 +51,8 @@ export interface GovernanceEventDiagnostics {
     duplicateVoteEventsDropped: number;
 }
 
-const PROPOSAL_EVENT_TYPE = 'co.bmc.proposal';
-const VOTE_EVENT_TYPE = 'co.bmc.vote';
+const PROPOSAL_EVENT_TYPE = GOVERNANCE_PROPOSAL_EVENT_TYPE;
+const VOTE_EVENT_TYPE = GOVERNANCE_VOTE_EVENT_TYPE;
 
 export const useProposals = (roomId: string) => {
     const roomState = useRoom(roomId);
@@ -200,25 +192,19 @@ export const useVotes = (proposalId: string | null, roomId: string) => {
 
 export const useCastVote = (roomId: string) => {
     const client = useMatrixClient();
+    const actions = useMemo(
+        () =>
+            createGovernanceMatrixActions({
+                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendStateEvent: (rid, et, content, stateKey) =>
+                    client.sendStateEvent(rid, et as never, content as never, stateKey),
+            }),
+        [client],
+    );
 
     return useCallback(
-        async (payload: VoteContent) => {
-            await (
-                client as unknown as {
-                    sendEvent: (
-                        rid: string,
-                        et: string,
-                        content: Record<string, unknown>,
-                    ) => Promise<unknown>;
-                }
-            ).sendEvent(roomId, VOTE_EVENT_TYPE, {
-                ...payload,
-                schemaVersion: GOVERNANCE_SCHEMA_VERSION,
-                voteId: crypto.randomUUID(),
-                submittedAt: Date.now(),
-            });
-        },
-        [client, roomId],
+        async (payload: VoteContent) => actions.castVote(roomId, payload),
+        [actions, roomId],
     );
 };
 
@@ -292,18 +278,22 @@ export const useProposalResult = (proposalId: string, roomId: string) => {
 
 export const useCreateProposal = (roomId: string) => {
     const client = useMatrixClient();
+    const actions = useMemo(
+        () =>
+            createGovernanceMatrixActions({
+                sendEvent: (rid, et, content) => client.sendEvent(rid, et as never, content as never),
+                sendStateEvent: (rid, et, content, stateKey) =>
+                    client.sendStateEvent(rid, et as never, content as never, stateKey),
+            }),
+        [client],
+    );
 
     return useCallback(
         async (content: ProposalContent) => {
             const stateKey = `proposal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            await client.sendStateEvent(
-                roomId,
-                PROPOSAL_EVENT_TYPE as never,
-                { ...content, schemaVersion: GOVERNANCE_SCHEMA_VERSION } as never,
-                stateKey,
-            );
+            await actions.createProposal(roomId, content, stateKey);
         },
-        [client, roomId],
+        [actions, roomId],
     );
 };
 

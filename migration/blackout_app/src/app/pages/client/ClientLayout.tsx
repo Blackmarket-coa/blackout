@@ -40,6 +40,7 @@ import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
     buildFeatureEntrypointRegistry,
+    getQuickActionEntriesForPackage,
     getQuickActionEntriesForSurface,
     getUnseenQuickActionIds,
     invokeQuickAction,
@@ -117,9 +118,17 @@ export const ClientLayout = () => {
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
     const callEnabled = featureFlags['features.call.elementCall'] ?? false;
     const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
+    const discoverPanelEnabled = featureFlags['features.engagement.discoverPanel'] ?? false;
+    const communityLeaderboardsEnabled =
+        featureFlags['features.engagement.communityLeaderboards'] ?? false;
     const rightPanels = useMemo(
-        () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
-        [rolesEnabled],
+        () => [
+            ...BASE_RIGHT_PANELS,
+            ...(rolesEnabled ? (['roles'] as const) : []),
+            ...(discoverPanelEnabled ? (['discover'] as const) : []),
+            ...(communityLeaderboardsEnabled ? (['leaderboards'] as const) : []),
+        ],
+        [communityLeaderboardsEnabled, discoverPanelEnabled, rolesEnabled],
     );
 
     useEffect(() => {
@@ -295,17 +304,29 @@ export const ClientLayout = () => {
         () => hasModeratorAccess(rooms, userId),
         [rooms, userId],
     );
-    const desktopQuickActions = useMemo(
-        () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'),
+    const growthPackEntries = useMemo(
+        () => getQuickActionEntriesForPackage(featureEntrypointRegistry, 'growth_pack_engagement_v1'),
         [featureEntrypointRegistry],
+    );
+    const desktopQuickActions = useMemo(
+        () =>
+            getQuickActionEntriesForSurface(
+                { ...featureEntrypointRegistry, entries: growthPackEntries },
+                'desktop',
+            ),
+        [featureEntrypointRegistry, growthPackEntries],
     );
     const mobileQuickActions = useMemo(
-        () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'mobile'),
-        [featureEntrypointRegistry],
+        () =>
+            getQuickActionEntriesForSurface(
+                { ...featureEntrypointRegistry, entries: growthPackEntries },
+                'mobile',
+            ),
+        [featureEntrypointRegistry, growthPackEntries],
     );
     const unseenQuickActionIds = useMemo(
-        () => getUnseenQuickActionIds(featureEntrypointRegistry.entries),
-        [featureEntrypointRegistry.entries],
+        () => getUnseenQuickActionIds(growthPackEntries),
+        [growthPackEntries],
     );
 
     useEffect(() => {
@@ -330,7 +351,9 @@ export const ClientLayout = () => {
         await markAllRead();
     };
 
-    const openSettingsSection = (section: 'appearance' | 'voice-video' | 'accessibility') => {
+    const openSettingsSection = (
+        section: 'appearance' | 'voice-video' | 'accessibility' | 'notifications',
+    ) => {
         setSettingsPage(section);
         setSettingsOpen(true);
     };
@@ -354,13 +377,25 @@ export const ClientLayout = () => {
             queueCommand: (command) => {
                 void handleCommandPicked(command);
             },
+            openDiscoverPanel: () => setRightPanel('discover'),
+            openPresenceDigest: () => {
+                openSettingsSection('notifications');
+                setComposerCommandStatus('Opened presence digest in notifications.');
+            },
+            openCommunityLeaderboards: () => setRightPanel('leaderboards'),
+            runSoftStreaks: () =>
+                setComposerCommandStatus('Soft streak check-in saved for today.'),
+            openWellbeingHardStops: () => {
+                openSettingsSection('accessibility');
+                setComposerCommandStatus('Opened wellbeing hard-stop controls.');
+            },
         });
     };
 
     const handleCommandPicked = async (command: string) => {
         const roomScopedCommands = new Set(['/invite', '/topic', '/me', '/shrug', '/leave']);
         if (roomScopedCommands.has(command) && !selectedRoomId) {
-            setComposerCommandStatus(`Select a room before using ${command}.`);
+            setComposerCommandStatus(`Select a den before using ${command}.`);
             return;
         }
 
@@ -369,21 +404,21 @@ export const ClientLayout = () => {
             try {
                 await client.leave(selectedRoomId);
                 setSelectedRoomId(null);
-                setComposerCommandStatus(`Left room ${selectedRoomId}.`);
+                setComposerCommandStatus(`Left den ${selectedRoomId}.`);
             } catch (error) {
                 setComposerCommandStatus(
                     error instanceof Error
-                        ? `Failed to leave room: ${error.message}`
-                        : 'Failed to leave room.',
+                        ? `Failed to leave den: ${error.message}`
+                        : 'Failed to leave den.',
                 );
             }
             return;
         }
 
         if (command === '/join') {
-            const roomAlias = window.prompt('Enter room alias or room ID to join');
+            const roomAlias = window.prompt('Enter den alias or den ID to join');
             if (!roomAlias?.trim()) {
-                setComposerCommandStatus('Join cancelled: room alias is required.');
+                setComposerCommandStatus('Join cancelled: den alias is required.');
                 return;
             }
             try {
@@ -551,6 +586,8 @@ export const ClientLayout = () => {
                 open={quickOpen}
                 onClose={() => setQuickOpen(false)}
                 onCommandPicked={(command) => void handleCommandPicked(command)}
+                quickActions={growthPackEntries}
+                onQuickActionPicked={handleQuickAction}
             />
 
             {desktop || (!mobile && !selectedRoomId) ? (
@@ -1307,10 +1344,10 @@ export const ClientLayout = () => {
                                     }}
                                 >
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Room organization
+                                        Den organization
                                     </span>
                                     <select
-                                        aria-label="Room organization"
+                                        aria-label="Den organization"
                                         value={settings.mobileRoomListScope ?? 'space'}
                                         onChange={(event) =>
                                             setSettings((prev) => ({
@@ -1478,7 +1515,7 @@ export const ClientLayout = () => {
                     />
                     <div
                         role="separator"
-                        aria-label="Resize room sidebar"
+                        aria-label="Resize den sidebar"
                         style={{
                             position: 'fixed',
                             left: layout.spaceColumnWidth + layout.roomColumnWidth - 2,

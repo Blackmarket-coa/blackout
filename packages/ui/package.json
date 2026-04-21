@@ -13,10 +13,15 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@blackout/config": "workspace:*",
     "@blackout/core": "workspace:*",
-    "@blackout/design": "workspace:*"
+    "@blackout/design": "workspace:*",
+    "lucide-react-native": "^0.542.0",
+    "react": "^19.1.1",
+    "react-native": "^0.82.0"
   },
   "devDependencies": {
+    "@types/react": "^19.1.16",
     "typescript": "5.9.3"
   }
 }

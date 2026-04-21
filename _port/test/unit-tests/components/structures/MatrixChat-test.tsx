@@ -70,6 +70,9 @@ import { clearStorage } from "../../../../src/Lifecycle";
 import RoomListStore from "../../../../src/stores/room-list/RoomListStore.ts";
 import UserSettingsDialog from "../../../../src/components/views/dialogs/UserSettingsDialog.tsx";
 import { SdkContextClass } from "../../../../src/contexts/SDKContext.ts";
+import RightPanelStore from "../../../../src/stores/right-panel/RightPanelStore.ts";
+import { RightPanelPhases } from "../../../../src/stores/right-panel/RightPanelStorePhases.ts";
+import * as findDMForUserUtils from "../../../../src/utils/dm/findDMForUser.ts";
 
 jest.mock("matrix-js-sdk/src/oidc/authorize", () => ({
     completeAuthorizationCodeGrant: jest.fn(),
@@ -1024,6 +1027,59 @@ describe("<MatrixChat />", () => {
                         format: "org.matrix.custom.html",
                         body: "evil",
                         formatted_body: "evil",
+                    });
+                });
+
+                it("should preserve the right-panel source card when opening a thread deep-link", async () => {
+                    await getComponentAndWaitForReady();
+                    jest.spyOn(RightPanelStore.instance, "currentCard", "get").mockReturnValue({
+                        phase: RightPanelPhases.RoomSummary,
+                        state: {},
+                    });
+                    const pushCardSpy = jest.spyOn(RightPanelStore.instance, "pushCard");
+                    const setCardsSpy = jest.spyOn(RightPanelStore.instance, "setCards");
+                    const rootEvent = new MatrixEvent({
+                        event_id: "$threadRoot",
+                        room_id: "!room:server.org",
+                        type: "m.room.message",
+                        sender: "@bob:server.org",
+                        content: { body: "Thread root", msgtype: "m.text" },
+                    });
+
+                    defaultDispatcher.dispatch({
+                        action: Action.ShowThread,
+                        rootEvent,
+                    });
+                    await flushPromises();
+
+                    expect(pushCardSpy).toHaveBeenCalledWith(
+                        expect.objectContaining({ phase: RightPanelPhases.ThreadView }),
+                    );
+                    expect(setCardsSpy).not.toHaveBeenCalled();
+                });
+
+                it("should gate DM creation behind approval when policy requires it", async () => {
+                    await getComponentAndWaitForReady();
+                    jest.spyOn(findDMForUserUtils, "findDMForUser").mockReturnValue(undefined);
+                    const originalGetValue = SettingsStore.getValue.bind(SettingsStore);
+                    const getValueSpy = jest.spyOn(SettingsStore, "getValue");
+                    getValueSpy.mockImplementation((settingName, ...rest) => {
+                        if (settingName === "feature_dm_request_approval") return true;
+                        return originalGetValue(settingName, ...rest);
+                    });
+                    jest.spyOn(Modal, "createDialog").mockReturnValue({
+                        finished: Promise.resolve([false]),
+                    } as any);
+
+                    defaultDispatcher.dispatch({
+                        action: Action.ViewStartChatOrReuse,
+                        user_id: "@bob:server.org",
+                    });
+                    await flushPromises();
+
+                    expect(defaultDispatcher.dispatch).not.toHaveBeenCalledWith({
+                        action: "start_chat",
+                        user_id: "@bob:server.org",
                     });
                 });
             });

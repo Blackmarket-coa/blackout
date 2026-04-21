@@ -11,7 +11,8 @@
   },
   "scripts": {
     "web:dev": "pnpm --filter @blackout/blackout-web dev",
-    "web:build": "pnpm --filter @blackout/blackout-web build:web",
+    "web:build": "pnpm --filter @blackout/client build",
+    "client:build": "pnpm --filter @blackout/client build",
     "web:test": "pnpm --filter @blackout/blackout-web test",
     "web:test:mobile": "pnpm --filter @blackout/blackout-web test:mobile",
     "desktop:dev": "pnpm --dir blackout-desktop dev",
@@ -25,7 +26,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --parallel",
     "clean": "turbo run clean",
     "smoke:aligned": "node tools/ci/run-smoke-aligned-checks.mjs",
     "ci:parity": "node tools/ci/run-centralized-parity.mjs",
@@ -55,18 +56,40 @@
     "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
     "guard:runtime-targets": "node tools/ci/check-canonical-runtime-targets.mjs",
     "test:guard:runtime-targets": "node --test tools/ci/check-canonical-runtime-targets.test.mjs",
-    "build:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run build",
-    "lint:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run lint",
-    "test:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/api --filter @blackout/blackout-web --filter blackout-mobile run test",
+    "build:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/server --filter @blackout/blackout-web --filter blackout-mobile run build",
+    "lint:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/server --filter @blackout/blackout-web --filter blackout-mobile run lint",
+    "test:runtime": "pnpm --filter @blackout/contracts --filter @blackout/core --filter @blackout/server --filter @blackout/blackout-web --filter blackout-mobile run test",
     "guard:runtime-scripts": "node tools/ci/check-runtime-scripts.mjs",
     "test:guard:runtime-scripts": "node --test tools/ci/check-runtime-scripts.test.mjs",
     "guard:blackout-legacy-aliases": "node tools/ci/check-blackout-legacy-aliases.mjs",
-    "test:guard:blackout-legacy-aliases": "node --test tools/ci/check-blackout-legacy-aliases.test.mjs"
+    "test:guard:blackout-legacy-aliases": "node --test tools/ci/check-blackout-legacy-aliases.test.mjs",
+    "dev:client": "pnpm --filter @blackout/client dev",
+    "dev:server": "pnpm --filter @blackout/server dev",
+    "guard:dev-filters": "node tools/ci/check-dev-filter-resolution.mjs",
+    "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs",
+    "guard:workspace-packages": "node tools/ci/check-workspace-package-assertions.mjs",
+    "guard:sdk-boundary": "node tools/ci/check-sdk-boundary.mjs",
+    "guard:protocol-import-consistency": "node tools/ci/check-protocol-import-consistency.mjs",
+    "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
+    "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs",
+    "guard:legacy-runtime-imports": "node tools/ci/check-legacy-runtime-imports.mjs",
+    "test:guard:legacy-runtime-imports": "node --test tools/ci/check-legacy-runtime-imports.test.mjs",
+    "guard:deployment-readiness": "node tools/ci/check-deployment-readiness.mjs",
+    "guard:frontend-consolidation": "node tools/ci/check-frontend-consolidation-gates.mjs",
+    "ci:smoke:blackout-client": "node tools/ci/run-blackout-client-smoke-matrix.mjs",
+    "guard:blackout-client-release-gate": "node tools/ci/check-blackout-client-release-gate.mjs",
+    "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs"
   },
   "devDependencies": {
-    "turbo": "^2.4.0",
-    "typescript": "5.9.3",
+    "turbo": "^2.8.16",
+    "typescript": "^5.9.3",
     "tsx": "^4.20.6",
     "@electric-sql/pglite": "^0.3.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^18.2.39",
+      "@types/react-dom": "^18.2.17"
+    }
   }
 }

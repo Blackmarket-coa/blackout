@@ -22,7 +22,7 @@ jobs:
             BLACKOUT_P2P_RECOVERY_PASSED: "true"
             BLACKOUT_P2P_KILL_SWITCH: "false"
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
             - uses: actions/setup-node@v4
               with:
                   node-version-file: ".node-version"
@@ -38,7 +38,7 @@ jobs:
                     "kill_switch": "${BLACKOUT_P2P_KILL_SWITCH}"
                   }
                   JSON
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
               with:
                   name: p2p-cutover-readiness
                   path: artifacts/cutover-readiness.json

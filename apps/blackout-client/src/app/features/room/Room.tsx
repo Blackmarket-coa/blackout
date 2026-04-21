@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { isKeyHotkey } from 'is-hotkey';
 import { RoomView } from './RoomView';
 import { MembersDrawer } from './MembersDrawer';
+import { RoomRightPanelHost } from './RoomRightPanelHost';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/compat-settings';
@@ -46,6 +47,9 @@ export function Room() {
             <Line variant="Background" direction="Vertical" size="300" />
             <MembersDrawer key={room.roomId} room={room} members={members} />
           </>
+        )}
+        {screenSize === ScreenSize.Desktop && (
+          <RoomRightPanelHost room={room} />
         )}
       </Box>
     </PowerLevelsContextProvider>

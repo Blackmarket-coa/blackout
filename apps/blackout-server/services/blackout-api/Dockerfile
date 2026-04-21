@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY services/blackout-api /app
 
 EXPOSE 8080
-CMD ["uvicorn", "blackout_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "blackout_api.main:app", "--host", "0.0.0.0", "--port", "9000"]

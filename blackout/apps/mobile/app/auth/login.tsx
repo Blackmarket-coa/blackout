@@ -38,7 +38,7 @@ export default function LoginScreen() {
 
         {/* Form */}
         <View style={styles.form}>
-          <Text style={styles.label}>HOMESERVER</Text>
+          <Text style={styles.label}>ROOT</Text>
           <TextInput
             style={styles.input}
             value={homeserver}

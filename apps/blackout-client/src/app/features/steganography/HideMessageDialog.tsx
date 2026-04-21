@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { decodeMessageFromImage } from './SteganographyDecoder';
 import { encodeMessageInImage, getSteganographyCapacity } from './SteganographyEncoder';
+import { stegoEnterprisePolicyAtom, stegoSettingsAtom } from './stegoAtoms';
+import {
+    applyStegoPolicyLifecycleAction,
+    canExecuteStegoPolicyAction,
+    enforceStegoPolicyConstraints,
+    type StegoPolicyLifecycleAction,
+} from './stegoPolicyLifecycle';
+import { openStegoUpgradeFlow, trackStegoBaselineUsage } from './stegoTelemetry';
 
 interface HideMessageDialogProps {
     open: boolean;
@@ -26,13 +35,17 @@ const generatePassphrase = (length: number): string => {
 };
 
 export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialogProps) => {
+    const stegoSettings = useAtomValue(stegoSettingsAtom);
+    const [enterprisePolicy, setEnterprisePolicy] = useAtom(stegoEnterprisePolicyAtom);
     const [activePanel, setActivePanel] = useState<StegoPanel>('encode');
     const [sourceImage, setSourceImage] = useState<File | null>(null);
     const [message, setMessage] = useState('');
     const [passphrase, setPassphrase] = useState('');
     const [encoding, setEncoding] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [policyReason, setPolicyReason] = useState('Routine policy maintenance');
     const [maxLength, setMaxLength] = useState<number | null>(null);
+    const [ttlHours, setTtlHours] = useState(enterprisePolicy.defaultTtlHours);
 
     const [decodeImage, setDecodeImage] = useState<File | null>(null);
     const [decodePassphrase, setDecodePassphrase] = useState('');
@@ -44,8 +57,15 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
 
     const disabled = useMemo(
         () => !sourceImage || !message.trim() || !passphrase.trim() || encoding,
-        [encoding, message, passphrase, sourceImage],
+        [encoding, message, passphrase, sourceImage]
     );
+    const lifecycleActions: StegoPolicyLifecycleAction[] = [
+        'activate',
+        'suspend',
+        'rotate_keys',
+        'revoke',
+        'archive',
+    ];
 
     if (!open) return null;
 
@@ -119,7 +139,7 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                         setError(
                                             err instanceof Error
                                                 ? err.message
-                                                : 'Failed to inspect image capacity.',
+                                                : 'Failed to inspect image capacity.'
                                         );
                                         setMaxLength(null);
                                     }
@@ -146,6 +166,147 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                 onChange={(event) => setPassphrase(event.target.value)}
                             />
                         </label>
+
+                        <details
+                            open
+                            style={{
+                                marginTop: 10,
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 10,
+                                padding: 8,
+                            }}
+                        >
+                            <summary>Advanced stego controls</summary>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    marginTop: 8,
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={enterprisePolicy.enabled}
+                                    onChange={(event) =>
+                                        setEnterprisePolicy((prev) => ({
+                                            ...prev,
+                                            enabled: event.target.checked,
+                                        }))
+                                    }
+                                />
+                                Enable enterprise policy plugin
+                            </label>
+                            <label style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                                Multi-carrier routing (Advanced)
+                                <select disabled={!stegoSettings.advancedEntitled}>
+                                    <option>Single image carrier</option>
+                                    <option>Image + audio carrier</option>
+                                </select>
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    marginTop: 8,
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={stegoSettings.advancedOptions.expiryRemoteBurn}
+                                    disabled
+                                    readOnly
+                                />
+                                Expiry / remote burn (Advanced)
+                            </label>
+                            <label
+                                style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    marginTop: 8,
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={stegoSettings.advancedOptions.policyAudit}
+                                    disabled
+                                    readOnly
+                                />
+                                Policy audit trail (Advanced)
+                            </label>
+                            <label style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                                Ephemeral TTL hours
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={enterprisePolicy.constraints.maxTtlHours}
+                                    value={ttlHours}
+                                    onChange={(event) => setTtlHours(Number(event.target.value))}
+                                    disabled={!enterprisePolicy.enabled}
+                                />
+                            </label>
+                            <label style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                                Lifecycle reason
+                                <input
+                                    value={policyReason}
+                                    onChange={(event) => setPolicyReason(event.target.value)}
+                                    placeholder="Why this policy action is needed"
+                                    disabled={!enterprisePolicy.enabled}
+                                />
+                            </label>
+                            <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                                <small style={{ color: 'var(--text-secondary)' }}>
+                                    Policy status: {enterprisePolicy.status} · approvals{' '}
+                                    {enterprisePolicy.governance.approvals.length}/
+                                    {enterprisePolicy.governance.requiredApprovals}
+                                </small>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {lifecycleActions.map((action) => {
+                                        const decision = canExecuteStegoPolicyAction(
+                                            enterprisePolicy,
+                                            action
+                                        );
+                                        return (
+                                            <button
+                                                key={action}
+                                                type="button"
+                                                disabled={!decision.allowed}
+                                                title={decision.reason}
+                                                onClick={() => {
+                                                    try {
+                                                        const { next } =
+                                                            applyStegoPolicyLifecycleAction(
+                                                                enterprisePolicy,
+                                                                action,
+                                                                policyReason
+                                                            );
+                                                        setEnterprisePolicy(next);
+                                                    } catch (err) {
+                                                        setError(
+                                                            err instanceof Error
+                                                                ? err.message
+                                                                : 'Policy action failed.'
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                {action.replace('_', ' ')}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                style={{ marginTop: 8 }}
+                                disabled={stegoSettings.advancedEntitled}
+                                onClick={() => openStegoUpgradeFlow('composer_advanced_controls')}
+                            >
+                                Upgrade for Advanced
+                            </button>
+                        </details>
 
                         {maxLength !== null ? (
                             <small>
@@ -180,12 +341,28 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                         setEncoding(true);
                                         setError(null);
                                         try {
+                                            const policyDecision = enforceStegoPolicyConstraints(
+                                                enterprisePolicy,
+                                                {
+                                                    ttlHours,
+                                                    passphraseLength: passphrase.trim().length,
+                                                    carrier: 'image',
+                                                }
+                                            );
+                                            if (!policyDecision.allowed) {
+                                                setError(
+                                                    policyDecision.reason ??
+                                                        'Policy denied request.'
+                                                );
+                                                return;
+                                            }
                                             const encoded = await encodeMessageInImage(
                                                 message,
                                                 sourceImage,
-                                                passphrase,
+                                                passphrase
                                             );
                                             onEncoded(encoded.file);
+                                            trackStegoBaselineUsage(stegoSettings.advancedEntitled);
                                             setSourceImage(null);
                                             setMessage('');
                                             setPassphrase('');
@@ -194,7 +371,7 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                             setError(
                                                 err instanceof Error
                                                     ? err.message
-                                                    : 'Failed to encode hidden message.',
+                                                    : 'Failed to encode hidden message.'
                                             );
                                         } finally {
                                             setEncoding(false);
@@ -253,11 +430,11 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                     try {
                                         const decoded = await decodeMessageFromImage(
                                             decodeImage,
-                                            decodePassphrase,
+                                            decodePassphrase
                                         );
                                         if (!decoded) {
                                             setDecodeError(
-                                                'No hidden message found or passphrase is incorrect.',
+                                                'No hidden message found or passphrase is incorrect.'
                                             );
                                             return;
                                         }
@@ -266,7 +443,7 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                         setDecodeError(
                                             err instanceof Error
                                                 ? err.message
-                                                : 'Failed to decode hidden content.',
+                                                : 'Failed to decode hidden content.'
                                         );
                                     } finally {
                                         setDecoding(false);
@@ -336,6 +513,19 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                                 </button>
                             </div>
                         </div>
+                        <div style={{ marginTop: 10, color: 'var(--text-secondary)' }}>
+                            <strong>Channel rotation (Advanced)</strong> and{' '}
+                            <strong>ephemeral lifecycle (Advanced)</strong> require paid
+                            entitlement.
+                        </div>
+                        <button
+                            type="button"
+                            style={{ marginTop: 8 }}
+                            disabled={stegoSettings.advancedEntitled}
+                            onClick={() => openStegoUpgradeFlow('composer_password_panel')}
+                        >
+                            Upgrade for Advanced
+                        </button>
                     </>
                 ) : null}
             </div>

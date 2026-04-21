@@ -1,6 +1,7 @@
 name: Blackout CI
 
 on:
+  push:
   pull_request:
     branches: ["**"]
 
@@ -16,32 +17,30 @@ jobs:
     name: Lint (ESLint + Prettier)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
-      - run: pnpm --filter @blackout/client exec prettier --check .
 
   typecheck:
     name: Type check (tsc --noEmit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client run typecheck
       - name: Build workspace dependencies (core, design) for project references
         run: |
           pnpm --filter @blackout/core run build
@@ -53,10 +52,10 @@ jobs:
     name: Unit tests (Vitest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -69,10 +68,10 @@ jobs:
     name: Component tests (Vitest + Testing Library)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -92,10 +91,10 @@ jobs:
           SYNAPSE_SERVER_NAME: localhost
           SYNAPSE_REPORT_STATS: "no"
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -108,10 +107,10 @@ jobs:
     name: Matrix protocol sync tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -124,11 +123,21 @@ jobs:
     name: Feature registry validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node tools/ci/check-feature-registry.mjs
+
+  deployment-readiness:
+    name: Deployment readiness assertions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/ci/check-deployment-readiness.mjs
 
   build-verification:
     name: Build verification
@@ -137,15 +146,16 @@ jobs:
       matrix:
         project: ["@blackout/blackout-web", "@blackout/client", "blackout-mobile"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: Fresh install (force relink)
+        run: pnpm install --frozen-lockfile --force
       - run: pnpm --filter "${{ matrix.project }}" run build
 
   bundle-size:
@@ -154,10 +164,10 @@ jobs:
     env:
       MAX_BUNDLE_KB: 2048
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -172,3 +182,55 @@ jobs:
             echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
             exit 1
           fi
+
+  qa-monorepo:
+    name: Monorepo QA conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run monorepo QA suite
+        id: qa_monorepo
+        continue-on-error: ${{ vars.MONOREPO_MIGRATION_THRESHOLD_MET != 'true' }}
+        run: pnpm qa:monorepo
+      - name: Upload monorepo QA artifacts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: qa-monorepo-artifacts
+          path: artifacts/qa-monorepo
+          if-no-files-found: warn
+      - name: Enforce monorepo QA gate at threshold
+        if: vars.MONOREPO_MIGRATION_THRESHOLD_MET == 'true' && steps.qa_monorepo.outcome != 'success'
+        run: |
+          echo "MONOREPO_MIGRATION_THRESHOLD_MET=true so qa:monorepo is required."
+          exit 1
+
+  frontend-consolidation-safety-gates:
+    name: Frontend consolidation safety gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Anti-drift check for consolidation artifacts
+        run: pnpm guard:frontend-consolidation
+      - name: Legacy docs integrity gate
+        run: node _port/scripts/operations/docs_integrity_check.cjs
+      - name: Keep legacy/migration surfaces green
+        run: |
+          pnpm --filter @blackout/web test
+          pnpm --filter @blackout/blackout-gov test

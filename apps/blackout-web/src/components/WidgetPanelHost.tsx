@@ -1,4 +1,5 @@
 import { FEATURE_UI_ENTRIES } from "../settings/feature-entrypoints";
+import { resolveEntitlement, type EntitlementKey } from "../settings/entitlement-resolver";
 
 const WIDGET_ENTRY_IDS = new Set([
   "feature-widget-townhall-sfu",
@@ -24,7 +25,10 @@ export function renderWidgetPanelHost(features: Record<string, boolean>): string
   const rows = widgetEntries
     .map((entry) => {
       const [, uiEntryId] = entry.uiEntry.split(":");
-      const enabled = features[entry.presetKey] ?? false;
+      const enabled = resolveEntitlement({
+        key: entry.presetKey as EntitlementKey,
+        deploymentPreset: features,
+      }).enabled;
       const testId = `${uiEntryId}-unavailable`;
       return `
         <article class="panel-card" data-testid="widget-panel-entry-${uiEntryId}">

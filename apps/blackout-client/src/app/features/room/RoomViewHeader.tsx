@@ -25,6 +25,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { JoinRule, Room } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
+import { useSetAtom } from 'jotai';
 
 import { useStateEvent } from '../../hooks/useStateEvent';
 import { PageHeader } from '../../components/page';
@@ -69,6 +70,7 @@ import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
+import { rightPanelAtom } from '../../state/bmc-navigation';
 
 type RoomMenuProps = {
   room: Room;
@@ -190,7 +192,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
           radii="300"
         >
           <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-            Room Settings
+            Den Settings
           </Text>
         </MenuItem>
         <UseStateProvider initial={false}>
@@ -236,7 +238,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 aria-pressed={promptLeave}
               >
                 <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
-                  Leave Room
+                  Leave Den
                 </Text>
               </MenuItem>
               {promptLeave && (
@@ -276,8 +278,14 @@ export function RoomViewHeader() {
     : undefined;
 
   const [peopleDrawer, setPeopleDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
+  const setRightPanel = useSetAtom(rightPanelAtom);
 
   const handleSearchClick = () => {
+    if (screenSize === ScreenSize.Desktop) {
+      setRightPanel('search');
+      return;
+    }
+
     const searchParams: _SearchPathSearchParams = {
       rooms: room.roomId,
     };
@@ -285,6 +293,14 @@ export function RoomViewHeader() {
       ? getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))
       : getHomeSearchPath();
     navigate(withSearchParam(path, searchParams));
+  };
+
+  const handleOpenMembersPanel = () => {
+    setRightPanel('members');
+  };
+
+  const handleOpenThreadsPanel = () => {
+    setRightPanel('threads');
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -449,7 +465,41 @@ export function RoomViewHeader() {
               offset={4}
               tooltip={
                 <Tooltip>
-                  <Text>{peopleDrawer ? 'Hide Members' : 'Show Members'}</Text>
+                  <Text>Threads Panel</Text>
+                </Tooltip>
+              }
+            >
+              {(triggerRef) => (
+                <IconButton ref={triggerRef} onClick={handleOpenThreadsPanel}>
+                  <Icon size="400" src={Icons.Message} />
+                </IconButton>
+              )}
+            </TooltipProvider>
+          )}
+          {screenSize === ScreenSize.Desktop && (
+            <TooltipProvider
+              position="Bottom"
+              offset={4}
+              tooltip={
+                <Tooltip>
+                  <Text>Members Panel</Text>
+                </Tooltip>
+              }
+            >
+              {(triggerRef) => (
+                <IconButton ref={triggerRef} onClick={handleOpenMembersPanel}>
+                  <Icon size="400" src={Icons.User} />
+                </IconButton>
+              )}
+            </TooltipProvider>
+          )}
+          {screenSize === ScreenSize.Desktop && (
+            <TooltipProvider
+              position="Bottom"
+              offset={4}
+              tooltip={
+                <Tooltip>
+                  <Text>{peopleDrawer ? 'Hide Shadows' : 'Show Shadows'}</Text>
                 </Tooltip>
               }
             >

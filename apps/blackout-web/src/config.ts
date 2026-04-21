@@ -12,7 +12,7 @@ import { resolveEngagementPolicy } from "./settings/engagement-policy";
 import type { ReleaseCohort } from "./services/telemetry";
 import type { EngagementPolicy, NotificationRule } from "./types";
 
-const DEFAULT_HOMESERVER_URL = "https://matrix.theblackout.app";
+const DEFAULT_HOMESERVER_URL = "https://theblackout.app";
 
 function normalizeRailwayReference(value: string): string {
   const trimmed = value.trim();

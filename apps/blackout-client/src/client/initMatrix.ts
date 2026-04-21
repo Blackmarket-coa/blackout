@@ -46,16 +46,16 @@ const normalizeMatrixError = (error: unknown): MatrixInitError => {
     const matrixError = error as Partial<MatrixError> & { errcode?: string; message?: string };
 
     if (matrixError?.errcode === 'M_LIMIT_EXCEEDED') {
-        return new MatrixInitError('rate_limited', 'Homeserver rate limit exceeded.');
+        return new MatrixInitError('rate_limited', 'Root rate limit exceeded.');
     }
     if (matrixError?.errcode === 'M_FORBIDDEN' || matrixError?.errcode === 'M_UNKNOWN_TOKEN') {
         return new MatrixInitError('invalid_credentials', 'Session token is invalid or expired.');
     }
     if (matrixError?.errcode === 'M_CAPTCHA_NEEDED') {
-        return new MatrixInitError('captcha_required', 'Homeserver requires CAPTCHA verification.');
+        return new MatrixInitError('captcha_required', 'Root requires CAPTCHA verification.');
     }
     if (isLikelyNetworkError(error)) {
-        return new MatrixInitError('network_failure', 'Unable to reach the homeserver.');
+        return new MatrixInitError('network_failure', 'Unable to reach the root.');
     }
 
     return new MatrixInitError('unknown', matrixError?.message ?? 'Matrix initialization failed.');
@@ -68,7 +68,7 @@ const ensureValidHomeserver = (baseUrl: string): void => {
             throw new Error('Invalid protocol');
         }
     } catch {
-        throw new MatrixInitError('invalid_homeserver', 'Homeserver URL is invalid.');
+        throw new MatrixInitError('invalid_homeserver', 'Root URL is invalid.');
     }
 };
 
@@ -156,6 +156,17 @@ export const initMatrixFromStoredSession = async (
 
 export const stopMatrixClient = (client: MatrixClient | null): void => {
     client?.stopClient();
+};
+
+export const initClient = (session: StoredSession): Promise<MatrixClient> =>
+    initClientForSession(session);
+
+export const startClient = async (client: MatrixClient): Promise<void> => {
+    await startSyncWithRetry(client);
+};
+
+export const clearLoginData = (): void => {
+    window.localStorage.clear();
 };
 
 export const logoutClient = async (client: MatrixClient): Promise<void> => {

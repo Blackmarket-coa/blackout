@@ -1,15 +1,18 @@
+import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
 import authRoutes from './routes/auth';
 import messageRoutes from './routes/messages';
-import governanceRoutes from './routes/governance';
 import federationRoutes from './routes/federation';
 import channelRoutes from './routes/channels';
+import entitlementRoutes from './routes/entitlements';
+import marketplaceRoutes from './routes/marketplace';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
 import { runSecurityPreflight } from './config/security';
+import { registerFeatureModules } from './modules';
 
 const securityPreflight = runSecurityPreflight();
 const app = new Hono();
@@ -38,11 +41,19 @@ if (legacyAliasEnabled) {
 for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
   app.route(`${root}/auth`, authRoutes);
   app.route(`${root}/messages`, messageRoutes);
-  app.route(`${root}/governance`, governanceRoutes);
   app.route(`${root}/federation`, federationRoutes);
   app.route(`${root}/channels`, channelRoutes);
+  app.route(`${root}/entitlements`, entitlementRoutes);
+  app.route(`${root}/marketplace`, marketplaceRoutes);
+  registerFeatureModules(app, root);
 }
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
+
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+
+serve({ fetch: app.fetch, port: PORT }, (info) => {
+  console.log(`[blackout-server] listening on http://localhost:${info.port}`);
+});
 
 export default app;

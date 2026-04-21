@@ -12,6 +12,7 @@ describe("renderGovernanceRoomPanel", () => {
       proposals: [],
       canPropose: true,
       canVote: true,
+      governanceAdvancedEnabled: false,
     });
 
     expect(html).toContain('data-action="governance-set-tab" data-tab="feed"');

@@ -26,7 +26,15 @@ export type TelemetryEventName =
   | "kpi_ttfv_checkpoint"
   | "kpi_onboarding_completion"
   | "kpi_invite_completion"
-  | "kpi_advanced_feature_discovery";
+  | "kpi_advanced_feature_discovery"
+  | "stego_baseline_used"
+  | "governance_baseline_used"
+  | "advanced_control_opened"
+  | "upgrade_click"
+  | "upgrade_intent"
+  | "stego_upgrade_intent"
+  | "governance_upgrade_intent"
+  | "upgrade_conversion";
 
 export interface TelemetryEvent {
   name: TelemetryEventName | string;

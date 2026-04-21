@@ -370,7 +370,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.spaces.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Spaces
+                          Canopies
                         </Text>
                         {mutual.spaces.map(renderItem)}
                       </Box>
@@ -378,7 +378,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.rooms.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Rooms
+                          Dens
                         </Text>
                         {mutual.rooms.map(renderItem)}
                       </Box>
@@ -386,7 +386,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                     {mutual.directs.length > 0 && (
                       <Box direction="Column" gap="100">
                         <Text style={{ paddingLeft: config.space.S100 }} size="L400">
-                          Direct Messages
+                          Locked In
                         </Text>
                         {mutual.directs.map(renderItem)}
                       </Box>
@@ -411,8 +411,8 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       >
         <Text size="B300">
           {mutualRoomsState.status === AsyncStatus.Success &&
-            `${mutualRoomsState.data.length} Mutual Rooms`}
-          {mutualRoomsState.status === AsyncStatus.Loading && 'Mutual Rooms'}
+            `${mutualRoomsState.data.length} Mutual Dens`}
+          {mutualRoomsState.status === AsyncStatus.Loading && 'Mutual Dens'}
         </Text>
       </Chip>
     </PopOut>

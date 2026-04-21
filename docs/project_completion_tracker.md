@@ -4,6 +4,11 @@ This tracker consolidates rollout milestones and readiness gates for distributed
 
 Use this consolidated tracker as the single source of truth for rollout progress.
 
+## Monorepo migration references
+
+- Active work plan: `docs/blackout-monorepo-work-required.md`
+- QA write-up and command baseline: `docs/blackout-monorepo-qa-writeup.md`
+
 ## Progress snapshot
 
 - Overall checklist completion: **34/34 items (100%)**.

@@ -83,6 +83,256 @@ function toCanonicalRegistry(registry) {
   };
 }
 
+function readIfExists(filePath) {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
+}
+
+function parseStringListConst(source, constName) {
+  const pattern = new RegExp(`${constName}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'm');
+  const match = source.match(pattern);
+  if (!match) return null;
+
+  const ids = [];
+  for (const literal of match[1].matchAll(/'([^']+)'/g)) {
+    ids.push(literal[1]);
+  }
+
+  return ids;
+}
+
+function parseFlagIdsFromCoreModules(source) {
+  const ids = [];
+  const flagRe = /flag\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(flagRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function parseFeatureIdsFromPlugins(source) {
+  const ids = [];
+  const moduleIdRe = /feature\s*:\s*\{[\s\S]*?id\s*:\s*'([^']+)'[\s\S]*?\}/g;
+  for (const match of source.matchAll(moduleIdRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+
+function parseRuntimePluginIdsFromManifest(source) {
+  const ids = [];
+  const idRe = /id\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(idRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function parseFeatureModulePluginIds(source) {
+  const ids = [];
+  const pluginIdRe = /id\s*:\s*'([^']+)'/g;
+  for (const match of source.matchAll(pluginIdRe)) {
+    ids.push(match[1]);
+  }
+  return ids;
+}
+
+function listFeatureManifestFiles(featuresRoot) {
+  if (!fs.existsSync(featuresRoot)) return [];
+
+  const files = [];
+  const stack = [featuresRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name === 'manifest.ts') {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function parseFeatureObjectTopLevelProps(source) {
+  const props = [];
+  const marker = 'BlackoutFeature';
+  let markerIndex = source.indexOf(marker);
+  while (markerIndex !== -1) {
+    const objectStart = source.indexOf('{', markerIndex);
+    if (objectStart === -1) break;
+
+    let depth = 0;
+    let currentToken = '';
+    let captureProperty = false;
+    for (let i = objectStart; i < source.length; i += 1) {
+      const char = source[i];
+      const prev = source[i - 1];
+      const escaped = prev === '\\';
+
+      if (char === "'" || char === '"' || char === '`') {
+        const quote = char;
+        i += 1;
+        while (i < source.length) {
+          if (source[i] === quote && source[i - 1] !== '\\') break;
+          i += 1;
+        }
+        continue;
+      }
+
+      if (char === '{') {
+        depth += 1;
+        captureProperty = depth === 1;
+        currentToken = '';
+        continue;
+      }
+
+      if (char === '}') {
+        if (depth === 1) {
+          markerIndex = source.indexOf(marker, i);
+          return props;
+        }
+        depth -= 1;
+        continue;
+      }
+
+      if (depth !== 1) continue;
+
+      if (char === ':' && captureProperty) {
+        const prop = currentToken.trim().replace(/^[,\s]+/, '');
+        if (prop) props.push(prop);
+        captureProperty = false;
+        currentToken = '';
+        continue;
+      }
+
+      if (char === ',') {
+        captureProperty = true;
+        currentToken = '';
+        continue;
+      }
+
+      if (captureProperty) {
+        if (!escaped) currentToken += char;
+      }
+    }
+    break;
+  }
+  return props;
+}
+
+function validateClientFeatureRegistration(errors) {
+  const manifestTs = path.resolve(process.cwd(), getArg('--manifest-ts') ?? 'apps/blackout-client/src/app/core/features/manifest.ts');
+  const coreModulesTs = path.resolve(process.cwd(), getArg('--core-modules-ts') ?? 'apps/blackout-client/src/app/core/features/coreModules.ts');
+  const featurePluginsTs = path.resolve(process.cwd(), getArg('--plugins-ts') ?? 'apps/blackout-client/src/app/core/features/plugins.ts');
+  const runtimePluginsTs = path.resolve(process.cwd(), getArg('--runtime-plugins-ts') ?? 'apps/blackout-client/src/app/plugins/manifest.ts');
+  const capabilityGateTs = path.resolve(process.cwd(), getArg('--capability-gate-ts') ?? 'apps/blackout-client/src/app/core/features/capabilityGate.ts');
+  const featuresRoot = path.resolve(process.cwd(), getArg('--features-root') ?? 'apps/blackout-client/src/app/features');
+
+  const manifestSource = readIfExists(manifestTs);
+  const coreSource = readIfExists(coreModulesTs);
+  const featurePluginsSource = readIfExists(featurePluginsTs);
+  const runtimePluginsSource = readIfExists(runtimePluginsTs);
+
+  if (!manifestSource || !coreSource || !featurePluginsSource || !runtimePluginsSource) {
+    return;
+  }
+
+  const registeredFeatureIds = parseStringListConst(manifestSource, 'featureModuleManifest');
+  if (!registeredFeatureIds || registeredFeatureIds.length === 0) {
+    errors.push(`Client feature registry missing featureModuleManifest allowlist in ${path.relative(process.cwd(), manifestTs)}.`);
+    return;
+  }
+
+  const registeredSet = new Set(registeredFeatureIds);
+
+  const coreFlagIds = parseFlagIdsFromCoreModules(coreSource);
+  for (const flagId of coreFlagIds) {
+    if (!registeredSet.has(flagId)) {
+      errors.push(`Core feature module flag "${flagId}" is not in featureModuleManifest.`);
+    }
+  }
+
+  const pluginFeatureIds = parseFeatureIdsFromPlugins(featurePluginsSource);
+  for (const featureId of pluginFeatureIds) {
+    if (!registeredSet.has(featureId)) {
+      errors.push(`Plugin injects unregistered feature id "${featureId}" in ${path.relative(process.cwd(), featurePluginsTs)}.`);
+    }
+  }
+
+  const allowedFeatureModulePluginIds = parseStringListConst(manifestSource, 'featureModulePluginManifest');
+  const declaredFeatureModulePluginIds = parseFeatureModulePluginIds(featurePluginsSource);
+  if (!allowedFeatureModulePluginIds || allowedFeatureModulePluginIds.length === 0) {
+    errors.push(`Feature module plugin allowlist missing featureModulePluginManifest in ${path.relative(process.cwd(), manifestTs)}.`);
+  } else {
+    const allowedFeatureModulePluginSet = new Set(allowedFeatureModulePluginIds);
+    for (const pluginId of declaredFeatureModulePluginIds) {
+      if (!allowedFeatureModulePluginSet.has(pluginId)) {
+        errors.push(`Unknown feature module plugin id "${pluginId}" in ${path.relative(process.cwd(), featurePluginsTs)}.`);
+      }
+    }
+  }
+
+  const allowedRuntimePluginIds = parseStringListConst(manifestSource, 'runtimePluginManifest');
+  const declaredRuntimePluginIds = parseRuntimePluginIdsFromManifest(runtimePluginsSource);
+
+  if (!allowedRuntimePluginIds || allowedRuntimePluginIds.length === 0) {
+    errors.push(`Runtime plugin allowlist missing runtimePluginManifest in ${path.relative(process.cwd(), manifestTs)}.`);
+    return;
+  }
+
+  if (!declaredRuntimePluginIds || declaredRuntimePluginIds.length === 0) {
+    errors.push(`Runtime plugin declarations missing runtimePluginEntries in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    return;
+  }
+
+  const allowedRuntimeSet = new Set(allowedRuntimePluginIds);
+  for (const pluginId of declaredRuntimePluginIds) {
+    if (!allowedRuntimeSet.has(pluginId)) {
+      errors.push(`Unknown runtime plugin id "${pluginId}" declared in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    }
+  }
+
+  for (const pluginId of allowedRuntimePluginIds) {
+    if (!declaredRuntimePluginIds.includes(pluginId)) {
+      errors.push(`Allowlisted runtime plugin id "${pluginId}" is missing in ${path.relative(process.cwd(), runtimePluginsTs)}.`);
+    }
+  }
+
+  const capabilityGateSource = readIfExists(capabilityGateTs);
+  if (capabilityGateSource) {
+    const forbiddenFallbackAnchors = ['-legacy', 'routes: feature.routes', 'navItems: feature.navItems', 'settings: feature.settings'];
+    for (const anchor of forbiddenFallbackAnchors) {
+      if (capabilityGateSource.includes(anchor)) {
+        errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), capabilityGateTs)}: remove legacy fallback anchor "${anchor}".`);
+      }
+    }
+  }
+
+  for (const featureManifestFile of listFeatureManifestFiles(featuresRoot)) {
+    const source = readIfExists(featureManifestFile);
+    if (!source) continue;
+
+    const topLevelProps = new Set(parseFeatureObjectTopLevelProps(source));
+    if (topLevelProps.size === 0) continue;
+
+    if (!topLevelProps.has('customizations')) {
+      errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), featureManifestFile)}: feature manifest must declare "customizations".`);
+    }
+
+    for (const forbiddenProp of ['routes', 'navItems', 'settings']) {
+      if (topLevelProps.has(forbiddenProp)) {
+        errors.push(`Plugin-only customization violation in ${path.relative(process.cwd(), featureManifestFile)}: top-level "${forbiddenProp}" must move into plugin customizations.`);
+      }
+    }
+  }
+}
+
 const registryPath = path.resolve(process.cwd(), getArg('--file') ?? 'docs/features/feature_registry.json');
 
 if (!fs.existsSync(registryPath)) {
@@ -260,33 +510,39 @@ for (const [scopeIndex, scope] of scopes.entries()) {
         continue;
       }
 
+      if (sectionUniqueIds.has(featureId)) {
+        errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": duplicate feature id "${featureId}".`);
+      }
       sectionUniqueIds.add(featureId);
       scopeUniqueIds.add(featureId);
 
-      const featureName = String(featureById.get(featureId).name ?? '').trim().toLowerCase();
-      if (featureName.length > 0) {
-        const existingFeatureId = scopeNames.get(featureName);
-        if (existingFeatureId && existingFeatureId !== featureId) {
-          errors.push(`Scope "${scopeLabel}": duplicate feature name "${featureById.get(featureId).name}" in scope.`);
+      const featureName = featureById.get(featureId)?.name;
+      if (typeof featureName === 'string') {
+        const existingForName = scopeNames.get(featureName.toLowerCase());
+        if (existingForName && existingForName !== featureId) {
+          errors.push(`Scope "${scopeLabel}": duplicate feature name "${featureName}" across feature ids "${existingForName}" and "${featureId}".`);
+        } else {
+          scopeNames.set(featureName.toLowerCase(), featureId);
         }
-        scopeNames.set(featureName, featureId);
       }
     }
 
-    if (typeof section.total === 'number' && section.total !== sectionUniqueIds.size) {
-      errors.push(
-        `Scope "${scopeLabel}" section "${sectionLabel}": total=${section.total} does not match unique featureIds=${sectionUniqueIds.size}.`,
-      );
+    if ('total' in section && section.total !== sectionUniqueIds.size) {
+      errors.push(`Scope "${scopeLabel}" section "${sectionLabel}": total=${section.total} does not match unique featureIds=${sectionUniqueIds.size}.`);
     }
   }
 
-  if (typeof scope.globalTotal === 'number' && scope.globalTotal !== scopeUniqueIds.size) {
-    errors.push(`Scope "${scopeLabel}": globalTotal=${scope.globalTotal} does not match unique scoped features=${scopeUniqueIds.size}.`);
+  if ('globalTotal' in scope && scope.globalTotal !== scopeUniqueIds.size) {
+    errors.push(`Scope "${scopeLabel}": globalTotal=${scope.globalTotal} does not match unique featureIds=${scopeUniqueIds.size}.`);
   }
 }
 
+validateClientFeatureRegistration(errors);
+
 if (errors.length > 0) {
-  fail(`Feature registry validation failed:\n- ${errors.join('\n- ')}`);
+  process.stderr.write(`Feature registry validation failed (${errors.length} issue${errors.length === 1 ? '' : 's'}):\n`);
+  errors.forEach((error) => process.stderr.write(`- ${error}\n`));
+  process.exit(1);
 }
 
-process.stdout.write(`Feature registry validation passed (${features.length} rows across ${scopes.length} scope(s)).\n`);
+process.stdout.write(`Feature registry validation passed: ${features.length} features across ${scopes.length} scope(s).\n`);

@@ -8,98 +8,105 @@ import { IEmoji } from '../../../plugins/emoji';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
-  const label = element.getAttribute('title');
-  const type = element.getAttribute('data-emoji-type') as EmojiType | undefined;
-  const data = element.getAttribute('data-emoji-data');
-  const shortcode = element.getAttribute('data-emoji-shortcode');
+    const label = element.getAttribute('title');
+    const type = element.getAttribute('data-emoji-type') as EmojiType | undefined;
+    const data = element.getAttribute('data-emoji-data');
+    const shortcode = element.getAttribute('data-emoji-shortcode');
 
-  if (type && data && shortcode && label)
-    return {
-      type,
-      data,
-      shortcode,
-      label,
-    };
-  return undefined;
+    if (type && data && shortcode && label)
+        return {
+            type,
+            data,
+            shortcode,
+            label,
+        };
+    return undefined;
 };
 
 type EmojiItemProps = {
-  emoji: IEmoji;
+    emoji: IEmoji;
 };
 export function EmojiItem({ emoji }: EmojiItemProps) {
-  return (
-    <Box
-      as="button"
-      type="button"
-      alignItems="Center"
-      justifyContent="Center"
-      className={css.EmojiItem}
-      title={emoji.label}
-      aria-label={`${emoji.label} emoji`}
-      data-emoji-type={EmojiType.Emoji}
-      data-emoji-data={emoji.unicode}
-      data-emoji-shortcode={emoji.shortcode}
-    >
-      {emoji.unicode}
-    </Box>
-  );
+    return (
+        <Box
+            as="button"
+            type="button"
+            alignItems="Center"
+            justifyContent="Center"
+            className={css.EmojiItem}
+            title={emoji.label}
+            aria-label={`${emoji.label} emoji`}
+            data-emoji-type={EmojiType.Emoji}
+            data-emoji-data={emoji.unicode}
+            data-emoji-shortcode={emoji.shortcode}
+        >
+            {emoji.unicode}
+        </Box>
+    );
 }
 
 type CustomEmojiItemProps = {
-  mx: MatrixClient;
-  useAuthentication?: boolean;
-  image: PackImageReader;
+    mx: MatrixClient;
+    useAuthentication?: boolean;
+    image: PackImageReader;
 };
 export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
-  return (
-    <Box
-      as="button"
-      type="button"
-      alignItems="Center"
-      justifyContent="Center"
-      className={css.EmojiItem}
-      title={image.body || image.shortcode}
-      aria-label={`${image.body || image.shortcode} emoji`}
-      data-emoji-type={EmojiType.CustomEmoji}
-      data-emoji-data={image.url}
-      data-emoji-shortcode={image.shortcode}
-    >
-      <img
-        loading="lazy"
-        className={css.CustomEmojiImg}
-        alt={image.body || image.shortcode}
-        src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
-      />
-    </Box>
-  );
+    return (
+        <Box
+            as="button"
+            type="button"
+            alignItems="Center"
+            justifyContent="Center"
+            className={css.EmojiItem}
+            title={image.body || image.shortcode}
+            aria-label={`${image.body || image.shortcode} emoji`}
+            data-emoji-type={EmojiType.CustomEmoji}
+            data-emoji-data={image.url}
+            data-emoji-shortcode={image.shortcode}
+        >
+            <img
+                loading="lazy"
+                className={css.CustomEmojiImg}
+                alt={image.body || image.shortcode}
+                src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
+            />
+        </Box>
+    );
 }
 
 type StickerItemProps = {
-  mx: MatrixClient;
-  useAuthentication?: boolean;
-  image: PackImageReader;
+    mx: MatrixClient;
+    useAuthentication?: boolean;
+    image: PackImageReader;
+    type?: EmojiType.Sticker | EmojiType.Gif;
 };
 
-export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
-  return (
-    <Box
-      as="button"
-      type="button"
-      alignItems="Center"
-      justifyContent="Center"
-      className={css.StickerItem}
-      title={image.body || image.shortcode}
-      aria-label={`${image.body || image.shortcode} emoji`}
-      data-emoji-type={EmojiType.Sticker}
-      data-emoji-data={image.url}
-      data-emoji-shortcode={image.shortcode}
-    >
-      <img
-        loading="lazy"
-        className={css.StickerImg}
-        alt={image.body || image.shortcode}
-        src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
-      />
-    </Box>
-  );
+export function StickerItem({
+    mx,
+    useAuthentication,
+    image,
+    type = EmojiType.Sticker,
+}: StickerItemProps) {
+    const label = image.body || image.shortcode;
+    return (
+        <Box
+            as="button"
+            type="button"
+            alignItems="Center"
+            justifyContent="Center"
+            className={css.StickerItem}
+            title={label}
+            aria-label={`${label} ${type === EmojiType.Gif ? 'gif' : 'emoji'}`}
+            data-emoji-type={type}
+            data-emoji-data={image.url}
+            data-emoji-shortcode={image.shortcode}
+        >
+            <img
+                loading="lazy"
+                className={css.StickerImg}
+                alt={label}
+                src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
+            />
+        </Box>
+    );
 }

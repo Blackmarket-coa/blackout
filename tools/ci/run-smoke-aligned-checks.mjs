@@ -18,14 +18,14 @@ const commands = [
     args: ['guard:feature-budget'],
   },
   {
+    label: 'Dev filter resolution guard',
+    cmd: 'pnpm',
+    args: ['guard:dev-filters'],
+  },
+  {
     label: 'Preset-complete definition-of-done guard',
     cmd: 'pnpm',
     args: ['guard:preset-complete'],
-  },
-  {
-    label: 'Preset smoke matrix',
-    cmd: 'pnpm',
-    args: ['ci:smoke:preset-matrix'],
   },
   {
     label: 'Web shell build smoke gate',

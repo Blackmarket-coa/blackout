@@ -221,7 +221,7 @@ function RoomProfile({
         <Box gap="200" alignItems="Center">
           {memberCount && (
             <Box shrink="No" gap="200">
-              <Text size="T200" priority="300">{`${millify(memberCount)} Members`}</Text>
+              <Text size="T200" priority="300">{`${millify(memberCount)} Shadows`}</Text>
             </Box>
           )}
           {memberCount && topic && (
@@ -358,7 +358,7 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
                           fill="None"
                           size="400"
                           radii="Pill"
-                          aria-label="Open Room"
+                          aria-label="Open Den"
                         >
                           <Icon size="50" src={Icons.ArrowRight} />
                         </Chip>

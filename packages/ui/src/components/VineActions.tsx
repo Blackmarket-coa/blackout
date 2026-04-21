@@ -37,14 +37,14 @@ export function VineActions({ actions, animation, onAction, onOpenOverflow, styl
       {visibleActions.map((action) => (
         <Pressable
           key={action.label}
-          style={({ hovered }) => [styles.vineAction, action.primary && styles.vineActionPrimary, hovered && styles.vineActionHovered]}
+          style={({ pressed }) => [styles.vineAction, action.primary && styles.vineActionPrimary, pressed && styles.vineActionHovered]}
           onPress={() => onAction(action)}
         >
           <Text style={[styles.vineActionLabel, action.primary && styles.vineActionLabelPrimary]}>{action.label}</Text>
         </Pressable>
       ))}
       {hasOverflow && onOpenOverflow && (
-        <Pressable style={({ hovered }) => [styles.vineAction, hovered && styles.vineActionHovered]} onPress={onOpenOverflow}>
+        <Pressable style={({ pressed }) => [styles.vineAction, pressed && styles.vineActionHovered]} onPress={onOpenOverflow}>
           <Text style={styles.vineActionLabel}>More</Text>
         </Pressable>
       )}

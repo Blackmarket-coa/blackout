@@ -1,17 +1,7 @@
-import { useAtomValue } from 'jotai';
-import { authStateAtom, matrixClientAtom } from '../state/bmc-auth';
+import { useLegacyMatrixClientAdapter } from '../plugins/matrix-adapters/hooks/useLegacyMatrixClientAdapter';
 
 /**
- * Returns authenticated Matrix client instance from Jotai state.
- * Throws when user is not logged in or client has not been initialized.
+ * @deprecated Temporary bridge to preserve legacy imports.
+ * Scheduled for deletion in PR-6 after feature/plugin migration completes.
  */
-export const useMatrixClient = () => {
-    const authState = useAtomValue(authStateAtom);
-    const client = useAtomValue(matrixClientAtom);
-
-    if (authState !== 'logged_in' || !client) {
-        throw new Error('Matrix client unavailable: user is not logged in.');
-    }
-
-    return client;
-};
+export const useMatrixClient = () => useLegacyMatrixClientAdapter();

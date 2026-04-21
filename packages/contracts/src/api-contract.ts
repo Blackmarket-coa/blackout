@@ -1,3 +1,4 @@
+import type { EntitlementAccessPayload, EntitlementFamily, PlanState } from '@blackout/protocol';
 import type {
   ApiMessage as GeneratedApiMessage,
   CastVoteRequest as GeneratedCastVoteRequest,
@@ -8,7 +9,7 @@ import type {
 
 export const API_VERSION = 'v1' as const;
 
-export const API_DOMAINS = ['auth', 'channels', 'messages', 'governance', 'federation'] as const;
+export const API_DOMAINS = ['auth', 'channels', 'messages', 'governance', 'forum', 'deaddrop', 'moderation', 'federation', 'entitlements'] as const;
 
 export const API_ROOTS = {
   v1: '/v1',
@@ -20,3 +21,9 @@ export type CreateMessageRequest = GeneratedCreateMessageRequest;
 export type CreateVoteRequest = GeneratedCreateVoteRequest;
 export type CastVoteRequest = GeneratedCastVoteRequest;
 export type FederatedCommunitiesResponse = GeneratedFederatedCommunitiesResponse;
+
+export interface EntitlementSnapshotResponse {
+  family: EntitlementFamily | 'all';
+  payload: EntitlementAccessPayload;
+  planState: PlanState | null;
+}

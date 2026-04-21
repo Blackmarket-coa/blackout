@@ -157,7 +157,7 @@ export function Members({ requestClose }: MembersProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              {room.getJoinedMemberCount()} Members
+              {room.getJoinedMemberCount()} Shadows
             </Text>
           </Box>
           <Box shrink="No">
@@ -295,7 +295,7 @@ export function Members({ requestClose }: MembersProps) {
 
               {!fetchingMembers && !result && flattenTagMembers.length === 0 && (
                 <Text style={{ padding: config.space.S300 }} align="Center">
-                  {`No "${membershipFilter.name}" Members`}
+                  {`No "${membershipFilter.name}" Shadows`}
                 </Text>
               )}
 

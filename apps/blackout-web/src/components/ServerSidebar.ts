@@ -77,7 +77,7 @@ export function renderServerSidebar({ servers, activeServerId, activeView, showA
 
       <div class="sidebar-divider"></div>
 
-      <button type="button" class="sidebar-nav-btn" data-action="create-server" aria-label="Create space" style="border: 2px dashed var(--text-faint); background: none; color: var(--text-faint);" onmouseover="this.style.borderColor='var(--teal)'; this.style.color='var(--teal)'; this.style.background='var(--bg-hover)';" onmouseout="this.style.borderColor='var(--text-faint)'; this.style.color='var(--text-faint)'; this.style.background='none';">
+      <button type="button" class="sidebar-nav-btn" data-action="create-server" aria-label="Create canopy" style="border: 2px dashed var(--text-faint); background: none; color: var(--text-faint);" onmouseover="this.style.borderColor='var(--teal)'; this.style.color='var(--teal)'; this.style.background='var(--bg-hover)';" onmouseout="this.style.borderColor='var(--text-faint)'; this.style.color='var(--text-faint)'; this.style.background='none';">
         <span style="font-size: 22px; font-weight: 300;">+</span>
       </button>
     </aside>

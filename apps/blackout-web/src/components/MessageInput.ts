@@ -7,6 +7,7 @@ interface MessageInputOptions {
   compactMode: boolean;
   richEditingEnabled: boolean;
   stegoEnabled: boolean;
+  stegoAdvancedEnabled: boolean;
   composerRepliesEnabled: boolean;
   composerEditsEnabled: boolean;
   composerRedactionsEnabled: boolean;
@@ -15,6 +16,10 @@ interface MessageInputOptions {
   typingIndicatorsEnabled: boolean;
   showTypingIndicator: boolean;
   attachmentMode: "quick" | "manage" | "bulk";
+}
+
+function renderAdvancedLabel(label: string): string {
+  return `${label} (Advanced)`;
 }
 
 function renderAttachmentQuickAddSection(disabled: boolean): string {
@@ -76,6 +81,7 @@ export function renderMessageInput({
   compactMode: _compactMode,
   richEditingEnabled,
   stegoEnabled,
+  stegoAdvancedEnabled,
   composerRepliesEnabled: _composerRepliesEnabled,
   composerEditsEnabled: _composerEditsEnabled,
   composerRedactionsEnabled: _composerRedactionsEnabled,
@@ -103,7 +109,7 @@ export function renderMessageInput({
       </div>
       <div class="composer-e2ee-hint">
         <span>🔒</span>
-        Messages are end-to-end encrypted ${renderGlossaryTip("E2EE")}. Only members of this room can read them.
+        Messages are end-to-end encrypted ${renderGlossaryTip("E2EE")}. Only shadows of this den can read them.
       </div>
       <div class="composer-popovers">
         <section class="composer-popover" data-panel="attachments" data-testid="composer-attachment-panel" aria-hidden="true">
@@ -162,6 +168,7 @@ export function renderMessageInput({
             <p class="composer-popover-title">Governance composer</p>
             <button type="button" class="ghost-btn" data-action="composer-close-panel" aria-label="Close governance composer">Close</button>
           </div>
+          <p class="meta" data-testid="composer-governance-baseline-hint">Baseline flow: insert a proposal command, cast votes with <code>/vote</code>, then open Results in the governance panel.</p>
           <label class="composer-popover-field">Proposal title
             <input type="text" data-action="composer-governance-title" value="Approve sprint release?" ${disabled ? "disabled" : ""} />
           </label>
@@ -182,7 +189,7 @@ export function renderMessageInput({
             <button type="button" data-action="composer-governance-insert-proposal" ${disabled || !canPropose ? "disabled" : ""}>Insert proposal</button>
             <button type="button" data-action="composer-governance-insert-vote" ${disabled ? "disabled" : ""}>Insert vote</button>
           </div>
-          ${!canPropose ? '<p class="meta" role="status">You can vote, but proposal creation requires elevated governance permission.</p>' : ""}
+          ${!canPropose ? '<p class="meta" role="status">Proposal insertion is currently unavailable in this den.</p>' : ""}
           <div class="composer-channel-editor">
             <p class="composer-popover-title">Governance templates</p>
             <div class="composer-popover-actions">
@@ -274,11 +281,15 @@ export function renderMessageInput({
                   <button type="button" data-action="composer-stego-tab-password" data-testid="composer-stego-tab-password" role="tab" aria-selected="false" ${disabled ? "disabled" : ""}>Password</button>
                 </div>
                 <div class="composer-stego-view is-active" data-stego-view="encode">
+                  <p class="meta" data-testid="composer-stego-baseline-hint">Baseline mode: hide/reveal inside the default text carrier.</p>
                   <label class="composer-popover-field">Hidden text
                     <input type="text" data-action="composer-stego-hidden" value="hidden-message" ${disabled ? "disabled" : ""} />
                   </label>
                   <label class="composer-popover-field">Cover text ${renderGlossaryTip("Cover text")}
                     <input type="text" data-action="composer-stego-cover" value="let's sync after standup" ${disabled ? "disabled" : ""} />
+                  </label>
+                  <label class="composer-popover-field">Carrier (default)
+                    <input type="text" value="text-body" readonly data-action="composer-stego-carrier" />
                   </label>
                   <label class="composer-popover-field">Passphrase
                     <input type="password" data-action="composer-stego-passphrase" value="" placeholder="Required passphrase" ${disabled ? "disabled" : ""} />
@@ -295,8 +306,8 @@ export function renderMessageInput({
                   </div>
                   <details class="composer-stego-advanced">
                     <summary>Advanced options</summary>
-                    <label class="composer-popover-field">Codec ${renderGlossaryTip("Codec")}
-                      <select data-action="composer-stego-algorithm" ${disabled ? "disabled" : ""}>
+                    <label class="composer-popover-field">${renderAdvancedLabel("Codec")} ${renderGlossaryTip("Codec")}
+                      <select data-action="composer-stego-algorithm" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="basic-lsb-image">Basic LSB (Image)</option>
                         <option value="dct-image" disabled>DCT Image (Signal lock)</option>
                         <option value="audio-lsb" disabled>Audio LSB (Signal lock)</option>
@@ -305,19 +316,24 @@ export function renderMessageInput({
                       </select>
                     </label>
                     <p class="meta">Codecs: LSB ${renderGlossaryTip("LSB (Image)")} · DCT ${renderGlossaryTip("DCT (Image)")}</p>
-                    <button type="button" class="ghost-btn" data-action="composer-open-subscription" ${disabled ? "disabled" : ""}>Upgrade to Signal</button>
-                    <label class="composer-popover-field">Stego channel
-                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${disabled ? "disabled" : ""}>
+                    <label class="composer-popover-field">${renderAdvancedLabel("Stego channel rotation")}
+                      <select data-action="composer-stego-channel-select" data-testid="composer-stego-channel-select" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>
                         <option value="">No saved channel</option>
                       </select>
                     </label>
                     <label class="composer-popover-inline">
-                      <input type="checkbox" data-action="composer-stego-ephemeral" ${disabled ? "disabled" : ""} />
-                      Ephemeral message ${renderGlossaryTip("Ephemeral")}
+                      <input type="checkbox" data-action="composer-stego-ephemeral" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
+                      ${renderAdvancedLabel("Ephemeral lifecycle")} ${renderGlossaryTip("Ephemeral")}
                     </label>
-                    <label class="composer-popover-field">TTL (hours) ${renderGlossaryTip("TTL")}
-                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${disabled ? "disabled" : ""} />
+                    <label class="composer-popover-field">${renderAdvancedLabel("Expiry / remote burn TTL")} ${renderGlossaryTip("TTL")}
+                      <input type="number" min="1" max="168" step="1" data-action="composer-stego-ttl" value="24" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
+                    <p class="meta">Multi-carrier routing + policy audit are Advanced controls available on paid tiers.</p>
+                    ${
+                      stegoAdvancedEnabled
+                        ? ""
+                        : '<button type="button" class="ghost-btn" data-action="open-upgrade-flow" data-upgrade-source="composer_stego_advanced_controls">Upgrade for Advanced stego</button>'
+                    }
                   </details>
                   <button type="button" data-action="composer-insert-stego" ${disabled ? "disabled" : ""}>Encode & insert</button>
                 </div>
@@ -346,11 +362,11 @@ export function renderMessageInput({
                     <label class="composer-popover-field">Shared password
                       <input type="text" data-action="composer-stego-channel-passphrase" placeholder="Set a shared passphrase" ${disabled ? "disabled" : ""} />
                     </label>
-                    <label class="composer-popover-field">Rotate every (days)
-                      <input type="number" min="1" max="90" step="1" value="14" data-action="composer-stego-channel-rotation-days" ${disabled ? "disabled" : ""} />
+                    <label class="composer-popover-field">${renderAdvancedLabel("Rotate every (days)")}
+                      <input type="number" min="1" max="90" step="1" value="14" data-action="composer-stego-channel-rotation-days" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""} />
                     </label>
                     <div class="composer-popover-actions">
-                      <button type="button" data-action="composer-stego-save-channel" ${disabled ? "disabled" : ""}>Save channel</button>
+                      <button type="button" data-action="composer-stego-save-channel" ${(disabled || !stegoAdvancedEnabled) ? "disabled" : ""}>${renderAdvancedLabel("Save channel")}</button>
                     </div>
                     <ul class="composer-channel-list" data-testid="composer-stego-channel-list">
                       <li class="meta">No saved channels yet.</li>

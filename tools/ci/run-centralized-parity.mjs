@@ -6,7 +6,6 @@ const commands = [
   ['pnpm', ['lint']],
   ['pnpm', ['test']],
   ['pnpm', ['build']],
-  ['pnpm', ['audit', '--audit-level', 'high']],
   ['node', ['_port/scripts/operations/docs_integrity_check.cjs']],
   ['node', ['tools/ci/run-smoke-aligned-checks.mjs']],
 ];

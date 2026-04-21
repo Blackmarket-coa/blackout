@@ -2,6 +2,8 @@ import { fireEvent, getByRole, waitFor } from "@testing-library/dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BlackoutWebApp } from "../../src/app";
+import { FEATURE_PRESET_BUNDLES } from "../../src/settings/feature-presets";
+import { FEATURE_PANEL_REGION_BY_KIND, FEATURE_UI_ENTRIES, type UiEntryKind } from "../../src/settings/feature-entrypoints";
 
 const waitForAuthenticatedWorkspace = async (root: HTMLElement): Promise<void> => {
   await waitFor(() => {
@@ -32,7 +34,10 @@ describe("BlackoutWebApp integration", () => {
       rollout: { cohort: "internal" },
       presets: {
         activePreset: "starter",
-        features: {},
+        features: {
+          "features.engagement.discover": true,
+          "features.matrix.client": true,
+        },
         diagnostics: {
           deploymentPreset: "starter",
           tenantPreset: null,
@@ -319,6 +324,91 @@ describe("BlackoutWebApp integration", () => {
       fireEvent.click(requireElement<HTMLButtonElement>(root, `[data-testid="${testId}"]`));
       expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened");
     }
+  });
+
+  it("routes premium admin controls to concrete advanced destinations", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-federation-boost"]'));
+    expect(root.querySelector('[data-testid="settings-page-operations"][aria-selected="true"]')).toBeTruthy();
+    expect(root.querySelector('[data-action="platform-tab"][data-tab="federation"].is-active')).toBeTruthy();
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="settings-page-workspace"]'));
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-engagement-experiments"]'));
+    expect(root.querySelector('[data-action="revenue-tab"][data-tab="monetization"].is-active')).toBeTruthy();
+
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="settings-page-workspace"]'));
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-bmc-templates"]'));
+    expect(root.querySelector<HTMLInputElement>('[data-testid="feature-filter-input"]')?.value).toBe("space_templates");
+
+    fireEvent.input(requireElement<HTMLInputElement>(root, '[data-testid="feature-filter-input"]'), { target: { value: "" } });
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-bmc-cell-routing"]'));
+    expect(root.querySelector<HTMLInputElement>('[data-testid="feature-filter-input"]')?.value).toBe("cell_routing");
+  });
+
+  it("denies premium admin controls for non-admin server roles", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+    (
+      app as unknown as {
+        store: { patch: (delta: { servers: Array<{ id: string; name: string; role: string }>; activeServerId: string }) => void };
+        render: () => void;
+      }
+    ).store.patch({
+      servers: [{ id: "srv_member", name: "Member Workspace", role: "member" }],
+      activeServerId: "srv_member",
+    });
+    (app as unknown as { render: () => void }).render();
+
+    fireEvent.click(root.querySelector('[data-testid="toggle-settings-button"]') as HTMLButtonElement);
+    fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="feature-admin-federation-boost"]'));
+    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("requires moderator or admin permissions");
   });
 
   it("renders a ui entrypoint hook for every feature registry row", async () => {
@@ -690,6 +780,165 @@ describe("BlackoutWebApp integration", () => {
 
   });
 
+  it("keeps baseline stego send flow working on starter preset while advanced controls stay disabled", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "starter",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "starter",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const composer = document.querySelector<HTMLTextAreaElement>("textarea[name='message']");
+    if (!composer) throw new Error("missing composer");
+
+    const stegoTrigger = root.querySelector('[data-testid="composer-stego-trigger"]') as HTMLButtonElement;
+    fireEvent.click(stegoTrigger);
+    expect((root.querySelector("[data-action='composer-stego-ephemeral']") as HTMLInputElement).disabled).toBe(true);
+    expect((root.querySelector("[data-action='composer-stego-channel-rotation-days']") as HTMLInputElement).disabled).toBe(true);
+    expect(root.querySelector("[data-testid='composer-stego-baseline-hint']")).toBeTruthy();
+    expect((root.querySelector("[data-action='composer-stego-carrier']") as HTMLInputElement).value).toBe("text-body");
+    expect(root.querySelector("[data-action='open-upgrade-flow'][data-upgrade-source='composer_stego_advanced']")).toBeFalsy();
+    fireEvent.input(root.querySelector("[data-action='composer-stego-hidden']") as HTMLInputElement, { target: { value: "ship at dawn" } });
+    fireEvent.input(root.querySelector("[data-action='composer-stego-cover']") as HTMLInputElement, { target: { value: "all clear" } });
+    fireEvent.click(root.querySelector("[data-action='composer-insert-stego']") as HTMLButtonElement);
+
+    expect(composer.value).toContain('carrier="text-body"');
+    expect(composer.value).toContain('hidden="ship at dawn"');
+    fireEvent.submit(root.querySelector("#message-form") as HTMLFormElement);
+    expect(composer.value).toBe("");
+  });
+
+  it("keeps baseline governance composer flow discoverable across default presets", async () => {
+    const presets: Array<"starter" | "governance" | "sovereignty"> = ["starter", "governance", "sovereignty"];
+
+    for (const preset of presets) {
+      window.localStorage.clear();
+      document.body.innerHTML = `<div id="app"></div>`;
+      const root = document.querySelector("#app");
+      if (!root) throw new Error("missing app root in test");
+
+      const app = new BlackoutWebApp(root, {
+        homeserverUrl: "https://matrix.blackout.local",
+        mode: "daily-chat",
+        rollout: { cohort: "internal" },
+        presets: {
+          activePreset: preset,
+          features: {},
+          diagnostics: {
+            deploymentPreset: preset,
+            tenantPreset: null,
+            userOverrideCount: 0,
+          },
+        },
+        simpleMode: {
+          simple_mode_default: false,
+          show_advanced_admin_modules: true,
+          onboarding_progressive_disclosure: true,
+        },
+      });
+      await app.mount();
+
+      fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+      fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+      fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+      await waitForAuthenticatedWorkspace(root);
+
+      const composer = requireElement<HTMLTextAreaElement>(root, "textarea[name='message']");
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      expect(root.querySelector("[data-testid='composer-governance-baseline-hint']")).toBeTruthy();
+      fireEvent.input(requireElement<HTMLInputElement>(root, "[data-action='composer-governance-title']"), { target: { value: `Approve plan ${preset}` } });
+      fireEvent.input(requireElement<HTMLInputElement>(root, "[data-action='composer-governance-options']"), { target: { value: "Approve,Block" } });
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-governance-insert-proposal']"));
+      expect(composer.value).toContain(`/proposal "Approve plan ${preset}"`);
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-governance-insert-vote']"));
+      expect(composer.value).toContain('/vote "Approve"');
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-right-panel'][data-panel='governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='governance-right-panel-tab'][data-tab='results']"));
+      expect(root.textContent).toContain("No proposal results yet.");
+    }
+  });
+
+  it("handles free -> paid -> free transitions with advanced feature fallback and no compose/governance regressions", async () => {
+    const transitions: Array<{ preset: "starter" | "sovereignty"; advancedEnabled: boolean }> = [
+      { preset: "starter", advancedEnabled: false },
+      { preset: "sovereignty", advancedEnabled: true },
+      { preset: "starter", advancedEnabled: false },
+    ];
+
+    for (const [index, step] of transitions.entries()) {
+      window.localStorage.clear();
+      document.body.innerHTML = `<div id="app"></div>`;
+      const root = document.querySelector("#app");
+      if (!root) throw new Error("missing app root in test");
+
+      const app = new BlackoutWebApp(root, {
+        homeserverUrl: "https://matrix.blackout.local",
+        mode: "daily-chat",
+        rollout: { cohort: "internal" },
+        presets: {
+          activePreset: step.preset,
+          features: {},
+          diagnostics: {
+            deploymentPreset: step.preset,
+            tenantPreset: null,
+            userOverrideCount: 0,
+          },
+        },
+        simpleMode: {
+          simple_mode_default: false,
+          show_advanced_admin_modules: true,
+          onboarding_progressive_disclosure: true,
+        },
+      });
+      await app.mount();
+
+      fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+      fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+      fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+      await waitForAuthenticatedWorkspace(root);
+
+      const composer = requireElement<HTMLTextAreaElement>(root, "textarea[name='message']");
+      fireEvent.input(composer, { target: { value: `transition step ${index + 1}` } });
+      fireEvent.submit(requireElement<HTMLFormElement>(root, "#message-form"));
+      expect(requireElement<HTMLFormElement>(root, "#message-form")).toBeTruthy();
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='composer-open-governance']"));
+      expect(root.querySelector("[data-testid='composer-governance-baseline-hint']")).toBeTruthy();
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='open-right-panel'][data-panel='governance']"));
+      fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-action='governance-right-panel-tab'][data-tab='results']"));
+      expect(root.textContent).toContain("No proposal results yet.");
+
+      fireEvent.click(requireElement<HTMLButtonElement>(root, '[data-testid="toggle-settings-button"]'));
+      const advancedEnabledNode = root.querySelector('[data-testid="feature-widget-townhall-sfu"]');
+      const advancedFallbackNode = root.querySelector('[data-testid="feature-widget-townhall-sfu-unavailable"]');
+      if (step.advancedEnabled) {
+        expect(advancedEnabledNode).toBeTruthy();
+      } else {
+        expect(advancedFallbackNode).toBeTruthy();
+      }
+    }
+  }, 15_000);
+
   it("opens features via command palette and supports Ctrl+K shortcut", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
     const root = document.querySelector("#app");
@@ -711,19 +960,22 @@ describe("BlackoutWebApp integration", () => {
     });
     await app.mount();
 
+    fireEvent.input(root.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(root.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(root.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const paletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
     expect(paletteInput).toBeTruthy();
-    fireEvent.input(paletteInput as HTMLInputElement, { target: { value: "matrix-native" } });
-    fireEvent.click(getByRole(root, "button", { name: /Matrix-native client architecture/i }));
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened matrix_client_arch");
+    fireEvent.input(paletteInput as HTMLInputElement, { target: { value: "discover" } });
+    expect(root.querySelector(".command-palette-list .empty")?.textContent).toContain("No enabled commands");
 
-    fireEvent.click(root.querySelector('[data-testid="open-command-palette"]') as HTMLButtonElement);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const secondPaletteInput = root.querySelector<HTMLInputElement>('[data-testid="feature-command-palette-input"]');
-    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "steganographic" } });
-    fireEvent.click(getByRole(root, "button", { name: /Steganographic messaging toolkit/i }));
-    expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("unavailable");
-  });
+    fireEvent.input(secondPaletteInput as HTMLInputElement, { target: { value: "presence" } });
+    expect(root.querySelector(".command-palette-list .empty")?.textContent).toContain("No enabled commands");
+  }, 15_000);
 
   it("restores focus to the opener when command palette closes via Escape", async () => {
     document.body.innerHTML = `<div id="app"></div>`;
@@ -806,6 +1058,65 @@ describe("BlackoutWebApp integration", () => {
     fireEvent.click(requireElement<HTMLButtonElement>(root, "[data-feature-id='media_pipeline']"));
 
     expect(root.querySelector('[data-testid="feature-action-result"]')?.textContent).toContain("Opened media_pipeline");
+  });
+
+  it("renders feature entry flows only in approved shell panel regions", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.querySelector("#app");
+    if (!root) throw new Error("missing app root in test");
+
+    const app = new BlackoutWebApp(root, {
+      homeserverUrl: "https://matrix.blackout.local",
+      mode: "daily-chat",
+      rollout: { cohort: "internal" },
+      presets: {
+        activePreset: "sovereignty",
+        features: {},
+        diagnostics: {
+          deploymentPreset: "sovereignty",
+          tenantPreset: null,
+          userOverrideCount: 0,
+        },
+      },
+      simpleMode: {
+        simple_mode_default: false,
+        show_advanced_admin_modules: true,
+        onboarding_progressive_disclosure: false,
+      },
+    });
+    await app.mount();
+
+    fireEvent.input(document.querySelector("input[name='username']") as HTMLInputElement, { target: { value: "alice" } });
+    fireEvent.input(document.querySelector("input[name='password']") as HTMLInputElement, { target: { value: "secret" } });
+    fireEvent.submit(document.querySelector("#auth-form") as HTMLFormElement);
+    await waitForAuthenticatedWorkspace(root);
+
+    const approvedRegionChecks: Record<string, () => void> = {
+      settings_shell: () => expect(root.querySelector('[data-testid="settings-shell"]')).toBeTruthy(),
+      chat_workspace: () => expect(root.querySelector(".chat-window")).toBeTruthy(),
+      right_panel_overlay: () => {
+        expect(root.querySelector('[data-testid="right-panel-overlay"]')).toBeTruthy();
+        expect(root.querySelector('[data-testid="widget-panel-host"]')).toBeTruthy();
+      },
+      repo_tools_shell: () => expect(root.querySelector(".repo-tools-page")).toBeTruthy(),
+      command_palette_overlay: () => expect(root.querySelector('[data-testid="feature-command-palette"]')).toBeTruthy(),
+    };
+
+    const enabledEntryByKind = new Map<UiEntryKind, string>();
+    for (const entry of FEATURE_UI_ENTRIES) {
+      const [kind] = entry.uiEntry.split(":") as [UiEntryKind, string];
+      if (enabledEntryByKind.has(kind)) continue;
+      if (!FEATURE_PRESET_BUNDLES.sovereignty[entry.presetKey]) continue;
+      enabledEntryByKind.set(kind, entry.id);
+    }
+
+    for (const [kind, featureId] of enabledEntryByKind.entries()) {
+      const dropdown = requireElement<HTMLSelectElement>(root, '[data-testid="feature-toolbar-dropdown-frequent"]');
+      fireEvent.change(dropdown, { target: { value: `${kind}|${featureId}` } });
+      approvedRegionChecks[FEATURE_PANEL_REGION_BY_KIND[kind]]();
+      expect(root.querySelector('[data-testid="feature-custom-panel-root"]')).toBeFalsy();
+      expect(root.querySelector("[data-feature-root='custom']")).toBeFalsy();
+    }
   });
 
   it("supports DM panel quick-start action with dm- prefix", async () => {

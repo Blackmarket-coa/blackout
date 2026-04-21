@@ -40,7 +40,7 @@ function renderSnapshotsView(): string {
   return `
     <section class="federation-grid" data-testid="federation-snapshots-view">
       <article class="federation-card"><h3>Timeline</h3><p class="meta">30-day snapshot history with daily checkpoints.</p></article>
-      <article class="federation-card"><h3>Latest snapshot</h3><p class="meta">2.4 GB · CRDT v5 · 214 rooms included</p></article>
+      <article class="federation-card"><h3>Latest snapshot</h3><p class="meta">2.4 GB · CRDT v5 · 214 dens included</p></article>
       <article class="federation-card"><h3>Drift alerts</h3><p class="meta">No drift alerts in last 7 days.</p></article>
     </section>
   `;
@@ -51,7 +51,7 @@ function renderRecoveryView(): string {
     <section class="federation-grid" data-testid="federation-recovery-view">
       <article class="federation-card"><h3>Reconnecting banner</h3><p class="meta">“Reconnecting via federation mesh…”</p></article>
       <article class="federation-card"><h3>Completion banner</h3><p class="meta">“Connection restored. All messages synced.”</p></article>
-      <article class="federation-card"><h3>Admin system room</h3><p class="meta">#federation-health gets automatic recovery reports.</p></article>
+      <article class="federation-card"><h3>Admin system den</h3><p class="meta">#federation-health gets automatic recovery reports.</p></article>
     </section>
   `;
 }

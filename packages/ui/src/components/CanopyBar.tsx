@@ -18,7 +18,7 @@ export function CanopyBar({ activeDomain, composerFocused, pendingVoteCount, ani
           <Pressable
             key={domain}
             onPress={() => onToggleDomain(domain)}
-            style={({ hovered }) => [styles.canopyPill, activeDomain === domain && styles.canopyPillActive, hovered && styles.canopyPillHovered]}
+            style={({ pressed }) => [styles.canopyPill, activeDomain === domain && styles.canopyPillActive, pressed && styles.canopyPillHovered]}
           >
             <Text style={[styles.canopyPillLabel, activeDomain === domain && styles.canopyPillLabelActive]}>
               {domain.charAt(0).toUpperCase() + domain.slice(1)}
@@ -50,7 +50,7 @@ export function CanopyBar({ activeDomain, composerFocused, pendingVoteCount, ani
           ]}
         >
           {DOMAIN_ACTIONS[activeDomain].map((label) => (
-            <Pressable key={`${activeDomain}-${label}`} style={({ hovered }) => [styles.canopySub, hovered && styles.canopySubHovered]}>
+            <Pressable key={`${activeDomain}-${label}`} style={({ pressed }) => [styles.canopySub, pressed && styles.canopySubHovered]}>
               <Text style={styles.canopySubLabel}>
                 {label}
                 {activeDomain === "governance" && label === "Active votes" && pendingVoteCount > 0 ? ` (${pendingVoteCount})` : ""}

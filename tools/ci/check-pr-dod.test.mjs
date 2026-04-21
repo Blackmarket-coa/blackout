@@ -30,6 +30,15 @@ const validBody = `
 ## Tests
 - [x] Unit tests for touched packages.
 - [x] Integration/e2e checks (if applicable).
+- [x] Targeted PR checks executed for touched paths:
+  - [x] \`pnpm --filter @blackout/client lint\`
+  - [x] \`pnpm --filter @blackout/client test:unit\`
+  - [x] \`pnpm --filter @blackout/client test:integration\`
+  - [x] \`pnpm --filter @blackout/client build\`
+
+## Architecture/review checklist
+- [x] Entitlement path review completed (state fetch, gating, and transition behavior validated for changed flows).
+- [x] Panel placement review completed (new or changed panel entry points/layout placements validated on intended surfaces).
 
 ## KPI impact statement
 - [x] KPI target statement included (expected directional movement and band).

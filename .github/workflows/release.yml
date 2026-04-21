@@ -14,17 +14,17 @@ jobs:
     name: Build web artifact
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/blackout-web run build:web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-web-${{ github.ref_name }}
           path: apps/blackout-web/dist
@@ -37,10 +37,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -49,7 +49,7 @@ jobs:
       - name: Build desktop app
         working-directory: blackout-desktop
         run: pnpm build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-desktop-${{ matrix.os }}-${{ github.ref_name }}
           path: blackout-desktop/src-tauri/target/release/bundle
@@ -59,10 +59,10 @@ jobs:
     name: Build mobile artifact (Android)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -74,7 +74,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter blackout-mobile run sync:android
       - run: cd blackout-mobile/android && ./gradlew assembleRelease
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-mobile-android-${{ github.ref_name }}
           path: blackout-mobile/android/app/build/outputs/**/*.apk
@@ -84,10 +84,10 @@ jobs:
     name: Build mobile artifact (iOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 9.15.4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -110,7 +110,7 @@ jobs:
             -sdk iphonesimulator \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-mobile-ios-${{ github.ref_name }}
           path: blackout-mobile/ios/App/build/Build/Products/**/*.app
@@ -121,7 +121,7 @@ jobs:
     needs: [build-web, build-desktop, build-mobile-android, build-mobile-ios]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

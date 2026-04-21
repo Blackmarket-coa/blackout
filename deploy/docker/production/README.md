@@ -109,3 +109,11 @@ For executable migration test steps and pass/fail criteria, see:
 For invite-only/domain-allowlist/rate-limit/abuse-throttle/admin-override design (API + DB + middleware), see:
 
 - `REGISTRATION_CONTROL_ARCHITECTURE.md`
+
+## Production operations baseline
+
+For backup/restore drills, media/config backup policy, on-call handoff, release gates, and evidence cadence, see:
+
+- `OPS_BASELINE.md`
+- `cron/production-ops.cron`
+

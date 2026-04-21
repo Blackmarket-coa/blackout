@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import React, { act } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
 
 vi.mock('../../../../src/app/features/call/CallProvider', () => ({
     useCall: () => ({
@@ -16,7 +17,9 @@ vi.mock('../../../../src/app/features/call/CallProvider', () => ({
         focusReason: 'jwt timeout',
         focusMessage:
             'Call provider is degraded (jwt timeout). Retry shortly or continue in widget fallback mode.',
-        membership: { '@alice:example.org': { userId: '@alice:example.org', membership: 'joined' } },
+        membership: {
+            '@alice:example.org': { userId: '@alice:example.org', membership: 'joined' },
+        },
         audioLevels: {},
         joinCall: vi.fn(),
         leaveCall: vi.fn(),
@@ -59,7 +62,7 @@ describe('VoiceChannel degraded fallback', () => {
                     title="Ops Voice"
                     members={[{ userId: '@alice:example.org', name: 'Alice' } as never]}
                     activeRoomId="!room:example.org"
-                />,
+                />
             );
             await Promise.resolve();
         });

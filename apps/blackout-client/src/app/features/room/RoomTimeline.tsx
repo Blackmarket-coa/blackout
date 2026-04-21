@@ -12,6 +12,7 @@ import {
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import { sanitizeMatrixHtml } from '../../utils/bmc-markdown';
+import { designSpacing } from '../../../../../../packages/design/src';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import { useRoomTimeline, useTimelineScroll } from '../../hooks/bmc-useTimeline';
 import { useTypingIndicator } from '../../hooks/bmc-useTyping';
@@ -25,6 +26,7 @@ import {
 import { Reactions } from './Reactions';
 import { ProfileModal } from '../profile/ProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
+import { roomViewLayoutRhythm } from './roomViewLayoutContract';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -82,7 +84,7 @@ const styles: Record<string, CSSProperties> = {
     scroller: {
         height: '100%',
         overflowY: 'auto',
-        padding: '12px 10px 60px',
+        padding: `${roomViewLayoutRhythm.timelineTopPaddingPx}px ${roomViewLayoutRhythm.timelineHorizontalPaddingPx}px ${roomViewLayoutRhythm.timelineBottomPaddingPx}px`,
     },
     viewport: {
         position: 'relative',
@@ -107,8 +109,10 @@ const styles: Record<string, CSSProperties> = {
     unreadDivider: {
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        margin: '12px 0 8px',
+        gap: roomViewLayoutRhythm.timelineHorizontalPaddingPx,
+        margin: `${roomViewLayoutRhythm.timelineTopPaddingPx}px 0 ${
+            roomViewLayoutRhythm.timelineTopPaddingPx - 4
+        }px`,
         color: 'var(--accent-primary)',
         fontSize: 12,
         fontWeight: 600,
@@ -120,7 +124,7 @@ const styles: Record<string, CSSProperties> = {
     messageRow: {
         display: 'grid',
         gridTemplateColumns: '36px 1fr',
-        gap: 8,
+        gap: roomViewLayoutRhythm.timelineHorizontalPaddingPx,
         alignItems: 'flex-start',
         marginBottom: 2,
     },
@@ -152,7 +156,7 @@ const styles: Record<string, CSSProperties> = {
     header: {
         display: 'flex',
         alignItems: 'baseline',
-        gap: 8,
+        gap: roomViewLayoutRhythm.timelineHorizontalPaddingPx,
         marginBottom: 4,
     },
     sender: {
@@ -204,8 +208,8 @@ const styles: Record<string, CSSProperties> = {
     },
     jumpButton: {
         position: 'absolute',
-        right: 12,
-        bottom: 54,
+        right: roomViewLayoutRhythm.timelineHorizontalPaddingPx,
+        bottom: roomViewLayoutRhythm.minTouchTargetPx + 14,
         borderRadius: 999,
         border: '1px solid var(--border-default)',
         background: 'var(--bg-input)',
@@ -222,7 +226,7 @@ const styles: Record<string, CSSProperties> = {
         borderTop: '1px solid var(--border-default)',
         background: 'var(--bg-surface)',
         color: 'var(--text-secondary)',
-        padding: '8px 12px',
+        padding: `${designSpacing.compactGapPx}px ${roomViewLayoutRhythm.timelineHorizontalPaddingPx}px`,
         fontSize: 12,
     },
     stateEvent: {
@@ -295,11 +299,11 @@ const resolveStateCopy = (event: MatrixEvent, room: Room | null): string => {
             return `${sender} ${membership}`;
         }
         case 'm.room.name':
-            return `Room name changed to “${typeof content.name === 'string' ? content.name : 'Unknown'}”`;
+            return `Den name changed to “${typeof content.name === 'string' ? content.name : 'Unknown'}”`;
         case 'm.room.topic':
             return `Topic changed: ${typeof content.topic === 'string' ? content.topic : ''}`;
         case 'm.room.avatar':
-            return `${sender} changed the room avatar`;
+            return `${sender} changed the den avatar`;
         case 'm.room.encryption':
             return 'Encryption is now enabled';
         default:
@@ -567,7 +571,7 @@ const MessageBubble = ({
                                         title={receipt.displayName}
                                         style={styles.receiptAvatar}
                                     />
-                                ),
+                                )
                             )}
                     </div>
                 ) : null}
@@ -615,7 +619,7 @@ export const RoomTimeline = ({
             mutualSpaces: [],
             profile: {},
         }),
-        [room],
+        [room]
     );
 
     const items = useMemo(() => buildTimelineItems(events, unreadEventId), [events, unreadEventId]);
@@ -623,7 +627,7 @@ export const RoomTimeline = ({
     const startIndex = Math.max(Math.floor(scrollTop / ROW_ESTIMATE) - OVERSCAN, 0);
     const endIndex = Math.min(
         Math.ceil((scrollTop + viewportHeight) / ROW_ESTIMATE) + OVERSCAN,
-        items.length,
+        items.length
     );
 
     const beforeHeight = startIndex * ROW_ESTIMATE;
@@ -646,7 +650,7 @@ export const RoomTimeline = ({
                 });
             return receiptEntries;
         },
-        [room],
+        [room]
     );
 
     const handleScroll = useCallback(async () => {
@@ -682,7 +686,7 @@ export const RoomTimeline = ({
     useEffect(() => {
         if (!jumpToEventId) return;
         const index = items.findIndex(
-            (item) => item.kind === 'message' && item.event.getId() === jumpToEventId,
+            (item) => item.kind === 'message' && item.event.getId() === jumpToEventId
         );
         if (index < 0) {
             onJumpResolved?.(jumpToEventId, false);
@@ -733,7 +737,9 @@ export const RoomTimeline = ({
                                     room={room}
                                     roomId={roomId}
                                     receipts={getReceipts(item.event)}
-                                    onOpenProfile={(userId) => setProfileTarget(buildProfile(userId))}
+                                    onOpenProfile={(userId) =>
+                                        setProfileTarget(buildProfile(userId))
+                                    }
                                 />
                             </Fragment>
                         );

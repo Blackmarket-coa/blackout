@@ -159,6 +159,8 @@ export enum Command {
   UnFlip = 'unflip',
   Delete = 'delete',
   Acl = 'acl',
+  StegHide = 'steg-hide',
+  StegPolicy = 'steg-policy',
 }
 
 export type CommandContent = {
@@ -201,7 +203,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.StartDm]: {
         name: Command.StartDm,
-        description: 'Start direct message with user. Example: /startdm userId1',
+        description: 'Start locked in chat with user. Example: /startdm userId1',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const userIds = rawIds.filter((id) => isUserId(id) && id !== mx.getSafeUserId());
@@ -226,7 +228,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.Join]: {
         name: Command.Join,
-        description: 'Join room with address. Example: /join address1 address2',
+        description: 'Join den with address. Example: /join address1 address2',
         exe: async (payload) => {
           const rawIds = splitWithSpace(payload);
           const roomIdOrAliases = rawIds.filter(
@@ -400,7 +402,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToDm]: {
         name: Command.ConvertToDm,
-        description: 'Convert room to direct message',
+        description: 'Convert den to locked in',
         exe: async () => {
           const dmUserId = guessDmRoomUserId(room, mx.getSafeUserId());
           await addRoomIdToMDirect(mx, room.roomId, dmUserId);
@@ -408,7 +410,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
       },
       [Command.ConvertToRoom]: {
         name: Command.ConvertToRoom,
-        description: 'Convert direct message to room',
+        description: 'Convert locked in to den',
         exe: async () => {
           await removeRoomIdFromMDirect(mx, room.roomId);
         },
@@ -530,6 +532,16 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
 
           await mx.sendStateEvent(room.roomId, StateEvent.RoomServerAcl as any, aclContent);
         },
+      },
+      [Command.StegHide]: {
+        name: Command.StegHide,
+        description: 'Open steganography hide-message flow in composer.',
+        exe: async () => undefined,
+      },
+      [Command.StegPolicy]: {
+        name: Command.StegPolicy,
+        description: 'Open steganography policy lifecycle flow in composer.',
+        exe: async () => undefined,
       },
     }),
     [mx, room, navigateRoom]

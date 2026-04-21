@@ -5,14 +5,19 @@
   "type": "module",
   "description": "Blackout Hono API scaffold",
   "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
     "build": "node -e \"console.log('api build scaffold ok')\"",
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
     "test": "node -e \"console.log('api test scaffold ok')\"",
-    "test:integration": "tsx --test test/**/*.integration.test.ts"
+    "test:integration": "tsx --test test/**/*.integration.test.ts",
+    "migrate": "node -e \"console.log('api migrate scaffold ok')\""
   },
   "dependencies": {
     "@blackout/core": "workspace:*",
     "@blackout/contracts": "workspace:*",
-    "hono": "^4.9.6"
+    "hono": "^4.9.6",
+    "@hono/node-server": "^1.13.7",
+    "@blackout/protocol": "workspace:*"
   }
 }

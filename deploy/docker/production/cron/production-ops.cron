@@ -1,0 +1,24 @@
+# Blackout production operations baseline cron jobs (UTC)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 1) Database backup (nightly) + immutable copy to object storage
+15 2 * * * /opt/blackout/deploy/docker/production/scripts/backup.sh && /opt/blackout/bin/sync-backups-offsite.sh >> /var/log/blackout/backup.log 2>&1
+
+# 2) Restore verification drill (daily light check)
+45 2 * * * /opt/blackout/deploy/docker/production/scripts/restore-verify.sh >> /var/log/blackout/restore-verify.log 2>&1
+
+# 3) Media backup policy execution (incremental every 6h)
+0 */6 * * * /opt/blackout/bin/backup-media-incremental.sh >> /var/log/blackout/media-backup.log 2>&1
+
+# 4) Config/env backup handling (hourly encrypted export)
+10 * * * * /opt/blackout/bin/backup-config-env.sh >> /var/log/blackout/config-backup.log 2>&1
+
+# 5) Uptime checks and alert routing every 5 minutes
+*/5 * * * * /opt/blackout/deploy/docker/production/scripts/network-uptime-probe.sh app.example.com || /opt/blackout/bin/route-alert.sh uptime-critical >> /var/log/blackout/uptime.log 2>&1
+
+# 6) Dashboard evidence snapshots (CPU/memory/disk/log errors)
+30 3 * * 1 /opt/blackout/bin/export-observability-dashboards.sh weekly >> /var/log/blackout/dashboard-evidence.log 2>&1
+
+# 7) Release gate checks (pre-deploy and daily confidence)
+0 4 * * * /opt/blackout/deploy/docker/production/scripts/release-gate-checks.sh >> /var/log/blackout/release-gates.log 2>&1

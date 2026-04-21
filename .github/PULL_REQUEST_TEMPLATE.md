@@ -19,7 +19,16 @@
 ## Tests
 - [ ] Unit tests for touched packages.
 - [ ] Integration/e2e checks (if applicable).
+- [ ] Targeted PR checks executed for touched paths:
+  - `pnpm --filter @blackout/client lint`
+  - `pnpm --filter @blackout/client test:unit`
+  - `pnpm --filter @blackout/client test:integration`
+  - `pnpm --filter @blackout/client build`
 - [ ] If `apps/blackout-client/src/main.tsx` routes changed: update `apps/blackout-web/config/react-client-paths.json` and include a changelog note for route-parity contract updates.
+
+## Architecture/review checklist
+- [ ] Entitlement path review completed (state fetch, gating, and transition behavior validated for changed flows).
+- [ ] Panel placement review completed (new or changed panel entry points/layout placements validated on intended surfaces).
 
 ## KPI impact hypothesis
 - [ ] KPI target statement included (expected directional improvement and band).

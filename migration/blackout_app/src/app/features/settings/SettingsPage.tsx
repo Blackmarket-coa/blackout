@@ -1,7 +1,7 @@
 import { Suspense, lazy, type ComponentType, type LazyExoticComponent, useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
-import { trackSettingsInteraction } from './settingsTelemetry';
+import { trackSettingsInteraction, trackSettingsNavigation } from './settingsTelemetry';
 
 const AccountSettings = lazy(() => import('./AccountSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
@@ -11,6 +11,12 @@ const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
 const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
 const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
 const DeveloperSettings = lazy(() => import('./DeveloperSettings'));
+
+const MonetizationPlanSettings = lazy(() => import('./MonetizationPlanSettings'));
+const MonetizationBillingSettings = lazy(() => import('./MonetizationBillingSettings'));
+const MonetizationBoostSettings = lazy(() => import('./MonetizationBoostSettings'));
+const MonetizationMarketplaceSettings = lazy(() => import('./MonetizationMarketplaceSettings'));
+const MonetizationThemePacksSettings = lazy(() => import('./MonetizationThemePacksSettings'));
 const AboutSettings = lazy(() => import('./AboutSettings'));
 
 interface SettingsSection {
@@ -69,6 +75,37 @@ const sections: SettingsSection[] = [
         summary: 'Developer mode, diagnostics bundle export',
         component: DeveloperSettings,
     },
+
+    {
+        id: 'monetization-plan',
+        label: 'Plan & Trial',
+        summary: 'Plan visibility and trial lifecycle state',
+        component: MonetizationPlanSettings,
+    },
+    {
+        id: 'monetization-billing',
+        label: 'Billing UX',
+        summary: 'Checkout defaults and invoice preferences',
+        component: MonetizationBillingSettings,
+    },
+    {
+        id: 'monetization-boost',
+        label: 'Boost',
+        summary: 'Boost entry points, audience, and renewals',
+        component: MonetizationBoostSettings,
+    },
+    {
+        id: 'monetization-marketplace',
+        label: 'Marketplace',
+        summary: 'Marketplace visibility and seller controls',
+        component: MonetizationMarketplaceSettings,
+    },
+    {
+        id: 'monetization-theme-packs',
+        label: 'Theme Packs',
+        summary: 'Commercialization toggles for theme packs',
+        component: MonetizationThemePacksSettings,
+    },
     {
         id: 'about',
         label: 'About',
@@ -121,6 +158,7 @@ export const SettingsPage = () => {
                             type="button"
                             onClick={() => {
                                 setActiveSection(section.id);
+                                trackSettingsNavigation(activeSection, section.id);
                                 trackSettingsInteraction('settings', 'navigate-section', section.id);
                             }}
                             style={{

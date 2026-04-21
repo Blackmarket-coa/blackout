@@ -98,7 +98,7 @@ function CreatePackTile({ packs, roomId }: CreatePackTileProps) {
     >
       <SettingTile
         title="New Pack"
-        description="Add your own emoji and sticker pack to use in room."
+        description="Add your own emoji and sticker pack to use in den."
       >
         <Box
           style={{ marginTop: config.space.S200 }}

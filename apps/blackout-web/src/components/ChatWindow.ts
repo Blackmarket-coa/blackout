@@ -11,6 +11,7 @@ interface ChatWindowProps {
   sendPending: boolean;
   richEditingEnabled: boolean;
   stegoEnabled: boolean;
+  stegoAdvancedEnabled: boolean;
   composerRepliesEnabled: boolean;
   composerEditsEnabled: boolean;
   composerRedactionsEnabled: boolean;
@@ -34,6 +35,7 @@ export function renderChatWindow({
   sendPending,
   richEditingEnabled,
   stegoEnabled,
+  stegoAdvancedEnabled,
   composerRepliesEnabled,
   composerEditsEnabled,
   composerRedactionsEnabled,
@@ -65,7 +67,7 @@ export function renderChatWindow({
         <div class="chat-head-actions">
           <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="threads" title="Threads" aria-label="Open threads">🧵</button>
           <button type="button" class="chat-head-action" data-action="open-right-panel" data-panel="pinned" title="Pinned" aria-label="View pinned messages">📌</button>
-          <button type="button" class="chat-head-action chat-head-action--desktop" data-action="open-right-panel" data-panel="members" title="Members" aria-label="Open member list">👥</button>
+          <button type="button" class="chat-head-action chat-head-action--desktop" data-action="open-right-panel" data-panel="members" title="Shadows" aria-label="Open shadow list">👥</button>
           <button type="button" class="chat-head-action chat-head-action--desktop" data-action="open-right-panel" data-panel="search" title="Search panel" aria-label="Open search panel">🔎</button>
           <button type="button" class="chat-head-action chat-head-action--desktop" data-action="open-right-panel" data-panel="governance" title="Governance dashboard" aria-label="Open governance dashboard">🏛️</button>
           <input type="search" class="chat-head-search chat-head-search--desktop" placeholder="Search…" aria-label="Search channel" data-action="focus-search">
@@ -79,6 +81,7 @@ export function renderChatWindow({
         compactMode,
         richEditingEnabled,
         stegoEnabled,
+        stegoAdvancedEnabled,
         composerRepliesEnabled,
         composerEditsEnabled,
         composerRedactionsEnabled,

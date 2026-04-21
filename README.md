@@ -30,6 +30,8 @@ For deeper architecture context:
 - `docs/blackout-reuse-completion-tracker.md`
 - `docs/distributed_self_healing_blueprint.md`
 - `docs/deploying-blackout-fedora-tauri.md`
+- `docs/blackout-monorepo-work-required.md` (active migration work plan)
+- `docs/blackout-monorepo-qa-writeup.md` (QA baseline + migration changelog)
 
 ---
 
@@ -54,6 +56,118 @@ What the blueprint includes:
 Implementation status should be tracked in:
 
 - `docs/project_completion_tracker.md`
+
+---
+
+## Completed Blackout architecture (mental model)
+
+```text
+blackout/  (monorepo root)
+│
+├─ apps/
+│  ├─ blackout-client        # main frontend (Cinny-based)
+│  │   ├─ core shell
+│  │   ├─ feature registry
+│  │   ├─ routes/nav/settings
+│  │   └─ feature plugins
+│  │       ├─ chat
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       ├─ moderation
+│  │       └─ steganography
+│  │
+│  ├─ blackout-server        # backend
+│  │   ├─ auth
+│  │   ├─ db
+│  │   ├─ middleware
+│  │   └─ feature modules
+│  │       ├─ governance
+│  │       ├─ forum
+│  │       ├─ deaddrop
+│  │       └─ moderation
+│  │
+│  └─ blackout-gov           # optional separate surface
+│
+├─ packages/
+│  ├─ blackout-protocol      # shared event types + schemas
+│  ├─ blackout-sdk           # shared API/network helpers
+│  ├─ core                   # shared runtime logic
+│  ├─ contracts              # API contracts
+│  ├─ config                 # config/env helpers
+│  ├─ design                 # tokens/themes
+│  ├─ ui                     # shared UI
+│  └─ web                    # web-specific helpers
+│
+├─ blackout-desktop
+├─ blackout-mobile
+│
+├─ legacy/
+│  └─ element                # preserved Element-era code not in active path
+│
+├─ tools/
+├─ test/
+├─ pnpm-workspace.yaml
+├─ turbo.json
+└─ package.json
+```
+
+Runtime flow:
+
+```text
+User
+  │
+  ▼
+blackout-client
+  │
+  ├─ loads feature plugins from registry
+  │
+  ├─ uses @blackout/sdk for actions
+  │
+  ▼
+@blackout/sdk
+  │
+  ├─ uses shared types from @blackout/protocol
+  │
+  ▼
+blackout-server
+  │
+  ├─ validates/contracts
+  ├─ runs feature module logic
+  ├─ stores data
+  └─ emits/handles feature events
+```
+
+Feature-level flow:
+
+```text
+Feature Plugin in Client
+   │
+   ├─ UI components
+   ├─ routes
+   ├─ nav items
+   ├─ settings entries
+   └─ capability checks
+        │
+        ▼
+   @blackout/sdk
+        │
+        ▼
+   blackout-server module
+        │
+        ▼
+   shared event/contracts in @blackout/protocol
+```
+
+System ownership rules:
+
+- `blackout-client` owns the user-facing experience.
+- `blackout-server` owns backend behavior.
+- `blackout-protocol` owns shared meaning.
+- `blackout-sdk` owns client/server wiring.
+- Legacy Element code stays isolated under `legacy/element`.
+
+In shorthand: **Cinny UI shell + modular features + shared SDK + shared protocol + modular backend**.
 
 ---
 
@@ -120,41 +234,31 @@ On Windows, use the same command:
 pnpm build
 ```
 
-### Build and run the frontend
+### Build and run the canonical frontend
 
 ```bash
-pnpm --filter @blackout/blackout-web build:web
-pnpm start
+pnpm --filter @blackout/client build
+pnpm --filter @blackout/client dev
 ```
 
-> Canonical frontend package: `@blackout/blackout-web` (`apps/blackout-web`).  
-> `@blackout/web` and `@blackout/web-ui` are legacy/scaffold paths and are not the deploy target.
+> Canonical frontend package: `@blackout/client` (`apps/blackout-client`).
 
-Then open:
+Default local URL:
 
-- Frontend app: `http://localhost:3000/`
-- Health endpoint: `http://localhost:3000/health`
-- Readiness endpoint: `http://localhost:3000/ready`
-
-If deployed on Railway, use your Railway domain instead of localhost:
-
-- Frontend app: `https://$RAILWAY_PUBLIC_DOMAIN/`
-- Health endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/health`
-- Readiness endpoint: `https://$RAILWAY_PUBLIC_DOMAIN/ready`
+- Frontend app: `http://localhost:5173/`
 
 ### Deploy to Railway
 
 1. Create a new Railway project and connect this GitHub repo.
 2. Use Node.js 22+ and pnpm 9.x.
 3. Set commands:
-   - Build: `pnpm install --frozen-lockfile && pnpm --filter @blackout/blackout-web build:web`
-   - Start: `pnpm start`
+   - Build: `pnpm install --frozen-lockfile && pnpm --filter @blackout/client build`
+   - Start: `pnpm --filter @blackout/client dev -- --host 0.0.0.0 --port $PORT`
 4. Expose `PORT` (Railway sets this automatically).
 5. Verify:
-   - `/` returns the built frontend app.
-   - `/health` and `/ready` return 200 JSON.
+   - `/` returns the frontend app.
 
-### Frontend quality checks (`apps/blackout-web`)
+### Legacy frontend quality checks (`apps/blackout-web`)
 
 ```bash
 pnpm --filter @blackout/blackout-web test:unit
@@ -173,7 +277,7 @@ pnpm lint
 pnpm test
 ```
 
-For steganography-specific changes, run targeted suites too:
+For steganography-specific changes in the legacy web surface, run targeted suites too:
 
 ```bash
 pnpm --filter @blackout/blackout-web test
@@ -200,6 +304,8 @@ Use this section when working with coding agents or AI copilots.
 - Ask the AI to name exact files it plans to modify.
 - Keep changes small and subsystem-focused.
 - Prefer incremental PRs over large mixed refactors.
+- Require an explicit pre-edit file plan (exact relative paths) and reject edits outside that list unless the AI updates the plan first.
+- Require justification whenever the AI proposes creating a new design token or UI component (why reuse was insufficient, where it will be consumed, and why it belongs at that layer).
 
 ### 2) Require explicit validation commands
 
@@ -254,6 +360,16 @@ Before merge, confirm the AI has:
 - Updated docs for behavior/config changes
 - Added or updated tests for new logic
 - Included rollback notes for risky changes
+
+### 8) Reuse shared packages before app-local additions
+
+Before accepting app-local styling or logic in `apps/*`, require AI to explicitly check and document whether reuse is possible from:
+
+- `packages/design` (tokens, themes, primitives)
+- `packages/ui` (shared UI building blocks)
+- `packages/core` (shared business/runtime logic)
+
+Only allow new app-local implementations when those packages cannot satisfy requirements without causing coupling or regressions, and require that rationale in the PR summary.
 
 ---
 
@@ -334,3 +450,50 @@ Licensed under one of:
 3. Element Commercial License (paid, by agreement)
 
 See `LICENSE` and `LICENSE-GPL-3.0` for details.
+
+---
+
+## Deployment-ready workflow (canonical)
+
+Canonical deployable applications:
+
+- Frontend: `apps/blackout-client`
+- Backend: `apps/blackout-server` (runtime delegates to `@blackout/api`)
+
+Canonical shared runtime packages:
+
+- `packages/blackout-protocol`
+- `packages/blackout-sdk`
+
+### Reproducible local bootstrap
+
+```bash
+git clone <repo>
+cd blackout
+pnpm install
+cp apps/blackout-server/.env.example apps/blackout-server/.env
+cp apps/blackout-client/.env.example apps/blackout-client/.env
+pnpm build
+pnpm dev
+```
+
+### Deployment config locations
+
+- Infrastructure configs and docs: `infra/`
+- Existing production compose and container assets: `deploy/docker/`
+- Kubernetes manifests: `deploy/kubernetes/`
+
+### Health checks expected in CI
+
+At minimum CI should validate install, lint, build, and tests from the monorepo root:
+
+```bash
+pnpm install
+pnpm lint
+pnpm build
+pnpm test
+```
+
+Deployment readiness checklist and current status:
+
+- `docs/deployment/readiness-checklist.md`

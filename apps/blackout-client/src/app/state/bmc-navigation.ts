@@ -1,6 +1,25 @@
 import { atom } from 'jotai';
 
-export type RightPanelType = 'members' | 'threads' | 'pins' | 'search' | 'governance' | 'roles' | null;
+export type RightPanelType =
+    | 'members'
+    | 'threads'
+    | 'pins'
+    | 'search'
+    | 'governance'
+    | 'monetization'
+    | 'roles'
+    | 'townhall_sfu'
+    | 'widget_shell_layouts'
+    | 'media_pipeline'
+    | 'media_spoilers'
+    | 'media_codeblocks'
+    | 'media_link_previews'
+    | 'element_call'
+    | 'matrix_widget_compat'
+    | 'soundboard'
+    | 'numbers_station'
+    | 'stage_channels'
+    | null;
 
 /**
  * Current room selection for timeline context.

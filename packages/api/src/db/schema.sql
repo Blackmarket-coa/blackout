@@ -29,3 +29,81 @@ CREATE TABLE IF NOT EXISTS channels (
   matrix_room_id VARCHAR(255),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS marketplace_listings_cache (
+  provider_id VARCHAR(64) NOT NULL,
+  provider_listing_id VARCHAR(128) NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  price_cents INTEGER NOT NULL,
+  currency VARCHAR(8) NOT NULL,
+  seller_id VARCHAR(128),
+  seller_display_name TEXT,
+  entitlement_kind VARCHAR(64) NOT NULL,
+  media_urls JSONB NOT NULL DEFAULT '[]',
+  tags JSONB,
+  available_skus JSONB,
+  version INTEGER NOT NULL DEFAULT 1,
+  synced_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (provider_id, provider_listing_id)
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_entitlements (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider_id VARCHAR(64) NOT NULL,
+  provider_listing_id VARCHAR(128) NOT NULL,
+  sku VARCHAR(128),
+  kind VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  granted_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ,
+  source_event_id VARCHAR(256) NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_entitlements_user
+  ON marketplace_entitlements (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_marketplace_entitlements_listing
+  ON marketplace_entitlements (provider_id, provider_listing_id);
+
+CREATE TABLE IF NOT EXISTS marketplace_webhook_events (
+  provider_id VARCHAR(64) NOT NULL,
+  event_id VARCHAR(256) NOT NULL,
+  type VARCHAR(64) NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  processed_at TIMESTAMPTZ,
+  payload JSONB NOT NULL,
+  signature_ok BOOLEAN NOT NULL,
+  PRIMARY KEY (provider_id, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_seller_profiles (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider_id VARCHAR(64) NOT NULL,
+  display_name TEXT,
+  bio TEXT,
+  avatar_url TEXT,
+  payout_id VARCHAR(128),
+  reputation_tier VARCHAR(32),
+  vacation_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, provider_id)
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_license_keys (
+  entitlement_id UUID PRIMARY KEY REFERENCES marketplace_entitlements(id) ON DELETE CASCADE,
+  license_key VARCHAR(64) NOT NULL UNIQUE,
+  activations_used INTEGER NOT NULL DEFAULT 0,
+  activations_max INTEGER NOT NULL DEFAULT 3
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_provider_config (
+  provider_id VARCHAR(64) PRIMARY KEY,
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  base_url TEXT,
+  public_key TEXT,
+  last_synced_at TIMESTAMPTZ
+);

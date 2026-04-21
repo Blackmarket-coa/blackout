@@ -3,6 +3,9 @@
 ## Scope
 MatrixRTC + LiveKit call path for Blackout web/client in staging and production-like environments.
 
+For TURN launch hardening, port policy, and call validation matrices, use:
+- `docs/operations/runbooks/turn-launch-reliability.md`
+
 ## Required environment checks
 1. `/.well-known/matrix/client` exposes `org.matrix.msc4143.rtc_foci` (or `rtc_foci`) with a `livekit` focus.
 2. LiveKit SFU endpoint is reachable (`/livekit/sfu` proxy path).

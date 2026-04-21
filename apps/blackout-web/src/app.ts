@@ -7,7 +7,12 @@ import { renderFederationPanel, type FederationTab } from "./components/Federati
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
 import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/PlatformOpsPanel";
-import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab } from "./components/RevenueOpsPanel";
+import {
+  renderRevenueOpsPanel,
+  type QuestStage,
+  type RevenueFunnelMetric,
+  type RevenueOpsTab,
+} from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderGlossaryTip } from "./components/glossary";
@@ -395,6 +400,14 @@ export class BlackoutWebApp {
     return this.activeChannelHasCapability("governance");
   }
 
+  private governanceAdvancedEnabled(): boolean {
+    return this.getActivePresetFeatures()["features.governance.entitlements"] ?? false;
+  }
+
+  private stegoAdvancedEnabled(): boolean {
+    return this.getActivePresetFeatures()["features.stego.ephemeral"] ?? false;
+  }
+
   private canPropose(): boolean {
     return this.governanceFeatureEnabled() && this.hasAdminAccess();
   }
@@ -704,6 +717,7 @@ export class BlackoutWebApp {
         proposals: state.governanceProposals.filter((proposal) => proposal.channelId === activeChannelId),
         canPropose: this.canPropose(),
         canVote: this.canVote(),
+        governanceAdvancedEnabled: this.governanceAdvancedEnabled(),
         actionMessage: this.featureActionResult,
       });
     }
@@ -712,6 +726,7 @@ export class BlackoutWebApp {
       return renderEconomicsPanel({
         channelLabel: activeChannelName,
         activeTab: this.activeEconomicsTab,
+        selectedTheme: this.selectedTheme,
       });
     }
 
@@ -739,6 +754,7 @@ export class BlackoutWebApp {
       sendPending: state.loading.send,
       richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
       stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
+      stegoAdvancedEnabled: this.stegoAdvancedEnabled(),
       composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
       composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
       composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
@@ -1611,6 +1627,8 @@ export class BlackoutWebApp {
       paymentIssue: this.paymentIssue,
       questStage: this.questStage,
       installedApps: this.installedApps,
+      funnelMetrics: this.getRevenueFunnelMetrics(),
+      selectedTheme: this.selectedTheme,
     });
   }
 
@@ -1627,6 +1645,28 @@ export class BlackoutWebApp {
 
   private parseTheme(theme: string | null): ThemeKey {
     return normalizeThemeId(theme);
+  }
+
+  private getRevenueFunnelMetrics(): RevenueFunnelMetric[] {
+    const stegoAdvancedEnabled = this.stegoAdvancedEnabled();
+    const governanceAdvancedEnabled = this.governanceAdvancedEnabled();
+
+    return [
+      {
+        family: "stego",
+        baselineUsage: stegoAdvancedEnabled ? 18 : 12,
+        advancedControlOpens: stegoAdvancedEnabled ? 9 : 5,
+        upgradeClicks: stegoAdvancedEnabled ? 4 : 2,
+        conversions: stegoAdvancedEnabled ? 2 : 1,
+      },
+      {
+        family: "governance",
+        baselineUsage: governanceAdvancedEnabled ? 14 : 9,
+        advancedControlOpens: governanceAdvancedEnabled ? 7 : 4,
+        upgradeClicks: governanceAdvancedEnabled ? 3 : 1,
+        conversions: governanceAdvancedEnabled ? 2 : 0,
+      },
+    ];
   }
 
   private applyTheme(theme: ThemeKey): void {

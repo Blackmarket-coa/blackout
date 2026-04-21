@@ -44,6 +44,14 @@ export const VoiceChannel = ({
         });
         return [...joinedMap.values()];
     }, [members, membership]);
+    const speakingCount = useMemo(
+        () =>
+            connectedUsers.filter((member) => {
+                const state = audioLevels[member.userId];
+                return Boolean(state?.speaking);
+            }).length,
+        [audioLevels, connectedUsers]
+    );
 
     useEffect(() => {
         if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -86,19 +94,35 @@ export const VoiceChannel = ({
                         {connectedUsers.length} connected
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => void joinCall(roomId)}
-                    style={{
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 8,
-                        background: 'var(--accent-primary)',
-                        color: 'var(--bg-surface)',
-                        padding: '6px 10px',
-                    }}
-                >
-                    {joined && activeCallRoomId === roomId ? 'Connected' : 'Join Voice'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {joined && activeCallRoomId === roomId ? (
+                        <span
+                            style={{
+                                fontSize: 10,
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                padding: '2px 6px',
+                                background: 'rgba(83, 240, 117, 0.2)',
+                            }}
+                            data-testid="voice-room-live-badge"
+                        >
+                            LIVE{speakingCount > 0 ? ` • ${speakingCount} speaking` : ''}
+                        </span>
+                    ) : null}
+                    <button
+                        type="button"
+                        onClick={() => void joinCall(roomId)}
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 8,
+                            background: 'var(--accent-primary)',
+                            color: 'var(--bg-surface)',
+                            padding: '6px 10px',
+                        }}
+                    >
+                        {joined && activeCallRoomId === roomId ? 'Connected' : 'Join Voice'}
+                    </button>
+                </div>
             </header>
 
             {focusStatus !== 'healthy' ? (
@@ -144,7 +168,11 @@ export const VoiceChannel = ({
                                 padding: 6,
                             }}
                         >
-                            <SpeakingIndicator speaking={speaking} audioLevel={audioLevel}>
+                            <SpeakingIndicator
+                                speaking={speaking}
+                                audioLevel={audioLevel}
+                                showStateBadge
+                            >
                                 <div
                                     style={{
                                         width: 30,

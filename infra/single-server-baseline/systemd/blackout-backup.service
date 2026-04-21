@@ -1,0 +1,13 @@
+[Unit]
+Description=Blackout backup job
+After=blackout-stack.service
+Requires=blackout-stack.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/blackout
+EnvironmentFile=/opt/blackout/.env
+Environment=STACK_DIR=/opt/blackout
+Environment=BACKUP_ROOT=/var/backups/blackout
+ExecStart=/opt/blackout/backup/backup.sh

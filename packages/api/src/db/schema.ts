@@ -9,4 +9,10 @@ export const schema = {
   federationLinks: 'federation_links',
   reputationEvents: 'reputation_events',
   subscriptions: 'subscriptions',
+  marketplaceListingsCache: 'marketplace_listings_cache',
+  marketplaceEntitlements: 'marketplace_entitlements',
+  marketplaceWebhookEvents: 'marketplace_webhook_events',
+  marketplaceSellerProfiles: 'marketplace_seller_profiles',
+  marketplaceLicenseKeys: 'marketplace_license_keys',
+  marketplaceProviderConfig: 'marketplace_provider_config',
 } as const;
