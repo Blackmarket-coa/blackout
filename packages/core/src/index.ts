@@ -4,4 +4,6 @@ export * from './governance';
 export * from './federation';
 export * from './quick-actions';
 
+export * from './feature-presets';
+export * from './customization';
 export * from './themes';

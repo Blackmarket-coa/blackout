@@ -1,6 +1,5 @@
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useAtom } from 'jotai';
-import { useAtomValue } from 'jotai';
+import React, { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
@@ -14,7 +13,7 @@ import {
     roomUnreadMarkerEventIdAtom,
     type RightPanelType,
 } from '../../state/bmc-navigation';
-import { settingsAtom } from '../../state/bmc-settings';
+import { defaultAppSettings, settingsAtom } from '../../state/bmc-settings';
 import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/bmc-composer';
 import {
     DeadDropComposer,
@@ -48,6 +47,7 @@ import {
     readQuickActionCollapsed,
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
+import { customizationAtom } from '../../state/customization';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -75,7 +75,9 @@ export const ClientLayout = () => {
     const client = useMatrixClient();
     const rooms = useAtomValue(joinedRoomsAtom);
     const userId = useAtomValue(userIdAtom);
-    const [settings, setSettings] = useAtom(settingsAtom);
+    const [storedSettings, setSettings] = useAtom(settingsAtom);
+    const [customization] = useAtom(customizationAtom);
+    const settings = storedSettings instanceof Promise ? defaultAppSettings : storedSettings;
     const [, setSettingsPage] = useAtom(settingsPageAtom);
     const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
@@ -112,7 +114,14 @@ export const ClientLayout = () => {
     const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
     const homeRooms = useMemo(() => rooms.filter((room) => room.getType() !== 'm.space'), [rooms]);
-    const featureEntrypointRegistry = useMemo(() => buildFeatureEntrypointRegistry(), []);
+    const featureEntrypointRegistry = useMemo(
+        () =>
+            buildFeatureEntrypointRegistry({
+                preset: customization.activePreset,
+                flags: customization.features,
+            }),
+        [customization.activePreset, customization.features],
+    );
     const featureFlags = featureEntrypointRegistry.flags;
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
     const callEnabled = featureFlags['features.call.elementCall'] ?? false;
@@ -835,10 +844,10 @@ export const ClientLayout = () => {
                                             const next = event.target.value;
                                             setSelectedAudioDeviceId(next);
                                             callState?.setPreferredAudioDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
+                                            setSettings({
+                                                ...settings,
                                                 preferredAudioDeviceId: next,
-                                            }));
+                                            });
                                         }}
                                         style={{
                                             width: '100%',
@@ -866,10 +875,10 @@ export const ClientLayout = () => {
                                             const next = event.target.value;
                                             setSelectedVideoDeviceId(next);
                                             callState?.setPreferredVideoDeviceId(next);
-                                            setSettings((prev) => ({
-                                                ...prev,
+                                            setSettings({
+                                                ...settings,
                                                 preferredVideoDeviceId: next,
-                                            }));
+                                            });
                                         }}
                                         style={{
                                             width: '100%',
@@ -1313,12 +1322,12 @@ export const ClientLayout = () => {
                                         aria-label="Room organization"
                                         value={settings.mobileRoomListScope ?? 'space'}
                                         onChange={(event) =>
-                                            setSettings((prev) => ({
-                                                ...prev,
+                                            setSettings({
+                                                ...settings,
                                                 mobileRoomListScope: event.target.value as
                                                     | 'space'
                                                     | 'all',
-                                            }))
+                                            })
                                         }
                                         style={{
                                             border: '1px solid var(--border-default)',
@@ -1463,10 +1472,10 @@ export const ClientLayout = () => {
                                     96,
                                     Math.max(52, start + (moveEvent.clientX - origin)),
                                 );
-                                setSettings((prev) => ({
-                                    ...prev,
-                                    layout: { ...(prev.layout ?? {}), spaceColumnWidth: width },
-                                }));
+                                setSettings({
+                                    ...settings,
+                                    layout: { ...(settings.layout ?? {}), spaceColumnWidth: width },
+                                });
                             };
                             const onUp = () => {
                                 window.removeEventListener('mousemove', onMove);
@@ -1495,10 +1504,10 @@ export const ClientLayout = () => {
                                     360,
                                     Math.max(220, start + (moveEvent.clientX - origin)),
                                 );
-                                setSettings((prev) => ({
-                                    ...prev,
-                                    layout: { ...(prev.layout ?? {}), roomColumnWidth: width },
-                                }));
+                                setSettings({
+                                    ...settings,
+                                    layout: { ...(settings.layout ?? {}), roomColumnWidth: width },
+                                });
                             };
                             const onUp = () => {
                                 window.removeEventListener('mousemove', onMove);

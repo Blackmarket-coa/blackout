@@ -1,7 +1,7 @@
 {
-  "name": "Cinny",
-  "short_name": "Cinny",
-  "description": "Yet another matrix client",
+  "name": "Blackout Client",
+  "short_name": "Blackout",
+  "description": "Modern Blackout Matrix client",
   "dir": "auto",
   "lang": "en-US",
   "display": "standalone",

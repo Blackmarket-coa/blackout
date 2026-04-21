@@ -7,8 +7,8 @@ import {
     type MatrixError,
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
-import { restoreActiveSession, type StoredSession } from './sessionManager';
+import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/bmc-auth';
+import { clearSession, restoreActiveSession, type StoredSession } from './sessionManager';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -156,4 +156,23 @@ export const initMatrixFromStoredSession = async (
 
 export const stopMatrixClient = (client: MatrixClient | null): void => {
     client?.stopClient();
+};
+
+export const logoutClient = async (client: MatrixClient): Promise<void> => {
+    stopMatrixClient(client);
+
+    try {
+        await client.logout();
+    } catch {
+        // ignore server-side logout failures; local cleanup still needs to finish
+    }
+
+    await client.clearStores();
+    clearSession(client.getUserId() ?? undefined);
+};
+
+export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {
+    stopMatrixClient(client);
+    await client.clearStores();
+    window.location.reload();
 };

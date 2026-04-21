@@ -1,4 +1,8 @@
-export type FeaturePresetKey = 'starter' | 'governance' | 'sovereignty';
+import {
+    FEATURE_PRESET_BUNDLES,
+    type FeatureFlagMap,
+    type FeaturePresetKey,
+} from '../../../lib/bmc-core';
 
 export type QuickActionSurface = 'desktop' | 'mobile';
 
@@ -27,41 +31,8 @@ export interface FeatureEntrypointRegistry {
 
 export interface BuildRegistryOptions {
     preset?: FeaturePresetKey;
-    flags?: Record<string, boolean>;
+    flags?: FeatureFlagMap;
 }
-
-const PRESET_FLAGS: Record<FeaturePresetKey, Record<string, boolean>> = {
-    starter: {
-        'features.settings.appearance': false,
-        'features.settings.account': false,
-        'features.nav.roomInvites': false,
-        'features.nav.search': false,
-        'features.timeline.threads': false,
-        'features.bmc.roles': false,
-        'features.call.elementCall': false,
-        'features.bmc.forum': false,
-    },
-    governance: {
-        'features.settings.appearance': true,
-        'features.settings.account': true,
-        'features.nav.roomInvites': false,
-        'features.nav.search': false,
-        'features.timeline.threads': false,
-        'features.bmc.roles': false,
-        'features.call.elementCall': false,
-        'features.bmc.forum': false,
-    },
-    sovereignty: {
-        'features.settings.appearance': true,
-        'features.settings.account': true,
-        'features.nav.roomInvites': true,
-        'features.nav.search': true,
-        'features.timeline.threads': true,
-        'features.bmc.roles': true,
-        'features.call.elementCall': true,
-        'features.bmc.forum': true,
-    },
-};
 
 const FEATURE_ENTRYPOINTS: FeatureEntry[] = [
     {
@@ -122,7 +93,7 @@ export function buildFeatureEntrypointRegistry(
     options: BuildRegistryOptions = {},
 ): FeatureEntrypointRegistry {
     const preset = options.preset ?? 'sovereignty';
-    const base = PRESET_FLAGS[preset];
+    const base = FEATURE_PRESET_BUNDLES[preset];
     const flags = { ...base, ...(options.flags ?? {}) };
     const entries = FEATURE_ENTRYPOINTS.filter((entry) => flags[entry.presetKey] ?? false);
     return { preset, flags, entries };

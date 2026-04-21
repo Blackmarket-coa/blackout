@@ -1,17 +1,53 @@
+/* eslint-disable import/first */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { enableMapSet } from 'immer';
+import '@fontsource/inter/variable.css';
+import 'folds/dist/style.css';
+import { configClass, varsClass } from 'folds';
 import { useAtomValue } from 'jotai';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
-import { MatrixBootstrapper } from './app/components/MatrixBootstrapper';
-import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
+import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
+import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
+import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
+import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { DraupnirRoutePage } from './app/features/moderation/draupnir';
+import { trimTrailingSlash } from './app/utils/common';
+import { pushSessionToSW } from './sw-session';
+import { getFallbackSession } from './app/state/sessions';
+
+enableMapSet();
+document.body.classList.add(configClass, varsClass);
+
+if ('serviceWorker' in navigator) {
+    const swUrl =
+        import.meta.env.MODE === 'production'
+            ? `${trimTrailingSlash(import.meta.env.BASE_URL)}/sw.js`
+            : '/dev-sw.js?dev-sw';
+
+    const sendSessionToSW = () => {
+        const session = getFallbackSession();
+        pushSessionToSW(session?.baseUrl, session?.accessToken);
+    };
+
+    navigator.serviceWorker.register(swUrl).then(sendSessionToSW);
+    navigator.serviceWorker.ready.then(sendSessionToSW);
+
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+        const { type } = ev.data ?? {};
+
+        if (type === 'requestSession') {
+            sendSessionToSW();
+        }
+    });
+}
 
 const queryClient = new QueryClient();
 
@@ -110,6 +146,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
         <JotaiProvider>
             <ThemeProvider>
+                <RuntimeSettingsBridge />
                 <MatrixBootstrapper />
                 <QueryClientProvider client={queryClient}>
                     <BootstrapStatus />

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useStore } from 'jotai';
-import { authStateAtom, cryptoInitErrorAtom } from '../state/bmc-auth';
-import { initMatrixFromStoredSession } from '../../client/initMatrix';
-import { CryptoInitError, initCrypto } from '../../client/crypto';
+import { authStateAtom, cryptoInitErrorAtom } from '../../state/bmc-auth';
+import { initMatrixFromStoredSession } from '../../../client/initMatrix';
+import { CryptoInitError, initCrypto } from '../../../client/crypto';
 
 export const MatrixBootstrapper = () => {
     const store = useStore();

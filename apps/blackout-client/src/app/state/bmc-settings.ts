@@ -1,5 +1,5 @@
 import { normalizeThemeId } from '../../lib/bmc-core';
-import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { atomWithStorage } from 'jotai/utils';
 import type { ThemePreference } from '../styles/theme.css';
 
 export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
@@ -24,7 +24,7 @@ export interface AppSettings {
     preferredVideoDeviceId?: string;
 }
 
-const defaultSettings: AppSettings = {
+export const defaultAppSettings: AppSettings = {
     theme: 'dark_canopy',
     pageZoom: 1,
     twitterEmoji: true,
@@ -43,20 +43,42 @@ const defaultSettings: AppSettings = {
 export const normalizeAppSettingsTheme = (theme: string): ThemePreference =>
     normalizeThemeId(theme);
 
-const appSettingsStorage = createJSONStorage<AppSettings>(() => localStorage, {
-    reviver: (key, value) => {
-        if (key === 'theme' && typeof value === 'string') {
-            return normalizeAppSettingsTheme(value);
+const appSettingsStorage = {
+    getItem: (key: string, initialValue: AppSettings): AppSettings => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return initialValue;
+
+        try {
+            const parsed = JSON.parse(raw) as Partial<AppSettings>;
+            return {
+                ...initialValue,
+                ...parsed,
+                theme:
+                    typeof parsed.theme === 'string'
+                        ? normalizeAppSettingsTheme(parsed.theme)
+                        : initialValue.theme,
+                layout: {
+                    ...initialValue.layout,
+                    ...(parsed.layout ?? {}),
+                },
+            };
+        } catch {
+            return initialValue;
         }
-        return value;
     },
-});
+    setItem: (key: string, value: AppSettings) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    },
+    removeItem: (key: string) => {
+        localStorage.removeItem(key);
+    },
+};
 
 /**
  * Persisted client settings for appearance, notifications, and developer toggles.
  */
 export const settingsAtom = atomWithStorage<AppSettings>(
     'blackout.settings.v1',
-    defaultSettings,
+    defaultAppSettings,
     appSettingsStorage,
 );

@@ -36,7 +36,13 @@ import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKe
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
-import { BLACKOUT_THEMES, normalizeThemeId, type BlackoutThemeId } from "@blackout/core";
+import {
+  BLACKOUT_THEMES,
+  createCustomizationBundle,
+  normalizeThemeId,
+  serializeCustomizationBundle,
+  type BlackoutThemeId,
+} from "@blackout/core";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
@@ -173,6 +179,7 @@ export class BlackoutWebApp {
   })();
   private advancedPanelViewedTracked = false;
   private readonly advancedModuleDiscoveryTracked = new Set<string>();
+  private customizationTransferStatus: string | null = null;
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -1331,7 +1338,7 @@ export class BlackoutWebApp {
     if (this.activeSettingsPage === "operations") {
       return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
     }
-    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+    return `${this.renderPresetManagementSection()}${this.renderCustomizationTransferSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
   }
 
   private renderPresetManagementSection(): string {
@@ -1445,6 +1452,33 @@ export class BlackoutWebApp {
         <ul class="theme-list">
           ${BLACKOUT_THEMES.map((theme) => `<li class="meta"><strong>${theme.label}</strong>${theme.id === "dark_canopy" ? " (default)" : ""}: ${theme.description}</li>`).join("")}
         </ul>
+      </section>
+    `;
+  }
+
+  private buildCustomizationTransferBundle(): string {
+    return serializeCustomizationBundle(
+      createCustomizationBundle({
+        source: "blackout-web",
+        activePreset: this.appliedPreset,
+        features: this.getActivePresetFeatures(),
+        theme: this.selectedTheme,
+      }),
+    );
+  }
+
+  private renderCustomizationTransferSection(): string {
+    return `
+      <section class="stack panel-card" data-testid="customization-transfer-panel">
+        <h2>Transfer to Blackout Client</h2>
+        <p class="meta">Blackout Web is a customization transfer shell. Export the active preset and theme, then import the bundle in Blackout Client.</p>
+        <p class="meta">Current bundle: preset <strong>${this.appliedPreset}</strong>, theme <strong>${this.selectedTheme}</strong>.</p>
+        <div class="modal-actions">
+          <button type="button" data-action="copy-customization-bundle">Copy bundle</button>
+          <button type="button" class="ghost-btn" data-action="download-customization-bundle">Download bundle</button>
+        </div>
+        <textarea readonly rows="12" data-testid="customization-transfer-bundle">${this.buildCustomizationTransferBundle()}</textarea>
+        <p class="meta">${this.customizationTransferStatus ?? "Export a bundle, then import it in Blackout Client > Settings > Developer > Customization transfer."}</p>
       </section>
     `;
   }
@@ -2172,6 +2206,30 @@ export class BlackoutWebApp {
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.deploymentPreset] };
       this.appendPresetAuditLog(`${new Date().toISOString()} rollback ${previousPreset} → ${this.deploymentPreset}`);
       this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='copy-customization-bundle']")?.addEventListener("click", async () => {
+      const raw = this.buildCustomizationTransferBundle();
+      try {
+        await globalThis.navigator.clipboard.writeText(raw);
+        this.customizationTransferStatus = "Customization bundle copied to clipboard.";
+      } catch {
+        this.customizationTransferStatus = "Clipboard copy failed. Copy the bundle text manually.";
+      }
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='download-customization-bundle']")?.addEventListener("click", () => {
+      const raw = this.buildCustomizationTransferBundle();
+      const blob = new Blob([raw], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `blackout-customization-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      this.customizationTransferStatus = "Customization bundle downloaded.";
       this.render();
     });
 

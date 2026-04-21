@@ -1,7 +1,7 @@
 {
-  "name": "cinny",
+  "name": "@blackout/blackout-client",
   "version": "4.10.5",
-  "description": "Yet another matrix client",
+  "description": "Blackout client",
   "main": "index.js",
   "type": "module",
   "engines": {
