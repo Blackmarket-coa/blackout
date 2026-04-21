@@ -78,7 +78,7 @@ export function CreateRoomAliasInput({ disabled }: { disabled?: boolean }) {
 
   return (
     <Box shrink="No" direction="Column" gap="100">
-      <Text size="L400">Address (Optional)</Text>
+      <Text size="L400">Public Address (Optional)</Text>
       <Text size="T200" priority="300">
         Pick a unique address to make it easier to find.
       </Text>

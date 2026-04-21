@@ -67,11 +67,11 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
             {name}
           </Text>
           <Text size="T400" priority="400">
-            {typeof topic === 'string' ? topic : 'This is the beginning of conversation.'}
+            {typeof topic === 'string' ? topic : 'This is the beginning of this conversation.'}
           </Text>
           {creatorName && ts && (
             <Text size="T200" priority="300">
-              {'Created by '}
+              {'Started by '}
               <b>@{creatorName}</b>
               {` on ${timeDayMonthYear(ts)} ${timeHourMinute(ts, hour24Clock)}`}
             </Text>
@@ -79,7 +79,7 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
         </Box>
         <Box gap="200" wrap="Wrap">
           <Button onClick={() => setInvitePrompt(true)} variant="Secondary" size="300" radii="300">
-            <Text size="B300">Invite Member</Text>
+            <Text size="B300">Invite People</Text>
           </Button>
 
           {invitePrompt && (
