@@ -44,7 +44,7 @@ export function RoomImagePack({ room, stateKey }: RoomImagePackProps) {
 
       await mx.sendStateEvent(
         address.roomId,
-        StateEvent.PoniesRoomEmotes,
+        StateEvent.PoniesRoomEmotes as any,
         packContent,
         address.stateKey
       );

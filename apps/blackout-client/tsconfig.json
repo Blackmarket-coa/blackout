@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "sourceMap": true,
-    "jsx": "react",
-    "target": "ES2016",
+    "jsx": "react-jsx",
+    "target": "ES2021",
     "module": "ES2020",
     "allowJs": true,
     "strict": true,
@@ -11,7 +11,7 @@
     "resolveJsonModule": true,
     "outDir": "dist",
     "skipLibCheck": true,
-    "lib": ["ES2016", "DOM"]
+    "lib": ["ES2021", "DOM"]
   },
   "exclude": ["node_modules", "dist"],
   "include": ["src"]

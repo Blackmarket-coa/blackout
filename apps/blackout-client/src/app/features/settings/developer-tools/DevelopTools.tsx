@@ -25,7 +25,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      await mx.setAccountData(type, content);
+      await (mx as any).setAccountData(type, content);
     },
     [mx]
   );
@@ -34,7 +34,9 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
     return (
       <AccountDataEditor
         type={accountDataType ?? undefined}
-        content={accountDataType ? mx.getAccountData(accountDataType)?.getContent() : undefined}
+        content={
+          accountDataType ? (mx as any).getAccountData(accountDataType)?.getContent() : undefined
+        }
         submitChange={submitAccountData}
         requestClose={() => setAccountDataType(undefined)}
       />

@@ -97,10 +97,8 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
       <Box grow="Yes" direction="Column">
         <RoomTimeline
           key={roomId}
-          room={room}
-          eventId={eventId}
-          roomInputRef={roomInputRef}
-          editor={editor}
+          roomId={roomId}
+          jumpToEventId={eventId}
         />
         <RoomViewTyping room={room} />
       </Box>

@@ -153,7 +153,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           },
         };
 
-        return mx.sendMessage(roomId, content);
+        return mx.sendMessage(roomId, content as any);
       }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody])
     );
 

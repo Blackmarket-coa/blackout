@@ -17,7 +17,7 @@ const toBody = (value: Descendant[]): string => {
         .trim();
 };
 
-const initialValue: Descendant[] = [{ type: 'paragraph', children: [{ text: '' }] }];
+const initialValue = [{ type: 'paragraph', children: [{ text: '' }] }] as unknown as Descendant[];
 
 export const CreatePostModal = ({
     roomId,
