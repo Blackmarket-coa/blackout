@@ -19,7 +19,7 @@ import { spaceRoomsAtom } from '../../state/spaceRooms';
 import { MembersDrawer } from '../room/MembersDrawer';
 import { useSetting } from '../../state/hooks/settings';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 import { LobbyHeader } from './LobbyHeader';
 import { LobbyHero } from './LobbyHero';
 import { ScrollTopContainer } from '../../components/scroll-top-container';

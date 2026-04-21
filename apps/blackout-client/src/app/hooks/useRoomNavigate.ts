@@ -13,7 +13,7 @@ import { getOrphanParents, guessPerfectParent } from '../utils/room';
 import { roomToParentsAtom } from '../state/room/roomToParents';
 import { mDirectAtom } from '../state/mDirectList';
 import { useSelectedSpace } from './router/useSelectedSpace';
-import { settingsAtom } from '../state/settings';
+import { settingsAtom } from '../state/compat-settings';
 import { useSetting } from '../state/hooks/settings';
 
 export const useRoomNavigate = () => {

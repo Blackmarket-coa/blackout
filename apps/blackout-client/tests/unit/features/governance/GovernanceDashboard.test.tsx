@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { userIdAtom } from '../../../../src/app/state/auth';
+import { userIdAtom } from '../../../../src/app/state/bmc-auth';
 import { GovernanceDashboard } from '../../../../src/app/features/governance/GovernanceDashboard';
 import type {
     ProposalModel,

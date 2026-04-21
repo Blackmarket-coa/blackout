@@ -6,6 +6,11 @@ import {
     type AppSettings,
 } from './bmc-settings';
 
+/**
+ * Compatibility settings bridge for retained legacy UI surfaces.
+ * Modern runtime state should prefer bmc-settings/theme-atoms directly.
+ */
+
 const STORAGE_KEY = 'blackout.settings.compat.v1';
 const LEGACY_STORAGE_KEY = 'settings';
 
