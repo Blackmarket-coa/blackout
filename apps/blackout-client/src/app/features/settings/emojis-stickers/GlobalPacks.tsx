@@ -24,6 +24,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue } from 'jotai';
 import { Room } from 'matrix-js-sdk';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 import { useGlobalImagePacks, useRoomsImagePacks } from '../../../hooks/useImagePacks';
 import { SequenceCardStyle } from '../styles.css';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -107,7 +108,7 @@ function GlobalPackSelector({
       <Header size="400" variant="Surface" style={{ padding: `0 ${config.space.S300}` }}>
         <Box grow="Yes">
           <Text size="L400" truncate>
-            Room Packs
+            {BLACKOUT_TERMS.den.titlePlural} Packs
           </Text>
         </Box>
         <Box shrink="No">
@@ -235,7 +236,8 @@ function GlobalPackSelector({
                     No Packs
                   </Text>
                   <Text size="T200" align="Center">
-                    Pack from rooms will appear here. You do not have any room with packs yet.
+                    Packs from your {BLACKOUT_TERMS.den.plural} will appear here. You do not have
+                    any {BLACKOUT_TERMS.den.singular} with packs yet.
                   </Text>
                 </Box>
               </SequenceCard>
@@ -303,7 +305,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
   const [applyState, applyChanges] = useAsyncCallback(
     useCallback(async () => {
       const content =
-        mx.getAccountData(AccountDataEvent.PoniesEmoteRooms)?.getContent<EmoteRoomsContent>() ?? {};
+        mx.getAccountData(AccountDataEvent.PoniesEmoteRooms as never)?.getContent<EmoteRoomsContent>() ?? {};
       const updatedContent: EmoteRoomsContent = JSON.parse(JSON.stringify(content));
 
       selectedPacks.forEach((addr) => {
@@ -320,7 +322,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         }
       });
 
-      await mx.setAccountData(AccountDataEvent.PoniesEmoteRooms, updatedContent);
+      await mx.setAccountData(AccountDataEvent.PoniesEmoteRooms as never, updatedContent as never);
     }, [mx, selectedPacks, removedPacks])
   );
 
@@ -429,7 +431,7 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         >
           <SettingTile
             title="Select Pack"
-            description="Pick emojis and stickers pack from rooms to use in all rooms."
+            description={`Pick emoji and sticker packs from your ${BLACKOUT_TERMS.den.plural} to use across every ${BLACKOUT_TERMS.den.singular}.`}
             after={
               <>
                 <Button

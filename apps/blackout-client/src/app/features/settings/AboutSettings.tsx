@@ -1,11 +1,13 @@
+import React from 'react';
+
 const version = import.meta.env?.VITE_APP_VERSION ?? '0.1.0';
 const channel = import.meta.env?.VITE_BUILD_CHANNEL ?? 'production';
 const buildSha = import.meta.env?.VITE_BUILD_SHA ?? 'local';
 
 const links = [
-    { label: 'Support Center', href: 'https://blackoutchat.example/support' },
-    { label: 'Status Page', href: 'https://blackoutchat.example/status' },
-    { label: 'Contact Email', href: 'mailto:support@blackoutchat.example' },
+    { label: 'Repository', href: 'https://github.com/Blackmarket-coa/blackout' },
+    { label: 'Issue Tracker', href: 'https://github.com/Blackmarket-coa/blackout/issues' },
+    { label: 'Documentation', href: 'https://github.com/Blackmarket-coa/blackout/tree/main/docs' },
 ];
 
 const AboutSettings = () => (
@@ -13,7 +15,7 @@ const AboutSettings = () => (
         <header>
             <h3 style={{ marginBottom: 6 }}>About</h3>
             <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                Build information and official support channels.
+                Build information, repository links, and support paths for Blackout Client.
             </p>
         </header>
 
@@ -30,7 +32,7 @@ const AboutSettings = () => (
         </div>
 
         <section>
-            <h4 style={{ marginTop: 0, marginBottom: 8 }}>Support</h4>
+            <h4 style={{ marginTop: 0, marginBottom: 8 }}>Links</h4>
             <ul style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 6 }}>
                 {links.map((link) => (
                     <li key={link.href}>
