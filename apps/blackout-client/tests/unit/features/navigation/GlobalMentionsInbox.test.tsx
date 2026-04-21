@@ -5,11 +5,11 @@ import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import GlobalMentionsInbox from '../../../../src/app/features/navigation/GlobalMentionsInbox';
-import { matrixClientAtom } from '../../../../src/app/state/auth';
+import { matrixClientAtom } from '../../../../src/app/state/bmc-auth';
 import {
     roomJumpTargetEventIdAtom,
     selectedRoomIdAtom,
-} from '../../../../src/app/state/navigation';
+} from '../../../../src/app/state/bmc-navigation';
 
 const mentionEvent = {
     getId: () => '$mention-1',

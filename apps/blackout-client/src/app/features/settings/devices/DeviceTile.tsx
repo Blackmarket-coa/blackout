@@ -28,7 +28,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { LogoutDialog } from '../../../components/LogoutDialog';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useSetting } from '../../../state/hooks/settings';
-import { settingsAtom } from '../../../state/settings';
+import { settingsAtom } from '../../../state/compat-settings';
 
 export function DeviceTilePlaceholder() {
   return (

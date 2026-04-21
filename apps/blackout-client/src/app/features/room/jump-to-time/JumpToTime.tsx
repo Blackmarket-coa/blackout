@@ -30,7 +30,7 @@ import { StateEvent } from '../../../../types/matrix/room';
 import { getToday, getYesterday, timeDayMonthYear, timeHourMinute } from '../../../utils/time';
 import { DatePicker, TimePicker } from '../../../components/time-date';
 import { useSetting } from '../../../state/hooks/settings';
-import { settingsAtom } from '../../../state/settings';
+import { settingsAtom } from '../../../state/compat-settings';
 
 type JumpToTimeProps = {
   onCancel: () => void;

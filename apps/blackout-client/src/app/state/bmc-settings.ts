@@ -1,6 +1,5 @@
 import { normalizeThemeId } from '../../lib/bmc-core';
-import { designShellLayout } from '../../../../../packages/design/src';
-import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { atomWithStorage } from 'jotai/utils';
 import type { ThemePreference } from '../styles/theme.css';
 
 export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
@@ -25,7 +24,7 @@ export interface AppSettings {
     preferredVideoDeviceId?: string;
 }
 
-const defaultSettings: AppSettings = {
+export const defaultAppSettings: AppSettings = {
     theme: 'dark_canopy',
     pageZoom: 1,
     twitterEmoji: true,
@@ -35,8 +34,8 @@ const defaultSettings: AppSettings = {
     devMode: false,
     streamerMode: false,
     layout: {
-        spaceColumnWidth: designShellLayout.defaultSpaceColumnWidthPx,
-        roomColumnWidth: designShellLayout.defaultRoomColumnWidthPx,
+        spaceColumnWidth: 64,
+        roomColumnWidth: 260,
     },
     mobileRoomListScope: 'space',
 };
@@ -44,15 +43,34 @@ const defaultSettings: AppSettings = {
 export const normalizeAppSettingsTheme = (theme: string): ThemePreference =>
     normalizeThemeId(theme);
 
-const baseAppSettingsStorage = createJSONStorage<AppSettings>(() => localStorage);
-const appSettingsStorage: typeof baseAppSettingsStorage = {
-    ...baseAppSettingsStorage,
-    getItem: (key, initialValue) => {
-        const value = baseAppSettingsStorage.getItem(key, initialValue);
-        if (value && typeof value === 'object' && typeof value.theme === 'string') {
-            return { ...value, theme: normalizeAppSettingsTheme(value.theme) };
+const appSettingsStorage = {
+    getItem: (key: string, initialValue: AppSettings): AppSettings => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return initialValue;
+
+        try {
+            const parsed = JSON.parse(raw) as Partial<AppSettings>;
+            return {
+                ...initialValue,
+                ...parsed,
+                theme:
+                    typeof parsed.theme === 'string'
+                        ? normalizeAppSettingsTheme(parsed.theme)
+                        : initialValue.theme,
+                layout: {
+                    ...initialValue.layout,
+                    ...(parsed.layout ?? {}),
+                },
+            };
+        } catch {
+            return initialValue;
         }
-        return value;
+    },
+    setItem: (key: string, value: AppSettings) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    },
+    removeItem: (key: string) => {
+        localStorage.removeItem(key);
     },
 };
 
@@ -61,6 +79,6 @@ const appSettingsStorage: typeof baseAppSettingsStorage = {
  */
 export const settingsAtom = atomWithStorage<AppSettings>(
     'blackout.settings.v1',
-    defaultSettings,
+    defaultAppSettings,
     appSettingsStorage,
 );

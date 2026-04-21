@@ -2,7 +2,7 @@
   "name": "@blackout/blackout-web",
   "version": "0.0.1",
   "private": true,
-  "description": "Blackout daily chat client (Cinny fork migration shell)",
+  "description": "Blackout customization transfer shell",
   "type": "module",
   "scripts": {
     "build": "tsc --build",

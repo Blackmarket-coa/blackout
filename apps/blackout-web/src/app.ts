@@ -7,7 +7,12 @@ import { renderFederationPanel, type FederationTab } from "./components/Federati
 import { renderGovernanceRoomPanel, type GovernanceRoomTab } from "./components/GovernanceRoomPanel";
 import { renderMobileTabBar, type MobileTab } from "./components/MobileTabBar";
 import { renderPlatformOpsPanel, type PlatformOpsTab } from "./components/PlatformOpsPanel";
-import { renderRevenueOpsPanel, type QuestStage, type RevenueOpsTab, type RevenueFunnelMetric } from "./components/RevenueOpsPanel";
+import {
+  renderRevenueOpsPanel,
+  type QuestStage,
+  type RevenueFunnelMetric,
+  type RevenueOpsTab,
+} from "./components/RevenueOpsPanel";
 import { renderServerSidebar } from "./components/ServerSidebar";
 import { renderTownhallPanel, type TownhallMode } from "./components/TownhallPanel";
 import { renderGlossaryTip } from "./components/glossary";
@@ -25,7 +30,7 @@ import {
   listenForNativeBridgeEvents,
   type NativeBridgeEvent,
 } from "./platform/native-bridge-contract";
-import { FEATURE_UI_ENTRIES, PREMIUM_ADMIN_CONSOLE_FEATURE_IDS, type UiEntryKind } from "./settings/feature-entrypoints";
+import { FEATURE_UI_ENTRIES, type UiEntryKind } from "./settings/feature-entrypoints";
 import {
   parseAttachmentImport,
   validateAttachmentInput,
@@ -33,11 +38,16 @@ import {
 } from "./utils/attachment-validation";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKey } from "./settings/feature-presets";
-import { resolveEntitlement, type EntitlementKey } from "./settings/entitlement-resolver";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
 import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
-import { BLACKOUT_THEMES, normalizeThemeId, type BlackoutThemeId } from "@blackout/core";
+import {
+  BLACKOUT_THEMES,
+  createCustomizationBundle,
+  normalizeThemeId,
+  serializeCustomizationBundle,
+  type BlackoutThemeId,
+} from "@blackout/core";
 
 const NAME_PATTERN = /^[a-zA-Z0-9 _-]{2,40}$/;
 const ONBOARDING_INVITE_SENT_STORAGE_KEY = "blackout.onboarding.invite_sent";
@@ -86,11 +96,6 @@ const GIF_LIBRARY_STORAGE_KEY = "blackout.composer.gifs.v1";
 const EMOJI_LIBRARY_STORAGE_KEY = "blackout.composer.emoji.v1";
 const ATTACHMENT_LIBRARY_STORAGE_KEY = "blackout.composer.attachments.v1";
 const GOVERNANCE_TEMPLATE_STORAGE_KEY = "blackout.composer.governance.v1";
-
-const DEFAULT_REVENUE_FUNNEL_METRICS: RevenueFunnelMetric[] = [
-  { family: "stego", baselineUsage: 0, advancedControlOpens: 0, upgradeClicks: 0, conversions: 0 },
-  { family: "governance", baselineUsage: 0, advancedControlOpens: 0, upgradeClicks: 0, conversions: 0 },
-];
 const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
 const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
@@ -140,7 +145,6 @@ export class BlackoutWebApp {
   private paymentIssue = false;
   private questStage: QuestStage = "open";
   private installedApps = 2;
-  private revenueFunnelMetrics: RevenueFunnelMetric[] = DEFAULT_REVENUE_FUNNEL_METRICS.map((metric) => ({ ...metric }));
   private activePlatformOpsTab: PlatformOpsTab = "federation";
   private readinessScore = 86;
   private vaultUsageGb = 11.5;
@@ -180,6 +184,7 @@ export class BlackoutWebApp {
   })();
   private advancedPanelViewedTracked = false;
   private readonly advancedModuleDiscoveryTracked = new Set<string>();
+  private customizationTransferStatus: string | null = null;
 
   private readonly featureKindUi: Record<UiEntryKind, { icon: string; label: string; firstUseTooltip: string }> = {
     settings_toggle: {
@@ -194,8 +199,8 @@ export class BlackoutWebApp {
     },
     room_action: {
       icon: "💬",
-      label: "Den actions",
-      firstUseTooltip: "Context actions for channels, threads, and den workflows.",
+      label: "Room actions",
+      firstUseTooltip: "Context actions for channels, threads, and room workflows.",
     },
     widget_panel: {
       icon: "🧩",
@@ -227,9 +232,6 @@ export class BlackoutWebApp {
         deploymentPreset: "starter",
         tenantPreset: null,
         userOverrideCount: 0,
-      },
-      entitlementLayers: {
-        deploymentPreset: {},
       },
     },
     simpleMode: {
@@ -392,13 +394,22 @@ export class BlackoutWebApp {
   }
 
   private governanceFeatureEnabled(): boolean {
-    if (this.isFeatureEnabled("features.governance.entitlements") || this.isFeatureEnabled("features.bmc.governance")) return true;
+    const features = this.getActivePresetFeatures();
+    if ((features["features.governance.entitlements"] ?? false) || (features["features.bmc.governance"] ?? false)) return true;
     if (this.hasAdminAccess()) return true;
     return this.activeChannelHasCapability("governance");
   }
 
+  private governanceAdvancedEnabled(): boolean {
+    return this.getActivePresetFeatures()["features.governance.entitlements"] ?? false;
+  }
+
+  private stegoAdvancedEnabled(): boolean {
+    return this.getActivePresetFeatures()["features.stego.ephemeral"] ?? false;
+  }
+
   private canPropose(): boolean {
-    return this.governanceFeatureEnabled();
+    return this.governanceFeatureEnabled() && this.hasAdminAccess();
   }
 
   private canVote(): boolean {
@@ -706,7 +717,7 @@ export class BlackoutWebApp {
         proposals: state.governanceProposals.filter((proposal) => proposal.channelId === activeChannelId),
         canPropose: this.canPropose(),
         canVote: this.canVote(),
-        governanceAdvancedEnabled: this.isFeatureEnabled("features.governance.entitlements"),
+        governanceAdvancedEnabled: this.governanceAdvancedEnabled(),
         actionMessage: this.featureActionResult,
       });
     }
@@ -741,15 +752,15 @@ export class BlackoutWebApp {
       canPropose: this.canPropose(),
       governanceEnabled: this.governanceFeatureEnabled(),
       sendPending: state.loading.send,
-      richEditingEnabled: this.isFeatureEnabled("features.composer.richEditing"),
-      stegoEnabled: this.isFeatureEnabled("features.stego.enabled") || this.isFeatureEnabled("features.bmc.steganography"),
-      stegoAdvancedEnabled: this.isFeatureEnabled("features.stego.ephemeral"),
-      composerRepliesEnabled: this.isFeatureEnabled("features.composer.replies"),
-      composerEditsEnabled: this.isFeatureEnabled("features.composer.edits"),
-      composerRedactionsEnabled: this.isFeatureEnabled("features.composer.redactions"),
-      mediaCodeBlocksEnabled: this.isFeatureEnabled("features.media.codeBlocks"),
-      mediaSpoilersEnabled: this.isFeatureEnabled("features.media.spoilers"),
-      typingIndicatorsEnabled: this.isFeatureEnabled("features.composer.typingIndicators"),
+      richEditingEnabled: this.getActivePresetFeatures()["features.composer.richEditing"] ?? false,
+      stegoEnabled: (this.getActivePresetFeatures()["features.stego.enabled"] ?? false) || (this.getActivePresetFeatures()["features.bmc.steganography"] ?? false),
+      stegoAdvancedEnabled: this.stegoAdvancedEnabled(),
+      composerRepliesEnabled: this.getActivePresetFeatures()["features.composer.replies"] ?? false,
+      composerEditsEnabled: this.getActivePresetFeatures()["features.composer.edits"] ?? false,
+      composerRedactionsEnabled: this.getActivePresetFeatures()["features.composer.redactions"] ?? false,
+      mediaCodeBlocksEnabled: this.getActivePresetFeatures()["features.media.codeBlocks"] ?? false,
+      mediaSpoilersEnabled: this.getActivePresetFeatures()["features.media.spoilers"] ?? false,
+      typingIndicatorsEnabled: this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false,
       showTypingIndicator: this.composerIsTyping,
       attachmentMode: this.activeAttachmentMode,
       compactMode: this.getCompactModeActive(),
@@ -869,7 +880,7 @@ export class BlackoutWebApp {
             <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="approve" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to approve" : "Vote approve"}</button>
             <button type="button" class="ghost-btn" data-action="governance-vote" data-proposal-id="${selectedProposal.id}" data-vote="block" ${this.canVote() ? "" : "disabled"}>${myVote ? "Change to block" : "Vote block"}</button>
           </div>
-          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is currently unavailable in this room.</p>'}
+          ${this.canVote() ? "" : '<p class="meta" role="status">Voting is unavailable until governance entitlements are enabled.</p>'}
         </div>
       `;
     } else if (this.activeGovernancePanelTab === "active") {
@@ -936,7 +947,7 @@ export class BlackoutWebApp {
     const dmChannels = getDirectMessageChannels(state.channels, state.unreadByChannel);
     const quickLinks = `
       <li class="dm-hub-shell">
-      <section class="dm-hub-card" aria-label="Locked in hub">
+      <section class="dm-hub-card" aria-label="Direct message hub">
         <button type="button" class="dm-hub-search" data-action="start-dm-channel" aria-label="Find or start a secure conversation">Find or start a secure conversation</button>
         <div class="dm-hub-list" role="list">
           <button type="button" class="dm-hub-item" data-action="dm-open-friends" role="listitem">
@@ -985,16 +996,17 @@ export class BlackoutWebApp {
 
     const fallback = '<li class="repo-tools-item"><div><strong>No DMs detected</strong><p class="meta">Create a DM channel with names like "dm-alex", "pm-sam", or "@alex:matrix.org".</p></div></li>';
     return this.renderWorkspaceUtilityPage(
-      "Locked In",
-      "A focused panel for quick locked in access.",
+      "Direct messages",
+      "A focused panel for quick DM access.",
       `${quickLinks}${starter}${items || fallback}`,
     );
   }
 
   private renderActivityPanel(): string {
     const state = this.store.getState();
+    const activeFeatures = this.getActivePresetFeatures();
     const items = FEATURE_UI_ENTRIES
-      .filter((entry) => this.isFeatureEnabled(entry.presetKey as EntitlementKey))
+      .filter((entry) => activeFeatures[entry.presetKey] ?? false)
       .slice(0, 8)
       .map((feature) => {
         const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
@@ -1149,7 +1161,7 @@ export class BlackoutWebApp {
       }
       const [kind, testId] = feature.uiEntry.split(":") as [UiEntryKind, string];
       if (!showAdvancedModules && kind === "admin_console") continue;
-      const enabled = this.isFeatureEnabled(feature.presetKey as EntitlementKey);
+      const enabled = this.getActivePresetFeatures()[feature.presetKey] ?? false;
       const content = enabled
         ? `<button type="button" class="ghost-btn" data-action="open-feature-entry" data-feature-id="${feature.id}" data-feature-kind="${kind}" data-testid="${testId}">${feature.name}</button>`
         : `<p class="empty" data-testid="${testId}-unavailable">${feature.name} unavailable: blocked by policy or entitlement.</p>`;
@@ -1160,7 +1172,7 @@ export class BlackoutWebApp {
       grouped.set(kind, [...(grouped.get(kind) ?? []), row]);
     }
     const totalEntries = Array.from(grouped.values()).reduce((total, entries) => total + entries.length, 0);
-    const enabledCount = FEATURE_UI_ENTRIES.filter((feature) => this.isFeatureEnabled(feature.presetKey as EntitlementKey)).length;
+    const enabledCount = FEATURE_UI_ENTRIES.filter((feature) => this.getActivePresetFeatures()[feature.presetKey] ?? false).length;
 
     return `
       <section class="stack panel-card" data-testid="feature-entrypoint-registry">
@@ -1194,11 +1206,12 @@ export class BlackoutWebApp {
 
 
   private renderFeatureToolbar(): string {
+    const activeFeatures = this.getActivePresetFeatures();
     const showAdvancedModules = this.shouldShowAdvancedAdminModules();
     const enabledFeatures = FEATURE_UI_ENTRIES.filter((feature) => {
       const [kind] = feature.uiEntry.split(":") as [UiEntryKind, string];
       if (!showAdvancedModules && kind === "admin_console") return false;
-      return this.isFeatureEnabled(feature.presetKey as EntitlementKey);
+      return activeFeatures[feature.presetKey] ?? false;
     });
 
     if (!enabledFeatures.length) {
@@ -1333,7 +1346,7 @@ export class BlackoutWebApp {
       return `${this.renderThemeManagementSection()}`;
     }
     if (this.activeSettingsPage === "monetization") {
-      return `${this.renderSubscriptionPanelSection()}${this.renderStegoAdvancedEntitlementsSection()}${this.renderUpgradePromptSection()}`;
+      return `${this.renderSubscriptionPanelSection()}${this.renderUpgradePromptSection()}`;
     }
     if (this.activeSettingsPage === "mobile") {
       return `${this.renderMobileGesturesPanel()}`;
@@ -1341,7 +1354,7 @@ export class BlackoutWebApp {
     if (this.activeSettingsPage === "operations") {
       return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
     }
-    return `${this.renderPresetManagementSection()}${this.renderFeatureLibraryDisclosure()}${this.isFeatureEnabled("features.epic.deliveryBlueprint") ? this.renderEpicDeliverySection() : ""}`;
+    return `${this.renderPresetManagementSection()}${this.renderCustomizationTransferSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
   }
 
   private renderPresetManagementSection(): string {
@@ -1459,6 +1472,33 @@ export class BlackoutWebApp {
     `;
   }
 
+  private buildCustomizationTransferBundle(): string {
+    return serializeCustomizationBundle(
+      createCustomizationBundle({
+        source: "blackout-web",
+        activePreset: this.appliedPreset,
+        features: this.getActivePresetFeatures(),
+        theme: this.selectedTheme,
+      }),
+    );
+  }
+
+  private renderCustomizationTransferSection(): string {
+    return `
+      <section class="stack panel-card" data-testid="customization-transfer-panel">
+        <h2>Transfer to Blackout Client</h2>
+        <p class="meta">Blackout Web is a customization transfer shell. Export the active preset and theme, then import the bundle in Blackout Client.</p>
+        <p class="meta">Current bundle: preset <strong>${this.appliedPreset}</strong>, theme <strong>${this.selectedTheme}</strong>.</p>
+        <div class="modal-actions">
+          <button type="button" data-action="copy-customization-bundle">Copy bundle</button>
+          <button type="button" class="ghost-btn" data-action="download-customization-bundle">Download bundle</button>
+        </div>
+        <textarea readonly rows="12" data-testid="customization-transfer-bundle">${this.buildCustomizationTransferBundle()}</textarea>
+        <p class="meta">${this.customizationTransferStatus ?? "Export a bundle, then import it in Blackout Client > Settings > Developer > Customization transfer."}</p>
+      </section>
+    `;
+  }
+
   private renderSubscriptionPanelSection(): string {
     const plans = this.getSubscriptionTierMatches();
 
@@ -1486,7 +1526,6 @@ export class BlackoutWebApp {
           <span>Self-Healing ($19/mo)</span>
           <span>Steg Voting Compliance ($49/mo)</span>
           <span>Bounty Payroll ($9/mo)</span>
-          <span>BMC Theme Packs ($4.99/mo)</span>
         </div>
       </section>
     `;
@@ -1531,7 +1570,7 @@ export class BlackoutWebApp {
   private renderUpgradePromptSection(): string {
     const prompts = [
       { trigger: "Select advanced steg codec", location: "Stego panel dropdown", plan: "Signal" },
-      { trigger: "Open Governance den tab", location: "Den header tabs", plan: "Coalition" },
+      { trigger: "Open Governance room tab", location: "Room header tabs", plan: "Coalition" },
       { trigger: "Start Townhall mode", location: "Call modal", plan: "Sovereign" },
       { trigger: "Enable federation dashboard", location: "Admin federation tab", plan: "Sovereign + add-on" },
     ];
@@ -1550,35 +1589,6 @@ export class BlackoutWebApp {
               `,
             )
             .join("")}
-        </div>
-        <div class="modal-actions">
-          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_upgrade_prompts">Upgrade for Advanced features</button>
-        </div>
-      </section>
-    `;
-  }
-
-  private renderStegoAdvancedEntitlementsSection(): string {
-    const advancedEnabled = this.isFeatureEnabled("features.stego.ephemeral");
-    return `
-      <section class="stack panel-card" data-testid="settings-stego-advanced-entitlements">
-        <h2>Stego advanced controls</h2>
-        <p class="meta">Baseline stego toolkit is available on free tiers. Advanced lifecycle and policy controls are paid.</p>
-        <label class="composer-popover-inline">
-          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
-          Ephemeral lifecycle (Advanced)
-        </label>
-        <label class="composer-popover-inline">
-          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
-          Rotation + multi-carrier routing (Advanced)
-        </label>
-        <label class="composer-popover-inline">
-          <input type="checkbox" disabled ${advancedEnabled ? "checked" : ""} />
-          Expiry / remote burn + policy audit (Advanced)
-        </label>
-        ${advancedEnabled ? '<p class="meta">Advanced stego controls are enabled for this workspace.</p>' : '<p class="meta">Upgrade to unlock Advanced stego controls in composer and room workflows.</p>'}
-        <div class="modal-actions">
-          <button type="button" data-action="open-upgrade-flow" data-upgrade-source="settings_stego_advanced" ${advancedEnabled ? "disabled" : ""}>Upgrade for Advanced stego</button>
         </div>
       </section>
     `;
@@ -1610,22 +1620,6 @@ export class BlackoutWebApp {
     `;
   }
 
-
-  private incrementFunnelMetric(family: RevenueFunnelMetric["family"], metric: Exclude<keyof RevenueFunnelMetric, "family">): void {
-    this.revenueFunnelMetrics = this.revenueFunnelMetrics.map((row) => (
-      row.family === family ? { ...row, [metric]: row[metric] + 1 } : row
-    ));
-  }
-
-  private trackAdvancedControlOpen(family: RevenueFunnelMetric["family"], source: string): void {
-    this.incrementFunnelMetric(family, "advancedControlOpens");
-    this.telemetry.track("advanced_control_opened", {
-      ...this.telemetryContext(),
-      family,
-      source,
-    });
-  }
-
   private renderRevenueOpsPanelSection(): string {
     return renderRevenueOpsPanel({
       activeTab: this.activeRevenueOpsTab,
@@ -1633,7 +1627,7 @@ export class BlackoutWebApp {
       paymentIssue: this.paymentIssue,
       questStage: this.questStage,
       installedApps: this.installedApps,
-      funnelMetrics: this.revenueFunnelMetrics,
+      funnelMetrics: this.getRevenueFunnelMetrics(),
       selectedTheme: this.selectedTheme,
     });
   }
@@ -1653,26 +1647,26 @@ export class BlackoutWebApp {
     return normalizeThemeId(theme);
   }
 
-  private openUpgradeFlow(source: string): void {
-    const capability = source.includes("governance")
-      ? "governance"
-      : source.includes("stego")
-        ? "stego"
-        : "general";
-    this.subscriptionPopupOpen = true;
-    this.featureActionResult = "Opened shared upgrade flow for Advanced features.";
-    this.telemetry.track("upgrade_click", { ...this.telemetryContext(), source, capability });
-    this.telemetry.track("upgrade_intent", { ...this.telemetryContext(), source, capability });
-    if (capability === "stego") {
-      this.incrementFunnelMetric("stego", "upgradeClicks");
-      this.telemetry.track("stego_upgrade_intent", { ...this.telemetryContext(), source });
-    }
-    if (capability === "governance") {
-      this.incrementFunnelMetric("governance", "upgradeClicks");
-      this.telemetry.track("governance_upgrade_intent", { ...this.telemetryContext(), source });
-    }
-    this.closeComposerPanels();
-    this.render();
+  private getRevenueFunnelMetrics(): RevenueFunnelMetric[] {
+    const stegoAdvancedEnabled = this.stegoAdvancedEnabled();
+    const governanceAdvancedEnabled = this.governanceAdvancedEnabled();
+
+    return [
+      {
+        family: "stego",
+        baselineUsage: stegoAdvancedEnabled ? 18 : 12,
+        advancedControlOpens: stegoAdvancedEnabled ? 9 : 5,
+        upgradeClicks: stegoAdvancedEnabled ? 4 : 2,
+        conversions: stegoAdvancedEnabled ? 2 : 1,
+      },
+      {
+        family: "governance",
+        baselineUsage: governanceAdvancedEnabled ? 14 : 9,
+        advancedControlOpens: governanceAdvancedEnabled ? 7 : 4,
+        upgradeClicks: governanceAdvancedEnabled ? 3 : 1,
+        conversions: governanceAdvancedEnabled ? 2 : 0,
+      },
+    ];
   }
 
   private applyTheme(theme: ThemeKey): void {
@@ -1732,13 +1726,6 @@ export class BlackoutWebApp {
 
   private getActivePresetFeatures(): Record<string, boolean> {
     return this.appliedFeatures;
-  }
-
-  private isFeatureEnabled(key: EntitlementKey): boolean {
-    return resolveEntitlement({
-      key,
-      deploymentPreset: this.getActivePresetFeatures(),
-    }).enabled;
   }
 
   private renderFeatureGroup(kind: UiEntryKind, items: string[]): string {
@@ -1996,10 +1983,8 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='dm-open-shop']").forEach((button) => {
       button.addEventListener("click", () => {
-        this.settingsOpen = true;
-        this.activeRevenueOpsTab = "marketplace";
-        this.featureActionResult =
-          "Opened the federated Blackout marketplace (freeblackmarket, Blamazon, Mayhem Marketplaze, Antin Amazon).";
+        globalThis.open("https://freeblackmarket.com/digital-products", "_blank", "noopener,noreferrer");
+        this.featureActionResult = "Black Market opened digital products at freeblackmarket.com.";
         this.render();
       });
     });
@@ -2141,12 +2126,6 @@ export class BlackoutWebApp {
       this.paymentIssue = !this.paymentIssue;
       this.render();
     });
-    this.root.querySelector<HTMLButtonElement>("[data-action='theme-bundle-open-catalog']")?.addEventListener("click", () => {
-      this.settingsOpen = true;
-      this.activeSettingsPage = "appearance";
-      this.featureActionResult = "Opened BMC theme catalog in Appearance settings.";
-      this.render();
-    });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='quest-next-stage']")?.addEventListener("click", () => {
       this.questStage = this.questStage === "open" ? "claimed" : this.questStage === "claimed" ? "submitted" : this.questStage === "submitted" ? "approved" : "approved";
@@ -2253,11 +2232,6 @@ export class BlackoutWebApp {
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.selectedPreset] };
       this.appendPresetAuditLog(`${new Date().toISOString()} applied ${previousPreset} → ${this.appliedPreset}`);
       this.telemetry.track("preset_applied", { preset: this.appliedPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
-      if (previousPreset === "starter" && (this.appliedPreset === "governance" || this.appliedPreset === "sovereignty")) {
-        this.incrementFunnelMetric("governance", "conversions");
-        this.incrementFunnelMetric("stego", "conversions");
-        this.telemetry.track("upgrade_conversion", { ...this.telemetryContext(), fromPreset: previousPreset, toPreset: this.appliedPreset });
-      }
       this.render();
     });
 
@@ -2272,6 +2246,30 @@ export class BlackoutWebApp {
       this.appliedFeatures = { ...FEATURE_PRESET_BUNDLES[this.deploymentPreset] };
       this.appendPresetAuditLog(`${new Date().toISOString()} rollback ${previousPreset} → ${this.deploymentPreset}`);
       this.telemetry.track("preset_rollback", { preset: this.deploymentPreset, fromPreset: previousPreset, cohort: this.runtimeConfig.rollout.cohort });
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='copy-customization-bundle']")?.addEventListener("click", async () => {
+      const raw = this.buildCustomizationTransferBundle();
+      try {
+        await globalThis.navigator.clipboard.writeText(raw);
+        this.customizationTransferStatus = "Customization bundle copied to clipboard.";
+      } catch {
+        this.customizationTransferStatus = "Clipboard copy failed. Copy the bundle text manually.";
+      }
+      this.render();
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='download-customization-bundle']")?.addEventListener("click", () => {
+      const raw = this.buildCustomizationTransferBundle();
+      const blob = new Blob([raw], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `blackout-customization-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      this.customizationTransferStatus = "Customization bundle downloaded.";
       this.render();
     });
 
@@ -2397,7 +2395,7 @@ export class BlackoutWebApp {
       element.addEventListener("click", () => {
         const channelId = this.store.getState().activeChannelId;
         if (!channelId || !this.canPropose()) {
-          this.featureActionResult = "Proposal creation is currently unavailable in this room.";
+          this.featureActionResult = "You do not have permission to create proposals in this room.";
           this.render();
           return;
         }
@@ -2562,18 +2560,19 @@ export class BlackoutWebApp {
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-toggle-stego-panel']")?.addEventListener("click", () => {
       this.toggleComposerPanel("stego", "[data-action='composer-toggle-stego-panel']");
       this.trackAdvancedDiscovery("stego");
-      this.trackAdvancedControlOpen("stego", "composer_stego_panel");
+    });
+
+    this.root.querySelector<HTMLButtonElement>("[data-action='composer-open-subscription']")?.addEventListener("click", () => {
+      this.subscriptionPopupOpen = true;
+      this.featureActionResult = "Opened subscription popup. Upgrade to Signal to unlock advanced codecs and batch mode.";
+      this.closeComposerPanels();
+      this.render();
     });
 
     this.root.querySelectorAll<HTMLElement>("[data-action='open-subscription-popup']").forEach((element) => {
       element.addEventListener("click", () => {
-        this.openUpgradeFlow("subscription_panel");
-      });
-    });
-
-    this.root.querySelectorAll<HTMLElement>("[data-action='open-upgrade-flow']").forEach((element) => {
-      element.addEventListener("click", () => {
-        this.openUpgradeFlow(element.getAttribute("data-upgrade-source") ?? "unknown");
+        this.subscriptionPopupOpen = true;
+        this.render();
       });
     });
 
@@ -2685,13 +2684,12 @@ export class BlackoutWebApp {
         }
         this.toggleComposerPanel("governance", button);
         this.trackAdvancedDiscovery("governance");
-        this.trackAdvancedControlOpen("governance", "composer_governance_panel");
       });
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-governance-insert-proposal']")?.addEventListener("click", () => {
       if (!this.canPropose()) {
-        this.featureActionResult = "Proposal insertion is currently unavailable in this room.";
+        this.featureActionResult = "You need proposal permissions to insert governance proposals.";
         this.render();
         return;
       }
@@ -2791,21 +2789,14 @@ export class BlackoutWebApp {
       const hidden = hiddenInput?.value.trim() || "hidden-message";
       const cover = coverInput?.value.trim() || "let's sync after standup";
       const passphrase = passphraseInput?.value.trim() || "";
-      const algorithm = algorithmSelect?.value || "basic-lsb-image";
-      const carrier = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-carrier']")?.value || "text-body";
+      const algorithm = algorithmSelect?.value || "lsb-aes-256-cbc";
       const ephemeral = ephemeralCheckbox?.checked ?? false;
       const ttl = Math.max(1, Number.parseInt(ttlInput?.value ?? "24", 10) || 24);
       const keyHint = passphrase ? `${passphrase.slice(0, 2)}***${passphrase.slice(-2)}` : "none";
       const channelId = channelSelect?.value || "";
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
-      this.applyComposerSnippet(` [stego carrier="${carrier}" algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
-      this.incrementFunnelMetric("stego", "baselineUsage");
-      this.telemetry.track("stego_baseline_used", {
-        ...this.telemetryContext(),
-        advanced_enabled: this.isFeatureEnabled("features.stego.ephemeral"),
-        used_ephemeral: ephemeral,
-      });
+      this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
       this.closeComposerPanels();
     });
 
@@ -2821,10 +2812,9 @@ export class BlackoutWebApp {
       const hidden = match[2];
       const cover = match[3];
       const algorithm = attrs.match(/algo="([^"]+)"/)?.[1] ?? "unknown";
-      const carrier = attrs.match(/carrier="([^"]+)"/)?.[1] ?? "text-body";
       const keyHint = attrs.match(/keyHint="([^"]+)"/)?.[1] ?? "none";
       const lifecycle = attrs.match(/lifecycle="([^"]+)"/)?.[1] ?? "persistent";
-      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Carrier: ${carrier} · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
+      this.updateStegoDecryptResult(`Hidden: "${hidden}" · Cover: "${cover}" · Algo: ${algorithm} · Key hint: ${keyHint} · Lifecycle: ${lifecycle}`);
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-generate-passphrase']")?.addEventListener("click", () => {
@@ -3042,10 +3032,6 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLButtonElement>("[data-action='composer-stego-save-channel']")?.addEventListener("click", () => {
-      if (!this.isFeatureEnabled("features.stego.ephemeral")) {
-        this.openUpgradeFlow("composer_stego_channel_save");
-        return;
-      }
       const nameInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-name']");
       const audienceInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-audience']");
       const passphraseInput = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-channel-passphrase']");
@@ -3122,7 +3108,7 @@ export class BlackoutWebApp {
     });
 
     this.root.querySelector<HTMLTextAreaElement>("#message-form textarea[name='message']")?.addEventListener("input", (event) => {
-      const canShowTyping = this.isFeatureEnabled("features.composer.typingIndicators");
+      const canShowTyping = this.getActivePresetFeatures()["features.composer.typingIndicators"] ?? false;
       if (!canShowTyping) return;
       const value = (event.currentTarget as HTMLTextAreaElement).value.trim();
       this.composerIsTyping = value.length > 0;
@@ -3452,10 +3438,6 @@ export class BlackoutWebApp {
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-stego-channel-rotate']").forEach((button) => {
       button.addEventListener("click", () => {
-        if (!this.isFeatureEnabled("features.stego.ephemeral")) {
-          this.openUpgradeFlow("composer_stego_channel_rotate");
-          return;
-        }
         const channelId = button.dataset.channelId;
         if (!channelId) return;
         const nextPassphrase = this.generateStegoPassphrase();
@@ -3923,15 +3905,9 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
-    const enabled = this.isFeatureEnabled(entry.presetKey as EntitlementKey);
+    const enabled = this.getActivePresetFeatures()[entry.presetKey] ?? false;
     if (!enabled) {
       this.featureActionResult = `${entry.id} is unavailable: blocked by policy or entitlement.`;
-      this.trackDeniedFeature(entry.id, kind);
-      this.render();
-      return;
-    }
-    if (kind === "admin_console" && !this.canOpenAdminConsoleFeature(entry.id)) {
-      this.featureActionResult = `${entry.id} requires moderator or admin permissions.`;
       this.trackDeniedFeature(entry.id, kind);
       this.render();
       return;
@@ -3976,30 +3952,6 @@ export class BlackoutWebApp {
         this.activeWidgetFeatureId = featureId;
         return "chat widget panel";
       case "admin_console":
-        if (featureId === "federation_boost_policy") {
-          this.settingsOpen = true;
-          this.activeSettingsPage = "operations";
-          this.activePlatformOpsTab = "federation";
-          return "operations › federation boost policy controls";
-        }
-        if (featureId === "engagement_experiments") {
-          this.settingsOpen = true;
-          this.activeSettingsPage = "operations";
-          this.activeRevenueOpsTab = "monetization";
-          return "operations › engagement experiments controls";
-        }
-        if (featureId === "space_templates") {
-          this.settingsOpen = true;
-          this.activeSettingsPage = "workspace";
-          this.featureFilter = "space_templates";
-          return "workspace settings › space template controls";
-        }
-        if (featureId === "cell_routing") {
-          this.settingsOpen = true;
-          this.activeSettingsPage = "workspace";
-          this.featureFilter = "cell_routing";
-          return "workspace settings › cell routing controls";
-        }
         this.settingsOpen = true;
         this.activeWorkspacePanel = "repo-tools";
         this.repoToolsOpen = true;
@@ -4013,15 +3965,6 @@ export class BlackoutWebApp {
         this.repoToolsOpen = false;
         return "chat";
     }
-  }
-
-  private canOpenAdminConsoleFeature(featureId: string): boolean {
-    if (!PREMIUM_ADMIN_CONSOLE_FEATURE_IDS.includes(featureId as (typeof PREMIUM_ADMIN_CONSOLE_FEATURE_IDS)[number])) {
-      return true;
-    }
-    const state = this.store.getState();
-    if (!state.activeServerId) return true;
-    return this.hasAdminAccess();
   }
 
   private showQuickActionPopup(featureId: string, kind: UiEntryKind): void {

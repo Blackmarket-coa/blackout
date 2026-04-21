@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text, Icon, Icons, config, IconSrc } from 'folds';
 import { SequenceCard } from '../sequence-card';
 import { SettingTile } from '../setting-tile';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export enum CreateRoomKind {
   Private = 'private',
@@ -14,6 +15,7 @@ type CreateRoomKindSelectorProps = {
   canRestrict?: boolean;
   disabled?: boolean;
   getIcon: (kind: CreateRoomKind) => IconSrc;
+  targetLabel?: string;
 };
 export function CreateRoomKindSelector({
   value,
@@ -21,6 +23,7 @@ export function CreateRoomKindSelector({
   canRestrict,
   disabled,
   getIcon,
+  targetLabel = 'conversation',
 }: CreateRoomKindSelectorProps) {
   return (
     <Box shrink="No" direction="Column" gap="100">
@@ -42,7 +45,7 @@ export function CreateRoomKindSelector({
           >
             <Text size="H6">Restricted</Text>
             <Text size="T300" priority="300">
-              Only member of parent space can join.
+              Only members of the parent {BLACKOUT_TERMS.canopy.singular} can join this {targetLabel}.
             </Text>
           </SettingTile>
         </SequenceCard>
@@ -64,7 +67,7 @@ export function CreateRoomKindSelector({
         >
           <Text size="H6">Private</Text>
           <Text size="T300" priority="300">
-            Only people with invite can join.
+            Only invited people can join this {targetLabel}.
           </Text>
         </SettingTile>
       </SequenceCard>
@@ -85,7 +88,7 @@ export function CreateRoomKindSelector({
         >
           <Text size="H6">Public</Text>
           <Text size="T300" priority="300">
-            Anyone with the address can join.
+            Anyone with the address can join this {targetLabel}.
           </Text>
         </SettingTile>
       </SequenceCard>

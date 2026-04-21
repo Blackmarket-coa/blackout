@@ -14,7 +14,7 @@ export type ISidebarFolder = {
 export type TSidebarItem = string | ISidebarFolder;
 export type SidebarItems = Array<TSidebarItem>;
 
-export type InCinnySpacesContent = {
+export type BlackoutSpacesContent = {
   shortcut?: string[];
   sidebar?: SidebarItems;
 };
@@ -22,7 +22,7 @@ export type InCinnySpacesContent = {
 export const parseSidebar = (
   mx: MatrixClient,
   orphanSpaces: string[],
-  content?: InCinnySpacesContent
+  content?: BlackoutSpacesContent
 ) => {
   const sidebar = content?.sidebar ?? content?.shortcut ?? [];
   const orphans = new Set(orphanSpaces);
@@ -69,27 +69,27 @@ export const useSidebarItems = (
   const mx = useMatrixClient();
 
   const [sidebarItems, setSidebarItems] = useState(() => {
-    const inCinnySpacesContent = getAccountData(
+    const blackoutSpacesContent = getAccountData(
       mx,
-      AccountDataEvent.CinnySpaces
-    )?.getContent<InCinnySpacesContent>();
-    return parseSidebar(mx, orphanSpaces, inCinnySpacesContent);
+      AccountDataEvent.BlackoutSpaces
+    )?.getContent<BlackoutSpacesContent>();
+    return parseSidebar(mx, orphanSpaces, blackoutSpacesContent);
   });
 
   useEffect(() => {
-    const inCinnySpacesContent = getAccountData(
+    const blackoutSpacesContent = getAccountData(
       mx,
-      AccountDataEvent.CinnySpaces
-    )?.getContent<InCinnySpacesContent>();
-    setSidebarItems(parseSidebar(mx, orphanSpaces, inCinnySpacesContent));
+      AccountDataEvent.BlackoutSpaces
+    )?.getContent<BlackoutSpacesContent>();
+    setSidebarItems(parseSidebar(mx, orphanSpaces, blackoutSpacesContent));
   }, [mx, orphanSpaces]);
 
   useAccountDataCallback(
     mx,
     useCallback(
       (mEvent) => {
-        if (mEvent.getType() === AccountDataEvent.CinnySpaces) {
-          const newContent = mEvent.getContent<InCinnySpacesContent>();
+        if (mEvent.getType() === AccountDataEvent.BlackoutSpaces) {
+          const newContent = mEvent.getContent<BlackoutSpacesContent>();
           setSidebarItems(parseSidebar(mx, orphanSpaces, newContent));
         }
       },
@@ -122,15 +122,15 @@ export const sidebarItemWithout = (items: SidebarItems, roomId: string) => {
   return newItems;
 };
 
-export const makeCinnySpacesContent = (
+export const makeBlackoutSpacesContent = (
   mx: MatrixClient,
   items: SidebarItems
-): InCinnySpacesContent => {
-  const currentInSpaces =
-    getAccountData(mx, AccountDataEvent.CinnySpaces)?.getContent<InCinnySpacesContent>() ?? {};
+): BlackoutSpacesContent => {
+  const currentBlackoutSpaces =
+    getAccountData(mx, AccountDataEvent.BlackoutSpaces)?.getContent<BlackoutSpacesContent>() ?? {};
 
-  const newSpacesContent: InCinnySpacesContent = {
-    ...currentInSpaces,
+  const newSpacesContent: BlackoutSpacesContent = {
+    ...currentBlackoutSpaces,
     sidebar: items,
   };
 

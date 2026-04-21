@@ -1,6 +1,6 @@
 import { createClient, type MatrixClient, type MatrixError } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/auth';
+import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/bmc-auth';
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
 
@@ -90,7 +90,7 @@ export const loginWithPassword = async (
                 user: input.userId,
             },
             password: input.password,
-            initial_device_display_name: 'Blackout Web',
+            initial_device_display_name: 'Blackout Client',
             refresh_token: true,
         });
 
@@ -128,7 +128,7 @@ export const registerUser = async (
             auth: { type: 'm.login.dummy' },
             username: input.username,
             password: input.password,
-            initial_device_display_name: 'Blackout Web',
+            initial_device_display_name: 'Blackout Client',
             inhibit_login: false,
         });
 

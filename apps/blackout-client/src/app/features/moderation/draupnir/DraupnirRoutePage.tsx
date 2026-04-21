@@ -1,6 +1,7 @@
+import React from 'react';
 import { useAtomValue } from 'jotai';
-import { joinedRoomsAtom } from '../../../state/rooms';
-import { userIdAtom } from '../../../state/auth';
+import { joinedRoomsAtom } from '../../../state/bmc-rooms';
+import { userIdAtom } from '../../../state/bmc-auth';
 import { ModDashboard } from './ModDashboard';
 import { hasModeratorAccess } from './access';
 

@@ -17,6 +17,7 @@ import {
   useNotificationModeActions,
 } from '../../../hooks/useNotificationMode';
 import { NotificationModeSwitcher } from './NotificationModeSwitcher';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 
 const NOTIFY_MODE_OPS: NotificationModeOptions = {
   highlight: true,
@@ -156,7 +157,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title={`Contains Displayname ${displayName ? `("${displayName}")` : ''}`}
+          title={`Contains Display Name ${displayName ? `("${displayName}")` : ''}`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -190,7 +191,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Mention @room"
+          title={`Mention entire ${BLACKOUT_TERMS.den.singular} (@room)`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}
@@ -207,7 +208,7 @@ export function SpecialMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Contains @room"
+          title={`Contains ${BLACKOUT_TERMS.den.singular}-wide alert (@room)`}
           after={
             <MentionModeSwitcher
               pushRules={pushRules}

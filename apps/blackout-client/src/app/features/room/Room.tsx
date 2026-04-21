@@ -7,7 +7,7 @@ import { MembersDrawer } from './MembersDrawer';
 import { RoomRightPanelHost } from './RoomRightPanelHost';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 import { PowerLevelsContextProvider, usePowerLevels } from '../../hooks/usePowerLevels';
 import { useRoom } from '../../hooks/useRoom';
 import { useKeyDown } from '../../hooks/useKeyDown';

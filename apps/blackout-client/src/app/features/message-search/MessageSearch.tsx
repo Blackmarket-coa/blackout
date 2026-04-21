@@ -9,7 +9,7 @@ import { PageHero, PageHeroEmpty, PageHeroSection } from '../../components/page'
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { _SearchPathSearchParams } from '../../pages/paths';
 import { useSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 import { SequenceCard } from '../../components/sequence-card';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { ScrollTopContainer } from '../../components/scroll-top-container';

@@ -5,7 +5,7 @@ import * as css from './styles.css';
 import { PickerColumn } from './PickerColumn';
 import { hour12to24, hour24to12, hoursToMs, inSameDay, minutesToMs } from '../../utils/time';
 import { useSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 
 type TimePickerProps = {
   min: number;

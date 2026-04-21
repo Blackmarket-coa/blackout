@@ -39,6 +39,7 @@ import { useAlive } from '../../../hooks/useAlive';
 import { creatorsSupported } from '../../../utils/matrix';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { BreakWord } from '../../../styles/Text.css';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 
 function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
   const mx = useMatrixClient();
@@ -103,7 +104,11 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
               size="500"
             >
               <Box grow="Yes">
-                <Text size="H4">{room.isSpaceRoom() ? 'Canopy Upgrade' : 'Den Upgrade'}</Text>
+                <Text size="H4">
+                  {room.isSpaceRoom()
+                    ? `${BLACKOUT_TERMS.canopy.title} Upgrade`
+                    : `${BLACKOUT_TERMS.den.title} Upgrade`}
+                </Text>
               </Box>
               <IconButton size="300" onClick={requestClose} radii="300">
                 <Icon src={Icons.Cross} />
@@ -148,7 +153,11 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
                 disabled={upgrading}
                 before={upgrading && <Spinner size="200" variant="Secondary" fill="Solid" />}
               >
-                <Text size="B400">{room.isSpaceRoom() ? 'Upgrade Canopy' : 'Upgrade Den'}</Text>
+                <Text size="B400">
+                  {room.isSpaceRoom()
+                    ? `Upgrade ${BLACKOUT_TERMS.canopy.title}`
+                    : `Upgrade ${BLACKOUT_TERMS.den.title}`}
+                </Text>
               </Button>
             </Box>
           </Dialog>
@@ -213,11 +222,19 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
       gap="400"
     >
       <SettingTile
-        title={room.isSpaceRoom() ? 'Upgrade Canopy' : 'Upgrade Den'}
+        title={
+          room.isSpaceRoom()
+            ? `Upgrade ${BLACKOUT_TERMS.canopy.title}`
+            : `Upgrade ${BLACKOUT_TERMS.den.title}`
+        }
         description={
           replacementRoom
             ? tombstoneContent.body ||
-              `This ${room.isSpaceRoom() ? 'canopy' : 'den'} has been replaced!`
+              `This ${
+                room.isSpaceRoom()
+                  ? BLACKOUT_TERMS.canopy.singular
+                  : BLACKOUT_TERMS.den.singular
+              } has been replaced!`
             : `Current version: ${roomVersion}.`
         }
         after={
@@ -231,7 +248,11 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
                 radii="300"
                 onClick={handleOpenOldRoom}
               >
-                <Text size="B300">{room.isSpaceRoom() ? 'Old Canopy' : 'Old Den'}</Text>
+                <Text size="B300">
+                  {room.isSpaceRoom()
+                    ? `Old ${BLACKOUT_TERMS.canopy.title}`
+                    : `Old ${BLACKOUT_TERMS.den.title}`}
+                </Text>
               </Button>
             )}
             {replacementRoom ? (
@@ -242,7 +263,11 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
                 radii="300"
                 onClick={handleOpenRoom}
               >
-                <Text size="B300">{room.isSpaceRoom() ? 'Open New Canopy' : 'Open New Den'}</Text>
+                <Text size="B300">
+                  {room.isSpaceRoom()
+                    ? `Open New ${BLACKOUT_TERMS.canopy.title}`
+                    : `Open New ${BLACKOUT_TERMS.den.title}`}
+                </Text>
               </Button>
             ) : (
               <Button

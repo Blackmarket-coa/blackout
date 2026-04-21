@@ -4,7 +4,7 @@ import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import BlackoutSVG from '../../../../../public/res/svg/blackout.svg';
+import BrandSVG from '../../../../../public/res/svg/cinny.svg';
 import { clearCacheAndReload } from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 
@@ -38,23 +38,23 @@ export function About({ requestClose }: AboutProps) {
                 <Box shrink="No">
                   <img
                     style={{ width: toRem(60), height: toRem(60) }}
-                    src={BlackoutSVG}
+                    src={BrandSVG}
                     alt="Blackout logo"
                   />
                 </Box>
                 <Box direction="Column" gap="300">
                   <Box direction="Column" gap="100">
                     <Box gap="100" alignItems="End">
-                      <Text size="H3">Blackout</Text>
+                      <Text size="H3">Blackout Client</Text>
                       <Text size="T200">v4.10.5</Text>
                     </Box>
-                    <Text>Yet another matrix client.</Text>
+                    <Text>A modern Matrix client shaped around the Blackout runtime.</Text>
                   </Box>
 
                   <Box gap="200" wrap="Wrap">
                     <Button
                       as="a"
-                      href="https://github.com/blackout-labs/blackout"
+                      href="https://github.com/Blackmarket-coa/blackout"
                       rel="noreferrer noopener"
                       target="_blank"
                       variant="Secondary"
@@ -67,16 +67,16 @@ export function About({ requestClose }: AboutProps) {
                     </Button>
                     <Button
                       as="a"
-                      href="https://theblackout.app/support"
+                      href="https://github.com/Blackmarket-coa/blackout/issues"
                       rel="noreferrer noopener"
                       target="_blank"
-                      variant="Critical"
+                      variant="Primary"
                       fill="Soft"
                       size="300"
                       radii="300"
-                      before={<Icon src={Icons.Heart} size="100" filled />}
+                      before={<Icon src={Icons.Info} size="100" filled />}
                     >
-                      <Text size="B300">Support</Text>
+                      <Text size="B300">Report Issue</Text>
                     </Button>
                   </Box>
                 </Box>

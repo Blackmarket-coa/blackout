@@ -10,7 +10,6 @@ import {
     useState,
 } from 'react';
 import {
-    BaseEditor,
     Editor,
     Element as SlateElement,
     Node,
@@ -55,14 +54,6 @@ type MentionElement = {
 type LinkElement = { type: 'link'; href: string; children: CustomText[] };
 
 type CustomElement = ParagraphElement | CodeBlockElement | MentionElement | LinkElement;
-
-declare module 'slate' {
-    interface CustomTypes {
-        Editor: BaseEditor & ReactEditor;
-        Element: CustomElement;
-        Text: CustomText;
-    }
-}
 
 interface ComposerTarget {
     mode: 'new' | 'reply' | 'thread' | 'edit';
@@ -144,7 +135,7 @@ const fuzzyMatch = (term: string, query: string): boolean => {
 
 const toPlainText = (value: CustomElement[]): string =>
     value
-        .map((node) => Node.string(node))
+        .map((node) => Node.string(node as any))
         .join('\n')
         .trim();
 
@@ -202,7 +193,9 @@ const withMarkdown = (editor: Editor): Editor => {
 
         const [blockEntry] = Editor.nodes(editor, {
             match: (n) =>
-                SlateElement.isElement(n) && (n.type === 'paragraph' || n.type === 'code_block'),
+                SlateElement.isElement(n) &&
+                (((n as { type?: string }).type === 'paragraph') ||
+                    ((n as { type?: string }).type === 'code_block')),
         });
 
         if (!blockEntry) return;
@@ -216,7 +209,7 @@ const withMarkdown = (editor: Editor): Editor => {
             Transforms.delete(editor);
             Transforms.setNodes(
                 editor,
-                { type: 'code_block' },
+                { type: 'code_block' } as any,
                 { match: (n) => SlateElement.isElement(n) && Editor.isBlock(editor, n) },
             );
             return;
@@ -255,9 +248,11 @@ const withMarkdown = (editor: Editor): Editor => {
 const withMentions = (editor: Editor): Editor => {
     const { isInline, isVoid } = editor;
     editor.isInline = (element) =>
-        (SlateElement.isElement(element) && element.type === 'mention') || isInline(element);
+        (SlateElement.isElement(element) && (element as { type?: string }).type === 'mention') ||
+        isInline(element);
     editor.isVoid = (element) =>
-        (SlateElement.isElement(element) && element.type === 'mention') || isVoid(element);
+        (SlateElement.isElement(element) && (element as { type?: string }).type === 'mention') ||
+        isVoid(element);
     return editor;
 };
 
@@ -303,7 +298,7 @@ const withLinks = (editor: Editor): Editor => {
 
         Transforms.wrapNodes(
             editor,
-            { type: 'link', href: word, children: [{ text: word }] },
+            { type: 'link', href: word, children: [{ text: word }] } as any,
             { at: range, split: true, match: (n) => Text.isText(n) },
         );
     };
@@ -671,7 +666,7 @@ export const MessageComposer = ({
                     label: suggestion.kind === 'room' ? `#${suggestion.label}` : suggestion.label,
                     children: [{ text: '' }],
                 };
-                Transforms.insertNodes(editor, mention);
+                Transforms.insertNodes(editor, mention as any);
                 Transforms.insertText(editor, ' ');
             }
             setTriggerRange(null);
@@ -982,8 +977,8 @@ export const MessageComposer = ({
             ) : null}
 
             <Slate
-                editor={editor}
-                initialValue={value}
+                editor={editor as ReactEditor}
+                initialValue={value as any}
                 onChange={(nextValue) => {
                     setValue(nextValue as CustomElement[]);
                     runAutocomplete();
@@ -1171,8 +1166,8 @@ export const MessageComposer = ({
                 >
                     <Editable
                         placeholder={placeholder}
-                        renderElement={(props) => <ElementRenderer {...props} />}
-                        renderLeaf={(props) => <LeafRenderer {...props} />}
+                        renderElement={(props) => <ElementRenderer {...(props as any)} />}
+                        renderLeaf={(props) => <LeafRenderer {...(props as any)} />}
                         onKeyDown={(event) => void handleKeyDown(event)}
                         onPaste={onPaste}
                         spellCheck

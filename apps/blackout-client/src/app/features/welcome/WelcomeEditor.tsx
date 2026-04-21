@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoom } from '../../hooks/bmc-useRoom';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { OnboardingWizard } from './OnboardingWizard';
 import { WelcomeScreen } from './WelcomeScreen';
 import {
@@ -88,7 +89,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
         return (
             <section style={{ display: 'grid', gap: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <strong>Welcome Preview</strong>
+                    <strong>{BLACKOUT_TERMS.canopy.title} welcome preview</strong>
                     <button
                         type="button"
                         onClick={() => setPreview(false)}
@@ -104,7 +105,10 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                     </button>
                 </div>
 
-                <WelcomeScreen spaceId={spaceId} actionLabel="Explore" />
+                <WelcomeScreen
+                    spaceId={spaceId}
+                    actionLabel={`Explore ${BLACKOUT_TERMS.den.plural}`}
+                />
                 <OnboardingWizard
                     spaceId={spaceId}
                     open={onboardingDraft.enabled}
@@ -124,7 +128,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                     alignItems: 'center',
                 }}
             >
-                <strong>Welcome + Onboarding Editor</strong>
+                <strong>{BLACKOUT_TERMS.canopy.title} welcome and onboarding editor</strong>
                 <div style={{ display: 'inline-flex', gap: 8 }}>
                     <button
                         type="button"
@@ -226,7 +230,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                             alignItems: 'center',
                         }}
                     >
-                        <strong>Featured channels</strong>
+                        <strong>Featured {BLACKOUT_TERMS.den.plural}</strong>
                         <button
                             type="button"
                             onClick={addFeaturedChannel}
@@ -238,7 +242,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                                 padding: '4px 8px',
                             }}
                         >
-                            Add channel
+                            Add {BLACKOUT_TERMS.den.singular}
                         </button>
                     </div>
 
@@ -319,7 +323,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                                     padding: '6px 8px',
                                 }}
                             >
-                                <option value="">Choose channel</option>
+                                <option value="">Choose {BLACKOUT_TERMS.den.singular}</option>
                                 {memberRoomOptions.map((option) => (
                                     <option key={option.roomId} value={option.roomId}>
                                         {option.label}
@@ -395,7 +399,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                             padding: '4px 8px',
                         }}
                     >
-                        Add Channels
+                        Add {BLACKOUT_TERMS.den.titlePlural}
                     </button>
                 </div>
 
@@ -543,7 +547,7 @@ export const WelcomeEditor = ({ spaceId }: { spaceId: string }) => {
                                     });
                                 }}
                                 rows={2}
-                                placeholder="Channel IDs, comma-separated"
+                                placeholder="Den IDs, comma-separated"
                                 style={{
                                     border: '1px solid var(--border-default)',
                                     borderRadius: 8,

@@ -19,7 +19,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import { PageHeader } from '../../components/page';
 import { useSetSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 import { useRoomAvatar, useRoomName } from '../../hooks/useRoomMeta';
 import { useSpace } from '../../hooks/useSpace';
 import { useMatrixClient } from '../../hooks/useMatrixClient';

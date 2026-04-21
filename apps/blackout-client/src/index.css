@@ -7,6 +7,7 @@
 
 :root {
   --tc-link: hsl(213deg 100% 45%);
+  --blackout-font-scale: 1;
 
   /* user mxid colors */
   --mx-uc-1: hsl(208, 100%, 45%);
@@ -48,7 +49,7 @@ body {
   padding: 0;
   height: 100%;
   font-family: var(--font-secondary);
-  font-size: 16px;
+  font-size: calc(16px * var(--blackout-font-scale));
   font-weight: 400;
 
   /*Why font-variant-ligatures => https://github.com/rsms/inter/issues/222 */
@@ -67,6 +68,23 @@ body {
   box-sizing: border-box;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
   -webkit-tap-highlight-color: transparent;
+}
+
+html[data-blackout-reduced-motion='true'] *,
+html[data-blackout-reduced-motion='true'] *::before,
+html[data-blackout-reduced-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-blackout-high-contrast='true'] {
+  filter: contrast(1.08) saturate(1.04);
+}
+
+html[data-blackout-dyslexia-friendly-font='true'] body {
+  line-height: 1.6;
 }
 a {
   color: var(--tc-link);

@@ -5,7 +5,7 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useSetting } from '../../../state/hooks/settings';
-import { settingsAtom } from '../../../state/settings';
+import { settingsAtom } from '../../../state/compat-settings';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import {
   AccountDataEditor,
@@ -25,7 +25,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      await mx.setAccountData(type as never, content as never);
+      await (mx as any).setAccountData(type, content);
     },
     [mx]
   );
@@ -34,7 +34,9 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
     return (
       <AccountDataEditor
         type={accountDataType ?? undefined}
-        content={accountDataType ? mx.getAccountData(accountDataType as never)?.getContent() : undefined}
+        content={
+          accountDataType ? (mx as any).getAccountData(accountDataType)?.getContent() : undefined
+        }
         submitChange={submitAccountData}
         requestClose={() => setAccountDataType(undefined)}
       />

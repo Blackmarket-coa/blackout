@@ -1,11 +1,13 @@
+import React from 'react';
 import { useAtom } from 'jotai';
 import { privacySettingsAtom, type DmPermission } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const dmOptions: Array<{ value: DmPermission; label: string }> = [
     { value: 'everyone', label: 'Everyone' },
     { value: 'friends', label: 'Friends' },
-    { value: 'mutual-spaces', label: 'Mutual Spaces' },
+    { value: 'mutual-spaces', label: `Mutual ${BLACKOUT_TERMS.canopy.titlePlural}` },
     { value: 'nobody', label: 'Nobody' },
 ];
 
@@ -60,7 +62,7 @@ export const PrivacySettings = () => {
             </section>
 
             <section>
-                <h3>DM permissions</h3>
+                <h3>Direct message permissions</h3>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {dmOptions.map((option) => (
                         <button

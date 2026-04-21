@@ -7,7 +7,11 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import type { Room } from 'matrix-js-sdk';
 import ClientLayout from '../../../../../src/app/pages/client/ClientLayout';
 import DraupnirRoutePage from '../../../../../src/app/features/moderation/draupnir/DraupnirRoutePage';
-import { authStateAtom, matrixClientAtom, userIdAtom } from '../../../../../src/app/state/auth';
+import {
+    authStateAtom,
+    matrixClientAtom,
+    userIdAtom,
+} from '../../../../../src/app/state/bmc-auth';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

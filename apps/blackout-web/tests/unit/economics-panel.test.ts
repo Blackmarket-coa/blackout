@@ -7,6 +7,7 @@ describe("renderEconomicsPanel", () => {
     const html = renderEconomicsPanel({
       channelLabel: "quest-board",
       activeTab: "quests",
+      selectedTheme: "dark_canopy",
     });
 
     expect(html).toContain('data-action="economics-set-tab" data-tab="boosts"');

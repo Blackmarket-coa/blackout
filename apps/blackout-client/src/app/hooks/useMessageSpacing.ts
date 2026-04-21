@@ -1,5 +1,38 @@
 import { useMemo } from 'react';
-import { composerQuickActionsPlugin, type MessageSpacingItem } from '../plugins/composer';
+import { MessageSpacing } from '../state/compat-settings';
+
+export type MessageSpacingItem = {
+  name: string;
+  spacing: MessageSpacing;
+};
 
 export const useMessageSpacingItems = (): MessageSpacingItem[] =>
-  useMemo(() => composerQuickActionsPlugin.getMessageSpacingItems(), []);
+  useMemo(
+    () => [
+      {
+        spacing: '0',
+        name: 'None',
+      },
+      {
+        spacing: '100',
+        name: 'Ultra Small',
+      },
+      {
+        spacing: '200',
+        name: 'Extra Small',
+      },
+      {
+        spacing: '300',
+        name: 'Small',
+      },
+      {
+        spacing: '400',
+        name: 'Normal',
+      },
+      {
+        spacing: '500',
+        name: 'Large',
+      },
+    ],
+    []
+  );

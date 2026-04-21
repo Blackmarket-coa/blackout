@@ -14,6 +14,7 @@ import {
   useNotificationModeActions,
 } from '../../../hooks/useNotificationMode';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 
 const getAllMessageDefaultRule = (
   ruleId: RuleId,
@@ -126,7 +127,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Dens"
+          title={BLACKOUT_TERMS.den.titlePlural}
           after={<AllMessagesModeSwitcher pushRules={pushRules} ruleId={RuleId.Message} />}
         />
       </SequenceCard>
@@ -137,7 +138,7 @@ export function AllMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Dens (Encrypted)"
+          title={`${BLACKOUT_TERMS.den.titlePlural} (Encrypted)`}
           after={
             <AllMessagesModeSwitcher
               pushRules={pushRules}

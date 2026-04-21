@@ -14,6 +14,7 @@ describe("renderRevenueOpsPanel", () => {
         { family: "stego", baselineUsage: 12, advancedControlOpens: 5, upgradeClicks: 2, conversions: 1 },
         { family: "governance", baselineUsage: 9, advancedControlOpens: 4, upgradeClicks: 3, conversions: 1 },
       ],
+      selectedTheme: "dark_canopy",
     });
 
     expect(html).toContain('data-action="revenue-tab" data-tab="monetization"');

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import { useMatrixClient } from './useMatrixClient';
+import { useMatrixClient } from './bmc-useMatrixClient';
+import { useRoom } from './bmc-useRoom';
 import { uploadMedia } from '../utils/media';
 
 export interface HookResult<T> {
@@ -16,6 +17,7 @@ export interface TimelineResult extends HookResult<MatrixEvent[]> {
 /** Returns room timeline events with pagination and live updates. */
 export const useRoomTimeline = (roomId: string): TimelineResult => {
     const client = useMatrixClient();
+    const roomState = useRoom(roomId);
     const [events, setEvents] = useState<MatrixEvent[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<Error | null>(null);
@@ -29,18 +31,17 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
     }, []);
 
     useEffect(() => {
-        const room = roomId ? client.getRoom(roomId) : null;
         setLoading(true);
         setError(null);
         try {
-            refresh(room);
+            refresh(roomState.data);
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to load timeline.'));
         } finally {
             setLoading(false);
         }
 
-        const onTimeline = () => refresh(client.getRoom(roomId));
+        const onTimeline = () => refresh(roomState.data);
         const emitter = client as unknown as {
             on: (event: string, cb: () => void) => void;
             off: (event: string, cb: () => void) => void;
@@ -50,33 +51,32 @@ export const useRoomTimeline = (roomId: string): TimelineResult => {
         return () => {
             emitter.off('Room.timeline', onTimeline);
         };
-    }, [client, refresh, roomId]);
+    }, [client, refresh, roomState.data]);
 
     const loadMore = useCallback(
         async (limit = 50) => {
-            const room = roomId ? client.getRoom(roomId) : null;
-            if (!room) return;
+            if (!roomState.data) return;
             setLoading(true);
             try {
-                await client.scrollback(room, limit);
-                refresh(room);
+                await client.scrollback(roomState.data, limit);
+                refresh(roomState.data);
             } catch (err) {
                 setError(err instanceof Error ? err : new Error('Failed to paginate timeline.'));
             } finally {
                 setLoading(false);
             }
         },
-        [client, refresh, roomId],
+        [client, refresh, roomState.data],
     );
 
     return useMemo(
         () => ({
             data: events,
-            loading,
-            error,
+            loading: loading || roomState.loading,
+            error: error ?? roomState.error,
             loadMore,
         }),
-        [error, events, loadMore, loading],
+        [error, events, loadMore, loading, roomState.error, roomState.loading],
     );
 };
 

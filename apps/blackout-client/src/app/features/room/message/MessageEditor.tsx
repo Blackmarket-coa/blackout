@@ -46,7 +46,7 @@ import {
   getMentions,
 } from '../../../components/editor';
 import { useSetting } from '../../../state/hooks/settings';
-import { settingsAtom } from '../../../state/settings';
+import { settingsAtom } from '../../../state/compat-settings';
 import { UseStateProvider } from '../../../components/UseStateProvider';
 import { EmojiBoard } from '../../../components/emoji-board';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -153,7 +153,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           },
         };
 
-        return mx.sendMessage(roomId, content as never);
+        return mx.sendMessage(roomId, content as any);
       }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody])
     );
 
@@ -202,7 +202,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     }, [editor]);
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
-      editor.insertNode(createEmoticonElement(key, shortcode) as never);
+      editor.insertNode(createEmoticonElement(key, shortcode));
       moveCursor(editor);
     };
 

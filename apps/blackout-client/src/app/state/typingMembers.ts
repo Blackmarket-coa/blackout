@@ -3,7 +3,7 @@ import { atom, useSetAtom } from 'jotai';
 import { MatrixClient, RoomMemberEvent, RoomMemberEventHandlerMap } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import { useSetting } from './hooks/settings';
-import { settingsAtom } from './settings';
+import { settingsAtom } from './compat-settings';
 
 export const TYPING_TIMEOUT_MS = 5000; // 5 seconds
 

@@ -44,15 +44,31 @@ const createSafeStorage = () => ({
 const createSafeJsonStorage = <T>() => createJSONStorage<T>(createSafeStorage);
 
 export const normalizeAppearanceTheme = (theme: string): ThemeOption => normalizeThemeId(theme);
-const baseAppearanceStorage = createJSONStorage<AppearanceSettingsState>(createSafeStorage);
-const appearanceStorage: typeof baseAppearanceStorage = {
-    ...baseAppearanceStorage,
-    getItem: (key, initialValue) => {
-        const value = baseAppearanceStorage.getItem(key, initialValue);
-        if (value && typeof value === 'object' && typeof value.theme === 'string') {
-            return { ...value, theme: normalizeAppearanceTheme(value.theme) };
+const appearanceStorage = {
+    getItem: (key: string, initialValue: AppearanceSettingsState): AppearanceSettingsState => {
+        const raw = createSafeStorage().getItem(key);
+        if (!raw) return initialValue;
+
+        try {
+            const parsed = JSON.parse(raw) as Partial<AppearanceSettingsState>;
+            return {
+                ...initialValue,
+                ...parsed,
+                theme:
+                    typeof parsed.theme === 'string'
+                        ? normalizeAppearanceTheme(parsed.theme)
+                        : initialValue.theme,
+            };
+        } catch (error) {
+            trackSettingsSaveFailure(key, 'get', error);
+            return initialValue;
         }
-        return value;
+    },
+    setItem: (key: string, value: AppearanceSettingsState) => {
+        createSafeStorage().setItem(key, JSON.stringify(value));
+    },
+    removeItem: (key: string) => {
+        createSafeStorage().removeItem(key);
     },
 };
 const getOnInit = { getOnInit: true };

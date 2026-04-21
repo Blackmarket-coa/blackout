@@ -38,6 +38,7 @@ import {
   RoomVersionSelector,
   useAdditionalCreators,
 } from '../../components/create-room';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const getCreateRoomKindToIcon = (kind: CreateRoomKind) => {
   if (kind === CreateRoomKind.Private) return Icons.HashLock;
@@ -144,6 +145,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
           canRestrict={allowRestricted}
           disabled={disabled}
           getIcon={getCreateRoomKindToIcon}
+          targetLabel={BLACKOUT_TERMS.den.singular}
         />
       </Box>
       <Box shrink="No" direction="Column" gap="100">
@@ -211,7 +213,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
             >
               <SettingTile
                 title="End-to-End Encryption"
-                description="Once this feature is enabled, it can't be disabled after the den is created."
+                description={`Once this feature is enabled, it can't be disabled after the ${BLACKOUT_TERMS.den.singular} is created.`}
                 after={
                   <Switch
                     variant="Primary"
@@ -231,7 +233,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
               >
                 <SettingTile
                   title="Knock to Join"
-                  description="Anyone can send request to join this den."
+                  description={`Anyone can send a request to join this ${BLACKOUT_TERMS.den.singular}.`}
                   after={
                     <Switch
                       variant="Primary"

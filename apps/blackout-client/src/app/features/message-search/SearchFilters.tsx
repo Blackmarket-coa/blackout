@@ -39,6 +39,7 @@ import {
 import { DebounceOptions, useDebounce } from '../../hooks/useDebounce';
 import { VirtualTile } from '../../components/virtualizer';
 import { stopPropagation } from '../../utils/keyboard';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type OrderButtonProps = {
   order?: string;
@@ -238,8 +239,10 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
                     paddingRight: 0,
                   }}
                 >
-                  {!searchResult && <Text size="L400">Dens</Text>}
-                  {searchResult && <Text size="L400">{`Dens for "${searchResult.query}"`}</Text>}
+                  {!searchResult && <Text size="L400">{BLACKOUT_TERMS.den.titlePlural}</Text>}
+                  {searchResult && (
+                    <Text size="L400">{`${BLACKOUT_TERMS.den.titlePlural} for "${searchResult.query}"`}</Text>
+                  )}
                   {searchResult && searchResult.items.length === 0 && (
                     <Text style={{ padding: config.space.S400 }} size="T300" align="Center">
                       No match found!
@@ -321,7 +324,7 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
         radii="Pill"
         before={<Icon size="100" src={Icons.PlusCircle} />}
       >
-        <Text size="T200">Select Rooms</Text>
+        <Text size="T200">Select {BLACKOUT_TERMS.den.titlePlural}</Text>
       </Chip>
     </PopOut>
   );

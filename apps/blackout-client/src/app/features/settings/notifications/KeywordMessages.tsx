@@ -162,7 +162,7 @@ export function KeywordMessagesNotifications() {
   return (
     <Box direction="Column" gap="100">
       <Box alignItems="Center" justifyContent="SpaceBetween" gap="200">
-        <Text size="L400">Keyword Messages</Text>
+        <Text size="L400">Keyword Alerts</Text>
         <Box gap="100">
           <Text size="T200">Badge: </Text>
           <Badge radii="300" variant="Success" fill="Solid">
@@ -177,8 +177,8 @@ export function KeywordMessagesNotifications() {
         gap="400"
       >
         <SettingTile
-          title="Select Keyword"
-          description="Set a notification preference for message containing given keyword."
+          title="Choose Keyword"
+          description="Set a notification preference for messages containing a specific keyword."
         >
           <KeywordInput />
         </SettingTile>

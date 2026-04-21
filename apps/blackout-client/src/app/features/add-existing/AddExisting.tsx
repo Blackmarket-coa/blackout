@@ -54,6 +54,7 @@ import { StateEvent } from '../../../types/matrix/room';
 import { getViaServers } from '../../plugins/via-servers';
 import { rateLimitedActions } from '../../utils/matrix';
 import { useAlive } from '../../hooks/useAlive';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const SEARCH_OPTS: UseAsyncSearchOptions = {
   limit: 500,
@@ -236,12 +237,22 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                         gap="100"
                       >
                         <Text size="H6" align="Center">
-                          {searchResult ? 'No Match Found' : `No ${space ? 'Spaces' : 'Rooms'}`}
+                          {searchResult
+                            ? 'No Match Found'
+                            : `No ${
+                                space
+                                  ? BLACKOUT_TERMS.canopy.titlePlural
+                                  : BLACKOUT_TERMS.den.titlePlural
+                              }`}
                         </Text>
                         <Text size="T200" align="Center">
                           {searchResult
                             ? `No match found for "${searchResult.query}".`
-                            : `You do not have any ${space ? 'Spaces' : 'Rooms'} to display yet.`}
+                            : `You do not have any ${
+                                space
+                                  ? BLACKOUT_TERMS.canopy.plural
+                                  : BLACKOUT_TERMS.den.plural
+                              } to display yet.`}
                         </Text>
                       </Box>
                     )}

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useOnboardingCompletion, useOnboardingContent } from './useWelcome';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export const OnboardingWizard = ({
     spaceId,
@@ -79,7 +80,7 @@ export const OnboardingWizard = ({
                 onClick={(event) => event.stopPropagation()}
             >
                 <header style={{ display: 'grid', gap: 4 }}>
-                    <strong>Onboarding</strong>
+                    <strong>{BLACKOUT_TERMS.canopy.title} onboarding</strong>
                     <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
                         Step {Math.min(stepIndex + 1, totalSteps + 1)} of {totalSteps + 1}
                     </span>
@@ -226,7 +227,8 @@ export const OnboardingWizard = ({
                     >
                         <h3 style={{ marginTop: 0 }}>You're all set!</h3>
                         <p style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
-                            Enjoy the space and jump into the conversation.
+                            Enjoy the {BLACKOUT_TERMS.canopy.singular} and settle into a{' '}
+                            {BLACKOUT_TERMS.den.singular}.
                         </p>
                     </section>
                 )}

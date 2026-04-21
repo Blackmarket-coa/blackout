@@ -1,44 +1,34 @@
-# Contributing to Cinny
+# Contributing to Blackout Client
 
-First off, thanks for taking the time to contribute! ❤️
+Thanks for helping improve Blackout.
 
-All types of contributions are encouraged and valued. Please make sure to read the relevant section before making your contribution. It will make it a lot easier for us maintainers and smooth out the experience for all involved. The community looks forward to your contributions. 🎉
+## Before you start
 
-> And if you like the project, but just don't have time to contribute, that's fine. There are other easy ways to support the project and show your appreciation, which we would also be very happy about:
-> - Star the project
-> - Tweet about it (tag @cinnyapp)
-> - Refer this project in your project's readme
-> - Mention the project at local meetups and tell your friends/colleagues
-> - [Donate to us](https://cinny.in/#sponsor)
+- Check existing issues before opening a new one.
+- If you want to add or reshape a feature, open an issue first so the work lines up with the current migration plan.
+- Prefer focused pull requests over broad mixed changes.
 
-## Bug reports
+## Pull request expectations
 
-Bug reports and feature suggestions must use descriptive and concise titles and be submitted to [GitHub Issues](https://github.com/ajbura/cinny/issues). Please use the search function to make sure that you are not submitting duplicates, and that a similar report or request has not already been resolved or rejected.
+- Use clear titles.
+- Keep behavior changes easy to review.
+- Do not bundle unrelated cleanup into feature work unless it is required to make the change safe.
+- Preserve compatibility paths unless the change explicitly removes them.
 
-## Pull requests
+## Development notes
 
-> ### Legal Notice
-> When contributing to this project, you must agree that you have authored 100% of the content, that you have the necessary rights to the content and that the content you contribute may be provided under the project license.
+- The modern client lives in `apps/blackout-client`.
+- `apps/blackout-web` should only be used for customization transfer flows.
+- Some inherited code still exists in the package; if you touch it, prefer moving behavior into the modern path instead of deepening the legacy surface.
 
-**NOTE: If you want to add new features, please discuss with maintainers before coding or opening a pull request.** This is to ensure that we are on same track and following our roadmap.
+## Quality bar
 
-**Please use clean, concise titles for your pull requests.** We use commit squashing, so the final commit in the dev branch will carry the title of the pull request. For easier sorting in changelog, start your pull request titles using one of the verbs "Add", "Change", "Remove", or "Fix" (present tense).
+- Run the narrowest relevant checks you can before submitting.
+- Call out any known test or typecheck gaps in your PR description.
+- Avoid reverting unrelated workspace changes you did not make.
 
-Example:
+## Links
 
-|Not ideal|Better|
-|---|----|
-|Fixed markAllAsRead in RoomTimeline|Fix read marker when paginating room timeline|
-
-It is not always possible to phrase every change in such a manner, but it is desired.
-
-**The smaller the set of changes in the pull request is, the quicker it can be reviewed and merged.** Splitting tasks into multiple smaller pull requests is often preferable.
-
-Also, we use [ESLint](https://eslint.org/) for clean and stylistically consistent code syntax, so make sure your pull request follow it.
-
-**For any query or design discussion, join our [Matrix room](https://matrix.to/#/#cinny:matrix.org).**
-
-## Helpful links
-- [BEM methodology](http://getbem.com/introduction/)
-- [Atomic design](https://bradfrost.com/blog/post/atomic-web-design/)
-- [Matrix JavaScript SDK documentation](https://matrix-org.github.io/matrix-js-sdk/index.html)
+- Repo: [Blackmarket-coa/blackout](https://github.com/Blackmarket-coa/blackout)
+- Issues: [GitHub issue tracker](https://github.com/Blackmarket-coa/blackout/issues)
+- Client README: [README.md](./README.md)

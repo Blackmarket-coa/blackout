@@ -23,6 +23,7 @@ import {
 } from '../../state/hooks/createRoomModal';
 import { CreateRoomModalState } from '../../state/createRoomModal';
 import { stopPropagation } from '../../utils/keyboard';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type CreateRoomModalProps = {
   state: CreateRoomModalState;
@@ -57,7 +58,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
                   }}
                 >
                   <Box grow="Yes">
-                    <Text size="H4">New Den</Text>
+                    <Text size="H4">New {BLACKOUT_TERMS.den.title}</Text>
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>

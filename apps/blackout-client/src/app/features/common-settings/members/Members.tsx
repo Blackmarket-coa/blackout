@@ -42,7 +42,7 @@ import {
 import { getMemberSearchStr } from '../../../utils/room';
 import { useMembershipFilter, useMembershipFilterMenu } from '../../../hooks/useMemberFilter';
 import { useMemberPowerSort, useMemberSort, useMemberSortMenu } from '../../../hooks/useMemberSort';
-import { settingsAtom } from '../../../state/settings';
+import { settingsAtom } from '../../../state/compat-settings';
 import { useSetting } from '../../../state/hooks/settings';
 import { UseStateProvider } from '../../../components/UseStateProvider';
 import { MembershipFilterMenu } from '../../../components/MembershipFilterMenu';

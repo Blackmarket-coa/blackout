@@ -1,4 +1,5 @@
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export type PresenceGroup = 'online' | 'away' | 'offline';
 
@@ -133,17 +134,17 @@ export const buildSpaceGroups = ({
     rooms: Room[];
 }): SpaceGroup[] => {
     if (!selectedSpaceId) {
-        return [{ id: 'rooms', label: 'Rooms', rooms: selectedSpaceRooms }];
+        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
     }
 
     const selectedSpace = rooms.find((room) => room.roomId === selectedSpaceId);
     if (!selectedSpace) {
-        return [{ id: 'rooms', label: 'Rooms', rooms: selectedSpaceRooms }];
+        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
     }
 
     const childIds = getOrderedChildIds(selectedSpace);
     if (childIds.length === 0) {
-        return [{ id: 'rooms', label: 'Rooms', rooms: selectedSpaceRooms }];
+        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
     }
 
     const roomById = new Map(rooms.map((room) => [room.roomId, room]));

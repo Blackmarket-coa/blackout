@@ -34,7 +34,7 @@ import { HeadingLevel } from './slate';
 import { isMacOS } from '../../utils/user-agent';
 import { KeySymbol } from '../../utils/key-symbol';
 import { useSetting } from '../../state/hooks/settings';
-import { settingsAtom } from '../../state/settings';
+import { settingsAtom } from '../../state/compat-settings';
 import { stopPropagation } from '../../utils/keyboard';
 
 function BtnTooltip({ text, shortCode }: { text: string; shortCode?: string }) {
