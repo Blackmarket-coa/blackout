@@ -1,8 +1,9 @@
+import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 interface BaseResult {
     id: string;
@@ -84,6 +85,12 @@ const buildIndex = (rooms: Room[]): BaseResult[] => {
     });
 
     return list;
+};
+
+const categoryLabel = (category: BaseResult['category']): string => {
+    if (category === 'Rooms') return BLACKOUT_TERMS.den.titlePlural;
+    if (category === 'Spaces') return BLACKOUT_TERMS.canopy.titlePlural;
+    return category;
 };
 
 export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherProps) => {
@@ -262,7 +269,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Search rooms, spaces, users, commands"
+                    placeholder={`Search ${BLACKOUT_TERMS.den.plural}, ${BLACKOUT_TERMS.canopy.plural}, users, commands`}
                     style={{
                         width: '100%',
                         border: 'none',
@@ -288,7 +295,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
                                         padding: '4px 8px',
                                     }}
                                 >
-                                    {category}
+                                    {categoryLabel(category)}
                                 </div>
                                 {items.map((item) => {
                                     const absoluteIndex = flattened.findIndex(

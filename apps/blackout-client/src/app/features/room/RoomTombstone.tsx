@@ -8,6 +8,7 @@ import { Membership } from '../../../types/matrix/room';
 import { RoomInputPlaceholder } from './RoomInputPlaceholder';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { getViaServers } from '../../plugins/via-servers';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type RoomTombstoneProps = { roomId: string; body?: string; replacementRoomId: string };
 export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstoneProps) {
@@ -44,7 +45,7 @@ export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstone
         {replacementRoom?.getMyMembership() === Membership.Join ||
         joinState.status === AsyncStatus.Success ? (
           <Button onClick={handleOpen} size="300" variant="Success" fill="Solid" radii="300">
-            <Text size="B300">Open New Room</Text>
+            <Text size="B300">Open New {BLACKOUT_TERMS.den.title}</Text>
           </Button>
         ) : (
           <Button
@@ -60,7 +61,7 @@ export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstone
             }
             disabled={joinState.status === AsyncStatus.Loading}
           >
-            <Text size="B300">Join New Room</Text>
+            <Text size="B300">Join New {BLACKOUT_TERMS.den.title}</Text>
           </Button>
         )}
       </Box>

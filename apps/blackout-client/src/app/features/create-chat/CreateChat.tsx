@@ -12,6 +12,7 @@ import { millisecondsToMinutes } from '../../utils/common';
 import { createRoomEncryptionState } from '../../components/create-room';
 import { useAlive } from '../../hooks/useAlive';
 import { getDirectRoomPath } from '../../pages/pathUtils';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type CreateChatProps = {
   defaultUserId?: string;
@@ -107,7 +108,7 @@ export function CreateChat({ defaultUserId }: CreateChatProps) {
         >
           <SettingTile
             title="End-to-End Encryption"
-            description="Once this feature is enabled, it can't be disabled after the room is created."
+            description={`Once this feature is enabled, it can't be disabled after the ${BLACKOUT_TERMS.den.singular} is created.`}
             after={
               <Switch
                 variant="Primary"

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { StateEvent } from '../../../../types/matrix/room';
 import { PermissionGroup } from '../../common-settings/permissions';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 
 export const usePermissionGroups = (): PermissionGroup[] => {
   const groups: PermissionGroup[] = useMemo(() => {
@@ -12,7 +13,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.SpaceChild,
           },
-          name: 'Manage space rooms',
+          name: `Manage ${BLACKOUT_TERMS.canopy.singular} ${BLACKOUT_TERMS.den.plural}`,
         },
         {
           location: {},
@@ -49,28 +50,28 @@ export const usePermissionGroups = (): PermissionGroup[] => {
     };
 
     const roomOverviewGroup: PermissionGroup = {
-      name: 'Space Overview',
+      name: `${BLACKOUT_TERMS.canopy.title} Overview`,
       items: [
         {
           location: {
             state: true,
             key: StateEvent.RoomAvatar,
           },
-          name: 'Space Avatar',
+          name: `${BLACKOUT_TERMS.canopy.title} Avatar`,
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomName,
           },
-          name: 'Space Name',
+          name: `${BLACKOUT_TERMS.canopy.title} Name`,
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomTopic,
           },
-          name: 'Space Topic',
+          name: `${BLACKOUT_TERMS.canopy.title} Topic`,
         },
       ],
     };
@@ -83,7 +84,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomJoinRules,
           },
-          name: 'Change Space Access',
+          name: `Change ${BLACKOUT_TERMS.canopy.title} Access`,
         },
         {
           location: {
@@ -111,7 +112,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomTombstone,
           },
-          name: 'Upgrade Space',
+          name: `Upgrade ${BLACKOUT_TERMS.canopy.title}`,
         },
         {
           location: {

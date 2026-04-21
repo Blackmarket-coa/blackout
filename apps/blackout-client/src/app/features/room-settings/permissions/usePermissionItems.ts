@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { MessageEvent, StateEvent } from '../../../../types/matrix/room';
 import { PermissionGroup } from '../../common-settings/permissions';
+import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 
 export const usePermissionGroups = (): PermissionGroup[] => {
   const groups: PermissionGroup[] = useMemo(() => {
@@ -87,28 +88,28 @@ export const usePermissionGroups = (): PermissionGroup[] => {
     };
 
     const roomOverviewGroup: PermissionGroup = {
-      name: 'Room Overview',
+      name: `${BLACKOUT_TERMS.den.title} Overview`,
       items: [
         {
           location: {
             state: true,
             key: StateEvent.RoomAvatar,
           },
-          name: 'Room Avatar',
+          name: `${BLACKOUT_TERMS.den.title} Avatar`,
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomName,
           },
-          name: 'Room Name',
+          name: `${BLACKOUT_TERMS.den.title} Name`,
         },
         {
           location: {
             state: true,
             key: StateEvent.RoomTopic,
           },
-          name: 'Room Topic',
+          name: `${BLACKOUT_TERMS.den.title} Topic`,
         },
       ],
     };
@@ -121,7 +122,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomJoinRules,
           },
-          name: 'Change Room Access',
+          name: `Change ${BLACKOUT_TERMS.den.title} Access`,
         },
         {
           location: {
@@ -163,7 +164,7 @@ export const usePermissionGroups = (): PermissionGroup[] => {
             state: true,
             key: StateEvent.RoomTombstone,
           },
-          name: 'Upgrade Room',
+          name: `Upgrade ${BLACKOUT_TERMS.den.title}`,
         },
         {
           location: {

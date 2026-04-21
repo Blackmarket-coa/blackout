@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MiniProfile, ProfileEditor, ProfileModal, myProfileAtom } from '../profile';
 
@@ -11,7 +11,7 @@ const AccountSettings = () => {
             <section>
                 <h3 style={{ marginTop: 0 }}>Account</h3>
                 <p style={{ marginTop: 0, opacity: 0.85 }}>
-                    Manage your profile data, account credentials, and active sessions.
+                    Manage your profile, account credentials, and active device sessions.
                 </p>
             </section>
 
@@ -28,7 +28,7 @@ const AccountSettings = () => {
 
             <section style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setOpenPreview(true)}>
-                    Preview Profile Modal
+                    Preview Profile Card
                 </button>
             </section>
 

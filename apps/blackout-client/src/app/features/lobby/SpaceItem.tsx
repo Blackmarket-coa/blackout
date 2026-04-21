@@ -36,6 +36,7 @@ import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
 import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
 import { AddExistingModal } from '../add-existing';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 function SpaceProfileLoading() {
   return (
@@ -233,7 +234,7 @@ function RootSpaceProfile({ closed, categoryId, handleClose }: RootSpaceProfileP
     >
       <Box alignItems="Center" gap="200">
         <Text size="H4" truncate>
-          Rooms
+          {BLACKOUT_TERMS.den.titlePlural}
         </Text>
       </Box>
     </Chip>
@@ -283,10 +284,10 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
               fill="None"
               onClick={handleCreateRoom}
             >
-              <Text size="T300">New Room</Text>
+              <Text size="T300">New {BLACKOUT_TERMS.den.title}</Text>
             </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
-              <Text size="T300">Existing Room</Text>
+              <Text size="T300">Existing {BLACKOUT_TERMS.den.title}</Text>
             </MenuItem>
           </Menu>
         </FocusTrap>
@@ -299,7 +300,7 @@ function AddRoomButton({ item }: { item: HierarchyItem }) {
         onClick={handleAddRoom}
         aria-pressed={!!cords}
       >
-        <Text size="B300">Add Room</Text>
+        <Text size="B300">Add {BLACKOUT_TERMS.den.title}</Text>
       </Chip>
       {addExisting && (
         <AddExistingModal parentId={item.roomId} requestClose={() => setAddExisting(false)} />
@@ -350,10 +351,10 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
               fill="None"
               onClick={handleCreateSpace}
             >
-              <Text size="T300">New Space</Text>
+              <Text size="T300">New {BLACKOUT_TERMS.canopy.title}</Text>
             </MenuItem>
             <MenuItem size="300" radii="300" fill="None" onClick={handleAddExisting}>
-              <Text size="T300">Existing Space</Text>
+              <Text size="T300">Existing {BLACKOUT_TERMS.canopy.title}</Text>
             </MenuItem>
           </Menu>
         </FocusTrap>
@@ -366,7 +367,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
         onClick={handleAddSpace}
         aria-pressed={!!cords}
       >
-        <Text size="B300">Add Space</Text>
+        <Text size="B300">Add {BLACKOUT_TERMS.canopy.title}</Text>
       </Chip>
       {addExisting && (
         <AddExistingModal space parentId={item.roomId} requestClose={() => setAddExisting(false)} />

@@ -59,6 +59,7 @@ import { useKeyDown } from '../../hooks/useKeyDown';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { KeySymbol } from '../../utils/key-symbol';
 import { isMacOS } from '../../utils/user-agent';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 enum SearchRoomType {
   Rooms = '#',
@@ -129,6 +130,13 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   normalizeOptions: {
     ignoreWhitespace: false,
   },
+};
+
+const getSearchCollectionLabel = (searchRoomType: SearchRoomType | undefined): string => {
+  if (searchRoomType === SearchRoomType.Spaces) return BLACKOUT_TERMS.canopy.titlePlural;
+  if (searchRoomType === SearchRoomType.Directs) return 'Direct Messages';
+  if (searchRoomType === SearchRoomType.Rooms) return BLACKOUT_TERMS.den.titlePlural;
+  return 'Conversations';
 };
 
 type SearchProps = {
@@ -269,7 +277,7 @@ export function Search({ requestClose }: SearchProps) {
                 variant="Background"
                 radii="400"
                 outlined
-                placeholder="Search"
+                placeholder={`Search ${BLACKOUT_TERMS.den.plural}, ${BLACKOUT_TERMS.canopy.plural}, or direct messages`}
                 before={<Icon size="200" src={Icons.Search} />}
                 onChange={handleInputChange}
                 onKeyDown={handleInputKeyDown}
@@ -286,12 +294,14 @@ export function Search({ requestClose }: SearchProps) {
                   gap="100"
                 >
                   <Text size="H6" align="Center">
-                    {result ? 'No Match Found' : `No Rooms'}`}
+                    {result ? 'No Match Found' : `No ${getSearchCollectionLabel(searchRoomType)}`}
                   </Text>
                   <Text size="T200" align="Center">
                     {result
                       ? `No match found for "${result.query}".`
-                      : `You do not have any Rooms to display yet.`}
+                      : `You do not have any ${getSearchCollectionLabel(
+                          searchRoomType,
+                        ).toLowerCase()} to display yet.`}
                   </Text>
                 </Box>
               )}

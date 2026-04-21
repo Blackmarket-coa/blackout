@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../utils/bmc-markdown';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 interface ProfileModalProps {
     open: boolean;
@@ -351,11 +352,11 @@ export const ProfileModal = ({
                         </>
                     )}
 
-                    {/* Mutual Spaces */}
+                    {/* Mutual canopies */}
                     {profile.mutualSpaces.length > 0 && (
                         <>
                             <p style={dc.sectionHeader}>
-                                Mutual Servers — {profile.mutualSpaces.length}
+                                Mutual {BLACKOUT_TERMS.canopy.titlePlural} - {profile.mutualSpaces.length}
                             </p>
                             <div
                                 style={{

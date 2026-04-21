@@ -23,6 +23,7 @@ import {
 } from '../../state/hooks/createSpaceModal';
 import { CreateSpaceModalState } from '../../state/createSpaceModal';
 import { stopPropagation } from '../../utils/keyboard';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type CreateSpaceModalProps = {
   state: CreateSpaceModalState;
@@ -58,7 +59,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
                   }}
                 >
                   <Box grow="Yes">
-                    <Text size="H4">New Space</Text>
+                    <Text size="H4">New {BLACKOUT_TERMS.canopy.title}</Text>
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>

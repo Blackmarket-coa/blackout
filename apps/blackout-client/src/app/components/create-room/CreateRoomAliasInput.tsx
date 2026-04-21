@@ -80,7 +80,7 @@ export function CreateRoomAliasInput({ disabled }: { disabled?: boolean }) {
     <Box shrink="No" direction="Column" gap="100">
       <Text size="L400">Address (Optional)</Text>
       <Text size="T200" priority="300">
-        Pick an unique address to make it discoverable.
+        Pick a unique address to make it easier to find.
       </Text>
       <Input
         ref={aliasInputRef}

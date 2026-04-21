@@ -17,6 +17,7 @@ import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { InviteUserPrompt } from '../invite-user-prompt';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export type RoomIntroProps = {
   room: Room;
@@ -93,7 +94,7 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
                 fill="Soft"
                 radii="300"
               >
-                <Text size="B300">Open Old Room</Text>
+                <Text size="B300">Open Old {BLACKOUT_TERMS.den.title}</Text>
               </Button>
             ) : (
               <Button
@@ -109,7 +110,7 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
                   ) : undefined
                 }
               >
-                <Text size="B300">Join Old Room</Text>
+                <Text size="B300">Join Old {BLACKOUT_TERMS.den.title}</Text>
               </Button>
             ))}
         </Box>

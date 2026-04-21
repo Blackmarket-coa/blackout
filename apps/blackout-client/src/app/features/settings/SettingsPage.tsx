@@ -32,7 +32,7 @@ const sections: SettingsSection[] = [
     {
         id: 'account',
         label: 'Account',
-        summary: 'Display name, avatar, email, password, sessions',
+        summary: 'Profile, credentials, and active sessions',
         component: AccountSettings,
     },
     {
@@ -50,7 +50,7 @@ const sections: SettingsSection[] = [
     {
         id: 'privacy',
         label: 'Privacy',
-        summary: 'Blocked users, DM permissions, read receipts',
+        summary: 'Blocked users, direct-message permissions, read receipts',
         component: PrivacySettings,
     },
     {
@@ -80,7 +80,7 @@ const sections: SettingsSection[] = [
     {
         id: 'about',
         label: 'About',
-        summary: 'Version, support, and contact links',
+        summary: 'Version, support, and repository links',
         component: AboutSettings,
     },
 ];
@@ -156,7 +156,7 @@ export const SettingsPage = () => {
             </aside>
 
             <main style={{ padding: 16 }}>
-                <Suspense fallback={<p>Loading {active.label} settings…</p>}>
+                <Suspense fallback={<p>Loading {active.label} settings...</p>}>
                     <ActiveSection />
                 </Suspense>
             </main>

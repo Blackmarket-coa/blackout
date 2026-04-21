@@ -18,6 +18,7 @@ import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { SequenceCard } from '../../components/sequence-card';
 import { getRoomCreatorsForRoomId } from '../../hooks/useRoomCreators';
 import { getRoomPermissionsAPI } from '../../hooks/useRoomPermissions';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type SpaceHierarchyProps = {
   summary: IHierarchyRoom | undefined;
@@ -217,10 +218,10 @@ export const SpaceHierarchy = forwardRef<HTMLDivElement, SpaceHierarchyProps>(
                 gap="100"
               >
                 <Text size="H5" align="Center">
-                  No Rooms
+                  No {BLACKOUT_TERMS.den.titlePlural}
                 </Text>
                 <Text align="Center" size="T300" priority="300">
-                  This space does not contains rooms yet.
+                  This {BLACKOUT_TERMS.canopy.singular} does not contain any {BLACKOUT_TERMS.den.plural} yet.
                 </Text>
               </Box>
             </SequenceCard>

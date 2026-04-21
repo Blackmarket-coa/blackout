@@ -62,7 +62,7 @@ export const PrivacySettings = () => {
             </section>
 
             <section>
-                <h3>DM permissions</h3>
+                <h3>Direct message permissions</h3>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {dmOptions.map((option) => (
                         <button

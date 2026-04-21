@@ -39,6 +39,7 @@ import {
   useAdditionalCreators,
 } from '../../components/create-room';
 import { RoomType } from '../../../types/matrix/room';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 const getCreateSpaceKindToIcon = (kind: CreateRoomKind) => {
   if (kind === CreateRoomKind.Private) return Icons.SpaceLock;
@@ -145,6 +146,7 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
           canRestrict={allowRestricted}
           disabled={disabled}
           getIcon={getCreateSpaceKindToIcon}
+          targetLabel={BLACKOUT_TERMS.canopy.singular}
         />
       </Box>
       <Box shrink="No" direction="Column" gap="100">
@@ -211,7 +213,7 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
           >
             <SettingTile
               title="Knock to Join"
-              description="Anyone can send request to join this space."
+              description={`Anyone can send a request to join this ${BLACKOUT_TERMS.canopy.singular}.`}
               after={
                 <Switch variant="Primary" value={knock} onChange={setKnock} disabled={disabled} />
               }
