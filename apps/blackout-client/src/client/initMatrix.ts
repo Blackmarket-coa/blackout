@@ -14,6 +14,8 @@ type AtomStore = ReturnType<typeof createStore>;
 
 const SYNC_RETRY_BASE_MS = 2_000;
 const MAX_SYNC_RETRIES = 6;
+const LEGACY_SYNC_STORE_PREFIX = 'blackout-sync-store';
+const LEGACY_CRYPTO_STORE_PREFIX = 'blackout-crypto-store';
 
 export type MatrixInitErrorCode =
     | 'invalid_homeserver'
@@ -89,19 +91,84 @@ const applyAuthAtoms = (store: AtomStore, client: MatrixClient | null, authState
     store.set(userIdAtom, client?.getUserId() ?? null);
 };
 
+type StoreNames = {
+    sync: string;
+    crypto: string;
+    legacySync: string;
+    legacyCrypto: string;
+};
+
+const getStoreNames = (session: StoredSession): StoreNames => ({
+    sync: `${LEGACY_SYNC_STORE_PREFIX}:${session.userId}:${session.deviceId}`,
+    crypto: `${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}:${session.deviceId}`,
+    legacySync: `${LEGACY_SYNC_STORE_PREFIX}:${session.userId}`,
+    legacyCrypto: `${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}`,
+});
+
+const deleteDatabase = (dbName: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+        try {
+            const request = window.indexedDB.deleteDatabase(dbName);
+            request.onsuccess = () => resolve();
+            request.onerror = () =>
+                reject(request.error ?? new Error(`Failed to delete IndexedDB database "${dbName}".`));
+            request.onblocked = () => resolve();
+        } catch (error) {
+            reject(error);
+        }
+    });
+
+const deleteDatabaseSafe = async (dbName: string): Promise<void> => {
+    try {
+        await deleteDatabase(dbName);
+    } catch (error) {
+        console.warn(`Unable to delete IndexedDB database "${dbName}".`, error);
+    }
+};
+
+const cleanupStaleSessionStores = async (session: StoredSession): Promise<void> => {
+    const { sync, crypto, legacySync, legacyCrypto } = getStoreNames(session);
+    const staleDbNames = new Set<string>([legacySync, legacyCrypto]);
+
+    if (typeof window.indexedDB.databases === 'function') {
+        try {
+            const databases = await window.indexedDB.databases();
+            databases.forEach(({ name }) => {
+                if (!name) return;
+
+                const isSyncStore =
+                    name.startsWith(`${LEGACY_SYNC_STORE_PREFIX}:${session.userId}:`) && name !== sync;
+                const isCryptoStore =
+                    name.startsWith(`${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}:`) &&
+                    name !== crypto;
+
+                if (isSyncStore || isCryptoStore) {
+                    staleDbNames.add(name);
+                }
+            });
+        } catch (error) {
+            console.warn('Unable to enumerate IndexedDB databases for stale Matrix store cleanup.', error);
+        }
+    }
+
+    await Promise.all(Array.from(staleDbNames).map((dbName) => deleteDatabaseSafe(dbName)));
+};
+
+const isStoreAccountMismatchError = (error: unknown): boolean =>
+    error instanceof Error &&
+    error.message.includes("the account in the store doesn't match the account in the constructor");
+
 const initClientForSession = async (session: StoredSession): Promise<MatrixClient> => {
     ensureValidHomeserver(session.baseUrl);
+    const { sync, crypto } = getStoreNames(session);
 
     const syncStore = new IndexedDBStore({
         indexedDB: window.indexedDB,
         localStorage: window.localStorage,
-        dbName: `blackout-sync-store:${session.userId}`,
+        dbName: sync,
     });
 
-    const cryptoStore = new IndexedDBCryptoStore(
-        window.indexedDB,
-        `blackout-crypto-store:${session.userId}`,
-    );
+    const cryptoStore = new IndexedDBCryptoStore(window.indexedDB, crypto);
 
     const client = createClient({
         baseUrl: session.baseUrl,
@@ -119,6 +186,24 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     client.setMaxListeners(100);
 
     return client;
+};
+
+const initClientForSessionWithRecovery = async (session: StoredSession): Promise<MatrixClient> => {
+    try {
+        await cleanupStaleSessionStores(session);
+        return await initClientForSession(session);
+    } catch (error) {
+        if (!isStoreAccountMismatchError(error)) {
+            throw error;
+        }
+
+        console.warn(
+            'Detected stale Matrix crypto store bound to another device. Clearing stores and retrying.',
+            error,
+        );
+        await cleanupStaleSessionStores(session);
+        return initClientForSession(session);
+    }
 };
 
 export const startSyncWithRetry = async (client: MatrixClient): Promise<void> => {
@@ -154,7 +239,7 @@ export const initMatrixFromStoredSession = async (
     }
 
     try {
-        const client = await initClientForSession(session);
+        const client = await initClientForSessionWithRecovery(session);
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
         return client;
@@ -171,7 +256,7 @@ export const stopMatrixClient = (client: MatrixClient | null): void => {
 };
 
 export const initClient = (session: StoredSession): Promise<MatrixClient> =>
-    initClientForSession(session);
+    initClientForSessionWithRecovery(session);
 
 export const startClient = async (client: MatrixClient): Promise<void> => {
     await startSyncWithRetry(client);
