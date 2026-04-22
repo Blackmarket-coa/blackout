@@ -3,14 +3,26 @@ import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/bmc-auth';
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
+import { removeFallbackSession, setFallbackSession } from '../app/state/sessions';
 
 type AtomStore = ReturnType<typeof createStore>;
 
 export interface PasswordLoginInput {
     baseUrl: string;
-    userId: string;
+    identifier:
+        | {
+              type: 'm.id.user';
+              user: string;
+          }
+        | {
+              type: 'm.id.thirdparty';
+              medium: 'email';
+              address: string;
+          };
     password: string;
 }
+
+export type PasswordLoginIdentifier = PasswordLoginInput['identifier'];
 
 export interface RegistrationInput {
     baseUrl: string;
@@ -73,6 +85,7 @@ const saveFromLoginResponse = (
     };
 
     saveSession(session);
+    setFallbackSession(session.accessToken, session.deviceId, session.userId, session.baseUrl);
     return session;
 };
 
@@ -85,10 +98,7 @@ export const loginWithPassword = async (
     try {
         const client = createClient({ baseUrl: input.baseUrl });
         const result = await client.login('m.login.password', {
-            identifier: {
-                type: 'm.id.user',
-                user: input.userId,
-            },
+            identifier: input.identifier,
             password: input.password,
             initial_device_display_name: 'Blackout Client',
             refresh_token: true,
@@ -174,6 +184,7 @@ export const logout = async (store: AtomStore): Promise<void> => {
     } else {
         clearSession();
     }
+    removeFallbackSession();
 
     applyLoggedOutAtoms(store);
 };

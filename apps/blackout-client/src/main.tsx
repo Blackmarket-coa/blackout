@@ -7,21 +7,23 @@ import 'folds/dist/style.css';
 import { configClass, varsClass } from 'folds';
 import { useAtomValue } from 'jotai';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { matchPath, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
+import { ClientConfigLoader } from './app/components/ClientConfigLoader';
+import { ClientConfigProvider } from './app/hooks/useClientConfig';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
-import ClientLayout from './app/pages/client/ClientLayout';
-import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { trimTrailingSlash } from './app/utils/common';
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
+import { LOGIN_PATH, REGISTER_PATH, RESET_PASSWORD_PATH } from './app/pages/paths';
+import { appRouter } from './app/auth/AppRouter';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -51,76 +53,70 @@ if ('serviceWorker' in navigator) {
 
 const queryClient = new QueryClient();
 
-const router = createBrowserRouter([
-    {
-        path: '/',
-        element: <ClientLayout />,
-    },
-    {
-        path: '/room/:roomId',
-        element: <ClientLayout />,
-    },
-    {
-        path: '/moderation/draupnir',
-        element: <DraupnirRoutePage />,
-    },
-]);
+const isAuthPath = (pathname: string): boolean =>
+    Boolean(
+        matchPath(LOGIN_PATH, pathname) ||
+            matchPath(REGISTER_PATH, pathname) ||
+            matchPath(RESET_PASSWORD_PATH, pathname)
+    );
+
+const BootstrapCard = ({
+    title,
+    details,
+    action,
+}: {
+    title: string;
+    details: string;
+    action?: React.ReactNode;
+}) => (
+    <main
+        style={{
+            minHeight: '100vh',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'var(--bg-surface, #111827)',
+            color: 'var(--text-primary, #f8fafc)',
+            padding: 24,
+        }}
+    >
+        <section
+            style={{
+                width: 'min(560px, 100%)',
+                border: '1px solid var(--border-default, #374151)',
+                borderRadius: 12,
+                background: 'var(--bg-input, #0f172a)',
+                padding: 20,
+                display: 'grid',
+                gap: 12,
+            }}
+        >
+            <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
+            <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
+            {action}
+        </section>
+    </main>
+);
 
 // eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
 
-    if (authState === 'logged_in') {
+    if (authState === 'crypto_initializing') {
         return (
-            <>
-                <GlobalHeaderInboxLauncher />
-                <RouterProvider router={router} />
-            </>
+            <BootstrapCard
+                title="Initializing secure crypto..."
+                details="Please wait while startup completes."
+            />
         );
     }
 
-    const title =
-        authState === 'crypto_initializing'
-            ? 'Initializing secure crypto…'
-            : authState === 'crypto_failed'
-              ? 'Secure crypto unavailable'
-              : authState === 'loading'
-                ? 'Restoring session…'
-                : 'Signed out';
-
-    const details =
-        authState === 'crypto_failed'
-            ? (cryptoInitError ?? 'Unable to initialize secure crypto features.')
-            : authState === 'logged_out'
-              ? 'Sign in to start syncing with Matrix.'
-              : 'Please wait while startup completes.';
-
-    return (
-        <main
-            style={{
-                minHeight: '100vh',
-                display: 'grid',
-                placeItems: 'center',
-                background: 'var(--bg-surface, #111827)',
-                color: 'var(--text-primary, #f8fafc)',
-                padding: 24,
-            }}
-        >
-            <section
-                style={{
-                    width: 'min(560px, 100%)',
-                    border: '1px solid var(--border-default, #374151)',
-                    borderRadius: 12,
-                    background: 'var(--bg-input, #0f172a)',
-                    padding: 20,
-                    display: 'grid',
-                    gap: 12,
-                }}
-            >
-                <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
-                <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
-                {authState === 'crypto_failed' ? (
+    if (authState === 'crypto_failed') {
+        return (
+            <BootstrapCard
+                title="Secure crypto unavailable"
+                details={cryptoInitError ?? 'Unable to initialize secure crypto features.'}
+                action={
                     <button
                         type="button"
                         onClick={() => window.location.reload()}
@@ -136,9 +132,41 @@ const BootstrapStatus = () => {
                     >
                         Retry startup
                     </button>
-                ) : null}
-            </section>
-        </main>
+                }
+            />
+        );
+    }
+
+    if (authState === 'loading' && !isAuthPath(window.location.pathname)) {
+        return (
+            <BootstrapCard title="Restoring session..." details="Please wait while startup completes." />
+        );
+    }
+
+    return (
+        <>
+            {authState === 'logged_in' ? <GlobalHeaderInboxLauncher /> : null}
+            <ClientConfigLoader
+                fallback={() => (
+                    <BootstrapCard
+                        title="Loading client configuration..."
+                        details="Preparing your Blackout sign-in experience."
+                    />
+                )}
+                error={() => (
+                    <BootstrapCard
+                        title="Client configuration unavailable"
+                        details="Refresh the page and try again."
+                    />
+                )}
+            >
+                {(clientConfig) => (
+                    <ClientConfigProvider value={clientConfig}>
+                        <RouterProvider router={appRouter} />
+                    </ClientConfigProvider>
+                )}
+            </ClientConfigLoader>
+        </>
     );
 };
 
