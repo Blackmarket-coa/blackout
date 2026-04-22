@@ -116,6 +116,7 @@ export const loginWithPassword = async (
 
         return initializedClient;
     } catch (error) {
+        console.error('Blackout password login failed during session bootstrap.', error);
         applyLoggedOutAtoms(store);
         throw normalizeAuthError(error);
     }
@@ -158,6 +159,7 @@ export const registerUser = async (
 
         return initializedClient;
     } catch (error) {
+        console.error('Blackout registration failed during session bootstrap.', error);
         applyLoggedOutAtoms(store);
         throw normalizeAuthError(error);
     }

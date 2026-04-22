@@ -58,6 +58,17 @@ const normalizeMatrixError = (error: unknown): MatrixInitError => {
         return new MatrixInitError('network_failure', 'Unable to reach the root.');
     }
 
+    if (error instanceof DOMException) {
+        return new MatrixInitError(
+            'unknown',
+            `Matrix secure storage failed: ${error.name}${error.message ? `: ${error.message}` : ''}.`,
+        );
+    }
+
+    if (error instanceof Error && error.message) {
+        return new MatrixInitError('unknown', error.message);
+    }
+
     return new MatrixInitError('unknown', matrixError?.message ?? 'Matrix initialization failed.');
 };
 
@@ -148,6 +159,7 @@ export const initMatrixFromStoredSession = async (
         applyAuthAtoms(store, client, 'logged_in');
         return client;
     } catch (error) {
+        console.error('Blackout Matrix bootstrap failed after session restore.', error);
         const normalizedError = normalizeMatrixError(error);
         applyAuthAtoms(store, null, 'logged_out');
         throw normalizedError;

@@ -57,30 +57,54 @@ export enum LoginError {
 const toLoginError = (error: unknown): MatrixError => {
   if (error instanceof Error) {
     if (error.message === GetBaseUrlError.NotAllow) {
-      return new MatrixError({ errcode: LoginError.ServerNotAllowed });
+      return new MatrixError({
+        errcode: LoginError.ServerNotAllowed,
+        error: 'Login with custom server not allowed by your client instance.',
+      });
     }
     if (error.message === GetBaseUrlError.NotFound) {
-      return new MatrixError({ errcode: LoginError.InvalidServer });
+      return new MatrixError({
+        errcode: LoginError.InvalidServer,
+        error: 'Failed to find your Matrix ID server.',
+      });
     }
   }
 
   if (error instanceof MatrixInitError) {
     switch (error.code) {
       case 'invalid_credentials':
-        return new MatrixError({ errcode: LoginError.Forbidden });
+        return new MatrixError({
+          errcode: LoginError.Forbidden,
+          error: error.message,
+        });
       case 'rate_limited':
-        return new MatrixError({ errcode: LoginError.RateLimited });
+        return new MatrixError({
+          errcode: LoginError.RateLimited,
+          error: error.message,
+        });
       case 'invalid_homeserver':
       case 'network_failure':
-        return new MatrixError({ errcode: LoginError.InvalidServer });
+        return new MatrixError({
+          errcode: LoginError.InvalidServer,
+          error: error.message,
+        });
       case 'captcha_required':
-        return new MatrixError({ errcode: LoginError.InvalidRequest });
+        return new MatrixError({
+          errcode: LoginError.InvalidRequest,
+          error: error.message,
+        });
       default:
-        return new MatrixError({ errcode: LoginError.Unknown });
+        return new MatrixError({
+          errcode: LoginError.Unknown,
+          error: error.message,
+        });
     }
   }
 
-  return new MatrixError({ errcode: LoginError.Unknown });
+  return new MatrixError({
+    errcode: LoginError.Unknown,
+    error: error instanceof Error ? error.message : 'Unknown login error.',
+  });
 };
 
 export const usePasswordLogin = () => {

@@ -1,38 +1,40 @@
 import { ReactNode, useCallback, useEffect, useMemo } from 'react';
-import { createClient } from 'matrix-js-sdk';
+import { MatrixError, createClient } from 'matrix-js-sdk';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { useAutoDiscoveryInfo } from '../hooks/useAutoDiscoveryInfo';
-import { AuthFlows } from '../hooks/useAuthFlows';
-import { promiseFulfilledResult } from '../utils/common';
+import {
+  RegisterFlowStatus,
+  RegisterFlowsResponse,
+  parseRegisterErrResp,
+} from '../hooks/useAuthFlows';
 
-type AuthFlowsLoaderProps = {
+type RegisterFlowsLoaderProps = {
   fallback?: () => ReactNode;
   error?: (err: unknown) => ReactNode;
-  children: (authFlows: AuthFlows) => ReactNode;
+  children: (registerFlows: RegisterFlowsResponse) => ReactNode;
 };
-export function AuthFlowsLoader({ fallback, error, children }: AuthFlowsLoaderProps) {
+
+export function RegisterFlowsLoader({
+  fallback,
+  error,
+  children,
+}: RegisterFlowsLoaderProps) {
   const autoDiscoveryInfo = useAutoDiscoveryInfo();
   const baseUrl = autoDiscoveryInfo['m.homeserver'].base_url;
-
   const mx = useMemo(() => createClient({ baseUrl }), [baseUrl]);
 
   const [state, load] = useAsyncCallback(
     useCallback(async () => {
-      const result = await Promise.allSettled([mx.loginFlows()]);
-      const loginFlows = promiseFulfilledResult(result[0]);
+      try {
+        await mx.registerRequest({});
+        return { status: RegisterFlowStatus.InvalidRequest } satisfies RegisterFlowsResponse;
+      } catch (registerError) {
+        if (registerError instanceof MatrixError && registerError.httpStatus) {
+          return parseRegisterErrResp(registerError);
+        }
 
-      if (!loginFlows) {
-        throw new Error('Missing auth flow!');
+        throw registerError;
       }
-      if ('errcode' in loginFlows) {
-        throw new Error('Failed to load auth flow!');
-      }
-
-      const authFlows: AuthFlows = {
-        loginFlows,
-      };
-
-      return authFlows;
     }, [mx])
   );
 

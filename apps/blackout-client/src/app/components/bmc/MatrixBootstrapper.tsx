@@ -30,7 +30,8 @@ export const MatrixBootstrapper = () => {
 
             try {
                 await initMatrixFromStoredSession(store);
-            } catch {
+            } catch (error) {
+                console.error('Blackout startup session restore failed.', error);
                 if (!cancelled) {
                     store.set(authStateAtom, 'logged_out');
                 }

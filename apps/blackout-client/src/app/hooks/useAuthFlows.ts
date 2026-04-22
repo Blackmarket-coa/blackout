@@ -43,7 +43,6 @@ export const parseRegisterErrResp = (matrixError: MatrixError): RegisterFlowsRes
 
 export type AuthFlows = {
   loginFlows: ILoginFlowsResponse;
-  registerFlows: RegisterFlowsResponse;
 };
 
 const AuthFlowsContext = createContext<AuthFlows | null>(null);

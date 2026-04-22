@@ -210,7 +210,9 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
               <FieldError message="Login with custom server not allowed by your client instance." />
             )}
             {loginState.error.errcode === LoginError.InvalidServer && (
-              <FieldError message="Failed to find your Matrix ID server." />
+              <FieldError
+                message={loginState.error.data?.error ?? 'Failed to find your Matrix ID server.'}
+              />
             )}
           </>
         )}
@@ -233,7 +235,9 @@ export function PasswordLoginForm({ defaultUsername, defaultEmail }: PasswordLog
                 <FieldError message="Failed to sign in. Your request has been rate-limited by the server." />
               )}
               {loginState.error.errcode === LoginError.Unknown && (
-                <FieldError message="Failed to sign in. Unknown reason." />
+                <FieldError
+                  message={loginState.error.data?.error ?? 'Failed to sign in. Unknown reason.'}
+                />
               )}
             </>
           )}
