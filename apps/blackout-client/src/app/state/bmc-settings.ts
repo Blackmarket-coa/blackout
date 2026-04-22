@@ -1,6 +1,6 @@
 import { normalizeThemeId } from '../../lib/bmc-core';
 import { atomWithStorage } from 'jotai/utils';
-import type { ThemePreference } from '../styles/theme.css';
+import type { ThemePreference } from '../styles/theme-runtime';
 
 export type ChatDensity = 'compact' | 'comfortable' | 'cozy';
 

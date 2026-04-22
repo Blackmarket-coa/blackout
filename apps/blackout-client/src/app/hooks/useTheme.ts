@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { onDarkFontWeight, onLightFontWeight } from '../../config.css';
 import { butterTheme, darkTheme, silverTheme } from '../../colors.css';
 import { themePreferenceAtom } from '../state/theme-atoms';
-import { themeColorSchemeByPreference, type ThemePreference } from '../styles/theme.css';
+import { themeColorSchemeByPreference, type ThemePreference } from '../styles/theme-runtime';
 
 export enum ThemeKind {
   Light = 'light',

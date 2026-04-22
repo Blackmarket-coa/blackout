@@ -7,6 +7,11 @@ import React, {
     useState,
 } from 'react';
 import { useAtom } from 'jotai';
+import {
+    designBreakpoints,
+    designShellLayout,
+    designSpacing,
+} from '../../../../../../packages/design/src';
 import { settingsPageAtom, type SettingsSectionId } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
@@ -85,14 +90,25 @@ const sections: SettingsSection[] = [
     },
 ];
 
+export const settingsLayoutMetrics = Object.freeze({
+    mobileMaxWidthPx: designBreakpoints.mobileMaxPx,
+    panelPaddingPx: designShellLayout.desktopPanelPaddingPx,
+    sectionGapPx: designSpacing.comfortableGapPx,
+    itemGapPx: designSpacing.comfortableGapPx,
+    minTouchTargetPx: designShellLayout.navRailButtonSizePx,
+});
+
+export const isSettingsMobileViewport = (width: number): boolean =>
+    width <= settingsLayoutMetrics.mobileMaxWidthPx;
+
 export const SettingsPage = () => {
     const [activeSection, setActiveSection] = useAtom(settingsPageAtom);
     const [isMobile, setIsMobile] = useState(
-        typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+        typeof window !== 'undefined' ? isSettingsMobileViewport(window.innerWidth) : false,
     );
 
     useEffect(() => {
-        const onResize = () => setIsMobile(window.innerWidth <= 768);
+        const onResize = () => setIsMobile(isSettingsMobileViewport(window.innerWidth));
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
@@ -117,12 +133,12 @@ export const SettingsPage = () => {
                 style={{
                     borderRight: isMobile ? 'none' : '1px solid var(--border-default)',
                     borderBottom: isMobile ? '1px solid var(--border-default)' : 'none',
-                    padding: 12,
+                    padding: settingsLayoutMetrics.panelPaddingPx,
                     background: 'var(--bg-input)',
                 }}
             >
                 <h2 style={{ marginTop: 0, marginBottom: 10 }}>Settings</h2>
-                <nav style={{ display: 'grid', gap: 6 }}>
+                <nav style={{ display: 'grid', gap: settingsLayoutMetrics.itemGapPx }}>
                     {sections.map((section) => (
                         <button
                             key={section.id}
@@ -138,7 +154,7 @@ export const SettingsPage = () => {
                                         ? '1px solid var(--accent-primary)'
                                         : '1px solid var(--border-default)',
                                 borderRadius: 8,
-                                padding: '8px 10px',
+                                padding: `8px ${settingsLayoutMetrics.sectionGapPx}px`,
                                 background:
                                     activeSection === section.id
                                         ? 'var(--bg-surface)'
@@ -155,7 +171,7 @@ export const SettingsPage = () => {
                 </nav>
             </aside>
 
-            <main style={{ padding: 16 }}>
+            <main style={{ padding: settingsLayoutMetrics.panelPaddingPx }}>
                 <Suspense fallback={<p>Loading {active.label} settings...</p>}>
                     <ActiveSection />
                 </Suspense>
