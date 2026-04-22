@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBrowserRouter } from 'react-router-dom';
-import LegacyClientLayout from '../pages/client/LegacyClientLayout';
+import ClientLayout from '../pages/client/ClientLayout';
 import { DraupnirRoutePage } from '../features/moderation/draupnir';
 import { AuthLayout, Login, Register, ResetPassword } from '../pages/auth';
 import { AuthenticatedRoute, LoggedOutOnlyRoute } from './routeGuards';
@@ -31,7 +31,7 @@ export const appRouter = createBrowserRouter([
     path: '/',
     element: (
       <AuthenticatedRoute>
-        <LegacyClientLayout />
+        <ClientLayout />
       </AuthenticatedRoute>
     ),
   },
@@ -39,7 +39,7 @@ export const appRouter = createBrowserRouter([
     path: '/room/:roomId',
     element: (
       <AuthenticatedRoute>
-        <LegacyClientLayout />
+        <ClientLayout />
       </AuthenticatedRoute>
     ),
   },
