@@ -82,14 +82,6 @@ jobs:
   e2e-tests:
     name: E2E tests (Playwright + local Synapse)
     runs-on: ubuntu-latest
-    services:
-      synapse:
-        image: matrixdotorg/synapse:latest
-        ports:
-          - 8008:8008
-        env:
-          SYNAPSE_SERVER_NAME: localhost
-          SYNAPSE_REPORT_STATS: "no"
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: pnpm/action-setup@v5

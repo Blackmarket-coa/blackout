@@ -1,11 +1,14 @@
 export type FeaturePresetKey = 'starter' | 'governance' | 'sovereignty';
 export type LegacyFeaturePresetKey = 'tier_free' | 'tier_pro' | 'tier_enterprise';
+export type FeatureKillSwitchKey = 'advanced_stego' | 'townhall_sfu' | 'advanced_governance';
 
 export type FeatureFlagMap = Record<string, boolean>;
+export type FeatureKillSwitchMap = Partial<Record<FeatureKillSwitchKey, boolean>>;
 
 export interface DeploymentPresetConfig {
   preset?: FeaturePresetKey | LegacyFeaturePresetKey;
   defaults?: FeatureFlagMap;
+  presetKillSwitches?: Partial<Record<FeaturePresetKey, FeatureKillSwitchMap>>;
 }
 
 export interface TenantPresetPolicy {
@@ -13,6 +16,7 @@ export interface TenantPresetPolicy {
   overrides?: FeatureFlagMap;
   allowUserOverrides?: boolean;
   userOverrideAllowlist?: string[];
+  tierKillSwitches?: Partial<Record<FeaturePresetKey, FeatureKillSwitchMap>>;
 }
 
 export interface UserPresetOverrides {
@@ -26,6 +30,10 @@ export interface ResolvedPresetConfig {
     deploymentPreset: FeaturePresetKey;
     tenantPreset: FeaturePresetKey | null;
     userOverrideCount: number;
+    killSwitchesApplied: {
+      preset: number;
+      tier: number;
+    };
   };
 }
 
@@ -90,7 +98,7 @@ const STARTER: FeatureFlagMap = {
   'features.bmc.banner': false,
   'features.bmc.inviteSplash': false,
   'features.bmc.governance': false,
-  'features.bmc.steganography': false,
+  'features.bmc.steganography': true,
   'features.bmc.deaddrop': false,
   'features.bmc.cellRouting': false,
   'features.bmc.numbersStation': false,
@@ -111,7 +119,7 @@ const STARTER: FeatureFlagMap = {
   'features.bmc.nsfwGate': false,
   'features.bmc.slowmode': false,
 
-  'features.stego.enabled': false,
+  'features.stego.enabled': true,
   'features.stego.ephemeral': false,
   'features.governance.entitlements': false,
   'features.federationBoost.enabled': false,
@@ -216,6 +224,30 @@ function mergeFeatures(base: FeatureFlagMap, overrides?: FeatureFlagMap): Featur
   return { ...base, ...overrides };
 }
 
+const FEATURE_KEYS_BY_KILL_SWITCH: Record<FeatureKillSwitchKey, string[]> = {
+  advanced_stego: ['features.stego.ephemeral', 'features.bmc.deaddrop'],
+  townhall_sfu: ['features.townhall.enabled'],
+  advanced_governance: ['features.governance.entitlements', 'features.bmc.governance'],
+};
+
+function countEnabledKillSwitches(killSwitches: FeatureKillSwitchMap | undefined): number {
+  if (!killSwitches) return 0;
+  return Object.values(killSwitches).filter(Boolean).length;
+}
+
+function applyKillSwitches(features: FeatureFlagMap, killSwitches: FeatureKillSwitchMap | undefined): FeatureFlagMap {
+  if (!killSwitches) return features;
+
+  const next = { ...features };
+  for (const [switchName, enabled] of Object.entries(killSwitches) as Array<[FeatureKillSwitchKey, boolean | undefined]>) {
+    if (!enabled) continue;
+    for (const featureKey of FEATURE_KEYS_BY_KILL_SWITCH[switchName]) {
+      next[featureKey] = false;
+    }
+  }
+  return next;
+}
+
 export function resolveFeaturePreset(
   deployment: DeploymentPresetConfig,
   tenantPolicy?: TenantPresetPolicy,
@@ -225,9 +257,16 @@ export function resolveFeaturePreset(
   const tenantPreset = normalizeFeaturePresetKey(tenantPolicy?.preset);
   const activePreset = tenantPreset ?? deploymentPreset;
 
-  let features = { ...FEATURE_PRESET_BUNDLES[activePreset] };
+  let features = { ...FEATURE_PRESET_BUNDLES[deploymentPreset] };
   features = mergeFeatures(features, deployment.defaults);
+  if (tenantPreset) {
+    features = mergeFeatures(features, FEATURE_PRESET_BUNDLES[tenantPreset]);
+  }
   features = mergeFeatures(features, tenantPolicy?.overrides);
+  const presetKillSwitches = deployment.presetKillSwitches?.[deploymentPreset];
+  const tierKillSwitches = tenantPreset ? tenantPolicy?.tierKillSwitches?.[tenantPreset] : undefined;
+  features = applyKillSwitches(features, presetKillSwitches);
+  features = applyKillSwitches(features, tierKillSwitches);
 
   let userOverrideCount = 0;
   if (tenantPolicy?.allowUserOverrides && userOverrides?.overrides) {
@@ -249,6 +288,10 @@ export function resolveFeaturePreset(
       deploymentPreset,
       tenantPreset: tenantPreset ?? null,
       userOverrideCount,
+      killSwitchesApplied: {
+        preset: countEnabledKillSwitches(presetKillSwitches),
+        tier: countEnabledKillSwitches(tierKillSwitches),
+      },
     },
   };
 }
