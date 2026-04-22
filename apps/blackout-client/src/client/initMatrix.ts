@@ -10,6 +10,7 @@ import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/bmc-auth';
 import { setFallbackSession } from '../app/state/sessions';
 import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
+import { pushSessionToSW } from '../sw-session';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -230,6 +231,7 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
             updatedSession.userId,
             updatedSession.baseUrl,
         );
+        pushSessionToSW(updatedSession.baseUrl, updatedSession.accessToken);
 
         return {
             accessToken: updatedSession.accessToken,
@@ -347,6 +349,7 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
 
     await client.clearStores();
     clearSession(client.getUserId() ?? undefined);
+    pushSessionToSW(undefined, undefined);
 };
 
 export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {

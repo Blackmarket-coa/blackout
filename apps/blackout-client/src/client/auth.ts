@@ -4,6 +4,7 @@ import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/bmc-au
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
 import { removeFallbackSession, setFallbackSession } from '../app/state/sessions';
+import { pushSessionToSW } from '../sw-session';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -236,5 +237,12 @@ export const refreshSessionToken = async (store: AtomStore): Promise<StoredSessi
     };
 
     saveSession(updatedSession);
+    setFallbackSession(
+        updatedSession.accessToken,
+        updatedSession.deviceId,
+        updatedSession.userId,
+        updatedSession.baseUrl,
+    );
+    pushSessionToSW(updatedSession.baseUrl, updatedSession.accessToken);
     return updatedSession;
 };
