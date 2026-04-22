@@ -5,6 +5,7 @@ import type {
     NormalizedEntitlement,
     NormalizedListing,
 } from '@blackout/core';
+import { createAuthorizedApiClient } from '../../../sdk/client';
 
 export interface MarketplaceProviderSummary {
     id: MarketplaceProviderId;
@@ -26,33 +27,21 @@ export interface FulfillmentAsset {
     activationsMax?: number;
 }
 
-const API_BASE =
-    (typeof import.meta !== 'undefined' &&
-        (import.meta as { env?: { VITE_BLACKOUT_API_BASE_URL?: string } }).env
-            ?.VITE_BLACKOUT_API_BASE_URL) ||
-    '';
-const MARKETPLACE_BASE = `${API_BASE}/v1/marketplace`;
-
-function authHeader(token: string | null): Record<string, string> {
-    return token ? { authorization: `Bearer ${token}` } : {};
-}
+const MARKETPLACE_BASE = '/v1/marketplace';
 
 async function getJson<T>(url: string, token: string | null): Promise<T> {
-    const response = await fetch(url, {
-        headers: { 'content-type': 'application/json', ...authHeader(token) },
+    return createAuthorizedApiClient(token)({
+        method: 'GET',
+        path: url,
     });
-    if (!response.ok) throw new Error(`request failed: ${response.status}`);
-    return (await response.json()) as T;
 }
 
 async function postJson<T>(url: string, body: unknown, token: string | null): Promise<T> {
-    const response = await fetch(url, {
+    return createAuthorizedApiClient(token)({
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeader(token) },
-        body: JSON.stringify(body),
+        path: url,
+        body,
     });
-    if (!response.ok) throw new Error(`request failed: ${response.status}`);
-    return (await response.json()) as T;
 }
 
 export async function fetchProviders(token: string | null): Promise<MarketplaceProviderSummary[]> {
@@ -73,7 +62,7 @@ export async function fetchListings(
     query: ListingsQuery,
     token: string | null
 ): Promise<NormalizedListing[]> {
-    const url = new URL(`${MARKETPLACE_BASE}/listings`, window.location.origin);
+    const url = new URL(`${MARKETPLACE_BASE}/listings`, 'https://blackout.local');
     if (query.providerId) url.searchParams.set('providerId', query.providerId);
     if (query.category) url.searchParams.set('category', query.category);
     if (query.q) url.searchParams.set('q', query.q);

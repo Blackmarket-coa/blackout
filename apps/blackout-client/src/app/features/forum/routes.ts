@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { useAtomValue } from 'jotai';
-import { selectedRoomIdAtom } from '../../state/navigation';
+import { selectedRoomIdAtom } from '../../state/bmc-navigation';
 import type { FeatureRoute } from '../../core/features/types';
 import ForumView from './ForumView';
 

@@ -1,8 +1,6 @@
 import { createTheme, createThemeContract, globalStyle } from '@vanilla-extract/css';
-import { BLACKOUT_THEME_IDS, normalizeThemeId, type BlackoutThemeId } from '../../lib/bmc-core';
+import { type BlackoutThemeId } from '../../lib/bmc-core';
 import {
-    applyThemeToRoot as applyThemeToRootEngine,
-    themeColorSchemeByPreference,
     themeTokenMap,
     type ThemeTokens,
 } from './theme-engine';
@@ -71,23 +69,11 @@ export const themeClassByPreference: Record<BlackoutThemeId, string> = {
     adventure_spectrum: adventureSpectrumThemeClass,
 };
 
-export { themeColorSchemeByPreference, themeTokenMap };
-
 export const allThemeClasses = Object.values(themeClassByPreference);
 
 for (const className of allThemeClasses) {
     exposeSemanticCustomProperties(`.${className}`);
 }
-
-export const applyThemeToRoot = (root: HTMLElement, preference: string | null | undefined) =>
-    applyThemeToRootEngine(root, preference, themeClassByPreference);
-
-export type ThemePreference = BlackoutThemeId;
-
-export const normalizeThemePreference = (theme: string | null | undefined): ThemePreference =>
-    normalizeThemeId(theme);
-
-export const THEME_PREFERENCE_IDS = BLACKOUT_THEME_IDS;
 
 globalStyle(':root', {
     color: 'var(--text-primary)',
