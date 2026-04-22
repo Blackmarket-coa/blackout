@@ -56,6 +56,9 @@ storybook-static
 /apps/blackout-web/test-results
 /apps/blackout-web/playwright-report
 
+# Local archived client checkout
+/apps/blackout-app
+
 # Workspace package build outputs
 /apps/blackout-gov/dist
 /apps/web/dist

@@ -232,6 +232,10 @@ export class BlackoutWebApp {
         deploymentPreset: "starter",
         tenantPreset: null,
         userOverrideCount: 0,
+        killSwitchesApplied: {
+          preset: 0,
+          tier: 0,
+        },
       },
     },
     simpleMode: {
@@ -2793,10 +2797,11 @@ export class BlackoutWebApp {
       const ephemeral = ephemeralCheckbox?.checked ?? false;
       const ttl = Math.max(1, Number.parseInt(ttlInput?.value ?? "24", 10) || 24);
       const keyHint = passphrase ? `${passphrase.slice(0, 2)}***${passphrase.slice(-2)}` : "none";
+      const carrier = this.root.querySelector<HTMLInputElement>("[data-action='composer-stego-carrier']")?.value || "text-body";
       const channelId = channelSelect?.value || "";
       const lifecycle = ephemeral ? ` lifecycle="ephemeral" ttl="${ttl}h"` : "";
       const channelAttr = channelId ? ` channel="${channelId}"` : "";
-      this.applyComposerSnippet(` [stego algo="${algorithm}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
+      this.applyComposerSnippet(` [stego algo="${algorithm}" carrier="${carrier}" keyHint="${keyHint}"${channelAttr}${lifecycle} hidden="${hidden}"]${cover}[/stego]`);
       this.closeComposerPanels();
     });
 
@@ -3912,6 +3917,12 @@ export class BlackoutWebApp {
       this.render();
       return;
     }
+    const activeServer = this.store.getState().servers.find((server) => server.id === this.store.getState().activeServerId);
+    if (kind === "admin_console" && activeServer && !this.hasAdminAccess()) {
+      this.featureActionResult = `${entry.name} requires moderator or admin permissions.`;
+      this.render();
+      return;
+    }
     const destination = this.routeFeatureToWorkflow(entry.id, kind);
     this.featureActionResult = `Opened ${entry.id} via ${kind} → ${destination}.`;
     this.quickAccessFeatureId = entry.id;
@@ -3955,6 +3966,19 @@ export class BlackoutWebApp {
         this.settingsOpen = true;
         this.activeWorkspacePanel = "repo-tools";
         this.repoToolsOpen = true;
+        if (featureId === "federation_boost_policy") {
+          this.activeSettingsPage = "operations";
+          this.activePlatformOpsTab = "federation";
+        } else if (featureId === "engagement_experiments") {
+          this.activeSettingsPage = "operations";
+          this.activeRevenueOpsTab = "monetization";
+        } else if (featureId === "space_templates") {
+          this.activeSettingsPage = "workspace";
+          this.featureFilter = "space_templates";
+        } else if (featureId === "cell_routing") {
+          this.activeSettingsPage = "workspace";
+          this.featureFilter = "cell_routing";
+        }
         return "admin console tools";
       case "command_palette":
         this.openCommandPalette();
