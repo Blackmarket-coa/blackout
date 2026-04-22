@@ -16,6 +16,8 @@ const SYNC_RETRY_BASE_MS = 2_000;
 const MAX_SYNC_RETRIES = 6;
 const LEGACY_SYNC_STORE_PREFIX = 'blackout-sync-store';
 const LEGACY_CRYPTO_STORE_PREFIX = 'blackout-crypto-store';
+const RUST_CRYPTO_STORE_PREFIX = 'blackout-rust-crypto-store';
+const LEGACY_RUST_CRYPTO_STORE_PREFIX = 'matrix-js-sdk';
 
 export type MatrixInitErrorCode =
     | 'invalid_homeserver'
@@ -94,13 +96,20 @@ const applyAuthAtoms = (store: AtomStore, client: MatrixClient | null, authState
 type StoreNames = {
     sync: string;
     crypto: string;
+    rustCryptoPrefix: string;
     legacySync: string;
     legacyCrypto: string;
 };
 
+const getRustCryptoDbNames = (prefix: string): string[] => [
+    `${prefix}::matrix-sdk-crypto`,
+    `${prefix}::matrix-sdk-crypto-meta`,
+];
+
 const getStoreNames = (session: StoredSession): StoreNames => ({
     sync: `${LEGACY_SYNC_STORE_PREFIX}:${session.userId}:${session.deviceId}`,
     crypto: `${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}:${session.deviceId}`,
+    rustCryptoPrefix: `${RUST_CRYPTO_STORE_PREFIX}:${session.userId}:${session.deviceId}`,
     legacySync: `${LEGACY_SYNC_STORE_PREFIX}:${session.userId}`,
     legacyCrypto: `${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}`,
 });
@@ -126,9 +135,18 @@ const deleteDatabaseSafe = async (dbName: string): Promise<void> => {
     }
 };
 
-const cleanupStaleSessionStores = async (session: StoredSession): Promise<void> => {
-    const { sync, crypto, legacySync, legacyCrypto } = getStoreNames(session);
+const cleanupStaleSessionStores = async (
+    session: StoredSession,
+    { aggressive = false }: { aggressive?: boolean } = {},
+): Promise<void> => {
+    const { sync, crypto, rustCryptoPrefix, legacySync, legacyCrypto } = getStoreNames(session);
     const staleDbNames = new Set<string>([legacySync, legacyCrypto]);
+
+    if (aggressive) {
+        getRustCryptoDbNames(LEGACY_RUST_CRYPTO_STORE_PREFIX).forEach((dbName) =>
+            staleDbNames.add(dbName),
+        );
+    }
 
     if (typeof window.indexedDB.databases === 'function') {
         try {
@@ -141,8 +159,14 @@ const cleanupStaleSessionStores = async (session: StoredSession): Promise<void> 
                 const isCryptoStore =
                     name.startsWith(`${LEGACY_CRYPTO_STORE_PREFIX}:${session.userId}:`) &&
                     name !== crypto;
+                const isRustCryptoStore =
+                    name.startsWith(`${RUST_CRYPTO_STORE_PREFIX}:${session.userId}:`) &&
+                    !name.startsWith(rustCryptoPrefix);
+                const isLegacyRustCryptoStore =
+                    aggressive &&
+                    getRustCryptoDbNames(LEGACY_RUST_CRYPTO_STORE_PREFIX).includes(name);
 
-                if (isSyncStore || isCryptoStore) {
+                if (isSyncStore || isCryptoStore || isRustCryptoStore || isLegacyRustCryptoStore) {
                     staleDbNames.add(name);
                 }
             });
@@ -160,7 +184,7 @@ const isStoreAccountMismatchError = (error: unknown): boolean =>
 
 const initClientForSession = async (session: StoredSession): Promise<MatrixClient> => {
     ensureValidHomeserver(session.baseUrl);
-    const { sync, crypto } = getStoreNames(session);
+    const { sync, crypto, rustCryptoPrefix } = getStoreNames(session);
 
     const syncStore = new IndexedDBStore({
         indexedDB: window.indexedDB,
@@ -182,7 +206,7 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     });
 
     await syncStore.startup();
-    await client.initRustCrypto();
+    await client.initRustCrypto({ cryptoDatabasePrefix: rustCryptoPrefix });
     client.setMaxListeners(100);
 
     return client;
@@ -201,7 +225,7 @@ const initClientForSessionWithRecovery = async (session: StoredSession): Promise
             'Detected stale Matrix crypto store bound to another device. Clearing stores and retrying.',
             error,
         );
-        await cleanupStaleSessionStores(session);
+        await cleanupStaleSessionStores(session, { aggressive: true });
         return initClientForSession(session);
     }
 };
