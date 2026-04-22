@@ -8,7 +8,8 @@ import {
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/bmc-auth';
-import { clearSession, restoreActiveSession, type StoredSession } from './sessionManager';
+import { setFallbackSession } from '../app/state/sessions';
+import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -193,12 +194,57 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     });
 
     const cryptoStore = new IndexedDBCryptoStore(window.indexedDB, crypto);
+    const tokenRefreshFunction = async (refreshToken: string) => {
+        const refreshUrl = new URL('/_matrix/client/v3/refresh', session.baseUrl);
+        const response = await fetch(refreshUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Token refresh failed (${response.status}).`);
+        }
+
+        const data = (await response.json()) as {
+            access_token?: string;
+            refresh_token?: string;
+            expires_in_ms?: number;
+        };
+
+        if (!data.access_token) {
+            throw new Error('Refresh response missing access token.');
+        }
+
+        const updatedSession: StoredSession = {
+            ...session,
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token ?? refreshToken,
+            expiresAt: data.expires_in_ms ? Date.now() + data.expires_in_ms : session.expiresAt,
+        };
+
+        saveSession(updatedSession);
+        setFallbackSession(
+            updatedSession.accessToken,
+            updatedSession.deviceId,
+            updatedSession.userId,
+            updatedSession.baseUrl,
+        );
+
+        return {
+            accessToken: updatedSession.accessToken,
+            refreshToken: updatedSession.refreshToken,
+            expiry: updatedSession.expiresAt ? new Date(updatedSession.expiresAt) : undefined,
+        };
+    };
 
     const client = createClient({
         baseUrl: session.baseUrl,
         userId: session.userId,
         deviceId: session.deviceId,
         accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        tokenRefreshFunction,
         store: syncStore,
         cryptoStore,
         timelineSupport: true,
