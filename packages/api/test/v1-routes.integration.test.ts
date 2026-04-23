@@ -5,33 +5,105 @@ process.env.JWT_SECRET_PRIMARY =
   process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
+process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
+const { signJwt } = await import('../src/services/auth');
 
 async function json(res: Response) {
   return (await res.json()) as Record<string, unknown>;
 }
 
-async function registerUser() {
-  const seed = Date.now();
+let registerSeed = Date.now();
+async function registerUser(password = 'test-password') {
+  const seed = ++registerSeed;
+  const email = `user-${seed}@example.com`;
   const response = await app.request('/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       username: `user-${seed}`,
-      email: `user-${seed}@example.com`,
-      password: 'test-password',
+      email,
+      password,
     }),
   });
 
   assert.equal(response.status, 201);
-  return (await response.json()) as { token: string; userId: string };
+  const body = (await response.json()) as { token: string; userId: string };
+  return { ...body, email, password };
 }
 
 test('v1 auth register works', async () => {
   const body = await registerUser();
   assert.ok(body.token);
   assert.ok(body.userId);
+});
+
+test('v1 auth register rejects short passwords', async () => {
+  const seed = ++registerSeed;
+  const response = await app.request('/v1/auth/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      username: `short-${seed}`,
+      email: `short-${seed}@example.com`,
+      password: 'short',
+    }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test('v1 auth login succeeds with correct credentials', async () => {
+  const { email, password } = await registerUser();
+  const response = await app.request('/v1/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { token: string; userId: string };
+  assert.ok(body.token);
+  assert.ok(body.userId);
+});
+
+test('v1 auth login rejects wrong password', async () => {
+  const { email } = await registerUser();
+  const response = await app.request('/v1/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password: 'wrong-password' }),
+  });
+  assert.equal(response.status, 401);
+  const body = await json(response);
+  assert.equal(body.error, 'Invalid credentials');
+});
+
+test('v1 auth login rejects unknown email with the same error as wrong password', async () => {
+  const response = await app.request('/v1/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'does-not-exist@example.com', password: 'whatever-password' }),
+  });
+  assert.equal(response.status, 401);
+  const body = await json(response);
+  assert.equal(body.error, 'Invalid credentials');
+});
+
+test('v1 auth login rejects missing fields', async () => {
+  const response = await app.request('/v1/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'someone@example.com' }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test('v1 auth middleware rejects expired JWTs', async () => {
+  const expired = signJwt('demo-user', 'demo', -10);
+  const response = await app.request('/v1/channels', {
+    headers: { authorization: `Bearer ${expired}` },
+  });
+  assert.equal(response.status, 401);
 });
 
 test('v1 messages post/list works', async () => {

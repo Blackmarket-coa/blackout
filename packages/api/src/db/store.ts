@@ -41,7 +41,14 @@ class InMemoryDb {
   moderationActions = new Map<string, ModerationActionRecord>();
 
   constructor() {
-    const demoPassword = process.env.BLACKOUT_DEMO_PASSWORD ?? 'demo';
+    const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
+    if (process.env.NODE_ENV === 'production' && !explicitDemoPassword) {
+      // Refuse to seed a known-password demo account in production. Operators
+      // who actually want a demo user in prod must set BLACKOUT_DEMO_PASSWORD
+      // to an explicit, non-default value.
+      return;
+    }
+    const demoPassword = explicitDemoPassword ?? 'demo';
     this.createUser({
       id: 'demo-user',
       username: 'demo',
@@ -57,6 +64,10 @@ class InMemoryDb {
     const record: UserRecord = { ...input, createdAt: nowIso() };
     this.users.set(record.id, record);
     return record;
+  }
+
+  deleteUser(id: string): boolean {
+    return this.users.delete(id);
   }
 
   findUserByEmail(email: string): UserRecord | undefined {
@@ -226,6 +237,12 @@ class FileBackedDb extends InMemoryDb {
     const created = super.createUser(input);
     this.persist();
     return created;
+  }
+
+  override deleteUser(id: string): boolean {
+    const removed = super.deleteUser(id);
+    if (removed) this.persist();
+    return removed;
   }
 
   override createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
