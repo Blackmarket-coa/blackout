@@ -102,6 +102,12 @@ export const clearAuthRuntimeConfigCache = () => {
   cachedConfig = null;
 };
 
+export const MIN_PASSWORD_LENGTH = 8;
+
+export function isAcceptablePassword(password: unknown): password is string {
+  return typeof password === 'string' && password.length >= MIN_PASSWORD_LENGTH;
+}
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, 64).toString('hex');
@@ -115,6 +121,17 @@ export function verifyPassword(password: string, stored: string): boolean {
   const candidate = scryptSync(password, salt, 64);
   const target = Buffer.from(hashed, 'hex');
   return candidate.length === target.length && timingSafeEqual(candidate, target);
+}
+
+// Precomputed so the "user not found" branch of login can spend the same
+// scrypt work as the "wrong password" branch, preventing email enumeration
+// via response-time measurement.
+const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(16).toString('hex'));
+
+export function verifyPasswordConstantTime(password: string, stored: string | undefined | null): boolean {
+  const target = stored && stored.includes(':') ? stored : DUMMY_PASSWORD_HASH;
+  const ok = verifyPassword(password, target);
+  return Boolean(stored) && ok;
 }
 
 export function signJwt(userId: string, username: string, ttlSeconds = 60 * 60 * 24): string {
@@ -154,7 +171,13 @@ export function verifyJwt(token: string): AuthTokenPayload | null {
 
   if (!validSignature) return null;
 
-  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as AuthTokenPayload;
+  let decoded: AuthTokenPayload;
+  try {
+    decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as AuthTokenPayload;
+  } catch {
+    return null;
+  }
+  if (typeof decoded?.exp !== 'number' || typeof decoded?.iat !== 'number') return null;
   const now = Math.floor(Date.now() / 1000);
   if (decoded.exp < now) return null;
   if (decoded.iss !== config.issuer || decoded.aud !== config.audience) return null;

@@ -5,6 +5,7 @@ process.env.JWT_SECRET_PRIMARY =
   process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
+process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const [{ default: app }, { featureModules }] = await Promise.all([
   import('../src/index'),
