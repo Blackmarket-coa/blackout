@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { hashPassword } from '../services/auth';
 import type {
   ChannelRecord,
   FederationLinkRecord,
@@ -40,11 +41,12 @@ class InMemoryDb {
   moderationActions = new Map<string, ModerationActionRecord>();
 
   constructor() {
+    const demoPassword = process.env.BLACKOUT_DEMO_PASSWORD ?? 'demo';
     this.createUser({
       id: 'demo-user',
       username: 'demo',
       email: 'demo@blackout.local',
-      passwordHash: 'demo-password-hash',
+      passwordHash: hashPassword(demoPassword),
       reputationScore: 100,
       reputationTier: 'member',
       pubkeyEd25519: 'demo-pubkey',
