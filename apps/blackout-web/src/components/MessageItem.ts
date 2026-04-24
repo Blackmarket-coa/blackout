@@ -3,6 +3,9 @@ import { formatTime } from "../utils/format";
 
 interface MessageItemOptions {
   compact?: boolean;
+  customEmojiByAlias?: Record<string, string>;
+  customStickerByAlias?: Record<string, string>;
+  canAccessMemberAssets?: boolean;
 }
 
 const AVATAR_COLORS = [
@@ -44,12 +47,13 @@ function renderDeliveryStatus(status: "sending" | "delivered" | "failed"): strin
 
 export function renderMessageItem(message: ChatMessage, options: MessageItemOptions = {}): string {
   const compact = options.compact ?? false;
+  const renderedBody = renderMessageBody(message.body, options);
 
   if (compact) {
     return `
       <li class="message-item message-item--compact" data-message-id="${message.id}">
         <div class="message-body-wrap">
-          <p>${message.body}</p>
+          <p>${renderedBody}</p>
         </div>
       </li>
     `;
@@ -69,8 +73,25 @@ export function renderMessageItem(message: ChatMessage, options: MessageItemOpti
           <time datetime="${message.timestamp}">${timeStr}</time>
           ${renderDeliveryStatus(deliveryStatus)}
         </div>
-        <p>${message.body}</p>
+        <p>${renderedBody}</p>
       </div>
     </li>
   `;
+}
+
+function renderMessageBody(body: string, options: MessageItemOptions): string {
+  const emojiByAlias = options.customEmojiByAlias ?? {};
+  const stickerByAlias = options.customStickerByAlias ?? {};
+  const canAccess = options.canAccessMemberAssets ?? true;
+  return body
+    .replace(/:([a-z0-9_]+):/gi, (_whole, alias: string) => {
+      const symbol = emojiByAlias[alias.toLowerCase()];
+      if (!symbol) return `:${alias}:`;
+      return canAccess ? symbol : `:${alias}:`;
+    })
+    .replace(/\[sticker:([a-z0-9_]+)\]/gi, (_whole, alias: string) => {
+      const sticker = stickerByAlias[alias.toLowerCase()];
+      if (!sticker) return `[sticker:${alias}]`;
+      return canAccess ? `<img src="${sticker}" alt="${alias}" class="inline-sticker" loading="lazy" />` : `[sticker:${alias}]`;
+    });
 }

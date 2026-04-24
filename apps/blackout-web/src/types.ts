@@ -104,3 +104,34 @@ export interface WellbeingState {
   breakPromptsDismissedToday: number;
   lastBreakPromptAt: string | null;
 }
+
+export type CanopyAssetKind = "emoji" | "sticker" | "sound";
+export type CanopyAssetStatus = "active" | "reported" | "removed";
+export type CanopyPlan = "starter" | "governance" | "sovereignty";
+
+export interface CanopyAsset {
+  id: string;
+  canopyId: string;
+  kind: CanopyAssetKind;
+  name: string;
+  aliases: string[];
+  sourceUrl: string;
+  normalizedUrl: string;
+  mimeType: string;
+  sizeBytes: number;
+  ownerUserId: string;
+  memberOnly: boolean;
+  abuseFlags: string[];
+  status: CanopyAssetStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssetAuditEntry {
+  id: string;
+  assetId: string;
+  actorUserId: string;
+  action: "upload" | "rename" | "alias_update" | "delete" | "report" | "remove";
+  details: string;
+  createdAt: string;
+}

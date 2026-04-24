@@ -102,6 +102,7 @@ export function renderMessageInput({
         <div class="composer-shell-actions">
           <button type="button" class="composer-shell-icon" data-action="composer-toggle-attachments" data-testid="composer-attachment-trigger" aria-label="Add attachment" title="Add attachment" aria-expanded="false" ${disabled ? "disabled" : ""}>📎</button>
           <button type="button" class="composer-shell-icon" data-action="composer-toggle-gif-picker" data-testid="composer-gif-trigger" aria-label="Open GIF picker" title="GIF" aria-expanded="false" ${disabled ? "disabled" : ""}>😊</button>
+          <button type="button" class="composer-shell-icon" data-action="composer-toggle-emoji-picker" data-testid="composer-emoji-trigger" aria-label="Open emoji picker" title="Emoji and stickers" aria-expanded="false" ${disabled ? "disabled" : ""}>😺</button>
           ${stegoEnabled ? `<button type="button" class="composer-shell-icon composer-shell-icon--steg" data-action="composer-toggle-stego-panel" data-testid="composer-stego-trigger" aria-label="Open stego composer" title="Steganography" aria-expanded="false" ${disabled ? "disabled" : ""}>🛡</button>` : ""}
           <button type="button" class="composer-shell-icon" data-action="composer-open-governance" aria-label="Open governance composer" title="Governance composer" ${disabled ? "disabled" : ""}>🧾</button>
           <button type="submit" class="composer-shell-icon composer-shell-icon--send" aria-label="Send message" title="Send" ${disabled ? "disabled" : ""}>➤</button>
