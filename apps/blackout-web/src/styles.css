@@ -3166,3 +3166,27 @@ summary:focus-visible,
   width: 100%;
   background: #000;
 }
+
+.inline-sticker {
+  width: 20px;
+  height: 20px;
+  vertical-align: text-bottom;
+  border-radius: 4px;
+}
+
+.soundboard-strip {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+.soundboard-strip button {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}

@@ -36,11 +36,12 @@ import {
   validateAttachmentInput,
   validateAttachmentUrl,
 } from "./utils/attachment-validation";
+import { getPlanPackLimit, runAssetPipeline } from "./utils/asset-pipeline";
 import { getDirectMessageChannels } from "./utils/dm-channel";
 import { FEATURE_PRESET_BUNDLES, normalizeFeaturePresetKey, type FeaturePresetKey } from "./settings/feature-presets";
 import { AppStore, type PendingCreate } from "./store/app-store";
 import type { BlackoutRuntimeConfig } from "./config";
-import type { ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
+import type { AssetAuditEntry, CanopyAsset, CanopyAssetKind, CanopyPlan, ChannelCapabilityTag, ChatMessage, GovernanceProposal, ServerDetails } from "./types";
 import {
   BLACKOUT_THEMES,
   createCustomizationBundle,
@@ -100,6 +101,8 @@ const MOBILE_PUSH_TOKEN_STORAGE_KEY = "blackout.mobile.pushToken";
 const MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY = "blackout.mobile.pushToken.registered";
 const ONBOARDING_STARTED_AT_STORAGE_KEY = "blackout.onboarding.started_at";
 const PRESET_AUDIT_LOG_STORAGE_KEY = "blackout.preset.audit.v1";
+const CANOPY_ASSET_STORAGE_KEY = "blackout.canopy.assets.v1";
+const CANOPY_ASSET_AUDIT_STORAGE_KEY = "blackout.canopy.asset-audit.v1";
 
 export class BlackoutWebApp {
   private readonly root: HTMLElement;
@@ -164,6 +167,9 @@ export class BlackoutWebApp {
   private activeAttachmentMode: AttachmentPanelMode = "quick";
   private selectedAttachmentType: AttachmentType = "image";
   private governanceTemplates: GovernanceTemplateItem[] = [];
+  private canopyAssets: CanopyAsset[] = [];
+  private canopyAssetAudit: AssetAuditEntry[] = [];
+  private soundboardCooldownByAlias: Record<string, number> = {};
   private mobileBridgeEventsBound = false;
   private pendingMobileRoomId: string | null = null;
   private pendingPushTokenRegistration: string | null = null;
@@ -296,6 +302,8 @@ export class BlackoutWebApp {
     this.emojiLibrary = this.loadEmojiLibrary();
     this.attachmentLibrary = this.loadAttachmentLibrary();
     this.governanceTemplates = this.loadGovernanceTemplates();
+    this.canopyAssets = this.loadCanopyAssets();
+    this.canopyAssetAudit = this.loadCanopyAssetAudit();
   }
 
   async mount(): Promise<void> {
@@ -710,6 +718,8 @@ export class BlackoutWebApp {
     const isEconomicsRoom = this.activeChannelHasCapability("economics");
     const isFederationRoom = this.activeChannelHasCapability("federation");
     const isTownhallRoom = this.activeChannelHasCapability("townhall");
+    const isVoiceRoom = this.inferVoiceRoom(activeChannelName);
+    const canAccessMemberAssets = this.canAccessMemberAssets();
 
     if (isGovernanceRoom && activeChannelId) {
       this.trackAdvancedDiscovery("governance");
@@ -769,6 +779,11 @@ export class BlackoutWebApp {
       attachmentMode: this.activeAttachmentMode,
       compactMode: this.getCompactModeActive(),
       compactRecommended: this.isMessageHeavySession(),
+      customEmojiByAlias: this.getCustomEmojiMap(),
+      customStickerByAlias: this.getCustomStickerMap(),
+      canAccessMemberAssets,
+      soundboardEnabled: isVoiceRoom,
+      soundboardButtons: this.getSoundboardButtons(),
     });
 
     return `
@@ -1358,7 +1373,42 @@ export class BlackoutWebApp {
     if (this.activeSettingsPage === "operations") {
       return `${this.renderRevenueOpsPanelSection()}${this.renderPlatformOpsPanelSection()}`;
     }
-    return `${this.renderPresetManagementSection()}${this.renderCustomizationTransferSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+    return `${this.renderPresetManagementSection()}${this.renderCanopyAssetManagementSection()}${this.renderCustomizationTransferSection()}${this.renderFeatureLibraryDisclosure()}${(this.getActivePresetFeatures()["features.epic.deliveryBlueprint"] ?? false) ? this.renderEpicDeliverySection() : ""}`;
+  }
+
+  private renderCanopyAssetManagementSection(): string {
+    const plan = this.appliedPreset as CanopyPlan;
+    const emojiCount = this.canopyAssets.filter((asset) => asset.kind === "emoji" && asset.status !== "removed").length;
+    const stickerCount = this.canopyAssets.filter((asset) => asset.kind === "sticker" && asset.status !== "removed").length;
+    const soundCount = this.canopyAssets.filter((asset) => asset.kind === "sound" && asset.status !== "removed").length;
+    const latestAudit = this.canopyAssetAudit.slice(0, 6).map((entry) => `<li class="meta">${entry.createdAt.slice(0, 16)} · ${entry.action} · ${entry.details}</li>`).join("");
+    return `
+      <section class="stack panel-card" data-testid="canopy-asset-management">
+        <h2>Canopy asset management</h2>
+        <p class="meta">Admin-only controls for emoji, stickers, and voice soundboard assets with validation, normalization, and abuse scanning.</p>
+        <p class="meta">Plan quota — emoji ${emojiCount}/${getPlanPackLimit(plan, "emoji")} · stickers ${stickerCount}/${getPlanPackLimit(plan, "sticker")} · sounds ${soundCount}/${getPlanPackLimit(plan, "sound")}.</p>
+        <div class="composer-channel-editor">
+          <label class="composer-popover-field">Asset type
+            <select data-action="canopy-asset-kind">
+              <option value="emoji">Emoji</option>
+              <option value="sticker">Sticker</option>
+              <option value="sound">Sound</option>
+            </select>
+          </label>
+          <label class="composer-popover-field">Name <input type="text" data-action="canopy-asset-name" placeholder="party_parrot" /></label>
+          <label class="composer-popover-field">Aliases (comma separated) <input type="text" data-action="canopy-asset-aliases" placeholder="parrot,party" /></label>
+          <label class="composer-popover-field">Asset URL <input type="url" data-action="canopy-asset-url" placeholder="https://cdn.example.com/parrot.webp" /></label>
+          <label class="composer-popover-field">MIME type <input type="text" data-action="canopy-asset-mime" placeholder="image/webp or audio/ogg" /></label>
+          <label class="composer-popover-field">Size (KB) <input type="number" min="1" step="1" data-action="canopy-asset-size-kb" value="64" /></label>
+          <label class="composer-popover-inline"><input type="checkbox" data-action="canopy-asset-member-only" checked /> Members only</label>
+          <button type="button" data-action="canopy-asset-upload">Upload asset</button>
+          <p class="meta" data-testid="canopy-asset-result"></p>
+        </div>
+        <ul class="composer-channel-list" data-testid="canopy-asset-list">${this.renderCanopyAssetRows()}</ul>
+        <h3>Asset audit log</h3>
+        <ul class="stack" data-testid="canopy-asset-audit">${latestAudit || '<li class="meta">No asset actions yet.</li>'}</ul>
+      </section>
+    `;
   }
 
   private renderPresetManagementSection(): string {
@@ -3120,6 +3170,29 @@ export class BlackoutWebApp {
       this.render();
     });
 
+    this.root.querySelector<HTMLButtonElement>("[data-action='canopy-asset-upload']")?.addEventListener("click", () => {
+      this.handleCanopyAssetUpload();
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='canopy-asset-delete']").forEach((button) => {
+      button.addEventListener("click", () => this.moderateCanopyAsset(button.dataset.assetId, "delete"));
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='canopy-asset-remove']").forEach((button) => {
+      button.addEventListener("click", () => this.moderateCanopyAsset(button.dataset.assetId, "remove"));
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='canopy-asset-report']").forEach((button) => {
+      button.addEventListener("click", () => this.moderateCanopyAsset(button.dataset.assetId, "report"));
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='canopy-asset-rename']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const assetId = button.dataset.assetId;
+        const nextName = globalThis.prompt("Rename asset to:")?.trim();
+        if (assetId && nextName) this.renameCanopyAsset(assetId, nextName);
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='soundboard-trigger']").forEach((button) => {
+      button.addEventListener("click", () => this.triggerSoundboardAlias(button.dataset.soundAlias));
+    });
+
     this.refreshStegoChannelUi();
     this.refreshGifLibraryUi();
     this.refreshEmojiLibraryUi();
@@ -3128,6 +3201,7 @@ export class BlackoutWebApp {
     this.switchAttachmentMode(this.activeAttachmentMode);
     this.updateAttachmentActionState();
     this.refreshGovernanceTemplateUi();
+    this.refreshCanopyAssetUi();
     this.bindCommandPaletteFocusTrap();
     this.manageGovernanceModalFocus();
   }
@@ -3522,11 +3596,13 @@ export class BlackoutWebApp {
   private refreshEmojiLibraryUi(): void {
     const list = this.root.querySelector<HTMLElement>("[data-testid='composer-emoji-library-list']");
     if (!list) return;
-    if (!this.emojiLibrary.length) {
+    const canopyEmoji = this.canopyAssets.filter((asset) => asset.kind === "emoji" && asset.status === "active");
+    const canopyStickers = this.canopyAssets.filter((asset) => asset.kind === "sticker" && asset.status === "active");
+    if (!this.emojiLibrary.length && !canopyEmoji.length && !canopyStickers.length) {
       list.innerHTML = '<li class="meta">No custom emoji yet.</li>';
       return;
     }
-    list.innerHTML = this.emojiLibrary
+    const baseRows = this.emojiLibrary
       .map((emoji) => `
         <li class="composer-channel-row">
           <div>
@@ -3540,6 +3616,19 @@ export class BlackoutWebApp {
         </li>
       `)
       .join("");
+    const canopyRows = canopyEmoji.map((asset) => `
+      <li class="composer-channel-row">
+        <div><strong>✨ :${asset.name}: </strong><p class="meta">aliases: ${asset.aliases.join(", ") || "none"}</p></div>
+        <div class="composer-popover-actions"><button type="button" data-action="composer-canopy-emoji-use" data-asset-name="${asset.name}">Use</button></div>
+      </li>
+    `).join("");
+    const stickerRows = canopyStickers.map((asset) => `
+      <li class="composer-channel-row">
+        <div><strong>🧩 [sticker:${asset.name}]</strong><p class="meta">${asset.normalizedUrl}</p></div>
+        <div class="composer-popover-actions"><button type="button" data-action="composer-canopy-sticker-use" data-asset-name="${asset.name}">Use</button></div>
+      </li>
+    `).join("");
+    list.innerHTML = `${baseRows}${canopyRows}${stickerRows}`;
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-emoji-use']").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3568,6 +3657,22 @@ export class BlackoutWebApp {
         this.emojiLibrary = this.emojiLibrary.filter((emoji) => emoji.id !== emojiId);
         this.persistEmojiLibrary();
         this.refreshEmojiLibraryUi();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-canopy-emoji-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const name = button.dataset.assetName;
+        if (!name) return;
+        this.applyComposerSnippet(` :${name}:`);
+        this.closeComposerPanels();
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-action='composer-canopy-sticker-use']").forEach((button) => {
+      button.addEventListener("click", () => {
+        const name = button.dataset.assetName;
+        if (!name) return;
+        this.applyComposerSnippet(` [sticker:${name}]`);
+        this.closeComposerPanels();
       });
     });
   }
@@ -3783,6 +3888,169 @@ export class BlackoutWebApp {
     return `${type} attachment`;
   }
 
+  private inferVoiceRoom(channelName: string): boolean {
+    return /(voice|stage|call|town)/i.test(channelName);
+  }
+
+  private canAccessMemberAssets(): boolean {
+    const activeServer = this.store.getState().servers.find((server) => server.id === this.store.getState().activeServerId);
+    return (activeServer?.role ?? "").toLowerCase() !== "guest";
+  }
+
+  private getCustomEmojiMap(): Record<string, string> {
+    return this.canopyAssets
+      .filter((asset) => asset.kind === "emoji" && asset.status === "active")
+      .reduce<Record<string, string>>((acc, asset) => {
+        for (const alias of [asset.name, ...asset.aliases]) acc[alias] = "✨";
+        return acc;
+      }, {});
+  }
+
+  private getCustomStickerMap(): Record<string, string> {
+    return this.canopyAssets
+      .filter((asset) => asset.kind === "sticker" && asset.status === "active")
+      .reduce<Record<string, string>>((acc, asset) => {
+        for (const alias of [asset.name, ...asset.aliases]) acc[alias] = asset.normalizedUrl;
+        return acc;
+      }, {});
+  }
+
+  private getSoundboardButtons(): Array<{ id: string; label: string; alias: string; disabled: boolean; cooldownLabel?: string }> {
+    const now = Date.now();
+    return this.canopyAssets
+      .filter((asset) => asset.kind === "sound" && asset.status === "active")
+      .slice(0, 6)
+      .map((asset) => {
+        const cooldownUntil = this.soundboardCooldownByAlias[asset.name] ?? 0;
+        const remainingMs = cooldownUntil - now;
+        const disabled = remainingMs > 0;
+        return {
+          id: asset.id,
+          label: asset.name,
+          alias: asset.name,
+          disabled,
+          cooldownLabel: disabled ? `${Math.ceil(remainingMs / 1000)}s` : undefined,
+        };
+      });
+  }
+
+  private triggerSoundboardAlias(alias?: string): void {
+    if (!alias) return;
+    const now = Date.now();
+    const cooldownUntil = this.soundboardCooldownByAlias[alias] ?? 0;
+    if (cooldownUntil > now) {
+      this.featureActionResult = `Soundboard cooldown active for ${Math.ceil((cooldownUntil - now) / 1000)}s.`;
+      this.render();
+      return;
+    }
+    this.soundboardCooldownByAlias[alias] = now + 4_000;
+    this.featureActionResult = `Soundboard triggered: ${alias}.`;
+    this.applyComposerSnippet(` [sound:${alias}]`);
+    this.render();
+  }
+
+  private renderCanopyAssetRows(): string {
+    if (!this.canopyAssets.length) return '<li class="meta">No uploaded assets yet.</li>';
+    return this.canopyAssets.map((asset) => `
+      <li class="composer-channel-row">
+        <div>
+          <strong>${asset.kind} · ${asset.name}</strong>
+          <p class="meta">${asset.mimeType} · ${Math.ceil(asset.sizeBytes / 1024)}KB · aliases: ${asset.aliases.join(", ") || "none"} · ${asset.status}</p>
+        </div>
+        <div class="composer-popover-actions">
+          <button type="button" data-action="canopy-asset-rename" data-asset-id="${asset.id}">Rename</button>
+          <button type="button" data-action="canopy-asset-report" data-asset-id="${asset.id}">Report</button>
+          <button type="button" data-action="canopy-asset-remove" data-asset-id="${asset.id}">Remove</button>
+          <button type="button" data-action="canopy-asset-delete" data-asset-id="${asset.id}">Delete</button>
+        </div>
+      </li>
+    `).join("");
+  }
+
+  private refreshCanopyAssetUi(): void {
+    const list = this.root.querySelector<HTMLElement>("[data-testid='canopy-asset-list']");
+    if (list) list.innerHTML = this.renderCanopyAssetRows();
+  }
+
+  private handleCanopyAssetUpload(): void {
+    const kind = (this.root.querySelector<HTMLSelectElement>("[data-action='canopy-asset-kind']")?.value as CanopyAssetKind | undefined) ?? "emoji";
+    const name = this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-name']")?.value.trim() ?? "";
+    const aliasRaw = this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-aliases']")?.value ?? "";
+    const aliases = aliasRaw.split(",").map((item) => item.trim()).filter(Boolean);
+    const sourceUrl = this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-url']")?.value.trim() ?? "";
+    const mimeType = this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-mime']")?.value.trim() ?? "";
+    const sizeKb = Number.parseInt(this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-size-kb']")?.value ?? "0", 10) || 0;
+    const memberOnly = this.root.querySelector<HTMLInputElement>("[data-action='canopy-asset-member-only']")?.checked ?? true;
+    const resultNode = this.root.querySelector<HTMLElement>("[data-testid='canopy-asset-result']");
+    const plan = this.appliedPreset as CanopyPlan;
+    const activeCount = this.canopyAssets.filter((asset) => asset.kind === kind && asset.status !== "removed").length;
+    if (activeCount >= getPlanPackLimit(plan, kind)) {
+      if (resultNode) resultNode.textContent = `Plan limit reached for ${kind}.`;
+      return;
+    }
+    const pipeline = runAssetPipeline({ kind, name, aliases, sourceUrl, sizeBytes: sizeKb * 1024, mimeType });
+    if (!pipeline.accepted) {
+      if (resultNode) resultNode.textContent = pipeline.reason ?? "Asset rejected.";
+      return;
+    }
+    const id = `${kind}-${pipeline.normalizedName}-${Date.now()}`;
+    const now = new Date().toISOString();
+    const asset: CanopyAsset = {
+      id,
+      canopyId: this.store.getState().activeServerId ?? "default-canopy",
+      kind,
+      name: pipeline.normalizedName,
+      aliases: pipeline.normalizedAliases,
+      sourceUrl,
+      normalizedUrl: pipeline.normalizedUrl,
+      mimeType: pipeline.normalizedMimeType,
+      sizeBytes: sizeKb * 1024,
+      ownerUserId: this.store.getState().session?.user.id ?? "system",
+      memberOnly,
+      abuseFlags: pipeline.abuseFlags,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.canopyAssets = [asset, ...this.canopyAssets.filter((entry) => entry.id !== asset.id)];
+    this.recordCanopyAudit(asset.id, "upload", `${asset.kind}:${asset.name}`);
+    this.persistCanopyAssets();
+    this.persistCanopyAudit();
+    if (resultNode) resultNode.textContent = `Uploaded ${asset.name} (${asset.kind}).`;
+    this.render();
+  }
+
+  private moderateCanopyAsset(assetId: string | undefined, action: "delete" | "remove" | "report"): void {
+    if (!assetId) return;
+    const existing = this.canopyAssets.find((asset) => asset.id === assetId);
+    if (!existing) return;
+    if (action === "delete") this.canopyAssets = this.canopyAssets.filter((asset) => asset.id !== assetId);
+    else this.canopyAssets = this.canopyAssets.map((asset) => asset.id === assetId ? { ...asset, status: action === "report" ? "reported" : "removed", updatedAt: new Date().toISOString() } : asset);
+    this.recordCanopyAudit(assetId, action, `${existing.kind}:${existing.name}`);
+    this.persistCanopyAssets();
+    this.persistCanopyAudit();
+    this.render();
+  }
+
+  private renameCanopyAsset(assetId: string, nextName: string): void {
+    this.canopyAssets = this.canopyAssets.map((asset) => asset.id === assetId ? { ...asset, name: this.normalizeStegoChannelId(nextName), updatedAt: new Date().toISOString() } : asset);
+    this.recordCanopyAudit(assetId, "rename", nextName);
+    this.persistCanopyAssets();
+    this.persistCanopyAudit();
+    this.render();
+  }
+
+  private recordCanopyAudit(assetId: string, action: AssetAuditEntry["action"], details: string): void {
+    this.canopyAssetAudit = [{
+      id: `${action}-${Date.now()}`,
+      assetId,
+      actorUserId: this.store.getState().session?.user.id ?? "system",
+      action,
+      details,
+      createdAt: new Date().toISOString(),
+    }, ...this.canopyAssetAudit].slice(0, 80);
+  }
+
   private persistStegoChannels(): void {
     globalThis.localStorage.setItem(STEGO_CHANNEL_STORAGE_KEY, JSON.stringify(this.stegoChannels));
   }
@@ -3895,6 +4163,38 @@ export class BlackoutWebApp {
           options: item.options.map((option) => String(option)),
           durationHours: Math.max(1, Number.parseInt(String(item.durationHours), 10) || 48),
         }));
+    } catch {
+      return [];
+    }
+  }
+
+  private persistCanopyAssets(): void {
+    globalThis.localStorage.setItem(CANOPY_ASSET_STORAGE_KEY, JSON.stringify(this.canopyAssets));
+  }
+
+  private loadCanopyAssets(): CanopyAsset[] {
+    const raw = globalThis.localStorage.getItem(CANOPY_ASSET_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as CanopyAsset[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((asset) => asset && typeof asset.id === "string" && typeof asset.kind === "string" && typeof asset.name === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  private persistCanopyAudit(): void {
+    globalThis.localStorage.setItem(CANOPY_ASSET_AUDIT_STORAGE_KEY, JSON.stringify(this.canopyAssetAudit));
+  }
+
+  private loadCanopyAssetAudit(): AssetAuditEntry[] {
+    const raw = globalThis.localStorage.getItem(CANOPY_ASSET_AUDIT_STORAGE_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as AssetAuditEntry[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry) => entry && typeof entry.id === "string" && typeof entry.assetId === "string");
     } catch {
       return [];
     }

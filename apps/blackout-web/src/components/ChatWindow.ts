@@ -22,6 +22,11 @@ interface ChatWindowProps {
   attachmentMode: "quick" | "manage" | "bulk";
   compactMode: boolean;
   compactRecommended: boolean;
+  customEmojiByAlias: Record<string, string>;
+  customStickerByAlias: Record<string, string>;
+  canAccessMemberAssets: boolean;
+  soundboardEnabled: boolean;
+  soundboardButtons: Array<{ id: string; label: string; alias: string; disabled: boolean; cooldownLabel?: string }>;
 }
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -46,8 +51,13 @@ export function renderChatWindow({
   attachmentMode,
   compactMode,
   compactRecommended,
+  customEmojiByAlias,
+  customStickerByAlias,
+  canAccessMemberAssets,
+  soundboardEnabled,
+  soundboardButtons,
 }: ChatWindowProps): string {
-  const renderedMessages = renderGroupedMessages(messages, compactMode);
+  const renderedMessages = renderGroupedMessages(messages, compactMode, { customEmojiByAlias, customStickerByAlias, canAccessMemberAssets });
   const uniqueParticipants = new Set(messages.map((message) => message.sender)).size;
   const lastMessage = messages[messages.length - 1];
   const freshnessLabel = lastMessage ? formatRecency(lastMessage.timestamp) : "No activity yet";
@@ -73,6 +83,7 @@ export function renderChatWindow({
           <input type="search" class="chat-head-search chat-head-search--desktop" placeholder="Search…" aria-label="Search channel" data-action="focus-search">
         </div>
       </div>
+      ${soundboardEnabled ? `<div class="soundboard-strip">${soundboardButtons.map((button) => `<button type="button" data-action="soundboard-trigger" data-sound-alias="${button.alias}" ${button.disabled ? "disabled" : ""}>🔊 ${button.label}${button.cooldownLabel ? ` (${button.cooldownLabel})` : ""}</button>`).join("")}</div>` : ""}
       <ul class="message-list">${renderedMessages || '<li class="empty" style="padding: 20px; color: var(--text-muted); font-size: 14px;">No messages yet — start the conversation 👋</li>'}</ul>
       ${renderMessageInput({
         disabled: !canSend || sendPending,
@@ -95,7 +106,7 @@ export function renderChatWindow({
   `;
 }
 
-function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean): string {
+function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean, renderOptions: Parameters<typeof renderMessageItem>[1]): string {
   let previousDayKey: string | null = null;
 
   return messages
@@ -106,7 +117,7 @@ function renderGroupedMessages(messages: ChatMessage[], forceCompact: boolean): 
       const dayDivider =
         dayKey !== previousDayKey ? `<li class="message-day-divider">${formatDayLabel(message.timestamp)}</li>` : "";
       previousDayKey = dayKey;
-      return `${dayDivider}${renderMessageItem(message, { compact })}`;
+      return `${dayDivider}${renderMessageItem(message, { compact, ...renderOptions })}`;
     })
     .join("");
 }
