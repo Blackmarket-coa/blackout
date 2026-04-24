@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.JWT_SECRET_PRIMARY =
   process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
@@ -32,7 +33,7 @@ async function issueToken(): Promise<string> {
 test('feature module registry contains canonical frontend domains', () => {
   assert.deepEqual(
     featureModules.map((module) => module.id),
-    ['governance', 'forum', 'deaddrop', 'moderation', 'streaming'],
+    ['governance', 'forum', 'deaddrop', 'moderation', 'streaming', 'discovery'],
   );
 });
 
@@ -40,7 +41,7 @@ test('feature module routes bootstrap under /v1', async () => {
   const token = await issueToken();
   const headers = {
     authorization: `Bearer ${token}`,
-    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,moderation.read,streaming.read',
+    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,moderation.read,streaming.read,discovery.read',
   };
 
   const checks = await Promise.all([
@@ -49,6 +50,7 @@ test('feature module routes bootstrap under /v1', async () => {
     app.request('/v1/deaddrop/events', { headers }),
     app.request('/v1/moderation/events', { headers }),
     app.request('/v1/streaming/events', { headers }),
+    app.request('/v1/discovery/events', { headers }),
   ]);
 
   for (const response of checks) {

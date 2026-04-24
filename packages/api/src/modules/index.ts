@@ -4,9 +4,17 @@ import { forumModule } from './forum';
 import { deaddropModule } from './deaddrop';
 import { moderationModule } from './moderation';
 import { streamingModule } from './streaming';
+import { discoveryModule } from './discovery';
 import type { FeatureModule } from './types';
 
-export const featureModules: FeatureModule[] = [governanceModule, forumModule, deaddropModule, moderationModule, streamingModule];
+export const featureModules: FeatureModule[] = [
+  governanceModule,
+  forumModule,
+  deaddropModule,
+  moderationModule,
+  streamingModule,
+  discoveryModule,
+];
 
 export function registerFeatureModules(app: Hono, apiRoot: string): void {
   for (const featureModule of featureModules) {

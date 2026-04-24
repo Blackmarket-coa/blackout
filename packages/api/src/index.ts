@@ -55,9 +55,12 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
+const shouldListen = process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
 
-serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`[blackout-server] listening on http://localhost:${info.port}`);
-});
+if (shouldListen) {
+  serve({ fetch: app.fetch, port: PORT }, (info) => {
+    console.log(`[blackout-server] listening on http://localhost:${info.port}`);
+  });
+}
 
 export default app;
