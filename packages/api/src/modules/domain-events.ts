@@ -1,6 +1,6 @@
 export interface DomainEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
-  module: 'governance' | 'forum' | 'deaddrop' | 'moderation';
+  module: 'governance' | 'forum' | 'deaddrop' | 'moderation' | 'streaming';
   type: string;
   payload: TPayload;
   emittedAt: string;

@@ -3126,3 +3126,43 @@ summary:focus-visible,
 .blackout-mobile * {
   scrollbar-width: none;
 }
+
+.owncast-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.owncast-controls {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.owncast-controls label {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.owncast-controls select {
+  border-radius: var(--r-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg-alt);
+  color: var(--text-primary);
+  padding: 0.45rem;
+}
+
+.owncast-embed-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.owncast-embed {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-md);
+  min-height: 240px;
+  width: 100%;
+  background: #000;
+}

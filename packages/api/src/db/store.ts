@@ -14,6 +14,13 @@ import type {
   VoiceRoomParticipantRecord,
   VoteEntryRecord,
   VoteRecord,
+  ForumPostRecord,
+  DeadDropRecord,
+  ModerationActionRecord,
+  CreatorStreamAuthRecord,
+  StreamRecord,
+  StreamSessionRecord,
+  StreamModerationRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -30,6 +37,10 @@ type PersistedState = {
   forumPosts: ForumPostRecord[];
   deadDrops: DeadDropRecord[];
   moderationActions: ModerationActionRecord[];
+  creatorStreamAuth: CreatorStreamAuthRecord[];
+  streams: StreamRecord[];
+  streamSessions: StreamSessionRecord[];
+  streamModeration: StreamModerationRecord[];
   canopyVoiceRooms: CanopyVoiceRoomRecord[];
   voiceRoomParticipants: VoiceRoomParticipantRecord[];
   voiceRoomEvents: VoiceRoomEventRecord[];
@@ -45,6 +56,10 @@ class InMemoryDb {
   forumPosts = new Map<string, ForumPostRecord>();
   deadDrops = new Map<string, DeadDropRecord>();
   moderationActions = new Map<string, ModerationActionRecord>();
+  creatorStreamAuth = new Map<string, CreatorStreamAuthRecord>();
+  streams = new Map<string, StreamRecord>();
+  streamSessions = new Map<string, StreamSessionRecord>();
+  streamModeration = new Map<string, StreamModerationRecord>();
   canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
   voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
   voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
@@ -52,9 +67,6 @@ class InMemoryDb {
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
     if (process.env.NODE_ENV === 'production' && !explicitDemoPassword) {
-      // Refuse to seed a known-password demo account in production. Operators
-      // who actually want a demo user in prod must set BLACKOUT_DEMO_PASSWORD
-      // to an explicit, non-default value.
       return;
     }
     const demoPassword = explicitDemoPassword ?? 'demo';
@@ -193,6 +205,79 @@ class InMemoryDb {
     return [...this.moderationActions.values()].filter((action) => action.communityId === communityId);
   }
 
+  upsertCreatorStreamAuth(input: Omit<CreatorStreamAuthRecord, 'createdAt' | 'rotatedAt'>): CreatorStreamAuthRecord {
+    const existing = [...this.creatorStreamAuth.values()].find((record) => record.creatorId === input.creatorId);
+    const record: CreatorStreamAuthRecord = {
+      ...input,
+      id: existing?.id ?? input.id,
+      createdAt: existing?.createdAt ?? nowIso(),
+      rotatedAt: nowIso(),
+    };
+    this.creatorStreamAuth.set(record.id, record);
+    return record;
+  }
+
+  getCreatorStreamAuth(creatorId: string): CreatorStreamAuthRecord | undefined {
+    return [...this.creatorStreamAuth.values()].find((record) => record.creatorId === creatorId);
+  }
+
+  upsertStream(input: Omit<StreamRecord, 'createdAt' | 'updatedAt'>): StreamRecord {
+    const existing = this.streams.get(input.id);
+    const record: StreamRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? nowIso(),
+      updatedAt: nowIso(),
+    };
+    this.streams.set(record.id, record);
+    return record;
+  }
+
+  getStream(streamId: string): StreamRecord | undefined {
+    return this.streams.get(streamId);
+  }
+
+  listStreamsByCreator(creatorId: string): StreamRecord[] {
+    return [...this.streams.values()].filter((stream) => stream.creatorId === creatorId);
+  }
+
+  createStreamSession(input: Omit<StreamSessionRecord, 'createdAt'>): StreamSessionRecord {
+    const record: StreamSessionRecord = { ...input, createdAt: nowIso() };
+    this.streamSessions.set(record.id, record);
+    return record;
+  }
+
+  endStreamSession(sessionId: string, replayPointer?: string): StreamSessionRecord | undefined {
+    const existing = this.streamSessions.get(sessionId);
+    if (!existing) return undefined;
+
+    const updated: StreamSessionRecord = {
+      ...existing,
+      endedAt: existing.endedAt ?? nowIso(),
+      replayPointer: replayPointer ?? existing.replayPointer,
+    };
+    this.streamSessions.set(sessionId, updated);
+    return updated;
+  }
+
+  listStreamSessions(streamId: string): StreamSessionRecord[] {
+    return [...this.streamSessions.values()]
+      .filter((session) => session.streamId === streamId)
+      .sort((a, b) => (a.startedAt < b.startedAt ? -1 : 1));
+  }
+
+  upsertStreamModeration(input: Omit<StreamModerationRecord, 'updatedAt'>): StreamModerationRecord {
+    const record: StreamModerationRecord = {
+      ...input,
+      updatedAt: nowIso(),
+    };
+    this.streamModeration.set(record.streamId, record);
+    return record;
+  }
+
+  getStreamModeration(streamId: string): StreamModerationRecord | undefined {
+    return this.streamModeration.get(streamId);
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -313,6 +398,10 @@ class FileBackedDb extends InMemoryDb {
     this.forumPosts = new Map((parsed.forumPosts ?? []).map((row) => [row.id, row]));
     this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
     this.moderationActions = new Map((parsed.moderationActions ?? []).map((row) => [row.id, row]));
+    this.creatorStreamAuth = new Map((parsed.creatorStreamAuth ?? []).map((row) => [row.id, row]));
+    this.streams = new Map((parsed.streams ?? []).map((row) => [row.id, row]));
+    this.streamSessions = new Map((parsed.streamSessions ?? []).map((row) => [row.id, row]));
+    this.streamModeration = new Map((parsed.streamModeration ?? []).map((row) => [row.streamId, row]));
     this.canopyVoiceRooms = new Map((parsed.canopyVoiceRooms ?? []).map((row) => [row.id, row]));
     this.voiceRoomParticipants = new Map((parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row]));
     this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
@@ -329,6 +418,10 @@ class FileBackedDb extends InMemoryDb {
       forumPosts: [...this.forumPosts.values()],
       deadDrops: [...this.deadDrops.values()],
       moderationActions: [...this.moderationActions.values()],
+      creatorStreamAuth: [...this.creatorStreamAuth.values()],
+      streams: [...this.streams.values()],
+      streamSessions: [...this.streamSessions.values()],
+      streamModeration: [...this.streamModeration.values()],
       canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
       voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
       voiceRoomEvents: [...this.voiceRoomEvents.values()],
@@ -409,6 +502,34 @@ class FileBackedDb extends InMemoryDb {
     return created;
   }
 
+  override upsertCreatorStreamAuth(input: Omit<CreatorStreamAuthRecord, 'createdAt' | 'rotatedAt'>): CreatorStreamAuthRecord {
+    const created = super.upsertCreatorStreamAuth(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertStream(input: Omit<StreamRecord, 'createdAt' | 'updatedAt'>): StreamRecord {
+    const created = super.upsertStream(input);
+    this.persist();
+    return created;
+  }
+
+  override createStreamSession(input: Omit<StreamSessionRecord, 'createdAt'>): StreamSessionRecord {
+    const created = super.createStreamSession(input);
+    this.persist();
+    return created;
+  }
+
+  override endStreamSession(sessionId: string, replayPointer?: string): StreamSessionRecord | undefined {
+    const ended = super.endStreamSession(sessionId, replayPointer);
+    if (ended) this.persist();
+    return ended;
+  }
+
+  override upsertStreamModeration(input: Omit<StreamModerationRecord, 'updatedAt'>): StreamModerationRecord {
+    const created = super.upsertStreamModeration(input);
+    this.persist();
+    return created;
   override createOrUpdateVoiceRoom(input: {
     canopyId: string;
     channelId: string;
