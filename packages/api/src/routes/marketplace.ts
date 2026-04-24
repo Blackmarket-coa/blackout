@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import {
     feeForProvider,
+    getMarketplaceProviderPresentation,
     marketplaceProviderIds,
     type CatalogQuery,
     type MarketplaceCategory,
@@ -54,13 +55,24 @@ function requireUser(c: Context): AuthTokenPayload | null {
 }
 
 marketplace.get('/providers', (c) => {
-    const providers = [...getMarketplaceRegistry().values()].map((provider) => ({
-        id: provider.id,
-        displayName: provider.displayName,
-        enabled: provider.enabled,
-        capabilities: provider.capabilities,
-        fees: feeForProvider(provider.id),
-    }));
+    const providers = [...getMarketplaceRegistry().values()].map((provider) => {
+        const presentation = getMarketplaceProviderPresentation(provider.id, provider.displayName);
+        return {
+            id: provider.id,
+            displayName: provider.displayName,
+            enabled: provider.enabled,
+            capabilities: provider.capabilities,
+            fees: feeForProvider(provider.id),
+            presentation: {
+                label: presentation.label,
+                icon: presentation.icon,
+                profileSlug: presentation.profileSlug,
+                profileHeadline: presentation.profileHeadline,
+            },
+            trust: presentation.trust,
+            profileUrl: `/marketplace/providers/${presentation.profileSlug}`,
+        };
+    });
     return c.json({ providers });
 });
 

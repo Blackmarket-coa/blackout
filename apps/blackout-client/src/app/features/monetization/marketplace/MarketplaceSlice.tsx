@@ -15,6 +15,7 @@ import {
 import { readBlackoutApiToken } from './useMarketplaceAuth';
 import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
+import { resolveMarketplaceProvider } from './providerMetadata';
 
 type View = 'catalog' | 'library';
 
@@ -61,6 +62,7 @@ export function MarketplaceSlice() {
     const [loadingCatalog, setLoadingCatalog] = useState(false);
     const [purchasingId, setPurchasingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
     const token = useMemo(() => readBlackoutApiToken(), []);
 
@@ -137,6 +139,8 @@ export function MarketplaceSlice() {
             const key = listingKey(listing);
             setPurchasingId(key);
             setError(null);
+            const provider = resolveMarketplaceProvider(listing.providerId, providers);
+            setCheckoutNotice(provider.checkoutDisclosure);
             try {
                 const result = await startCheckout(
                     {
@@ -155,7 +159,7 @@ export function MarketplaceSlice() {
                 setPurchasingId(null);
             }
         },
-        [refreshEntitlements, token]
+        [providers, refreshEntitlements, token]
     );
 
     const providerChips = createElement(
@@ -181,7 +185,7 @@ export function MarketplaceSlice() {
                         style: chipStyle(providerFilter === provider.id),
                         onClick: () => setProviderFilter(provider.id),
                     },
-                    provider.displayName
+                    `${provider.presentation.icon} ${provider.presentation.label}`
                 )
             )
     );
@@ -280,9 +284,16 @@ export function MarketplaceSlice() {
         createElement(
             'p',
             { style: { margin: 0, color: 'var(--text-secondary)' } },
-            'Browse federated listings from every connected marketplace. Checkout is handled by the upstream marketplace; purchases unlock in-app immediately after the webhook arrives.'
+            'Browse federated listings from connected marketplaces. Provider badges, payout cadence, refund terms, and support policies are shown before checkout.'
         ),
         viewSwitch,
+        checkoutNotice
+            ? createElement(
+                  'p',
+                  { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
+                  checkoutNotice
+              )
+            : null,
         error
             ? createElement(
                   'div',

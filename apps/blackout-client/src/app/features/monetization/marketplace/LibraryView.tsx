@@ -1,18 +1,11 @@
 import { createElement, type ReactNode } from 'react';
 import type { NormalizedEntitlement } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
+import { resolveMarketplaceProvider } from './providerMetadata';
 
 interface LibraryViewProps {
     entitlements: NormalizedEntitlement[];
     providers: MarketplaceProviderSummary[];
-}
-
-function providerDisplayName(
-    providerId: string,
-    providers: MarketplaceProviderSummary[]
-): string {
-    const match = providers.find((provider) => provider.id === providerId);
-    return match?.displayName ?? providerId;
 }
 
 function groupByProvider(
@@ -56,7 +49,7 @@ export function LibraryView({ entitlements, providers }: LibraryViewProps): Reac
                 createElement(
                     'h4',
                     { style: { margin: 0, fontSize: 14 } },
-                    providerDisplayName(providerId, providers)
+                    `${resolveMarketplaceProvider(providerId, providers).icon} ${resolveMarketplaceProvider(providerId, providers).displayName}`
                 ),
                 createElement(
                     'ul',

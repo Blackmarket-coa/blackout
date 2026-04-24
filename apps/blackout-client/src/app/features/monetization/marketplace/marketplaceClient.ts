@@ -7,12 +7,32 @@ import type {
 } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../../sdk/client';
 
+export interface MarketplaceProviderPresentationSummary {
+    label: string;
+    icon: string;
+    profileSlug: string;
+    profileHeadline: string;
+}
+
+export interface MarketplaceProviderTrustSummary {
+    tier: 'verified' | 'community' | 'unverified';
+    verificationBadge: string | null;
+    trustSummary: string;
+    checkoutDisclosure: string;
+    payoutPolicy: string;
+    refundPolicy: string;
+    supportPolicy: string;
+}
+
 export interface MarketplaceProviderSummary {
     id: MarketplaceProviderId;
     displayName: string;
     enabled: boolean;
     capabilities: string[];
     fees: MarketplaceProviderFeeSchedule;
+    presentation: MarketplaceProviderPresentationSummary;
+    trust: MarketplaceProviderTrustSummary;
+    profileUrl: string;
 }
 
 export interface FulfillmentAsset {
