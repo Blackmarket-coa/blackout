@@ -64,4 +64,25 @@ export const createClientQueries = (client: ApiClient) => ({
             method: 'GET',
             path: '/v1/moderation/events',
         }),
+    // Streaming / Owncast
+    getStreamingOrigin: () =>
+        client<Record<string, unknown>>({
+            method: 'GET',
+            path: '/v1/streaming/origin',
+        }),
+    getCreatorStreamKey: (creatorId: string) =>
+        client<Record<string, unknown>>({
+            method: 'GET',
+            path: `/v1/streaming/creators/${encodeURIComponent(creatorId)}/stream-key`,
+        }),
+    listStreamSessions: (streamId: string) =>
+        client<Record<string, unknown>[]>({
+            method: 'GET',
+            path: `/v1/streaming/streams/${encodeURIComponent(streamId)}/sessions`,
+        }),
+    getStreamModeration: (streamId: string) =>
+        client<Record<string, unknown>>({
+            method: 'GET',
+            path: `/v1/streaming/streams/${encodeURIComponent(streamId)}/moderation`,
+        }),
 });

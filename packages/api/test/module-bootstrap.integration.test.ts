@@ -32,7 +32,7 @@ async function issueToken(): Promise<string> {
 test('feature module registry contains canonical frontend domains', () => {
   assert.deepEqual(
     featureModules.map((module) => module.id),
-    ['governance', 'forum', 'deaddrop', 'moderation'],
+    ['governance', 'forum', 'deaddrop', 'moderation', 'streaming'],
   );
 });
 
@@ -40,7 +40,7 @@ test('feature module routes bootstrap under /v1', async () => {
   const token = await issueToken();
   const headers = {
     authorization: `Bearer ${token}`,
-    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,moderation.read',
+    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,moderation.read,streaming.read',
   };
 
   const checks = await Promise.all([
@@ -48,6 +48,7 @@ test('feature module routes bootstrap under /v1', async () => {
     app.request('/v1/forum/events', { headers }),
     app.request('/v1/deaddrop/events', { headers }),
     app.request('/v1/moderation/events', { headers }),
+    app.request('/v1/streaming/events', { headers }),
   ]);
 
   for (const response of checks) {

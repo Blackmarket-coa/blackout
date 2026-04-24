@@ -9,7 +9,7 @@ import type {
 
 export const API_VERSION = 'v1' as const;
 
-export const API_DOMAINS = ['auth', 'channels', 'messages', 'governance', 'forum', 'deaddrop', 'moderation', 'federation', 'entitlements'] as const;
+export const API_DOMAINS = ['auth', 'channels', 'messages', 'governance', 'forum', 'deaddrop', 'moderation', 'streaming', 'federation', 'entitlements'] as const;
 
 export const API_ROOTS = {
   v1: '/v1',

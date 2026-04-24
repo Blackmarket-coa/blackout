@@ -111,3 +111,45 @@ export interface ModerationActionRecord {
   reason: string;
   createdAt: string;
 }
+
+export interface CreatorStreamAuthRecord {
+  id: UUID;
+  creatorId: UUID;
+  streamId: UUID;
+  owncastUrl: string;
+  streamKey: string;
+  rotatedAt: string;
+  createdAt: string;
+}
+
+export interface StreamRecord {
+  id: UUID;
+  creatorId: UUID;
+  state: 'offline' | 'live';
+  title: string;
+  category?: string;
+  tags: string[];
+  visibility: 'public' | 'private' | 'member_only';
+  allowedSubscriberIds: UUID[];
+  latencyProfile: 'normal' | 'low';
+  replayPointer?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StreamSessionRecord {
+  id: UUID;
+  streamId: UUID;
+  startedAt: string;
+  endedAt?: string;
+  replayPointer?: string;
+  createdAt: string;
+}
+
+export interface StreamModerationRecord {
+  streamId: UUID;
+  slowModeSeconds: number;
+  bannedUserIds: UUID[];
+  keywordFilters: string[];
+  updatedAt: string;
+}

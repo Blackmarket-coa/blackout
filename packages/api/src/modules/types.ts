@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 
-export type FeatureModuleId = 'governance' | 'forum' | 'deaddrop' | 'moderation';
+export type FeatureModuleId = 'governance' | 'forum' | 'deaddrop' | 'moderation' | 'streaming';
 
 export interface FeatureModule {
   id: FeatureModuleId;
