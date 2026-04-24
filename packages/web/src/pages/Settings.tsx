@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ModerationCenter } from '../components/ModerationCenter';
 
 type DirectoryApp = {
   id: string;
@@ -91,6 +92,8 @@ export function SettingsPage() {
           );
         })}
       </ul>
+
+      <ModerationCenter communityId={canopyId} actorId="mod-1" />
     </section>
   );
 }
