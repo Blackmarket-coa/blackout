@@ -2,10 +2,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+  CanopyVoiceRoomRecord,
   ChannelRecord,
   FederationLinkRecord,
   MessageRecord,
+  ModerationActionRecord,
+  DeadDropRecord,
+  ForumPostRecord,
   UserRecord,
+  VoiceRoomEventRecord,
+  VoiceRoomParticipantRecord,
   VoteEntryRecord,
   VoteRecord,
   ForumPostRecord,
@@ -35,6 +41,9 @@ type PersistedState = {
   streams: StreamRecord[];
   streamSessions: StreamSessionRecord[];
   streamModeration: StreamModerationRecord[];
+  canopyVoiceRooms: CanopyVoiceRoomRecord[];
+  voiceRoomParticipants: VoiceRoomParticipantRecord[];
+  voiceRoomEvents: VoiceRoomEventRecord[];
 };
 
 class InMemoryDb {
@@ -51,6 +60,9 @@ class InMemoryDb {
   streams = new Map<string, StreamRecord>();
   streamSessions = new Map<string, StreamSessionRecord>();
   streamModeration = new Map<string, StreamModerationRecord>();
+  canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
+  voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
+  voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -270,6 +282,98 @@ class InMemoryDb {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
   }
+
+  getVoiceRoom(canopyId: string, channelId: string): CanopyVoiceRoomRecord | undefined {
+    return [...this.canopyVoiceRooms.values()].find((room) => room.canopyId === canopyId && room.channelId === channelId && room.active);
+  }
+
+  createOrUpdateVoiceRoom(input: {
+    canopyId: string;
+    channelId: string;
+    createdBy: string;
+    livekitRoomName: string;
+    isLocked?: boolean;
+  }): CanopyVoiceRoomRecord {
+    const existing = this.getVoiceRoom(input.canopyId, input.channelId);
+    const timestamp = nowIso();
+    if (existing) {
+      const updated: CanopyVoiceRoomRecord = {
+        ...existing,
+        active: true,
+        livekitRoomName: input.livekitRoomName,
+        isLocked: input.isLocked ?? existing.isLocked,
+        updatedAt: timestamp,
+      };
+      this.canopyVoiceRooms.set(updated.id, updated);
+      return updated;
+    }
+
+    const created: CanopyVoiceRoomRecord = {
+      id: crypto.randomUUID(),
+      canopyId: input.canopyId,
+      channelId: input.channelId,
+      livekitRoomName: input.livekitRoomName,
+      createdBy: input.createdBy,
+      isLocked: Boolean(input.isLocked),
+      active: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    this.canopyVoiceRooms.set(created.id, created);
+    return created;
+  }
+
+  setVoiceRoomLock(roomId: string, isLocked: boolean): CanopyVoiceRoomRecord | undefined {
+    const existing = this.canopyVoiceRooms.get(roomId);
+    if (!existing) return undefined;
+    const updated: CanopyVoiceRoomRecord = { ...existing, isLocked, updatedAt: nowIso() };
+    this.canopyVoiceRooms.set(roomId, updated);
+    return updated;
+  }
+
+  joinVoiceRoom(input: Omit<VoiceRoomParticipantRecord, 'id' | 'joinedAt' | 'leftAt'>): VoiceRoomParticipantRecord {
+    const existingActive = [...this.voiceRoomParticipants.values()].find(
+      (participant) => participant.roomId === input.roomId && participant.userId === input.userId && !participant.leftAt
+    );
+    if (existingActive) {
+      return existingActive;
+    }
+    const participant: VoiceRoomParticipantRecord = {
+      id: crypto.randomUUID(),
+      roomId: input.roomId,
+      userId: input.userId,
+      role: input.role,
+      canPublish: input.canPublish,
+      canSubscribe: input.canSubscribe,
+      joinedAt: nowIso(),
+    };
+    this.voiceRoomParticipants.set(participant.id, participant);
+    return participant;
+  }
+
+  leaveVoiceRoom(roomId: string, userId: string): VoiceRoomParticipantRecord | undefined {
+    const existing = [...this.voiceRoomParticipants.values()].find((participant) => participant.roomId === roomId && participant.userId === userId && !participant.leftAt);
+    if (!existing) return undefined;
+    const updated = { ...existing, leftAt: nowIso() };
+    this.voiceRoomParticipants.set(updated.id, updated);
+    return updated;
+  }
+
+  getVoiceRoomActiveParticipants(roomId: string): VoiceRoomParticipantRecord[] {
+    return [...this.voiceRoomParticipants.values()].filter((participant) => participant.roomId === roomId && !participant.leftAt);
+  }
+
+  logVoiceRoomEvent(input: Omit<VoiceRoomEventRecord, 'id' | 'createdAt'>): VoiceRoomEventRecord {
+    const record: VoiceRoomEventRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+    this.voiceRoomEvents.set(record.id, record);
+    return record;
+  }
+
+  listVoiceRoomEvents(roomId: string): VoiceRoomEventRecord[] {
+    return [...this.voiceRoomEvents.values()]
+      .filter((event) => event.roomId === roomId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
 }
 
 class FileBackedDb extends InMemoryDb {
@@ -298,6 +402,9 @@ class FileBackedDb extends InMemoryDb {
     this.streams = new Map((parsed.streams ?? []).map((row) => [row.id, row]));
     this.streamSessions = new Map((parsed.streamSessions ?? []).map((row) => [row.id, row]));
     this.streamModeration = new Map((parsed.streamModeration ?? []).map((row) => [row.streamId, row]));
+    this.canopyVoiceRooms = new Map((parsed.canopyVoiceRooms ?? []).map((row) => [row.id, row]));
+    this.voiceRoomParticipants = new Map((parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row]));
+    this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
   }
 
   private snapshot(): PersistedState {
@@ -315,6 +422,9 @@ class FileBackedDb extends InMemoryDb {
       streams: [...this.streams.values()],
       streamSessions: [...this.streamSessions.values()],
       streamModeration: [...this.streamModeration.values()],
+      canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
+      voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
+      voiceRoomEvents: [...this.voiceRoomEvents.values()],
     };
   }
 
@@ -420,6 +530,40 @@ class FileBackedDb extends InMemoryDb {
     const created = super.upsertStreamModeration(input);
     this.persist();
     return created;
+  override createOrUpdateVoiceRoom(input: {
+    canopyId: string;
+    channelId: string;
+    createdBy: string;
+    livekitRoomName: string;
+    isLocked?: boolean;
+  }): CanopyVoiceRoomRecord {
+    const room = super.createOrUpdateVoiceRoom(input);
+    this.persist();
+    return room;
+  }
+
+  override setVoiceRoomLock(roomId: string, isLocked: boolean): CanopyVoiceRoomRecord | undefined {
+    const room = super.setVoiceRoomLock(roomId, isLocked);
+    if (room) this.persist();
+    return room;
+  }
+
+  override joinVoiceRoom(input: Omit<VoiceRoomParticipantRecord, 'id' | 'joinedAt' | 'leftAt'>): VoiceRoomParticipantRecord {
+    const participant = super.joinVoiceRoom(input);
+    this.persist();
+    return participant;
+  }
+
+  override leaveVoiceRoom(roomId: string, userId: string): VoiceRoomParticipantRecord | undefined {
+    const participant = super.leaveVoiceRoom(roomId, userId);
+    if (participant) this.persist();
+    return participant;
+  }
+
+  override logVoiceRoomEvent(input: Omit<VoiceRoomEventRecord, 'id' | 'createdAt'>): VoiceRoomEventRecord {
+    const event = super.logVoiceRoomEvent(input);
+    this.persist();
+    return event;
   }
 }
 

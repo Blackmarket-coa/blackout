@@ -153,3 +153,39 @@ export interface StreamModerationRecord {
   keywordFilters: string[];
   updatedAt: string;
 }
+export interface CanopyVoiceRoomRecord {
+  id: UUID;
+  canopyId: UUID;
+  channelId: UUID;
+  livekitRoomName: string;
+  createdBy: UUID;
+  isLocked: boolean;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VoiceRoomParticipantRecord {
+  id: UUID;
+  roomId: UUID;
+  userId: UUID;
+  role: 'member' | 'moderator' | 'admin';
+  canPublish: boolean;
+  canSubscribe: boolean;
+  joinedAt: string;
+  leftAt?: string;
+}
+
+export interface VoiceRoomEventRecord {
+  id: UUID;
+  roomId: UUID;
+  canopyId: UUID;
+  channelId: UUID;
+  userId: UUID;
+  eventType: 'join' | 'leave' | 'mute' | 'remove' | 'lock' | 'unlock';
+  actorId?: UUID;
+  targetUserId?: UUID;
+  sessionDurationSeconds?: number;
+  metadata?: Record<string, string>;
+  createdAt: string;
+}
