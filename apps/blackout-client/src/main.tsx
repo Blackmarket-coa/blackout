@@ -11,6 +11,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
+import { LoginForm } from './app/components/bmc/LoginForm';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
@@ -84,17 +85,17 @@ const BootstrapStatus = () => {
         authState === 'crypto_initializing'
             ? 'Initializing secure crypto…'
             : authState === 'crypto_failed'
-              ? 'Secure crypto unavailable'
-              : authState === 'loading'
-                ? 'Restoring session…'
-                : 'Signed out';
+            ? 'Secure crypto unavailable'
+            : authState === 'loading'
+            ? 'Restoring session…'
+            : 'Signed out';
 
     const details =
         authState === 'crypto_failed'
-            ? (cryptoInitError ?? 'Unable to initialize secure crypto features.')
+            ? cryptoInitError ?? 'Unable to initialize secure crypto features.'
             : authState === 'logged_out'
-              ? 'Sign in to start syncing with Matrix.'
-              : 'Please wait while startup completes.';
+            ? 'Sign in to start syncing with Matrix.'
+            : 'Please wait while startup completes.';
 
     return (
         <main
@@ -120,6 +121,7 @@ const BootstrapStatus = () => {
             >
                 <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
                 <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
+                {authState === 'logged_out' ? <LoginForm /> : null}
                 {authState === 'crypto_failed' ? (
                     <button
                         type="button"
@@ -153,5 +155,5 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 </QueryClientProvider>
             </ThemeProvider>
         </JotaiProvider>
-    </React.StrictMode>,
+    </React.StrictMode>
 );
