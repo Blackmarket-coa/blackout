@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { buildApiUrl, getApiConfigValidationError } from '../../components/apiConfig';
 import { getSession } from '../../components/session';
 
-const API_BASE_URL = 'http://localhost:8787/api';
 const CHANNEL_ID = 'general';
 
 interface ChatMessage {
@@ -12,18 +12,29 @@ interface ChatMessage {
 }
 
 export default function ChatScreen() {
+  const configError = useMemo(() => getApiConfigValidationError(), []);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(configError);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/messages/${CHANNEL_ID}`)
+    if (configError) {
+      setMessages([]);
+      return;
+    }
+
+    fetch(buildApiUrl(`/messages/${CHANNEL_ID}`))
       .then((response) => response.json() as Promise<ChatMessage[]>)
       .then(setMessages)
-      .catch(() => setMessages([]));
-  }, []);
+      .catch(() => {
+        setMessages([]);
+        setError('Unable to load chat messages.');
+      });
+  }, [configError]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#1a1a1a' }}>
+      {error ? <Text style={{ color: '#ef4444', paddingHorizontal: 12, paddingTop: 12 }}>{error}</Text> : null}
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
@@ -48,13 +59,19 @@ export default function ChatScreen() {
           placeholderTextColor="#666"
           value={text}
           onChangeText={setText}
+          editable={!configError}
         />
         <TouchableOpacity
           onPress={async () => {
+            if (configError) {
+              setError(configError);
+              return;
+            }
+
             const session = getSession();
             if (!session.userId || !text.trim()) return;
 
-            const response = await fetch(`${API_BASE_URL}/messages/${CHANNEL_ID}`, {
+            const response = await fetch(buildApiUrl(`/messages/${CHANNEL_ID}`), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -73,8 +90,9 @@ export default function ChatScreen() {
               setText('');
             }
           }}
+          disabled={Boolean(configError)}
           style={{
-            backgroundColor: '#1a6e3a',
+            backgroundColor: configError ? '#475569' : '#1a6e3a',
             padding: 12,
             borderRadius: 8,
             justifyContent: 'center',
