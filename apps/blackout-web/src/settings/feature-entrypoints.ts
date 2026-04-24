@@ -73,7 +73,7 @@ export const FEATURE_UI_ENTRIES: FeatureUiEntry[] = [
   { id: "settings_emoji", name: "Emoji style settings", presetKey: "features.settings.emoji", uiEntry: "settings_toggle:feature-toggle-settings-emoji" },
   { id: "settings_zoom", name: "Page zoom controls", presetKey: "features.settings.zoom", uiEntry: "settings_toggle:feature-toggle-settings-zoom" },
   { id: "element_call", name: "Element Call widget integration", presetKey: "features.call.elementCall", uiEntry: "widget_panel:feature-widget-element-call" },
-  { id: "owncast_live", name: "Owncast live player and chat embed", presetKey: "features.townhall.enabled", uiEntry: "widget_panel:feature-widget-owncast-live" },
+  { id: "owncast_live", name: "Owncast live player and chat embed", presetKey: "features.townhall.enabled", uiEntry: "widget_panel:feature-widget-owncast-live", aliasOfId: "townhall_sfu" },
 
   // Blackout custom build manifest coverage.
   { id: "matrix_client_arch", name: "Matrix-native client architecture", presetKey: "features.matrix.client", uiEntry: "settings_toggle:feature-toggle-matrix-client" },

@@ -61,23 +61,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build workspace dependencies for project references
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
       - run: pnpm --filter @blackout/blackout-web exec vitest run tests/unit
       - run: pnpm --filter @blackout/blackout-web exec vitest run tests/integration
-
-  component-tests:
-    name: Component tests (Vitest + Testing Library)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/blackout-web exec vitest run --environment jsdom
 
   e2e-tests:
     name: E2E tests (Playwright + local Synapse)
@@ -94,22 +83,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/blackout-web exec playwright install --with-deps chromium
       - run: pnpm --filter @blackout/blackout-web run test:e2e
-
-  matrix-protocol-tests:
-    name: Matrix protocol sync tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Run matrix-js-sdk sync mock tests
-        run: pnpm --filter @blackout/blackout-web exec vitest run tests/unit tests/integration
 
   feature-registry-validation:
     name: Feature registry validation

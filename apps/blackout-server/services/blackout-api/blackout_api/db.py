@@ -13,6 +13,13 @@ def utc_now() -> datetime:
 
 
 DATABASE_URL = os.getenv("BLACKOUT_API_DATABASE_URL", "sqlite:///./blackout_api.db")
+_ALLOW_SQLITE = os.getenv("BLACKOUT_API_ALLOW_SQLITE", "").lower() in {"1", "true", "yes"}
+if DATABASE_URL.startswith("sqlite") and not _ALLOW_SQLITE:
+    raise RuntimeError(
+        "Refusing to start blackout-api on SQLite. "
+        "Set BLACKOUT_API_DATABASE_URL to a PostgreSQL URL, "
+        "or set BLACKOUT_API_ALLOW_SQLITE=1 for local development."
+    )
 engine = create_engine(DATABASE_URL, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
