@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     db_path = tmp_path / "blackout_api_test.db"
     monkeypatch.setenv("BLACKOUT_API_DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("BLACKOUT_API_ALLOW_SQLITE", "1")
     monkeypatch.setenv("BLACKOUT_API_JWT_SECRET", "test-secret")
     monkeypatch.setenv("BLACKOUT_API_JWT_AUDIENCE", "blackout-api")
     monkeypatch.setenv("BLACKOUT_API_JWT_ISSUER", "blackout-auth")
