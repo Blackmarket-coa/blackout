@@ -10,6 +10,8 @@ const modeOptions: Array<{ value: NotificationMode; label: string }> = [
     { value: 'muted', label: 'Muted' },
 ];
 
+const toMuteUntil = (hours: number): number => Date.now() + (hours * 60 * 60 * 1000);
+
 export const NotificationSettings = () => {
     const [settings, setSettings] = useAtom(notificationSettingsAtom);
     const updateSettings = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
@@ -18,6 +20,7 @@ export const NotificationSettings = () => {
     };
 
     const [roomInput, setRoomInput] = useState('');
+    const [canopyInput, setCanopyInput] = useState('');
 
     const upsertRoomOverride = (roomId: string, mode: NotificationMode) => {
         const trimmed = roomId.trim();
@@ -41,6 +44,28 @@ export const NotificationSettings = () => {
         });
     };
 
+    const upsertCanopyOverride = (canopyId: string, mode: NotificationMode) => {
+        const trimmed = canopyId.trim();
+        if (!trimmed) return;
+
+        setSettings((prev) => {
+            const existing = prev.perCanopyOverrides.find((entry) => entry.canopyId === trimmed);
+            if (existing) {
+                return {
+                    ...prev,
+                    perCanopyOverrides: prev.perCanopyOverrides.map((entry) =>
+                        entry.canopyId === trimmed ? { ...entry, mode } : entry,
+                    ),
+                };
+            }
+
+            return {
+                ...prev,
+                perCanopyOverrides: [...prev.perCanopyOverrides, { canopyId: trimmed, mode }],
+            };
+        });
+    };
+
     return (
         <div style={{ display: 'grid', gap: 18 }}>
             <section>
@@ -50,9 +75,7 @@ export const NotificationSettings = () => {
                         <button
                             key={option.value}
                             type="button"
-                            onClick={() =>
-                                updateSettings('globalMode', option.value)
-                            }
+                            onClick={() => updateSettings('globalMode', option.value)}
                             style={{
                                 border:
                                     settings.globalMode === option.value
@@ -70,6 +93,11 @@ export const NotificationSettings = () => {
                             {option.label}
                         </button>
                     ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button type="button" onClick={() => updateSettings('muteUntil', toMuteUntil(1))}>Mute 1h</button>
+                    <button type="button" onClick={() => updateSettings('muteUntil', toMuteUntil(8))}>Mute 8h</button>
+                    <button type="button" onClick={() => updateSettings('muteUntil', undefined)}>Clear mute</button>
                 </div>
             </section>
 
@@ -121,17 +149,7 @@ export const NotificationSettings = () => {
                                     <button
                                         key={option.value}
                                         type="button"
-                                        onClick={() =>
-                                            upsertRoomOverride(item.roomId, option.value)
-                                        }
-                                        style={{
-                                            border:
-                                                item.mode === option.value
-                                                    ? '1px solid var(--accent-primary)'
-                                                    : '1px solid var(--border-default)',
-                                            borderRadius: 6,
-                                            padding: '4px 8px',
-                                        }}
+                                        onClick={() => upsertRoomOverride(item.roomId, option.value)}
                                     >
                                         {option.label}
                                     </button>
@@ -155,13 +173,112 @@ export const NotificationSettings = () => {
                 </div>
             </section>
 
+            <section>
+                <h3>Per-canopy overrides</h3>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <input
+                        value={canopyInput}
+                        onChange={(event) => setCanopyInput(event.target.value)}
+                        placeholder="canopy id"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            upsertCanopyOverride(canopyInput, 'mentions');
+                            setCanopyInput('');
+                        }}
+                    >
+                        Add canopy override
+                    </button>
+                </div>
+                {settings.perCanopyOverrides.map((item) => (
+                    <div key={item.canopyId} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <code>{item.canopyId}</code>
+                        {modeOptions.map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => upsertCanopyOverride(item.canopyId, option.value)}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setSettings((prev) => ({
+                                    ...prev,
+                                    perCanopyOverrides: prev.perCanopyOverrides.filter(
+                                        (entry) => entry.canopyId !== item.canopyId,
+                                    ),
+                                }))
+                            }
+                        >
+                            Remove
+                        </button>
+                    </div>
+                ))}
+            </section>
+
+            <section>
+                <h3>Quiet hours</h3>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.quietHours.enabled}
+                        onChange={(event) =>
+                            updateSettings('quietHours', { ...settings.quietHours, enabled: event.target.checked })
+                        }
+                    />
+                    Enable quiet hours
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                        type="time"
+                        value={settings.quietHours.start}
+                        onChange={(event) =>
+                            updateSettings('quietHours', { ...settings.quietHours, start: event.target.value })
+                        }
+                    />
+                    <input
+                        type="time"
+                        value={settings.quietHours.end}
+                        onChange={(event) =>
+                            updateSettings('quietHours', { ...settings.quietHours, end: event.target.value })
+                        }
+                    />
+                </div>
+            </section>
+
+            <section>
+                <h3>Event controls</h3>
+                {[
+                    ['mentions', 'Mentions'],
+                    ['replies', 'Replies'],
+                    ['subscriptionEvents', 'Subscription events'],
+                    ['modAlerts', 'Mod alerts'],
+                ].map(([key, label]) => (
+                    <label key={key} style={{ display: 'flex', gap: 8 }}>
+                        <input
+                            type="checkbox"
+                            checked={settings.eventToggles[key as keyof typeof settings.eventToggles]}
+                            onChange={(event) =>
+                                updateSettings('eventToggles', {
+                                    ...settings.eventToggles,
+                                    [key]: event.target.checked,
+                                })
+                            }
+                        />
+                        {label}
+                    </label>
+                ))}
+            </section>
+
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                     type="checkbox"
                     checked={settings.desktopNotifications}
-                    onChange={(event) =>
-                        updateSettings('desktopNotifications', event.target.checked)
-                    }
+                    onChange={(event) => updateSettings('desktopNotifications', event.target.checked)}
                 />
                 Desktop notifications
             </label>
@@ -171,9 +288,7 @@ export const NotificationSettings = () => {
                     <input
                         type="checkbox"
                         checked={settings.soundEnabled}
-                        onChange={(event) =>
-                            updateSettings('soundEnabled', event.target.checked)
-                        }
+                        onChange={(event) => updateSettings('soundEnabled', event.target.checked)}
                     />
                     Sound notifications
                 </label>
@@ -185,9 +300,7 @@ export const NotificationSettings = () => {
                         max={100}
                         value={settings.soundVolume}
                         disabled={!settings.soundEnabled}
-                        onChange={(event) =>
-                            updateSettings('soundVolume', Number(event.target.value))
-                        }
+                        onChange={(event) => updateSettings('soundVolume', Number(event.target.value))}
                     />
                 </label>
             </section>
@@ -196,9 +309,7 @@ export const NotificationSettings = () => {
                 <input
                     type="checkbox"
                     checked={settings.flashTaskbar}
-                    onChange={(event) =>
-                        updateSettings('flashTaskbar', event.target.checked)
-                    }
+                    onChange={(event) => updateSettings('flashTaskbar', event.target.checked)}
                 />
                 Flash taskbar on notification
             </label>
