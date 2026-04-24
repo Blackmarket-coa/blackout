@@ -36,6 +36,38 @@ function ownedKey(entitlement: NormalizedEntitlement): string {
   return `${entitlement.providerId}:${entitlement.providerListingId}`;
 }
 
+
+function resolveProvider(providerId: string, providers: ProviderSummary[]) {
+  const provider = providers.find((item) => item.id === providerId);
+  if (!provider) {
+    const label = providerId
+      .split(/[-_]/g)
+      .filter(Boolean)
+      .map((segment) => segment[0].toUpperCase() + segment.slice(1))
+      .join(' ');
+    return {
+      label: label || providerId,
+      icon: '🏬',
+      verificationBadge: null as string | null,
+      trustSummary: 'Provider trust metadata is unavailable for this listing.',
+      checkoutDisclosure: `Checkout opens on ${label || providerId}; review terms before payment.`,
+      payoutPolicy: 'Payout policy is disclosed by the provider.',
+      refundPolicy: 'Refund policy is controlled by the provider.',
+      supportPolicy: 'Support contacts are shown in checkout.',
+    };
+  }
+  return {
+    label: provider.presentation.label ?? provider.displayName,
+    icon: provider.presentation.icon ?? '🏬',
+    verificationBadge: provider.trust.verificationBadge,
+    trustSummary: provider.trust.trustSummary,
+    checkoutDisclosure: provider.trust.checkoutDisclosure,
+    payoutPolicy: provider.trust.payoutPolicy,
+    refundPolicy: provider.trust.refundPolicy,
+    supportPolicy: provider.trust.supportPolicy,
+  };
+}
+
 export default function MarketplaceScreen() {
   const [view, setView] = useState<View>('catalog');
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
@@ -47,6 +79,7 @@ export default function MarketplaceScreen() {
   const [loading, setLoading] = useState(false);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
   const refreshEntitlements = useCallback(async () => {
     try {
@@ -107,6 +140,8 @@ export default function MarketplaceScreen() {
       setPurchasingId(key);
       setError(null);
       try {
+        const provider = resolveProvider(listing.providerId, providers);
+        setCheckoutNotice(provider.checkoutDisclosure);
         const { redirectUrl } = await startCheckout(listing.providerId, listing.providerListingId);
         await Linking.openURL(redirectUrl);
         setTimeout(() => {
@@ -119,7 +154,7 @@ export default function MarketplaceScreen() {
         setPurchasingId(null);
       }
     },
-    [refreshEntitlements]
+    [providers, refreshEntitlements]
   );
 
   return (
@@ -143,6 +178,7 @@ export default function MarketplaceScreen() {
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {checkoutNotice ? <Text style={styles.notice}>{checkoutNotice}</Text> : null}
 
       {view === 'catalog' ? (
         <View style={{ flex: 1 }}>
@@ -169,7 +205,7 @@ export default function MarketplaceScreen() {
                   style={[styles.chip, providerFilter === provider.id && styles.chipActive]}
                   onPress={() => setProviderFilter(provider.id)}
                 >
-                  <Text style={styles.chipText}>{provider.displayName}</Text>
+                  <Text style={styles.chipText}>{provider.presentation.icon} {provider.presentation.label}</Text>
                 </TouchableOpacity>
               ))}
           </ScrollView>
@@ -195,17 +231,22 @@ export default function MarketplaceScreen() {
               renderItem={({ item }) => {
                 const key = `${item.providerId}:${item.providerListingId}`;
                 const owned = ownedSet.has(key);
-                const providerName =
-                  providers.find((provider) => provider.id === item.providerId)?.displayName ??
-                  item.providerId;
+                const provider = resolveProvider(item.providerId, providers);
                 return (
                   <View style={styles.card}>
                     <View style={styles.cardHeader}>
-                      <Text style={styles.providerBadge}>{providerName}</Text>
+                      <Text style={styles.providerBadge}>
+                        {provider.icon} {provider.label}
+                        {provider.verificationBadge ? ` · ${provider.verificationBadge}` : ''}
+                      </Text>
                       <Text style={styles.categoryText}>{item.category}</Text>
                     </View>
                     <Text style={styles.title}>{item.title}</Text>
                     <Text style={styles.description}>{item.description}</Text>
+                    <Text style={styles.meta}>{provider.trustSummary}</Text>
+                    <Text style={styles.meta}>Payouts: {provider.payoutPolicy}</Text>
+                    <Text style={styles.meta}>Refunds: {provider.refundPolicy}</Text>
+                    <Text style={styles.meta}>Support: {provider.supportPolicy}</Text>
                     <Text style={styles.price}>
                       {(item.priceCents / 100).toFixed(2)} {item.currency.toUpperCase()}
                     </Text>
@@ -303,5 +344,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 13,
   },
+  notice: {
+    color: '#bbb',
+    backgroundColor: '#202733',
+    padding: 8,
+    borderRadius: 8,
+    fontSize: 12,
+  },
+  meta: { color: '#9ea6b4', fontSize: 12 },
   empty: { color: '#888', textAlign: 'center', marginTop: 20 },
 });

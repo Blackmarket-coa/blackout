@@ -1,6 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 import type { NormalizedListing } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
+import { resolveMarketplaceProvider } from './providerMetadata';
 
 const cardStyle: Record<string, string | number> = {
     border: '1px solid var(--border-default)',
@@ -14,13 +15,12 @@ const cardStyle: Record<string, string | number> = {
 const providerBadgeStyle: Record<string, string | number> = {
     display: 'inline-flex',
     alignItems: 'center',
+    gap: 6,
     padding: '2px 8px',
     borderRadius: 999,
     background: 'var(--bg-input)',
     color: 'var(--text-secondary)',
     fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
 };
 
 const priceStyle: Record<string, string | number> = {
@@ -31,14 +31,6 @@ const priceStyle: Record<string, string | number> = {
 function formatPrice(priceCents: number, currency: string): string {
     const major = (priceCents / 100).toFixed(2);
     return `${major} ${currency.toUpperCase()}`;
-}
-
-function providerDisplayName(
-    providerId: string,
-    providers: MarketplaceProviderSummary[]
-): string {
-    const match = providers.find((provider) => provider.id === providerId);
-    return match?.displayName ?? providerId;
 }
 
 interface ListingCardProps {
@@ -56,13 +48,26 @@ export function ListingCard({
     purchasing,
     alreadyOwned,
 }: ListingCardProps): ReactNode {
+    const provider = resolveMarketplaceProvider(listing.providerId, providers);
+
     return createElement(
         'article',
         { style: cardStyle },
         createElement(
             'div',
             { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-            createElement('span', { style: providerBadgeStyle }, providerDisplayName(listing.providerId, providers)),
+            createElement(
+                'span',
+                { style: providerBadgeStyle },
+                `${provider.icon} ${provider.displayName}`,
+                provider.verificationBadge
+                    ? createElement(
+                          'strong',
+                          { style: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 } },
+                          provider.verificationBadge
+                      )
+                    : null
+            ),
             createElement(
                 'span',
                 { style: { fontSize: 11, color: 'var(--text-secondary)' } },
@@ -75,7 +80,37 @@ export function ListingCard({
             { style: { margin: 0, fontSize: 13, color: 'var(--text-secondary)' } },
             listing.description
         ),
+        createElement(
+            'p',
+            { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
+            provider.trustSummary
+        ),
+        createElement(
+            'p',
+            { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
+            `Payouts: ${provider.payoutPolicy} Refunds: ${provider.refundPolicy}`
+        ),
+        createElement(
+            'p',
+            { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
+            `Support: ${provider.supportPolicy}`
+        ),
         createElement('div', { style: priceStyle }, formatPrice(listing.priceCents, listing.currency)),
+        createElement(
+            'a',
+            {
+                href: provider.profileUrl,
+                target: '_blank',
+                rel: 'noreferrer',
+                style: { color: 'var(--text-link)', fontSize: 12 },
+            },
+            `View ${provider.displayName} profile`
+        ),
+        createElement(
+            'p',
+            { style: { margin: 0, fontSize: 12, color: 'var(--text-secondary)' } },
+            provider.checkoutDisclosure
+        ),
         createElement(
             'button',
             {

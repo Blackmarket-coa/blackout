@@ -13,6 +13,17 @@ export interface ProviderSummary {
   enabled: boolean;
   capabilities: string[];
   fees: { feeBps: number; displayFeePercent: number; payoutCadence: 'weekly' | 'monthly' };
+  presentation: { label: string; icon: string; profileSlug: string; profileHeadline: string };
+  trust: {
+    tier: 'verified' | 'community' | 'unverified';
+    verificationBadge: string | null;
+    trustSummary: string;
+    checkoutDisclosure: string;
+    payoutPolicy: string;
+    refundPolicy: string;
+    supportPolicy: string;
+  };
+  profileUrl: string;
 }
 
 export interface NormalizedListing {
