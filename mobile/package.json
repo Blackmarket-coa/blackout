@@ -1,0 +1,17 @@
+{
+  "name": "@blackout/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Blackout native mobile workspace",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@blackout/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

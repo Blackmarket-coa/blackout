@@ -11,6 +11,7 @@ This repository is a pnpm/turborepo monorepo built from an Element Web fork, wit
 - Upstream Element Web application architecture.
 - Desktop app wrapper: `blackout-desktop` (Tauri)
 - Mobile app wrapper: `blackout-mobile` (Capacitor)
+- Mobile native workspace: `mobile/` (shared auth/session, native bridge contracts, and core surface controllers)
 - Blackout governance-focused features and rollout documentation.
 - A steganography subsystem with test coverage and developer tooling.
 
@@ -204,6 +205,7 @@ pnpm mobile:dev
 ```
 
 > `mobile:*` root scripts use the Capacitor shell in `blackout-mobile/` (the current runnable mobile app path).
+> `mobile:workspace:*` scripts target the new `mobile/` workspace for shared native logic and release tooling.
 > `pnpm mobile:dev` is a safe preflight + web-bundle build (no platform sync).
 
 Build individual apps:
