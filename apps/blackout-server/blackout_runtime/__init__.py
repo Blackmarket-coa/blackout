@@ -3,6 +3,15 @@
 from .crdt import AutomergePrototypeCRDT, CRDTOperation
 from .envelope import EventEnvelope, generate_event_id
 from .module import BLACKOUT_PRESENCE_ACCOUNT_DATA_TYPE, BlackoutRuntimeModule
+from .message_index import (
+    AttachmentMetadata,
+    MessageIndexPipeline,
+    RelevanceTuning,
+    SearchFilters,
+    SearchPage,
+    SearchResult,
+    benchmark_high_volume_canopies,
+)
 from .policy_engine import (
     DEFAULT_FEATURE_FLAGS,
     FEDERATION_TRUST_TIER_ACLS,
@@ -45,4 +54,11 @@ __all__ = [
     "BlackoutPolicyEngine",
     "PilotDecision",
     "RollbackCriteria",
+    "AttachmentMetadata",
+    "MessageIndexPipeline",
+    "RelevanceTuning",
+    "SearchFilters",
+    "SearchPage",
+    "SearchResult",
+    "benchmark_high_volume_canopies",
 ]
