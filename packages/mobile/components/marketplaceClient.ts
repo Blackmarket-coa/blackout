@@ -1,3 +1,4 @@
+import { buildServiceUrl } from './apiConfig';
 import { getSession } from './session';
 
 export type MarketplaceProviderId =
@@ -41,7 +42,6 @@ export interface NormalizedEntitlement {
   metadata: Record<string, unknown>;
 }
 
-const API_BASE_URL = 'http://localhost:8787';
 const MARKETPLACE_PATH = '/v1/marketplace';
 
 function authHeaders(): Record<string, string> {
@@ -52,7 +52,7 @@ function authHeaders(): Record<string, string> {
 }
 
 export async function fetchProviders(): Promise<ProviderSummary[]> {
-  const response = await fetch(`${API_BASE_URL}${MARKETPLACE_PATH}/providers`, {
+  const response = await fetch(buildServiceUrl(`${MARKETPLACE_PATH}/providers`), {
     headers: authHeaders(),
   });
   const data = (await response.json()) as { providers: ProviderSummary[] };
@@ -69,14 +69,14 @@ export async function fetchListings(filters: {
   if (filters.category) params.set('category', filters.category);
   if (filters.q) params.set('q', filters.q);
   const qs = params.toString();
-  const url = `${API_BASE_URL}${MARKETPLACE_PATH}/listings${qs ? `?${qs}` : ''}`;
+  const url = `${buildServiceUrl(`${MARKETPLACE_PATH}/listings`)}${qs ? `?${qs}` : ''}`;
   const response = await fetch(url, { headers: authHeaders() });
   const data = (await response.json()) as { listings: NormalizedListing[] };
   return data.listings ?? [];
 }
 
 export async function fetchEntitlements(): Promise<NormalizedEntitlement[]> {
-  const response = await fetch(`${API_BASE_URL}${MARKETPLACE_PATH}/entitlements`, {
+  const response = await fetch(buildServiceUrl(`${MARKETPLACE_PATH}/entitlements`), {
     headers: authHeaders(),
   });
   if (!response.ok) return [];
@@ -88,7 +88,7 @@ export async function startCheckout(
   providerId: MarketplaceProviderId,
   listingId: string
 ): Promise<{ redirectUrl: string; sessionId: string }> {
-  const response = await fetch(`${API_BASE_URL}${MARKETPLACE_PATH}/checkout`, {
+  const response = await fetch(buildServiceUrl(`${MARKETPLACE_PATH}/checkout`), {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({
