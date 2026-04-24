@@ -338,3 +338,79 @@ test('v1 subscriptions admin tools support comp + refund + audit timeline', asyn
   const timeline = auditBody.timeline as Array<Record<string, unknown>>;
   assert.ok(timeline.length >= 2);
 });
+
+test('v1 apps contract, events, and actions are exposed', async () => {
+  const contract = await app.request('/v1/apps/contract');
+  assert.equal(contract.status, 200);
+  const contractBody = await json(contract);
+  assert.ok(contractBody.oauth);
+  assert.ok(contractBody.webhook);
+  assert.ok(contractBody.rateLimits);
+
+  const events = await app.request('/v1/apps/events');
+  assert.equal(events.status, 200);
+  const eventsBody = await json(events);
+  assert.deepEqual(eventsBody.events, ['message_created', 'member_joined', 'report_created']);
+
+  const actions = await app.request('/v1/apps/actions');
+  assert.equal(actions.status, 200);
+  const actionsBody = await json(actions);
+  assert.deepEqual(actionsBody.actions, ['post_message', 'moderate_user', 'assign_role']);
+});
+
+test('v1 app directory install review and revoke flow works', async () => {
+  const directory = await app.request('/v1/apps/directory?canopyId=main');
+  assert.equal(directory.status, 200);
+  const directoryBody = await json(directory);
+  const apps = directoryBody.apps as Array<{ id: string; defaultScopes: string[] }>;
+  assert.ok(apps.length >= 1);
+
+  const target = apps[0];
+  const install = await app.request(`/v1/apps/directory/${target.id}/install`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ canopyId: 'main', permissions: target.defaultScopes }),
+  });
+  assert.equal(install.status, 201);
+
+  const observability = await app.request(`/v1/apps/directory/${target.id}/observability?canopyId=main`);
+  assert.equal(observability.status, 200);
+  const obsBody = await json(observability);
+  const metrics = obsBody.metrics as Record<string, unknown>;
+  assert.equal(metrics.quotaUsed, 0);
+
+  const action = await app.request('/v1/apps/actions/post_message', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 42 }),
+  });
+  assert.equal(action.status, 200);
+
+  const revoke = await app.request(`/v1/apps/directory/${target.id}/revoke`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ canopyId: 'main' }),
+  });
+  assert.equal(revoke.status, 200);
+
+  const deniedAction = await app.request('/v1/apps/actions/post_message', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ appId: target.id, canopyId: 'main', latencyMs: 10 }),
+  });
+  assert.equal(deniedAction.status, 404);
+});
+
+test('v1 managed n8n templates are exposed for common automation packs', async () => {
+  const templates = await app.request('/v1/apps/workflows/n8n/templates');
+  assert.equal(templates.status, 200);
+  const templatesBody = await json(templates);
+  const list = templatesBody.templates as Array<{ id: string }>;
+  assert.ok(list.some((entry) => entry.id === 'welcome-flow-v1'));
+
+  const detail = await app.request('/v1/apps/workflows/n8n/templates/welcome-flow-v1');
+  assert.equal(detail.status, 200);
+  const detailBody = await json(detail);
+  const template = detailBody.template as Record<string, unknown>;
+  assert.ok(template.n8nTemplate);
+});

@@ -9,11 +9,11 @@ export function ChatPage() {
   const canopyId = 'main';
 
   return (
-    <main>
+    <section>
       <ChannelPanel channels={[{ id: 'general', name: 'general' }]} />
       <VoicePanel canopyId={canopyId} channelId={channelId} role="admin" />
       <MessageList channelId={channelId} />
       <MessageComposer channelId={channelId} />
-    </main>
+    </section>
   );
 }
