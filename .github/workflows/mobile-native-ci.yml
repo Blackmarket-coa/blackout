@@ -1,0 +1,103 @@
+name: mobile-native-ci
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-native-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-native-ci.yml'
+  workflow_dispatch:
+    inputs:
+      promote_stage:
+        description: 'Promote staged rollout phase'
+        required: false
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - phase-1-5-percent
+          - phase-2-25-percent
+          - phase-3-50-percent
+          - phase-4-100-percent
+
+jobs:
+  verify-mobile-workspace:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @blackout/mobile build
+
+  android-internal:
+    needs: verify-mobile-workspace
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request'
+    env:
+      PLAY_TRACK: internal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Decode Android signing keystore
+        env:
+          ANDROID_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$ANDROID_UPLOAD_KEYSTORE_B64" ]; then
+            echo "ANDROID_UPLOAD_KEYSTORE_B64 is required" >&2
+            exit 1
+          fi
+          echo "$ANDROID_UPLOAD_KEYSTORE_B64" | base64 -d > /tmp/android-upload.jks
+      - name: Build Android AAB for internal track
+        run: |
+          echo "./gradlew bundleRelease with signing config would run here"
+      - name: Upload to Play internal test track
+        run: |
+          echo "Upload signed AAB to Google Play track: $PLAY_TRACK"
+
+  ios-internal:
+    needs: verify-mobile-workspace
+    runs-on: macos-14
+    if: github.event_name != 'pull_request'
+    env:
+      TESTFLIGHT_GROUP: internal
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          if [ -z "$APP_STORE_CONNECT_API_KEY_CONTENT" ]; then
+            echo "App Store Connect API key missing" >&2
+            exit 1
+          fi
+      - name: Build signed iOS archive
+        run: |
+          echo "xcodebuild archive/export with match or manual signing would run here"
+      - name: Upload to TestFlight internal testers
+        run: |
+          echo "Upload IPA to TestFlight group: $TESTFLIGHT_GROUP"
+
+  rollout-promotion:
+    needs: [android-internal, ios-internal]
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Promote staged rollout
+        run: |
+          echo "Promoting rollout to: ${{ github.event.inputs.promote_stage }}"
+          echo "Rollout changes should only occur after release criteria in mobile/docs/release-criteria.md are met."
