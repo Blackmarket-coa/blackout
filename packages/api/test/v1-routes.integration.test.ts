@@ -6,6 +6,9 @@ process.env.JWT_SECRET_PRIMARY =
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
 process.env.JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
+process.env.LIVEKIT_URL = process.env.LIVEKIT_URL ?? 'wss://livekit.local';
+process.env.LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? 'lk_test_key';
+process.env.LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? 'lk_test_secret';
 
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
@@ -207,4 +210,131 @@ test('v1 entitlements returns 400 for invalid payload', async () => {
   });
 
   assert.equal(response.status, 400);
+});
+
+test('v1 subscriptions checkout + webhook + entitlement state works end-to-end', async () => {
+  const { token, userId } = await registerUser();
+
+  const checkout = await app.request('/v1/subscriptions/checkout', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ planCode: 'canopy_sprout_monthly', successUrl: 'https://example.com/success' }),
+  });
+  assert.equal(checkout.status, 201);
+
+  const paid = await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: `evt_${Date.now()}`,
+      type: 'invoice.paid',
+      userId,
+      planCode: 'canopy_sprout_monthly',
+    }),
+  });
+  assert.equal(paid.status, 200);
+
+  const entitlements = await app.request('/v1/entitlements/me', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(entitlements.status, 200);
+  const body = await json(entitlements);
+  const payload = body.payload as Record<string, unknown>;
+  const planState = payload.planState as Record<string, unknown>;
+  assert.equal(planState.status, 'active');
+
+  const duplicate = await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: 'evt_duplicate',
+      type: 'subscription.canceled',
+      userId,
+    }),
+  });
+  assert.equal(duplicate.status, 200);
+
+  const duplicateAgain = await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: 'evt_duplicate',
+      type: 'subscription.canceled',
+      userId,
+    }),
+  });
+  assert.equal(duplicateAgain.status, 200);
+  const duplicateBody = await json(duplicateAgain);
+  assert.equal(duplicateBody.processed, false);
+});
+
+test('v1 voice join is gated by backend subscription entitlement', async () => {
+  const { token, userId } = await registerUser();
+
+  const denied = await app.request('/v1/voice/rooms/join', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1', role: 'member' }),
+  });
+  assert.equal(denied.status, 402);
+
+  await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: `evt_voice_${Date.now()}`,
+      type: 'invoice.paid',
+      userId,
+      planCode: 'canopy_sprout_monthly',
+    }),
+  });
+
+  const allowed = await app.request('/v1/voice/rooms/join', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1', role: 'member' }),
+  });
+  assert.equal(allowed.status, 200);
+});
+
+test('v1 subscriptions admin tools support comp + refund + audit timeline', async () => {
+  process.env.BLACKOUT_ADMIN_API_KEY = 'integration-admin';
+  const { userId } = await registerUser();
+
+  const comp = await app.request('/v1/subscriptions/admin/comp', {
+    method: 'POST',
+    headers: {
+      'x-admin-api-key': 'integration-admin',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ userId, detail: 'goodwill' }),
+  });
+  assert.equal(comp.status, 200);
+
+  const refund = await app.request('/v1/subscriptions/admin/refund-sync', {
+    method: 'POST',
+    headers: {
+      'x-admin-api-key': 'integration-admin',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ userId, reason: 'requested' }),
+  });
+  assert.equal(refund.status, 200);
+
+  const audit = await app.request(`/v1/subscriptions/admin/audit/${userId}`, {
+    headers: { 'x-admin-api-key': 'integration-admin' },
+  });
+  assert.equal(audit.status, 200);
+  const auditBody = await json(audit);
+  const timeline = auditBody.timeline as Array<Record<string, unknown>>;
+  assert.ok(timeline.length >= 2);
 });

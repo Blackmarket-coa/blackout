@@ -530,6 +530,8 @@ class FileBackedDb extends InMemoryDb {
     const created = super.upsertStreamModeration(input);
     this.persist();
     return created;
+  }
+
   override createOrUpdateVoiceRoom(input: {
     canopyId: string;
     channelId: string;

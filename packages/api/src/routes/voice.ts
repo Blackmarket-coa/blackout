@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../db/store';
 import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
+import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
 
 type UserClaims = { sub: string; username?: string };
 
@@ -44,6 +45,10 @@ voice.post('/rooms/create', async (c) => {
     return c.json({ error: 'canopyId and channelId are required' }, 400);
   }
 
+  if (!hasPremiumCanopyEntitlement(user.sub)) {
+    return c.json({ error: 'Premium canopy subscription required' }, 402);
+  }
+
   if (!canModerate(role)) {
     return c.json({ error: 'Only canopy admins/mods can create voice rooms' }, 403);
   }
@@ -71,6 +76,10 @@ voice.post('/rooms/join', async (c) => {
 
   if (!canopyId || !channelId) {
     return c.json({ error: 'canopyId and channelId are required' }, 400);
+  }
+
+  if (!hasPremiumCanopyEntitlement(user.sub)) {
+    return c.json({ error: 'Premium canopy subscription required' }, 402);
   }
 
   const room = db.createOrUpdateVoiceRoom({
