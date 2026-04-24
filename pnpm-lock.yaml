@@ -457,6 +457,16 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  mobile:
+    dependencies:
+      '@blackout/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/api:
     dependencies:
       '@blackout/contracts':
