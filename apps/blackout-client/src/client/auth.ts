@@ -6,9 +6,19 @@ import { clearSession, getSessionForUser, saveSession, type StoredSession } from
 
 type AtomStore = ReturnType<typeof createStore>;
 
+export type PasswordLoginIdentifier =
+    | { type: 'm.id.user'; user: string }
+    | { type: 'm.id.thirdparty'; medium: 'email'; address: string };
+
 export interface PasswordLoginInput {
     baseUrl: string;
-    userId: string;
+    /**
+     * Plain username (used when identifier is not provided). Kept for
+     * backwards compatibility with callers that pass a bare user id.
+     */
+    userId?: string;
+    /** Full Matrix login identifier; takes precedence over userId. */
+    identifier?: PasswordLoginIdentifier;
     password: string;
 }
 
@@ -33,7 +43,7 @@ const normalizeAuthError = (error: unknown): MatrixInitError => {
             if (error instanceof MatrixInitError) return error;
             return new MatrixInitError(
                 'network_failure',
-                matrixError?.message ?? 'Authentication failed.',
+                matrixError?.message ?? 'Authentication failed.'
             );
     }
 };
@@ -52,12 +62,12 @@ const saveFromLoginResponse = (
         user_id?: string;
         device_id?: string;
         expires_in_ms?: number;
-    },
+    }
 ): StoredSession => {
     if (!response.access_token || !response.user_id || !response.device_id) {
         throw new MatrixInitError(
             'invalid_credentials',
-            'Login response did not include required session fields.',
+            'Login response did not include required session fields.'
         );
     }
 
@@ -78,17 +88,18 @@ const saveFromLoginResponse = (
 
 export const loginWithPassword = async (
     store: AtomStore,
-    input: PasswordLoginInput,
+    input: PasswordLoginInput
 ): Promise<MatrixClient> => {
     store.set(authStateAtom, 'loading');
 
     try {
+        const identifier: PasswordLoginIdentifier = input.identifier ?? {
+            type: 'm.id.user',
+            user: input.userId ?? '',
+        };
         const client = createClient({ baseUrl: input.baseUrl });
         const result = await client.login('m.login.password', {
-            identifier: {
-                type: 'm.id.user',
-                user: input.userId,
-            },
+            identifier,
             password: input.password,
             initial_device_display_name: 'Blackout Client',
             refresh_token: true,
@@ -100,7 +111,7 @@ export const loginWithPassword = async (
         if (!initializedClient) {
             throw new MatrixInitError(
                 'invalid_credentials',
-                'Unable to restore session after login.',
+                'Unable to restore session after login.'
             );
         }
 
@@ -118,7 +129,7 @@ export const beginSsoRedirect = (baseUrl: string, redirectUrl: string): string =
 
 export const registerUser = async (
     store: AtomStore,
-    input: RegistrationInput,
+    input: RegistrationInput
 ): Promise<MatrixClient> => {
     store.set(authStateAtom, 'loading');
 
@@ -142,7 +153,7 @@ export const registerUser = async (
         if (!initializedClient) {
             throw new MatrixInitError(
                 'invalid_credentials',
-                'Unable to restore session after registration.',
+                'Unable to restore session after registration.'
             );
         }
 
@@ -188,7 +199,7 @@ export const refreshSessionToken = async (store: AtomStore): Promise<StoredSessi
     if (!session?.refreshToken) {
         throw new MatrixInitError(
             'invalid_credentials',
-            'No refresh token available for active session.',
+            'No refresh token available for active session.'
         );
     }
 

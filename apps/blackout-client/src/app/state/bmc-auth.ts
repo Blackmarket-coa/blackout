@@ -12,3 +12,4 @@ export const matrixClientAtom = atom<MatrixClient | null>(null);
 export const authStateAtom = atom<AuthState>('loading');
 export const userIdAtom = atom<string | null>(null);
 export const cryptoInitErrorAtom = atom<string | null>(null);
+export const loginErrorAtom = atom<string | null>(null);
