@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@blackout/core": "workspace:*",
-    "@blackout/contracts": "workspace:*"
+    "@blackout/contracts": "workspace:*",
+    "livekit-client": "^2.15.7"
   }
 }
