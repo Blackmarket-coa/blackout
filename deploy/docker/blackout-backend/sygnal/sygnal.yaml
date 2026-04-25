@@ -1,0 +1,35 @@
+http:
+  bind_addresses: ['0.0.0.0']
+  port: ${SYGNAL_HTTP_PORT}
+
+log:
+  setup:
+    version: 1
+    formatters:
+      precise:
+        format: '%(asctime)s %(name)s [%(levelname)s] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: precise
+    root:
+      level: INFO
+      handlers: [console]
+
+apps:
+  ${SYGNAL_APNS_APP_ID}:
+    type: apns
+    enabled: ${SYGNAL_APNS_ENABLED}
+    platform: production
+    team_id: "${SYGNAL_APNS_TEAM_ID}"
+    key_id: "${SYGNAL_APNS_KEY_ID}"
+    topic: "${SYGNAL_APNS_TOPIC}"
+    push_type: "${SYGNAL_APNS_PUSH_TYPE}"
+    convert_device_token_to_hex: ${SYGNAL_APNS_CONVERT_DEVICE_TOKEN_TO_HEX}
+    keyfile: "${SYGNAL_APNS_KEYFILE}"
+
+  ${SYGNAL_FCM_APP_ID}:
+    type: gcm
+    enabled: ${SYGNAL_FCM_ENABLED}
+    api_key: "${SYGNAL_FCM_API_KEY}"
+    project_id: "${SYGNAL_FCM_PROJECT_ID}"

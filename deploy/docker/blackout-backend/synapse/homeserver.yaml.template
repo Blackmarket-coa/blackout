@@ -65,3 +65,12 @@ url_preview_enabled: false
 
 federation_metrics_domains:
   - "${MATRIX_SERVER_NAME}"
+
+
+push:
+  enabled: true
+  include_content: true
+  group_unread_count_by_room: true
+  # Default destination for pushers that do not provide an explicit URL.
+  push_gateway_url: "${SYGNAL_URL}"
+
