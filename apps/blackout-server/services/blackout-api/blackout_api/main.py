@@ -37,7 +37,10 @@ JWT_SECRET = os.getenv("BLACKOUT_API_JWT_SECRET", "change-me")
 JWT_ALGORITHM = os.getenv("BLACKOUT_API_JWT_ALGORITHM", "HS256")
 JWT_AUDIENCE = os.getenv("BLACKOUT_API_JWT_AUDIENCE", "blackout-api")
 JWT_ISSUER = os.getenv("BLACKOUT_API_JWT_ISSUER", "blackout-auth")
-RUN_MIGRATIONS = os.getenv("BLACKOUT_API_RUN_MIGRATIONS", "true").lower() == "true"
+# Default off: run `alembic upgrade head` as a separate one-shot before
+# starting uvicorn (e.g. an init container). Inline migrations on startup
+# block the lifespan and can wedge the API on a stuck migration.
+RUN_MIGRATIONS = os.getenv("BLACKOUT_API_RUN_MIGRATIONS", "false").lower() == "true"
 SYNAPSE_URL = os.getenv("BLACKOUT_API_SYNAPSE_URL", "http://localhost:8008")
 
 
