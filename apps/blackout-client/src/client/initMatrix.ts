@@ -78,18 +78,86 @@ const applyAuthAtoms = (store: AtomStore, client: MatrixClient | null, authState
     store.set(userIdAtom, client?.getUserId() ?? null);
 };
 
+const SYNC_STORE_PREFIX = 'blackout-sync-store:';
+const CRYPTO_STORE_PREFIX = 'blackout-crypto-store:';
+
+const cryptoStoreDbName = (userId: string, deviceId: string): string =>
+    `${CRYPTO_STORE_PREFIX}${userId}:${deviceId}`;
+
+const syncStoreDbName = (userId: string, deviceId: string): string =>
+    `${SYNC_STORE_PREFIX}${userId}:${deviceId}`;
+
+const deleteIndexedDb = (name: string): Promise<void> =>
+    new Promise<void>((resolve) => {
+        try {
+            const req = window.indexedDB.deleteDatabase(name);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+            req.onblocked = () => resolve();
+        } catch {
+            resolve();
+        }
+    });
+
+/**
+ * Each new login from a homeserver creates a fresh device_id. The rust-crypto
+ * SDK refuses to load a crypto store created for a different device_id, which
+ * surfaces as "account in store doesn't match the account in the constructor".
+ *
+ * To stay self-healing across logout/login cycles we (1) namespace the IndexedDB
+ * stores by deviceId, and (2) best-effort prune stale stores belonging to other
+ * device_ids for the same user, plus the legacy un-suffixed databases.
+ */
+const cleanupStaleStoresForUser = async (
+    userId: string,
+    activeDeviceId: string,
+): Promise<void> => {
+    const targetCryptoDb = cryptoStoreDbName(userId, activeDeviceId);
+    const targetSyncDb = syncStoreDbName(userId, activeDeviceId);
+
+    // Always remove the legacy un-suffixed databases from earlier builds.
+    const legacyDbs = [`${CRYPTO_STORE_PREFIX}${userId}`, `${SYNC_STORE_PREFIX}${userId}`];
+
+    let staleDbs: string[] = [];
+
+    const databasesFn = (
+        window.indexedDB as IDBFactory & { databases?: () => Promise<IDBDatabaseInfo[]> }
+    ).databases;
+    if (typeof databasesFn === 'function') {
+        try {
+            const dbs = await databasesFn.call(window.indexedDB);
+            staleDbs = dbs
+                .map((info) => info.name)
+                .filter((name): name is string => typeof name === 'string')
+                .filter(
+                    (name) =>
+                        (name.startsWith(`${CRYPTO_STORE_PREFIX}${userId}:`) &&
+                            name !== targetCryptoDb) ||
+                        (name.startsWith(`${SYNC_STORE_PREFIX}${userId}:`) &&
+                            name !== targetSyncDb),
+                );
+        } catch {
+            // indexedDB.databases() can throw in some browsers; fall through.
+        }
+    }
+
+    await Promise.all([...legacyDbs, ...staleDbs].map(deleteIndexedDb));
+};
+
 const initClientForSession = async (session: StoredSession): Promise<MatrixClient> => {
     ensureValidHomeserver(session.baseUrl);
+
+    await cleanupStaleStoresForUser(session.userId, session.deviceId);
 
     const syncStore = new IndexedDBStore({
         indexedDB: window.indexedDB,
         localStorage: window.localStorage,
-        dbName: `blackout-sync-store:${session.userId}`,
+        dbName: syncStoreDbName(session.userId, session.deviceId),
     });
 
     const cryptoStore = new IndexedDBCryptoStore(
         window.indexedDB,
-        `blackout-crypto-store:${session.userId}`,
+        cryptoStoreDbName(session.userId, session.deviceId),
     );
 
     const client = createClient({
@@ -179,7 +247,21 @@ export const logoutClient = async (client: MatrixClient): Promise<void> => {
     }
 
     await client.clearStores();
-    clearSession(client.getUserId() ?? undefined);
+    const userId = client.getUserId();
+    const deviceId = client.getDeviceId();
+    if (userId) {
+        await Promise.all([
+            ...(deviceId
+                ? [
+                      deleteIndexedDb(cryptoStoreDbName(userId, deviceId)),
+                      deleteIndexedDb(syncStoreDbName(userId, deviceId)),
+                  ]
+                : []),
+            deleteIndexedDb(`${CRYPTO_STORE_PREFIX}${userId}`),
+            deleteIndexedDb(`${SYNC_STORE_PREFIX}${userId}`),
+        ]);
+    }
+    clearSession(userId ?? undefined);
 };
 
 export const clearCacheAndReload = async (client: MatrixClient): Promise<void> => {
