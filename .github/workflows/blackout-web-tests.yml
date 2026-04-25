@@ -13,7 +13,8 @@ on:
 permissions: {}
 
 jobs:
-  test:
+  lint-blackout-web:
+    name: Lint blackout-web (@blackout/blackout-web)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -36,7 +37,31 @@ jobs:
           pnpm --filter @blackout/design run build
 
       - name: Lint
-        run: pnpm --filter @blackout/blackout-web lint
+        run: pnpm --filter @blackout/blackout-web run lint
+
+  test-blackout-web:
+    name: Test blackout-web (@blackout/blackout-web)
+    needs: lint-blackout-web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace dependencies (core, design) for project references
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
 
       - name: Unit tests
         run: pnpm --filter @blackout/blackout-web test:unit

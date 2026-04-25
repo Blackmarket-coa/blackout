@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint (ESLint + Prettier)
+  lint-client:
+    name: Lint client (@blackout/client)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
@@ -26,7 +26,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/client exec eslint "src/**/*.{ts,tsx}" --max-warnings=0
+      - run: pnpm --filter @blackout/client run lint
+
+  lint-blackout-web:
+    name: Lint blackout-web (@blackout/blackout-web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @blackout/blackout-web run lint
 
   typecheck:
     name: Type check (tsc --noEmit)

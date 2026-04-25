@@ -514,6 +514,18 @@ pnpm build
 pnpm test
 ```
 
+### Frontend lint policy (canonical)
+
+To keep lint gates explicit and avoid workflow drift:
+
+- CI treats both frontends as required lint targets:
+  - `@blackout/client`
+  - `@blackout/blackout-web`
+- Use the same lint invocation form everywhere:
+  - `pnpm --filter <package> run lint`
+- Do not mix `pnpm --filter <package> run lint` with direct `exec eslint ...` in workflow gates.
+- If both frontend lint gates are present in a workflow, keep them as distinct jobs (for example `lint-client` and `lint-blackout-web`) so failures are unambiguous.
+
 Deployment readiness checklist and current status:
 
 - `docs/deployment/readiness-checklist.md`
