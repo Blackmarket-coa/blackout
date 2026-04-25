@@ -18,7 +18,9 @@ from blackout_api.db import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False so we don't silence uvicorn's loggers
+    # when env.py runs from inside the FastAPI startup hook.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option(
     "sqlalchemy.url",
