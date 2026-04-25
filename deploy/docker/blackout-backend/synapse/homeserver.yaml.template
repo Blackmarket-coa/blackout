@@ -13,20 +13,18 @@ listeners:
 trusted_key_servers:
   - server_name: "matrix.org"
 
-# Delegated auth (OIDC): configure Keycloak/Authentik via environment variables.
-oidc_providers:
-  - idp_id: "${SYNAPSE_OIDC_IDP_ID:-blackout-oidc}"
-    idp_name: "${SYNAPSE_OIDC_IDP_NAME:-Blackout SSO}"
-    issuer: "${SYNAPSE_OIDC_ISSUER}"
-    client_id: "${SYNAPSE_OIDC_CLIENT_ID}"
-    client_secret: "${SYNAPSE_OIDC_CLIENT_SECRET}"
-    scopes: ["openid", "profile", "email"]
-    user_mapping_provider:
-      config:
-        localpart_template: "{{ user.preferred_username or user.sub }}"
-        display_name_template: "{{ user.name or user.preferred_username }}"
-        email_template: "{{ user.email }}"
-    backchannel_logout_enabled: true
+# Authentication mode toggles:
+# - Local Synapse auth:     SYNAPSE_AUTH_MODE=local, SYNAPSE_MSC3861_ENABLED=false
+# - MAS delegated auth:     SYNAPSE_AUTH_MODE=mas,   SYNAPSE_MSC3861_ENABLED=true
+experimental_features:
+  msc3861:
+    enabled: ${SYNAPSE_MSC3861_ENABLED}
+    issuer: "${SYNAPSE_MSC3861_ISSUER}"
+    client_id: "${SYNAPSE_MSC3861_CLIENT_ID}"
+    client_auth_method: "${SYNAPSE_MSC3861_CLIENT_AUTH_METHOD}"
+    client_secret: "${SYNAPSE_MSC3861_CLIENT_SECRET}"
+    admin_token: "${SYNAPSE_MSC3861_ADMIN_TOKEN}"
+    account_management_url: "${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}"
 
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
@@ -57,6 +55,8 @@ signing_key_path: /data/${MATRIX_SERVER_NAME}.signing.key
 
 enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
 enable_registration_without_verification: false
+password_config:
+  enabled: ${SYNAPSE_PASSWORD_AUTH_ENABLED:-true}
 
 log_config: /data/${MATRIX_SERVER_NAME}.log.config
 
