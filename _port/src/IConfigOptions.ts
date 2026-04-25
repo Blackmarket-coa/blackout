@@ -50,6 +50,11 @@ export interface IConfigOptions {
     disable_guests?: boolean;
     disable_login_language_selector?: boolean;
     disable_3pid_login?: boolean;
+    /**
+     * Optional list of web client hostnames where password login must be hidden and
+     * homeserver-advertised OIDC/SSO should be used as the primary login path.
+     */
+    oidc_only_production_hosts?: string[];
 
     brand: string;
     branding?: {

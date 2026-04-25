@@ -20,6 +20,10 @@
     "bug_report_endpoint_url": "https://rageshakes.element.io/api/submit",
     "uisi_autorageshake_app": "element-auto-uisi",
     "show_labs_settings": false,
+    "oidc_only_production_hosts": [
+        "app.element.io",
+        "staging.element.io"
+    ],
     "room_directory": {
         "servers": ["matrix.org", "gitter.im"]
     },
