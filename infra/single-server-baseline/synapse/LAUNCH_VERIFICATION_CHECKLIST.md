@@ -11,6 +11,7 @@ export SHARED_SECRET="<synapse registration_shared_secret>"
 export ADMIN_USER="<existing-admin-username>"
 export ADMIN_PASS="<existing-admin-password>"
 export RECOVERY_EMAIL="noreply@theblackout.app"
+export OPEN_REGISTRATION_EXPECTED="true"
 ```
 
 If you do **not** want shared-secret user creation during verification, leave `SHARED_SECRET` unset and provide an existing test account:
@@ -33,7 +34,7 @@ infra/single-server-baseline/synapse/verify-launch.sh
 ### Expected success signatures
 
 - `✔ admin login returned access token`
-- `✔ open registration is not silently enabled`
+- `✔ registration endpoint posture matches expectation`
 - `✔ sync returned next_batch token`
 - `✔ room created: !...`
 - `✔ space created: !...`
@@ -61,7 +62,7 @@ ENABLE_FEDERATION_TEST=true infra/single-server-baseline/synapse/verify-launch.s
 ### Login/register behavior fails
 
 - Check reverse proxy route for `/_matrix/client/*`.
-- Confirm `enable_registration: false` and shared-secret settings in Synapse config.
+- Confirm `SYNAPSE_ENABLE_REGISTRATION` and `enable_registration_without_verification` values match your intended policy, plus shared-secret settings.
 - Inspect Synapse logs for auth/rate-limit errors.
 
 ### `/sync` fails or lacks `next_batch`

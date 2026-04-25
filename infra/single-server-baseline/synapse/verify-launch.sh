@@ -23,6 +23,7 @@ TEST_PASS2="${TEST_PASS2:-}"
 MAX_UPLOAD_BYTES="${MAX_UPLOAD_BYTES:-104857600}" # 100 MiB
 ENABLE_FEDERATION_TEST="${ENABLE_FEDERATION_TEST:-false}"
 RECOVERY_EMAIL="${RECOVERY_EMAIL:-noreply@theblackout.app}"
+OPEN_REGISTRATION_EXPECTED="${OPEN_REGISTRATION_EXPECTED:-true}"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -114,10 +115,18 @@ else
 fi
 
 open_reg_resp="$(post_json "$BASE_URL/_matrix/client/v3/register" -d '{"username":"openregtest","password":"NotUsed-123"}')"
-if echo "$open_reg_resp" | jq -e '.errcode=="M_FORBIDDEN" or .errcode=="M_UNAUTHORIZED" or .flows' >/dev/null; then
-  ok "open registration is not silently enabled"
+if [[ "$OPEN_REGISTRATION_EXPECTED" == "true" ]]; then
+  if echo "$open_reg_resp" | jq -e '(.session? != null) or (.flows? | type == "array")' >/dev/null; then
+    ok "registration endpoint posture matches expectation"
+  else
+    fail "unexpected register response; expected registration auth flows when OPEN_REGISTRATION_EXPECTED=true"
+  fi
 else
-  fail "unexpected register response; expected forbidden/auth flow"
+  if echo "$open_reg_resp" | jq -e ' .errcode=="M_FORBIDDEN" or .errcode=="M_UNAUTHORIZED" or .flows' >/dev/null; then
+    ok "registration endpoint posture matches expectation"
+  else
+    fail "unexpected register response; expected forbidden/auth flow when OPEN_REGISTRATION_EXPECTED=false"
+  fi
 fi
 
 step "2) /sync success"
