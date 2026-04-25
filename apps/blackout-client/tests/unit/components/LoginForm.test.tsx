@@ -167,4 +167,96 @@ describe('LoginForm', () => {
 
         root.unmount();
     });
+
+    it('handles IdP denial/cancel and clears callback query parameters', async () => {
+        loginFlowsMock.mockResolvedValueOnce({ flows: [{ type: 'm.login.sso' }] });
+
+        window.sessionStorage.setItem(
+            'blackout.sso.pending',
+            JSON.stringify({ baseUrl: 'https://sso.example.org' }),
+        );
+        window.history.replaceState(
+            null,
+            '',
+            '/?error=access_denied&error_description=User%20cancelled%20sign-in',
+        );
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                    />
+                </Provider>,
+            );
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(loginWithTokenMock).not.toHaveBeenCalled();
+        expect(container.textContent).toContain('User cancelled sign-in');
+        expect(window.location.search).toBe('');
+        expect(window.sessionStorage.getItem('blackout.sso.pending')).toBeNull();
+
+        root.unmount();
+    });
+
+    it('uses a sanitized callback redirect URL when starting SSO', async () => {
+        loginFlowsMock.mockResolvedValueOnce({
+            flows: [
+                { type: 'm.login.sso', identity_providers: [{ id: 'authentik', name: 'Authentik' }] },
+            ],
+        });
+        loginWithTokenMock.mockResolvedValueOnce({});
+        beginSsoRedirectMock.mockReturnValue('https://example.org/_matrix/client/v3/login/sso/redirect');
+
+        window.history.replaceState(
+            null,
+            '',
+            '/?loginToken=stale&code=123&state=456&error=access_denied&error_description=oops',
+        );
+
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <LoginForm
+                        server={defaultServer}
+                        canRegister={true}
+                        onSwitchTab={vi.fn()}
+                    />
+                </Provider>,
+            );
+            await Promise.resolve();
+        });
+
+        const ssoButton = container.querySelector('button[type="button"]');
+        expect(ssoButton).not.toBeNull();
+
+        await act(async () => {
+            ssoButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+
+        expect(beginSsoRedirectMock).toHaveBeenCalledTimes(1);
+        const redirectUrl = beginSsoRedirectMock.mock.calls[0]?.[1] as string;
+        const parsed = new URL(redirectUrl);
+        expect(beginSsoRedirectMock).toHaveBeenCalledWith(
+            'https://example.org',
+            redirectUrl,
+            'sso',
+            'authentik',
+        );
+        expect(parsed.search).toBe('');
+
+        root.unmount();
+    });
 });
