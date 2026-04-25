@@ -65,6 +65,7 @@ services:
     volumes:
       - synapse_data:/data
       - ./synapse/homeserver.yaml.template:/templates/homeserver.yaml.template:ro
+      - ./integrations/hookshot:/integrations/hookshot:ro
     command: >-
       /bin/sh -c "envsubst < /templates/homeserver.yaml.template > /data/homeserver.yaml
       && exec /start.py"
@@ -192,6 +193,60 @@ services:
     networks:
       - blackout-backend
 
+  hookshot-db:
+    image: postgres:16-alpine
+    container_name: blackout-hookshot-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${HOOKSHOT_POSTGRES_DB}
+      POSTGRES_USER: ${HOOKSHOT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${HOOKSHOT_POSTGRES_PASSWORD}
+    volumes:
+      - hookshot_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HOOKSHOT_POSTGRES_USER} -d ${HOOKSHOT_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  matrix-hookshot:
+    image: halfshot/matrix-hookshot:latest
+    container_name: blackout-matrix-hookshot
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      hookshot-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      HOOKSHOT_DOMAIN: ${HOOKSHOT_DOMAIN}
+      HOOKSHOT_URL: ${HOOKSHOT_URL}
+      HOOKSHOT_PORT: ${HOOKSHOT_PORT}
+      HOOKSHOT_AS_TOKEN: ${HOOKSHOT_AS_TOKEN}
+      HOOKSHOT_HS_TOKEN: ${HOOKSHOT_HS_TOKEN}
+      HOOKSHOT_FEED_POLL_INTERVAL_SECONDS: ${HOOKSHOT_FEED_POLL_INTERVAL_SECONDS}
+      HOOKSHOT_POSTGRES_DB: ${HOOKSHOT_POSTGRES_DB}
+      HOOKSHOT_POSTGRES_USER: ${HOOKSHOT_POSTGRES_USER}
+      HOOKSHOT_POSTGRES_PASSWORD: ${HOOKSHOT_POSTGRES_PASSWORD}
+      HOOKSHOT_POSTGRES_HOST: hookshot-db
+      HOOKSHOT_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/hookshot:/integrations/hookshot
+    command: >-
+      /bin/sh -c "envsubst < /integrations/hookshot/config.yml.template > /integrations/hookshot/config.yml
+      && envsubst < /integrations/hookshot/registration.yml.template > /integrations/hookshot/registration.yml
+      && exec node /matrix-hookshot/lib/app.js --config /integrations/hookshot/config.yml --registrationFile /integrations/hookshot/registration.yml"
+    networks:
+      - blackout-backend
+
   nginx:
     image: nginx:1.27-alpine
     container_name: blackout-nginx
@@ -234,3 +289,4 @@ volumes:
   synapse_data:
   mas_data:
   draupnir_data:
+  hookshot_db_data:

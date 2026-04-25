@@ -1,0 +1,46 @@
+# Matrix Hookshot configuration template.
+# Rendered by envsubst into integrations/hookshot/config.yml.
+
+bridge:
+  domain: "${HOOKSHOT_DOMAIN}"
+  url: "${HOOKSHOT_URL}"
+  port: ${HOOKSHOT_PORT}
+
+
+listeners:
+  - bindAddress: 0.0.0.0
+    port: ${HOOKSHOT_PORT}
+    resources:
+      - webhooks
+      - widgets
+
+homeserver:
+  url: "http://synapse:8008"
+  serverName: "${MATRIX_SERVER_NAME}"
+
+permissions:
+  "*": "relay"
+
+service:
+  id: hookshot
+  as_token: "${HOOKSHOT_AS_TOKEN}"
+  hs_token: "${HOOKSHOT_HS_TOKEN}"
+  bot_localpart: hookshot
+  sender_localpart: hookshot
+
+feeds:
+  enabled: true
+  pollIntervalSeconds: ${HOOKSHOT_FEED_POLL_INTERVAL_SECONDS}
+
+github:
+  enabled: false
+
+gitlab:
+  enabled: false
+
+generic:
+  enabled: true
+
+database:
+  engine: postgres
+  connectionString: "postgresql://${HOOKSHOT_POSTGRES_USER}:${HOOKSHOT_POSTGRES_PASSWORD}@${HOOKSHOT_POSTGRES_HOST}:${HOOKSHOT_POSTGRES_PORT}/${HOOKSHOT_POSTGRES_DB}"

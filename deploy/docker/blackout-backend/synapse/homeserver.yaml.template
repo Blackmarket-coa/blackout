@@ -26,6 +26,14 @@ experimental_features:
     admin_token: "${SYNAPSE_MSC3861_ADMIN_TOKEN}"
     account_management_url: "${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}"
 
+# Appservice registrations (optional integrations profile):
+# 1) Start the integrations profile once to render Hookshot registration:
+#    docker compose --profile integrations up -d hookshot-db matrix-hookshot
+# 2) Ensure integrations/hookshot/registration.yml exists on the host.
+# 3) Keep this path enabled when Synapse should load the bridge appservice.
+app_service_config_files:
+  - /integrations/hookshot/registration.yml
+
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
 form_secret: "${SYNAPSE_FORM_SECRET}"
