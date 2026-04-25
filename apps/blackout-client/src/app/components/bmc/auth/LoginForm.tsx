@@ -28,8 +28,15 @@ type SsoPending = { baseUrl: string };
 
 const buildSsoRedirectUrl = (): string => {
     const url = new URL(window.location.href);
-    // Strip any existing token param so the SSO callback doesn't re-trigger.
+    // Strip auth callback params so delegated auth handoff cannot loop or leak
+    // stale state into a new SSO request.
     url.searchParams.delete('loginToken');
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    url.searchParams.delete('id_token');
+    url.searchParams.delete('access_token');
+    url.searchParams.delete('error');
+    url.searchParams.delete('error_description');
     return url.toString();
 };
 
@@ -125,7 +132,8 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
     useEffect(() => {
         const url = new URL(window.location.href);
         const token = url.searchParams.get('loginToken');
-        if (!token) return;
+        const errorCode = url.searchParams.get('error');
+        const errorDescription = url.searchParams.get('error_description');
 
         let pending: SsoPending | null = null;
         try {
@@ -134,6 +142,25 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
         } catch {
             pending = null;
         }
+
+        if (!token) {
+            // IdP denial/cancel returns without a login token.
+            if (pending && errorCode) {
+                const isAccessDenied = errorCode === 'access_denied';
+                const message =
+                    errorDescription ??
+                    (isAccessDenied
+                        ? 'Sign-in was cancelled at the identity provider.'
+                        : `Identity provider sign-in failed (${errorCode}).`);
+                setError(message);
+                window.sessionStorage.removeItem(SSO_RETURN_KEY);
+                url.searchParams.delete('error');
+                url.searchParams.delete('error_description');
+                window.history.replaceState(null, '', url.toString());
+            }
+            return;
+        }
+
         const baseUrl = pending?.baseUrl ?? server.baseUrl;
 
         setTokenLoading(true);
