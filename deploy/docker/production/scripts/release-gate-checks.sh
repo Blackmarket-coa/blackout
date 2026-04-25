@@ -8,6 +8,8 @@ MAX_BACKUP_AGE_HOURS="${MAX_BACKUP_AGE_HOURS:-24}"
 MAX_RESTORE_EVIDENCE_AGE_DAYS="${MAX_RESTORE_EVIDENCE_AGE_DAYS:-7}"
 ENABLE_MATRIX_COMPLIANCE_GATE="${ENABLE_MATRIX_COMPLIANCE_GATE:-0}"
 MATRIX_COMPLIANCE_GATE_SCRIPT="${MATRIX_COMPLIANCE_GATE_SCRIPT:-$(dirname "$0")/matrix-compliance-gate.sh}"
+ENABLE_BRIDGE_HEALTH_GATE="${ENABLE_BRIDGE_HEALTH_GATE:-0}"
+BRIDGE_HEALTH_GATE_SCRIPT="${BRIDGE_HEALTH_GATE_SCRIPT:-$(dirname "$0")/bridge-health-smoke.sh}"
 
 latest_backup="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'postgres-*.sql.gz' | sort | tail -n 1)"
 [ -n "$latest_backup" ] || { echo "[gate] FAIL: no postgres backup found"; exit 1; }
@@ -43,6 +45,13 @@ if [ "$ENABLE_MATRIX_COMPLIANCE_GATE" = "1" ]; then
   "$MATRIX_COMPLIANCE_GATE_SCRIPT"
 else
   echo "[gate] matrix compliance gate skipped (ENABLE_MATRIX_COMPLIANCE_GATE=${ENABLE_MATRIX_COMPLIANCE_GATE})"
+fi
+
+if [ "$ENABLE_BRIDGE_HEALTH_GATE" = "1" ]; then
+  echo "[gate] bridge health gate enabled"
+  "$BRIDGE_HEALTH_GATE_SCRIPT"
+else
+  echo "[gate] bridge health gate skipped (ENABLE_BRIDGE_HEALTH_GATE=${ENABLE_BRIDGE_HEALTH_GATE})"
 fi
 
 echo "[gate] PASS: release gate checks passed"

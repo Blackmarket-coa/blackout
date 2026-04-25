@@ -1,0 +1,83 @@
+groups:
+  - name: bridge-health
+    interval: 30s
+    rules:
+      - alert: BridgeContainerUnavailable
+        expr: up{job=~"matrix-hookshot|bridge"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge exporter target is down"
+          description: "No successful scrape for bridge target for 5m; verify container/process availability."
+
+      - alert: BridgeContainerUnhealthy
+        expr: max_over_time(container_health_status{container_label_com_docker_compose_service=~"matrix-hookshot|mautrix-discord"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge container healthcheck is unhealthy"
+          description: "Docker health state has been unhealthy for 5m."
+
+  - name: bridge-delivery
+    interval: 30s
+    rules:
+      - alert: BridgeMessageDeliveryFailuresHigh
+        expr: rate(matrix_bridge_message_delivery_failures_total{bridge=~"hookshot|mautrix-discord"}[10m]) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge delivery failures above SLO"
+          description: "Delivery failures exceed 0.02 events/sec over 10m for a bridge instance."
+
+      - alert: BridgeMessageDeliveryFailuresCritical
+        expr: rate(matrix_bridge_message_delivery_failures_total{bridge=~"hookshot|mautrix-discord"}[5m]) > 0.2
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge delivery failures critical"
+          description: "Delivery failures exceed 0.2 events/sec over 5m; user impact is likely active."
+
+      - alert: BridgeAuthTokenFailuresHigh
+        expr: rate(matrix_bridge_auth_failures_total{bridge=~"hookshot|mautrix-discord",reason=~"token|auth|forbidden|unauthorized"}[5m]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge auth/token failures detected"
+          description: "Auth/token failures are sustained and may indicate credential drift or revocation."
+
+      - alert: BridgeQueueLagWarning
+        expr: max_over_time(matrix_bridge_queue_backlog{bridge=~"hookshot|mautrix-discord"}[10m]) > 250
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge queue backlog elevated"
+          description: "Queue backlog is above 250 messages for 10m."
+
+      - alert: BridgeQueueLagCritical
+        expr: max_over_time(matrix_bridge_queue_backlog{bridge=~"hookshot|mautrix-discord"}[5m]) > 1000
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+          service: bridge
+        annotations:
+          summary: "Bridge queue backlog critical"
+          description: "Queue backlog is above 1000 messages for 5m."
