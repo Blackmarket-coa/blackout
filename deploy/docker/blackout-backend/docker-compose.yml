@@ -73,7 +73,7 @@ services:
       - blackout-backend
 
   mas:
-    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    image: ghcr.io/element-hq/matrix-authentication-service:v1.15.0
     container_name: blackout-mas
     restart: unless-stopped
     depends_on:
@@ -108,7 +108,7 @@ services:
       - blackout-backend
 
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.11.0
     container_name: blackout-livekit
     restart: unless-stopped
     depends_on:
@@ -151,7 +151,7 @@ services:
       - blackout-backend
 
   sygnal:
-    image: matrixdotorg/sygnal:latest
+    image: matrixdotorg/sygnal:v0.17.0
     container_name: blackout-sygnal
     restart: unless-stopped
     depends_on:
@@ -178,7 +178,7 @@ services:
     networks:
       - blackout-backend
   draupnir:
-    image: the-draupnir-project/draupnir:latest
+    image: the-draupnir-project/draupnir:v3.0.0
     container_name: blackout-draupnir
     restart: unless-stopped
     depends_on:
@@ -214,7 +214,7 @@ services:
       - blackout-backend
 
   matrix-hookshot:
-    image: halfshot/matrix-hookshot:latest
+    image: halfshot/matrix-hookshot:7.3.2
     container_name: blackout-matrix-hookshot
     restart: unless-stopped
     profiles:
