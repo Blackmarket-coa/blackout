@@ -1,0 +1,56 @@
+database:
+  uri: "${MAS_DATABASE_URL}"
+
+http:
+  public_base: "${MAS_PUBLIC_BASE_URL}"
+  issuer: "${MAS_ISSUER}"
+  listeners:
+    - name: web
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+      binds:
+        - host: 0.0.0.0
+          port: 8080
+
+matrix:
+  kind: synapse
+  homeserver: "${MAS_MATRIX_HOMESERVER}"
+  endpoint: "${MAS_MATRIX_ENDPOINT}"
+  secret: "${MAS_MATRIX_SECRET}"
+
+clients:
+  - client_id: "${MAS_CLIENT_ID}"
+    client_auth_method: "${MAS_CLIENT_AUTH_METHOD}"
+    client_secret: "${MAS_CLIENT_SECRET}"
+
+secrets:
+  encryption: "${MAS_ENCRYPTION_KEY}"
+  keys:
+    - kid: "${MAS_SIGNING_KEY_ID}"
+      key: "${MAS_SIGNING_KEY}"
+
+upstream_oauth2:
+  providers:
+    - id: "upstream-oidc"
+      human_name: "Upstream OIDC"
+      issuer: "${MAS_UPSTREAM_OIDC_ISSUER}"
+      client_id: "${MAS_UPSTREAM_OIDC_CLIENT_ID}"
+      client_secret: "${MAS_UPSTREAM_OIDC_CLIENT_SECRET}"
+      discovery_mode: insecure
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: force
+          template: "{{ user.preferred_username | default(user.sub) }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name | default(user.preferred_username) }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+      oauth_callback_url: "${MAS_UPSTREAM_OIDC_CALLBACK_URL}"

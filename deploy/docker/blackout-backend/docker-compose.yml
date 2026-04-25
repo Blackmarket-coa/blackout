@@ -39,10 +39,23 @@ services:
     environment:
       SYNAPSE_SERVER_NAME: ${MATRIX_SERVER_NAME}
       SYNAPSE_REPORT_STATS: ${SYNAPSE_REPORT_STATS}
+      SERVER_NAME: ${SERVER_NAME}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      SYNAPSE_ENABLE_REGISTRATION: ${SYNAPSE_ENABLE_REGISTRATION}
+      SYNAPSE_REGISTRATION_SHARED_SECRET: ${SYNAPSE_REGISTRATION_SHARED_SECRET}
+      SYNAPSE_MACAROON_SECRET_KEY: ${SYNAPSE_MACAROON_SECRET_KEY}
+      SYNAPSE_FORM_SECRET: ${SYNAPSE_FORM_SECRET}
+      SYNAPSE_PASSWORD_AUTH_ENABLED: ${SYNAPSE_PASSWORD_AUTH_ENABLED}
+      SYNAPSE_MSC3861_ENABLED: ${SYNAPSE_MSC3861_ENABLED}
+      SYNAPSE_MSC3861_ISSUER: ${SYNAPSE_MSC3861_ISSUER}
+      SYNAPSE_MSC3861_CLIENT_ID: ${SYNAPSE_MSC3861_CLIENT_ID}
+      SYNAPSE_MSC3861_CLIENT_AUTH_METHOD: ${SYNAPSE_MSC3861_CLIENT_AUTH_METHOD}
+      SYNAPSE_MSC3861_CLIENT_SECRET: ${SYNAPSE_MSC3861_CLIENT_SECRET}
+      SYNAPSE_MSC3861_ADMIN_TOKEN: ${SYNAPSE_MSC3861_ADMIN_TOKEN}
+      SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL: ${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +67,41 @@ services:
     command: >-
       /bin/sh -c "envsubst < /templates/homeserver.yaml.template > /data/homeserver.yaml
       && exec /start.py"
+    networks:
+      - blackout-backend
+
+  mas:
+    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    container_name: blackout-mas
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      synapse:
+        condition: service_started
+    environment:
+      MAS_DATABASE_URL: ${MAS_DATABASE_URL}
+      MAS_PUBLIC_BASE_URL: ${MAS_PUBLIC_BASE_URL}
+      MAS_ISSUER: ${MAS_ISSUER}
+      MAS_MATRIX_HOMESERVER: ${MATRIX_SERVER_NAME}
+      MAS_MATRIX_ENDPOINT: http://synapse:8008
+      MAS_MATRIX_SECRET: ${MAS_MATRIX_SECRET}
+      MAS_CLIENT_ID: ${MAS_CLIENT_ID}
+      MAS_CLIENT_SECRET: ${MAS_CLIENT_SECRET}
+      MAS_CLIENT_AUTH_METHOD: ${MAS_CLIENT_AUTH_METHOD}
+      MAS_UPSTREAM_OIDC_ISSUER: ${MAS_UPSTREAM_OIDC_ISSUER}
+      MAS_UPSTREAM_OIDC_CLIENT_ID: ${MAS_UPSTREAM_OIDC_CLIENT_ID}
+      MAS_UPSTREAM_OIDC_CLIENT_SECRET: ${MAS_UPSTREAM_OIDC_CLIENT_SECRET}
+      MAS_UPSTREAM_OIDC_CALLBACK_URL: ${MAS_UPSTREAM_OIDC_CALLBACK_URL}
+      MAS_SIGNING_KEY_ID: ${MAS_SIGNING_KEY_ID}
+      MAS_SIGNING_KEY: ${MAS_SIGNING_KEY}
+      MAS_ENCRYPTION_KEY: ${MAS_ENCRYPTION_KEY}
+    volumes:
+      - mas_data:/data
+      - ./mas/config.yaml.template:/templates/config.yaml.template:ro
+    command: >-
+      /bin/sh -c "envsubst < /templates/config.yaml.template > /data/config.yaml
+      && exec mas-cli server -c /data/config.yaml"
     networks:
       - blackout-backend
 
@@ -122,6 +170,7 @@ services:
     restart: unless-stopped
     depends_on:
       - synapse
+      - mas
       - livekit
       - lk-jwt-service
     ports:
@@ -155,4 +204,5 @@ volumes:
   postgres_data:
   redis_data:
   synapse_data:
+  mas_data:
   draupnir_data:
