@@ -71,6 +71,7 @@
     "guard:no-direct-fetch-in-client-features": "node tools/ci/check-no-direct-fetch-in-client-features.mjs",
     "guard:matrix-sdk-version-alignment": "node tools/ci/check-matrix-sdk-version-alignment.mjs",
     "guard:matrix-sdk-internal-imports": "node tools/ci/check-matrix-sdk-internal-imports.mjs",
+    "guard:sdk-internal-import-budget": "node tools/ci/check-sdk-internal-import-budget.mjs",
     "guard:protocol-import-consistency": "node tools/ci/check-protocol-import-consistency.mjs",
     "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
     "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs",

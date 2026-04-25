@@ -12,6 +12,7 @@ const checks = [
   { name: 'legacy-runtime-imports', command: ['pnpm', 'guard:legacy-runtime-imports'] },
   { name: 'matrix-sdk-version-alignment', command: ['pnpm', 'guard:matrix-sdk-version-alignment'] },
   { name: 'matrix-sdk-internal-imports', command: ['pnpm', 'guard:matrix-sdk-internal-imports'] },
+  { name: 'sdk-internal-import-budget', command: ['pnpm', 'guard:sdk-internal-import-budget'] },
 ];
 
 const outputDir = path.resolve(process.cwd(), 'artifacts', 'qa-monorepo');
