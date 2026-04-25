@@ -94,6 +94,17 @@ jobs:
           node-version: 22
       - run: node tools/ci/check-feature-registry.mjs
 
+
+  matrix-sdk-baseline:
+    name: Matrix SDK baseline alignment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/ci/check-matrix-sdk-version-alignment.mjs
+
   deployment-readiness:
     name: Deployment readiness assertions
     runs-on: ubuntu-latest
