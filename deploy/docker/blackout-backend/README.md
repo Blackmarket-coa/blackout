@@ -13,6 +13,7 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 7. `nginx` (`nginx`) – reverse proxy + `.well-known`
 8. `certbot` (`certbot/certbot`) – Let's Encrypt renewal
 9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – Matrix Authentication Service for MSC3861 delegated auth
+10. `sygnal` (`matrixdotorg/sygnal`) – push gateway for APNs/FCM delivery
 
 ## Files
 
@@ -21,6 +22,7 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 - `synapse/homeserver.yaml.template`
 - `mas/config.yaml.template`
 - `livekit/config.yaml`
+- `sygnal/sygnal.yaml`
 - `.env.example`
 - `well-known/matrix/client`
 - `well-known/matrix/server`
@@ -173,3 +175,45 @@ Use this sequence to minimize login disruption:
    - Test login, refresh, logout flows from a client.
    - Confirm Synapse client APIs and federation still work.
    - Keep backups until you are confident rollback is unnecessary.
+
+## Push gateway (Sygnal) setup
+
+Sygnal is included as an internal push gateway service and is reachable from Synapse at `${SYGNAL_URL}`.
+
+### Provider configuration
+
+1. Copy `.env.example` to `.env` and configure all `SYGNAL_*` values.
+2. Enable providers you intend to use:
+   - APNs: set `SYGNAL_APNS_ENABLED=true`, then provide Team ID, Key ID, Topic, and mount your `.p8` key via `SYGNAL_APNS_KEY_DIR` / `SYGNAL_APNS_KEYFILE`.
+   - FCM: set `SYGNAL_FCM_ENABLED=true`, then set `SYGNAL_FCM_PROJECT_ID` and `SYGNAL_FCM_API_KEY`.
+3. Ensure client pusher registration uses app IDs matching `SYGNAL_APNS_APP_ID` (iOS) and `SYGNAL_FCM_APP_ID` (Android).
+4. Restart services after configuration changes:
+
+```bash
+docker compose up -d synapse sygnal
+```
+
+### Verification flow
+
+1. **Push registration test**
+   - From a Matrix client (or API), register a pusher with `kind: http` and `url: ${SYGNAL_PUBLIC_URL}`.
+   - Verify via Synapse API that the pusher exists:
+
+```bash
+curl -s -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  https://<domain>/_matrix/client/v3/pushers | jq
+```
+
+2. **Event delivery check**
+   - Send a message to the registered user while the device/app is backgrounded.
+   - Confirm Synapse can reach Sygnal and receives a 2xx response:
+
+```bash
+docker compose logs --tail=200 synapse sygnal
+```
+
+3. **Expected logs**
+   - Synapse: pusher activity logs indicating an outbound HTTP notify request to `sygnal`.
+   - Sygnal: accepted notification requests and upstream provider responses (APNs/FCM success or detailed provider errors).
+   - On provider auth issues, Sygnal logs include explicit credential or token errors; fix env values and restart `sygnal`.
+

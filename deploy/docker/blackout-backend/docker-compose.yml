@@ -56,6 +56,7 @@ services:
       SYNAPSE_MSC3861_CLIENT_SECRET: ${SYNAPSE_MSC3861_CLIENT_SECRET}
       SYNAPSE_MSC3861_ADMIN_TOKEN: ${SYNAPSE_MSC3861_ADMIN_TOKEN}
       SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL: ${SYNAPSE_MSC3861_ACCOUNT_MANAGEMENT_URL}
+      SYGNAL_URL: ${SYGNAL_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +149,33 @@ services:
     networks:
       - blackout-backend
 
+  sygnal:
+    image: matrixdotorg/sygnal:latest
+    container_name: blackout-sygnal
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    environment:
+      SYGNAL_HTTP_PORT: ${SYGNAL_HTTP_PORT}
+      SYGNAL_APNS_ENABLED: ${SYGNAL_APNS_ENABLED}
+      SYGNAL_APNS_TEAM_ID: ${SYGNAL_APNS_TEAM_ID}
+      SYGNAL_APNS_KEY_ID: ${SYGNAL_APNS_KEY_ID}
+      SYGNAL_APNS_TOPIC: ${SYGNAL_APNS_TOPIC}
+      SYGNAL_APNS_PUSH_TYPE: ${SYGNAL_APNS_PUSH_TYPE}
+      SYGNAL_APNS_CONVERT_DEVICE_TOKEN_TO_HEX: ${SYGNAL_APNS_CONVERT_DEVICE_TOKEN_TO_HEX}
+      SYGNAL_APNS_KEYFILE: ${SYGNAL_APNS_KEYFILE}
+      SYGNAL_FCM_ENABLED: ${SYGNAL_FCM_ENABLED}
+      SYGNAL_FCM_API_KEY: ${SYGNAL_FCM_API_KEY}
+      SYGNAL_FCM_APP_ID: ${SYGNAL_FCM_APP_ID}
+      SYGNAL_FCM_PROJECT_ID: ${SYGNAL_FCM_PROJECT_ID}
+    volumes:
+      - ./sygnal/sygnal.yaml:/etc/sygnal/sygnal.yaml.template:ro
+      - ${SYGNAL_APNS_KEY_DIR:-./sygnal}:/etc/sygnal/keys:ro
+    command: >-
+      /bin/sh -c "envsubst < /etc/sygnal/sygnal.yaml.template > /tmp/sygnal.yaml
+      && exec python -m sygnal.sygnal /tmp/sygnal.yaml"
+    networks:
+      - blackout-backend
   draupnir:
     image: the-draupnir-project/draupnir:latest
     container_name: blackout-draupnir
