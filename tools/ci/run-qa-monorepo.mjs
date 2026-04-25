@@ -6,11 +6,12 @@ import path from 'node:path';
 const checks = [
   { name: 'workspace-package-assertion', command: ['pnpm', 'guard:workspace-packages'] },
   { name: 'canonical-dev-filter-resolution', command: ['pnpm', 'guard:dev-filters'] },
-  { name: 'sdk-boundary', command: ['pnpm', 'guard:sdk-boundary'] },
+  { name: 'no-direct-fetch-in-client-features', command: ['pnpm', 'guard:no-direct-fetch-in-client-features'] },
   { name: 'protocol-import-consistency', command: ['pnpm', 'guard:protocol-import-consistency'] },
   { name: 'legacy-isolation', command: ['pnpm', 'guard:legacy-isolation'] },
   { name: 'legacy-runtime-imports', command: ['pnpm', 'guard:legacy-runtime-imports'] },
-  { name: 'matrix-sdk-baseline', command: ['pnpm', 'guard:matrix-sdk-baseline'] },
+  { name: 'matrix-sdk-version-alignment', command: ['pnpm', 'guard:matrix-sdk-version-alignment'] },
+  { name: 'matrix-sdk-internal-imports', command: ['pnpm', 'guard:matrix-sdk-internal-imports'] },
 ];
 
 const outputDir = path.resolve(process.cwd(), 'artifacts', 'qa-monorepo');
