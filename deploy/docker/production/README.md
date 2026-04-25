@@ -86,6 +86,44 @@ See `.github/workflows/deploy-compose-prod.yml` for hooks that:
 
 Use GitHub environments + required reviewers for gated production releases.
 
+## Matrix compliance release gate (Complement)
+
+`scripts/release-gate-checks.sh` can run a Complement-based Matrix compliance gate in addition to backup/restore/health checks.
+
+Enable the gate during phased rollout:
+
+```bash
+ENABLE_MATRIX_COMPLIANCE_GATE=1 \
+MATRIX_COMPLEMENT_SMOKE_CMD="./complement-run.sh smoke" \
+./scripts/release-gate-checks.sh
+```
+
+Required environment for smoke checks:
+
+- `ENABLE_MATRIX_COMPLIANCE_GATE=1` to activate the gate.
+- `MATRIX_COMPLEMENT_SMOKE_CMD` must run a **minimal, deterministic** Complement smoke profile against the deployed Synapse target (pin your image/tag and test selection).
+
+Optional environment for E2EE-critical flows:
+
+- `ENABLE_MATRIX_COMPLEMENT_CRYPTO=1` to run crypto scenarios.
+- `MATRIX_COMPLEMENT_CRYPTO_CMD` for the Complement crypto command.
+
+Execution profile knobs:
+
+- `MATRIX_COMPLEMENT_SMOKE_PROFILE` (default: `synapse-deployed-smoke`)
+- `MATRIX_COMPLEMENT_CRYPTO_PROFILE` (default: `synapse-deployed-crypto`)
+- `MATRIX_COMPLIANCE_ARTIFACT_DIR` (default: `ops/evidence/matrix-compliance`)
+- `MATRIX_COMPLIANCE_GATE_SCRIPT` to override script path used by `release-gate-checks.sh`
+
+Machine-readable output:
+
+- `scripts/matrix-compliance-gate.sh` writes a timestamped run directory with:
+  - `result.json` (overall/suite pass-fail state, exit codes, artifact paths)
+  - `result.env` (shell-friendly key/value output for pipeline ingestion)
+  - `smoke.log` and `crypto.log` (suite logs)
+
+If smoke fails, or crypto is enabled and fails, the gate exits non-zero and blocks promotion.
+
 ## Cloudflare Tunnel migration runbook
 
 For staged Cloudflare Tunnel + TLS + DNS migration (staging then production), see:
