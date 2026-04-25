@@ -1,0 +1,22 @@
+# Generic Matrix appservice registration template.
+# Reusable for matrix-appservice-discord, matrix-appservice-irc,
+# matrix-appservice-slack, and Mautrix bridge families.
+
+id: ${APP_SERVICE_ID}
+url: ${APP_SERVICE_URL}
+as_token: ${APP_SERVICE_AS_TOKEN}
+hs_token: ${APP_SERVICE_HS_TOKEN}
+sender_localpart: ${APP_SERVICE_SENDER_LOCALPART}
+rate_limited: ${APP_SERVICE_RATE_LIMITED:-false}
+
+namespaces:
+  users:
+    - exclusive: ${APP_SERVICE_USERS_EXCLUSIVE:-true}
+      regex: '${APP_SERVICE_USERS_REGEX:-@_bridge_.*:${MATRIX_SERVER_NAME}}'
+  aliases:
+    - exclusive: ${APP_SERVICE_ALIASES_EXCLUSIVE:-true}
+      regex: '${APP_SERVICE_ALIASES_REGEX:-#_bridge_.*:${MATRIX_SERVER_NAME}}'
+  rooms: []
+
+# MSC3202 support flag (if required by the bridge; keep false unless needed).
+# de.sorunome.msc3202: ${APP_SERVICE_MSC3202:-false}
