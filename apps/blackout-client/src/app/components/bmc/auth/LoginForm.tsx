@@ -66,10 +66,11 @@ const resolveLoginIdentifier = (
 
 type LoginFormProps = {
     server: ResolvedHomeserver;
+    canRegister: boolean;
     onSwitchTab: (tab: 'register' | 'reset') => void;
 };
 
-export const LoginForm = ({ server, onSwitchTab }: LoginFormProps) => {
+export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) => {
     const store = useStore();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -311,16 +312,22 @@ export const LoginForm = ({ server, onSwitchTab }: LoginFormProps) => {
                 </div>
             ) : null}
 
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
-                New to {server.serverName}?{' '}
-                <button
-                    type="button"
-                    onClick={() => onSwitchTab('register')}
-                    style={linkButtonStyle}
-                >
-                    Create an account
-                </button>
-            </p>
+            {canRegister ? (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
+                    New to {server.serverName}?{' '}
+                    <button
+                        type="button"
+                        onClick={() => onSwitchTab('register')}
+                        style={linkButtonStyle}
+                    >
+                        Create an account
+                    </button>
+                </p>
+            ) : (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
+                    Account creation is disabled on {server.serverName}. Contact your server admin.
+                </p>
+            )}
         </div>
     );
 };
