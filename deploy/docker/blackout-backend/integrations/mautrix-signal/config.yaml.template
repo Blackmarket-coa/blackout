@@ -1,0 +1,43 @@
+# Mautrix Signal configuration template (rendered by envsubst).
+# Reference: https://github.com/mautrix/signal
+
+homeserver:
+  address: "http://synapse:8008"
+  domain: "${MATRIX_SERVER_NAME}"
+
+appservice:
+  address: "${MAUTRIX_SIGNAL_APP_SERVICE_ADDRESS}"
+  hostname: 0.0.0.0
+  port: 29328
+  id: "${MAUTRIX_SIGNAL_APPSERVICE_ID}"
+  bot:
+    username: "${MAUTRIX_SIGNAL_BOT_USERNAME}"
+    displayname: Signal Bridge Bot
+  as_token: "${MAUTRIX_SIGNAL_AS_TOKEN}"
+  hs_token: "${MAUTRIX_SIGNAL_HS_TOKEN}"
+
+bridge:
+  username_template: "signal_{{.}}"
+  displayname_template: "{{or .ContactName .ProfileName .PhoneNumber}} (Signal)"
+  command_prefix: "${MAUTRIX_SIGNAL_COMMAND_PREFIX}"
+  permissions:
+    "${MATRIX_SERVER_NAME}": user
+  provisioning:
+    enabled: true
+    prefix: /_matrix/provision
+    shared_secret: "${MAUTRIX_SIGNAL_PROVISIONING_SHARED_SECRET}"
+  public_address: "${MAUTRIX_SIGNAL_PUBLIC_ADDRESS}"
+
+metrics:
+  enabled: true
+  listen: "0.0.0.0:${MAUTRIX_SIGNAL_METRICS_PORT}"
+
+database:
+  type: postgres
+  uri: "postgres://${MAUTRIX_SIGNAL_POSTGRES_USER}:${MAUTRIX_SIGNAL_POSTGRES_PASSWORD}@${MAUTRIX_SIGNAL_POSTGRES_HOST}:${MAUTRIX_SIGNAL_POSTGRES_PORT}/${MAUTRIX_SIGNAL_POSTGRES_DB}?sslmode=disable"
+
+logging:
+  min_level: info
+  writers:
+    - type: stdout
+      format: pretty-colored

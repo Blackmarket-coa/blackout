@@ -1,0 +1,57 @@
+# matrix-appservice-irc configuration template (rendered by envsubst).
+# Reference: https://github.com/matrix-org/matrix-appservice-irc
+
+homeserver:
+  url: "http://synapse:8008"
+  media_url: "${MATRIX_HOMESERVER_URL}"
+  domain: "${MATRIX_SERVER_NAME}"
+  bindHostname: 0.0.0.0
+  bindPort: 9999
+  enablePresence: false
+
+database:
+  engine: postgres
+  connectionString: "postgres://${IRC_BRIDGE_POSTGRES_USER}:${IRC_BRIDGE_POSTGRES_PASSWORD}@${IRC_BRIDGE_POSTGRES_HOST}:${IRC_BRIDGE_POSTGRES_PORT}/${IRC_BRIDGE_POSTGRES_DB}"
+
+ircService:
+  servers:
+    irc.libera.chat:
+      name: "Libera.Chat"
+      port: 6697
+      ssl: true
+      sasl: false
+      botConfig:
+        enabled: true
+        nick: "${IRC_BRIDGE_BOT_NICK}"
+        joinChannelsIfNoUsers: true
+      privateMessages:
+        enabled: true
+        federate: true
+      dynamicChannels:
+        enabled: true
+        published: true
+        createAlias: true
+        joinRule: public
+        federate: true
+        aliasTemplate: "#irc_$CHANNEL"
+      mappings: {}
+      matrixClients:
+        userTemplate: "@irc_$NICK"
+        displayName: "$NICK (IRC)"
+        joinAttempts: 3
+      ircClients:
+        nickTemplate: "$DISPLAY[m]"
+        allowNickChanges: true
+        maxClients: 30
+        idleTimeout: 10800
+        reconnectIntervalMs: 5000
+        concurrentReconnectLimit: 50
+        lineLimit: 3
+  permissions:
+    "${MATRIX_SERVER_NAME}": admin
+
+advanced:
+  maxHttpSockets: 1000
+
+logging:
+  level: "info"

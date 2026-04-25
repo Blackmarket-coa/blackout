@@ -1,0 +1,17 @@
+# rageshake configuration template (rendered by envsubst).
+# Reference: https://github.com/matrix-org/rageshake
+
+listen: ${RAGESHAKE_LISTEN}
+
+allowed_app_names:
+  - blackout-client
+  - blackout-desktop
+  - blackout-mobile
+
+submission_base_url: ${RAGESHAKE_SUBMISSION_BASE_URL}
+
+generic_webhook_urls: []
+
+email_addresses: []
+
+bug_report_dir: /data/reports

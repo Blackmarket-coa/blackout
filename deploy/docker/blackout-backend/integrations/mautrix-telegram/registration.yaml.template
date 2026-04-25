@@ -1,0 +1,18 @@
+# Mautrix Telegram appservice registration template (rendered by envsubst).
+
+id: "${MAUTRIX_TELEGRAM_APPSERVICE_ID}"
+url: "${MAUTRIX_TELEGRAM_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_TELEGRAM_AS_TOKEN}"
+hs_token: "${MAUTRIX_TELEGRAM_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_TELEGRAM_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@telegram_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#telegram_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - telegram

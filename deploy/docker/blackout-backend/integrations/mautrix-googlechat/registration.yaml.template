@@ -1,0 +1,16 @@
+id: "${MAUTRIX_GOOGLECHAT_APPSERVICE_ID}"
+url: "${MAUTRIX_GOOGLECHAT_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_GOOGLECHAT_AS_TOKEN}"
+hs_token: "${MAUTRIX_GOOGLECHAT_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_GOOGLECHAT_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@googlechat_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#googlechat_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - googlechat

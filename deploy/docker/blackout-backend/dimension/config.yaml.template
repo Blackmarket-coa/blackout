@@ -1,0 +1,38 @@
+# matrix-dimension configuration template (rendered by envsubst).
+# Reference: https://github.com/turt2live/matrix-dimension
+
+web:
+  port: 8184
+  address: '0.0.0.0'
+
+homeserver:
+  name: '${MATRIX_SERVER_NAME}'
+  clientServerUrl: 'http://synapse:8008'
+  federationUrl: 'http://synapse:8008'
+  mediaUrl: '${MATRIX_HOMESERVER_URL}'
+  accessToken: '${DIMENSION_ACCESS_TOKEN}'
+
+database:
+  file: /data/dimension.db
+
+# Dimension exposes itself at /dimension/ via nginx (see nginx.conf).
+publicUrl: '${MATRIX_HOMESERVER_URL}/dimension'
+
+bots:
+  scalar: '@dimension:${MATRIX_SERVER_NAME}'
+
+logging:
+  file: /data/logs/dimension.log
+  console: true
+  consoleLevel: info
+  fileLevel: verbose
+  rotate:
+    size: 52428800
+    count: 5
+
+telegram:
+  appId: 0
+  appHash: ''
+
+webhooks:
+  publicUrl: '${MATRIX_HOMESERVER_URL}/dimension/webhooks'

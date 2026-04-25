@@ -1,0 +1,48 @@
+# Mautrix Google Chat configuration template (rendered by envsubst).
+# Reference: https://github.com/mautrix/googlechat
+
+homeserver:
+  address: "http://synapse:8008"
+  domain: "${MATRIX_SERVER_NAME}"
+
+appservice:
+  address: "${MAUTRIX_GOOGLECHAT_APP_SERVICE_ADDRESS}"
+  hostname: 0.0.0.0
+  port: 29320
+  database: "postgres://${MAUTRIX_GOOGLECHAT_POSTGRES_USER}:${MAUTRIX_GOOGLECHAT_POSTGRES_PASSWORD}@${MAUTRIX_GOOGLECHAT_POSTGRES_HOST}:${MAUTRIX_GOOGLECHAT_POSTGRES_PORT}/${MAUTRIX_GOOGLECHAT_POSTGRES_DB}?sslmode=disable"
+  database_opts:
+    min_size: 1
+    max_size: 10
+  id: "${MAUTRIX_GOOGLECHAT_APPSERVICE_ID}"
+  bot_username: "${MAUTRIX_GOOGLECHAT_BOT_USERNAME}"
+  bot_displayname: Google Chat Bridge Bot
+  as_token: "${MAUTRIX_GOOGLECHAT_AS_TOKEN}"
+  hs_token: "${MAUTRIX_GOOGLECHAT_HS_TOKEN}"
+
+bridge:
+  username_template: "googlechat_{userid}"
+  displayname_template: "{full_name} (GChat)"
+  command_prefix: "${MAUTRIX_GOOGLECHAT_COMMAND_PREFIX}"
+  permissions:
+    "${MATRIX_SERVER_NAME}": user
+  provisioning:
+    enabled: true
+    prefix: /_matrix/provision/v1
+    shared_secret: "${MAUTRIX_GOOGLECHAT_PROVISIONING_SHARED_SECRET}"
+
+metrics:
+  enabled: true
+  listen_port: ${MAUTRIX_GOOGLECHAT_METRICS_PORT}
+
+logging:
+  version: 1
+  formatters:
+    precise:
+      format: "[%(asctime)s] [%(levelname)s@%(name)s] %(message)s"
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: precise
+  root:
+    level: INFO
+    handlers: [console]

@@ -1,0 +1,16 @@
+id: "${MAUTRIX_SIGNAL_APPSERVICE_ID}"
+url: "${MAUTRIX_SIGNAL_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_SIGNAL_AS_TOKEN}"
+hs_token: "${MAUTRIX_SIGNAL_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_SIGNAL_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@signal_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#signal_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - signal
