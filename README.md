@@ -29,6 +29,7 @@ For deeper architecture context:
 - `docs/repository_functionality_analysis.md`
 - `docs/features/governance_features_analysis.md`
 - `docs/blackout-reuse-completion-tracker.md`
+- [`docs/matrix-upstreams.md`](docs/matrix-upstreams.md) (upstream Matrix dependency registry with adoption decisions)
 - `docs/distributed_self_healing_blueprint.md`
 - `docs/deploying-blackout-fedora-tauri.md`
 - `docs/blackout-monorepo-work-required.md` (active migration work plan)
