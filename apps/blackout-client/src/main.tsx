@@ -11,7 +11,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
-import { LoginForm } from './app/components/bmc/LoginForm';
+import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
@@ -121,7 +121,7 @@ const BootstrapStatus = () => {
             >
                 <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
                 <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
-                {authState === 'logged_out' ? <LoginForm /> : null}
+                {authState === 'logged_out' ? <LoginPage /> : null}
                 {authState === 'crypto_failed' ? (
                     <button
                         type="button"

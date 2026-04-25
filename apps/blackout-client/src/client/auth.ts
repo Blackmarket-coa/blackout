@@ -1,4 +1,10 @@
-import { createClient, type MatrixClient, type MatrixError } from 'matrix-js-sdk';
+import {
+    createClient,
+    type AuthDict,
+    type IAuthData,
+    type MatrixClient,
+    type MatrixError,
+} from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/bmc-auth';
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
@@ -22,12 +28,31 @@ export interface PasswordLoginInput {
     password: string;
 }
 
+export interface TokenLoginInput {
+    baseUrl: string;
+    token: string;
+}
+
 export interface RegistrationInput {
     baseUrl: string;
     username: string;
     password: string;
-    displayName?: string;
+    /** Optional UIA auth dict — supplied by the UIA flow runner per stage. */
+    auth?: AuthDict;
+    /** Optional initial email (added as a 3PID after registration succeeds). */
+    initialEmail?: string;
+    /** When the homeserver requires an email 3PID up-front. */
+    threepidCreds?: { sid: string; clientSecret: string };
+    inhibitLogin?: boolean;
 }
+
+/**
+ * Successful registration returns a session; otherwise the homeserver returns
+ * 401 with auth flow data so the caller can keep walking the UIA stages.
+ */
+export type RegistrationOutcome =
+    | { status: 'success'; client: MatrixClient }
+    | { status: 'flow'; authData: IAuthData };
 
 const normalizeAuthError = (error: unknown): MatrixInitError => {
     const matrixError = error as Partial<MatrixError> & { errcode?: string; message?: string };
@@ -122,38 +147,37 @@ export const loginWithPassword = async (
     }
 };
 
-export const beginSsoRedirect = (baseUrl: string, redirectUrl: string): string => {
+export const beginSsoRedirect = (
+    baseUrl: string,
+    redirectUrl: string,
+    method: 'sso' | 'cas' = 'sso',
+    idpId?: string
+): string => {
     const client = createClient({ baseUrl });
-    return client.getSsoLoginUrl(redirectUrl, 'sso');
+    return client.getSsoLoginUrl(redirectUrl, method, idpId);
 };
 
-export const registerUser = async (
+export const loginWithToken = async (
     store: AtomStore,
-    input: RegistrationInput
+    input: TokenLoginInput
 ): Promise<MatrixClient> => {
     store.set(authStateAtom, 'loading');
 
     try {
         const client = createClient({ baseUrl: input.baseUrl });
-        const response = await client.registerRequest({
-            auth: { type: 'm.login.dummy' },
-            username: input.username,
-            password: input.password,
+        const result = await client.login('m.login.token', {
+            token: input.token,
             initial_device_display_name: 'Blackout Client',
-            inhibit_login: false,
+            refresh_token: true,
         });
 
-        saveFromLoginResponse(input.baseUrl, {
-            access_token: response.access_token,
-            user_id: response.user_id,
-            device_id: response.device_id,
-        });
-
+        saveFromLoginResponse(input.baseUrl, result);
         const initializedClient = await initMatrixFromStoredSession(store);
+
         if (!initializedClient) {
             throw new MatrixInitError(
                 'invalid_credentials',
-                'Unable to restore session after registration.'
+                'Unable to restore session after SSO login.'
             );
         }
 
@@ -161,6 +185,135 @@ export const registerUser = async (
     } catch (error) {
         applyLoggedOutAtoms(store);
         throw normalizeAuthError(error);
+    }
+};
+
+/**
+ * registerUser drives one round-trip of the UIA flow.
+ *
+ * On 401 from the homeserver matrix-js-sdk surfaces the flow descriptor as
+ * `data` on the MatrixError. We translate that into a structured return so the
+ * caller (the registration UI) can run the appropriate stage UI and re-call us
+ * with a populated `auth` dict on the next attempt.
+ */
+export const registerUser = async (
+    store: AtomStore,
+    input: RegistrationInput
+): Promise<RegistrationOutcome> => {
+    if (!input.auth) {
+        store.set(authStateAtom, 'loading');
+    }
+
+    const client = createClient({ baseUrl: input.baseUrl });
+    let response;
+    try {
+        response = await client.registerRequest({
+            auth: input.auth,
+            username: input.username,
+            password: input.password,
+            initial_device_display_name: 'Blackout Client',
+            inhibit_login: input.inhibitLogin ?? false,
+        });
+    } catch (error) {
+        const matrixError = error as MatrixError;
+        if (matrixError?.httpStatus === 401 && matrixError.data) {
+            // UIA still in progress; surface the flow data, keep auth state intact.
+            return { status: 'flow', authData: matrixError.data as IAuthData };
+        }
+        applyLoggedOutAtoms(store);
+        throw normalizeAuthError(error);
+    }
+
+    if (!response.access_token || !response.device_id || !response.user_id) {
+        // inhibit_login: true returns no session; caller decides what to do.
+        applyLoggedOutAtoms(store);
+        throw new MatrixInitError(
+            'invalid_credentials',
+            'Registration completed but no session was returned.'
+        );
+    }
+
+    saveFromLoginResponse(input.baseUrl, response);
+    const initializedClient = await initMatrixFromStoredSession(store);
+    if (!initializedClient) {
+        applyLoggedOutAtoms(store);
+        throw new MatrixInitError(
+            'invalid_credentials',
+            'Unable to restore session after registration.'
+        );
+    }
+
+    return { status: 'success', client: initializedClient };
+};
+
+export interface RequestPasswordResetEmailInput {
+    baseUrl: string;
+    email: string;
+    clientSecret: string;
+    sendAttempt: number;
+    nextLink?: string;
+}
+
+export const requestPasswordResetEmail = async (
+    input: RequestPasswordResetEmailInput
+): Promise<{ sid: string }> => {
+    const client = createClient({ baseUrl: input.baseUrl });
+    const result = await client.requestPasswordEmailToken(
+        input.email,
+        input.clientSecret,
+        input.sendAttempt,
+        input.nextLink
+    );
+    return { sid: result.sid };
+};
+
+export interface CompletePasswordResetInput {
+    baseUrl: string;
+    sid: string;
+    clientSecret: string;
+    newPassword: string;
+    logoutDevices?: boolean;
+}
+
+/**
+ * Completes the email-token password reset by hitting
+ * `POST /_matrix/client/v3/account/password` with a UIA dict containing the
+ * sid + client_secret obtained from requestPasswordResetEmail. We call the
+ * endpoint directly because matrix-js-sdk's setPassword wrapper requires an
+ * authenticated client.
+ */
+export const completePasswordReset = async (
+    input: CompletePasswordResetInput
+): Promise<void> => {
+    const url = new URL('/_matrix/client/v3/account/password', input.baseUrl);
+    const body = {
+        new_password: input.newPassword,
+        logout_devices: input.logoutDevices ?? false,
+        auth: {
+            type: 'm.login.email.identity',
+            threepid_creds: { sid: input.sid, client_secret: input.clientSecret },
+            threepidCreds: { sid: input.sid, client_secret: input.clientSecret },
+        },
+    };
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        let message = `Password reset failed (${response.status}).`;
+        try {
+            const data = (await response.json()) as { error?: string; errcode?: string };
+            if (data.error) message = data.error;
+            if (data.errcode === 'M_THREEPID_AUTH_FAILED') {
+                message = 'Email verification not yet confirmed. Click the link in the email first.';
+            }
+        } catch {
+            // ignore
+        }
+        throw new MatrixInitError('invalid_credentials', message);
     }
 };
 
