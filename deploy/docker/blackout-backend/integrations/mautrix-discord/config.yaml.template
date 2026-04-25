@@ -1,0 +1,48 @@
+# Mautrix Discord configuration template.
+# Rendered by envsubst into /data/config.yaml.
+
+homeserver:
+  address: "http://synapse:8008"
+  domain: "${MATRIX_SERVER_NAME}"
+
+appservice:
+  address: "${MAUTRIX_DISCORD_APP_SERVICE_ADDRESS}"
+  hostname: 0.0.0.0
+  port: 29334
+  id: "${MAUTRIX_DISCORD_APPSERVICE_ID}"
+  bot:
+    username: "${MAUTRIX_DISCORD_BOT_USERNAME}"
+    displayname: Discord Bridge Bot
+    avatar: mxc://maunium.net/nIdEykemnwdisvHbpxflpDlC
+  as_token: "${MAUTRIX_DISCORD_AS_TOKEN}"
+  hs_token: "${MAUTRIX_DISCORD_HS_TOKEN}"
+
+bridge:
+  username_template: "discord_{{.}}"
+  alias_template: "discord_{{.}}"
+  displayname_template: "{{or .GlobalName .Username}} (Discord)"
+  command_prefix: "${MAUTRIX_DISCORD_COMMAND_PREFIX}"
+  provisioning:
+    enabled: true
+    prefix: /_matrix/provision
+    shared_secret: "${MAUTRIX_DISCORD_PROVISIONING_SHARED_SECRET}"
+  permissions:
+    "${MATRIX_SERVER_NAME}": relay
+  public_address: "${MAUTRIX_DISCORD_PUBLIC_ADDRESS}"
+
+metrics:
+  enabled: true
+  listen: "0.0.0.0:${MAUTRIX_DISCORD_METRICS_PORT}"
+
+database:
+  type: postgres
+  uri: "postgresql://${MAUTRIX_DISCORD_POSTGRES_USER}:${MAUTRIX_DISCORD_POSTGRES_PASSWORD}@${MAUTRIX_DISCORD_POSTGRES_HOST}:${MAUTRIX_DISCORD_POSTGRES_PORT}/${MAUTRIX_DISCORD_POSTGRES_DB}?sslmode=disable"
+
+discord:
+  token: "${MAUTRIX_DISCORD_DISCORD_TOKEN}"
+
+logging:
+  min_level: info
+  writers:
+    - type: stdout
+      format: pretty-colored

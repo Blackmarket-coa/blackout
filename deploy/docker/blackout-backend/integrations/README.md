@@ -6,6 +6,9 @@ This folder stores integration bridge configuration used by the optional Docker 
 
 - `hookshot/config.yml.template` – Matrix Hookshot runtime config template.
 - `hookshot/registration.yml.template` – Hookshot appservice registration template consumed by Synapse.
+- `mautrix-discord/config.yaml.template` – Mautrix Discord runtime config template.
+- `mautrix-discord/registration.yaml.template` – Mautrix Discord appservice registration template consumed by Synapse.
+- `mautrix-discord/RUNBOOK.md` – Bridge-specific operations runbook for on-call and deployments.
 - `templates/appservice-registration.yml.template` – Generic appservice registration template for dedicated bridges.
 - `templates/appservice-config.yml.template` – Generic bridge runtime config template for dedicated bridges.
 
@@ -96,6 +99,11 @@ The Hookshot service startup command renders:
 - `integrations/hookshot/config.yml`
 - `integrations/hookshot/registration.yml`
 
+The Mautrix Discord startup command renders:
+
+- `integrations/mautrix-discord/config.yaml`
+- `integrations/mautrix-discord/registration.yaml`
+
 Generic appservice templates can be rendered with `envsubst` (or your deployment tooling), for example:
 
 ```bash
@@ -111,6 +119,7 @@ Add each rendered registration file path to Synapse `app_service_config_files` i
 app_service_config_files:
   - /integrations/hookshot/registration.yml
   - /integrations/<bridge>/registration.yml
+  - /integrations/mautrix-discord/registration.yaml
 ```
 
 The `synapse` service mounts this folder read-only at `/integrations`.

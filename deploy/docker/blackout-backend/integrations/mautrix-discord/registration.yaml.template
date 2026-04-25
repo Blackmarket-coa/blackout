@@ -1,0 +1,19 @@
+# Mautrix Discord appservice registration template.
+# Rendered by envsubst into /data/registration.yaml.
+
+id: "${MAUTRIX_DISCORD_APPSERVICE_ID}"
+url: "${MAUTRIX_DISCORD_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_DISCORD_AS_TOKEN}"
+hs_token: "${MAUTRIX_DISCORD_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_DISCORD_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@discord_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#discord_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - discord
