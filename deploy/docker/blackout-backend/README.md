@@ -17,6 +17,17 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 11. `matrix-hookshot` (`halfshot/matrix-hookshot`, optional `integrations` profile) – webhook/feed bridge
 12. `hookshot-db` (`postgres`, optional `integrations` profile) – Hookshot persistence
 
+
+## Version matrix (pinned images)
+
+| Service | Current pinned version | Source repo URL | Last reviewed date | Upgrade cadence |
+| --- | --- | --- | --- | --- |
+| matrix-authentication-service | `ghcr.io/element-hq/matrix-authentication-service:v1.15.0` | https://github.com/element-hq/matrix-authentication-service | 2026-04-25 | Monthly |
+| sygnal | `matrixdotorg/sygnal:v0.17.0` | https://github.com/matrix-org/sygnal | 2026-04-25 | Monthly |
+| draupnir | `the-draupnir-project/draupnir:v3.0.0` | https://github.com/the-draupnir-project/Draupnir | 2026-04-25 | Monthly |
+| matrix-hookshot | `halfshot/matrix-hookshot:7.3.2` | https://github.com/matrix-org/matrix-hookshot | 2026-04-25 | Monthly |
+| livekit-server | `livekit/livekit-server:v1.11.0` | https://github.com/livekit/livekit | 2026-04-25 | Monthly |
+
 ## Files
 
 - `docker-compose.yml`
