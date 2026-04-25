@@ -68,7 +68,9 @@
     "guard:dev-filters": "node tools/ci/check-dev-filter-resolution.mjs",
     "test:guard:dev-filters": "node --test tools/ci/check-dev-filter-resolution.test.mjs",
     "guard:workspace-packages": "node tools/ci/check-workspace-package-assertions.mjs",
-    "guard:sdk-boundary": "node tools/ci/check-sdk-boundary.mjs",
+    "guard:no-direct-fetch-in-client-features": "node tools/ci/check-no-direct-fetch-in-client-features.mjs",
+    "guard:matrix-sdk-version-alignment": "node tools/ci/check-matrix-sdk-version-alignment.mjs",
+    "guard:matrix-sdk-internal-imports": "node tools/ci/check-matrix-sdk-internal-imports.mjs",
     "guard:protocol-import-consistency": "node tools/ci/check-protocol-import-consistency.mjs",
     "guard:legacy-isolation": "node tools/ci/check-legacy-isolation.mjs",
     "qa:monorepo": "node tools/ci/run-qa-monorepo.mjs",
@@ -81,7 +83,7 @@
     "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs",
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
-    "guard:matrix-sdk-baseline": "node tools/ci/check-matrix-sdk-version-alignment.mjs"
+    "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
