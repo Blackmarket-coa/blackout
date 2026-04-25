@@ -80,7 +80,8 @@
     "guard:blackout-client-release-gate": "node tools/ci/check-blackout-client-release-gate.mjs",
     "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs",
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
-    "mobile:workspace:test": "pnpm --filter @blackout/mobile test"
+    "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
+    "guard:matrix-sdk-baseline": "node tools/ci/check-matrix-sdk-version-alignment.mjs"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
