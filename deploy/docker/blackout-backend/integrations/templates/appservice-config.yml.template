@@ -1,0 +1,44 @@
+# Generic dedicated bridge config template.
+# This is intentionally bridge-agnostic and should be copied/extended per bridge.
+
+bridge:
+  # Human-readable bridge name, e.g. discord, irc, slack, whatsapp, telegram.
+  name: ${BRIDGE_NAME}
+  domain: ${MATRIX_SERVER_NAME}
+
+matrix:
+  homeserver_url: ${MATRIX_HOMESERVER_URL}
+  domain: ${MATRIX_SERVER_NAME}
+
+  appservice:
+    address: ${APP_SERVICE_URL}
+    id: ${APP_SERVICE_ID}
+    bot_username: ${APP_SERVICE_SENDER_LOCALPART}
+    as_token: ${APP_SERVICE_AS_TOKEN}
+    hs_token: ${APP_SERVICE_HS_TOKEN}
+
+  # Namespace ownership must match registration.yml exactly.
+  namespaces:
+    users: '${APP_SERVICE_USERS_REGEX:-@_bridge_.*:${MATRIX_SERVER_NAME}}'
+    aliases: '${APP_SERVICE_ALIASES_REGEX:-#_bridge_.*:${MATRIX_SERVER_NAME}}'
+
+logging:
+  level: ${BRIDGE_LOG_LEVEL:-info}
+  format: ${BRIDGE_LOG_FORMAT:-json}
+
+database:
+  # Example DSN values:
+  # - postgres://bridge:${BRIDGE_DB_PASSWORD}@postgres/bridge
+  # - sqlite:////data/bridge.db
+  uri: ${BRIDGE_DATABASE_URI}
+  max_open_conns: ${BRIDGE_DB_MAX_OPEN_CONNS:-20}
+  max_idle_conns: ${BRIDGE_DB_MAX_IDLE_CONNS:-5}
+
+security:
+  encryption_at_rest: ${BRIDGE_ENCRYPTION_AT_REST:-true}
+  rotate_tokens_days: ${BRIDGE_ROTATE_TOKENS_DAYS:-90}
+
+operations:
+  metrics_enabled: ${BRIDGE_METRICS_ENABLED:-true}
+  healthcheck_enabled: ${BRIDGE_HEALTHCHECK_ENABLED:-true}
+  backup_required: ${BRIDGE_BACKUP_REQUIRED:-true}
