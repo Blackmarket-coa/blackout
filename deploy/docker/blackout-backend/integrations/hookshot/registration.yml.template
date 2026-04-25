@@ -1,0 +1,19 @@
+# Matrix Hookshot appservice registration template.
+# Rendered by envsubst into integrations/hookshot/registration.yml.
+
+id: hookshot
+url: "http://matrix-hookshot:${HOOKSHOT_PORT}"
+as_token: "${HOOKSHOT_AS_TOKEN}"
+hs_token: "${HOOKSHOT_HS_TOKEN}"
+sender_localpart: hookshot
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@hookshot:.*"
+  aliases:
+    - exclusive: false
+      regex: "#github_.*"
+  rooms: []
+protocols:
+  - hookshot

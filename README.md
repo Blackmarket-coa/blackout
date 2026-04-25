@@ -172,6 +172,23 @@ In shorthand: **Cinny UI shell + modular features + shared SDK + shared protocol
 
 ---
 
+
+## Minimum viable bridges
+
+For a practical initial integration footprint, start with:
+
+- **Hookshot (webhooks):** good default for inbound webhooks, feed mirroring, and lightweight workflow automation.
+- **`matrix-appservice-bridge` family path:** add IRC/Discord/Slack bridges by deploying the relevant appservice bridge sidecar and registering each appservice in Synapse (`app_service_config_files`).
+- **When to prefer Mautrix bridges:** choose Mautrix when you need protocol-specific maturity (e.g., richer media/thread parity or stronger community-maintained bridge semantics) and can accept the extra operational surface.
+
+Operational readiness checklist for bridge deployments:
+
+- Define ingress and Synapse-side rate limits before exposing webhook or federation-facing bridge endpoints.
+- Run bridge bots with least privilege (room-scoped moderator roles rather than server-wide admin whenever possible).
+- Store bridge tokens/registration secrets in a secret manager (not plaintext `.env` in production), and rotate regularly.
+
+---
+
 ## Quick start
 
 ### Prerequisites

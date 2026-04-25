@@ -14,6 +14,8 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 8. `certbot` (`certbot/certbot`) – Let's Encrypt renewal
 9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – Matrix Authentication Service for MSC3861 delegated auth
 10. `sygnal` (`matrixdotorg/sygnal`) – push gateway for APNs/FCM delivery
+11. `matrix-hookshot` (`halfshot/matrix-hookshot`, optional `integrations` profile) – webhook/feed bridge
+12. `hookshot-db` (`postgres`, optional `integrations` profile) – Hookshot persistence
 
 ## Files
 
@@ -24,6 +26,9 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 - `livekit/config.yaml`
 - `sygnal/sygnal.yaml`
 - `.env.example`
+- `integrations/README.md`
+- `integrations/hookshot/config.yml.template`
+- `integrations/hookshot/registration.yml.template`
 - `well-known/matrix/client`
 - `well-known/matrix/server`
 
@@ -216,4 +221,42 @@ docker compose logs --tail=200 synapse sygnal
    - Synapse: pusher activity logs indicating an outbound HTTP notify request to `sygnal`.
    - Sygnal: accepted notification requests and upstream provider responses (APNs/FCM success or detailed provider errors).
    - On provider auth issues, Sygnal logs include explicit credential or token errors; fix env values and restart `sygnal`.
+
+
+## Integrations profile (optional): Matrix Hookshot
+
+Enable the optional Compose profile when you want webhook/feed bridging:
+
+```bash
+docker compose --profile integrations up -d hookshot-db matrix-hookshot
+```
+
+Hookshot renders these files on startup:
+
+- `integrations/hookshot/config.yml`
+- `integrations/hookshot/registration.yml`
+
+### Synapse appservice registration flow
+
+1. Render registration by starting the Hookshot service once (command above).
+2. Keep `app_service_config_files` in `synapse/homeserver.yaml.template` pointing to:
+   - `/integrations/hookshot/registration.yml`
+3. Restart Synapse so it loads the appservice registration:
+
+```bash
+docker compose up -d synapse
+```
+
+4. Validate bridge login/user provisioning from Synapse logs:
+
+```bash
+docker compose logs --tail=200 synapse matrix-hookshot
+```
+
+### Production operational notes
+
+- **Rate limits:** keep Synapse registration/message limits enabled for appservices and constrain ingress/webhook sources at your reverse proxy/WAF.
+- **Bot permissions:** scope Hookshot bot power levels to the minimum required rooms; avoid global admin for bridge bots.
+- **Secret management:** move `HOOKSHOT_AS_TOKEN`, `HOOKSHOT_HS_TOKEN`, and DB credentials into Docker secrets/secret manager, then rotate on incident or personnel change.
+- **Database durability:** back up `hookshot-db` (`hookshot_db_data`) with Synapse backups to preserve bridge state and delivery checkpoints.
 
