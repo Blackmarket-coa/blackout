@@ -1,0 +1,16 @@
+id: "${MAUTRIX_WHATSAPP_APPSERVICE_ID}"
+url: "${MAUTRIX_WHATSAPP_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_WHATSAPP_AS_TOKEN}"
+hs_token: "${MAUTRIX_WHATSAPP_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_WHATSAPP_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@whatsapp_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#whatsapp_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - whatsapp

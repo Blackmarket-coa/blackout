@@ -1,0 +1,43 @@
+# Mautrix WhatsApp configuration template (rendered by envsubst).
+# Reference: https://github.com/mautrix/whatsapp
+
+homeserver:
+  address: "http://synapse:8008"
+  domain: "${MATRIX_SERVER_NAME}"
+
+appservice:
+  address: "${MAUTRIX_WHATSAPP_APP_SERVICE_ADDRESS}"
+  hostname: 0.0.0.0
+  port: 29318
+  id: "${MAUTRIX_WHATSAPP_APPSERVICE_ID}"
+  bot:
+    username: "${MAUTRIX_WHATSAPP_BOT_USERNAME}"
+    displayname: WhatsApp Bridge Bot
+  as_token: "${MAUTRIX_WHATSAPP_AS_TOKEN}"
+  hs_token: "${MAUTRIX_WHATSAPP_HS_TOKEN}"
+
+bridge:
+  username_template: "whatsapp_{{.}}"
+  displayname_template: "{{or .FullName .PushName .JID}} (WA)"
+  command_prefix: "${MAUTRIX_WHATSAPP_COMMAND_PREFIX}"
+  permissions:
+    "${MATRIX_SERVER_NAME}": user
+  provisioning:
+    enabled: true
+    prefix: /_matrix/provision
+    shared_secret: "${MAUTRIX_WHATSAPP_PROVISIONING_SHARED_SECRET}"
+  public_address: "${MAUTRIX_WHATSAPP_PUBLIC_ADDRESS}"
+
+metrics:
+  enabled: true
+  listen: "0.0.0.0:${MAUTRIX_WHATSAPP_METRICS_PORT}"
+
+database:
+  type: postgres
+  uri: "postgres://${MAUTRIX_WHATSAPP_POSTGRES_USER}:${MAUTRIX_WHATSAPP_POSTGRES_PASSWORD}@${MAUTRIX_WHATSAPP_POSTGRES_HOST}:${MAUTRIX_WHATSAPP_POSTGRES_PORT}/${MAUTRIX_WHATSAPP_POSTGRES_DB}?sslmode=disable"
+
+logging:
+  min_level: info
+  writers:
+    - type: stdout
+      format: pretty-colored

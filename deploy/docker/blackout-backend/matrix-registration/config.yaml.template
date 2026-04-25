@@ -1,0 +1,52 @@
+# matrix-registration configuration template (rendered by envsubst).
+# Reference: https://github.com/zeratax/matrix-registration
+
+server_location: 'http://synapse:8008'
+server_name: '${MATRIX_SERVER_NAME}'
+registration_shared_secret: '${SYNAPSE_REGISTRATION_SHARED_SECRET}'
+admin_api_shared_secret: '${MATRIX_REGISTRATION_ADMIN_SECRET}'
+
+base_url: '/register'
+client_redirect: '${MATRIX_HOMESERVER_URL}/'
+client_logo: 'static/images/logo.png'
+db: 'sqlite:////data/db.sqlite3'
+
+host: '0.0.0.0'
+port: 5000
+
+rate_limit: ["100 per day", "10 per minute"]
+allow_cors: false
+ip_logging: false
+
+logging:
+  disable_existing_loggers: false
+  version: 1
+  root:
+    level: DEBUG
+    handlers: [console]
+  formatters:
+    brief:
+      format: '%(name)s - %(levelname)s - %(message)s'
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+      formatter: brief
+      stream: ext://sys.stdout
+
+password:
+  min_length: 8
+
+username:
+  validation_regex: []
+  invalidation_regex:
+    - "^abuse"
+    - "^admin"
+    - "^administrator"
+    - "^hostmaster"
+    - "^postmaster"
+    - "^root"
+    - "^security"
+    - "^webmaster"
+
+riot_instance: '${MATRIX_HOMESERVER_URL}/'

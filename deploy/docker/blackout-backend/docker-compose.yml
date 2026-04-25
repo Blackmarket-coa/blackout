@@ -193,6 +193,99 @@ services:
     networks:
       - blackout-backend
 
+  pantalaimon:
+    image: matrixdotorg/pantalaimon:0.10.5
+    container_name: blackout-pantalaimon
+    restart: unless-stopped
+    profiles:
+      - pantalaimon
+    depends_on:
+      - synapse
+    environment:
+      PANTALAIMON_IGNORE_VERIFICATION: ${PANTALAIMON_IGNORE_VERIFICATION}
+    volumes:
+      - ./pantalaimon/pantalaimon.conf.template:/templates/pantalaimon.conf.template:ro
+      - pantalaimon_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /templates/pantalaimon.conf.template > /data/pantalaimon.conf
+      && exec pantalaimon -c /data/pantalaimon.conf --data-path /data"
+    networks:
+      - blackout-backend
+
+  mmr-db:
+    image: postgres:16-alpine
+    container_name: blackout-mmr-db
+    restart: unless-stopped
+    profiles:
+      - media-repo
+    environment:
+      POSTGRES_DB: ${MMR_POSTGRES_DB}
+      POSTGRES_USER: ${MMR_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MMR_POSTGRES_PASSWORD}
+    volumes:
+      - mmr_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MMR_POSTGRES_USER} -d ${MMR_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  matrix-media-repo:
+    image: ghcr.io/t2bot/matrix-media-repo:v1.3.7
+    container_name: blackout-matrix-media-repo
+    restart: unless-stopped
+    profiles:
+      - media-repo
+    depends_on:
+      synapse:
+        condition: service_started
+      mmr-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MMR_POSTGRES_DB: ${MMR_POSTGRES_DB}
+      MMR_POSTGRES_USER: ${MMR_POSTGRES_USER}
+      MMR_POSTGRES_PASSWORD: ${MMR_POSTGRES_PASSWORD}
+      MMR_POSTGRES_HOST: mmr-db
+      MMR_POSTGRES_PORT: 5432
+    volumes:
+      - ./matrix-media-repo/config.yaml.template:/templates/config.yaml.template:ro
+      - mmr_media:/data/media
+    command: >-
+      /bin/sh -c "envsubst < /templates/config.yaml.template > /data/media-repo.yaml
+      && exec /usr/local/bin/media_repo -config /data/media-repo.yaml -migrations /var/lib/media-repo/migrations"
+    networks:
+      - blackout-backend
+
+  synapse-admin:
+    image: ghcr.io/etkecc/synapse-admin:0.10.3
+    container_name: blackout-synapse-admin
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    environment:
+      REACT_APP_SERVER: ${MATRIX_HOMESERVER_URL}
+      RESTRICT_BASE_URL: ${MATRIX_HOMESERVER_URL}
+    networks:
+      - blackout-backend
+
+  rageshake:
+    image: ghcr.io/matrix-org/rageshake:latest
+    container_name: blackout-rageshake
+    restart: unless-stopped
+    environment:
+      RAGESHAKE_LISTEN: 0.0.0.0:9110
+    volumes:
+      - ./rageshake/rageshake.yaml.template:/templates/rageshake.yaml.template:ro
+      - rageshake_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /templates/rageshake.yaml.template > /data/rageshake.yaml
+      && exec /usr/local/bin/rageshake -config /data/rageshake.yaml"
+    networks:
+      - blackout-backend
+
   hookshot-db:
     image: postgres:16-alpine
     container_name: blackout-hookshot-db
@@ -313,6 +406,517 @@ services:
     networks:
       - blackout-backend
 
+  mautrix-telegram-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-telegram-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_TELEGRAM_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_TELEGRAM_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_TELEGRAM_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_telegram_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_TELEGRAM_POSTGRES_USER} -d ${MAUTRIX_TELEGRAM_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-telegram:
+    image: dock.mau.dev/mautrix/telegram:v0.15.2
+    container_name: blackout-mautrix-telegram
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-telegram-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MAUTRIX_TELEGRAM_APPSERVICE_ID: ${MAUTRIX_TELEGRAM_APPSERVICE_ID}
+      MAUTRIX_TELEGRAM_APP_SERVICE_ADDRESS: ${MAUTRIX_TELEGRAM_APP_SERVICE_ADDRESS}
+      MAUTRIX_TELEGRAM_AS_TOKEN: ${MAUTRIX_TELEGRAM_AS_TOKEN}
+      MAUTRIX_TELEGRAM_HS_TOKEN: ${MAUTRIX_TELEGRAM_HS_TOKEN}
+      MAUTRIX_TELEGRAM_BOT_USERNAME: ${MAUTRIX_TELEGRAM_BOT_USERNAME}
+      MAUTRIX_TELEGRAM_COMMAND_PREFIX: ${MAUTRIX_TELEGRAM_COMMAND_PREFIX}
+      MAUTRIX_TELEGRAM_API_ID: ${MAUTRIX_TELEGRAM_API_ID}
+      MAUTRIX_TELEGRAM_API_HASH: ${MAUTRIX_TELEGRAM_API_HASH}
+      MAUTRIX_TELEGRAM_BOT_TOKEN: ${MAUTRIX_TELEGRAM_BOT_TOKEN}
+      MAUTRIX_TELEGRAM_PROVISIONING_SHARED_SECRET: ${MAUTRIX_TELEGRAM_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_TELEGRAM_METRICS_PORT: ${MAUTRIX_TELEGRAM_METRICS_PORT}
+      MAUTRIX_TELEGRAM_POSTGRES_DB: ${MAUTRIX_TELEGRAM_POSTGRES_DB}
+      MAUTRIX_TELEGRAM_POSTGRES_USER: ${MAUTRIX_TELEGRAM_POSTGRES_USER}
+      MAUTRIX_TELEGRAM_POSTGRES_PASSWORD: ${MAUTRIX_TELEGRAM_POSTGRES_PASSWORD}
+      MAUTRIX_TELEGRAM_POSTGRES_HOST: mautrix-telegram-db
+      MAUTRIX_TELEGRAM_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/mautrix-telegram:/integrations/mautrix-telegram
+      - mautrix_telegram_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-telegram/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/mautrix-telegram/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/mautrix-telegram/registration.yaml
+      && exec python3 -m mautrix_telegram -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  mautrix-signal-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-signal-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_SIGNAL_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_SIGNAL_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_SIGNAL_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_signal_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_SIGNAL_POSTGRES_USER} -d ${MAUTRIX_SIGNAL_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-signal:
+    image: dock.mau.dev/mautrix/signal:v0.7.4
+    container_name: blackout-mautrix-signal
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-signal-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MAUTRIX_SIGNAL_APPSERVICE_ID: ${MAUTRIX_SIGNAL_APPSERVICE_ID}
+      MAUTRIX_SIGNAL_APP_SERVICE_ADDRESS: ${MAUTRIX_SIGNAL_APP_SERVICE_ADDRESS}
+      MAUTRIX_SIGNAL_AS_TOKEN: ${MAUTRIX_SIGNAL_AS_TOKEN}
+      MAUTRIX_SIGNAL_HS_TOKEN: ${MAUTRIX_SIGNAL_HS_TOKEN}
+      MAUTRIX_SIGNAL_BOT_USERNAME: ${MAUTRIX_SIGNAL_BOT_USERNAME}
+      MAUTRIX_SIGNAL_COMMAND_PREFIX: ${MAUTRIX_SIGNAL_COMMAND_PREFIX}
+      MAUTRIX_SIGNAL_PUBLIC_ADDRESS: ${MAUTRIX_SIGNAL_PUBLIC_ADDRESS}
+      MAUTRIX_SIGNAL_PROVISIONING_SHARED_SECRET: ${MAUTRIX_SIGNAL_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_SIGNAL_METRICS_PORT: ${MAUTRIX_SIGNAL_METRICS_PORT}
+      MAUTRIX_SIGNAL_POSTGRES_DB: ${MAUTRIX_SIGNAL_POSTGRES_DB}
+      MAUTRIX_SIGNAL_POSTGRES_USER: ${MAUTRIX_SIGNAL_POSTGRES_USER}
+      MAUTRIX_SIGNAL_POSTGRES_PASSWORD: ${MAUTRIX_SIGNAL_POSTGRES_PASSWORD}
+      MAUTRIX_SIGNAL_POSTGRES_HOST: mautrix-signal-db
+      MAUTRIX_SIGNAL_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/mautrix-signal:/integrations/mautrix-signal
+      - mautrix_signal_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-signal/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/mautrix-signal/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/mautrix-signal/registration.yaml
+      && exec /usr/bin/mautrix-signal -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  mautrix-whatsapp-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-whatsapp-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_WHATSAPP_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_WHATSAPP_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_WHATSAPP_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_whatsapp_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_WHATSAPP_POSTGRES_USER} -d ${MAUTRIX_WHATSAPP_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-whatsapp:
+    image: dock.mau.dev/mautrix/whatsapp:v0.11.2
+    container_name: blackout-mautrix-whatsapp
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-whatsapp-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MAUTRIX_WHATSAPP_APPSERVICE_ID: ${MAUTRIX_WHATSAPP_APPSERVICE_ID}
+      MAUTRIX_WHATSAPP_APP_SERVICE_ADDRESS: ${MAUTRIX_WHATSAPP_APP_SERVICE_ADDRESS}
+      MAUTRIX_WHATSAPP_AS_TOKEN: ${MAUTRIX_WHATSAPP_AS_TOKEN}
+      MAUTRIX_WHATSAPP_HS_TOKEN: ${MAUTRIX_WHATSAPP_HS_TOKEN}
+      MAUTRIX_WHATSAPP_BOT_USERNAME: ${MAUTRIX_WHATSAPP_BOT_USERNAME}
+      MAUTRIX_WHATSAPP_COMMAND_PREFIX: ${MAUTRIX_WHATSAPP_COMMAND_PREFIX}
+      MAUTRIX_WHATSAPP_PUBLIC_ADDRESS: ${MAUTRIX_WHATSAPP_PUBLIC_ADDRESS}
+      MAUTRIX_WHATSAPP_PROVISIONING_SHARED_SECRET: ${MAUTRIX_WHATSAPP_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_WHATSAPP_METRICS_PORT: ${MAUTRIX_WHATSAPP_METRICS_PORT}
+      MAUTRIX_WHATSAPP_POSTGRES_DB: ${MAUTRIX_WHATSAPP_POSTGRES_DB}
+      MAUTRIX_WHATSAPP_POSTGRES_USER: ${MAUTRIX_WHATSAPP_POSTGRES_USER}
+      MAUTRIX_WHATSAPP_POSTGRES_PASSWORD: ${MAUTRIX_WHATSAPP_POSTGRES_PASSWORD}
+      MAUTRIX_WHATSAPP_POSTGRES_HOST: mautrix-whatsapp-db
+      MAUTRIX_WHATSAPP_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/mautrix-whatsapp:/integrations/mautrix-whatsapp
+      - mautrix_whatsapp_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-whatsapp/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/mautrix-whatsapp/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/mautrix-whatsapp/registration.yaml
+      && exec /usr/bin/mautrix-whatsapp -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  mautrix-slack-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-slack-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_SLACK_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_SLACK_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_SLACK_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_slack_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_SLACK_POSTGRES_USER} -d ${MAUTRIX_SLACK_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-slack:
+    image: dock.mau.dev/mautrix/slack:v0.1.3
+    container_name: blackout-mautrix-slack
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-slack-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MAUTRIX_SLACK_APPSERVICE_ID: ${MAUTRIX_SLACK_APPSERVICE_ID}
+      MAUTRIX_SLACK_APP_SERVICE_ADDRESS: ${MAUTRIX_SLACK_APP_SERVICE_ADDRESS}
+      MAUTRIX_SLACK_AS_TOKEN: ${MAUTRIX_SLACK_AS_TOKEN}
+      MAUTRIX_SLACK_HS_TOKEN: ${MAUTRIX_SLACK_HS_TOKEN}
+      MAUTRIX_SLACK_BOT_USERNAME: ${MAUTRIX_SLACK_BOT_USERNAME}
+      MAUTRIX_SLACK_COMMAND_PREFIX: ${MAUTRIX_SLACK_COMMAND_PREFIX}
+      MAUTRIX_SLACK_PUBLIC_ADDRESS: ${MAUTRIX_SLACK_PUBLIC_ADDRESS}
+      MAUTRIX_SLACK_PROVISIONING_SHARED_SECRET: ${MAUTRIX_SLACK_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_SLACK_METRICS_PORT: ${MAUTRIX_SLACK_METRICS_PORT}
+      MAUTRIX_SLACK_POSTGRES_DB: ${MAUTRIX_SLACK_POSTGRES_DB}
+      MAUTRIX_SLACK_POSTGRES_USER: ${MAUTRIX_SLACK_POSTGRES_USER}
+      MAUTRIX_SLACK_POSTGRES_PASSWORD: ${MAUTRIX_SLACK_POSTGRES_PASSWORD}
+      MAUTRIX_SLACK_POSTGRES_HOST: mautrix-slack-db
+      MAUTRIX_SLACK_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/mautrix-slack:/integrations/mautrix-slack
+      - mautrix_slack_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-slack/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/mautrix-slack/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/mautrix-slack/registration.yaml
+      && exec /usr/bin/mautrix-slack -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  mautrix-googlechat-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-googlechat-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_GOOGLECHAT_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_GOOGLECHAT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_GOOGLECHAT_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_googlechat_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_GOOGLECHAT_POSTGRES_USER} -d ${MAUTRIX_GOOGLECHAT_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-googlechat:
+    image: dock.mau.dev/mautrix/googlechat:v0.5.2
+    container_name: blackout-mautrix-googlechat
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-googlechat-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MAUTRIX_GOOGLECHAT_APPSERVICE_ID: ${MAUTRIX_GOOGLECHAT_APPSERVICE_ID}
+      MAUTRIX_GOOGLECHAT_APP_SERVICE_ADDRESS: ${MAUTRIX_GOOGLECHAT_APP_SERVICE_ADDRESS}
+      MAUTRIX_GOOGLECHAT_AS_TOKEN: ${MAUTRIX_GOOGLECHAT_AS_TOKEN}
+      MAUTRIX_GOOGLECHAT_HS_TOKEN: ${MAUTRIX_GOOGLECHAT_HS_TOKEN}
+      MAUTRIX_GOOGLECHAT_BOT_USERNAME: ${MAUTRIX_GOOGLECHAT_BOT_USERNAME}
+      MAUTRIX_GOOGLECHAT_COMMAND_PREFIX: ${MAUTRIX_GOOGLECHAT_COMMAND_PREFIX}
+      MAUTRIX_GOOGLECHAT_PROVISIONING_SHARED_SECRET: ${MAUTRIX_GOOGLECHAT_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_GOOGLECHAT_METRICS_PORT: ${MAUTRIX_GOOGLECHAT_METRICS_PORT}
+      MAUTRIX_GOOGLECHAT_POSTGRES_DB: ${MAUTRIX_GOOGLECHAT_POSTGRES_DB}
+      MAUTRIX_GOOGLECHAT_POSTGRES_USER: ${MAUTRIX_GOOGLECHAT_POSTGRES_USER}
+      MAUTRIX_GOOGLECHAT_POSTGRES_PASSWORD: ${MAUTRIX_GOOGLECHAT_POSTGRES_PASSWORD}
+      MAUTRIX_GOOGLECHAT_POSTGRES_HOST: mautrix-googlechat-db
+      MAUTRIX_GOOGLECHAT_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/mautrix-googlechat:/integrations/mautrix-googlechat
+      - mautrix_googlechat_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-googlechat/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/mautrix-googlechat/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/mautrix-googlechat/registration.yaml
+      && exec python3 -m mautrix_googlechat -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  matrix-appservice-irc-db:
+    image: postgres:16-alpine
+    container_name: blackout-matrix-appservice-irc-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${IRC_BRIDGE_POSTGRES_DB}
+      POSTGRES_USER: ${IRC_BRIDGE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${IRC_BRIDGE_POSTGRES_PASSWORD}
+    volumes:
+      - matrix_appservice_irc_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${IRC_BRIDGE_POSTGRES_USER} -d ${IRC_BRIDGE_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  matrix-appservice-irc:
+    image: matrixdotorg/matrix-appservice-irc:release-3.0.3
+    container_name: blackout-matrix-appservice-irc
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      matrix-appservice-irc-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      IRC_BRIDGE_APPSERVICE_ID: ${IRC_BRIDGE_APPSERVICE_ID}
+      IRC_BRIDGE_APP_SERVICE_ADDRESS: ${IRC_BRIDGE_APP_SERVICE_ADDRESS}
+      IRC_BRIDGE_AS_TOKEN: ${IRC_BRIDGE_AS_TOKEN}
+      IRC_BRIDGE_HS_TOKEN: ${IRC_BRIDGE_HS_TOKEN}
+      IRC_BRIDGE_SENDER_LOCALPART: ${IRC_BRIDGE_SENDER_LOCALPART}
+      IRC_BRIDGE_BOT_NICK: ${IRC_BRIDGE_BOT_NICK}
+      IRC_BRIDGE_POSTGRES_DB: ${IRC_BRIDGE_POSTGRES_DB}
+      IRC_BRIDGE_POSTGRES_USER: ${IRC_BRIDGE_POSTGRES_USER}
+      IRC_BRIDGE_POSTGRES_PASSWORD: ${IRC_BRIDGE_POSTGRES_PASSWORD}
+      IRC_BRIDGE_POSTGRES_HOST: matrix-appservice-irc-db
+      IRC_BRIDGE_POSTGRES_PORT: 5432
+    volumes:
+      - ./integrations/matrix-appservice-irc:/integrations/matrix-appservice-irc
+      - matrix_appservice_irc_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/matrix-appservice-irc/config.yaml.template > /data/config.yaml
+      && envsubst < /integrations/matrix-appservice-irc/registration.yaml.template > /data/registration.yaml
+      && cp /data/registration.yaml /integrations/matrix-appservice-irc/registration.yaml
+      && exec node /usr/src/app/app.js -c /data/config.yaml -f /data/registration.yaml -p 9999"
+    networks:
+      - blackout-backend
+
+  maubot-db:
+    image: postgres:16-alpine
+    container_name: blackout-maubot-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUBOT_POSTGRES_DB}
+      POSTGRES_USER: ${MAUBOT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUBOT_POSTGRES_PASSWORD}
+    volumes:
+      - maubot_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUBOT_POSTGRES_USER} -d ${MAUBOT_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  maubot:
+    image: dock.mau.dev/maubot/maubot:0.5.0
+    container_name: blackout-maubot
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      maubot-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      MAUBOT_PUBLIC_URL: ${MAUBOT_PUBLIC_URL}
+      MAUBOT_UNSHARED_SECRET: ${MAUBOT_UNSHARED_SECRET}
+      MAUBOT_REGISTRATION_SECRET: ${MAUBOT_REGISTRATION_SECRET}
+      MAUBOT_ADMIN_PASSWORD_HASH: ${MAUBOT_ADMIN_PASSWORD_HASH}
+      MAUBOT_POSTGRES_DB: ${MAUBOT_POSTGRES_DB}
+      MAUBOT_POSTGRES_USER: ${MAUBOT_POSTGRES_USER}
+      MAUBOT_POSTGRES_PASSWORD: ${MAUBOT_POSTGRES_PASSWORD}
+      MAUBOT_POSTGRES_HOST: maubot-db
+      MAUBOT_POSTGRES_PORT: 5432
+    volumes:
+      - ./maubot/config.yaml.template:/templates/config.yaml.template:ro
+      - maubot_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /templates/config.yaml.template > /data/config.yaml
+      && exec python3 -m maubot -c /data/config.yaml"
+    networks:
+      - blackout-backend
+
+  matrix-registration:
+    image: devture/matrix-registration:0.10.2
+    container_name: blackout-matrix-registration
+    restart: unless-stopped
+    profiles:
+      - registration
+    depends_on:
+      - synapse
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      SYNAPSE_REGISTRATION_SHARED_SECRET: ${SYNAPSE_REGISTRATION_SHARED_SECRET}
+      MATRIX_REGISTRATION_ADMIN_SECRET: ${MATRIX_REGISTRATION_ADMIN_SECRET}
+    volumes:
+      - ./matrix-registration/config.yaml.template:/templates/config.yaml.template:ro
+      - matrix_registration_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /templates/config.yaml.template > /data/config.yaml
+      && exec matrix-registration --config-path /data/config.yaml serve"
+    networks:
+      - blackout-backend
+
+  dimension:
+    image: turt2live/matrix-dimension:latest
+    container_name: blackout-dimension
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      - synapse
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      DIMENSION_ACCESS_TOKEN: ${DIMENSION_ACCESS_TOKEN}
+    volumes:
+      - ./dimension/config.yaml.template:/templates/config.yaml.template:ro
+      - dimension_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /templates/config.yaml.template > /etc/dimension.yaml
+      && exec node /app/build/app.js"
+    networks:
+      - blackout-backend
+
+  conduwuit:
+    image: ghcr.io/girlbossceo/conduwuit:v0.4.7
+    container_name: blackout-conduwuit
+    restart: unless-stopped
+    profiles:
+      - alt-homeserver-conduwuit
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      SYNAPSE_ENABLE_REGISTRATION: ${SYNAPSE_ENABLE_REGISTRATION}
+      CONDUWUIT_REGISTRATION_TOKEN: ${CONDUWUIT_REGISTRATION_TOKEN}
+    volumes:
+      - ./conduwuit/conduwuit.toml.template:/templates/conduwuit.toml.template:ro
+      - conduwuit_data:/var/lib/conduwuit
+    command: >-
+      /bin/sh -c "envsubst < /templates/conduwuit.toml.template > /etc/conduwuit.toml
+      && exec /usr/local/bin/conduwuit --config /etc/conduwuit.toml"
+    networks:
+      - blackout-backend
+
+  dendrite-db:
+    image: postgres:16-alpine
+    container_name: blackout-dendrite-db
+    restart: unless-stopped
+    profiles:
+      - alt-homeserver-dendrite
+    environment:
+      POSTGRES_DB: ${DENDRITE_POSTGRES_DB}
+      POSTGRES_USER: ${DENDRITE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DENDRITE_POSTGRES_PASSWORD}
+    volumes:
+      - dendrite_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DENDRITE_POSTGRES_USER} -d ${DENDRITE_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  dendrite:
+    image: matrixdotorg/dendrite-monolith:v0.13.8
+    container_name: blackout-dendrite
+    restart: unless-stopped
+    profiles:
+      - alt-homeserver-dendrite
+    depends_on:
+      dendrite-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      DENDRITE_POSTGRES_DB: ${DENDRITE_POSTGRES_DB}
+      DENDRITE_POSTGRES_USER: ${DENDRITE_POSTGRES_USER}
+      DENDRITE_POSTGRES_PASSWORD: ${DENDRITE_POSTGRES_PASSWORD}
+      DENDRITE_POSTGRES_HOST: dendrite-db
+      DENDRITE_POSTGRES_PORT: 5432
+      DENDRITE_METRICS_PASSWORD: ${DENDRITE_METRICS_PASSWORD}
+      SYNAPSE_REGISTRATION_SHARED_SECRET: ${SYNAPSE_REGISTRATION_SHARED_SECRET}
+    volumes:
+      - ./dendrite/dendrite.yaml.template:/templates/dendrite.yaml.template:ro
+      - dendrite_data:/var/dendrite
+      - dendrite_keys:/etc/dendrite/keys
+    command: >-
+      /bin/sh -c "envsubst < /templates/dendrite.yaml.template > /etc/dendrite/dendrite.yaml
+      && /usr/bin/generate-keys --private-key /etc/dendrite/keys/matrix_key.pem 2>/dev/null || true
+      && exec /usr/bin/dendrite --config /etc/dendrite/dendrite.yaml"
+    networks:
+      - blackout-backend
+
   nginx:
     image: nginx:1.27-alpine
     container_name: blackout-nginx
@@ -355,6 +959,30 @@ volumes:
   synapse_data:
   mas_data:
   draupnir_data:
+  pantalaimon_data:
+  mmr_db_data:
+  mmr_media:
+  rageshake_data:
   hookshot_db_data:
   mautrix_discord_db_data:
   mautrix_discord_data:
+  maubot_db_data:
+  maubot_data:
+  matrix_registration_data:
+  dimension_data:
+  mautrix_telegram_db_data:
+  mautrix_telegram_data:
+  mautrix_signal_db_data:
+  mautrix_signal_data:
+  mautrix_whatsapp_db_data:
+  mautrix_whatsapp_data:
+  mautrix_slack_db_data:
+  mautrix_slack_data:
+  mautrix_googlechat_db_data:
+  mautrix_googlechat_data:
+  matrix_appservice_irc_db_data:
+  matrix_appservice_irc_data:
+  conduwuit_data:
+  dendrite_db_data:
+  dendrite_data:
+  dendrite_keys:

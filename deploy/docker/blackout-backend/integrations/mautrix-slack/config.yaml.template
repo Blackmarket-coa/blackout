@@ -1,0 +1,43 @@
+# Mautrix Slack configuration template (rendered by envsubst).
+# Reference: https://github.com/mautrix/slack
+
+homeserver:
+  address: "http://synapse:8008"
+  domain: "${MATRIX_SERVER_NAME}"
+
+appservice:
+  address: "${MAUTRIX_SLACK_APP_SERVICE_ADDRESS}"
+  hostname: 0.0.0.0
+  port: 29335
+  id: "${MAUTRIX_SLACK_APPSERVICE_ID}"
+  bot:
+    username: "${MAUTRIX_SLACK_BOT_USERNAME}"
+    displayname: Slack Bridge Bot
+  as_token: "${MAUTRIX_SLACK_AS_TOKEN}"
+  hs_token: "${MAUTRIX_SLACK_HS_TOKEN}"
+
+bridge:
+  username_template: "slack_{{.TeamID}}_{{.UserID}}"
+  displayname_template: "{{or .RealName .Username}} (Slack)"
+  command_prefix: "${MAUTRIX_SLACK_COMMAND_PREFIX}"
+  permissions:
+    "${MATRIX_SERVER_NAME}": user
+  provisioning:
+    enabled: true
+    prefix: /_matrix/provision
+    shared_secret: "${MAUTRIX_SLACK_PROVISIONING_SHARED_SECRET}"
+  public_address: "${MAUTRIX_SLACK_PUBLIC_ADDRESS}"
+
+metrics:
+  enabled: true
+  listen: "0.0.0.0:${MAUTRIX_SLACK_METRICS_PORT}"
+
+database:
+  type: postgres
+  uri: "postgres://${MAUTRIX_SLACK_POSTGRES_USER}:${MAUTRIX_SLACK_POSTGRES_PASSWORD}@${MAUTRIX_SLACK_POSTGRES_HOST}:${MAUTRIX_SLACK_POSTGRES_PORT}/${MAUTRIX_SLACK_POSTGRES_DB}?sslmode=disable"
+
+logging:
+  min_level: info
+  writers:
+    - type: stdout
+      format: pretty-colored

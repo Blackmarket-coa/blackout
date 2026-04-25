@@ -18,6 +18,15 @@ export type ClientConfig = {
   };
 
   hashRouter?: HashRouterConfig;
+
+  // Rageshake (matrix-org/rageshake) bug-report receiver. When set,
+  // the in-app "submit debug logs" flow posts crash/diagnostic bundles here.
+  bugReportEndpointUrl?: string;
+
+  // Self-hosted matrix-dimension integration manager URL (optional). Consumed
+  // by the room "manage integrations" surface to deep-link into Dimension.
+  integrationsUrl?: string;
+  integrationsUiUrl?: string;
 };
 
 const ClientConfigContext = createContext<ClientConfig | null>(null);

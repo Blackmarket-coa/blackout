@@ -34,5 +34,10 @@
   "hashRouter": {
     "enabled": false,
     "basename": "/"
-  }
+  },
+
+  "bugReportEndpointUrl": "https://matrix.theblackout.app/rageshake/api/submit",
+
+  "integrationsUrl": "https://matrix.theblackout.app/dimension/api/v1/scalar",
+  "integrationsUiUrl": "https://matrix.theblackout.app/dimension/element"
 }

@@ -6,6 +6,8 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 
 ## Services included
 
+Default profile (always on):
+
 1. `synapse` (`ghcr.io/element-hq/synapse:v1.130.0`) – Matrix homeserver
 2. `postgres` (`postgres`) – Synapse DB
 3. `redis` (`redis`) – cache/session store
@@ -14,13 +16,41 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 6. `draupnir` (`the-draupnir-project/draupnir`) – moderation bot
 7. `nginx` (`nginx`) – reverse proxy + `.well-known`
 8. `certbot` (`certbot/certbot`) – Let's Encrypt renewal
-9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – Matrix Authentication Service for MSC3861 delegated auth
+9. `mas` (`ghcr.io/element-hq/matrix-authentication-service`) – delegated auth (MSC3861)
 10. `sygnal` (`matrixdotorg/sygnal`) – push gateway for APNs/FCM delivery
-11. `matrix-hookshot` (`halfshot/matrix-hookshot`, optional `integrations` profile) – webhook/feed bridge
-12. `hookshot-db` (`postgres`, optional `integrations` profile) – Hookshot persistence
-13. `mautrix-discord` (`dock.mau.dev/mautrix/discord`, optional `integrations` profile) – Discord chat bridge
-14. `mautrix-discord-db` (`postgres`, optional `integrations` profile) – Mautrix Discord persistence
+11. `synapse-admin` (`ghcr.io/etkecc/synapse-admin`) – admin UI exposed at `/admin/`
+12. `rageshake` (`ghcr.io/matrix-org/rageshake`) – debug-log/bug-report receiver consumed by blackout-client/desktop/mobile, exposed at `/rageshake/`
 
+Optional `pantalaimon` profile (E2EE proxy used by Draupnir/Hookshot/Maubot):
+
+13. `pantalaimon` (`matrixdotorg/pantalaimon`) – activated when `DRAUPNIR_PANTALAIMON_USE=true`
+
+Optional `media-repo` profile (replaces Synapse media handling):
+
+14. `mmr-db` (`postgres`) – matrix-media-repo persistence
+15. `matrix-media-repo` (`ghcr.io/t2bot/matrix-media-repo`) – horizontally-scalable media server with quarantine and dedup; nginx routes `/_matrix/media`, `/_matrix/client/v1/media`, and `/_matrix/federation/v1/media` here
+
+Optional `registration` profile:
+
+16. `matrix-registration` (`devture/matrix-registration`) – token-gated invite registration UI exposed at `/register/`
+
+Optional `integrations` profile:
+
+17. `matrix-hookshot` + `hookshot-db` – webhook/feed bridge
+18. `mautrix-discord` + `mautrix-discord-db` – Discord bridge
+19. `mautrix-telegram` + `mautrix-telegram-db` – Telegram bridge
+20. `mautrix-signal` + `mautrix-signal-db` – Signal bridge
+21. `mautrix-whatsapp` + `mautrix-whatsapp-db` – WhatsApp bridge
+22. `mautrix-slack` + `mautrix-slack-db` – Slack bridge
+23. `mautrix-googlechat` + `mautrix-googlechat-db` – Google Chat bridge
+24. `matrix-appservice-irc` + `matrix-appservice-irc-db` – IRC bridge (Libera.Chat by default)
+25. `maubot` + `maubot-db` (`dock.mau.dev/maubot/maubot`) – pluggable bot framework served at `/_matrix/maubot/`
+26. `dimension` (`turt2live/matrix-dimension`) – integration manager UI served at `/dimension/`
+
+Optional alternative homeservers (run instead of `synapse`, mutually exclusive):
+
+- `alt-homeserver-conduwuit` profile: `conduwuit` (`ghcr.io/girlbossceo/conduwuit`) – Rust low-resource homeserver
+- `alt-homeserver-dendrite` profile: `dendrite` + `dendrite-db` (`matrixdotorg/dendrite-monolith`) – Go second-generation homeserver
 
 ## Version matrix (pinned images)
 
@@ -29,8 +59,24 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 | matrix-authentication-service | `ghcr.io/element-hq/matrix-authentication-service:v1.15.0` | https://github.com/element-hq/matrix-authentication-service | 2026-04-25 | Monthly |
 | sygnal | `matrixdotorg/sygnal:v0.17.0` | https://github.com/matrix-org/sygnal | 2026-04-25 | Monthly |
 | draupnir | `the-draupnir-project/draupnir:v3.0.0` | https://github.com/the-draupnir-project/Draupnir | 2026-04-25 | Monthly |
+| pantalaimon | `matrixdotorg/pantalaimon:0.10.5` | https://github.com/matrix-org/pantalaimon | 2026-04-25 | Quarterly |
+| matrix-media-repo | `ghcr.io/t2bot/matrix-media-repo:v1.3.7` | https://github.com/turt2live/matrix-media-repo | 2026-04-25 | Monthly |
+| synapse-admin | `ghcr.io/etkecc/synapse-admin:0.10.3` | https://github.com/etkecc/synapse-admin | 2026-04-25 | Monthly |
+| rageshake | `ghcr.io/matrix-org/rageshake:latest` | https://github.com/matrix-org/rageshake | 2026-04-25 | Quarterly |
+| matrix-registration | `devture/matrix-registration:0.10.2` | https://github.com/zeratax/matrix-registration | 2026-04-25 | Quarterly |
+| maubot | `dock.mau.dev/maubot/maubot:0.5.0` | https://github.com/maubot/maubot | 2026-04-25 | Monthly |
+| matrix-dimension | `turt2live/matrix-dimension:latest` | https://github.com/turt2live/matrix-dimension | 2026-04-25 | Quarterly |
 | matrix-hookshot | `halfshot/matrix-hookshot:7.3.2` | https://github.com/matrix-org/matrix-hookshot | 2026-04-25 | Monthly |
+| mautrix-discord | `dock.mau.dev/mautrix/discord:v0.7.2` | https://github.com/mautrix/discord | 2026-04-25 | Monthly |
+| mautrix-telegram | `dock.mau.dev/mautrix/telegram:v0.15.2` | https://github.com/mautrix/telegram | 2026-04-25 | Monthly |
+| mautrix-signal | `dock.mau.dev/mautrix/signal:v0.7.4` | https://github.com/mautrix/signal | 2026-04-25 | Monthly |
+| mautrix-whatsapp | `dock.mau.dev/mautrix/whatsapp:v0.11.2` | https://github.com/mautrix/whatsapp | 2026-04-25 | Monthly |
+| mautrix-slack | `dock.mau.dev/mautrix/slack:v0.1.3` | https://github.com/mautrix/slack | 2026-04-25 | Monthly |
+| mautrix-googlechat | `dock.mau.dev/mautrix/googlechat:v0.5.2` | https://github.com/mautrix/googlechat | 2026-04-25 | Monthly |
+| matrix-appservice-irc | `matrixdotorg/matrix-appservice-irc:release-3.0.3` | https://github.com/matrix-org/matrix-appservice-irc | 2026-04-25 | Monthly |
 | livekit-server | `livekit/livekit-server:v1.11.0` | https://github.com/livekit/livekit | 2026-04-25 | Monthly |
+| conduwuit | `ghcr.io/girlbossceo/conduwuit:v0.4.7` | https://github.com/girlbossceo/conduwuit | 2026-04-25 | Quarterly (Monitor) |
+| dendrite | `matrixdotorg/dendrite-monolith:v0.13.8` | https://github.com/element-hq/dendrite | 2026-04-25 | Quarterly (Monitor) |
 
 ## Files
 

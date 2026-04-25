@@ -1,0 +1,16 @@
+id: "${MAUTRIX_SLACK_APPSERVICE_ID}"
+url: "${MAUTRIX_SLACK_APP_SERVICE_ADDRESS}"
+as_token: "${MAUTRIX_SLACK_AS_TOKEN}"
+hs_token: "${MAUTRIX_SLACK_HS_TOKEN}"
+sender_localpart: "${MAUTRIX_SLACK_BOT_USERNAME}"
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@slack_.*:${MATRIX_SERVER_NAME}'
+  aliases:
+    - exclusive: true
+      regex: '#slack_.*:${MATRIX_SERVER_NAME}'
+  rooms: []
+protocols:
+  - slack

@@ -1,0 +1,89 @@
+# Dendrite configuration template (rendered by envsubst).
+# Reference: https://github.com/element-hq/dendrite
+#
+# Dendrite is a second-generation Matrix homeserver written in Go. Run as
+# an alternative to Synapse via the `alt-homeserver-dendrite` compose
+# profile when you need a lower-resource server (recycled-Android-class
+# nodes per docs/distributed_self_healing_blueprint.md).
+
+version: 2
+
+global:
+  server_name: "${MATRIX_SERVER_NAME}"
+  private_key: /etc/dendrite/keys/matrix_key.pem
+  trusted_third_party_id_servers: []
+  database:
+    connection_string: "postgres://${DENDRITE_POSTGRES_USER}:${DENDRITE_POSTGRES_PASSWORD}@${DENDRITE_POSTGRES_HOST}:${DENDRITE_POSTGRES_PORT}/${DENDRITE_POSTGRES_DB}?sslmode=disable"
+    max_open_conns: 90
+    max_idle_conns: 5
+    conn_max_lifetime: -1
+  jetstream:
+    storage_path: /var/dendrite/jetstream
+    addresses: []
+  cache:
+    max_size_estimated: 1gb
+    max_age: 1h
+  metrics:
+    enabled: true
+    basic_auth:
+      username: metrics
+      password: "${DENDRITE_METRICS_PASSWORD}"
+  presence:
+    enable_inbound: false
+    enable_outbound: false
+  report_stats:
+    enabled: false
+  server_notices:
+    enabled: false
+
+app_service_api:
+  database:
+    connection_string: file:appservice.db
+  config_files: []
+
+client_api:
+  registration_disabled: false
+  registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
+  enable_registration_captcha: false
+
+federation_api:
+  send_max_retries: 16
+  disable_tls_validation: false
+  prefer_direct_fetch: false
+  disable_http_keepalives: false
+
+key_server:
+  database:
+    connection_string: file:keyserver.db
+
+media_api:
+  database:
+    connection_string: file:mediaapi.db
+  base_path: /var/dendrite/media_store
+  max_file_size_bytes: 104857600
+  dynamic_thumbnails: false
+  thumbnail_sizes:
+    - { width: 32, height: 32, method: crop }
+    - { width: 96, height: 96, method: crop }
+    - { width: 640, height: 480, method: scale }
+
+mscs:
+  mscs: []
+
+room_server:
+  database:
+    connection_string: file:roomserver.db
+
+sync_api:
+  database:
+    connection_string: file:syncapi.db
+  real_ip_header: X-Real-IP
+
+user_api:
+  bcrypt_cost: 10
+  database:
+    connection_string: file:userapi.db
+
+logging:
+  - type: std
+    level: info

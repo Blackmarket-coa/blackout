@@ -1,0 +1,15 @@
+; Pantalaimon configuration template (rendered by envsubst).
+; Pantalaimon proxies a Matrix client-server connection and transparently
+; performs E2EE for downstream consumers (bots, bridges, moderation tools).
+
+[Default]
+LogLevel = Info
+SSL = False
+
+[blackout]
+Homeserver = http://synapse:8008
+ListenAddress = 0.0.0.0
+ListenPort = 8009
+SSL = False
+UseKeyring = False
+IgnoreVerification = ${PANTALAIMON_IGNORE_VERIFICATION}

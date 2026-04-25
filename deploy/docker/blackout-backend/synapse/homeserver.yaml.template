@@ -34,6 +34,12 @@ experimental_features:
 app_service_config_files:
   - /integrations/hookshot/registration.yml
   - /integrations/mautrix-discord/registration.yaml
+  - /integrations/mautrix-telegram/registration.yaml
+  - /integrations/mautrix-signal/registration.yaml
+  - /integrations/mautrix-whatsapp/registration.yaml
+  - /integrations/mautrix-slack/registration.yaml
+  - /integrations/mautrix-googlechat/registration.yaml
+  - /integrations/matrix-appservice-irc/registration.yaml
 
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"

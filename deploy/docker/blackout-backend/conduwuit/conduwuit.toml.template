@@ -1,0 +1,27 @@
+# conduwuit configuration template (rendered by envsubst).
+# Reference: https://github.com/girlbossceo/conduwuit
+#
+# conduwuit is a Rust-based homeserver fork of Conduit, optimized for low
+# resource consumption. Run as an alternative to Synapse via the
+# `alt-homeserver-conduwuit` compose profile.
+
+[global]
+server_name = "${MATRIX_SERVER_NAME}"
+address = "0.0.0.0"
+port = 8008
+database_path = "/var/lib/conduwuit"
+database_backend = "rocksdb"
+
+max_request_size = 104857600
+allow_registration = ${SYNAPSE_ENABLE_REGISTRATION}
+registration_token = "${CONDUWUIT_REGISTRATION_TOKEN}"
+allow_federation = true
+allow_check_for_updates = false
+
+trusted_servers = ["matrix.org"]
+
+log = "warn,state_res=warn,_=off,sled=off"
+
+[global.well_known]
+client = "${MATRIX_HOMESERVER_URL}"
+server = "${MATRIX_SERVER_NAME}:443"

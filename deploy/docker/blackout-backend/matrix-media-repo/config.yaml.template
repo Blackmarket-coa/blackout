@@ -1,0 +1,96 @@
+# matrix-media-repo configuration template (rendered by envsubst).
+# Reference: https://github.com/turt2live/matrix-media-repo
+
+repo:
+  bindAddress: '0.0.0.0'
+  port: 8000
+  logDirectory: '-'
+  trustAnyForwardedAddress: true
+  useForwardedHost: true
+
+database:
+  postgres: "postgres://${MMR_POSTGRES_USER}:${MMR_POSTGRES_PASSWORD}@${MMR_POSTGRES_HOST}:${MMR_POSTGRES_PORT}/${MMR_POSTGRES_DB}?sslmode=disable"
+  pool:
+    maxConnections: 25
+    maxIdleConnections: 5
+
+homeservers:
+  - name: "${MATRIX_SERVER_NAME}"
+    csApi: "http://synapse:8008"
+
+accessTokens:
+  maxCacheTimeSeconds: 0
+  useLocalAppserviceConfig: false
+
+admins:
+  - "@admin:${MATRIX_SERVER_NAME}"
+
+datastores:
+  - type: file
+    enabled: true
+    forKinds: ["all"]
+    opts:
+      path: /data/media
+
+uploads:
+  maxBytes: 104857600
+  minBytes: 100
+  reportedMaxBytes: 0
+  quotas:
+    enabled: false
+
+downloads:
+  maxBytes: 104857600
+  numWorkers: 10
+  failureCacheMinutes: 5
+  cache:
+    enabled: true
+    maxSizeBytes: 1073741824
+    maxFileSizeBytes: 104857600
+    trackedMinutes: 30
+    minDownloads: 5
+    minCacheTimeSeconds: 300
+    minEvictedTimeSeconds: 60
+  expireAfterDays: 0
+
+thumbnails:
+  maxSourceBytes: 10485760
+  numWorkers: 100
+  types: [image/jpeg, image/jpg, image/png, image/gif, image/heif, image/webp, image/svg+xml]
+  expireAfterDays: 0
+  allowAnimated: true
+  defaultAnimated: false
+  maxAnimateSizeBytes: 10485760
+  sizes:
+    - { width: 32, height: 32 }
+    - { width: 96, height: 96 }
+    - { width: 320, height: 240 }
+    - { width: 640, height: 480 }
+    - { width: 800, height: 600 }
+
+urlPreviews:
+  enabled: false
+
+rateLimit:
+  enabled: true
+  requestsPerSecond: 1
+  burst: 10
+
+identicons:
+  enabled: true
+
+quarantine:
+  replaceThumbnails: true
+  replaceDownloads: false
+  thumbnailPath: ''
+  allowLocalAdmins: true
+
+timeouts:
+  urlPreviewTimeoutSeconds: 10
+  federationTimeoutSeconds: 120
+  clientServerTimeoutSeconds: 30
+
+metrics:
+  enabled: true
+  bindAddress: '0.0.0.0'
+  port: 9000
