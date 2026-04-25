@@ -4,7 +4,7 @@ This stack provisions a full backend for Blackout with Matrix + LiveKit calling 
 
 ## Services included
 
-1. `synapse` (`matrixdotorg/synapse`) – Matrix homeserver
+1. `synapse` (`ghcr.io/element-hq/synapse:v1.130.0`) – Matrix homeserver
 2. `postgres` (`postgres`) – Synapse DB
 3. `redis` (`redis`) – cache/session store
 4. `livekit` (`livekit/livekit-server`) – SFU for voice/video
@@ -42,7 +42,7 @@ docker run --rm -it \
   -v synapse_data:/data \
   -e SYNAPSE_SERVER_NAME="${MATRIX_SERVER_NAME}" \
   -e SYNAPSE_REPORT_STATS=no \
-  matrixdotorg/synapse:latest generate
+  ghcr.io/element-hq/synapse:v1.130.0 generate
 ```
 
 Then keep using `synapse/homeserver.yaml.template` as the source template for runtime config generation.
@@ -90,6 +90,7 @@ Expose and forward:
 
 ## Notes
 
+- `matrix-org/synapse` was archived on April 26, 2024; this stack tracks the active upstream image namespace `element-hq/synapse` via pinned semver tags.
 - `nginx` templates resolve domain variables from `.env` at container startup.
 - `.well-known/matrix/client` includes both `org.matrix.msc4143.rtc_foci` and `rtc_foci` for compatibility.
 - `certbot` container performs automated renewals every 12h.

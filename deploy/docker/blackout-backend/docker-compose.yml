@@ -33,7 +33,7 @@ services:
       - blackout-backend
 
   synapse:
-    image: matrixdotorg/synapse:latest
+    image: ghcr.io/element-hq/synapse:v1.130.0
     container_name: blackout-synapse
     restart: unless-stopped
     environment:
