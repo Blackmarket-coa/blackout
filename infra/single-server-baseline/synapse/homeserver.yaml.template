@@ -31,9 +31,9 @@ max_upload_size: 100M
 max_image_pixels: "50M"
 dynamic_thumbnails: true
 
-# Launch posture: private registrations. Create accounts via shared-secret
-# flow only until trust & anti-abuse controls are mature.
-enable_registration: false
+# Launch posture: open self-signup by default (can be overridden via env).
+# Keep verification requirements enabled to reduce automated abuse.
+enable_registration: ${SYNAPSE_ENABLE_REGISTRATION:-true}
 enable_registration_without_verification: false
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"

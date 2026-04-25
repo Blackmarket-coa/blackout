@@ -146,7 +146,7 @@ openssl rand -hex 32
 | `POSTGRES_PASSWORD` | Database password | (generate) |
 | `REDIS_PASSWORD` | Redis auth password | (generate) |
 | `SYNAPSE_REPORT_STATS` | Report anonymous stats to matrix.org | `no` |
-| `SYNAPSE_ENABLE_REGISTRATION` | Allow public sign-up | `false` |
+| `SYNAPSE_ENABLE_REGISTRATION` | Allow public sign-up | `true` |
 | `SYNAPSE_REGISTRATION_SHARED_SECRET` | Shared secret for admin user creation | (generate) |
 | `SYNAPSE_MACAROON_SECRET_KEY` | Macaroon signing key | (generate) |
 | `SYNAPSE_FORM_SECRET` | Form CSRF secret | (generate) |
@@ -163,6 +163,8 @@ openssl rand -hex 32
 | `DRAUPNIR_MANAGEMENT_ROOM` | Room ID for moderation commands | `!roomid:yourdomain.com` |
 | `DRAUPNIR_PANTALAIMON_USE` | Use Pantalaimon E2EE proxy | `false` |
 | `CERTBOT_EMAIL` | Email for Let's Encrypt notifications | `admin@yourdomain.com` |
+
+> **Registration safety:** `SYNAPSE_ENABLE_REGISTRATION=true` keeps public signup enabled, but this stack also keeps `enable_registration_without_verification: false` in Synapse. Configure at least one verification gate (registration tokens, CAPTCHA, or email verification) before going live, or set `SYNAPSE_ENABLE_REGISTRATION=false` for invite-only/private deployments.
 
 ---
 

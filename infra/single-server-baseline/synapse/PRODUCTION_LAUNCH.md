@@ -22,8 +22,8 @@ The split is intentional:
   - Mitigates image decompression-bomb behavior and memory spikes.
 - `dynamic_thumbnails: true`
   - Enables on-demand thumbnailing for compatible client behavior.
-- `enable_registration: false`
-  - Closes public self-signup for launch-day anti-abuse.
+- `enable_registration: ${SYNAPSE_ENABLE_REGISTRATION:-true}`
+  - Opens public self-signup by default; set `SYNAPSE_ENABLE_REGISTRATION=false` for invite-only/private cohorts.
 - `enable_registration_without_verification: false`
   - Prevents accidental open registration posture if other flags change.
 - `registration_shared_secret`
@@ -51,12 +51,13 @@ The split is intentional:
 4. Create first admin with shared-secret registration:
    - `register_new_matrix_user -c /data/homeserver.yaml http://127.0.0.1:8008`
 5. Disable/rotate the registration shared secret after bootstrap if not needed for ongoing operations.
-6. Verify `.well-known` responses on `https://theblackout.app`.
-7. Confirm TLS certificates include:
+6. If open signup is enabled, configure at least one verification gate (registration tokens, CAPTCHA, or email verification) before internet exposure.
+7. Verify `.well-known` responses on `https://theblackout.app`.
+8. Confirm TLS certificates include:
    - `theblackout.app`
    - `matrix.theblackout.app`
    - `turn.theblackout.app`
-8. Enforce backup + restore drill for `/data`, media volume, and Postgres dump.
+9. Enforce backup + restore drill for `/data`, media volume, and Postgres dump.
 
 ## Federation sanity checks
 

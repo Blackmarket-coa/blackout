@@ -28,7 +28,7 @@ redis:
   port: ${REDIS_PORT:-6379}
 
 registration_shared_secret: "${REGISTRATION_SHARED_SECRET}"
-enable_registration: ${ENABLE_REGISTRATION:-false}
+enable_registration: ${ENABLE_REGISTRATION:-true}
 report_stats: false
 
 jwt_config:
