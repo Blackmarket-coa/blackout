@@ -2,6 +2,8 @@
 
 This stack provisions a full backend for Blackout with Matrix + LiveKit calling support.
 
+Upstream dependency tracking and adoption decisions are documented in [`docs/matrix-upstreams.md`](../../../docs/matrix-upstreams.md) at the repository root.
+
 ## Services included
 
 1. `synapse` (`ghcr.io/element-hq/synapse:v1.130.0`) – Matrix homeserver
@@ -270,4 +272,3 @@ docker compose logs --tail=200 synapse matrix-hookshot
 - **Bot permissions:** scope Hookshot bot power levels to the minimum required rooms; avoid global admin for bridge bots.
 - **Secret management:** move `HOOKSHOT_AS_TOKEN`, `HOOKSHOT_HS_TOKEN`, and DB credentials into Docker secrets/secret manager, then rotate on incident or personnel change.
 - **Database durability:** back up `hookshot-db` (`hookshot_db_data`) with Synapse backups to preserve bridge state and delivery checkpoints.
-
