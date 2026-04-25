@@ -14,6 +14,7 @@ export type LoginFlowsState = {
     sso?: ISSOFlow;
     hasPassword: boolean;
     hasToken: boolean;
+    discoveryFailed?: boolean;
 };
 
 export type AuthTab = 'login' | 'register' | 'reset';

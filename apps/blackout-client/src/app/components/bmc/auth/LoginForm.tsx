@@ -101,11 +101,14 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
             })
             .catch(() => {
                 if (cancelled) return;
-                // Fall back to assuming password is supported — typical for self-hosted Synapse.
+                // If discovery fails, keep token/SSO options visible so token/SSO-only
+                // homeservers are still reachable.
                 setFlows({
-                    flows: [{ type: 'm.login.password' }],
-                    hasPassword: true,
-                    hasToken: false,
+                    flows: [{ type: 'm.login.sso' }, { type: 'm.login.token' }],
+                    sso: { type: 'm.login.sso' },
+                    hasPassword: false,
+                    hasToken: true,
+                    discoveryFailed: true,
                 });
             })
             .finally(() => {
@@ -212,7 +215,7 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
         );
     }
 
-    if (!flows?.hasPassword && !flows?.sso) {
+    if (!flows?.hasPassword && !flows?.sso && !flows?.hasToken) {
         return (
             <p role="alert" style={errorTextStyle}>
                 This homeserver does not advertise a supported sign-in method.
@@ -222,6 +225,25 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
 
     return (
         <div style={{ display: 'grid', gap: 12 }}>
+            {flows.discoveryFailed ? (
+                <p role="alert" style={errorTextStyle}>
+                    Couldn’t load supported flows; try SSO or switch homeserver.
+                </p>
+            ) : null}
+
+            {flows.hasToken && !flows.hasPassword && !flows.sso ? (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
+                    This homeserver uses token sign-in. Start SSO from your identity provider or
+                    switch homeserver.
+                </p>
+            ) : null}
+
+            {error ? (
+                <p role="alert" style={errorTextStyle}>
+                    {error}
+                </p>
+            ) : null}
+
             {flows.hasPassword ? (
                 <form
                     onSubmit={onPasswordSubmit}
@@ -268,11 +290,6 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                             style={inputStyle}
                         />
                     </label>
-                    {error ? (
-                        <p role="alert" style={errorTextStyle}>
-                            {error}
-                        </p>
-                    ) : null}
                     <button type="submit" disabled={submitting} style={primaryButtonStyle}>
                         {submitting ? 'Signing in…' : 'Sign in'}
                     </button>
