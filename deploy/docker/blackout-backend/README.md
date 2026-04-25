@@ -18,6 +18,8 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 10. `sygnal` (`matrixdotorg/sygnal`) – push gateway for APNs/FCM delivery
 11. `matrix-hookshot` (`halfshot/matrix-hookshot`, optional `integrations` profile) – webhook/feed bridge
 12. `hookshot-db` (`postgres`, optional `integrations` profile) – Hookshot persistence
+13. `mautrix-discord` (`dock.mau.dev/mautrix/discord`, optional `integrations` profile) – Discord chat bridge
+14. `mautrix-discord-db` (`postgres`, optional `integrations` profile) – Mautrix Discord persistence
 
 
 ## Version matrix (pinned images)
@@ -42,6 +44,9 @@ Upstream dependency tracking and adoption decisions are documented in [`docs/mat
 - `integrations/README.md`
 - `integrations/hookshot/config.yml.template`
 - `integrations/hookshot/registration.yml.template`
+- `integrations/mautrix-discord/config.yaml.template`
+- `integrations/mautrix-discord/registration.yaml.template`
+- `integrations/mautrix-discord/RUNBOOK.md`
 - `well-known/matrix/client`
 - `well-known/matrix/server`
 
@@ -249,11 +254,17 @@ Hookshot renders these files on startup:
 - `integrations/hookshot/config.yml`
 - `integrations/hookshot/registration.yml`
 
+Mautrix Discord renders these files on startup:
+
+- `integrations/mautrix-discord/config.yaml`
+- `integrations/mautrix-discord/registration.yaml`
+
 ### Synapse appservice registration flow
 
 1. Render registration by starting the Hookshot service once (command above).
 2. Keep `app_service_config_files` in `synapse/homeserver.yaml.template` pointing to:
    - `/integrations/hookshot/registration.yml`
+   - `/integrations/mautrix-discord/registration.yaml`
 3. Restart Synapse so it loads the appservice registration:
 
 ```bash

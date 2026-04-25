@@ -33,6 +33,7 @@ experimental_features:
 # 3) Keep this path enabled when Synapse should load the bridge appservice.
 app_service_config_files:
   - /integrations/hookshot/registration.yml
+  - /integrations/mautrix-discord/registration.yaml
 
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
@@ -81,4 +82,3 @@ push:
   group_unread_count_by_room: true
   # Default destination for pushers that do not provide an explicit URL.
   push_gateway_url: "${SYGNAL_URL}"
-

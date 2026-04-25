@@ -65,7 +65,7 @@ services:
     volumes:
       - synapse_data:/data
       - ./synapse/homeserver.yaml.template:/templates/homeserver.yaml.template:ro
-      - ./integrations/hookshot:/integrations/hookshot:ro
+      - ./integrations:/integrations:ro
     command: >-
       /bin/sh -c "envsubst < /templates/homeserver.yaml.template > /data/homeserver.yaml
       && exec /start.py"
@@ -247,6 +247,72 @@ services:
     networks:
       - blackout-backend
 
+  mautrix-discord-db:
+    image: postgres:16-alpine
+    container_name: blackout-mautrix-discord-db
+    restart: unless-stopped
+    profiles:
+      - integrations
+    environment:
+      POSTGRES_DB: ${MAUTRIX_DISCORD_POSTGRES_DB}
+      POSTGRES_USER: ${MAUTRIX_DISCORD_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MAUTRIX_DISCORD_POSTGRES_PASSWORD}
+    volumes:
+      - mautrix_discord_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAUTRIX_DISCORD_POSTGRES_USER} -d ${MAUTRIX_DISCORD_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - blackout-backend
+
+  mautrix-discord:
+    image: dock.mau.dev/mautrix/discord:v0.7.2
+    container_name: blackout-mautrix-discord
+    restart: unless-stopped
+    profiles:
+      - integrations
+    depends_on:
+      synapse:
+        condition: service_started
+      mautrix-discord-db:
+        condition: service_healthy
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      MATRIX_HOMESERVER_URL: ${MATRIX_HOMESERVER_URL}
+      MAUTRIX_DISCORD_APPSERVICE_ID: ${MAUTRIX_DISCORD_APPSERVICE_ID}
+      MAUTRIX_DISCORD_APP_SERVICE_ADDRESS: ${MAUTRIX_DISCORD_APP_SERVICE_ADDRESS}
+      MAUTRIX_DISCORD_AS_TOKEN: ${MAUTRIX_DISCORD_AS_TOKEN}
+      MAUTRIX_DISCORD_HS_TOKEN: ${MAUTRIX_DISCORD_HS_TOKEN}
+      MAUTRIX_DISCORD_BOT_USERNAME: ${MAUTRIX_DISCORD_BOT_USERNAME}
+      MAUTRIX_DISCORD_POSTGRES_DB: ${MAUTRIX_DISCORD_POSTGRES_DB}
+      MAUTRIX_DISCORD_POSTGRES_USER: ${MAUTRIX_DISCORD_POSTGRES_USER}
+      MAUTRIX_DISCORD_POSTGRES_PASSWORD: ${MAUTRIX_DISCORD_POSTGRES_PASSWORD}
+      MAUTRIX_DISCORD_POSTGRES_HOST: mautrix-discord-db
+      MAUTRIX_DISCORD_POSTGRES_PORT: 5432
+      MAUTRIX_DISCORD_DISCORD_TOKEN: ${MAUTRIX_DISCORD_DISCORD_TOKEN}
+      MAUTRIX_DISCORD_PROVISIONING_SHARED_SECRET: ${MAUTRIX_DISCORD_PROVISIONING_SHARED_SECRET}
+      MAUTRIX_DISCORD_METRICS_PORT: ${MAUTRIX_DISCORD_METRICS_PORT}
+      MAUTRIX_DISCORD_COMMAND_PREFIX: ${MAUTRIX_DISCORD_COMMAND_PREFIX}
+      MAUTRIX_DISCORD_PUBLIC_ADDRESS: ${MAUTRIX_DISCORD_PUBLIC_ADDRESS}
+    volumes:
+      - ./integrations/mautrix-discord:/integrations/mautrix-discord
+      - mautrix_discord_data:/data
+    command: >-
+      /bin/sh -c "envsubst < /integrations/mautrix-discord/config.yaml.template > /integrations/mautrix-discord/config.yaml
+      && envsubst < /integrations/mautrix-discord/registration.yaml.template > /integrations/mautrix-discord/registration.yaml
+      && cp /integrations/mautrix-discord/config.yaml /data/config.yaml
+      && cp /integrations/mautrix-discord/registration.yaml /data/registration.yaml
+      && exec /usr/bin/mautrix-discord -c /data/config.yaml"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:${MAUTRIX_DISCORD_METRICS_PORT}/metrics || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blackout-backend
+
   nginx:
     image: nginx:1.27-alpine
     container_name: blackout-nginx
@@ -290,3 +356,5 @@ volumes:
   mas_data:
   draupnir_data:
   hookshot_db_data:
+  mautrix_discord_db_data:
+  mautrix_discord_data:
