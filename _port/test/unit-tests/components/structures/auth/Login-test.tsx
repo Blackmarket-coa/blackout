@@ -137,6 +137,28 @@ describe("Login", function () {
         expect(ssoButton).toBeTruthy();
     });
 
+    it("should prioritize homeserver-advertised IdPs when identity providers are present", async () => {
+        mockClient.loginFlows.mockResolvedValue({
+            flows: [
+                { type: "m.login.password" },
+                {
+                    type: "m.login.sso",
+                    identity_providers: [{ id: "corp-oidc", name: "Corporate SSO" }],
+                },
+            ],
+        });
+
+        const { container } = getComponent();
+        await waitForElementToBeRemoved(() => screen.queryAllByLabelText("Loading…"));
+
+        const ssoButton = container.querySelector(".mx_SSOButton");
+        const passwordForm = container.querySelector("form");
+
+        expect(ssoButton).toBeTruthy();
+        expect(passwordForm).toBeTruthy();
+        expect(ssoButton!.compareDocumentPosition(passwordForm!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
     it("should hide register link when registration is disabled on the server", async () => {
         mockClient.registerRequest.mockRejectedValue(new MatrixError({}, 403));
 
@@ -199,6 +221,21 @@ describe("Login", function () {
 
         const ssoButtons = container.querySelectorAll(".mx_SSOButton");
         expect(ssoButtons.length).toBe(1);
+    });
+
+    it("should hide password login on configured production hosts", async () => {
+        SdkConfig.put({
+            brand: "test-brand",
+            disable_custom_urls: true,
+            oidc_only_production_hosts: [window.location.hostname],
+        });
+        mockClient.loginFlows.mockResolvedValue({ flows: [{ type: "m.login.password" }, { type: "m.login.sso" }] });
+
+        const { container } = getComponent();
+        await waitForElementToBeRemoved(() => screen.queryAllByLabelText("Loading…"));
+
+        expect(container.querySelector("form")).not.toBeInTheDocument();
+        expect(container.querySelector(".mx_SSOButton")).toBeTruthy();
     });
 
     it("should handle serverConfig updates correctly", async () => {

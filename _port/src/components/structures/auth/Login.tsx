@@ -15,6 +15,7 @@ import { _t, UserFriendlyError } from "../../../languageHandler";
 import Login, { type ClientLoginFlow, type OidcNativeFlow } from "../../../Login";
 import { messageForConnectionError, messageForLoginError } from "../../../utils/ErrorUtils";
 import AutoDiscoveryUtils from "../../../utils/AutoDiscoveryUtils";
+import SdkConfig from "../../../SdkConfig";
 import AuthPage from "../../views/auth/AuthPage";
 import PlatformPeg from "../../../PlatformPeg";
 import SettingsStore from "../../../settings/SettingsStore";
@@ -416,6 +417,10 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
     }
 
     private isSupportedFlow = (flow: ClientLoginFlow): boolean => {
+        if (flow.type === "m.login.password" && this.isPasswordLoginDisabledForCurrentHost()) {
+            return false;
+        }
+
         // technically the flow can have multiple steps, but no one does this
         // for login and loginLogic doesn't support it so we can ignore it.
         if (!this.stepRendererMap[flow.type]) {
@@ -428,8 +433,13 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
     public renderLoginComponentForFlows(): ReactNode {
         if (!this.state.flows) return null;
 
-        // this is the ideal order we want to show the flows in
-        const order = ["oidcNativeFlow", "m.login.password", "m.login.sso"];
+        const ssoFlow = this.state.flows.find((flow) => flow.type === "m.login.sso") as SSOFlow | undefined;
+        const hasHomeserverAdvertisedIdps = Boolean(ssoFlow?.identity_providers?.length);
+
+        // homeserver-advertised IdPs should be the primary login path when present
+        const order = hasHomeserverAdvertisedIdps
+            ? ["oidcNativeFlow", "m.login.sso", "m.login.password"]
+            : ["oidcNativeFlow", "m.login.password", "m.login.sso"];
 
         const flows = filterBoolean(order.map((type) => this.state.flows?.find((flow) => flow.type === type)));
         return (
@@ -440,6 +450,13 @@ export default class LoginComponent extends React.PureComponent<IProps, IState> 
                 })}
             </React.Fragment>
         );
+    }
+
+    private isPasswordLoginDisabledForCurrentHost(): boolean {
+        const oidcOnlyHosts = SdkConfig.get("oidc_only_production_hosts");
+        if (!oidcOnlyHosts?.length) return false;
+
+        return oidcOnlyHosts.includes(window.location.hostname);
     }
 
     private renderPasswordStep = (): JSX.Element => {
