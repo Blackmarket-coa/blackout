@@ -24,7 +24,7 @@ function createGovernanceRouter() {
     const { communityId, proposerId, title, description, options = [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }], durationHours = 168 } = payload;
 
     if (!communityId || !proposerId || !title) {
-      return c.json({ error: 'communityId, proposerId and title are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId, proposerId and title are required' }, 400);
     }
 
     const proposal = db.createVote({
@@ -54,18 +54,18 @@ function createGovernanceRouter() {
     const normalizedChoice = Array.isArray(choice) ? choice[0] : choice;
 
     if (!voteId || !userId || !normalizedChoice) {
-      return c.json({ error: 'voteId, userId and choice are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'voteId, userId and choice are required' }, 400);
     }
 
     const vote = db.getVote(voteId);
     if (!vote) {
-      return c.json({ error: 'Vote not found' }, 404);
+      return c.json({ code: 'vote_not_found', message: 'Vote not found' }, 404);
     }
 
     try {
       db.castVote({ id: crypto.randomUUID(), voteId, userId, choice: normalizedChoice, weight });
     } catch (error) {
-      return c.json({ error: (error as Error).message }, 400);
+      return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
     }
 
     const tally = tallyVotes(db.getVoteEntries(voteId));
@@ -79,7 +79,7 @@ function createGovernanceRouter() {
 
     const { proposalId } = c.req.param();
     const vote = db.getVote(proposalId);
-    if (!vote) return c.json({ error: 'Proposal not found' }, 404);
+    if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
 
     return c.json({ ...vote, results: tallyVotes(db.getVoteEntries(proposalId)) });
   });

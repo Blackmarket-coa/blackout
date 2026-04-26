@@ -26,7 +26,7 @@ export function createRateLimit(options: RateLimitOptions) {
     const history = (store.get(key) ?? []).filter((timestamp) => now - timestamp < windowMs);
 
     if (history.length >= maxRequests) {
-      return c.json({ error: 'Rate limit exceeded' }, 429);
+      return c.json({ code: 'rate_limited', message: 'Rate limit exceeded' }, 429);
     }
 
     history.push(now);

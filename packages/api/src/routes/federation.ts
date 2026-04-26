@@ -7,7 +7,7 @@ federation.post('/links', async (c) => {
   const { sourceCommunityId, targetCommunityId, linkType = 'zone', matrixBridgeRoomId } = await c.req.json();
 
   if (!sourceCommunityId || !targetCommunityId) {
-    return c.json({ error: 'sourceCommunityId and targetCommunityId are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'sourceCommunityId and targetCommunityId are required' }, 400);
   }
 
   const link = db.createFederationLink({

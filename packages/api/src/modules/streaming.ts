@@ -62,7 +62,7 @@ function createStreamingRouter() {
 
     const { creatorId } = c.req.param();
     const auth = db.getCreatorStreamAuth(creatorId);
-    if (!auth) return c.json({ error: 'No managed stream key found for creator' }, 404);
+    if (!auth) return c.json({ code: 'stream_key_not_found', message: 'No managed stream key found for creator' }, 404);
 
     return c.json(auth);
   });
@@ -74,7 +74,7 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const payload = (await c.req.json()) as { creatorId?: string; state?: 'offline' | 'live' };
     if (!payload.creatorId || !payload.state) {
-      return c.json({ error: 'creatorId and state are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'creatorId and state are required' }, 400);
     }
 
     const stream = ensureStream(streamId, payload.creatorId);
@@ -96,7 +96,7 @@ function createStreamingRouter() {
     };
 
     if (!payload.creatorId || !payload.title) {
-      return c.json({ error: 'creatorId and title are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'creatorId and title are required' }, 400);
     }
 
     const stream = ensureStream(streamId, payload.creatorId);
@@ -122,7 +122,7 @@ function createStreamingRouter() {
     };
 
     if (!payload.creatorId || !payload.visibility) {
-      return c.json({ error: 'creatorId and visibility are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'creatorId and visibility are required' }, 400);
     }
 
     const stream = ensureStream(streamId, payload.creatorId);
@@ -142,7 +142,7 @@ function createStreamingRouter() {
     const streamId = c.req.param('streamId');
     const subscriberId = c.req.query('subscriberId');
     const stream = db.getStream(streamId);
-    if (!stream) return c.json({ error: 'Stream not found' }, 404);
+    if (!stream) return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
 
     const canAccess =
       stream.visibility === 'public' ||
@@ -164,7 +164,7 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const payload = (await c.req.json()) as { creatorId?: string; replayPointer?: string };
     if (!payload.creatorId) {
-      return c.json({ error: 'creatorId is required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'creatorId is required' }, 400);
     }
 
     const stream = ensureStream(streamId, payload.creatorId);
@@ -183,7 +183,7 @@ function createStreamingRouter() {
     const sessionId = c.req.param('sessionId');
     const payload = (await c.req.json().catch(() => ({}))) as { replayPointer?: string };
     const session = db.endStreamSession(sessionId, payload.replayPointer);
-    if (!session) return c.json({ error: 'Session not found' }, 404);
+    if (!session) return c.json({ code: 'session_not_found', message: 'Session not found' }, 404);
 
     const stream = db.getStream(session.streamId);
     if (stream && payload.replayPointer) {

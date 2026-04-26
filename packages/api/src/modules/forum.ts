@@ -21,7 +21,7 @@ function createForumRouter() {
     };
 
     if (!payload.communityId || !payload.authorId || !payload.title || !payload.body) {
-      return c.json({ error: 'communityId, authorId, title and body are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId, authorId, title and body are required' }, 400);
     }
 
     const post = db.createForumPost({
@@ -44,7 +44,7 @@ function createForumRouter() {
 
     const communityId = c.req.query('communityId');
     if (!communityId) {
-      return c.json({ error: 'communityId query parameter is required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId query parameter is required' }, 400);
     }
 
     return c.json(db.listForumPosts(communityId));

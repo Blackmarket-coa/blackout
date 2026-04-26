@@ -20,7 +20,7 @@ function createModerationRouter() {
     };
 
     if (!payload.communityId || !payload.actorId || !payload.targetId || !payload.action || !payload.reason) {
-      return c.json({ error: 'communityId, actorId, targetId, action and reason are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId, actorId, targetId, action and reason are required' }, 400);
     }
 
     const record = db.createModerationAction({
@@ -42,7 +42,7 @@ function createModerationRouter() {
 
     const communityId = c.req.query('communityId');
     if (!communityId) {
-      return c.json({ error: 'communityId query parameter is required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId query parameter is required' }, 400);
     }
 
     return c.json(db.listModerationActions(communityId));

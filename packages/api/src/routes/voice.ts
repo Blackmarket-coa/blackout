@@ -33,15 +33,15 @@ voice.post('/rooms/create', async (c) => {
   const role = roleFromRequest(payload.role);
 
   if (!canopyId || !channelId) {
-    return c.json({ error: 'canopyId and channelId are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'canopyId and channelId are required' }, 400);
   }
 
   if (!hasPremiumCanopyEntitlement(user.sub)) {
-    return c.json({ error: 'Premium canopy subscription required' }, 402);
+    return c.json({ code: 'premium_required', message: 'Premium canopy subscription required' }, 402);
   }
 
   if (!canModerate(role)) {
-    return c.json({ error: 'Only canopy admins/mods can create voice rooms' }, 403);
+    return c.json({ code: 'forbidden', message: 'Only canopy admins/mods can create voice rooms' }, 403);
   }
 
   const room = db.createOrUpdateVoiceRoom({
@@ -66,11 +66,11 @@ voice.post('/rooms/join', async (c) => {
   const requestedCanSubscribe = payload.canSubscribe == null ? true : Boolean(payload.canSubscribe);
 
   if (!canopyId || !channelId) {
-    return c.json({ error: 'canopyId and channelId are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'canopyId and channelId are required' }, 400);
   }
 
   if (!hasPremiumCanopyEntitlement(user.sub)) {
-    return c.json({ error: 'Premium canopy subscription required' }, 402);
+    return c.json({ code: 'premium_required', message: 'Premium canopy subscription required' }, 402);
   }
 
   const room = db.createOrUpdateVoiceRoom({
@@ -81,7 +81,7 @@ voice.post('/rooms/join', async (c) => {
   });
 
   if (room.isLocked && !canModerate(role)) {
-    return c.json({ error: 'Room is locked' }, 423);
+    return c.json({ code: 'room_locked', message: 'Room is locked' }, 423);
   }
 
   const canPublish = canModerate(role) ? true : requestedCanPublish;
@@ -134,7 +134,7 @@ voice.post('/rooms/leave', async (c) => {
   const channelId = String(payload.channelId ?? '').trim();
 
   const room = db.getVoiceRoom(canopyId, channelId);
-  if (!room) return c.json({ error: 'Room not found' }, 404);
+  if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
 
   const participant = db.leaveVoiceRoom(room.id, user.sub);
   if (!participant) return c.json({ ok: true, message: 'No active participant session found' });
@@ -163,10 +163,10 @@ voice.post('/token', async (c) => {
   const role = roleFromRequest(payload.role);
 
   const room = db.getVoiceRoom(canopyId, channelId);
-  if (!room) return c.json({ error: 'Room not found' }, 404);
+  if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
 
   if (room.isLocked && !canModerate(role)) {
-    return c.json({ error: 'Room is locked' }, 423);
+    return c.json({ code: 'room_locked', message: 'Room is locked' }, 423);
   }
 
   const token = createLiveKitAccessToken({
@@ -194,11 +194,11 @@ voice.post('/rooms/moderation/:action', async (c) => {
   const role = roleFromRequest(payload.role);
 
   if (!canModerate(role)) {
-    return c.json({ error: 'Only canopy admins/mods can perform voice moderation controls' }, 403);
+    return c.json({ code: 'forbidden', message: 'Only canopy admins/mods can perform voice moderation controls' }, 403);
   }
 
   const room = db.getVoiceRoom(canopyId, channelId);
-  if (!room) return c.json({ error: 'Room not found' }, 404);
+  if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
 
   if (action === 'lock') {
     const isLocked = payload.locked == null ? true : Boolean(payload.locked);
@@ -216,7 +216,7 @@ voice.post('/rooms/moderation/:action', async (c) => {
   }
 
   if (!targetUserId) {
-    return c.json({ error: 'targetUserId is required for mute/remove actions' }, 400);
+    return c.json({ code: 'invalid_request', message: 'targetUserId is required for mute/remove actions' }, 400);
   }
 
   if (action === 'remove') {
@@ -242,7 +242,7 @@ voice.get('/rooms/:canopyId/:channelId/events', (c) => {
   const channelId = c.req.param('channelId');
 
   const room = db.getVoiceRoom(canopyId, channelId);
-  if (!room) return c.json({ error: 'Room not found' }, 404);
+  if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
 
   return c.json({ events: db.listVoiceRoomEvents(room.id), activeParticipants: db.getVoiceRoomActiveParticipants(room.id) });
 });

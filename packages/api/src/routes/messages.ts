@@ -25,12 +25,12 @@ messages.post('/:channelId', async (c) => {
   } = await c.req.json();
 
   if (!content || !userId) {
-    return c.json({ error: 'content and userId are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'content and userId are required' }, 400);
   }
 
   const user = db.getUserById(userId);
   if (!user) {
-    return c.json({ error: 'Unknown user' }, 404);
+    return c.json({ code: 'user_not_found', message: 'Unknown user' }, 404);
   }
 
   let transformedContent = content;

@@ -19,7 +19,7 @@ function createDeadDropRouter() {
     };
 
     if (!payload.channelId || !payload.senderId || !payload.recipientId || !payload.payload) {
-      return c.json({ error: 'channelId, senderId, recipientId and payload are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'channelId, senderId, recipientId and payload are required' }, 400);
     }
 
     const record = db.createDeadDrop({
@@ -40,12 +40,12 @@ function createDeadDropRouter() {
 
     const payload = (await c.req.json()) as { deaddropId?: string; recipientId?: string };
     if (!payload.deaddropId || !payload.recipientId) {
-      return c.json({ error: 'deaddropId and recipientId are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'deaddropId and recipientId are required' }, 400);
     }
 
     const opened = db.openDeadDrop(payload.deaddropId, payload.recipientId);
     if (!opened) {
-      return c.json({ error: 'Dead drop not found or recipient mismatch' }, 404);
+      return c.json({ code: 'deaddrop_not_found', message: 'Dead drop not found or recipient mismatch' }, 404);
     }
 
     const event = emitDomainEvent({ module: 'deaddrop', type: 'deaddrop.opened', payload: { dropId: opened.id, recipientId: opened.recipientId } });

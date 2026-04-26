@@ -26,7 +26,7 @@ function createDiscoveryRouter() {
     };
 
     if (!payload.id || !payload.entityType || !payload.name) {
-      return c.json({ error: 'id, entityType, and name are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'id, entityType, and name are required' }, 400);
     }
 
     const entity = discoveryService.upsertProfile({
@@ -52,10 +52,10 @@ function createDiscoveryRouter() {
     if (denied) return denied;
 
     const payload = (await c.req.json()) as { id?: string; delta?: number };
-    if (!payload.id) return c.json({ error: 'id is required' }, 400);
+    if (!payload.id) return c.json({ code: 'invalid_request', message: 'id is required' }, 400);
 
     const updated = discoveryService.recordActivity(payload.id, payload.delta ?? 1);
-    if (!updated) return c.json({ error: 'Entity not found' }, 404);
+    if (!updated) return c.json({ code: 'entity_not_found', message: 'Entity not found' }, 404);
 
     return c.json(updated, 202);
   });
@@ -137,11 +137,11 @@ function createDiscoveryRouter() {
 
     const payload = (await c.req.json()) as { entityId?: string; stage?: 'impression' | 'click' | 'join' | 'subscribe' };
     if (!payload.entityId || !payload.stage) {
-      return c.json({ error: 'entityId and stage are required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'entityId and stage are required' }, 400);
     }
 
     const analytics = discoveryService.recordFunnelEvent(payload.entityId, payload.stage);
-    if (!analytics) return c.json({ error: 'Entity must be indexed before analytics can be recorded' }, 409);
+    if (!analytics) return c.json({ code: 'entity_not_indexed', message: 'Entity must be indexed before analytics can be recorded' }, 409);
 
     return c.json(analytics, 202);
   });

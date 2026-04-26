@@ -30,11 +30,11 @@ export function canAccessDomain(c: Context, domain: 'governance' | 'forum' | 'de
 
 export function requireDomainCapability(c: Context, domain: 'governance' | 'forum' | 'deaddrop' | 'moderation' | 'streaming' | 'discovery', action: 'read' | 'write'): Response | null {
   if (!requireAuthenticatedUser(c)) {
-    return c.json({ error: 'Unauthorized' }, 401);
+    return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
   }
 
   if (!canAccessDomain(c, domain, action)) {
-    return c.json({ error: `Missing capability: ${domain}.${action}` }, 403);
+    return c.json({ code: 'missing_capability', message: `Missing capability: ${domain}.${action}` }, 403);
   }
 
   return null;

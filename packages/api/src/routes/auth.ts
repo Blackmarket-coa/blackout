@@ -19,18 +19,18 @@ auth.post('/register', async (c) => {
   const { username, email, password } = await c.req.json();
 
   if (!username || !email || !password) {
-    return c.json({ error: 'username, email, and password are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'username, email, and password are required' }, 400);
   }
 
   if (!isAcceptablePassword(password)) {
     return c.json(
-      { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+      { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
       400,
     );
   }
 
   if (db.findUserByEmail(email) || db.findUserByUsername(username)) {
-    return c.json({ error: 'User already exists' }, 409);
+    return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
   }
 
   const userId = crypto.randomUUID();
@@ -53,7 +53,7 @@ auth.post('/register', async (c) => {
   } catch (error) {
     db.deleteUser(user.id);
     return c.json(
-      { error: 'Failed to provision Matrix account', detail: (error as Error).message },
+      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', detail: (error as Error).message },
       502,
     );
   }
@@ -63,7 +63,7 @@ auth.post('/register', async (c) => {
   // the caller can retry with the same email/username.
   if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
     db.deleteUser(user.id);
-    return c.json({ error: 'Failed to provision Matrix account', matrix }, 502);
+    return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix }, 502);
   }
 
   const token = signJwt(user.id, user.username);
@@ -79,7 +79,7 @@ auth.post('/login', async (c) => {
   const { email, password } = await c.req.json();
 
   if (typeof email !== 'string' || typeof password !== 'string') {
-    return c.json({ error: 'email and password are required' }, 400);
+    return c.json({ code: 'invalid_request', message: 'email and password are required' }, 400);
   }
 
   const user = db.findUserByEmail(email);
@@ -87,7 +87,7 @@ auth.post('/login', async (c) => {
   // Run scrypt even when the user is missing so the two 401 branches have
   // equivalent timing and cannot be used to enumerate registered emails.
   if (!verifyPasswordConstantTime(password, user?.passwordHash)) {
-    return c.json({ error: 'Invalid credentials' }, 401);
+    return c.json({ code: 'invalid_credentials', message: 'Invalid credentials' }, 401);
   }
 
   const token = signJwt(user!.id, user!.username);
