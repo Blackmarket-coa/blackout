@@ -45,44 +45,46 @@ echo "[entrypoint] startup profile=${SELECTED_PROFILE} reason=${PROFILE_REASON} 
 
 mkdir -p /data
 
-if [[ ! -f "$CONFIG_PATH" ]]; then
-  if [[ "$SELECTED_PROFILE" == "managed" ]]; then
-    missing=()
-    for required_var in DATABASE_HOST DATABASE_PASSWORD REDIS_HOST REGISTRATION_SHARED_SECRET; do
-      if [[ -z "${!required_var:-}" ]]; then
-        missing+=("$required_var")
-      fi
-    done
-
-    if [[ ${#missing[@]} -ne 0 ]]; then
-      echo "[entrypoint] ERROR: BLACKOUT_PROFILE=managed requires env vars: DATABASE_HOST DATABASE_PASSWORD REDIS_HOST REGISTRATION_SHARED_SECRET"
-      echo "[entrypoint] ERROR: missing vars: ${missing[*]}"
-      echo "[entrypoint] ACTION: provide managed dependencies or set BLACKOUT_PROFILE=standalone|constrained for sqlite mode."
-      exit 1
+if [[ "$SELECTED_PROFILE" == "managed" ]]; then
+  missing=()
+  for required_var in DATABASE_HOST DATABASE_PASSWORD REDIS_HOST REGISTRATION_SHARED_SECRET; do
+    if [[ -z "${!required_var:-}" ]]; then
+      missing+=("$required_var")
     fi
+  done
 
-    # Managed-hosting operator controls:
-    # - BLACKOUT_MANAGED_READINESS_CHECKS=true|false (default true)
-    # - BLACKOUT_BACKUP_VERIFY_HOOK / BLACKOUT_RESTORE_VERIFY_HOOK
-    # - BLACKOUT_BACKUP_HOOK_REQUIRED=true|false
-    # - BLACKOUT_RESTORE_HOOK_REQUIRED=true|false
-    python -m synapse.util.managed_hosting readiness
-    python -m synapse.util.managed_hosting run-hooks
-
-    envsubst < "$TEMPLATE_PATH" > "$CONFIG_PATH"
-  else
-    echo "[entrypoint] generating ${SELECTED_PROFILE} sqlite config"
-    python -m synapse.app.homeserver \
-      --generate-config \
-      -H "$SERVER_NAME" \
-      -c "$CONFIG_PATH" \
-      --report-stats=no
-    python -m synapse.util.blackout_profiles \
-      --config-path "$CONFIG_PATH" \
-      --profile "$SELECTED_PROFILE" \
-      --port "$PORT" \
-      --public-baseurl "${SYNAPSE_PUBLIC_BASEURL:-}"
+  if [[ ${#missing[@]} -ne 0 ]]; then
+    echo "[entrypoint] ERROR: BLACKOUT_PROFILE=managed requires env vars: DATABASE_HOST DATABASE_PASSWORD REDIS_HOST REGISTRATION_SHARED_SECRET"
+    echo "[entrypoint] ERROR: missing vars: ${missing[*]}"
+    echo "[entrypoint] ACTION: provide managed dependencies or set BLACKOUT_PROFILE=standalone|constrained for sqlite mode."
+    exit 1
   fi
+
+  # Managed-hosting operator controls:
+  # - BLACKOUT_MANAGED_READINESS_CHECKS=true|false (default true)
+  # - BLACKOUT_BACKUP_VERIFY_HOOK / BLACKOUT_RESTORE_VERIFY_HOOK
+  # - BLACKOUT_BACKUP_HOOK_REQUIRED=true|false
+  # - BLACKOUT_RESTORE_HOOK_REQUIRED=true|false
+  python -m synapse.util.managed_hosting readiness
+  python -m synapse.util.managed_hosting run-hooks
+
+  # Always re-render so updates to the template or env vars take effect on
+  # restart. The /data volume is persistent, so a one-shot first-boot render
+  # would pin the original config forever and silently swallow operator fixes
+  # (e.g. enabling registration after launch).
+  envsubst < "$TEMPLATE_PATH" > "$CONFIG_PATH"
+elif [[ ! -f "$CONFIG_PATH" ]]; then
+  echo "[entrypoint] generating ${SELECTED_PROFILE} sqlite config"
+  python -m synapse.app.homeserver \
+    --generate-config \
+    -H "$SERVER_NAME" \
+    -c "$CONFIG_PATH" \
+    --report-stats=no
+  python -m synapse.util.blackout_profiles \
+    --config-path "$CONFIG_PATH" \
+    --profile "$SELECTED_PROFILE" \
+    --port "$PORT" \
+    --public-baseurl "${SYNAPSE_PUBLIC_BASEURL:-}"
 fi
 
 if [[ ! -f "/data/${SERVER_NAME}.signing.key" ]]; then

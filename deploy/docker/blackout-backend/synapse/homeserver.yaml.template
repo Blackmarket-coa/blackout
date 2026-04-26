@@ -71,11 +71,15 @@ signing_key_path: /data/${MATRIX_SERVER_NAME}.signing.key
 enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
 # Without an email/captcha verifier configured, leaving verification required
 # causes Synapse to reject /register with M_FORBIDDEN ("Registration has been
-# disabled"). Default to allowing unverified signup; override via env once a
-# verifier is wired up.
-enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION:-true}
+# disabled"). Default to allowing unverified signup; flip the env to false
+# once an email/SMS or reCAPTCHA verifier is wired up.
+#
+# NOTE: envsubst (gettext-base) does NOT support ${VAR:-default} syntax — it
+# leaves those expressions as literal text. Use plain ${VAR} and provide the
+# default in .env.example so the rendered yaml always carries a real boolean.
+enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
 password_config:
-  enabled: ${SYNAPSE_PASSWORD_AUTH_ENABLED:-true}
+  enabled: ${SYNAPSE_PASSWORD_AUTH_ENABLED}
 
 log_config: /data/${MATRIX_SERVER_NAME}.log.config
 

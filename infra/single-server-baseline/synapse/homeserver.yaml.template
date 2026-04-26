@@ -38,8 +38,12 @@ dynamic_thumbnails: true
 # enable_registration_without_verification is false. We default to true so
 # self-signup works out of the box; flip the env to false once an email/SMS
 # or reCAPTCHA verifier is wired up.
-enable_registration: ${SYNAPSE_ENABLE_REGISTRATION:-true}
-enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION:-true}
+#
+# NOTE: envsubst (gettext-base) does NOT support ${VAR:-default} syntax — it
+# leaves those expressions as literal text. Use plain ${VAR} and rely on
+# .env.example to supply the default value at render time.
+enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
+enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
 form_secret: "${SYNAPSE_FORM_SECRET}"
