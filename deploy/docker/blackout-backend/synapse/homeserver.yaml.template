@@ -69,7 +69,11 @@ media_store_path: /data/media_store
 signing_key_path: /data/${MATRIX_SERVER_NAME}.signing.key
 
 enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
-enable_registration_without_verification: false
+# Without an email/captcha verifier configured, leaving verification required
+# causes Synapse to reject /register with M_FORBIDDEN ("Registration has been
+# disabled"). Default to allowing unverified signup; override via env once a
+# verifier is wired up.
+enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION:-true}
 password_config:
   enabled: ${SYNAPSE_PASSWORD_AUTH_ENABLED:-true}
 

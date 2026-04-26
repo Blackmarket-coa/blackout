@@ -32,9 +32,14 @@ max_image_pixels: "50M"
 dynamic_thumbnails: true
 
 # Launch posture: open self-signup by default (can be overridden via env).
-# Keep verification requirements enabled to reduce automated abuse.
+# Synapse rejects registration with M_FORBIDDEN ("Registration has been
+# disabled") whenever enable_registration is true but no verification path
+# (email/captcha/3PID) is configured AND
+# enable_registration_without_verification is false. We default to true so
+# self-signup works out of the box; flip the env to false once an email/SMS
+# or reCAPTCHA verifier is wired up.
 enable_registration: ${SYNAPSE_ENABLE_REGISTRATION:-true}
-enable_registration_without_verification: false
+enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION:-true}
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
 form_secret: "${SYNAPSE_FORM_SECRET}"
