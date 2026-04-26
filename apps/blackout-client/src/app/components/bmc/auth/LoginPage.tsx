@@ -8,7 +8,6 @@ import { errorTextStyle, tabBarStyle, tabStyle } from './styles';
 import type { AuthTab, ResolvedHomeserver } from './types';
 
 const FALLBACK_HOMESERVER_HOST = 'matrix.theblackout.app';
-const REGISTRATION_DISABLED_HOSTS = new Set([FALLBACK_HOMESERVER_HOST]);
 
 const initialTab = (): AuthTab => {
     try {
@@ -86,8 +85,7 @@ export const LoginPage = () => {
         );
     }
 
-    const canRegister = !REGISTRATION_DISABLED_HOSTS.has(server.serverName.toLowerCase());
-    const tabs: AuthTab[] = canRegister ? ['login', 'register', 'reset'] : ['login', 'reset'];
+    const tabs: AuthTab[] = ['login', 'register', 'reset'];
 
     return (
         <div style={{ display: 'grid', gap: 16 }}>
@@ -115,7 +113,7 @@ export const LoginPage = () => {
             {tab === 'login' ? (
                 <LoginForm
                     server={server}
-                    canRegister={canRegister}
+                    canRegister={true}
                     onSwitchTab={(next) => setTab(next)}
                 />
             ) : null}
