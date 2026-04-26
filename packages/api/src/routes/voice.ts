@@ -1,17 +1,8 @@
 import { Hono } from 'hono';
 import { db } from '../db/store';
+import { requireUser } from '../middleware/require-user';
 import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
-
-type UserClaims = { sub: string; username?: string };
-
-function requireUser(c: any): UserClaims | Response {
-  const user = c.get('user') as UserClaims | null;
-  if (!user?.sub) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-  return user;
-}
 
 function roleFromRequest(input: unknown): VoiceRole {
   if (input === 'admin' || input === 'moderator') return input;

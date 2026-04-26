@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import type { AuthTokenPayload } from '../services/auth';
+import type { Context } from 'hono';
+import { requireUser } from '../middleware/require-user';
 import {
   applyManualComp,
   applySubscriptionWebhookEvent,
@@ -14,15 +15,7 @@ import {
 
 const subscriptions = new Hono();
 
-function requireUser(c: any): AuthTokenPayload | Response {
-  const user = c.get('user') as AuthTokenPayload | null;
-  if (!user?.sub) {
-    return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
-  }
-  return user;
-}
-
-function requireAdmin(c: any): true | Response {
+function requireAdmin(c: Context): true | Response {
   const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
   const got = c.req.header('x-admin-api-key');
   if (!got || got !== expected) {

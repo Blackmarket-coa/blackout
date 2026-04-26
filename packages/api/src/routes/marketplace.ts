@@ -10,7 +10,7 @@ import {
     type MarketplaceProviderId,
     type NormalizedListing,
 } from '@blackout/core';
-import type { AuthTokenPayload } from '../services/auth';
+import { requireUser } from '../middleware/require-user';
 import {
     getMarketplaceProvider,
     getMarketplaceRegistry,
@@ -47,11 +47,6 @@ function readQuery(c: Context): CatalogQuery {
 
 function isProviderId(raw: string): raw is MarketplaceProviderId {
     return (marketplaceProviderIds as readonly string[]).includes(raw);
-}
-
-function requireUser(c: Context): AuthTokenPayload | null {
-    const user = c.get('user') as AuthTokenPayload | null | undefined;
-    return user ?? null;
 }
 
 marketplace.get('/providers', (c) => {
@@ -126,10 +121,8 @@ marketplace.get('/listings/:providerId/:listingId', async (c) => {
 });
 
 marketplace.post('/checkout', async (c) => {
-    const user = requireUser(c);
-    if (!user) {
-        return c.json({ code: 'unauthorized', message: 'Sign in to purchase' }, 401);
-    }
+    const user = requireUser(c, 'Sign in to purchase');
+    if (user instanceof Response) return user;
     const body = await c.req.json<{
         providerId?: string;
         listingId?: string;
@@ -165,19 +158,15 @@ marketplace.post('/checkout', async (c) => {
 });
 
 marketplace.get('/entitlements', (c) => {
-    const user = requireUser(c);
-    if (!user) {
-        return c.json({ code: 'unauthorized', message: 'Sign in to view entitlements' }, 401);
-    }
+    const user = requireUser(c, 'Sign in to view entitlements');
+    if (user instanceof Response) return user;
     const entitlements = listEntitlementsForUser(user.sub);
     return c.json({ entitlements });
 });
 
 marketplace.get('/fulfillment/:entitlementId/asset', (c) => {
-    const user = requireUser(c);
-    if (!user) {
-        return c.json({ code: 'unauthorized', message: 'Sign in to access fulfillment' }, 401);
-    }
+    const user = requireUser(c, 'Sign in to access fulfillment');
+    if (user instanceof Response) return user;
     const entitlement = getEntitlementById(c.req.param('entitlementId'));
     if (!entitlement || entitlement.userId !== user.sub) {
         return c.json({ code: 'entitlement_not_found', message: 'No such entitlement' }, 404);
