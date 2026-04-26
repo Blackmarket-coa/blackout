@@ -28,7 +28,15 @@ redis:
   port: ${REDIS_PORT:-6379}
 
 registration_shared_secret: "${REGISTRATION_SHARED_SECRET}"
-enable_registration: ${ENABLE_REGISTRATION:-true}
+# NOTE: envsubst (gettext-base) does NOT expand ${VAR:-default} syntax — it
+# leaves those expressions as literal text and Synapse's strtobool then
+# rejects them. Use plain ${VAR} and ship the default in .env.example.
+enable_registration: ${ENABLE_REGISTRATION}
+# Required when enable_registration=true and no email/captcha/3PID/token
+# verifier is configured. Without this, Synapse refuses to start
+# ("You have enabled open registration without any verification.") and
+# /register replies M_FORBIDDEN "Registration has been disabled".
+enable_registration_without_verification: ${ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
 report_stats: false
 
 jwt_config:
