@@ -130,54 +130,56 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
-  /governance/votes:
+  /governance/proposals:
     post:
-      operationId: createVote
+      operationId: createProposal
       tags: [governance]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateVoteRequest'
+              $ref: '#/components/schemas/CreateProposalRequest'
       responses:
         '201':
-          description: Vote created
+          description: Proposal created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Vote'
+                $ref: '#/components/schemas/Proposal'
         '400':
           $ref: '#/components/responses/ErrorResponse'
-  /governance/votes/{voteId}:
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+  /governance/proposals/{proposalId}:
     get:
-      operationId: getVote
+      operationId: getProposal
       tags: [governance]
       parameters:
         - in: path
-          name: voteId
+          name: proposalId
           required: true
           schema:
             type: string
       responses:
         '200':
-          description: Vote
+          description: Proposal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetVoteResponse'
+                $ref: '#/components/schemas/GetProposalResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
-  /governance/votes/{voteId}/cast:
+  /governance/votes:
     post:
       operationId: castVote
       tags: [governance]
-      parameters:
-        - in: path
-          name: voteId
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -193,7 +195,29 @@ paths:
                 $ref: '#/components/schemas/CastVoteResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
         '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /governance/events:
+    get:
+      operationId: listGovernanceEvents
+      tags: [governance]
+      responses:
+        '200':
+          description: Domain events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
           $ref: '#/components/responses/ErrorResponse'
   /federation/links:
     post:
@@ -243,10 +267,18 @@ components:
   schemas:
     ErrorResponse:
       type: object
-      required: [error]
+      required: [code, message]
       properties:
-        error:
+        code:
           type: string
+          description: Machine-readable error code (snake_case).
+        message:
+          type: string
+          description: Human-readable error message.
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured error context (e.g. validation issues).
     RegisterRequest:
       type: object
       required: [username, email, password]
@@ -341,7 +373,14 @@ components:
             - type: object
               additionalProperties: true
             - type: 'null'
-    CreateVoteRequest:
+    ProposalOptionInput:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+    CreateProposalRequest:
       type: object
       required: [communityId, proposerId, title]
       properties:
@@ -356,10 +395,10 @@ components:
         options:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/ProposalOptionInput'
         durationHours:
           type: number
-    VoteOption:
+    ProposalOption:
       type: object
       required: [id, text]
       properties:
@@ -367,7 +406,22 @@ components:
           type: string
         text:
           type: string
-    Vote:
+    DomainEvent:
+      type: object
+      required: [id, module, type, payload, occurredAt]
+      properties:
+        id:
+          type: string
+        module:
+          type: string
+        type:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        occurredAt:
+          type: string
+    Proposal:
       type: object
       required: [id, communityId, proposerId, title, voteType, options, requiresQuorum, durationHours, status]
       properties:
@@ -386,16 +440,18 @@ components:
         options:
           type: array
           items:
-            $ref: '#/components/schemas/VoteOption'
+            $ref: '#/components/schemas/ProposalOption'
         requiresQuorum:
           type: number
         durationHours:
           type: number
         status:
           type: string
-    GetVoteResponse:
+        event:
+          $ref: '#/components/schemas/DomainEvent'
+    GetProposalResponse:
       allOf:
-        - $ref: '#/components/schemas/Vote'
+        - $ref: '#/components/schemas/Proposal'
         - type: object
           required: [results]
           properties:
@@ -405,12 +461,18 @@ components:
                 type: number
     CastVoteRequest:
       type: object
-      required: [userId, choice]
+      required: [voteId, userId, choice]
       properties:
+        voteId:
+          type: string
         userId:
           type: string
         choice:
-          type: string
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
         weight:
           type: number
     CastVoteResponse:
@@ -423,6 +485,8 @@ components:
           type: object
           additionalProperties:
             type: number
+        event:
+          $ref: '#/components/schemas/DomainEvent'
     CreateChannelRequest:
       type: object
       required: [communityId, name]

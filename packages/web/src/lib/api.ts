@@ -9,10 +9,10 @@ import {
   type CastVoteResponse,
   type CreateMessageRequest,
   type CreateMessageResponse,
-  type CreateVoteRequest,
+  type CreateProposalRequest,
   type FederatedCommunitiesResponse,
-  type GetVoteResponse,
-  type Vote,
+  type GetProposalResponse,
+  type Proposal,
 } from '@blackout/contracts';
 
 export type {
@@ -21,10 +21,10 @@ export type {
   CastVoteResponse,
   CreateMessageRequest,
   CreateMessageResponse,
-  CreateVoteRequest,
+  CreateProposalRequest,
   FederatedCommunitiesResponse,
-  GetVoteResponse,
-  Vote,
+  GetProposalResponse,
+  Proposal,
 };
 
 const runtimeEnv = (globalThis as { BLACKOUT_ENV?: string }).BLACKOUT_ENV ?? (import.meta as any)?.env?.MODE ?? 'development';
@@ -70,15 +70,15 @@ async function mockRequest<T>(path: string, init?: RequestInit): Promise<T> {
     return ({ message, matrix: null } as T);
   }
 
-  if (path.startsWith('/governance/votes/') && path.endsWith('/cast')) {
+  if (path === '/governance/votes' && init?.method === 'POST') {
     return ({ success: true, tally: { yes: 1 } } as T);
   }
 
-  if (path.startsWith('/governance/votes/') && (!init?.method || init.method === 'GET')) {
-    return ({ id: path.split('/').at(-1), title: 'Mock vote', results: { yes: 1 } } as T);
+  if (path.startsWith('/governance/proposals/') && (!init?.method || init.method === 'GET')) {
+    return ({ id: path.split('/').at(-1), title: 'Mock proposal', results: { yes: 1 } } as T);
   }
 
-  if (path === '/governance/votes' && init?.method === 'POST') {
+  if (path === '/governance/proposals' && init?.method === 'POST') {
     const payload = init.body ? JSON.parse(String(init.body)) : {};
     return ({ id: crypto.randomUUID(), ...payload } as T);
   }
@@ -110,34 +110,34 @@ export const api = {
     return MessagesService.createMessage(channelId, payload);
   },
 
-  castVote(voteId: string, payload: CastVoteRequest): Promise<CastVoteResponse> {
+  castVote(payload: CastVoteRequest): Promise<CastVoteResponse> {
     if (USE_MOCK_API) {
-      return mockRequest<CastVoteResponse>(`/governance/votes/${voteId}/cast`, {
+      return mockRequest<CastVoteResponse>('/governance/votes', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
     }
 
-    return GovernanceService.castVote(voteId, payload);
+    return GovernanceService.castVote(payload);
   },
 
-  getVote(voteId: string): Promise<GetVoteResponse> {
+  getProposal(proposalId: string): Promise<GetProposalResponse> {
     if (USE_MOCK_API) {
-      return mockRequest<GetVoteResponse>(`/governance/votes/${voteId}`);
+      return mockRequest<GetProposalResponse>(`/governance/proposals/${proposalId}`);
     }
 
-    return GovernanceService.getVote(voteId);
+    return GovernanceService.getProposal(proposalId);
   },
 
-  createVote(payload: CreateVoteRequest): Promise<Vote> {
+  createProposal(payload: CreateProposalRequest): Promise<Proposal> {
     if (USE_MOCK_API) {
-      return mockRequest<Vote>('/governance/votes', {
+      return mockRequest<Proposal>('/governance/proposals', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
     }
 
-    return GovernanceService.createVote(payload);
+    return GovernanceService.createProposal(payload);
   },
 
   getFederatedCommunities(ids: string[]): Promise<FederatedCommunitiesResponse> {

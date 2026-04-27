@@ -2,23 +2,23 @@ import { api } from '../lib/api';
 
 export function useGovernance() {
   return {
-    createVote(payload: {
+    createProposal(payload: {
       communityId: string;
       proposerId: string;
       title: string;
       description?: string;
-      options?: string[];
+      options?: Array<{ id?: string; label?: string }>;
       durationHours?: number;
     }) {
-      return api.createVote(payload);
+      return api.createProposal(payload);
     },
 
     castVote(voteId: string, choice: string, userId = 'demo-user') {
-      return api.castVote(voteId, { userId, choice });
+      return api.castVote({ voteId, userId, choice });
     },
 
-    getVote(voteId: string) {
-      return api.getVote(voteId);
+    getProposal(proposalId: string) {
+      return api.getProposal(proposalId);
     },
   };
 }

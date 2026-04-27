@@ -3,6 +3,17 @@
 /* tslint:disable */
 /* eslint-disable */
 export type ErrorResponse = {
-    error: string;
+    /**
+     * Machine-readable error code (snake_case).
+     */
+    code: string;
+    /**
+     * Human-readable error message.
+     */
+    message: string;
+    /**
+     * Optional structured error context (e.g. validation issues).
+     */
+    details?: Record<string, any>;
 };
 

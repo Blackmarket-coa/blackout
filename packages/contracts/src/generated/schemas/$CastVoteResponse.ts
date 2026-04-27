@@ -15,5 +15,8 @@ export const $CastVoteResponse = {
             },
             isRequired: true,
         },
+        event: {
+            type: 'DomainEvent',
+        },
     },
 } as const;

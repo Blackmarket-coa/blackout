@@ -2,10 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type CastVoteRequest = {
-    voteId: string;
-    userId: string;
-    choice: (string | Array<string>);
-    weight?: number;
-};
+import type { Proposal } from './Proposal';
+export type GetProposalResponse = (Proposal & {
+    results: Record<string, number>;
+});
 

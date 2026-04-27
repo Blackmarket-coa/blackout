@@ -4,21 +4,62 @@
 /* eslint-disable */
 import type { CastVoteRequest } from '../models/CastVoteRequest';
 import type { CastVoteResponse } from '../models/CastVoteResponse';
-import type { CreateVoteRequest } from '../models/CreateVoteRequest';
-import type { GetVoteResponse } from '../models/GetVoteResponse';
-import type { Vote } from '../models/Vote';
+import type { CreateProposalRequest } from '../models/CreateProposalRequest';
+import type { GetProposalResponse } from '../models/GetProposalResponse';
+import type { Proposal } from '../models/Proposal';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class GovernanceService {
     /**
      * @param requestBody
-     * @returns Vote Vote created
+     * @returns Proposal Proposal created
      * @throws ApiError
      */
-    public static createVote(
-        requestBody: CreateVoteRequest,
-    ): CancelablePromise<Vote> {
+    public static createProposal(
+        requestBody: CreateProposalRequest,
+    ): CancelablePromise<Proposal> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/governance/proposals',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Error`,
+                401: `Error`,
+                403: `Error`,
+            },
+        });
+    }
+    /**
+     * @param proposalId
+     * @returns GetProposalResponse Proposal
+     * @throws ApiError
+     */
+    public static getProposal(
+        proposalId: string,
+    ): CancelablePromise<GetProposalResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/governance/proposals/{proposalId}',
+            path: {
+                'proposalId': proposalId,
+            },
+            errors: {
+                401: `Error`,
+                403: `Error`,
+                404: `Error`,
+            },
+        });
+    }
+    /**
+     * @param requestBody
+     * @returns CastVoteResponse Vote cast
+     * @throws ApiError
+     */
+    public static castVote(
+        requestBody: CastVoteRequest,
+    ): CancelablePromise<CastVoteResponse> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/governance/votes',
@@ -26,49 +67,23 @@ export class GovernanceService {
             mediaType: 'application/json',
             errors: {
                 400: `Error`,
+                401: `Error`,
+                403: `Error`,
+                404: `Error`,
             },
         });
     }
     /**
-     * @param voteId
-     * @returns GetVoteResponse Vote
+     * @returns any Domain events
      * @throws ApiError
      */
-    public static getVote(
-        voteId: string,
-    ): CancelablePromise<GetVoteResponse> {
+    public static listGovernanceEvents(): CancelablePromise<Array<Record<string, any>>> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/governance/votes/{voteId}',
-            path: {
-                'voteId': voteId,
-            },
+            url: '/governance/events',
             errors: {
-                404: `Error`,
-            },
-        });
-    }
-    /**
-     * @param voteId
-     * @param requestBody
-     * @returns CastVoteResponse Vote cast
-     * @throws ApiError
-     */
-    public static castVote(
-        voteId: string,
-        requestBody: CastVoteRequest,
-    ): CancelablePromise<CastVoteResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/governance/votes/{voteId}/cast',
-            path: {
-                'voteId': voteId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                400: `Error`,
-                404: `Error`,
+                401: `Error`,
+                403: `Error`,
             },
         });
     }

@@ -3,7 +3,7 @@ import type {
   ApiMessage as GeneratedApiMessage,
   CastVoteRequest as GeneratedCastVoteRequest,
   CreateMessageRequest as GeneratedCreateMessageRequest,
-  CreateVoteRequest as GeneratedCreateVoteRequest,
+  CreateProposalRequest as GeneratedCreateProposalRequest,
   FederatedCommunitiesResponse as GeneratedFederatedCommunitiesResponse,
 } from './generated';
 
@@ -18,7 +18,7 @@ export const API_ROOTS = {
 
 export type ApiMessage = GeneratedApiMessage;
 export type CreateMessageRequest = GeneratedCreateMessageRequest;
-export type CreateVoteRequest = GeneratedCreateVoteRequest;
+export type CreateProposalRequest = GeneratedCreateProposalRequest;
 export type CastVoteRequest = GeneratedCastVoteRequest;
 export type FederatedCommunitiesResponse = GeneratedFederatedCommunitiesResponse;
 

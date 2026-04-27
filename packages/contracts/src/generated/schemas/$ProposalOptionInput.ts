@@ -2,15 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export const $VoteOption = {
+export const $ProposalOptionInput = {
     properties: {
         id: {
             type: 'string',
-            isRequired: true,
         },
-        text: {
+        label: {
             type: 'string',
-            isRequired: true,
         },
     },
 } as const;
