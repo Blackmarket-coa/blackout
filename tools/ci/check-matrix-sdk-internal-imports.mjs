@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 
 const INTERNAL_IMPORT_PATTERN = 'matrix-js-sdk/src/';
-const scanRoots = ['apps', 'blackout'];
+const scanRoots = ['apps', 'packages'];
 const usagePolicies = [
   {
     name: 'blackout-client',
@@ -13,7 +13,7 @@ const usagePolicies = [
   {
     name: 'blackout-runtime',
     description: 'Runtime packages should use public matrix-js-sdk exports only.',
-    pathPrefixes: ['blackout/apps/', 'blackout/packages/'],
+    pathPrefixes: ['packages/'],
     budget: 0,
   },
 ];

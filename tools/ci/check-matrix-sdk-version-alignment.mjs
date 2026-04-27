@@ -6,10 +6,8 @@ import { fileURLToPath } from 'node:url';
 const BASELINE_MATRIX_JS_SDK_VERSION = '^40.0.0';
 const EXPLICIT_IN_SCOPE_MANIFESTS = [
   'apps/blackout-client/package.json',
-  'blackout/packages/core/package.json',
-  'blackout/apps/mobile/package.json',
 ];
-const DISCOVERY_ROOTS = ['apps', 'blackout/apps'];
+const DISCOVERY_ROOTS = ['apps', 'packages'];
 const MANIFEST_FILE = 'package.json';
 
 const __filename = fileURLToPath(import.meta.url);
