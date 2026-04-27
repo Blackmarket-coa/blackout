@@ -22,6 +22,7 @@
   "dependencies": {
     "@blackout/core": "workspace:*",
     "@blackout/design": "workspace:*",
+    "@blackout/sdk": "workspace:*",
     "@blackout/ui": "workspace:*",
     "@capacitor/core": "^7.0.0"
   },

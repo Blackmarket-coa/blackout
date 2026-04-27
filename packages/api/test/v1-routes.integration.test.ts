@@ -78,7 +78,8 @@ test('v1 auth login rejects wrong password', async () => {
   });
   assert.equal(response.status, 401);
   const body = await json(response);
-  assert.equal(body.error, 'Invalid credentials');
+  assert.equal(body.code, 'invalid_credentials');
+  assert.equal(body.message, 'Invalid credentials');
 });
 
 test('v1 auth login rejects unknown email with the same error as wrong password', async () => {
@@ -89,7 +90,8 @@ test('v1 auth login rejects unknown email with the same error as wrong password'
   });
   assert.equal(response.status, 401);
   const body = await json(response);
-  assert.equal(body.error, 'Invalid credentials');
+  assert.equal(body.code, 'invalid_credentials');
+  assert.equal(body.message, 'Invalid credentials');
 });
 
 test('v1 auth login rejects missing fields', async () => {

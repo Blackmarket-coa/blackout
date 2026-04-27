@@ -4,12 +4,24 @@
 /* eslint-disable */
 export const $CastVoteRequest = {
     properties: {
+        voteId: {
+            type: 'string',
+            isRequired: true,
+        },
         userId: {
             type: 'string',
             isRequired: true,
         },
         choice: {
-            type: 'string',
+            type: 'one-of',
+            contains: [{
+                type: 'string',
+            }, {
+                type: 'array',
+                contains: {
+                    type: 'string',
+                },
+            }],
             isRequired: true,
         },
         weight: {

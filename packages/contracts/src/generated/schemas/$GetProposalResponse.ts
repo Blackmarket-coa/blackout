@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export const $GetVoteResponse = {
+export const $GetProposalResponse = {
     type: 'all-of',
     contains: [{
-        type: 'Vote',
+        type: 'Proposal',
     }, {
         properties: {
             results: {

@@ -2,8 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export const $CreateVoteRequest = {
+export const $Proposal = {
     properties: {
+        id: {
+            type: 'string',
+            isRequired: true,
+        },
         communityId: {
             type: 'string',
             isRequired: true,
@@ -19,14 +23,31 @@ export const $CreateVoteRequest = {
         description: {
             type: 'string',
         },
+        voteType: {
+            type: 'string',
+            isRequired: true,
+        },
         options: {
             type: 'array',
             contains: {
-                type: 'string',
+                type: 'ProposalOption',
             },
+            isRequired: true,
+        },
+        requiresQuorum: {
+            type: 'number',
+            isRequired: true,
         },
         durationHours: {
             type: 'number',
+            isRequired: true,
+        },
+        status: {
+            type: 'string',
+            isRequired: true,
+        },
+        event: {
+            type: 'DomainEvent',
         },
     },
 } as const;

@@ -1,11 +1,18 @@
+import { fetchWithRetry, type RetryPolicy } from '@blackout/sdk';
 import type { DeviceRegistration, MobileSession, SessionRefreshResponse } from './types';
 
-interface JsonValue {
-  [key: string]: unknown;
+const DEFAULT_RETRY: RetryPolicy = { attempts: 3, backoffMs: 500 };
+
+export interface MobileApiClientOptions {
+  retry?: RetryPolicy;
 }
 
 export class MobileApiClient {
-  constructor(private readonly baseUrl: string) {}
+  private readonly retry: RetryPolicy;
+
+  constructor(private readonly baseUrl: string, options: MobileApiClientOptions = {}) {
+    this.retry = options.retry ?? DEFAULT_RETRY;
+  }
 
   async refreshSession(session: MobileSession): Promise<SessionRefreshResponse> {
     return this.fetchJson<SessionRefreshResponse>('/v1/auth/refresh', {
@@ -37,7 +44,10 @@ export class MobileApiClient {
   }
 
   private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, init);
+    const { response } = await fetchWithRetry(
+      () => fetch(`${this.baseUrl}${path}`, init),
+      this.retry,
+    );
     if (!response.ok) {
       throw new Error(`mobile api request failed (${response.status}) for ${path}`);
     }

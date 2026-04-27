@@ -2,10 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type CastVoteRequest = {
-    voteId: string;
-    userId: string;
-    choice: (string | Array<string>);
-    weight?: number;
+export type ProposalOptionInput = {
+    id?: string;
+    label?: string;
 };
 

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
 import {
   MIN_PASSWORD_LENGTH,
@@ -9,28 +10,38 @@ import {
 } from '../services/auth';
 import { matrixClient } from '../integrations/matrix-client';
 import { authRateLimit } from '../middleware/rate-limit';
+import { readJsonBody } from '../middleware/validate';
 
 const auth = new Hono();
 
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
 
-auth.post('/register', async (c) => {
-  const { username, email, password } = await c.req.json();
+const registerSchema = z.object({
+  username: z.string().min(1),
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
 
-  if (!username || !email || !password) {
-    return c.json({ error: 'username, email, and password are required' }, 400);
-  }
+const loginSchema = z.object({
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
+
+auth.post('/register', async (c) => {
+  const parsed = await readJsonBody(c, registerSchema);
+  if (parsed instanceof Response) return parsed;
+  const { username, email, password } = parsed;
 
   if (!isAcceptablePassword(password)) {
     return c.json(
-      { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+      { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
       400,
     );
   }
 
   if (db.findUserByEmail(email) || db.findUserByUsername(username)) {
-    return c.json({ error: 'User already exists' }, 409);
+    return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
   }
 
   const userId = crypto.randomUUID();
@@ -53,7 +64,7 @@ auth.post('/register', async (c) => {
   } catch (error) {
     db.deleteUser(user.id);
     return c.json(
-      { error: 'Failed to provision Matrix account', detail: (error as Error).message },
+      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', detail: (error as Error).message },
       502,
     );
   }
@@ -63,7 +74,7 @@ auth.post('/register', async (c) => {
   // the caller can retry with the same email/username.
   if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
     db.deleteUser(user.id);
-    return c.json({ error: 'Failed to provision Matrix account', matrix }, 502);
+    return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix }, 502);
   }
 
   const token = signJwt(user.id, user.username);
@@ -76,18 +87,16 @@ auth.post('/register', async (c) => {
 });
 
 auth.post('/login', async (c) => {
-  const { email, password } = await c.req.json();
-
-  if (typeof email !== 'string' || typeof password !== 'string') {
-    return c.json({ error: 'email and password are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, loginSchema);
+  if (parsed instanceof Response) return parsed;
+  const { email, password } = parsed;
 
   const user = db.findUserByEmail(email);
 
   // Run scrypt even when the user is missing so the two 401 branches have
   // equivalent timing and cannot be used to enumerate registered emails.
   if (!verifyPasswordConstantTime(password, user?.passwordHash)) {
-    return c.json({ error: 'Invalid credentials' }, 401);
+    return c.json({ code: 'invalid_credentials', message: 'Invalid credentials' }, 401);
   }
 
   const token = signJwt(user!.id, user!.username);

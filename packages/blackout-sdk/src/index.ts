@@ -1,5 +1,6 @@
 export * from './client/types';
 export * from './client/fetchClient';
+export * from './client/withRetry';
 export * from './client/queries';
 export * from './client/entitlementPaths';
 export * from './client/media';

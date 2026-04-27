@@ -1,7 +1,34 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
+import { readJsonBody } from '../middleware/validate';
 import { requireDomainCapability } from './authz';
 import { discoveryService } from '../services/discovery';
 import type { FeatureModule } from './types';
+
+const profileSchema = z.object({
+  id: z.string().min(1),
+  entityType: z.enum(['creator', 'canopy']),
+  name: z.string().min(1),
+  bio: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  language: z.string().optional(),
+  isPaid: z.boolean().optional(),
+  moderationStatus: z.enum(['approved', 'under_review', 'restricted', 'banned']).optional(),
+  visibility: z.enum(['public', 'private', 'unlisted']).optional(),
+  regionAllowlist: z.array(z.string()).optional(),
+  regionBlocklist: z.array(z.string()).optional(),
+  legalRestrictedRegions: z.array(z.string()).optional(),
+});
+
+const activitySchema = z.object({
+  id: z.string().min(1),
+  delta: z.number().optional(),
+});
+
+const funnelEventSchema = z.object({
+  entityId: z.string().min(1),
+  stage: z.enum(['impression', 'click', 'join', 'subscribe']),
+});
 
 function createDiscoveryRouter() {
   const discovery = new Hono();
@@ -10,38 +37,22 @@ function createDiscoveryRouter() {
     const denied = requireDomainCapability(c, 'discovery', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as {
-      id?: string;
-      entityType?: 'creator' | 'canopy';
-      name?: string;
-      bio?: string;
-      tags?: string[];
-      language?: string;
-      isPaid?: boolean;
-      moderationStatus?: 'approved' | 'under_review' | 'restricted' | 'banned';
-      visibility?: 'public' | 'private' | 'unlisted';
-      regionAllowlist?: string[];
-      regionBlocklist?: string[];
-      legalRestrictedRegions?: string[];
-    };
-
-    if (!payload.id || !payload.entityType || !payload.name) {
-      return c.json({ error: 'id, entityType, and name are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, profileSchema);
+    if (parsed instanceof Response) return parsed;
 
     const entity = discoveryService.upsertProfile({
-      id: payload.id,
-      entityType: payload.entityType,
-      name: payload.name,
-      bio: payload.bio,
-      tags: payload.tags,
-      language: payload.language,
-      isPaid: payload.isPaid,
-      moderationStatus: payload.moderationStatus,
-      visibility: payload.visibility,
-      regionAllowlist: payload.regionAllowlist,
-      regionBlocklist: payload.regionBlocklist,
-      legalRestrictedRegions: payload.legalRestrictedRegions,
+      id: parsed.id,
+      entityType: parsed.entityType,
+      name: parsed.name,
+      bio: parsed.bio,
+      tags: parsed.tags,
+      language: parsed.language,
+      isPaid: parsed.isPaid,
+      moderationStatus: parsed.moderationStatus,
+      visibility: parsed.visibility,
+      regionAllowlist: parsed.regionAllowlist,
+      regionBlocklist: parsed.regionBlocklist,
+      legalRestrictedRegions: parsed.legalRestrictedRegions,
     });
 
     return c.json(entity, 202);
@@ -51,11 +62,11 @@ function createDiscoveryRouter() {
     const denied = requireDomainCapability(c, 'discovery', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as { id?: string; delta?: number };
-    if (!payload.id) return c.json({ error: 'id is required' }, 400);
+    const parsed = await readJsonBody(c, activitySchema);
+    if (parsed instanceof Response) return parsed;
 
-    const updated = discoveryService.recordActivity(payload.id, payload.delta ?? 1);
-    if (!updated) return c.json({ error: 'Entity not found' }, 404);
+    const updated = discoveryService.recordActivity(parsed.id, parsed.delta ?? 1);
+    if (!updated) return c.json({ code: 'entity_not_found', message: 'Entity not found' }, 404);
 
     return c.json(updated, 202);
   });
@@ -135,13 +146,11 @@ function createDiscoveryRouter() {
     const denied = requireDomainCapability(c, 'discovery', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as { entityId?: string; stage?: 'impression' | 'click' | 'join' | 'subscribe' };
-    if (!payload.entityId || !payload.stage) {
-      return c.json({ error: 'entityId and stage are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, funnelEventSchema);
+    if (parsed instanceof Response) return parsed;
 
-    const analytics = discoveryService.recordFunnelEvent(payload.entityId, payload.stage);
-    if (!analytics) return c.json({ error: 'Entity must be indexed before analytics can be recorded' }, 409);
+    const analytics = discoveryService.recordFunnelEvent(parsed.entityId, parsed.stage);
+    if (!analytics) return c.json({ code: 'entity_not_indexed', message: 'Entity must be indexed before analytics can be recorded' }, 409);
 
     return c.json(analytics, 202);
   });

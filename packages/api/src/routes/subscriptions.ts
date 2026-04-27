@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
-import type { AuthTokenPayload } from '../services/auth';
+import type { Context } from 'hono';
+import { z } from 'zod';
+import { requireUser } from '../middleware/require-user';
+import { readJsonBody } from '../middleware/validate';
 import {
   applyManualComp,
   applySubscriptionWebhookEvent,
@@ -14,15 +17,39 @@ import {
 
 const subscriptions = new Hono();
 
-function requireUser(c: any): AuthTokenPayload | Response {
-  const user = c.get('user') as AuthTokenPayload | null;
-  if (!user?.sub) {
-    return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
-  }
-  return user;
-}
+const checkoutSchema = z.object({
+  planCode: z.string().min(1),
+  successUrl: z.string().optional(),
+  cancelUrl: z.string().optional(),
+});
 
-function requireAdmin(c: any): true | Response {
+const portalSchema = z.object({ returnUrl: z.string().optional() });
+
+const webhookEventTypes = [
+  'invoice.paid',
+  'invoice.payment_failed',
+  'subscription.renewed',
+  'subscription.canceled',
+  'charge.refunded',
+  'charge.dispute.created',
+] as const;
+
+const webhookSchema = z
+  .object({
+    eventId: z.string().min(1),
+    type: z.enum(webhookEventTypes),
+    userId: z.string().min(1),
+  })
+  .loose();
+
+const adminUserSchema = z.object({
+  userId: z.string().min(1),
+  detail: z.string().optional(),
+  reason: z.string().optional(),
+  actor: z.string().optional(),
+});
+
+function requireAdmin(c: Context): true | Response {
   const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
   const got = c.req.header('x-admin-api-key');
   if (!got || got !== expected) {
@@ -44,18 +71,15 @@ subscriptions.get('/me', (c) => {
 subscriptions.post('/checkout', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
-  const body = await c.req.json<{ planCode?: string; successUrl?: string; cancelUrl?: string }>();
-
-  if (!body.planCode) {
-    return c.json({ code: 'invalid_plan', message: 'planCode is required' }, 400);
-  }
+  const parsed = await readJsonBody(c, checkoutSchema);
+  if (parsed instanceof Response) return parsed;
 
   try {
     const session = createCheckoutSession({
       userId: user.sub,
-      planCode: body.planCode,
-      successUrl: body.successUrl,
-      cancelUrl: body.cancelUrl,
+      planCode: parsed.planCode,
+      successUrl: parsed.successUrl,
+      cancelUrl: parsed.cancelUrl,
       provider: 'stripe',
     });
     return c.json(session, 201);
@@ -67,47 +91,34 @@ subscriptions.post('/checkout', async (c) => {
 subscriptions.post('/portal', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
-  const body = await c.req.json<{ returnUrl?: string }>().catch(() => ({}));
-  return c.json(createCustomerPortalSession(user.sub, body.returnUrl));
+  const parsed = await readJsonBody(c, portalSchema);
+  const returnUrl = parsed instanceof Response ? undefined : parsed.returnUrl;
+  return c.json(createCustomerPortalSession(user.sub, returnUrl));
 });
 
 subscriptions.post('/webhooks/lago', async (c) => {
-  const rawBody = await c.req.json<Partial<SubscriptionWebhookEvent>>();
-  if (!rawBody?.eventId || !rawBody?.type || !rawBody?.userId) {
-    return c.json({ code: 'invalid_webhook', message: 'eventId, type, and userId are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, webhookSchema);
+  if (parsed instanceof Response) return parsed;
 
-  const allowedTypes = new Set([
-    'invoice.paid',
-    'invoice.payment_failed',
-    'subscription.renewed',
-    'subscription.canceled',
-    'charge.refunded',
-    'charge.dispute.created',
-  ]);
-  if (!allowedTypes.has(rawBody.type)) {
-    return c.json({ code: 'unsupported_event', message: 'Unsupported webhook type' }, 400);
-  }
-
-  const result = applySubscriptionWebhookEvent(rawBody as SubscriptionWebhookEvent);
+  const result = applySubscriptionWebhookEvent(parsed as SubscriptionWebhookEvent);
   return c.json({ ok: true, processed: result.processed, status: result.status, userId: result.userId });
 });
 
 subscriptions.post('/admin/comp', async (c) => {
   const admin = requireAdmin(c);
   if (admin instanceof Response) return admin;
-  const body = await c.req.json<{ userId?: string; detail?: string; actor?: string }>();
-  if (!body.userId) return c.json({ code: 'invalid_request', message: 'userId is required' }, 400);
-  const subscription = applyManualComp(body.userId, body.actor ?? 'admin', body.detail);
+  const parsed = await readJsonBody(c, adminUserSchema);
+  if (parsed instanceof Response) return parsed;
+  const subscription = applyManualComp(parsed.userId, parsed.actor ?? 'admin', parsed.detail);
   return c.json({ ok: true, subscription });
 });
 
 subscriptions.post('/admin/refund-sync', async (c) => {
   const admin = requireAdmin(c);
   if (admin instanceof Response) return admin;
-  const body = await c.req.json<{ userId?: string; reason?: string; actor?: string }>();
-  if (!body.userId) return c.json({ code: 'invalid_request', message: 'userId is required' }, 400);
-  const subscription = syncRefund(body.userId, body.actor ?? 'admin', body.reason);
+  const parsed = await readJsonBody(c, adminUserSchema);
+  if (parsed instanceof Response) return parsed;
+  const subscription = syncRefund(parsed.userId, parsed.actor ?? 'admin', parsed.reason);
   return c.json({ ok: true, subscription });
 });
 

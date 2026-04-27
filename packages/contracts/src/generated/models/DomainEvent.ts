@@ -2,8 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type VoteOption = {
+export type DomainEvent = {
     id: string;
-    text: string;
+    module: string;
+    type: string;
+    payload: Record<string, any>;
+    occurredAt: string;
 };
 

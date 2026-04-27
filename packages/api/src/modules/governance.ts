@@ -1,9 +1,27 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { tallyVotes } from '@blackout/core';
 import { db } from '../db/store';
+import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import type { FeatureModule } from './types';
+
+const proposalSchema = z.object({
+  communityId: z.string().min(1),
+  proposerId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  options: z.array(z.object({ id: z.string().optional(), label: z.string().optional() })).optional(),
+  durationHours: z.number().optional(),
+});
+
+const voteSchema = z.object({
+  voteId: z.string().min(1),
+  userId: z.string().min(1),
+  choice: z.union([z.string().min(1), z.array(z.string()).min(1)]),
+  weight: z.number().optional(),
+});
 
 function createGovernanceRouter() {
   const governance = new Hono();
@@ -12,20 +30,11 @@ function createGovernanceRouter() {
     const denied = requireDomainCapability(c, 'governance', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as {
-      communityId?: string;
-      proposerId?: string;
-      title?: string;
-      description?: string;
-      options?: Array<{ id?: string; label?: string }>;
-      durationHours?: number;
-    };
-
-    const { communityId, proposerId, title, description, options = [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }], durationHours = 168 } = payload;
-
-    if (!communityId || !proposerId || !title) {
-      return c.json({ error: 'communityId, proposerId and title are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, proposalSchema);
+    if (parsed instanceof Response) return parsed;
+    const { communityId, proposerId, title, description } = parsed;
+    const options = parsed.options ?? [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }];
+    const durationHours = parsed.durationHours ?? 168;
 
     const proposal = db.createVote({
       id: crypto.randomUUID(),
@@ -49,23 +58,21 @@ function createGovernanceRouter() {
     const denied = requireDomainCapability(c, 'governance', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as { voteId?: string; userId?: string; choice?: string | string[]; weight?: number };
-    const { voteId, userId, choice, weight = 1 } = payload;
+    const parsed = await readJsonBody(c, voteSchema);
+    if (parsed instanceof Response) return parsed;
+    const { voteId, userId, choice } = parsed;
+    const weight = parsed.weight ?? 1;
     const normalizedChoice = Array.isArray(choice) ? choice[0] : choice;
-
-    if (!voteId || !userId || !normalizedChoice) {
-      return c.json({ error: 'voteId, userId and choice are required' }, 400);
-    }
 
     const vote = db.getVote(voteId);
     if (!vote) {
-      return c.json({ error: 'Vote not found' }, 404);
+      return c.json({ code: 'vote_not_found', message: 'Vote not found' }, 404);
     }
 
     try {
       db.castVote({ id: crypto.randomUUID(), voteId, userId, choice: normalizedChoice, weight });
     } catch (error) {
-      return c.json({ error: (error as Error).message }, 400);
+      return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
     }
 
     const tally = tallyVotes(db.getVoteEntries(voteId));
@@ -79,7 +86,7 @@ function createGovernanceRouter() {
 
     const { proposalId } = c.req.param();
     const vote = db.getVote(proposalId);
-    if (!vote) return c.json({ error: 'Proposal not found' }, 404);
+    if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
 
     return c.json({ ...vote, results: tallyVotes(db.getVoteEntries(proposalId)) });
   });

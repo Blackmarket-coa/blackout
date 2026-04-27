@@ -1,3 +1,4 @@
+import { fetchWithRetry, type RetryPolicy } from "@blackout/sdk";
 import type {
   ApiErrorEnvelope,
   AuthRequest,
@@ -36,7 +37,10 @@ export class ApiError extends Error {
 export interface ApiClientOptions {
   baseUrl: string;
   useMockApi?: boolean;
+  retry?: RetryPolicy;
 }
+
+const DEFAULT_RETRY: RetryPolicy = { attempts: 3, backoffMs: 250 };
 
 export type GatewayEvent = RealtimeGatewayEvent;
 
@@ -51,10 +55,12 @@ async function parseJsonSafe(response: Response): Promise<unknown> {
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly useMockApi: boolean;
+  private readonly retry: RetryPolicy;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.useMockApi = options.useMockApi ?? false;
+    this.retry = options.retry ?? DEFAULT_RETRY;
   }
 
   async login(username: string, password: string): Promise<Session> {
@@ -234,7 +240,10 @@ export class ApiClient {
   }
 
   private async fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, init);
+    const { response } = await fetchWithRetry(
+      () => fetch(`${this.baseUrl}${path}`, init),
+      this.retry,
+    );
     if (!response.ok) {
       const body = await parseJsonSafe(response);
       const envelope = this.readErrorEnvelope(body);

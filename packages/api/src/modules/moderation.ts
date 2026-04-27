@@ -1,8 +1,18 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
+import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import type { FeatureModule } from './types';
+
+const moderationActionSchema = z.object({
+  communityId: z.string().min(1),
+  actorId: z.string().min(1),
+  targetId: z.string().min(1),
+  action: z.enum(['warn', 'mute', 'ban', 'remove_content']),
+  reason: z.string().min(1),
+});
 
 function createModerationRouter() {
   const moderation = new Hono();
@@ -11,25 +21,16 @@ function createModerationRouter() {
     const denied = requireDomainCapability(c, 'moderation', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as {
-      communityId?: string;
-      actorId?: string;
-      targetId?: string;
-      action?: 'warn' | 'mute' | 'ban' | 'remove_content';
-      reason?: string;
-    };
-
-    if (!payload.communityId || !payload.actorId || !payload.targetId || !payload.action || !payload.reason) {
-      return c.json({ error: 'communityId, actorId, targetId, action and reason are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, moderationActionSchema);
+    if (parsed instanceof Response) return parsed;
 
     const record = db.createModerationAction({
       id: crypto.randomUUID(),
-      communityId: payload.communityId,
-      actorId: payload.actorId,
-      targetId: payload.targetId,
-      action: payload.action,
-      reason: payload.reason,
+      communityId: parsed.communityId,
+      actorId: parsed.actorId,
+      targetId: parsed.targetId,
+      action: parsed.action,
+      reason: parsed.reason,
     });
 
     const event = emitDomainEvent({ module: 'moderation', type: 'moderation.action.taken', payload: { actionId: record.id, targetId: record.targetId, action: record.action } });
@@ -42,7 +43,7 @@ function createModerationRouter() {
 
     const communityId = c.req.query('communityId');
     if (!communityId) {
-      return c.json({ error: 'communityId query parameter is required' }, 400);
+      return c.json({ code: 'invalid_request', message: 'communityId query parameter is required' }, 400);
     }
 
     return c.json(db.listModerationActions(communityId));

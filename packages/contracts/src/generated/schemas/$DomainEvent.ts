@@ -2,24 +2,31 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export const $ErrorResponse = {
+export const $DomainEvent = {
     properties: {
-        code: {
+        id: {
             type: 'string',
-            description: `Machine-readable error code (snake_case).`,
             isRequired: true,
         },
-        message: {
+        module: {
             type: 'string',
-            description: `Human-readable error message.`,
             isRequired: true,
         },
-        details: {
+        type: {
+            type: 'string',
+            isRequired: true,
+        },
+        payload: {
             type: 'dictionary',
             contains: {
                 properties: {
                 },
             },
+            isRequired: true,
+        },
+        occurredAt: {
+            type: 'string',
+            isRequired: true,
         },
     },
 } as const;

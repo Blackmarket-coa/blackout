@@ -9,7 +9,8 @@
     "test": "node --test src/**/*.test.ts"
   },
   "dependencies": {
-    "@blackout/contracts": "workspace:*"
+    "@blackout/contracts": "workspace:*",
+    "@blackout/sdk": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

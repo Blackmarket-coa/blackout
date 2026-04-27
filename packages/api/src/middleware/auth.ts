@@ -13,7 +13,7 @@ export async function authMiddleware(c: Context, next: Next) {
 
   const payload = verifyJwt(token);
   if (!payload) {
-    return c.json({ error: 'Unauthorized' }, 401);
+    return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
   }
 
   c.set('user', payload);

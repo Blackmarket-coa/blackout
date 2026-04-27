@@ -14,7 +14,7 @@ export function MessageComposer({ channelId, userId = 'demo-user' }: { channelId
   const [pollDescription, setPollDescription] = useState('');
   const [stegoTier, setStegoTier] = useState<1 | 2 | 3>(2);
   const { sendMessage } = useMessages(channelId);
-  const { createVote } = useGovernance();
+  const { createProposal } = useGovernance();
 
   return (
     <div>
@@ -54,13 +54,13 @@ export function MessageComposer({ channelId, userId = 'demo-user' }: { channelId
           let governance: { type: 'poll'; data: any } | undefined;
 
           if (showPollComposer && pollTitle.trim().length > 0) {
-            const vote = await createVote({
+            const proposal = await createProposal({
               communityId: `${channelId}-community`,
               proposerId: userId,
               title: pollTitle.trim(),
               description: pollDescription.trim() || undefined,
             });
-            governance = { type: 'poll', data: vote };
+            governance = { type: 'poll', data: proposal };
           }
 
           await sendMessage({

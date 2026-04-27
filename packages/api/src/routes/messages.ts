@@ -1,9 +1,20 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { encodeStego, encryptE2E, formatFederatedMessage, signMessage } from '@blackout/core';
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
+import { readJsonBody } from '../middleware/validate';
 
 const messages = new Hono();
+
+const sendMessageSchema = z.object({
+  content: z.string().min(1),
+  userId: z.string().min(1),
+  stegoTier: z.number().int().min(1).max(3).optional(),
+  sign: z.boolean().optional(),
+  matrixRoomId: z.string().optional(),
+  governance: z.looseObject({ type: z.string() }).optional(),
+});
 
 messages.get('/:channelId', (c) => {
   const { channelId } = c.req.param();
@@ -15,22 +26,13 @@ messages.get('/:channelId', (c) => {
 
 messages.post('/:channelId', async (c) => {
   const { channelId } = c.req.param();
-  const {
-    content,
-    stegoTier = 1,
-    sign = false,
-    userId,
-    matrixRoomId,
-    governance,
-  } = await c.req.json();
-
-  if (!content || !userId) {
-    return c.json({ error: 'content and userId are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, sendMessageSchema);
+  if (parsed instanceof Response) return parsed;
+  const { content, stegoTier = 1, sign = false, userId, matrixRoomId, governance } = parsed;
 
   const user = db.getUserById(userId);
   if (!user) {
-    return c.json({ error: 'Unknown user' }, 404);
+    return c.json({ code: 'user_not_found', message: 'Unknown user' }, 404);
   }
 
   let transformedContent = content;
