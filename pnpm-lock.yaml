@@ -354,6 +354,9 @@ importers:
       '@blackout/design':
         specifier: workspace:*
         version: link:../../packages/design
+      '@blackout/sdk':
+        specifier: workspace:*
+        version: link:../../packages/blackout-sdk
       '@blackout/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -468,6 +471,9 @@ importers:
       '@blackout/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@blackout/sdk':
+        specifier: workspace:*
+        version: link:../packages/blackout-sdk
     devDependencies:
       typescript:
         specifier: ^5.9.3
