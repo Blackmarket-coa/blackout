@@ -39,7 +39,7 @@ Quantitative snapshot:
 - Parity matrix rows: **84**
 - Disposition rows: **84**
 - Ported rows pending migration: **28**
-- Documented wrapper blocker IDs: **WRAP-001..WRAP-004**
+- Documented wrapper blocker IDs: **WRAP-001..WRAP-004** (WRAP-001 closed 2026-04-27)
 
 ---
 
@@ -70,13 +70,13 @@ Quantitative snapshot:
 
 ## Blocking issues and required closure
 
-| Blocker ID | Severity | Owner | Required action | Target ETA |
-|---|---|---|---|---|
-| WRAP-001 | High | Frontend Platform Team | Implement canonical deep-link bridge compatibility layer in `apps/blackout-client`. | 2026-04-29 |
-| WRAP-002 | High | Frontend Notifications Team | Port notification token/interacted/unread contracts to canonical runtime + verify wrapper roundtrip. | 2026-05-03 |
-| WRAP-003 | Medium | Frontend Platform Team | Port lifecycle/resume-sync contract handling to canonical runtime. | 2026-05-06 |
-| WRAP-004 | Medium | Frontend Media Team | Port native share/camera/media bridge adapters to canonical runtime. | 2026-05-10 |
-| EXC-001 / EXC-002 / EXC-003 | Medium | Core/Moderation/Platform teams | Close boundary-audit exceptions or produce explicit waiver with risk acceptance. | 2026-05-08 |
+| Blocker ID | Severity | Status | Owner | Required action | Target ETA |
+|---|---|---|---|---|---|
+| WRAP-001 | High | **Closed 2026-04-27** | Frontend Platform Team | Canonical deep-link bridge compatibility layer landed in `apps/blackout-client/src/platform/{native-bridge-contract.ts,initDesktopBridge.ts,NativeBridgeListener.tsx}`; tests in `apps/blackout-client/tests/unit/native-bridge-{contract,listener}.test.*`. | 2026-04-29 (closed early) |
+| WRAP-002 | High | Open | Frontend Notifications Team | Port notification token/interacted/unread contracts to canonical runtime + verify wrapper roundtrip. | 2026-05-03 |
+| WRAP-003 | Medium | Open | Frontend Platform Team | Port lifecycle/resume-sync contract handling to canonical runtime. | 2026-05-06 |
+| WRAP-004 | Medium | Open | Frontend Media Team | Port native share/camera/media bridge adapters to canonical runtime. | 2026-05-10 |
+| EXC-001 / EXC-002 / EXC-003 | Medium | Open | Core/Moderation/Platform teams | Close boundary-audit exceptions or produce explicit waiver with risk acceptance. | 2026-05-08 |
 
 ---
 
