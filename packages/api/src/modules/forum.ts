@@ -1,8 +1,19 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
+import { readJsonBody } from '../middleware/validate';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import type { FeatureModule } from './types';
+
+const postSchema = z.object({
+  communityId: z.string().min(1),
+  channelId: z.string().optional(),
+  authorId: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().min(1),
+  tags: z.array(z.string()).optional(),
+});
 
 function createForumRouter() {
   const forum = new Hono();
@@ -11,27 +22,17 @@ function createForumRouter() {
     const denied = requireDomainCapability(c, 'forum', 'write');
     if (denied) return denied;
 
-    const payload = (await c.req.json()) as {
-      communityId?: string;
-      channelId?: string;
-      authorId?: string;
-      title?: string;
-      body?: string;
-      tags?: string[];
-    };
-
-    if (!payload.communityId || !payload.authorId || !payload.title || !payload.body) {
-      return c.json({ code: 'invalid_request', message: 'communityId, authorId, title and body are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, postSchema);
+    if (parsed instanceof Response) return parsed;
 
     const post = db.createForumPost({
       id: crypto.randomUUID(),
-      communityId: payload.communityId,
-      channelId: payload.channelId,
-      authorId: payload.authorId,
-      title: payload.title,
-      body: payload.body,
-      tags: Array.isArray(payload.tags) ? payload.tags : [],
+      communityId: parsed.communityId,
+      channelId: parsed.channelId,
+      authorId: parsed.authorId,
+      title: parsed.title,
+      body: parsed.body,
+      tags: parsed.tags ?? [],
     });
 
     const event = emitDomainEvent({ module: 'forum', type: 'forum.post.created', payload: { postId: post.id, communityId: post.communityId } });

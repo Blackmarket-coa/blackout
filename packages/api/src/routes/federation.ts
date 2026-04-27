@@ -1,14 +1,21 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
+import { readJsonBody } from '../middleware/validate';
 
 const federation = new Hono();
 
-federation.post('/links', async (c) => {
-  const { sourceCommunityId, targetCommunityId, linkType = 'zone', matrixBridgeRoomId } = await c.req.json();
+const createLinkSchema = z.object({
+  sourceCommunityId: z.string().min(1),
+  targetCommunityId: z.string().min(1),
+  linkType: z.string().optional(),
+  matrixBridgeRoomId: z.string().optional(),
+});
 
-  if (!sourceCommunityId || !targetCommunityId) {
-    return c.json({ code: 'invalid_request', message: 'sourceCommunityId and targetCommunityId are required' }, 400);
-  }
+federation.post('/links', async (c) => {
+  const parsed = await readJsonBody(c, createLinkSchema);
+  if (parsed instanceof Response) return parsed;
+  const { sourceCommunityId, targetCommunityId, linkType = 'zone', matrixBridgeRoomId } = parsed;
 
   const link = db.createFederationLink({
     id: crypto.randomUUID(),

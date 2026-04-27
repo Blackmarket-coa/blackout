@@ -1,9 +1,47 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
+import { readJsonBody } from '../middleware/validate';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import type { FeatureModule } from './types';
+
+const streamKeySchema = z
+  .object({ streamId: z.string().optional(), rotate: z.boolean().optional() })
+  .optional();
+
+const streamStateSchema = z.object({
+  creatorId: z.string().min(1),
+  state: z.enum(['offline', 'live']),
+});
+
+const streamMetadataSchema = z.object({
+  creatorId: z.string().min(1),
+  title: z.string().min(1),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  latencyProfile: z.enum(['normal', 'low']).optional(),
+});
+
+const streamAccessSchema = z.object({
+  creatorId: z.string().min(1),
+  visibility: z.enum(['public', 'private', 'member_only']),
+  allowedSubscriberIds: z.array(z.string()).optional(),
+});
+
+const streamSessionSchema = z.object({
+  creatorId: z.string().min(1),
+  replayPointer: z.string().optional(),
+});
+
+const streamSessionPatchSchema = z.object({ replayPointer: z.string().optional() }).optional();
+
+const streamModerationSchema = z.object({
+  slowModeSeconds: z.number().optional(),
+  bannedUserIds: z.array(z.string()).optional(),
+  keywordFilters: z.array(z.string()).optional(),
+});
 
 function ensureStream(streamId: string, creatorId: string) {
   return (
@@ -36,7 +74,8 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { creatorId } = c.req.param();
-    const payload = (await c.req.json().catch(() => ({}))) as { streamId?: string; rotate?: boolean };
+    const parsed = await readJsonBody(c, streamKeySchema);
+    const payload = parsed instanceof Response ? {} : parsed ?? {};
     const current = db.getCreatorStreamAuth(creatorId);
     const streamId = payload.streamId ?? current?.streamId ?? crypto.randomUUID();
 
@@ -72,13 +111,11 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
-    const payload = (await c.req.json()) as { creatorId?: string; state?: 'offline' | 'live' };
-    if (!payload.creatorId || !payload.state) {
-      return c.json({ code: 'invalid_request', message: 'creatorId and state are required' }, 400);
-    }
+    const parsed = await readJsonBody(c, streamStateSchema);
+    if (parsed instanceof Response) return parsed;
 
-    const stream = ensureStream(streamId, payload.creatorId);
-    const updated = db.upsertStream({ ...stream, state: payload.state });
+    const stream = ensureStream(streamId, parsed.creatorId);
+    const updated = db.upsertStream({ ...stream, state: parsed.state });
     return c.json(updated);
   });
 
@@ -87,25 +124,16 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
-    const payload = (await c.req.json()) as {
-      creatorId?: string;
-      title?: string;
-      category?: string;
-      tags?: string[];
-      latencyProfile?: 'normal' | 'low';
-    };
+    const parsed = await readJsonBody(c, streamMetadataSchema);
+    if (parsed instanceof Response) return parsed;
 
-    if (!payload.creatorId || !payload.title) {
-      return c.json({ code: 'invalid_request', message: 'creatorId and title are required' }, 400);
-    }
-
-    const stream = ensureStream(streamId, payload.creatorId);
+    const stream = ensureStream(streamId, parsed.creatorId);
     const updated = db.upsertStream({
       ...stream,
-      title: payload.title,
-      category: payload.category,
-      tags: Array.isArray(payload.tags) ? payload.tags : stream.tags,
-      latencyProfile: payload.latencyProfile ?? stream.latencyProfile,
+      title: parsed.title,
+      category: parsed.category,
+      tags: parsed.tags ?? stream.tags,
+      latencyProfile: parsed.latencyProfile ?? stream.latencyProfile,
     });
     return c.json(updated);
   });
@@ -115,21 +143,14 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
-    const payload = (await c.req.json()) as {
-      creatorId?: string;
-      visibility?: 'public' | 'private' | 'member_only';
-      allowedSubscriberIds?: string[];
-    };
+    const parsed = await readJsonBody(c, streamAccessSchema);
+    if (parsed instanceof Response) return parsed;
 
-    if (!payload.creatorId || !payload.visibility) {
-      return c.json({ code: 'invalid_request', message: 'creatorId and visibility are required' }, 400);
-    }
-
-    const stream = ensureStream(streamId, payload.creatorId);
+    const stream = ensureStream(streamId, parsed.creatorId);
     const updated = db.upsertStream({
       ...stream,
-      visibility: payload.visibility,
-      allowedSubscriberIds: Array.isArray(payload.allowedSubscriberIds) ? payload.allowedSubscriberIds : stream.allowedSubscriberIds,
+      visibility: parsed.visibility,
+      allowedSubscriberIds: parsed.allowedSubscriberIds ?? stream.allowedSubscriberIds,
     });
 
     return c.json(updated);
@@ -162,15 +183,13 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
-    const payload = (await c.req.json()) as { creatorId?: string; replayPointer?: string };
-    if (!payload.creatorId) {
-      return c.json({ code: 'invalid_request', message: 'creatorId is required' }, 400);
-    }
+    const parsed = await readJsonBody(c, streamSessionSchema);
+    if (parsed instanceof Response) return parsed;
 
-    const stream = ensureStream(streamId, payload.creatorId);
-    const session = db.createStreamSession({ id: crypto.randomUUID(), streamId, startedAt: new Date().toISOString(), replayPointer: payload.replayPointer });
-    if (payload.replayPointer) {
-      db.upsertStream({ ...stream, replayPointer: payload.replayPointer });
+    const stream = ensureStream(streamId, parsed.creatorId);
+    const session = db.createStreamSession({ id: crypto.randomUUID(), streamId, startedAt: new Date().toISOString(), replayPointer: parsed.replayPointer });
+    if (parsed.replayPointer) {
+      db.upsertStream({ ...stream, replayPointer: parsed.replayPointer });
     }
 
     return c.json(session, 201);
@@ -181,13 +200,14 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const sessionId = c.req.param('sessionId');
-    const payload = (await c.req.json().catch(() => ({}))) as { replayPointer?: string };
-    const session = db.endStreamSession(sessionId, payload.replayPointer);
+    const parsed = await readJsonBody(c, streamSessionPatchSchema);
+    const replayPointer = parsed instanceof Response ? undefined : parsed?.replayPointer;
+    const session = db.endStreamSession(sessionId, replayPointer);
     if (!session) return c.json({ code: 'session_not_found', message: 'Session not found' }, 404);
 
     const stream = db.getStream(session.streamId);
-    if (stream && payload.replayPointer) {
-      db.upsertStream({ ...stream, replayPointer: payload.replayPointer });
+    if (stream && replayPointer) {
+      db.upsertStream({ ...stream, replayPointer });
     }
 
     return c.json(session);
@@ -205,17 +225,14 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
-    const payload = (await c.req.json()) as {
-      slowModeSeconds?: number;
-      bannedUserIds?: string[];
-      keywordFilters?: string[];
-    };
+    const parsed = await readJsonBody(c, streamModerationSchema);
+    if (parsed instanceof Response) return parsed;
 
     const moderation = db.upsertStreamModeration({
       streamId,
-      slowModeSeconds: Math.max(0, Math.floor(payload.slowModeSeconds ?? 0)),
-      bannedUserIds: Array.isArray(payload.bannedUserIds) ? payload.bannedUserIds : [],
-      keywordFilters: Array.isArray(payload.keywordFilters) ? payload.keywordFilters : [],
+      slowModeSeconds: Math.max(0, Math.floor(parsed.slowModeSeconds ?? 0)),
+      bannedUserIds: parsed.bannedUserIds ?? [],
+      keywordFilters: parsed.keywordFilters ?? [],
     });
 
     const event = emitDomainEvent({

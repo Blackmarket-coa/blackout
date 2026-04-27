@@ -14,10 +14,11 @@
     "migrate": "node -e \"console.log('api migrate scaffold ok')\""
   },
   "dependencies": {
-    "@blackout/core": "workspace:*",
     "@blackout/contracts": "workspace:*",
-    "hono": "4.12.14",
+    "@blackout/core": "workspace:*",
+    "@blackout/protocol": "workspace:*",
     "@hono/node-server": "1.19.13",
-    "@blackout/protocol": "workspace:*"
+    "hono": "4.12.14",
+    "zod": "^4.3.6"
   }
 }

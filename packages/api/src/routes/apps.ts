@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { appActions, appEvents } from '@blackout/core';
+import { readJsonBody } from '../middleware/validate';
 import {
   getIntegrationContract,
   getObservability,
@@ -14,6 +16,20 @@ import {
 
 const apps = new Hono();
 
+const installAppSchema = z.object({
+  canopyId: z.string().min(1),
+  permissions: z.array(z.string()).optional(),
+});
+
+const revokeAppSchema = z.object({ canopyId: z.string().min(1) });
+
+const recordActionSchema = z.object({
+  appId: z.string().min(1),
+  canopyId: z.string().min(1),
+  latencyMs: z.number().optional(),
+  failed: z.boolean().optional(),
+});
+
 apps.get('/contract', (c) => c.json(getIntegrationContract()));
 
 apps.get('/events', (c) => c.json({ events: appEvents }));
@@ -26,11 +42,9 @@ apps.get('/directory', (c) => {
 
 apps.post('/directory/:appId/install', async (c) => {
   const appId = c.req.param('appId');
-  const body = await c.req.json<{ canopyId?: string; permissions?: string[] }>();
-  if (!body.canopyId) {
-    return c.json({ code: 'invalid_request', message: 'canopyId is required' }, 400);
-  }
-  const result = installApp({ appId, canopyId: body.canopyId, permissions: body.permissions });
+  const parsed = await readJsonBody(c, installAppSchema);
+  if (parsed instanceof Response) return parsed;
+  const result = installApp({ appId, canopyId: parsed.canopyId, permissions: parsed.permissions });
   if (!result.ok) {
     if (result.code === 'app_not_found') return c.json(result, 404);
     if (result.code === 'policy_denied') return c.json(result, 403);
@@ -41,11 +55,9 @@ apps.post('/directory/:appId/install', async (c) => {
 
 apps.post('/directory/:appId/revoke', async (c) => {
   const appId = c.req.param('appId');
-  const body = await c.req.json<{ canopyId?: string }>();
-  if (!body.canopyId) {
-    return c.json({ code: 'invalid_request', message: 'canopyId is required' }, 400);
-  }
-  const result = revokeApp(appId, body.canopyId);
+  const parsed = await readJsonBody(c, revokeAppSchema);
+  if (parsed instanceof Response) return parsed;
+  const result = revokeApp(appId, parsed.canopyId);
   if (!result.ok) return c.json(result, 404);
   return c.json(result, 200);
 });
@@ -63,16 +75,14 @@ apps.get('/directory/:appId/observability', (c) => {
 
 apps.post('/actions/:action', async (c) => {
   const action = c.req.param('action');
-  const body = await c.req.json<{ appId?: string; canopyId?: string; latencyMs?: number; failed?: boolean }>();
-  if (!body.appId || !body.canopyId) {
-    return c.json({ code: 'invalid_request', message: 'appId and canopyId are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, recordActionSchema);
+  if (parsed instanceof Response) return parsed;
   const result = recordActionExecution({
-    appId: body.appId,
-    canopyId: body.canopyId,
+    appId: parsed.appId,
+    canopyId: parsed.canopyId,
     action,
-    latencyMs: body.latencyMs ?? 10,
-    failed: body.failed,
+    latencyMs: parsed.latencyMs ?? 10,
+    failed: parsed.failed,
   });
   if (!result.ok) {
     if (result.code === 'quota_exceeded') return c.json(result, 429);

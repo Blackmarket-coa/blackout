@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
 import {
   MIN_PASSWORD_LENGTH,
@@ -9,18 +10,28 @@ import {
 } from '../services/auth';
 import { matrixClient } from '../integrations/matrix-client';
 import { authRateLimit } from '../middleware/rate-limit';
+import { readJsonBody } from '../middleware/validate';
 
 const auth = new Hono();
 
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
 
-auth.post('/register', async (c) => {
-  const { username, email, password } = await c.req.json();
+const registerSchema = z.object({
+  username: z.string().min(1),
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
 
-  if (!username || !email || !password) {
-    return c.json({ code: 'invalid_request', message: 'username, email, and password are required' }, 400);
-  }
+const loginSchema = z.object({
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
+
+auth.post('/register', async (c) => {
+  const parsed = await readJsonBody(c, registerSchema);
+  if (parsed instanceof Response) return parsed;
+  const { username, email, password } = parsed;
 
   if (!isAcceptablePassword(password)) {
     return c.json(
@@ -76,11 +87,9 @@ auth.post('/register', async (c) => {
 });
 
 auth.post('/login', async (c) => {
-  const { email, password } = await c.req.json();
-
-  if (typeof email !== 'string' || typeof password !== 'string') {
-    return c.json({ code: 'invalid_request', message: 'email and password are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, loginSchema);
+  if (parsed instanceof Response) return parsed;
+  const { email, password } = parsed;
 
   const user = db.findUserByEmail(email);
 

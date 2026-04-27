@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { z } from 'zod';
 import {
     feeForProvider,
     getMarketplaceProviderPresentation,
@@ -10,6 +11,7 @@ import {
     type MarketplaceProviderId,
     type NormalizedListing,
 } from '@blackout/core';
+import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import {
     getMarketplaceProvider,
@@ -48,6 +50,13 @@ function readQuery(c: Context): CatalogQuery {
 function isProviderId(raw: string): raw is MarketplaceProviderId {
     return (marketplaceProviderIds as readonly string[]).includes(raw);
 }
+
+const checkoutSchema = z.object({
+    providerId: z.string().min(1),
+    listingId: z.string().min(1),
+    sku: z.string().optional(),
+    returnUrl: z.string().optional(),
+});
 
 marketplace.get('/providers', (c) => {
     const providers = [...getMarketplaceRegistry().values()].map((provider) => {
@@ -123,18 +132,11 @@ marketplace.get('/listings/:providerId/:listingId', async (c) => {
 marketplace.post('/checkout', async (c) => {
     const user = requireUser(c, 'Sign in to purchase');
     if (user instanceof Response) return user;
-    const body = await c.req.json<{
-        providerId?: string;
-        listingId?: string;
-        sku?: string;
-        returnUrl?: string;
-    }>();
-    const { providerId, listingId, sku, returnUrl } = body;
-    if (!providerId || !isProviderId(providerId)) {
+    const parsed = await readJsonBody(c, checkoutSchema);
+    if (parsed instanceof Response) return parsed;
+    const { providerId, listingId, sku, returnUrl } = parsed;
+    if (!isProviderId(providerId)) {
         return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
-    }
-    if (!listingId) {
-        return c.json({ code: 'listing_required', message: 'listingId is required' }, 400);
     }
     const provider = getMarketplaceProvider(providerId);
     if (!provider || !provider.enabled) {

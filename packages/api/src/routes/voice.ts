@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { db } from '../db/store';
 import { requireUser } from '../middleware/require-user';
+import { readJsonBody } from '../middleware/validate';
 import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
 
@@ -8,6 +10,28 @@ function roleFromRequest(input: unknown): VoiceRole {
   if (input === 'admin' || input === 'moderator') return input;
   return 'member';
 }
+
+const roomCoordsSchema = z.object({
+  canopyId: z.string().trim().min(1),
+  channelId: z.string().trim().min(1),
+  role: z.unknown().optional(),
+});
+
+const joinRoomSchema = roomCoordsSchema.extend({
+  canPublish: z.boolean().optional(),
+  canSubscribe: z.boolean().optional(),
+});
+
+const tokenSchema = roomCoordsSchema.extend({
+  canPublish: z.boolean().optional(),
+  canSubscribe: z.boolean().optional(),
+  ttlSeconds: z.number().optional(),
+});
+
+const moderationSchema = roomCoordsSchema.extend({
+  targetUserId: z.string().trim().optional(),
+  locked: z.boolean().optional(),
+});
 
 function canModerate(role: VoiceRole): boolean {
   return role === 'admin' || role === 'moderator';
@@ -27,14 +51,10 @@ voice.get('/config', (c) => {
 voice.post('/rooms/create', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
-  const payload = await c.req.json();
-  const canopyId = String(payload.canopyId ?? '').trim();
-  const channelId = String(payload.channelId ?? '').trim();
-  const role = roleFromRequest(payload.role);
-
-  if (!canopyId || !channelId) {
-    return c.json({ code: 'invalid_request', message: 'canopyId and channelId are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, roomCoordsSchema);
+  if (parsed instanceof Response) return parsed;
+  const { canopyId, channelId } = parsed;
+  const role = roleFromRequest(parsed.role);
 
   if (!hasPremiumCanopyEntitlement(user.sub)) {
     return c.json({ code: 'premium_required', message: 'Premium canopy subscription required' }, 402);
@@ -58,16 +78,12 @@ voice.post('/rooms/join', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
 
-  const payload = await c.req.json();
-  const canopyId = String(payload.canopyId ?? '').trim();
-  const channelId = String(payload.channelId ?? '').trim();
-  const role = roleFromRequest(payload.role);
-  const requestedCanPublish = payload.canPublish == null ? true : Boolean(payload.canPublish);
-  const requestedCanSubscribe = payload.canSubscribe == null ? true : Boolean(payload.canSubscribe);
-
-  if (!canopyId || !channelId) {
-    return c.json({ code: 'invalid_request', message: 'canopyId and channelId are required' }, 400);
-  }
+  const parsed = await readJsonBody(c, joinRoomSchema);
+  if (parsed instanceof Response) return parsed;
+  const { canopyId, channelId } = parsed;
+  const role = roleFromRequest(parsed.role);
+  const requestedCanPublish = parsed.canPublish ?? true;
+  const requestedCanSubscribe = parsed.canSubscribe ?? true;
 
   if (!hasPremiumCanopyEntitlement(user.sub)) {
     return c.json({ code: 'premium_required', message: 'Premium canopy subscription required' }, 402);
@@ -129,9 +145,9 @@ voice.post('/rooms/leave', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
 
-  const payload = await c.req.json();
-  const canopyId = String(payload.canopyId ?? '').trim();
-  const channelId = String(payload.channelId ?? '').trim();
+  const parsed = await readJsonBody(c, roomCoordsSchema);
+  if (parsed instanceof Response) return parsed;
+  const { canopyId, channelId } = parsed;
 
   const room = db.getVoiceRoom(canopyId, channelId);
   if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
@@ -157,10 +173,10 @@ voice.post('/token', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
 
-  const payload = await c.req.json();
-  const canopyId = String(payload.canopyId ?? '').trim();
-  const channelId = String(payload.channelId ?? '').trim();
-  const role = roleFromRequest(payload.role);
+  const parsed = await readJsonBody(c, tokenSchema);
+  if (parsed instanceof Response) return parsed;
+  const { canopyId, channelId } = parsed;
+  const role = roleFromRequest(parsed.role);
 
   const room = db.getVoiceRoom(canopyId, channelId);
   if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
@@ -174,9 +190,9 @@ voice.post('/token', async (c) => {
     name: user.username ?? user.sub,
     roomName: room.livekitRoomName,
     role,
-    canPublish: payload.canPublish == null ? true : Boolean(payload.canPublish),
-    canSubscribe: payload.canSubscribe == null ? true : Boolean(payload.canSubscribe),
-    ttlSeconds: Number(payload.ttlSeconds),
+    canPublish: parsed.canPublish ?? true,
+    canSubscribe: parsed.canSubscribe ?? true,
+    ttlSeconds: parsed.ttlSeconds,
   });
 
   return c.json({ roomName: room.livekitRoomName, url: getLiveKitConfig().url, token: token.token, expiresAt: token.expiresAt });
@@ -187,11 +203,11 @@ voice.post('/rooms/moderation/:action', async (c) => {
   if (user instanceof Response) return user;
 
   const action = c.req.param('action');
-  const payload = await c.req.json();
-  const canopyId = String(payload.canopyId ?? '').trim();
-  const channelId = String(payload.channelId ?? '').trim();
-  const targetUserId = String(payload.targetUserId ?? '').trim();
-  const role = roleFromRequest(payload.role);
+  const parsed = await readJsonBody(c, moderationSchema);
+  if (parsed instanceof Response) return parsed;
+  const { canopyId, channelId } = parsed;
+  const targetUserId = parsed.targetUserId ?? '';
+  const role = roleFromRequest(parsed.role);
 
   if (!canModerate(role)) {
     return c.json({ code: 'forbidden', message: 'Only canopy admins/mods can perform voice moderation controls' }, 403);
@@ -201,7 +217,7 @@ voice.post('/rooms/moderation/:action', async (c) => {
   if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
 
   if (action === 'lock') {
-    const isLocked = payload.locked == null ? true : Boolean(payload.locked);
+    const isLocked = parsed.locked ?? true;
     const updated = db.setVoiceRoomLock(room.id, isLocked);
     db.logVoiceRoomEvent({
       roomId: room.id,
