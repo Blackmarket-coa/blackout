@@ -63,6 +63,15 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Manifest snapshot tests proving deterministic route/nav/settings aggregation.
   - Capability-gate tests ensuring admin entries hide/show correctly.
 - **Dependencies:** BKL-001.
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - `adminEntry?: boolean` slot added to `FeatureCustomizationManifest` plus `composeAdminEntries` / `hasAdminEntries` composers in `apps/blackout-client/src/app/core/features/composition.ts`. Replaces the ad-hoc `showAdminEntry` boolean used by `apps/blackout-web/src/components/ServerSidebar.ts`.
+  - New `platform-ops` core feature module at `apps/blackout-client/src/app/features/platform-ops/` contributing routes (`/ops/platform`, `/ops/platform/admin`), nav items, shell panels (workspace/sidebar/right-panel + admin sidebar), and Operations / Mobile / Admin settings sections. Two customizations gated by `platform-ops.read` and `platform-ops.admin` capabilities respectively, with the admin one annotated `adminEntry: true`.
+  - `platformOps` flag added to `FeatureFlags` (default `false`) with `BLACKOUT_PLATFORM_OPS=true|false` env override on top of every feature mode.
+  - `featureModuleManifest` allowlist extended with `platform-ops`.
+  - Protocol contract: `packages/blackout-protocol/src/capabilities/events.ts` publishes `capability.granted` / `capability.revoked` envelopes plus `isCapabilityGrantedEvent` / `isCapabilityRevokedEvent` type guards.
+  - SDK: `packages/blackout-sdk/src/capabilities/actions.ts` exposes `createCapabilityActions(client).fetchCapabilities()` (`GET /v1/capabilities`) and pure helpers `hasCapability`, `hasAllCapabilities`, `hasAnyCapability`, `applyCapabilityEvent`.
+  - Tests at `apps/blackout-client/tests/unit/core/features/adminEntries.test.ts` (5 cases) and `apps/blackout-client/tests/unit/sdk/capabilities.test.ts` (6 cases) cover platform-ops contributions, admin entry hide/show on capability changes, off-flag pruning, capability helpers, event narrowing, and the SDK fetch contract.
+  - Remaining acceptance work: actually consume `composeAdminEntries` and the platform-ops manifest in the canonical sidebar/settings shell (left for a follow-up alongside the BKL-001 UI rewire).
 
 #### BKL-010 (P2) — Federated ops and townhall/revenue panel migration
 - **Maps feature_ids:** `web.panel.federation`, `web.panel.revenue_ops`, `web.panel.townhall`

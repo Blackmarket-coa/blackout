@@ -13,6 +13,7 @@ export * from './deaddrop/matrixActions';
 export * from './moderation/actions';
 export * from './matrix/types';
 export * from './shell/panelMetadata';
+export * from './capabilities/actions';
 
 export type {
   EntitlementKey,

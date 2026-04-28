@@ -17,6 +17,7 @@ export type FeatureFlags = {
     monetizationAnalytics: boolean;
     monetizationPayoutAnalytics: boolean;
     monetizationSuite: boolean;
+    platformOps: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -47,6 +48,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     monetizationAnalytics: false,
     monetizationPayoutAnalytics: false,
     monetizationSuite: false,
+    platformOps: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -187,6 +189,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
             nextFlags.liveInteractionBundle = false;
         }
+        if (env.BLACKOUT_PLATFORM_OPS === 'true') {
+            nextFlags.platformOps = true;
+        }
+        if (env.BLACKOUT_PLATFORM_OPS === 'false') {
+            nextFlags.platformOps = false;
+        }
         return nextFlags;
     }
 
@@ -204,6 +212,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
         nextFlags.liveInteractionBundle = false;
+    }
+    if (env.BLACKOUT_PLATFORM_OPS === 'true') {
+        nextFlags.platformOps = true;
+    }
+    if (env.BLACKOUT_PLATFORM_OPS === 'false') {
+        nextFlags.platformOps = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

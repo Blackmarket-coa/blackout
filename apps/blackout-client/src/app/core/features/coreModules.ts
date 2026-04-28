@@ -3,6 +3,7 @@ import { forumFeature } from '../../features/forum';
 import { governanceFeature } from '../../features/governance';
 import { moderationFeature } from '../../features/moderation';
 import { monetizationFeature } from '../../features/monetization';
+import { platformOpsFeature } from '../../features/platform-ops';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -25,5 +26,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: monetizationFeature,
         flag: 'monetization',
+    },
+    {
+        feature: platformOpsFeature,
+        flag: 'platformOps',
     },
 ];

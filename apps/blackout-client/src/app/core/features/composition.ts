@@ -6,6 +6,7 @@ import {
 import { resolveFeatureCustomizations, type CapabilityGateContext } from './capabilityGate';
 import type {
     BlackoutFeature,
+    FeatureCustomizationManifest,
     FeatureModule,
     FeatureModulePlugin,
     FeatureNavItem,
@@ -128,3 +129,30 @@ export const selectPanelsByKind = (
     panels: readonly ShellPanelEntry[],
     kind: ShellPanelKind
 ): ShellPanelEntry[] => panels.filter((entry) => entry.kind === kind);
+
+/**
+ * Returns every customization that is flagged `adminEntry: true` AND that
+ * passes capability/flag gating for the supplied context. Drives the
+ * canonical sidebar's admin-entry visibility (parity with the
+ * `showAdminEntry` boolean in `apps/blackout-web/src/components/ServerSidebar.ts`).
+ *
+ * Foundation for BKL-002: replaces ad-hoc admin gating with manifest
+ * capability declarations.
+ */
+export const composeAdminEntries = (
+    registry: BlackoutFeature[],
+    context?: CapabilityGateContext
+): FeatureCustomizationManifest[] =>
+    registry.flatMap((feature) =>
+        resolveFeatureCustomizations(feature, context).filter(
+            (customization) => customization.adminEntry === true
+        )
+    );
+
+/**
+ * Boolean variant of `composeAdminEntries` for sidebar visibility checks.
+ */
+export const hasAdminEntries = (
+    registry: BlackoutFeature[],
+    context?: CapabilityGateContext
+): boolean => composeAdminEntries(registry, context).length > 0;

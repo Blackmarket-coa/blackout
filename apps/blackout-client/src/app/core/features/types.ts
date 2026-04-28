@@ -70,6 +70,15 @@ export type FeatureCustomizationManifest = {
     navItems?: FeatureNavItem[];
     settings?: FeatureSettingsItem[];
     panels?: ShellPanelEntry[];
+    /**
+     * Marks this customization as an admin-only entry. Lets the canonical
+     * shell drive the "show admin entry" gate from manifests instead of
+     * ad-hoc booleans (replaces the `showAdminEntry` flag from
+     * apps/blackout-web). Admin entries still go through the regular
+     * `capabilityGate` evaluation; this flag is purely an annotation so
+     * callers can filter to the admin surface.
+     */
+    adminEntry?: boolean;
 };
 
 export type BlackoutFeature = {
