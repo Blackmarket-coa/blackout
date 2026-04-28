@@ -1,4 +1,7 @@
-import { dispatchNativeBridgeEvent } from './native-bridge-contract';
+import {
+    dispatchNativeBridgeEvent,
+    listenForNativeBridgeEvents,
+} from './native-bridge-contract';
 
 type TauriBridge = {
     event?: {
@@ -32,5 +35,12 @@ export async function initDesktopBridge(): Promise<void> {
         });
     } catch {
         // Not running in a Tauri shell; safe to ignore.
+    }
+
+    if (tauri.core?.invoke) {
+        listenForNativeBridgeEvents((event) => {
+            if (event.type !== 'unread_count_changed') return;
+            void tauri.core?.invoke?.('set_unread_count', { unread: event.unread });
+        });
     }
 }

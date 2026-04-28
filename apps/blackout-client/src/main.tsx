@@ -25,6 +25,8 @@ import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { initDesktopBridge } from './platform/initDesktopBridge';
 import { NativeBridgeListener } from './platform/NativeBridgeListener';
+import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
+import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -166,6 +168,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             <ThemeProvider>
                 <RuntimeSettingsBridge />
                 <MatrixBootstrapper />
+                <NotificationTokenBroker />
+                <UnreadCountBroadcaster />
                 <QueryClientProvider client={queryClient}>
                     <BootstrapStatus />
                 </QueryClientProvider>

@@ -86,7 +86,7 @@ describe('NativeBridgeListener', () => {
         expect(router.state.location.pathname).toBe('/');
     });
 
-    it('ignores non-deep-link bridge events', async () => {
+    it('ignores non-routing bridge events (e.g. resume_sync)', async () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
@@ -101,6 +101,54 @@ describe('NativeBridgeListener', () => {
             dispatchNativeBridgeEvent({
                 type: 'resume_sync',
                 source: 'mobile',
+            });
+            await Promise.resolve();
+        });
+
+        expect(router.state.location.pathname).toBe('/');
+    });
+
+    it('routes notification_interacted to /room/:roomId', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        const router = buildRouter();
+
+        await act(async () => {
+            root.render(<RouterProvider router={router} />);
+            await Promise.resolve();
+        });
+
+        await act(async () => {
+            dispatchNativeBridgeEvent({
+                type: 'notification_interacted',
+                source: 'mobile',
+                roomId: '!incident:blackout.coop',
+            });
+            await Promise.resolve();
+        });
+
+        expect(router.state.location.pathname).toBe(
+            '/room/' + encodeURIComponent('!incident:blackout.coop')
+        );
+    });
+
+    it('ignores notification_interacted with empty roomId', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        const router = buildRouter();
+
+        await act(async () => {
+            root.render(<RouterProvider router={router} />);
+            await Promise.resolve();
+        });
+
+        await act(async () => {
+            dispatchNativeBridgeEvent({
+                type: 'notification_interacted',
+                source: 'mobile',
+                roomId: '',
             });
             await Promise.resolve();
         });

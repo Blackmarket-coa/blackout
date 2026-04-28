@@ -10,10 +10,16 @@ export function NativeBridgeListener(): null {
 
     useEffect(() => {
         return listenForNativeBridgeEvents((event) => {
-            if (event.type !== 'deep_link_opened') return;
-            const roomId = extractRoomIdFromDeepLinkUrl(event.url);
-            if (!roomId) return;
-            navigate(`/room/${encodeURIComponent(roomId)}`);
+            if (event.type === 'deep_link_opened') {
+                const roomId = extractRoomIdFromDeepLinkUrl(event.url);
+                if (!roomId) return;
+                navigate(`/room/${encodeURIComponent(roomId)}`);
+                return;
+            }
+            if (event.type === 'notification_interacted') {
+                if (!event.roomId) return;
+                navigate(`/room/${encodeURIComponent(event.roomId)}`);
+            }
         });
     }, [navigate]);
 
