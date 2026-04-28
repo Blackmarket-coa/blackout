@@ -24,6 +24,7 @@ import { trimTrailingSlash } from './app/utils/common';
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { initDesktopBridge } from './platform/initDesktopBridge';
+import { LifecycleSyncBroker } from './platform/LifecycleSyncBroker';
 import { NativeBridgeListener } from './platform/NativeBridgeListener';
 import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
@@ -170,6 +171,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 <MatrixBootstrapper />
                 <NotificationTokenBroker />
                 <UnreadCountBroadcaster />
+                <LifecycleSyncBroker />
                 <QueryClientProvider client={queryClient}>
                     <BootstrapStatus />
                 </QueryClientProvider>
