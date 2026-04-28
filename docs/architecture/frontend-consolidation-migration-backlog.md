@@ -131,6 +131,12 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Governance route integration tests for each tab and new scheduler/treasury surfaces.
   - Contract tests validating event payload compatibility.
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - Protocol: `packages/blackout-protocol/src/governance/contracts.ts` adds `GovernanceMeetingPayload` (with `GovernanceMeetingStatus` and attendee refs) and `GovernanceTreasurySnapshotPayload` (precision-safe string balances). `events.ts` adds `GovernanceMeetingScheduled` / `GovernanceTreasurySnapshotPublished` envelopes plus `isGovernanceMeetingScheduled`, `isGovernanceTreasurySnapshotPublished`, and `isGovernanceVoteCast` type guards. `BlackoutEventName` is extended with the two new event names, and `GOVERNANCE_EVENT_NAMES` covers the new `co.bmc.governance.meeting` / `co.bmc.governance.treasury.snapshot` Matrix event types.
+  - SDK: `packages/blackout-sdk/src/governance/actions.ts` extends `createGovernanceActions(client)` with `scheduleMeeting` (PUT keyed by `meetingId`), `listMeetings` (optional `proposalId` filter), `cancelMeeting`, `getTreasurySnapshot`, and `listTreasurySnapshots` (cursor + limit pagination, with non-positive limits dropped).
+  - Canonical client: `apps/blackout-client/src/app/features/governance/` adds `/governance/meetings` and `/governance/treasury` route placeholders (settled by the canonical scheduler + snapshot ports), `governanceRightPanelTabs` (active|past|create|my-votes|results), `governanceMeetingPanels` and `governanceTreasuryPanels` workspace+sidebar entries, plus `governanceMeetingsSettings` / `governanceTreasurySettings`. Manifest splits into three customizations gated by `governance.read`, `governance.meetings.schedule`, and `governance.treasury.read` respectively, all behind the `governance` flag.
+  - Tests at `apps/blackout-client/tests/unit/sdk/governanceActions.test.ts` (9 cases) and `apps/blackout-client/tests/unit/core/features/governanceTabsAndOps.test.ts` (4 cases) cover the new event-type strings, type-guard narrowing, every new SDK action's request shape, and capability-gated visibility of the right-panel tabs / meetings / treasury surfaces.
+  - Remaining acceptance work: actually render the scheduler form and treasury snapshot UI (canonical components are placeholders) and wire the right-panel tab strip in the canonical Cinny shell. Both are deferred alongside the BKL-001/BKL-002 UI rewire.
 
 ---
 

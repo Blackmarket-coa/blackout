@@ -1,6 +1,8 @@
 export type BlackoutEventName =
     | 'blackout.governance.proposal.created'
     | 'blackout.governance.vote.cast'
+    | 'blackout.governance.meeting.scheduled'
+    | 'blackout.governance.treasury.snapshot.published'
     | 'blackout.forum.post.created'
     | 'blackout.deaddrop.created'
     | 'blackout.deaddrop.opened'

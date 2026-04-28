@@ -1,7 +1,16 @@
 export { governanceFeature } from './manifest';
 export { governanceNavItems } from './nav';
-export { governancePanels } from './panels';
+export {
+    governanceMeetingPanels,
+    governancePanels,
+    governanceRightPanelTabs,
+    governanceTreasuryPanels,
+} from './panels';
 export { governanceRoutes } from './routes';
+export {
+    governanceMeetingsSettings,
+    governanceTreasurySettings,
+} from './settings';
 
 export * from './useProposals';
 export * from './ProposalCreator';
