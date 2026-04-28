@@ -37,6 +37,14 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Mobile vs desktop nav parity tests for tab/rail behavior.
   - Regression test: canonical Home/Direct/Explore/Inbox flows unchanged.
 - **Dependencies:** none (foundation).
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - Shell panel types + capability-gated `composeShellPanels` / `selectPanelsByKind` composer added in `apps/blackout-client/src/app/core/features/{types,composition}.ts`.
+  - `panels?` manifest slot added to `FeatureCustomizationManifest` and `BlackoutFeature`.
+  - Governance feature contributes a working set of panels (`workspace`, `mobile-tab`, `sidebar`) at `apps/blackout-client/src/app/features/governance/panels.ts` to prove the pipeline end-to-end.
+  - Protocol event schema for `shell.panel.selected` published from `packages/blackout-protocol/src/shell/events.ts` (with `isShellPanelSelectedEvent` type guard).
+  - SDK panel-metadata façade `createShellPanelCatalog` exposed from `packages/blackout-sdk/src/shell/panelMetadata.ts`, including `listPanels`, `findPanel`, `canAccess`, and `buildSelectionEvent`.
+  - Tests at `apps/blackout-client/tests/unit/core/features/shellPanels.test.ts` (4 cases) and `apps/blackout-client/tests/unit/sdk/shellPanelCatalog.test.ts` (9 cases) cover composer ordering, capability gating, catalog dedup, capability checks, and selection-event round-trip.
+  - Remaining acceptance work: actually rewire the canonical sidebar/tab/mobile-rail UI to consume the composer (deferred as part of BKL-002 delivery), plus router-integration tests once the UI is in place.
 
 ---
 

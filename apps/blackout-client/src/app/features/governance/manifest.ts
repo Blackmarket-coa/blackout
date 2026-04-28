@@ -1,5 +1,6 @@
 import type { BlackoutFeature } from '../../core/features/types';
 import { governanceNavItems } from './nav';
+import { governancePanels } from './panels';
 import { governanceRoutes } from './routes';
 
 export const governanceFeature: BlackoutFeature = {
@@ -16,6 +17,7 @@ export const governanceFeature: BlackoutFeature = {
             },
             routes: governanceRoutes,
             navItems: governanceNavItems,
+            panels: governancePanels,
         },
     ],
     capabilities: ['governance.read', 'governance.write'],

@@ -17,6 +17,35 @@ export type FeatureSettingsItem = {
     component: ComponentType;
 };
 
+/**
+ * Identifies a shell-level surface a feature can contribute UI into.
+ * Mirrors the surfaces blackout-web exposed (workspace tabs, mobile tab bar,
+ * sidebar nav, right-panel slots) so feature manifests own a single source of
+ * truth for cross-surface registration.
+ */
+export type ShellPanelKind = 'workspace' | 'mobile-tab' | 'sidebar' | 'right-panel';
+
+export type ShellPanelEntry = {
+    /**
+     * Unique entry id within a given (kind) bucket. Used by clients to drive
+     * `shell.panel.select` events and by the SDK panel metadata facade.
+     */
+    id: string;
+    kind: ShellPanelKind;
+    label: string;
+    /**
+     * Canonical client route that materializes this panel. Required because
+     * panel selection is deep-linkable.
+     */
+    to: string;
+    icon?: ComponentType;
+    /**
+     * Lower numbers render first within their `kind`. Defaults to insertion
+     * order when omitted.
+     */
+    order?: number;
+};
+
 export type PluginCategory =
     | 'visual/layout plugin'
     | 'interaction plugin'
@@ -40,6 +69,7 @@ export type FeatureCustomizationManifest = {
     routes?: FeatureRoute[];
     navItems?: FeatureNavItem[];
     settings?: FeatureSettingsItem[];
+    panels?: ShellPanelEntry[];
 };
 
 export type BlackoutFeature = {
@@ -48,6 +78,7 @@ export type BlackoutFeature = {
     routes?: FeatureRoute[];
     navItems?: FeatureNavItem[];
     settings?: FeatureSettingsItem[];
+    panels?: ShellPanelEntry[];
     capabilities?: string[];
     customizations?: FeatureCustomizationManifest[];
     init?: () => void | Promise<void>;
