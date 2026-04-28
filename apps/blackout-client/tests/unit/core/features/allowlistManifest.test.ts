@@ -17,6 +17,7 @@ describe('feature allowlist manifest', () => {
             'moderation',
             'monetization',
             'platform-ops',
+            'notifications-presence',
         ]);
     });
 

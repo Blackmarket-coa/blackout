@@ -13,6 +13,7 @@ export const featureModuleManifest = [
     'moderation',
     'monetization',
     'platform-ops',
+    'notifications-presence',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

@@ -5,6 +5,7 @@ export * from './deaddrop/events';
 export * from './moderation/events';
 export * from './shell/events';
 export * from './capabilities/events';
+export * from './notifications/events';
 
 export * from './governance/contracts';
 
