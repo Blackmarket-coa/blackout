@@ -15,6 +15,7 @@ export * from './matrix/types';
 export * from './shell/panelMetadata';
 export * from './capabilities/actions';
 export * from './notifications/actions';
+export * from './media/actions';
 
 export type {
   EntitlementKey,

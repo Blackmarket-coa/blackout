@@ -14,6 +14,7 @@ export const featureModuleManifest = [
     'monetization',
     'platform-ops',
     'notifications-presence',
+    'media-call',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

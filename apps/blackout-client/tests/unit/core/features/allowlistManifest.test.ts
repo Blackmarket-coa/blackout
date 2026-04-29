@@ -18,6 +18,7 @@ describe('feature allowlist manifest', () => {
             'monetization',
             'platform-ops',
             'notifications-presence',
+            'media-call',
         ]);
     });
 

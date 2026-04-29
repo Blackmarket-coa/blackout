@@ -8,7 +8,9 @@ export type BlackoutEventName =
     | 'blackout.deaddrop.opened'
     | 'blackout.moderation.action.taken'
     | 'blackout.notifications.digest.generated'
-    | 'blackout.notifications.digest.acknowledged';
+    | 'blackout.notifications.digest.acknowledged'
+    | 'blackout.media.upload.completed'
+    | 'blackout.call.launch.intent';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

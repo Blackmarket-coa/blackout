@@ -39,7 +39,7 @@ Quantitative snapshot:
 - Parity matrix rows: **84**
 - Disposition rows: **84**
 - Ported rows pending migration: **28**
-- Documented wrapper blocker IDs: **WRAP-001..WRAP-004** (WRAP-001..WRAP-003 closed 2026-04-27; WRAP-004 share closed, camera deferred to BKL-006)
+- Documented wrapper blocker IDs: **WRAP-001..WRAP-004** (all closed 2026-04-27)
 
 ---
 
@@ -59,7 +59,7 @@ Quantitative snapshot:
 ### C. Wrapper parity readiness (must all be true before archive)
 - [x] `blackout-mobile` bridge semantics run against canonical `apps/blackout-client` runtime — deep-link, notification (token + interaction), resume_sync, share all consume the same `globalThis` `blackout:native-event` channel (2026-04-27).
 - [x] `blackout-desktop` deep-link/notification/unread/lifecycle flows run against canonical runtime — Tauri `deep-link://new-url` listener and `set_unread_count` invoke wired up in `apps/blackout-client/src/platform/initDesktopBridge.ts` (2026-04-27).
-- [x] WRAP-001..WRAP-003 closed with verification evidence; WRAP-004 share closed with camera deferred to BKL-006 (no canonical consumer for composer attachments yet).
+- [x] WRAP-001..WRAP-004 closed with verification evidence (BKL-006 lands the canonical consumer for camera/media-pick).
 
 ### D. Release and rollback controls
 - [ ] Archive PR includes rollback strategy (re-enable legacy runtime path if regression).
@@ -75,7 +75,7 @@ Quantitative snapshot:
 | WRAP-001 | High | **Closed 2026-04-27** | Frontend Platform Team | Canonical deep-link bridge compatibility layer landed in `apps/blackout-client/src/platform/{native-bridge-contract.ts,initDesktopBridge.ts,NativeBridgeListener.tsx}`; tests in `apps/blackout-client/tests/unit/native-bridge-{contract,listener}.test.*`. | 2026-04-29 (closed early) |
 | WRAP-002 | High | **Closed 2026-04-27** | Frontend Notifications Team | Notification bridge parity landed in `apps/blackout-client/src/platform/{NativeBridgeListener.tsx,NotificationTokenBroker.tsx,UnreadCountBroadcaster.tsx,initDesktopBridge.ts}`; tests in `apps/blackout-client/tests/unit/{native-bridge-listener,notification-token-broker,unread-count-broadcaster,init-desktop-bridge}.test.*`. | 2026-05-03 (closed early) |
 | WRAP-003 | Medium | **Closed 2026-04-27** | Frontend Platform Team | Lifecycle parity landed in `apps/blackout-client/src/platform/LifecycleSyncBroker.tsx`; tests in `apps/blackout-client/tests/unit/lifecycle-sync-broker.test.tsx`. | 2026-05-06 (closed early) |
-| WRAP-004 | Medium | **Closed 2026-04-27 (share); camera deferred to BKL-006** | Frontend Media Team | Native share parity landed in `apps/blackout-client/src/platform/nativeMediaBridge.ts`; tests in `apps/blackout-client/tests/unit/native-media-bridge.test.ts`. Camera/media-pick deferred to BKL-006 because composer attachment surfaces are not yet ported. | 2026-05-10 (share closed early) |
+| WRAP-004 | Medium | **Closed 2026-04-27** | Frontend Media Team | Native share + camera/media-pick parity landed in `apps/blackout-client/src/platform/nativeMediaBridge.ts` (`nativeShare`, `nativeCanShare`, `nativePickPhoto`); tests in `apps/blackout-client/tests/unit/{native-media-bridge,native-pick-photo}.test.*`. Canonical consumer surface lands with BKL-006 (`media.pipeline.read` customization). | 2026-05-10 (closed early) |
 | EXC-001 / EXC-002 / EXC-003 | Medium | Open | Core/Moderation/Platform teams | Close boundary-audit exceptions or produce explicit waiver with risk acceptance. | 2026-05-08 |
 
 ---
