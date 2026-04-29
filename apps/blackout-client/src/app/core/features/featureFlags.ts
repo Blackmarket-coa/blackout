@@ -17,6 +17,9 @@ export type FeatureFlags = {
     monetizationAnalytics: boolean;
     monetizationPayoutAnalytics: boolean;
     monetizationSuite: boolean;
+    platformOps: boolean;
+    notificationsPresence: boolean;
+    mediaCall: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -47,6 +50,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     monetizationAnalytics: false,
     monetizationPayoutAnalytics: false,
     monetizationSuite: false,
+    platformOps: false,
+    notificationsPresence: false,
+    mediaCall: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -187,6 +193,24 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
             nextFlags.liveInteractionBundle = false;
         }
+        if (env.BLACKOUT_PLATFORM_OPS === 'true') {
+            nextFlags.platformOps = true;
+        }
+        if (env.BLACKOUT_PLATFORM_OPS === 'false') {
+            nextFlags.platformOps = false;
+        }
+        if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
+            nextFlags.notificationsPresence = true;
+        }
+        if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'false') {
+            nextFlags.notificationsPresence = false;
+        }
+        if (env.BLACKOUT_MEDIA_CALL === 'true') {
+            nextFlags.mediaCall = true;
+        }
+        if (env.BLACKOUT_MEDIA_CALL === 'false') {
+            nextFlags.mediaCall = false;
+        }
         return nextFlags;
     }
 
@@ -204,6 +228,24 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_LIVE_INTERACTION_BUNDLE === 'false') {
         nextFlags.liveInteractionBundle = false;
+    }
+    if (env.BLACKOUT_PLATFORM_OPS === 'true') {
+        nextFlags.platformOps = true;
+    }
+    if (env.BLACKOUT_PLATFORM_OPS === 'false') {
+        nextFlags.platformOps = false;
+    }
+    if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'true') {
+        nextFlags.notificationsPresence = true;
+    }
+    if (env.BLACKOUT_NOTIFICATIONS_PRESENCE === 'false') {
+        nextFlags.notificationsPresence = false;
+    }
+    if (env.BLACKOUT_MEDIA_CALL === 'true') {
+        nextFlags.mediaCall = true;
+    }
+    if (env.BLACKOUT_MEDIA_CALL === 'false') {
+        nextFlags.mediaCall = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

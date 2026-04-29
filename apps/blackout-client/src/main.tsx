@@ -7,7 +7,7 @@ import 'folds/dist/style.css';
 import { configClass, varsClass } from 'folds';
 import { useAtomValue } from 'jotai';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
@@ -23,6 +23,11 @@ import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { trimTrailingSlash } from './app/utils/common';
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
+import { initDesktopBridge } from './platform/initDesktopBridge';
+import { LifecycleSyncBroker } from './platform/LifecycleSyncBroker';
+import { NativeBridgeListener } from './platform/NativeBridgeListener';
+import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
+import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -52,18 +57,32 @@ if ('serviceWorker' in navigator) {
 
 const queryClient = new QueryClient();
 
+void initDesktopBridge();
+
+const RouterRoot = () => (
+    <>
+        <NativeBridgeListener />
+        <Outlet />
+    </>
+);
+
 const router = createBrowserRouter([
     {
-        path: '/',
-        element: <ClientLayout />,
-    },
-    {
-        path: '/room/:roomId',
-        element: <ClientLayout />,
-    },
-    {
-        path: '/moderation/draupnir',
-        element: <DraupnirRoutePage />,
+        element: <RouterRoot />,
+        children: [
+            {
+                path: '/',
+                element: <ClientLayout />,
+            },
+            {
+                path: '/room/:roomId',
+                element: <ClientLayout />,
+            },
+            {
+                path: '/moderation/draupnir',
+                element: <DraupnirRoutePage />,
+            },
+        ],
     },
 ]);
 
@@ -150,6 +169,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             <ThemeProvider>
                 <RuntimeSettingsBridge />
                 <MatrixBootstrapper />
+                <NotificationTokenBroker />
+                <UnreadCountBroadcaster />
+                <LifecycleSyncBroker />
                 <QueryClientProvider client={queryClient}>
                     <BootstrapStatus />
                 </QueryClientProvider>

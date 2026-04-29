@@ -16,6 +16,9 @@ describe('feature allowlist manifest', () => {
             'deaddrop',
             'moderation',
             'monetization',
+            'platform-ops',
+            'notifications-presence',
+            'media-call',
         ]);
     });
 

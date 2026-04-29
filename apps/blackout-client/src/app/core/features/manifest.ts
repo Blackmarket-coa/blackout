@@ -6,7 +6,16 @@
  * - then wire modules/plugins,
  * - then update CI/docs/tests.
  */
-export const featureModuleManifest = ['governance', 'forum', 'deaddrop', 'moderation', 'monetization'] as const;
+export const featureModuleManifest = [
+    'governance',
+    'forum',
+    'deaddrop',
+    'moderation',
+    'monetization',
+    'platform-ops',
+    'notifications-presence',
+    'media-call',
+] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
 

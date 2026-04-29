@@ -37,6 +37,14 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Mobile vs desktop nav parity tests for tab/rail behavior.
   - Regression test: canonical Home/Direct/Explore/Inbox flows unchanged.
 - **Dependencies:** none (foundation).
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - Shell panel types + capability-gated `composeShellPanels` / `selectPanelsByKind` composer added in `apps/blackout-client/src/app/core/features/{types,composition}.ts`.
+  - `panels?` manifest slot added to `FeatureCustomizationManifest` and `BlackoutFeature`.
+  - Governance feature contributes a working set of panels (`workspace`, `mobile-tab`, `sidebar`) at `apps/blackout-client/src/app/features/governance/panels.ts` to prove the pipeline end-to-end.
+  - Protocol event schema for `shell.panel.selected` published from `packages/blackout-protocol/src/shell/events.ts` (with `isShellPanelSelectedEvent` type guard).
+  - SDK panel-metadata façade `createShellPanelCatalog` exposed from `packages/blackout-sdk/src/shell/panelMetadata.ts`, including `listPanels`, `findPanel`, `canAccess`, and `buildSelectionEvent`.
+  - Tests at `apps/blackout-client/tests/unit/core/features/shellPanels.test.ts` (4 cases) and `apps/blackout-client/tests/unit/sdk/shellPanelCatalog.test.ts` (9 cases) cover composer ordering, capability gating, catalog dedup, capability checks, and selection-event round-trip.
+  - Remaining acceptance work: actually rewire the canonical sidebar/tab/mobile-rail UI to consume the composer (deferred as part of BKL-002 delivery), plus router-integration tests once the UI is in place.
 
 ---
 
@@ -55,6 +63,15 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Manifest snapshot tests proving deterministic route/nav/settings aggregation.
   - Capability-gate tests ensuring admin entries hide/show correctly.
 - **Dependencies:** BKL-001.
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - `adminEntry?: boolean` slot added to `FeatureCustomizationManifest` plus `composeAdminEntries` / `hasAdminEntries` composers in `apps/blackout-client/src/app/core/features/composition.ts`. Replaces the ad-hoc `showAdminEntry` boolean used by `apps/blackout-web/src/components/ServerSidebar.ts`.
+  - New `platform-ops` core feature module at `apps/blackout-client/src/app/features/platform-ops/` contributing routes (`/ops/platform`, `/ops/platform/admin`), nav items, shell panels (workspace/sidebar/right-panel + admin sidebar), and Operations / Mobile / Admin settings sections. Two customizations gated by `platform-ops.read` and `platform-ops.admin` capabilities respectively, with the admin one annotated `adminEntry: true`.
+  - `platformOps` flag added to `FeatureFlags` (default `false`) with `BLACKOUT_PLATFORM_OPS=true|false` env override on top of every feature mode.
+  - `featureModuleManifest` allowlist extended with `platform-ops`.
+  - Protocol contract: `packages/blackout-protocol/src/capabilities/events.ts` publishes `capability.granted` / `capability.revoked` envelopes plus `isCapabilityGrantedEvent` / `isCapabilityRevokedEvent` type guards.
+  - SDK: `packages/blackout-sdk/src/capabilities/actions.ts` exposes `createCapabilityActions(client).fetchCapabilities()` (`GET /v1/capabilities`) and pure helpers `hasCapability`, `hasAllCapabilities`, `hasAnyCapability`, `applyCapabilityEvent`.
+  - Tests at `apps/blackout-client/tests/unit/core/features/adminEntries.test.ts` (5 cases) and `apps/blackout-client/tests/unit/sdk/capabilities.test.ts` (6 cases) cover platform-ops contributions, admin entry hide/show on capability changes, off-flag pruning, capability helpers, event narrowing, and the SDK fetch contract.
+  - Remaining acceptance work: actually consume `composeAdminEntries` and the platform-ops manifest in the canonical sidebar/settings shell (left for a follow-up alongside the BKL-001 UI rewire).
 
 #### BKL-010 (P2) — Federated ops and townhall/revenue panel migration
 - **Maps feature_ids:** `web.panel.federation`, `web.panel.revenue_ops`, `web.panel.townhall`
@@ -114,6 +131,12 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Governance route integration tests for each tab and new scheduler/treasury surfaces.
   - Contract tests validating event payload compatibility.
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - Protocol: `packages/blackout-protocol/src/governance/contracts.ts` adds `GovernanceMeetingPayload` (with `GovernanceMeetingStatus` and attendee refs) and `GovernanceTreasurySnapshotPayload` (precision-safe string balances). `events.ts` adds `GovernanceMeetingScheduled` / `GovernanceTreasurySnapshotPublished` envelopes plus `isGovernanceMeetingScheduled`, `isGovernanceTreasurySnapshotPublished`, and `isGovernanceVoteCast` type guards. `BlackoutEventName` is extended with the two new event names, and `GOVERNANCE_EVENT_NAMES` covers the new `co.bmc.governance.meeting` / `co.bmc.governance.treasury.snapshot` Matrix event types.
+  - SDK: `packages/blackout-sdk/src/governance/actions.ts` extends `createGovernanceActions(client)` with `scheduleMeeting` (PUT keyed by `meetingId`), `listMeetings` (optional `proposalId` filter), `cancelMeeting`, `getTreasurySnapshot`, and `listTreasurySnapshots` (cursor + limit pagination, with non-positive limits dropped).
+  - Canonical client: `apps/blackout-client/src/app/features/governance/` adds `/governance/meetings` and `/governance/treasury` route placeholders (settled by the canonical scheduler + snapshot ports), `governanceRightPanelTabs` (active|past|create|my-votes|results), `governanceMeetingPanels` and `governanceTreasuryPanels` workspace+sidebar entries, plus `governanceMeetingsSettings` / `governanceTreasurySettings`. Manifest splits into three customizations gated by `governance.read`, `governance.meetings.schedule`, and `governance.treasury.read` respectively, all behind the `governance` flag.
+  - Tests at `apps/blackout-client/tests/unit/sdk/governanceActions.test.ts` (9 cases) and `apps/blackout-client/tests/unit/core/features/governanceTabsAndOps.test.ts` (4 cases) cover the new event-type strings, type-guard narrowing, every new SDK action's request shape, and capability-gated visibility of the right-panel tabs / meetings / treasury surfaces.
+  - Remaining acceptance work: actually render the scheduler form and treasury snapshot UI (canonical components are placeholders) and wire the right-panel tab strip in the canonical Cinny shell. Both are deferred alongside the BKL-001/BKL-002 UI rewire.
 
 ---
 
@@ -131,6 +154,12 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Notification settings integration tests with digest mode toggles.
   - Inbox behavior tests for digest ingestion and read-state updates.
 - **Dependencies:** BKL-002.
+- **Status (2026-04-27): foundation landed; UI rewire pending.**
+  - Protocol: `packages/blackout-protocol/src/notifications/{contracts,events}.ts` publishes `NotificationRulePayload` (parity with `apps/blackout-web/src/types.ts:NotificationRule`), `PresenceDigestPayload` + `PresenceDigestActivity`, and the `PresenceDigestGenerated` / `PresenceDigestAcknowledged` envelopes plus `isPresenceDigestGenerated` / `isPresenceDigestAcknowledged` type guards. `BlackoutEventName` is extended with both new event names; `NOTIFICATIONS_EVENT_NAMES` covers the `co.bmc.notifications.digest.{generated,acknowledged}` Matrix event types.
+  - SDK: `packages/blackout-sdk/src/notifications/actions.ts` ships `createNotificationActions(client)` with `fetchNotificationRules`, `upsertNotificationRule` (PUT keyed by `<feature>/<category>` with URL-encoding), `deleteNotificationRule`, `fetchPresenceDigest` (optional positive `windowMinutes`), and `acknowledgePresenceDigest`. Adds the pure `buildPresenceDigest(activities, nowIso, { windowMinutes })` helper that mirrors `apps/blackout-web/src/services/presence-digest.ts` and clamps malformed timestamps + negative windows.
+  - Canonical client: new `apps/blackout-client/src/app/features/notifications-presence/` module with two capability-gated customizations — `notifications-rules` (settings only, gated by `notifications.rules.manage`) and `notifications-presence` (route + right-panel/sidebar panels + settings, gated by `notifications.presence.read`). Both ride behind a new `notificationsPresence` flag (default off) with `BLACKOUT_NOTIFICATIONS_PRESENCE` env override on every feature mode. Module registered in `featureModuleManifest`, `coreModules.ts`, and `allowlistManifest.test.ts`.
+  - Tests: `apps/blackout-client/tests/unit/sdk/notificationsActions.test.ts` (12 cases) covers event-type strings, type-guard narrowing for both digest events, every SDK action's request shape (URL encoding, optional params, pagination), and `buildPresenceDigest` window math + malformed-input tolerance. `apps/blackout-client/tests/unit/core/features/notificationsPresenceModule.test.ts` (3 cases) covers presence digest route/panel exposure on capability change, settings hide/show on `notifications.rules.manage`, and total off-flag pruning.
+  - Remaining acceptance work: actually render the notification-rule editor and presence digest inbox (canonical components are placeholders) and wire them into the canonical Cinny shell once BKL-001/002's UI rewire lands.
 
 ---
 
@@ -167,6 +196,13 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Upload/viewer tests (file, image, preview, error path).
   - Call/dialpad smoke tests including unsupported-capability fallback.
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-27): foundation landed; UI rewire pending. Closes the WRAP-004 camera/media-pick deferral.**
+  - Protocol: `packages/blackout-protocol/src/media/{contracts,events}.ts` publishes `MediaUploadCompletedPayload` (with `MediaUploadStatus` union and pipeline-final fields), `CallLaunchIntentPayload` (with `CallLaunchKind` = `element-call|pstn-dialpad|matrix-rtc`), corresponding envelope types, and `isMediaUploadCompleted` / `isCallLaunchIntent` type guards. `BlackoutEventName` is extended with both new event names; `MEDIA_EVENT_NAMES` covers the `co.bmc.media.upload.completed` / `co.bmc.call.launch.intent` Matrix types.
+  - SDK: `packages/blackout-sdk/src/media/actions.ts` ships `createMediaActions(client)` (`fetchUploadProgress`, `cancelUpload`, `fetchCompletedUpload`) and `createCallActions(client)` (`launchCall`, `dialpadCall` injecting `kind=pstn-dialpad`, `getCallBootstrap`). Adds the pure `buildDialpadIntent(target, options)` helper that strips formatting characters from E.164 input and synthesizes intent ids when omitted.
+  - Native bridge: `apps/blackout-client/src/platform/nativeMediaBridge.ts` adds `nativePickPhoto({ source })` which delegates to `@capacitor/camera` (camera/gallery native sheet) → `<input type="file" accept="image/*" capture>` fallback. This closes the WRAP-004 camera/media-pick deferral; the wrapper-parity report and archive signoff are flipped accordingly.
+  - Canonical client: new `apps/blackout-client/src/app/features/media-call/` module with three capability-gated customizations — `media-pipeline` (route + right-panel + sidebar + settings, gated by `media.pipeline.read`), `call-dialpad` (route + workspace+sidebar panels + settings, gated by `call.dialpad.launch`), and `call-element` (route + sidebar + settings, gated by `call.element.launch`). All ride behind a new `mediaCall` flag (default off) with `BLACKOUT_MEDIA_CALL` env override on every feature mode. Module registered in `featureModuleManifest`, `coreModules.ts`, and `allowlistManifest.test.ts`.
+  - Tests: `apps/blackout-client/tests/unit/sdk/mediaActions.test.ts` (12 cases) covers event-type strings, type-guard narrowing (including the kind union), all media + call SDK request shapes, and `buildDialpadIntent` formatting. `apps/blackout-client/tests/unit/native-pick-photo.test.tsx` (3 cases) covers the file-input fallback's cancel path, the `capture="environment"` hint for camera mode and its omission for gallery mode, and the picked-file payload shape. `apps/blackout-client/tests/unit/core/features/mediaCallModule.test.ts` (4 cases) covers route/panel/settings exposure on each capability, capability isolation between dialpad and Element Call, and total off-flag pruning.
+  - Remaining acceptance work: render the actual upload progress widget, dialpad entry form, and Element Call launcher UI (canonical components are placeholders) and wire them into the canonical Cinny shell once BKL-001/002's UI rewire lands.
 
 ---
 
