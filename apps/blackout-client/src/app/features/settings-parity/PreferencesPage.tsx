@@ -5,6 +5,7 @@ import {
     type SettingsScope,
     type SettingsValue,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type PreferencesFetcher = {
     fetchBucket: (
@@ -32,7 +33,9 @@ const stub: PreferencesFetcher = {
 
 const SCOPES: SettingsScope[] = ['device', 'account'];
 
-export function PreferencesPage({ fetcher = stub }: Props) {
+export function PreferencesPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('preferences');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [scope, setScope] = useState<SettingsScope>('device');
     const [bucket, setBucket] = useState<SettingsBucket>({
         scope: 'device',

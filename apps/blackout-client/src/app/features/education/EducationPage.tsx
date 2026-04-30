@@ -5,6 +5,7 @@ import {
     type EducationModuleDescriptor,
     type EducationProgressPayload,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type EducationFetcher = {
     listModules: () => Promise<{ modules: EducationModuleDescriptor[] }>;
@@ -22,7 +23,9 @@ const stub: EducationFetcher = {
     completeLesson: async () => ({}),
 };
 
-export function EducationPage({ fetcher = stub }: Props) {
+export function EducationPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('education');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [modules, setModules] = useState<EducationModuleDescriptor[]>([]);
     const [progress, setProgress] = useState<EducationProgressPayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);

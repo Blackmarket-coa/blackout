@@ -7,6 +7,7 @@ import {
     type StegoChannelSnapshot,
     type StegoEphemeralMode,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type StegoToolkitFetcher = {
     listChannels: () => Promise<{ subject?: string; channels: StegoChannelSnapshot[] }>;
@@ -44,7 +45,9 @@ const stubFetcher: StegoToolkitFetcher = {
     createChannel: async () => ({}),
 };
 
-export function StegoToolkitPage({ fetcher = stubFetcher }: StegoToolkitPageProps) {
+export function StegoToolkitPage({ fetcher: explicitFetcher }: StegoToolkitPageProps) {
+    const contextFetcher = useRegistryFetcher('stegoToolkit');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stubFetcher;
     const [channels, setChannels] = useState<StegoChannelSnapshot[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [pending, setPending] = useState(false);

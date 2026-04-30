@@ -5,6 +5,7 @@ import {
     type BanListSnapshot,
     type ProtectionDescriptor,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type MjolnirFetcher = {
     listBanLists: () => Promise<{ lists: BanListSnapshot[] }>;
@@ -30,7 +31,9 @@ const stub: MjolnirFetcher = {
     setProtectionEnabled: async () => ({}),
 };
 
-export function MjolnirSettingsPage({ fetcher = stub }: Props) {
+export function MjolnirSettingsPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('mjolnir');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [lists, setLists] = useState<BanListSnapshot[]>([]);
     const [protections, setProtections] = useState<ProtectionDescriptor[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);

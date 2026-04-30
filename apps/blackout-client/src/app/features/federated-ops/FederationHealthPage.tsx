@@ -3,6 +3,7 @@ import {
     compareFederationSeverity,
     type FederationAlertStatusPayload,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type FederationHealthFetcher = {
     listAlerts: () => Promise<{ alerts: FederationAlertStatusPayload[] }>;
@@ -18,7 +19,9 @@ const stub: FederationHealthFetcher = {
     acknowledgeAlert: async () => ({}),
 };
 
-export function FederationHealthPage({ fetcher = stub }: Props) {
+export function FederationHealthPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('federationHealth');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [alerts, setAlerts] = useState<FederationAlertStatusPayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);

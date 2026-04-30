@@ -21,6 +21,9 @@ import {
 } from './app/core/features/capabilityHydration';
 import { runtimeFeatureFlags } from './app/core/features/featureFlags';
 import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
+import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProvider';
+import { buildRegistryFetchers } from './app/core/features/registryFetchers';
+import { createFetchApiClient } from '@blackout/sdk';
 import { useStore } from 'jotai';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
@@ -64,6 +67,21 @@ if ('serviceWorker' in navigator) {
 }
 
 const queryClient = new QueryClient();
+
+/**
+ * Production fetcher bag — built once at boot from the canonical
+ * `ApiClient`. The base URL is read from `import.meta.env.VITE_BLACKOUT_API_BASE`
+ * when present; otherwise calls go through the page's relative URL
+ * (matches the existing dev proxy setup). Hydration token wiring is
+ * deferred to a future bootstrap pass; the headers slot is open for it.
+ */
+const apiBaseUrl =
+    typeof import.meta !== 'undefined'
+        ? ((import.meta as { env?: Record<string, string | undefined> }).env
+              ?.VITE_BLACKOUT_API_BASE ?? undefined)
+        : undefined;
+const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
+const registryFetchers = buildRegistryFetchers(apiClient);
 
 void initDesktopBridge();
 
@@ -221,7 +239,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
                 <UnreadCountBroadcaster />
                 <LifecycleSyncBroker />
                 <QueryClientProvider client={queryClient}>
-                    <BootstrapStatus />
+                    <RegistryFetcherProvider fetchers={registryFetchers}>
+                        <BootstrapStatus />
+                    </RegistryFetcherProvider>
                 </QueryClientProvider>
             </ThemeProvider>
         </JotaiProvider>

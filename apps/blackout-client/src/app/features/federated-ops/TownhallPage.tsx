@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { TownhallLifecyclePayload, TownhallLifecyclePhase } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type TownhallFetcher = {
     listTownhalls: () => Promise<{ townhalls: TownhallLifecyclePayload[] }>;
@@ -20,7 +21,9 @@ const stub: TownhallFetcher = {
 
 const PHASES: TownhallLifecyclePhase[] = ['scheduled', 'live', 'archived', 'cancelled'];
 
-export function TownhallPage({ fetcher = stub }: Props) {
+export function TownhallPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('townhall');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [townhalls, setTownhalls] = useState<TownhallLifecyclePayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);

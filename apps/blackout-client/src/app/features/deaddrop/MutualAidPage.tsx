@@ -5,6 +5,7 @@ import {
     type MutualAidThreadStatus,
     type OpenMutualAidThreadInput,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type MutualAidFetcher = {
     listThreads: () => Promise<{ threads: MutualAidThreadPayload[] }>;
@@ -29,7 +30,9 @@ const stub: MutualAidFetcher = {
 
 const STATUSES: MutualAidThreadStatus[] = ['open', 'in_progress', 'resolved', 'cancelled'];
 
-export function MutualAidPage({ fetcher = stub, showInactive = false }: Props) {
+export function MutualAidPage({ fetcher: explicitFetcher, showInactive = false }: Props) {
+    const contextFetcher = useRegistryFetcher('mutualAid');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [threads, setThreads] = useState<MutualAidThreadPayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);

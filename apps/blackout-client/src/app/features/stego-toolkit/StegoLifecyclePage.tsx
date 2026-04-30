@@ -5,6 +5,7 @@ import {
     type StegoChannelExpiryReason,
     type StegoChannelSnapshot,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type StegoLifecycleFetcher = {
     listChannels: () => Promise<{ channels: StegoChannelSnapshot[] }>;
@@ -45,7 +46,9 @@ const formatExpirySummary = (channel: StegoChannelSnapshot): string => {
     return `Auto-expires ${next}`;
 };
 
-export function StegoLifecyclePage({ fetcher = stub }: Props) {
+export function StegoLifecyclePage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('stegoLifecycle');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [channels, setChannels] = useState<StegoChannelSnapshot[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [pendingId, setPendingId] = useState<string | null>(null);

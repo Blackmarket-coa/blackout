@@ -4,6 +4,7 @@ import {
     type LabsFeatureDescriptor,
     type LabsGateState,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type LabsFetcher = {
     fetchLabsFeatures: () => Promise<{ features: LabsFeatureDescriptor[] }>;
@@ -27,7 +28,9 @@ const stub: LabsFetcher = {
     setDeveloperMode: async () => ({}),
 };
 
-export function LabsPage({ fetcher = stub }: Props) {
+export function LabsPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('labs');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [features, setFeatures] = useState<LabsFeatureDescriptor[]>([]);
     const [gate, setGate] = useState<LabsGateState>(
         resolveLabsGate({ configFlag: false, developerMode: false })

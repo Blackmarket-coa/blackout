@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { RevenueOpsSnapshotPayload } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type RevenueOpsFetcher = {
     getRevenueSnapshot: () => Promise<RevenueOpsSnapshotPayload>;
@@ -20,7 +21,9 @@ const stub: RevenueOpsFetcher = {
     listRevenueSnapshots: async () => ({ snapshots: [] }),
 };
 
-export function RevenueOpsPage({ fetcher = stub }: Props) {
+export function RevenueOpsPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('revenueOps');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [latest, setLatest] = useState<RevenueOpsSnapshotPayload | null>(null);
     const [history, setHistory] = useState<RevenueOpsSnapshotPayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);

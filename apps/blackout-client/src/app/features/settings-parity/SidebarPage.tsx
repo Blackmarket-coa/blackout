@@ -4,6 +4,7 @@ import {
     type SettingsBucket,
     type SettingsValue,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type SidebarFetcher = {
     fetchBucket: (
@@ -45,7 +46,9 @@ const META_SPACES: Array<{ id: string; label: string; defaultEnabled: boolean }>
 
 const settingKey = (metaSpaceId: string) => `Spaces.enabledMetaSpaces.${metaSpaceId}`;
 
-export function SidebarPage({ fetcher = stub }: Props) {
+export function SidebarPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('sidebarSettings');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [bucket, setBucket] = useState<SettingsBucket>({
         scope: 'account',
         category: 'sidebar',

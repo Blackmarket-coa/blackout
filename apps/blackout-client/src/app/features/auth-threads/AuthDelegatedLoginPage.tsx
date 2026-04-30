@@ -5,6 +5,7 @@ import {
     type AuthSessionContinuedPayload,
     type OidcBootstrapDescriptor,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type AuthFetcher = {
     beginOidcLogin: (input: { redirectUri: string; scopes?: string[] }) => Promise<OidcBootstrapDescriptor>;
@@ -38,7 +39,9 @@ const stub: AuthFetcher = {
     signOut: async () => ({}),
 };
 
-export function AuthDelegatedLoginPage({ fetcher = stub, nowIso }: Props) {
+export function AuthDelegatedLoginPage({ fetcher: explicitFetcher, nowIso }: Props) {
+    const contextFetcher = useRegistryFetcher('auth');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [redirectUri, setRedirectUri] = useState(
         typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : ''
     );

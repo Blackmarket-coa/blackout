@@ -3,6 +3,7 @@ import {
     aggregateThreadUnread,
     type ThreadActivityUpdatedPayload,
 } from '@blackout/sdk';
+import { useRegistryFetcher } from '../../core/features/RegistryFetcherProvider';
 
 export type ThreadActivityFetcher = {
     listActivity: (options?: {
@@ -21,7 +22,9 @@ const stub: ThreadActivityFetcher = {
     markActivityRead: async () => ({}),
 };
 
-export function ThreadActivityPage({ fetcher = stub }: Props) {
+export function ThreadActivityPage({ fetcher: explicitFetcher }: Props) {
+    const contextFetcher = useRegistryFetcher('threadActivity');
+    const fetcher = explicitFetcher ?? contextFetcher ?? stub;
     const [activities, setActivities] = useState<ThreadActivityUpdatedPayload[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
