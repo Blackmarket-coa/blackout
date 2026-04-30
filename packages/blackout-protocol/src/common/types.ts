@@ -23,7 +23,9 @@ export type BlackoutEventName =
     | 'blackout.revenue.ops.snapshot'
     | 'blackout.thread.activity.updated'
     | 'blackout.auth.session.continued'
-    | 'blackout.education.module.progress';
+    | 'blackout.education.module.progress'
+    | 'blackout.deaddrop.mutual-aid.thread.opened'
+    | 'blackout.deaddrop.mutual-aid.thread.updated';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

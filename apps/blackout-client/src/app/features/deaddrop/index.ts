@@ -2,6 +2,10 @@ export { deaddropFeature } from './manifest';
 export { deaddropNavItems } from './nav';
 export { deaddropRoutes } from './routes';
 export { deaddropSettings } from './settings';
+export { mutualAidPanels } from './mutualAidPanels';
+export { mutualAidRoutes } from './mutualAidRoutes';
+export { mutualAidSettings } from './mutualAidSettings';
+export { MutualAidPage, type MutualAidFetcher } from './MutualAidPage';
 
 export { default as DeadDropIndicator } from './DeadDropIndicator';
 export { default as DeadDropComposer } from './DeadDropComposer';

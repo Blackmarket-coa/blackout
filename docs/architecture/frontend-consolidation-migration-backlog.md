@@ -310,6 +310,11 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
 - **Acceptance test requirement:**
   - Route integration tests and deep-link coverage for mutual-aid.
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-30): foundation + finished UI landed.**
+  - Protocol: `packages/blackout-protocol/src/deaddrop/events.ts` extends the deaddrop event module with `MutualAidThreadPayload` (with `MutualAidThreadStatus` = `open|in_progress|resolved|cancelled`) plus `MutualAidThreadOpenedEvent` / `MutualAidThreadUpdatedEvent` envelopes and `isMutualAidThreadOpened` / `isMutualAidThreadUpdated` type guards. `BlackoutEventName` is extended with both new event names; `MUTUAL_AID_EVENT_NAMES` covers `co.bmc.deaddrop.mutual-aid.thread.opened` / `co.bmc.deaddrop.mutual-aid.thread.updated`.
+  - SDK: `packages/blackout-sdk/src/deaddrop/actions.ts` adds `createMutualAidActions(client)` (`listThreads`, `openThread`, `updateThreadStatus`) plus pure helpers `filterActiveMutualAidThreads` (keeps `open` + `in_progress`) and `applyMutualAidThreadUpdate` (insert-or-replace by threadId).
+  - Canonical client: extends the existing `apps/blackout-client/src/app/features/deaddrop/` module with a second customization `mutual-aid-route` (route + sidebar + workspace + settings, gated by new capability `deaddrop.mutual-aid.read`). Rides behind the existing `deaddrop` flag. Real renderer: `MutualAidPage` lists active threads (with toggle to reveal resolved/cancelled), provides an open-request form with headline + optional body, and supports per-thread status transitions across the four canonical statuses.
+  - Tests: 7 SDK cases (event guards + URL encoding + helper edge cases) + 2 module cases + 4 page cases (default-active filter + toggle, headline guard, full open + body flow, status transition with refresh). 13/13 green.
 
 ## Ported-item traceability (every item mapped)
 
