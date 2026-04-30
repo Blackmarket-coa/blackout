@@ -23,6 +23,7 @@ describe('feature allowlist manifest', () => {
             'settings-parity',
             'federated-ops',
             'auth-threads',
+            'education',
         ]);
     });
 

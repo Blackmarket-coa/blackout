@@ -24,6 +24,7 @@ export type FeatureFlags = {
     settingsParity: boolean;
     federatedOps: boolean;
     authThreads: boolean;
+    education: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -61,6 +62,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     settingsParity: false,
     federatedOps: false,
     authThreads: false,
+    education: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -243,6 +245,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_AUTH_THREADS === 'false') {
             nextFlags.authThreads = false;
         }
+        if (env.BLACKOUT_EDUCATION === 'true') {
+            nextFlags.education = true;
+        }
+        if (env.BLACKOUT_EDUCATION === 'false') {
+            nextFlags.education = false;
+        }
         return nextFlags;
     }
 
@@ -302,6 +310,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_AUTH_THREADS === 'false') {
         nextFlags.authThreads = false;
+    }
+    if (env.BLACKOUT_EDUCATION === 'true') {
+        nextFlags.education = true;
+    }
+    if (env.BLACKOUT_EDUCATION === 'false') {
+        nextFlags.education = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

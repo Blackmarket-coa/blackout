@@ -21,6 +21,7 @@ export * from './settings/actions';
 export * from './mjolnir/actions';
 export * from './federated-ops/actions';
 export * from './auth-threads/actions';
+export * from './education/actions';
 
 export type {
   EntitlementKey,

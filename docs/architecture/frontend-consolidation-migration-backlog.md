@@ -130,6 +130,11 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Route reachability test for education entry.
   - Navigation discoverability test from canonical shell.
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-30): foundation + finished UI landed.**
+  - Protocol: `packages/blackout-protocol/src/education/{contracts,events}.ts` publishes `EducationModuleDescriptor` (with ordered `EducationLessonDescriptor[]` lessons), `EducationProgressPayload` (subject + moduleId + completedLessonIds), the matching envelope type, and `isEducationModuleProgress` type guard. `BlackoutEventName` is extended with `blackout.education.module.progress`; `EDUCATION_EVENT_NAMES` covers the `co.bmc.education.module.progress` Matrix event type.
+  - SDK: `packages/blackout-sdk/src/education/actions.ts` ships `createEducationActions(client)` (`listModules`, `listProgress`, `completeLesson`) plus pure helpers `computeModuleCompletion` (returns 0 → 1 fraction; 0 for empty modules; ignores out-of-module lessons) and `findNextLesson` (returns first incomplete lesson, `null` when complete).
+  - Canonical client: new `apps/blackout-client/src/app/features/education/` module with single capability-gated customization `education-modules` (gated by `education.modules.read`, behind a new `education` flag with `BLACKOUT_EDUCATION` env override on every feature mode). Real renderer: `EducationPage` lists modules with completion percentages, "next up" CTA hints, and per-lesson Mark-complete buttons that update progress optimistically.
+  - Tests: 7 SDK cases (event guard + URL encoding + helper edge cases) + 3 module cases + 4 page cases (empty, render with progress, optimistic complete, all-complete hint). 22/22 green.
 
 ---
 

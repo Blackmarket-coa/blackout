@@ -22,7 +22,8 @@ export type BlackoutEventName =
     | 'blackout.townhall.lifecycle'
     | 'blackout.revenue.ops.snapshot'
     | 'blackout.thread.activity.updated'
-    | 'blackout.auth.session.continued';
+    | 'blackout.auth.session.continued'
+    | 'blackout.education.module.progress';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;
