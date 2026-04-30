@@ -6,6 +6,7 @@ import { moderationFeature } from '../../features/moderation';
 import { monetizationFeature } from '../../features/monetization';
 import { notificationsPresenceFeature } from '../../features/notifications-presence';
 import { platformOpsFeature } from '../../features/platform-ops';
+import { authThreadsFeature } from '../../features/auth-threads';
 import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
 import { stegoToolkitFeature } from '../../features/stego-toolkit';
@@ -55,5 +56,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: federatedOpsFeature,
         flag: 'federatedOps',
+    },
+    {
+        feature: authThreadsFeature,
+        flag: 'authThreads',
     },
 ];

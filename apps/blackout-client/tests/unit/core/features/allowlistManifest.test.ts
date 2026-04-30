@@ -22,6 +22,7 @@ describe('feature allowlist manifest', () => {
             'stego-toolkit',
             'settings-parity',
             'federated-ops',
+            'auth-threads',
         ]);
     });
 

@@ -18,6 +18,7 @@ export const featureModuleManifest = [
     'stego-toolkit',
     'settings-parity',
     'federated-ops',
+    'auth-threads',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

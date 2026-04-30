@@ -112,6 +112,11 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
   - Auth integration tests for delegated login fallback.
   - Thread activity inbox tests (unread counts, navigation jumps).
 - **Dependencies:** BKL-001, BKL-002.
+- **Status (2026-04-30): foundation + finished UI landed.**
+  - Protocol: `packages/blackout-protocol/src/auth-threads/{contracts,events}.ts` publishes `ThreadActivityUpdatedPayload` (with `ThreadActivityKind` = `thread_started|thread_replied|thread_resolved`) and `AuthSessionContinuedPayload` (with `AuthSessionContinuationReason` = `login|refresh|idp_handoff`), the matching envelope types, and `isThreadActivityUpdated` / `isAuthSessionContinued` type guards. `BlackoutEventName` is extended with both new event names; `AUTH_THREADS_EVENT_NAMES` covers the `co.bmc.thread.activity.updated` / `co.bmc.auth.session.continued` Matrix event types.
+  - SDK: `packages/blackout-sdk/src/auth-threads/actions.ts` ships `createAuthActions(client)` (`beginOidcLogin`, `continueOidcSession`, `signOut`) and `createThreadActivityActions(client)` (`listActivity` with limit + sinceIso pagination — non-positive limits dropped — and `markActivityRead`). Adds three pure helpers: `aggregateThreadUnread` (sums positive counts, ignores zero/negative), `applyThreadActivityUpdate` (merges by id, drops zero-unread updates, sorts newest-first), and `isSessionExpired` (treats unparseable / null inputs as expired).
+  - Canonical client: new `apps/blackout-client/src/app/features/auth-threads/` module with two capability-gated customizations — `auth-oidc` (`auth.oidc.bootstrap`) and `thread-activity` (`threads.activity.read`) — both behind a new `authThreads` flag (default off, `BLACKOUT_AUTH_THREADS` override on every feature mode). Real renderers: `AuthDelegatedLoginPage` (bootstrap + continue + sign-out flow with active/expired session badge driven by `isSessionExpired`) and `ThreadActivityPage` (activity inbox with aggregate unread badge from `aggregateThreadUnread` and optimistic mark-read).
+  - Tests: 14 SDK cases (event guards + URL-encoding + helper edge cases) + 3 module cases + 7 page cases (active/expired clock paths, sign-out clears state, unread total aggregates, optimistic mark-read).
 
 #### BKL-012 (P2) — Education route parity decision + implementation
 - **Maps feature_ids:** `port.blackout.route.education`

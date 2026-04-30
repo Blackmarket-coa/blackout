@@ -23,6 +23,7 @@ export type FeatureFlags = {
     stegoToolkit: boolean;
     settingsParity: boolean;
     federatedOps: boolean;
+    authThreads: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -59,6 +60,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     stegoToolkit: false,
     settingsParity: false,
     federatedOps: false,
+    authThreads: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -235,6 +237,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_FEDERATED_OPS === 'false') {
             nextFlags.federatedOps = false;
         }
+        if (env.BLACKOUT_AUTH_THREADS === 'true') {
+            nextFlags.authThreads = true;
+        }
+        if (env.BLACKOUT_AUTH_THREADS === 'false') {
+            nextFlags.authThreads = false;
+        }
         return nextFlags;
     }
 
@@ -288,6 +296,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_FEDERATED_OPS === 'false') {
         nextFlags.federatedOps = false;
+    }
+    if (env.BLACKOUT_AUTH_THREADS === 'true') {
+        nextFlags.authThreads = true;
+    }
+    if (env.BLACKOUT_AUTH_THREADS === 'false') {
+        nextFlags.authThreads = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
