@@ -1,17 +1,6 @@
 import { createElement } from 'react';
 import type { FeatureRoute } from '../../core/features/types';
-
-const StegoToolkitRoutePage = () =>
-    createElement(
-        'main',
-        { style: { padding: 16 } },
-        createElement('h1', null, 'Stego Toolkit'),
-        createElement(
-            'p',
-            null,
-            'Channel manager + composer placeholder. Backed by `listChannels` / `createChannel` / `fetchChannel` SDK actions and `blackout.stego.channel.created` events.'
-        )
-    );
+import { StegoToolkitPage } from './StegoToolkitPage';
 
 const EphemeralLifecycleRoutePage = () =>
     createElement(
@@ -26,7 +15,7 @@ const EphemeralLifecycleRoutePage = () =>
     );
 
 export const stegoToolkitRoutes: FeatureRoute[] = [
-    { path: '/stego/channels', component: StegoToolkitRoutePage },
+    { path: '/stego/channels', component: StegoToolkitPage },
 ];
 
 export const ephemeralStegoLifecycleRoutes: FeatureRoute[] = [

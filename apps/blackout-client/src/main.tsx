@@ -15,7 +15,13 @@ import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
 import { capabilityContextAtom } from './app/core/features/capabilityContext';
+import {
+    buildCapabilityContextValue,
+    resolveDevCapabilitySeed,
+} from './app/core/features/capabilityHydration';
+import { runtimeFeatureFlags } from './app/core/features/featureFlags';
 import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
+import { useStore } from 'jotai';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
 import './app/styles/theme.css.ts';
@@ -60,6 +66,24 @@ if ('serviceWorker' in navigator) {
 const queryClient = new QueryClient();
 
 void initDesktopBridge();
+
+// eslint-disable-next-line react-refresh/only-export-components
+const DevCapabilitySeeder = () => {
+    const store = useStore();
+    React.useEffect(() => {
+        const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
+        const devSeed = resolveDevCapabilitySeed(env);
+        if (devSeed.length === 0) return;
+        const current = store.get(capabilityContextAtom);
+        const next = buildCapabilityContextValue({
+            fetched: current.capabilities,
+            devSeed,
+            flags: runtimeFeatureFlags,
+        });
+        store.set(capabilityContextAtom, next);
+    }, [store]);
+    return null;
+};
 
 const RouterRoot = () => (
     <>
@@ -191,6 +215,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <JotaiProvider>
             <ThemeProvider>
                 <RuntimeSettingsBridge />
+                <DevCapabilitySeeder />
                 <MatrixBootstrapper />
                 <NotificationTokenBroker />
                 <UnreadCountBroadcaster />

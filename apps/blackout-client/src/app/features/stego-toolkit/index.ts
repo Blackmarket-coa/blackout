@@ -13,3 +13,4 @@ export {
     stegoToolkitSettings,
 } from './settings';
 export { StegoSettingsTab } from './StegoSettingsTab';
+export { StegoToolkitPage, type StegoToolkitFetcher } from './StegoToolkitPage';
