@@ -11,3 +11,4 @@ export { moderationNavItems } from './nav';
 export { mjolnirSettingsPanels } from './mjolnirPanels';
 export { mjolnirSettingsRoutes } from './mjolnirRoutes';
 export { mjolnirSettingsItems } from './mjolnirSettings';
+export { MjolnirSettingsPage, type MjolnirFetcher } from './MjolnirSettingsPage';
