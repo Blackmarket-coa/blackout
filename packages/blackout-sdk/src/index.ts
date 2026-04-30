@@ -16,6 +16,7 @@ export * from './shell/panelMetadata';
 export * from './capabilities/actions';
 export * from './notifications/actions';
 export * from './media/actions';
+export * from './stego/actions';
 
 export type {
   EntitlementKey,

@@ -6,6 +6,7 @@ import { moderationFeature } from '../../features/moderation';
 import { monetizationFeature } from '../../features/monetization';
 import { notificationsPresenceFeature } from '../../features/notifications-presence';
 import { platformOpsFeature } from '../../features/platform-ops';
+import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -40,5 +41,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: mediaCallFeature,
         flag: 'mediaCall',
+    },
+    {
+        feature: stegoToolkitFeature,
+        flag: 'stegoToolkit',
     },
 ];

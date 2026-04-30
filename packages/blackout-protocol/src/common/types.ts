@@ -10,7 +10,10 @@ export type BlackoutEventName =
     | 'blackout.notifications.digest.generated'
     | 'blackout.notifications.digest.acknowledged'
     | 'blackout.media.upload.completed'
-    | 'blackout.call.launch.intent';
+    | 'blackout.call.launch.intent'
+    | 'blackout.stego.channel.created'
+    | 'blackout.stego.channel.rotated'
+    | 'blackout.stego.channel.expired';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

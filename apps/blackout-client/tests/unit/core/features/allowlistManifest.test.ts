@@ -19,6 +19,7 @@ describe('feature allowlist manifest', () => {
             'platform-ops',
             'notifications-presence',
             'media-call',
+            'stego-toolkit',
         ]);
     });
 
