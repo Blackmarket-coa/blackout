@@ -238,6 +238,11 @@ Canonical destination: `apps/blackout-client` feature registry + manifests.
 - **Acceptance test requirement:**
   - Settings tab render and persistence tests for stego controls.
 - **Dependencies:** BKL-005, BKL-007.
+- **Status (2026-04-30): foundation landed; settings IA rewire pending.**
+  - Canonical client: new `apps/blackout-client/src/app/features/stego-toolkit/StegoSettingsTab.tsx` mirrors `_port/src/components/views/settings/tabs/user/SteganographyUserSettingsTab.tsx` — a heading + device-level opt-in section, then folds in the existing `StegoSettings` panel from `apps/blackout-client/src/app/features/steganography/` so passphrases, advanced controls, and enterprise policy lifecycle live under the same tab. Persistence is delegated to the existing `blackout.settings.steganography.v1` `atomWithStorage` (parity with `_port`'s `LEVELS_DEVICE_ONLY_SETTINGS`).
+  - Manifest: third customization `stego-settings-tab` added to `stegoToolkitFeature` (gated by new capability `stego.settings.read`, settings-only — no routes/panels). Rides behind the same `stegoToolkit` flag as the BKL-005 customizations so admins can enable the tab independently of the toolkit/lifecycle controls.
+  - Tests: `apps/blackout-client/tests/unit/features/stego-toolkit/StegoSettingsTab.test.tsx` (3 cases) covers tab heading + opt-in section render, the round-trip toggle through `atomWithStorage` (writes to `localStorage` and toggles back), and hydration from a pre-seeded `localStorage` payload. `apps/blackout-client/tests/unit/core/features/stegoToolkitModule.test.ts` extended (+1 case = 4 total) to cover capability isolation for the dedicated tab and confirm full pruning when the flag is off.
+  - Remaining acceptance work: surface the tab inside the canonical settings IA (settings shell rewire is shared with BKL-007) so users can navigate to it instead of importing the section programmatically.
 
 ---
 

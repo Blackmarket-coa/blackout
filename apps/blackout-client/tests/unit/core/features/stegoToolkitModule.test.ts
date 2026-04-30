@@ -72,11 +72,48 @@ describe('stego-toolkit feature module (BKL-005)', () => {
         expect(settings).not.toContain('Stego / Toolkit');
     });
 
+    it('exposes the dedicated settings tab independently on stego.settings.read (BKL-008)', () => {
+        const flags = flagsWithStegoToolkit();
+        const registry = buildFeatureRegistry(flags);
+
+        const tab = { capabilities: ['stego.settings.read'], flags };
+        // Tab carries no routes/panels — it's a settings-only customization.
+        expect(composeFeatureRoutes(registry, tab).map((r) => r.path)).toEqual([]);
+        expect(
+            composeShellPanels(registry, tab)
+                .map((p) => p.id)
+                .filter((id) => id.startsWith('stego.'))
+        ).toEqual([]);
+
+        const settings = composeFeatureSettings(registry, tab).map((s) => s.section);
+        expect(settings).toContain('Steganography');
+        expect(settings).not.toContain('Stego / Toolkit');
+        expect(settings).not.toContain('Stego / Ephemeral lifecycle');
+
+        // Granting all three caps surfaces all three sections.
+        const fullCaps = {
+            capabilities: ['stego.toolkit.use', 'stego.lifecycle.manage', 'stego.settings.read'],
+            flags,
+        };
+        const allSections = composeFeatureSettings(registry, fullCaps).map((s) => s.section);
+        expect(allSections).toEqual(
+            expect.arrayContaining([
+                'Stego / Toolkit',
+                'Stego / Ephemeral lifecycle',
+                'Steganography',
+            ])
+        );
+    });
+
     it('disabling the stegoToolkit flag prunes everything', () => {
         const flags = flagsWithStegoToolkit({ stegoToolkit: false });
         const registry = buildFeatureRegistry(flags);
         const fullCaps = {
-            capabilities: ['stego.toolkit.use', 'stego.lifecycle.manage'],
+            capabilities: [
+                'stego.toolkit.use',
+                'stego.lifecycle.manage',
+                'stego.settings.read',
+            ],
             flags,
         };
 
@@ -91,10 +128,8 @@ describe('stego-toolkit feature module (BKL-005)', () => {
                 .map((p) => p.id)
                 .some((id) => id.startsWith('stego.'))
         ).toBe(false);
-        expect(
-            composeFeatureSettings(registry, fullCaps)
-                .map((s) => s.section)
-                .some((section) => section.startsWith('Stego /'))
-        ).toBe(false);
+        const sections = composeFeatureSettings(registry, fullCaps).map((s) => s.section);
+        expect(sections.some((section) => section.startsWith('Stego /'))).toBe(false);
+        expect(sections).not.toContain('Steganography');
     });
 });

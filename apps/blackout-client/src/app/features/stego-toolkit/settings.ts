@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import type { FeatureSettingsItem } from '../../core/features/types';
+import { StegoSettingsTab } from './StegoSettingsTab';
 
 const buildPlaceholderSection = (title: string, body: string) =>
     function StegoToolkitSettingsSection() {
@@ -14,7 +15,7 @@ const buildPlaceholderSection = (title: string, body: string) =>
 /**
  * Settings sections introduced for BKL-005 — toolkit + ephemeral lifecycle
  * preferences. The dedicated steganography settings tab parity (BKL-008)
- * will compose against these same sections via the shared module exports.
+ * composes against these same sections via the shared module exports.
  */
 export const stegoToolkitSettings: FeatureSettingsItem[] = [
     {
@@ -33,5 +34,18 @@ export const ephemeralStegoLifecycleSettings: FeatureSettingsItem[] = [
             'Stego · Ephemeral lifecycle',
             'Default ephemeral mode, TTL window, rotation cadence, and revocation policy. Backed by `rotateChannel` / `expireChannel` and `computeStegoExpiryAt`.'
         ),
+    },
+];
+
+/**
+ * Dedicated steganography settings tab — BKL-008. Parity with
+ * `_port/src/components/views/settings/tabs/user/SteganographyUserSettingsTab.tsx`.
+ * Persists via the existing `blackout.settings.steganography.v1`
+ * `atomWithStorage` so the opt-in survives reloads.
+ */
+export const stegoSettingsTabSettings: FeatureSettingsItem[] = [
+    {
+        section: 'Steganography',
+        component: StegoSettingsTab,
     },
 ];

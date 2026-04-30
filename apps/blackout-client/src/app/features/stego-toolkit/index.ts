@@ -9,5 +9,7 @@ export {
 } from './routes';
 export {
     ephemeralStegoLifecycleSettings,
+    stegoSettingsTabSettings,
     stegoToolkitSettings,
 } from './settings';
+export { StegoSettingsTab } from './StegoSettingsTab';
