@@ -17,6 +17,7 @@ export * from './capabilities/actions';
 export * from './notifications/actions';
 export * from './media/actions';
 export * from './stego/actions';
+export * from './settings/actions';
 
 export type {
   EntitlementKey,

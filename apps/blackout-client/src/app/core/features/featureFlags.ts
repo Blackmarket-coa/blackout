@@ -21,6 +21,7 @@ export type FeatureFlags = {
     notificationsPresence: boolean;
     mediaCall: boolean;
     stegoToolkit: boolean;
+    settingsParity: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -55,6 +56,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     notificationsPresence: false,
     mediaCall: false,
     stegoToolkit: false,
+    settingsParity: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -219,6 +221,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
             nextFlags.stegoToolkit = false;
         }
+        if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
+            nextFlags.settingsParity = true;
+        }
+        if (env.BLACKOUT_SETTINGS_PARITY === 'false') {
+            nextFlags.settingsParity = false;
+        }
         return nextFlags;
     }
 
@@ -260,6 +268,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
         nextFlags.stegoToolkit = false;
+    }
+    if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
+        nextFlags.settingsParity = true;
+    }
+    if (env.BLACKOUT_SETTINGS_PARITY === 'false') {
+        nextFlags.settingsParity = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

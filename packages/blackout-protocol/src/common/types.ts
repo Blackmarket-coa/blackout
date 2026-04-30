@@ -13,7 +13,9 @@ export type BlackoutEventName =
     | 'blackout.call.launch.intent'
     | 'blackout.stego.channel.created'
     | 'blackout.stego.channel.rotated'
-    | 'blackout.stego.channel.expired';
+    | 'blackout.stego.channel.expired'
+    | 'blackout.settings.changed'
+    | 'blackout.settings.labs.gate.changed';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

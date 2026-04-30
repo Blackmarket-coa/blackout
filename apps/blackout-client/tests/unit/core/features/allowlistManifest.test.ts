@@ -20,6 +20,7 @@ describe('feature allowlist manifest', () => {
             'notifications-presence',
             'media-call',
             'stego-toolkit',
+            'settings-parity',
         ]);
     });
 
