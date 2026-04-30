@@ -17,7 +17,10 @@ export type BlackoutEventName =
     | 'blackout.settings.changed'
     | 'blackout.settings.labs.gate.changed'
     | 'blackout.moderation.mjolnir.protection.changed'
-    | 'blackout.moderation.mjolnir.banlist.changed';
+    | 'blackout.moderation.mjolnir.banlist.changed'
+    | 'blackout.federation.alert.status'
+    | 'blackout.townhall.lifecycle'
+    | 'blackout.revenue.ops.snapshot';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

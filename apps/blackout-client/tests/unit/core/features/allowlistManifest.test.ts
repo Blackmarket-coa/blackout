@@ -21,6 +21,7 @@ describe('feature allowlist manifest', () => {
             'media-call',
             'stego-toolkit',
             'settings-parity',
+            'federated-ops',
         ]);
     });
 

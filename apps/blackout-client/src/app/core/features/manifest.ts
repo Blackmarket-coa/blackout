@@ -17,6 +17,7 @@ export const featureModuleManifest = [
     'media-call',
     'stego-toolkit',
     'settings-parity',
+    'federated-ops',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

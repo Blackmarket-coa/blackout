@@ -19,6 +19,7 @@ export * from './media/actions';
 export * from './stego/actions';
 export * from './settings/actions';
 export * from './mjolnir/actions';
+export * from './federated-ops/actions';
 
 export type {
   EntitlementKey,
