@@ -15,7 +15,9 @@ export type BlackoutEventName =
     | 'blackout.stego.channel.rotated'
     | 'blackout.stego.channel.expired'
     | 'blackout.settings.changed'
-    | 'blackout.settings.labs.gate.changed';
+    | 'blackout.settings.labs.gate.changed'
+    | 'blackout.moderation.mjolnir.protection.changed'
+    | 'blackout.moderation.mjolnir.banlist.changed';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

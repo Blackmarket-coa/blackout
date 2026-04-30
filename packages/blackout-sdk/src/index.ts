@@ -18,6 +18,7 @@ export * from './notifications/actions';
 export * from './media/actions';
 export * from './stego/actions';
 export * from './settings/actions';
+export * from './mjolnir/actions';
 
 export type {
   EntitlementKey,

@@ -9,6 +9,7 @@ export * from './notifications/events';
 export * from './media/events';
 export * from './stego/events';
 export * from './settings/events';
+export * from './mjolnir/events';
 
 export * from './governance/contracts';
 
