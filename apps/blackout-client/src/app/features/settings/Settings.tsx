@@ -71,6 +71,8 @@ import { AppearanceSettings } from './AppearanceSettings';
 
 import { StegoSettings } from '../steganography';
 
+import { RegistrySettingsList } from '../../core/features/RegistrySettingsList';
+
 import { UseStateProvider } from '../../components/UseStateProvider';
 
 import { stopPropagation } from '../../utils/keyboard';
@@ -94,6 +96,8 @@ export enum SettingsPages {
   AppearancePage,
 
   SteganographyPage,
+
+  FeatureSettingsPage,
 
   DeveloperToolsPage,
 
@@ -188,6 +192,16 @@ const useSettingsMenuItems = (): SettingsMenuItem[] =>
         name: 'Steganography',
 
         icon: Icons.Lock,
+
+      },
+
+      {
+
+        page: SettingsPages.FeatureSettingsPage,
+
+        name: 'Feature settings',
+
+        icon: Icons.Category,
 
       },
 
@@ -494,6 +508,16 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
       {activePage === SettingsPages.SteganographyPage && (
 
         <StegoSettings requestClose={handlePageRequestClose} />
+
+      )}
+
+      {activePage === SettingsPages.FeatureSettingsPage && (
+
+        <section data-testid="settings-feature-page" style={{ padding: 16 }}>
+
+          <RegistrySettingsList />
+
+        </section>
 
       )}
 

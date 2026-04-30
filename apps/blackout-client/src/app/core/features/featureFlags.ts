@@ -20,6 +20,11 @@ export type FeatureFlags = {
     platformOps: boolean;
     notificationsPresence: boolean;
     mediaCall: boolean;
+    stegoToolkit: boolean;
+    settingsParity: boolean;
+    federatedOps: boolean;
+    authThreads: boolean;
+    education: boolean;
     logistics: boolean;
     legacyShellLayout: boolean;
     legacyThemeOverrides: boolean;
@@ -53,6 +58,11 @@ export const defaultFeatureFlags: FeatureFlags = {
     platformOps: false,
     notificationsPresence: false,
     mediaCall: false,
+    stegoToolkit: false,
+    settingsParity: false,
+    federatedOps: false,
+    authThreads: false,
+    education: false,
     logistics: false,
     legacyShellLayout: false,
     legacyThemeOverrides: false,
@@ -211,6 +221,36 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_MEDIA_CALL === 'false') {
             nextFlags.mediaCall = false;
         }
+        if (env.BLACKOUT_STEGO_TOOLKIT === 'true') {
+            nextFlags.stegoToolkit = true;
+        }
+        if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
+            nextFlags.stegoToolkit = false;
+        }
+        if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
+            nextFlags.settingsParity = true;
+        }
+        if (env.BLACKOUT_SETTINGS_PARITY === 'false') {
+            nextFlags.settingsParity = false;
+        }
+        if (env.BLACKOUT_FEDERATED_OPS === 'true') {
+            nextFlags.federatedOps = true;
+        }
+        if (env.BLACKOUT_FEDERATED_OPS === 'false') {
+            nextFlags.federatedOps = false;
+        }
+        if (env.BLACKOUT_AUTH_THREADS === 'true') {
+            nextFlags.authThreads = true;
+        }
+        if (env.BLACKOUT_AUTH_THREADS === 'false') {
+            nextFlags.authThreads = false;
+        }
+        if (env.BLACKOUT_EDUCATION === 'true') {
+            nextFlags.education = true;
+        }
+        if (env.BLACKOUT_EDUCATION === 'false') {
+            nextFlags.education = false;
+        }
         return nextFlags;
     }
 
@@ -246,6 +286,36 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_MEDIA_CALL === 'false') {
         nextFlags.mediaCall = false;
+    }
+    if (env.BLACKOUT_STEGO_TOOLKIT === 'true') {
+        nextFlags.stegoToolkit = true;
+    }
+    if (env.BLACKOUT_STEGO_TOOLKIT === 'false') {
+        nextFlags.stegoToolkit = false;
+    }
+    if (env.BLACKOUT_SETTINGS_PARITY === 'true') {
+        nextFlags.settingsParity = true;
+    }
+    if (env.BLACKOUT_SETTINGS_PARITY === 'false') {
+        nextFlags.settingsParity = false;
+    }
+    if (env.BLACKOUT_FEDERATED_OPS === 'true') {
+        nextFlags.federatedOps = true;
+    }
+    if (env.BLACKOUT_FEDERATED_OPS === 'false') {
+        nextFlags.federatedOps = false;
+    }
+    if (env.BLACKOUT_AUTH_THREADS === 'true') {
+        nextFlags.authThreads = true;
+    }
+    if (env.BLACKOUT_AUTH_THREADS === 'false') {
+        nextFlags.authThreads = false;
+    }
+    if (env.BLACKOUT_EDUCATION === 'true') {
+        nextFlags.education = true;
+    }
+    if (env.BLACKOUT_EDUCATION === 'false') {
+        nextFlags.education = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

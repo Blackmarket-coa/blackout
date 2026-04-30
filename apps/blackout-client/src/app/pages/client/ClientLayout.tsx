@@ -49,6 +49,7 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { customizationAtom } from '../../state/customization';
+import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -906,6 +907,20 @@ export const ClientLayout = () => {
                                     </select>
                                 </label>
                             </div>
+                        </section>
+                    ) : null}
+                    {desktop ? (
+                        <section
+                            data-testid="client-layout-registry-sidebar"
+                            style={{
+                                width: '100%',
+                                borderTop: '1px solid var(--border-default)',
+                                padding: 8,
+                                display: 'grid',
+                                gap: 4,
+                            }}
+                        >
+                            <RegistrySidebarList />
                         </section>
                     ) : null}
                 </aside>

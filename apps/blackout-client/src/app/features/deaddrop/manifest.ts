@@ -2,6 +2,9 @@ import type { BlackoutFeature } from '../../core/features/types';
 import { deaddropNavItems } from './nav';
 import { deaddropRoutes } from './routes';
 import { deaddropSettings } from './settings';
+import { mutualAidPanels } from './mutualAidPanels';
+import { mutualAidRoutes } from './mutualAidRoutes';
+import { mutualAidSettings } from './mutualAidSettings';
 
 export const deaddropFeature: BlackoutFeature = {
     id: 'deaddrop',
@@ -19,6 +22,18 @@ export const deaddropFeature: BlackoutFeature = {
             navItems: deaddropNavItems,
             settings: deaddropSettings,
         },
+        {
+            id: 'mutual-aid-route',
+            name: 'Mutual Aid',
+            category: 'workflow plugin',
+            capabilityGate: {
+                allOf: ['deaddrop.mutual-aid.read'],
+                flags: ['deaddrop'],
+            },
+            routes: mutualAidRoutes,
+            panels: mutualAidPanels,
+            settings: mutualAidSettings,
+        },
     ],
-    capabilities: ['deaddrop.read', 'deaddrop.write'],
+    capabilities: ['deaddrop.read', 'deaddrop.write', 'deaddrop.mutual-aid.read'],
 };

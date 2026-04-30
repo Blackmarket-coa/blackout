@@ -42,8 +42,10 @@ export const hasCapability = (
     granted: readonly string[] | ReadonlySet<string>,
     required: string
 ): boolean => {
-    if (granted instanceof Set) return granted.has(required);
-    return granted.includes(required);
+    if (granted instanceof Set) {
+        return (granted as ReadonlySet<string>).has(required);
+    }
+    return (granted as readonly string[]).includes(required);
 };
 
 export const hasAllCapabilities = (

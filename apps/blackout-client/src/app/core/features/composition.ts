@@ -37,6 +37,14 @@ export const orderFeatureModulePlugins = (
 ): FeatureModulePlugin[] => {
     const seenPluginIds = new Set<string>();
 
+    // Validate every id upfront. `.sort()` skips the comparator on
+    // single-element arrays, so embedding the assertion in
+    // `getFeatureModulePluginOrder` would let an unknown id slip
+    // through when only one plugin is supplied.
+    plugins.forEach((plugin) => {
+        getFeatureModulePluginOrder(plugin.id as FeatureModulePluginId);
+    });
+
     return [...plugins]
         .sort(
             (left, right) =>

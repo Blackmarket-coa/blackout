@@ -14,6 +14,17 @@ import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
+import { capabilityContextAtom } from './app/core/features/capabilityContext';
+import {
+    buildCapabilityContextValue,
+    resolveDevCapabilitySeed,
+} from './app/core/features/capabilityHydration';
+import { runtimeFeatureFlags } from './app/core/features/featureFlags';
+import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
+import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProvider';
+import { buildRegistryFetchers } from './app/core/features/registryFetchers';
+import { createFetchApiClient } from '@blackout/sdk';
+import { useStore } from 'jotai';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
 import './app/styles/theme.css.ts';
@@ -57,7 +68,40 @@ if ('serviceWorker' in navigator) {
 
 const queryClient = new QueryClient();
 
+/**
+ * Production fetcher bag — built once at boot from the canonical
+ * `ApiClient`. The base URL is read from `import.meta.env.VITE_BLACKOUT_API_BASE`
+ * when present; otherwise calls go through the page's relative URL
+ * (matches the existing dev proxy setup). Hydration token wiring is
+ * deferred to a future bootstrap pass; the headers slot is open for it.
+ */
+const apiBaseUrl =
+    typeof import.meta !== 'undefined'
+        ? ((import.meta as { env?: Record<string, string | undefined> }).env
+              ?.VITE_BLACKOUT_API_BASE ?? undefined)
+        : undefined;
+const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
+const registryFetchers = buildRegistryFetchers(apiClient);
+
 void initDesktopBridge();
+
+// eslint-disable-next-line react-refresh/only-export-components
+const DevCapabilitySeeder = () => {
+    const store = useStore();
+    React.useEffect(() => {
+        const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
+        const devSeed = resolveDevCapabilitySeed(env);
+        if (devSeed.length === 0) return;
+        const current = store.get(capabilityContextAtom);
+        const next = buildCapabilityContextValue({
+            fetched: current.capabilities,
+            devSeed,
+            flags: runtimeFeatureFlags,
+        });
+        store.set(capabilityContextAtom, next);
+    }, [store]);
+    return null;
+};
 
 const RouterRoot = () => (
     <>
@@ -66,30 +110,51 @@ const RouterRoot = () => (
     </>
 );
 
-const router = createBrowserRouter([
-    {
-        element: <RouterRoot />,
-        children: [
-            {
-                path: '/',
-                element: <ClientLayout />,
-            },
-            {
-                path: '/room/:roomId',
-                element: <ClientLayout />,
-            },
-            {
-                path: '/moderation/draupnir',
-                element: <DraupnirRoutePage />,
-            },
-        ],
-    },
-]);
+const buildAppRouter = (capabilityContext: {
+    capabilities: string[];
+    flags: Record<string, boolean>;
+}) =>
+    createBrowserRouter([
+        {
+            element: <RouterRoot />,
+            children: [
+                {
+                    path: '/',
+                    element: <ClientLayout />,
+                },
+                {
+                    path: '/room/:roomId',
+                    element: <ClientLayout />,
+                },
+                {
+                    path: '/moderation/draupnir',
+                    element: <DraupnirRoutePage />,
+                },
+                ...buildRegistryRouteObjects({
+                    capabilities: capabilityContext.capabilities,
+                    flags: capabilityContext.flags as never,
+                }),
+            ],
+        },
+    ]);
 
 // eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
+    const capabilityContext = useAtomValue(capabilityContextAtom);
+
+    const router = React.useMemo(
+        () => buildAppRouter(capabilityContext),
+        // Capability + flag fingerprints capture every meaningful registry-route
+        // input; changes (auth → capability fetch, env-flag toggle) rebuild the
+        // router so newly-granted feature surfaces become navigable.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [
+            capabilityContext.capabilities.join('|'),
+            JSON.stringify(capabilityContext.flags),
+        ]
+    );
 
     if (authState === 'logged_in') {
         return (
@@ -168,12 +233,15 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <JotaiProvider>
             <ThemeProvider>
                 <RuntimeSettingsBridge />
+                <DevCapabilitySeeder />
                 <MatrixBootstrapper />
                 <NotificationTokenBroker />
                 <UnreadCountBroadcaster />
                 <LifecycleSyncBroker />
                 <QueryClientProvider client={queryClient}>
-                    <BootstrapStatus />
+                    <RegistryFetcherProvider fetchers={registryFetchers}>
+                        <BootstrapStatus />
+                    </RegistryFetcherProvider>
                 </QueryClientProvider>
             </ThemeProvider>
         </JotaiProvider>

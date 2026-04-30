@@ -16,6 +16,12 @@ export * from './shell/panelMetadata';
 export * from './capabilities/actions';
 export * from './notifications/actions';
 export * from './media/actions';
+export * from './stego/actions';
+export * from './settings/actions';
+export * from './mjolnir/actions';
+export * from './federated-ops/actions';
+export * from './auth-threads/actions';
+export * from './education/actions';
 
 export type {
   EntitlementKey,

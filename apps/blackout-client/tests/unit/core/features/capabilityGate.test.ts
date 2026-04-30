@@ -25,7 +25,10 @@ describe('capabilityGate', () => {
         expect(isCapabilityGateSatisfied({ flags: ['governance'] }, {})).toBe(false);
     });
 
-    it('adapts legacy feature surfaces as workflow plugin', () => {
+    it('rejects legacy top-level surfaces — every feature must declare plugin customizations', () => {
+        // Anti-drift: the `tools/ci/check-feature-registry.mjs` script
+        // forbids legacy fallback anchors in `capabilityGate.ts`; this
+        // test pins the throw so a future relaxation breaks here too.
         const legacyFeature: BlackoutFeature = {
             id: 'legacy-feature',
             name: 'Legacy Feature',
@@ -34,10 +37,8 @@ describe('capabilityGate', () => {
             settings: [],
         };
 
-        const customizations = resolveFeatureCustomizations(legacyFeature);
-
-        expect(customizations).toHaveLength(1);
-        expect(customizations[0].category).toBe('workflow plugin');
-        expect(customizations[0].id).toBe('legacy-feature-legacy');
+        expect(() => resolveFeatureCustomizations(legacyFeature)).toThrow(
+            /must define plugin customizations/
+        );
     });
 });

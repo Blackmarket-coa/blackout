@@ -101,10 +101,22 @@ function parseStringListConst(source, constName) {
 }
 
 function parseFlagIdsFromCoreModules(source) {
+  // Each core module entry binds `feature: <CamelCase>Feature`. The
+  // canonical feature id is the kebab-case form of that binding minus
+  // the trailing `Feature` suffix (matches the directory layout under
+  // `apps/blackout-client/src/app/features/`). Camel→kebab via inserting
+  // `-` before each uppercase run, then lowercasing — so
+  // `platformOpsFeature` → `platform-ops`, `mediaCallFeature` →
+  // `media-call`, `governanceFeature` → `governance`.
   const ids = [];
-  const flagRe = /flag\s*:\s*'([^']+)'/g;
-  for (const match of source.matchAll(flagRe)) {
-    ids.push(match[1]);
+  const featureBindingRe = /feature\s*:\s*([A-Za-z][A-Za-z0-9]*)Feature\b/g;
+  for (const match of source.matchAll(featureBindingRe)) {
+    const camel = match[1];
+    const kebab = camel
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+      .toLowerCase();
+    ids.push(kebab);
   }
   return ids;
 }

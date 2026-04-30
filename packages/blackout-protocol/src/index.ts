@@ -7,6 +7,12 @@ export * from './shell/events';
 export * from './capabilities/events';
 export * from './notifications/events';
 export * from './media/events';
+export * from './stego/events';
+export * from './settings/events';
+export * from './mjolnir/events';
+export * from './federated-ops/events';
+export * from './auth-threads/events';
+export * from './education/events';
 
 export * from './governance/contracts';
 

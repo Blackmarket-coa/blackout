@@ -10,7 +10,22 @@ export type BlackoutEventName =
     | 'blackout.notifications.digest.generated'
     | 'blackout.notifications.digest.acknowledged'
     | 'blackout.media.upload.completed'
-    | 'blackout.call.launch.intent';
+    | 'blackout.call.launch.intent'
+    | 'blackout.stego.channel.created'
+    | 'blackout.stego.channel.rotated'
+    | 'blackout.stego.channel.expired'
+    | 'blackout.settings.changed'
+    | 'blackout.settings.labs.gate.changed'
+    | 'blackout.moderation.mjolnir.protection.changed'
+    | 'blackout.moderation.mjolnir.banlist.changed'
+    | 'blackout.federation.alert.status'
+    | 'blackout.townhall.lifecycle'
+    | 'blackout.revenue.ops.snapshot'
+    | 'blackout.thread.activity.updated'
+    | 'blackout.auth.session.continued'
+    | 'blackout.education.module.progress'
+    | 'blackout.deaddrop.mutual-aid.thread.opened'
+    | 'blackout.deaddrop.mutual-aid.thread.updated';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

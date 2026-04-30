@@ -15,6 +15,11 @@ export const featureModuleManifest = [
     'platform-ops',
     'notifications-presence',
     'media-call',
+    'stego-toolkit',
+    'settings-parity',
+    'federated-ops',
+    'auth-threads',
+    'education',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
