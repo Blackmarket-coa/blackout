@@ -14,6 +14,8 @@ import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
+import { capabilityContextAtom } from './app/core/features/capabilityContext';
+import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
 import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
 import './app/styles/theme.css.ts';
@@ -66,30 +68,51 @@ const RouterRoot = () => (
     </>
 );
 
-const router = createBrowserRouter([
-    {
-        element: <RouterRoot />,
-        children: [
-            {
-                path: '/',
-                element: <ClientLayout />,
-            },
-            {
-                path: '/room/:roomId',
-                element: <ClientLayout />,
-            },
-            {
-                path: '/moderation/draupnir',
-                element: <DraupnirRoutePage />,
-            },
-        ],
-    },
-]);
+const buildAppRouter = (capabilityContext: {
+    capabilities: string[];
+    flags: Record<string, boolean>;
+}) =>
+    createBrowserRouter([
+        {
+            element: <RouterRoot />,
+            children: [
+                {
+                    path: '/',
+                    element: <ClientLayout />,
+                },
+                {
+                    path: '/room/:roomId',
+                    element: <ClientLayout />,
+                },
+                {
+                    path: '/moderation/draupnir',
+                    element: <DraupnirRoutePage />,
+                },
+                ...buildRegistryRouteObjects({
+                    capabilities: capabilityContext.capabilities,
+                    flags: capabilityContext.flags as never,
+                }),
+            ],
+        },
+    ]);
 
 // eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
+    const capabilityContext = useAtomValue(capabilityContextAtom);
+
+    const router = React.useMemo(
+        () => buildAppRouter(capabilityContext),
+        // Capability + flag fingerprints capture every meaningful registry-route
+        // input; changes (auth → capability fetch, env-flag toggle) rebuild the
+        // router so newly-granted feature surfaces become navigable.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [
+            capabilityContext.capabilities.join('|'),
+            JSON.stringify(capabilityContext.flags),
+        ]
+    );
 
     if (authState === 'logged_in') {
         return (
