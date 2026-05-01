@@ -23,11 +23,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/blackout-web run build:web
+      - run: pnpm --filter @blackout/client run build
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-web-${{ github.ref_name }}
-          path: apps/blackout-web/dist
+          path: apps/blackout-client/dist
 
   build-desktop:
     name: Build desktop (${{ matrix.os }})

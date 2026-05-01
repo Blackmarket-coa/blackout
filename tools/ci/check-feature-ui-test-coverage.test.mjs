@@ -15,10 +15,10 @@ function runScript(cwd) {
 function initFixture({ registryRows, tests }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-ui-budget-'));
   fs.mkdirSync(path.join(dir, 'docs/features'), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'apps/blackout-web/tests/integration'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'legacy/blackout-web/tests/integration'), { recursive: true });
 
   fs.writeFileSync(path.join(dir, 'docs/features/feature_registry.json'), JSON.stringify(registryRows, null, 2));
-  fs.writeFileSync(path.join(dir, 'apps/blackout-web/tests/integration/app.test.ts'), tests);
+  fs.writeFileSync(path.join(dir, 'legacy/blackout-web/tests/integration/app.test.ts'), tests);
 
   return dir;
 }

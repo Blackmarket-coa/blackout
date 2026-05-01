@@ -10,8 +10,8 @@ function read(relPath) {
 }
 
 test("bug report FAB + submission flow remains wired", () => {
-  const bugFab = read("apps/blackout-web/src/components/BugReportFab.ts");
-  const appSource = read("apps/blackout-web/src/app.ts");
+  const bugFab = read("legacy/blackout-web/src/components/BugReportFab.ts");
+  const appSource = read("legacy/blackout-web/src/app.ts");
 
   assert.match(bugFab, /class=\"bug-report-fab\"/);
   assert.match(bugFab, /data-action=\"open-bug-report\"/);
@@ -30,7 +30,7 @@ test("bug report FAB + submission flow remains wired", () => {
 });
 
 test("mobile composer/sidebar layout rules stay constrained to mobile breakpoints", () => {
-  const styles = read("apps/blackout-web/src/styles.css");
+  const styles = read("legacy/blackout-web/src/styles.css");
 
   // Desktop baseline: sidebar visible + popovers as floating panels by default.
   assert.match(styles, /\.server-sidebar \{[\s\S]*display:\s*flex;/);

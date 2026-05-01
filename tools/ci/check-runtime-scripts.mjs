@@ -18,7 +18,7 @@ const expectedFilters = [
   '@blackout/contracts',
   '@blackout/core',
   '@blackout/server',
-  '@blackout/blackout-web',
+  '@blackout/client',
   'blackout-mobile',
 ];
 

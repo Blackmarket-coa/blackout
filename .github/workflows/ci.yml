@@ -45,7 +45,7 @@ jobs:
         run: |
           pnpm --filter @blackout/core run build
           pnpm --filter @blackout/design run build
-      - run: pnpm --filter @blackout/blackout-web exec tsc --noEmit
+      - run: pnpm --filter @blackout/client run typecheck
       - run: pnpm --filter blackout-mobile run preflight
 
   unit-tests:
@@ -65,24 +65,8 @@ jobs:
         run: |
           pnpm --filter @blackout/core run build
           pnpm --filter @blackout/design run build
-      - run: pnpm --filter @blackout/blackout-web exec vitest run tests/unit
-      - run: pnpm --filter @blackout/blackout-web exec vitest run tests/integration
-
-  e2e-tests:
-    name: E2E tests (Playwright + local Synapse)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-      - uses: pnpm/action-setup@v5
-        with:
-          version: 9.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/blackout-web exec playwright install --with-deps chromium
-      - run: pnpm --filter @blackout/blackout-web run test:e2e
+      - run: pnpm --filter @blackout/client run test:unit
+      - run: pnpm --filter @blackout/client run test:integration
 
   feature-registry-validation:
     name: Feature registry validation
@@ -127,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: ["@blackout/blackout-web", "@blackout/client", "blackout-mobile"]
+        project: ["@blackout/client", "blackout-mobile"]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: pnpm/action-setup@v5
@@ -156,10 +140,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @blackout/blackout-web run build:web
+      - run: pnpm --filter @blackout/client run build
       - name: Check bundle size threshold
         run: |
-          BUNDLE_KB=$(du -sk apps/blackout-web/dist | cut -f1)
+          BUNDLE_KB=$(du -sk apps/blackout-client/dist | cut -f1)
           echo "Bundle size: ${BUNDLE_KB}KB"
           if [ "$BUNDLE_KB" -gt "$MAX_BUNDLE_KB" ]; then
             echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
@@ -213,7 +197,5 @@ jobs:
         run: pnpm guard:frontend-consolidation
       - name: Legacy docs integrity gate
         run: node _port/scripts/operations/docs_integrity_check.cjs
-      - name: Keep legacy/migration surfaces green
-        run: |
-          pnpm --filter @blackout/web test
-          pnpm --filter @blackout/blackout-gov test
+      - name: Keep canonical migration surfaces green
+        run: pnpm --filter @blackout/blackout-gov test

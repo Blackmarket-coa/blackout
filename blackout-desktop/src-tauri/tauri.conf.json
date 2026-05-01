@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "co.bmc.blackout",
   "build": {
-    "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/blackout-web dev",
-    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/blackout-web build:web",
+    "beforeDevCommand": "cd ../.. && pnpm --filter @blackout/client dev",
+    "beforeBuildCommand": "cd ../.. && pnpm --filter @blackout/client build",
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../../apps/blackout-web/dist"
+    "frontendDist": "../../apps/blackout-client/dist"
   },
   "app": {
     "withGlobalTauri": true,

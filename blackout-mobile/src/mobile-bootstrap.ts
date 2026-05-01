@@ -2,7 +2,7 @@ import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { SplashScreen } from '@capacitor/splash-screen';
-import { dispatchNativeBridgeEvent } from '../../apps/blackout-web/src/platform/native-bridge-contract';
+import { dispatchNativeBridgeEvent } from '../../apps/blackout-client/src/platform/native-bridge-contract';
 
 /**
  * Initialize all Capacitor native bridges.

@@ -28,7 +28,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build production bundle
-        run: pnpm --filter @blackout/blackout-web run build:web
+        run: pnpm --filter @blackout/client run build
 
       - name: Deploy to Railway
         if: env.DEPLOY_PROVIDER == 'railway'
@@ -47,7 +47,7 @@ jobs:
 
       - name: Deploy to Netlify
         if: env.DEPLOY_PROVIDER == 'netlify'
-        run: npx -y netlify-cli deploy --prod --dir=apps/blackout-web/dist --site "$NETLIFY_SITE_ID"
+        run: npx -y netlify-cli deploy --prod --dir=apps/blackout-client/dist --site "$NETLIFY_SITE_ID"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

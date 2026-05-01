@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "!apps/blackout-app"
   - "packages/*"
+  - "legacy/*"
   - "blackout-desktop"
   - "blackout-mobile"
   - "mobile"

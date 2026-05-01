@@ -2,7 +2,7 @@
   "name": "@blackout/blackout-web",
   "version": "0.0.1",
   "private": true,
-  "description": "Blackout customization transfer shell",
+  "description": "Legacy blackout-web shell (archived non-deploy); canonical frontend is @blackout/client",
   "type": "module",
   "scripts": {
     "build": "tsc --build",

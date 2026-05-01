@@ -23,7 +23,7 @@ test("android keyboard hardening config is enabled", () => {
 });
 
 test("composer panel dismissal guards remain wired", () => {
-  const appSource = read("apps/blackout-web/src/app.ts");
+  const appSource = read("legacy/blackout-web/src/app.ts");
 
   assert.match(appSource, /document\.addEventListener\("pointerdown", this\.handleDocumentPointerDown\)/);
   assert.match(appSource, /if \(event\.key === "Escape" && this\.root\.querySelector\("\.composer-popover\.is-open"\)\)/);

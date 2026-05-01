@@ -30,7 +30,7 @@ const commands = [
   {
     label: 'Web shell build smoke gate',
     cmd: 'pnpm',
-    args: ['--filter', '@blackout/blackout-web', 'build'],
+    args: ['--filter', '@blackout/client', 'build'],
   },
 ];
 
