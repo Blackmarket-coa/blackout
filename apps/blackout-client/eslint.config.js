@@ -76,5 +76,18 @@ export default [
             'no-restricted-syntax': noDirectFetchRule,
         },
     },
+    {
+        files: ['src/app/components/**/*.{ts,tsx}', 'src/platform/**/*.{ts,tsx}'],
+        ignores: [
+            // Runtime client-config bootstrap loader (loads /config.json).
+            'src/app/components/bmc/auth/homeserver.ts',
+            // Capacitor camera bridge: fetch() against a data: URI to convert to Blob.
+            // This is a synchronous local decode, not a network call.
+            'src/platform/nativeMediaBridge.ts',
+        ],
+        rules: {
+            'no-restricted-syntax': noDirectFetchRule,
+        },
+    },
     prettier,
 ];
