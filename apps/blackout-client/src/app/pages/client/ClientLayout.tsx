@@ -362,6 +362,7 @@ export const ClientLayout = () => {
             toggleInbox: () => setInboxOpen((prev) => !prev),
             openThreads: () => setRightPanel('threads'),
             openSearch: () => setRightPanel('search'),
+            openWidgetPanel: (widgetId) => setRightPanel(widgetId),
             queueCommand: (command) => {
                 void handleCommandPicked(command);
             },

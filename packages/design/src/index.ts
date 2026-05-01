@@ -21,5 +21,6 @@ export const designShellLayout = Object.freeze({
     navRailButtonSizePx: 40,
     navRailSectionGapPx: 8,
     desktopPanelPaddingPx: 16,
+    desktopPanelWidthPx: 320,
 });
 

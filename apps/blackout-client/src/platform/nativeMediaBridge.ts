@@ -113,7 +113,7 @@ export function nativeCanShare(): boolean {
             clipboard?: { writeText?: (data: string) => Promise<void> };
         };
         if (typeof nav.share === 'function') return true;
-        if (nav.clipboard?.writeText) return true;
+        if (typeof nav.clipboard?.writeText === 'function') return true;
     }
     // Capacitor presence is detected lazily inside nativeShare(); we can't
     // probe synchronously without a dynamic import.

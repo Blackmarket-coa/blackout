@@ -7,7 +7,7 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 interface BaseResult {
     id: string;
-    category: 'Rooms' | 'Spaces' | 'Users' | 'Commands';
+    category: 'Rooms' | 'Spaces' | 'Users' | 'Commands' | 'Actions';
     title: string;
     subtitle?: string;
     avatarUrl?: string;
@@ -15,10 +15,13 @@ interface BaseResult {
     keywords: string;
 }
 
+export type QuickSwitcherActionId = 'mark-read' | 'jump-mentions' | 'open-inbox';
+
 interface QuickSwitcherProps {
     open: boolean;
     onClose: () => void;
     onCommandPicked?: (command: string) => void;
+    onActionPicked?: (actionId: QuickSwitcherActionId) => void;
 }
 
 const COMMANDS = [
@@ -29,6 +32,12 @@ const COMMANDS = [
     { cmd: '/shrug', desc: 'Append ¯\\_(ツ)_/¯' },
     { cmd: '/leave', desc: 'Leave the current room' },
     { cmd: '/join', desc: 'Join by room alias' },
+];
+
+const ACTIONS: { id: QuickSwitcherActionId; title: string; desc: string }[] = [
+    { id: 'mark-read', title: 'Mark all mentions read', desc: 'Clear unread mentions across rooms' },
+    { id: 'open-inbox', title: 'Open inbox', desc: 'Show the mention inbox panel' },
+    { id: 'jump-mentions', title: 'Jump to mentions', desc: 'Open inbox at mention list' },
 ];
 
 const fuzzyIncludes = (text: string, query: string): boolean => {
@@ -84,6 +93,16 @@ const buildIndex = (rooms: Room[]): BaseResult[] => {
         });
     });
 
+    ACTIONS.forEach((action) => {
+        list.push({
+            id: action.id,
+            category: 'Actions',
+            title: action.title,
+            subtitle: action.desc,
+            keywords: `${action.title} ${action.desc}`,
+        });
+    });
+
     return list;
 };
 
@@ -93,7 +112,12 @@ const categoryLabel = (category: BaseResult['category']): string => {
     return category;
 };
 
-export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherProps) => {
+export const QuickSwitcher = ({
+    open,
+    onClose,
+    onCommandPicked,
+    onActionPicked,
+}: QuickSwitcherProps) => {
     const client = useMatrixClient();
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
@@ -142,6 +166,7 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
             Spaces: [],
             Users: [],
             Commands: [],
+            Actions: [],
         };
 
         filtered.forEach((entry) => {
@@ -195,9 +220,22 @@ export const QuickSwitcher = ({ open, onClose, onCommandPicked }: QuickSwitcherP
             if (result.category === 'Commands') {
                 onCommandPicked?.(result.id);
                 onClose();
+                return;
+            }
+
+            if (result.category === 'Actions') {
+                onActionPicked?.(result.id as QuickSwitcherActionId);
+                onClose();
             }
         },
-        [client, onClose, onCommandPicked, setSelectedRoomId, setSelectedSpaceId],
+        [
+            client,
+            onActionPicked,
+            onClose,
+            onCommandPicked,
+            setSelectedRoomId,
+            setSelectedSpaceId,
+        ],
     );
 
     const handleSelectionKey = useCallback(
