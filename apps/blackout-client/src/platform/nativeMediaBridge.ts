@@ -113,7 +113,7 @@ export function nativeCanShare(): boolean {
             clipboard?: { writeText?: (data: string) => Promise<void> };
         };
         if (typeof nav.share === 'function') return true;
-        if (nav.clipboard?.writeText) return true;
+        if (typeof nav.clipboard?.writeText === 'function') return true;
     }
     // Capacitor presence is detected lazily inside nativeShare(); we can't
     // probe synchronously without a dynamic import.
@@ -151,6 +151,9 @@ const FALLBACK_PHOTO_FILENAME = 'photo.jpg';
 
 const dataUrlToBlob = async (dataUrl: string): Promise<Blob | null> => {
     try {
+        // Direct fetch is allowed here (documented exemption): fetch() against a
+        // data: URI is a synchronous local decode, not a network call. See
+        // apps/blackout-client/src/app/sdk/NETWORK_BOUNDARY_INVENTORY.md.
         const response = await fetch(dataUrl);
         if (!response.ok) return null;
         return await response.blob();

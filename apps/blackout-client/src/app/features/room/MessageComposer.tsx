@@ -29,6 +29,7 @@ import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { composerCommandPayloadAtom } from '../../state/bmc-composer';
 import { uploadMedia } from '../../utils/bmc-media';
 import { HideMessageDialog } from '../steganography';
+import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -454,17 +455,10 @@ export const MessageComposer = ({
         setCommandPayload(null);
     }, [commandPayload, roomId, setCommandPayload]);
 
-    useEffect(() => {
-        if (!featureMenuOpen) return;
-        const onWindowClick = (event: MouseEvent) => {
-            const targetNode = event.target as globalThis.Node | null;
-            if (!targetNode) return;
-            if (featureMenuRef.current?.contains(targetNode)) return;
-            setFeatureMenuOpen(false);
-        };
-        window.addEventListener('mousedown', onWindowClick);
-        return () => window.removeEventListener('mousedown', onWindowClick);
-    }, [featureMenuOpen]);
+    useDismissOnOutsideOrEscape(featureMenuOpen, featureMenuRef, () =>
+        setFeatureMenuOpen(false),
+    );
+    useDismissOnOutsideOrEscape(hideDialogOpen, null, () => setHideDialogOpen(false));
 
     useEffect(() => {
         const query = window.matchMedia('(max-width: 768px)');

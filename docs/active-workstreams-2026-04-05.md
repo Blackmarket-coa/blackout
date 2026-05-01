@@ -3,6 +3,16 @@
 Date: 2026-04-05
 Owner: Release Engineering + Web Client + Governance UI + UX
 
+> **Status update (2026-05-01):** Workstream 1's blackout-web half is
+> superseded — `apps/blackout-web/` was archived to `legacy/blackout-web/`
+> on 2026-05-01 and the canonical frontend is now `@blackout/client`
+> (`apps/blackout-client/`). Re-read the rows below substituting
+> "blackout-web" with "blackout-client" only where the underlying capability
+> is also part of the frontend-consolidation migration backlog
+> (`docs/architecture/frontend-consolidation-migration-backlog.md`). The
+> blackout-gov half, the usability slice, and the shippable P0 waves remain
+> live workstreams.
+
 This plan converts currently open tracker items into an executable sequence with clear dependencies and exit criteria.
 
 ## Scope sources

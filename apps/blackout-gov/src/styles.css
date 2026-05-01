@@ -146,3 +146,88 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+
+.gov-shell__status--passed {
+  border-color: #214f34;
+  background: #0b2f1d;
+  color: #5be38d;
+}
+
+.gov-shell__status--rejected {
+  border-color: #5b1f1f;
+  background: #2f0b0b;
+  color: #ff8c8c;
+}
+
+.gov-shell__status--open {
+  border-color: #1f3f5b;
+  background: #0b1d2f;
+  color: #80b3ff;
+}
+
+.gov-shell__status--expired {
+  border-color: #4a4a4a;
+  background: #1a1a1a;
+  color: #b0b0b0;
+}
+
+.gov-shell__sub {
+  margin-top: 0.85rem;
+  border-top: 1px dashed #2a3646;
+  padding-top: 0.65rem;
+}
+
+.gov-shell__sub h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: #9ba7b4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gov-shell__delegation-rows,
+.gov-shell__tx-rows,
+.gov-shell__decision-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.gov-shell__delegation-rows li,
+.gov-shell__tx-rows li,
+.gov-shell__decision-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  border: 1px solid #2a3646;
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  background: rgba(8, 14, 24, 0.6);
+}
+
+.gov-shell__delegation-rows li em,
+.gov-shell__tx-rows li span {
+  margin-left: auto;
+  color: #9ba7b4;
+  font-style: normal;
+  font-size: 0.8rem;
+}
+
+.gov-shell__tx-rows li[data-direction="in"] {
+  border-color: #214f34;
+}
+
+.gov-shell__tx-rows li[data-direction="out"] {
+  border-color: #5b3a1f;
+}
+
+.gov-shell--simplified {
+  max-width: 520px;
+}
+
+.gov-shell--simplified .gov-shell__card {
+  padding: 1.25rem;
+}

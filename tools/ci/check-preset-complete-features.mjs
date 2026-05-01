@@ -17,7 +17,7 @@ if (!Array.isArray(registry)) {
   process.exit(1);
 }
 
-const integrationDir = path.join(repoRoot, 'apps/blackout-web/tests/integration');
+const integrationDir = path.join(repoRoot, 'legacy/blackout-web/tests/integration');
 const integrationText = fs.readdirSync(integrationDir)
   .filter((name) => name.endsWith('.ts'))
   .map((name) => fs.readFileSync(path.join(integrationDir, name), 'utf8'))

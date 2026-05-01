@@ -1,5 +1,5 @@
 import { getMessageActions } from './quickActionCatalog';
-import { type MessageSpacing } from '../../state/settings';
+import { type MessageSpacing } from '../../state/compat-settings';
 import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 

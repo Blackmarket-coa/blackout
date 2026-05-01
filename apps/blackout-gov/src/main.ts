@@ -1,4 +1,4 @@
-import { BlackoutGovApp } from "./app";
+import { BlackoutGovApp, type GovernanceShellOptions, type GovernanceShellView } from "./app";
 import { blackoutGovConfig } from "./index";
 import "./styles.css";
 
@@ -8,4 +8,10 @@ if (!root) {
   throw new Error("Missing #app root");
 }
 
-new BlackoutGovApp(root, blackoutGovConfig).mount();
+const params = new URLSearchParams(window.location.search);
+const requestedView = params.get("view");
+const view: GovernanceShellView = requestedView === "simplified" ? "simplified" : "default";
+
+const options: GovernanceShellOptions = { view };
+
+new BlackoutGovApp(root, blackoutGovConfig, options).mount();

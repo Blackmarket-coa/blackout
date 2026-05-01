@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const repoRoot = process.cwd();
 const registryPath = path.join(repoRoot, 'docs/features/feature_registry.json');
-const integrationTestsPath = path.join(repoRoot, 'apps/blackout-web/tests/integration');
+const integrationTestsPath = path.join(repoRoot, 'legacy/blackout-web/tests/integration');
 
 if (!fs.existsSync(registryPath)) {
   process.stderr.write(`Missing feature registry: ${registryPath}\n`);

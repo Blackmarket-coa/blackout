@@ -16,6 +16,9 @@ let cachedClientConfig: RuntimeClientConfig | null = null;
 export const loadClientConfig = async (): Promise<RuntimeClientConfig> => {
     if (cachedClientConfig) return cachedClientConfig;
     try {
+        // Direct fetch is allowed here (documented exemption): /config.json is
+        // loaded before the SDK is initialized, so it cannot route through
+        // clientQueries. See apps/blackout-client/src/app/sdk/NETWORK_BOUNDARY_INVENTORY.md.
         const response = await fetch('/config.json', { cache: 'no-cache' });
         if (!response.ok) {
             cachedClientConfig = {};

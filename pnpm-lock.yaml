@@ -347,70 +347,7 @@ importers:
 
   apps/blackout-server: {}
 
-  apps/blackout-web:
-    dependencies:
-      '@blackout/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@blackout/design':
-        specifier: workspace:*
-        version: link:../../packages/design
-      '@blackout/sdk':
-        specifier: workspace:*
-        version: link:../../packages/blackout-sdk
-      '@blackout/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      '@capacitor/core':
-        specifier: ^7.0.0
-        version: 7.6.0
-    optionalDependencies:
-      '@capacitor/keyboard':
-        specifier: ^7.0.0
-        version: 7.0.5(@capacitor/core@7.6.0)
-      '@capacitor/splash-screen':
-        specifier: ^7.0.0
-        version: 7.0.5(@capacitor/core@7.6.0)
-      '@capacitor/status-bar':
-        specifier: ^7.0.0
-        version: 7.0.5(@capacitor/core@7.6.0)
-    devDependencies:
-      '@playwright/test':
-        specifier: ^1.56.1
-        version: 1.58.2
-      '@testing-library/dom':
-        specifier: ^10.4.1
-        version: 10.4.1
-      jsdom:
-        specifier: ^26.1.0
-        version: 26.1.0
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: 7.3.2
-        version: 7.3.2(@types/node@24.12.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.12.0)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   apps/deaddrop-appservice: {}
-
-  apps/web:
-    dependencies:
-      '@blackout/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@blackout/design':
-        specifier: workspace:*
-        version: link:../../packages/design
-      '@blackout/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
 
   blackout-desktop:
     devDependencies:
@@ -465,6 +402,69 @@ importers:
         version: 22.19.15
       typescript:
         specifier: ^5.7.0
+        version: 5.9.3
+
+  legacy/blackout-web:
+    dependencies:
+      '@blackout/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@blackout/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@blackout/sdk':
+        specifier: workspace:*
+        version: link:../../packages/blackout-sdk
+      '@blackout/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@capacitor/core':
+        specifier: ^7.0.0
+        version: 7.6.0
+    optionalDependencies:
+      '@capacitor/keyboard':
+        specifier: ^7.0.0
+        version: 7.0.5(@capacitor/core@7.6.0)
+      '@capacitor/splash-screen':
+        specifier: ^7.0.0
+        version: 7.0.5(@capacitor/core@7.6.0)
+      '@capacitor/status-bar':
+        specifier: ^7.0.0
+        version: 7.0.5(@capacitor/core@7.6.0)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.56.1
+        version: 1.58.2
+      '@testing-library/dom':
+        specifier: ^10.4.1
+        version: 10.4.1
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vite:
+        specifier: 7.3.2
+        version: 7.3.2(@types/node@24.12.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.0)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  legacy/web:
+    dependencies:
+      '@blackout/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@blackout/design':
+        specifier: workspace:*
+        version: link:../../packages/design
+      '@blackout/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
         version: 5.9.3
 
   mobile:
@@ -13598,7 +13598,7 @@ snapshots:
       std-env: 3.10.0
       tinybench: 2.9.0
       tinyexec: 0.3.2
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
       vite: 6.4.2(@types/node@24.12.0)(lightningcss@1.32.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)

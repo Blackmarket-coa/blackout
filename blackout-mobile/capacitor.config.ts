@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'co.bmc.blackout',
   appName: 'Blackout',
-  webDir: '../apps/blackout-web/dist',
+  webDir: '../apps/blackout-client/dist',
   server: {
     androidScheme: 'https',
     iosScheme: 'https',

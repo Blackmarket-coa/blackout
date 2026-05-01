@@ -2,11 +2,11 @@
   "name": "blackout-mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "Blackout mobile app - Capacitor wrapper around blackout-web",
+  "description": "Blackout mobile app - Capacitor wrapper around @blackout/client",
   "scripts": {
     "preflight": "node -e \"const [major]=process.versions.node.split('.').map(Number); if(major<22){console.error('Node.js 22+ is required for blackout-mobile'); process.exit(1)}; console.log('Node', process.versions.node, 'ok')\"",
     "build": "pnpm build:web",
-    "build:web": "cd .. && pnpm --filter @blackout/blackout-web build:web",
+    "build:web": "cd .. && pnpm --filter @blackout/client build",
     "copy": "pnpm build:web && cap copy",
     "sync:android": "pnpm build:web && cap sync android",
     "sync:ios": "pnpm build:web && cap sync ios",

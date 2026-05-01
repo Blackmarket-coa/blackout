@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import React, { act } from 'react';
+import React from 'react';
+import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -53,6 +54,22 @@ vi.mock('../../../../src/app/features/deaddrop', () => ({
     DeadDropIndicator: () => null,
     DeadDropSettings: () => null,
     useDeadDrop: () => ({ data: { enabled: false }, queueCount: 0 }),
+    useDeadDropQueueActions: () => ({}),
+    useSetDeadDrop: () => () => {},
+    describeDeadDropSchedule: () => '',
+    getNextDeliveryDate: () => null,
+    deaddropFeature: { id: 'deaddrop', name: 'Deaddrop', customizations: [] },
+    deaddropNavItems: [],
+    deaddropRoutes: [],
+    deaddropSettings: [],
+    mutualAidPanels: [],
+    mutualAidRoutes: [],
+    mutualAidSettings: [],
+    MutualAidPage: () => null,
+    DEAD_DROP_COMMAND_EVENT_TYPE: 'co.bmc.deaddrop.command',
+    DEAD_DROP_EVENT_TYPE: 'co.bmc.deaddrop',
+    DEAD_DROP_QUEUE_EVENT_TYPE: 'co.bmc.deaddrop.queue',
+    DEAD_DROP_SCHEMA_VERSION: 1,
 }));
 
 vi.mock('../../../../src/app/features/settings', () => ({

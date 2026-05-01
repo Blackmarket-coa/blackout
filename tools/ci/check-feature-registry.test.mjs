@@ -32,7 +32,7 @@ function featureRow(overrides = {}) {
     notes: 'ok',
     sourcePointers: ['docs/a.md'],
     presetPolicy: { baseline_matrix: true, community_plus: true, blackout_full: true },
-    uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
+    uiTestRefs: ['legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-a'],
     fallbackBehavior: 'shows unavailable state',
     evidenceType: 'docs',
     lastVerifiedAt: '2026-04-09',
@@ -90,7 +90,7 @@ test('fails with invalid uiEntry mapping', () => {
       notes: 'bad ui entry',
       sourcePointers: ['docs/d.md'],
       presetPolicy: { baseline_matrix: false, community_plus: false, blackout_full: true },
-      uiTestRefs: ['apps/blackout-web/tests/integration/app.test.ts::feature-toggle-d'],
+      uiTestRefs: ['legacy/blackout-web/tests/integration/app.test.ts::feature-toggle-d'],
     }),
   ]);
 

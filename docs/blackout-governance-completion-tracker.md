@@ -1,5 +1,15 @@
 # Blackout Governance Build Plan Completion Tracker
 
+> **Scope note (2026-05-01):** the "Complete" rows below reference evidence
+> in the imported `_port/src/` fork tree (e.g. `src/services/crdt/...`,
+> `src/modules/education`). That tree is **not** the canonical runtime;
+> `apps/blackout-client/` is. Whether each governance phase is also live in
+> the canonical client is tracked separately in
+> `docs/architecture/frontend-consolidation-migration-backlog.md`. The
+> apps/blackout-gov shell is still in flight (delegation management, treasury,
+> analytics, simplified view). Treat this tracker as the build-plan parity
+> view against `_port/`, not as a frontend-consolidation status board.
+
 This tracker maps the implementation status in this repository to the phases defined in `docs/blackout-governance-build-plan.md`.
 
 ## Status legend

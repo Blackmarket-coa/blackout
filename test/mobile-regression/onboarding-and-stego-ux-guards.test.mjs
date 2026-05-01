@@ -10,10 +10,10 @@ function read(relPath) {
 }
 
 test("glossary/info-tip system remains present for jargon surfaces", () => {
-  const glossary = read("apps/blackout-web/src/components/glossary.ts");
-  const messageInput = read("apps/blackout-web/src/components/MessageInput.ts");
-  const governancePanel = read("apps/blackout-web/src/components/GovernanceRoomPanel.ts");
-  const federationPanel = read("apps/blackout-web/src/components/FederationPanel.ts");
+  const glossary = read("legacy/blackout-web/src/components/glossary.ts");
+  const messageInput = read("legacy/blackout-web/src/components/MessageInput.ts");
+  const governancePanel = read("legacy/blackout-web/src/components/GovernanceRoomPanel.ts");
+  const federationPanel = read("legacy/blackout-web/src/components/FederationPanel.ts");
 
   assert.match(glossary, /export function renderInfoTip\(/);
   assert.match(glossary, /export function renderGlossaryTip\(/);
@@ -26,7 +26,7 @@ test("glossary/info-tip system remains present for jargon surfaces", () => {
 });
 
 test("guided tours and telemetry hooks remain wired for first-use discovery", () => {
-  const appSource = read("apps/blackout-web/src/app.ts");
+  const appSource = read("legacy/blackout-web/src/app.ts");
 
   assert.match(appSource, /private maybeShowAdvancedTour\(/);
   assert.match(appSource, /private advanceAdvancedTour\(/);
@@ -42,7 +42,7 @@ test("guided tours and telemetry hooks remain wired for first-use discovery", ()
 });
 
 test("stego UX baseline keeps explanatory copy, preview, and progressive disclosure", () => {
-  const messageInput = read("apps/blackout-web/src/components/MessageInput.ts");
+  const messageInput = read("legacy/blackout-web/src/components/MessageInput.ts");
 
   assert.match(messageInput, /Hide secret messages inside normal-looking text\./);
   assert.match(messageInput, /Others see:/);
