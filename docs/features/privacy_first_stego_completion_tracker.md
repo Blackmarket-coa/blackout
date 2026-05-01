@@ -1,5 +1,16 @@
 # Privacy-First Stego Roadmap Completion Tracker
 
+> **Scope note (2026-05-01):** the "Complete" rows below cite paths under
+> `src/steganography/...` and `src/components/views/stego/...`, which resolve
+> to the imported `_port/` fork tree. The canonical client port lives at
+> `apps/blackout-client/src/app/features/steganography/` (and its tests at
+> `apps/blackout-client/tests/unit/features/steganography/`); whether each
+> phase is also live in the canonical client is tracked through the
+> frontend-consolidation migration backlog
+> (`docs/architecture/frontend-consolidation-migration-backlog.md`). Treat
+> this tracker as the roadmap parity view against `_port/`, not a
+> canonical-runtime readiness board.
+
 This tracker audits implementation evidence in the repository against the roadmap phases in `privacy_first_stego_roadmap.md`.
 
 Status legend:

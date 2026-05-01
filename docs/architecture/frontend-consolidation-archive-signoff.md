@@ -4,7 +4,30 @@ Date: 2026-04-13 (UTC)
 Canonical shell target: `apps/blackout-client`
 Archive candidates: `apps/blackout-web`, `apps/web`, `apps/blackout-gov`, `_port`, `legacy/element`
 
-## Executive recommendation
+## Status update — 2026-05-01
+
+The duplicate-shell archive of `apps/blackout-web` and `apps/web` was
+**executed** on 2026-05-01. Both directories were moved to `legacy/` (101
+files for `blackout-web` plus 3 for `web`), and the canonical wrappers
+(Tauri, Capacitor/Capacitor mobile, Railway, Netlify, root scripts, CI
+workflows, runtime guards) were repointed to `@blackout/client` /
+`apps/blackout-client/dist`. The 2026-04-13 NO-GO recommendation below is
+**superseded** for the duplicate-shell scope; `apps/blackout-gov`, `_port`,
+and `legacy/element` are unchanged and remain candidate-only.
+
+Caveats:
+- The migration backlog
+  (`docs/architecture/frontend-consolidation-migration-backlog.md`) still has
+  open `ported` items. The legacy package `@blackout/blackout-web` is kept
+  in the workspace at `legacy/blackout-web/` so its unit/integration tests
+  remain runnable as a parity reference for the migration backlog.
+- Boundary audit exceptions still apply; canonical client SDK-boundary
+  enforcement is tracked separately.
+- The CI `e2e-tests` Playwright job was dropped because
+  `@blackout/client` does not yet ship an e2e suite. Re-add once that suite
+  exists.
+
+## Executive recommendation (2026-04-13, superseded for duplicate-shell scope)
 
 **Recommendation: NO-GO (defer duplicate-shell archive). One blocker class — wrapper parity — has been resolved early; the remaining blockers are migration backlog (BKL) and boundary exceptions.**
 

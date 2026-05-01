@@ -1,62 +1,74 @@
-# Blackout Web + Gov Delivery Tracker
+# Blackout Web + Gov Delivery Tracker — RETIRED (2026-05-01)
 
-Snapshot date: 2026-04-05
+This tracker has been retired. It tracked work against `apps/blackout-web/` and
+`apps/blackout-gov/`, but `apps/blackout-web/` was archived to
+`legacy/blackout-web/` on 2026-05-01 (canonical frontend is now
+`@blackout/client` at `apps/blackout-client/`). Treat this file as historical
+context only.
 
-> Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for prioritized sequencing and exit criteria.
+## Where the work lives now
 
-## BLACKOUT-WEB (apps/blackout-web)
+- **Canonical frontend (replaces blackout-web):** `apps/blackout-client/` —
+  feature-entrypoint, plugin, and registry work is the live migration target.
+  The frontend-consolidation migration backlog
+  (`docs/architecture/frontend-consolidation-migration-backlog.md`) tracks the
+  remaining `ported` items that previously lived in blackout-web.
+- **Governance UI (apps/blackout-gov):** still in flight. The tracker rows for
+  delegation management, treasury view, governance analytics, and the
+  simplified governance view captured below remain accurate and are the basis
+  for the open governance workstream.
+- **Theme parity (light_grove, amoled_night):** canonical theme tokens are in
+  `packages/core/src/themes.ts`; component-level rollout in
+  `apps/blackout-client/` is tracked as part of the frontend-consolidation
+  backlog.
 
-| Task | Priority | Status | Notes |
+## Verification commands (no longer current)
+
+The verification commands below are kept for archival reference and **no
+longer apply** — `pnpm --filter @blackout/blackout-web ...` resolves to the
+archived `legacy/blackout-web/` package, and the production deploy targets
+`@blackout/client` via Tauri / Railway / Netlify. Use:
+
+- `pnpm --filter @blackout/client run typecheck`
+- `pnpm --filter @blackout/client test:unit`
+- `pnpm --filter @blackout/client test:integration`
+- `pnpm --filter @blackout/client run build`
+- `pnpm --filter @blackout/blackout-gov lint|test|build:web` (governance app
+  remains live)
+
+## Archived snapshot (2026-04-05) — for history only
+
+The original delivery tracker rows are preserved below. They reflect status
+against the now-archived `apps/blackout-web/` shell and should not be cited as
+current canonical-client status.
+
+### BLACKOUT-WEB (apps/blackout-web → legacy/blackout-web, archived 2026-05-01)
+
+| Task | Priority | Status (2026-04-05) | Notes |
 | --- | --- | --- | --- |
-| Copy Blackout_App source into `apps/blackout-web/` | P0 | Complete | Baseline UI source tree now present in `src/` (components, services, settings, tests) and builds via Vite entrypoint. |
-| Update Matrix homeserver URL config | P0 | Complete | `VITE_MATRIX_HOMESERVER_URL` + `BLACKOUT_SERVER_URL` supported with `railway:<service>` shorthand resolver. |
-| DeepDive swipe-to-join feature verification | P1 | In progress | Swipe controls are present in `DeepDivePanel` with unit coverage; end-to-end room-join verification against Synapse still pending. |
-| Light Theme | P1 | Partial | Token definition is present via canonical theme catalog entry `light_grove` in `packages/core/src/themes.ts`; component-level parity and full UI exposure remain in progress. |
-| AMOLED Theme | P1 | Partial | Token definition is present via canonical theme catalog entry `amoled_night` in `packages/core/src/themes.ts`; component-level parity and full UI exposure remain in progress. |
-| Room type badges | P1 | Complete | Channel sidebar renders room-kind classes and governance badge variants with unit coverage. |
-| Order notification cards | P1 | Not started | Depends on FBM bridge events in client timeline renderer. |
-| Delivery status inline | P2 | In progress | Message list now renders inline delivery state badges (`sending`, `delivered`, `failed`) with unit test coverage; bridge-sourced status wiring still pending. |
-| Voice/video call UI | P1 | Not started | Depends on VoIP wiring + SFU/townhall bridge. |
-| AI features (optional) | P2 | In progress | DeepDive panel now supports optional AI recommendation explanation affordances behind `aiRecommendationsEnabled`; model-service integration remains optional/future. |
-| Railway static deployment | P0 | Complete | Production static build pipeline validated via `pnpm --filter @blackout/blackout-web build:web` producing `dist/` artifact. |
+| Copy Blackout_App source into `apps/blackout-web/` | P0 | Complete | Baseline UI source tree imported; archived 2026-05-01. |
+| Update Matrix homeserver URL config | P0 | Complete | `VITE_MATRIX_HOMESERVER_URL` + `BLACKOUT_SERVER_URL` resolver retained in legacy shell. |
+| DeepDive swipe-to-join feature verification | P1 | In progress | Carry-forward to `apps/blackout-client/` if/when ported from migration backlog. |
+| Light Theme | P1 | Partial | Token in `packages/core/src/themes.ts`; canonical-client adoption tracked separately. |
+| AMOLED Theme | P1 | Partial | Same as Light Theme. |
+| Room type badges | P1 | Complete | Carried in legacy shell; canonical-client port pending if listed in migration backlog. |
+| Order notification cards | P1 | Not started | Depends on FBM bridge; carry-forward to canonical client. |
+| Delivery status inline | P2 | In progress | Carry-forward. |
+| Voice/video call UI | P1 | Not started | Depends on VoIP/SFU wiring; carry-forward. |
+| AI features (optional) | P2 | In progress | Carry-forward (optional). |
+| Railway static deployment | P0 | Complete | Repointed to `@blackout/client` on 2026-05-01. |
 
+### BLACKOUT-GOV (apps/blackout-gov) — still live
 
-### Theme rollout detail (BLACKOUT-WEB)
-
-| Theme | Token-definition status | Component coverage status | Runtime toggle/UI exposure status | Evidence |
-| --- | --- | --- | --- | --- |
-| Light Theme (`light_grove`) | Complete | Partial | Partial | Canonical ID is defined in `packages/core/src/themes.ts`; rollout parity tests exist, while broader component-by-component adoption is still underway. |
-| AMOLED Theme (`amoled_night`) | Complete | Partial | Partial | Canonical ID is defined in `packages/core/src/themes.ts`; rollout parity tests exist, while broader component-by-component adoption is still underway. |
-
-## BLACKOUT-GOV (apps/blackout-gov)
-
-| Task | Priority | Status | Notes |
+| Task | Priority | Status (2026-04-05) | Notes |
 | --- | --- | --- | --- |
-| Copy blackout repo source into `apps/blackout-gov/` | P0 | Complete | Baseline governance UI shell imported (`src/app.ts`, `src/main.ts`, styles) with Vite web entrypoint and runtime config wiring. |
-| Update homeserver connection config | P0 | Complete | `VITE_MATRIX_HOMESERVER_URL` + `BLACKOUT_SERVER_URL` supported with `railway:<service>` shorthand resolver. |
-| Proposal creation UI | P1 | Complete | Baseline proposal creation form is now rendered in governance shell. |
-| Voting interface | P1 | Complete | Baseline approve/block/abstain controls are now rendered in governance shell. |
-| Delegation management | P2 | In progress | Delegation metrics are visible in baseline P2 operations surface pending live data binding. |
-| Treasury view | P2 | In progress | Treasury balance card is present in baseline operations surface pending state-event integration. |
-| Meeting scheduler UI | P1 | Complete | Baseline meeting scheduler form is now rendered in governance shell. |
-| Governance analytics | P2 | In progress | Participation and active-proposal metrics are visible in baseline operations surface pending telemetry wiring. |
-| Simplified governance view | P1 | Not started | Depends on baseline governance features implementation. |
-| Railway static deployment | P0 | Complete | Production static build pipeline validated via `pnpm --filter @blackout/blackout-gov build:web` producing `dist/web/` artifact. |
-
-## Verification
-
-- `pnpm --filter @blackout/blackout-web lint`
-- `pnpm --filter @blackout/blackout-web test`
-- `pnpm --filter @blackout/blackout-web build:web`
-- `pnpm --filter @blackout/blackout-gov lint`
-- `pnpm --filter @blackout/blackout-gov test`
-- `pnpm --filter @blackout/blackout-gov build:web`
-- `pnpm --filter @blackout/blackout-web exec vitest run tests/unit/config.test.ts`
-- `pnpm --filter @blackout/blackout-web exec vitest run tests/unit/deepdive-panel.test.ts tests/unit/channel-sidebar.test.ts tests/unit/theme-parity.test.ts tests/unit/message-item.test.ts`
-- `pnpm --filter @blackout/blackout-gov exec vitest run tests/unit/config.test.ts`
-- `pnpm --filter @blackout/blackout-gov exec vitest run tests/unit/app.test.ts`
-
-Verification snapshot (2026-04-05):
-
-- `@blackout/blackout-gov`: lint ✅, test ✅, build:web ✅.
-- `@blackout/blackout-web`: build:web ✅; full lint/test remain failing due pre-existing baseline issues in `src/app.ts` and current integration test suite. Config wiring validation passes via targeted unit test.
+| Copy blackout repo source into `apps/blackout-gov/` | P0 | Complete | Baseline governance shell. |
+| Update homeserver connection config | P0 | Complete | Same env wiring as web. |
+| Proposal creation UI | P1 | Complete | Baseline form rendered. |
+| Voting interface | P1 | Complete | Approve/block/abstain controls rendered. |
+| Delegation management | P2 | In progress | Live data binding pending — tracked in active gov workstream. |
+| Treasury view | P2 | In progress | State-event integration pending. |
+| Meeting scheduler UI | P1 | Complete | Baseline form rendered. |
+| Governance analytics | P2 | In progress | Telemetry wiring pending. |
+| Simplified governance view | P1 | Not started | Depends on baseline gov features; tracked in active gov workstream. |
+| Railway static deployment | P0 | Complete | `pnpm --filter @blackout/blackout-gov build:web` produces `dist/web/`. |

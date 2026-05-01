@@ -1,5 +1,15 @@
 # Project completion tracker
 
+> **Scope note (2026-05-01):** the 100% completion claim below covers the
+> rollout, reliability, data-protection, observability, security/operations,
+> and documentation gates (sections A–F). It does **not** cover the
+> in-flight frontend-consolidation migration. The canonical frontend
+> (`apps/blackout-client`, `@blackout/client`) still has open `ported` work
+> tracked in `docs/architecture/frontend-consolidation-migration-backlog.md`,
+> and the legacy `apps/blackout-web` shell was archived to
+> `legacy/blackout-web/` on 2026-05-01. Frontend completion is **not**
+> implied by the 34/34 figure here.
+
 This tracker consolidates rollout milestones and readiness gates for distributed self-healing operations.
 
 Use this consolidated tracker as the single source of truth for rollout progress.

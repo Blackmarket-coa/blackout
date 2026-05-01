@@ -1,5 +1,13 @@
 # Blackout Reuse Strategy Completion Tracker
 
+> **Scope note (2026-05-01):** the "Complete" rows below cite evidence in the
+> imported `_port/` fork tree, **not** the canonical
+> `apps/blackout-client/` runtime. The frontend-consolidation migration
+> backlog (`docs/architecture/frontend-consolidation-migration-backlog.md`)
+> is the source of truth for which capabilities are live in the canonical
+> client. The legacy `apps/blackout-web/` shell was archived to
+> `legacy/blackout-web/` on 2026-05-01.
+
 This tracker now reflects a **code-backed analysis** of reuse-strategy feature status in this repository.
 
 Legend:
