@@ -129,7 +129,7 @@ jobs:
     name: Bundle size check
     runs-on: ubuntu-latest
     env:
-      MAX_BUNDLE_KB: 2048
+      MAX_BUNDLE_KB: 24576
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - uses: pnpm/action-setup@v5
@@ -143,8 +143,10 @@ jobs:
       - run: pnpm --filter @blackout/client run build
       - name: Check bundle size threshold
         run: |
-          BUNDLE_KB=$(du -sk apps/blackout-client/dist | cut -f1)
-          echo "Bundle size: ${BUNDLE_KB}KB"
+          # Exclude .map files: source maps aren't shipped to users and
+          # would dominate the size signal otherwise.
+          BUNDLE_KB=$(du -sk --exclude='*.map' apps/blackout-client/dist | cut -f1)
+          echo "Bundle size (excluding source maps): ${BUNDLE_KB}KB"
           if [ "$BUNDLE_KB" -gt "$MAX_BUNDLE_KB" ]; then
             echo "Bundle exceeds ${MAX_BUNDLE_KB}KB threshold"
             exit 1

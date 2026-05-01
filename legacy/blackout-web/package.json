@@ -9,7 +9,7 @@
     "build:web": "vite build",
     "dev": "vite",
     "lint": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node -e \"console.log('@blackout/blackout-web is archived (legacy/blackout-web/); tests preserved for reference. Run vitest run directly if needed.')\"",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:mobile": "vitest run tests/mobile",

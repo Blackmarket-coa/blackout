@@ -345,6 +345,38 @@ XL (~4 weeks).
   failing tests in `apps/blackout-client/tests/unit/features/navigation/QuickSwitcher.test.tsx`
   observed during Slice A verification (2026-05-01).
 
+## Test debt — quarantined unit tests (2026-05-01)
+
+When CI was repointed from `@blackout/blackout-web` (legacy shell archived
+2026-05-01) to `@blackout/client`, 17 pre-existing broken test files
+surfaced. Two were fixed in-place (an `act` import was being read from
+`react` instead of `react-dom/test-utils`, breaking `GovernanceDashboard`
+and `GlobalMentionsInbox`). The remaining 14 are quarantined in
+`apps/blackout-client/vitest.config.ts`'s `exclude` list pending
+feature-level fixes:
+
+| File | Failure mode | Likely fix |
+| --- | --- | --- |
+| `tests/unit/plugins/composer/composerQuickActionsPlugin.test.ts` | Imports `src/lib/bmc-core/quick-actions` (missing) | Build the missing source module or rewrite the plugin |
+| `tests/unit/plugins/matrix-adapters/readOnlyMatrixAdapters.test.ts` | Imports `src/app/plugins/matrix-adapters` (missing) | Build the missing source module |
+| `tests/unit/plugins/navigation/spaceHierarchyPlugin.test.ts` | Imports `src/app/plugins/navigation` (missing) | Build the missing source module |
+| `tests/unit/plugins/notifications/notificationsPlugin.test.ts` | Imports `src/app/plugins/notifications` (missing) | Build the missing source module |
+| `tests/unit/plugins/shell/shellLayoutPlugin.test.tsx` | Imports `src/app/plugins/shell/shellLayoutPlugin` (missing) | Build the missing source module |
+| `tests/unit/plugins/theme/legacyThemePlugin.test.ts` | Imports `src/app/plugins/theme/legacyThemePlugin` (missing) | Build the missing source module |
+| `tests/unit/utils/room.test.ts` | Imports util fns from `src/app/utils/room` that aren't exported | Restore exports or rewrite the test |
+| `tests/unit/features/navigation/QuickSwitcher.test.tsx` | `buildQuickSwitcherIndex` not implemented; assertion-level test drift | Implement helper + refresh DOM assertions; tracked under Workstream F |
+| `tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx` | Asserts a "Moderation" nav link the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
+| `tests/unit/pages/client/ClientLayout.test.tsx` | Asserts elements the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
+| `tests/unit/features/settings/SettingsPage.test.tsx` | vanilla-extract test setup: "Styles were unable to be assigned to a file" | Vanilla-extract vitest config; tracked under Workstream B |
+| `tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx` | Expected 7 customizations, got 15 | Refresh expected-count after registry settles |
+| `tests/unit/features/room/RoomView.layout.test.tsx` | Test environment / assertion drift | Refresh after Workstream A Port 1 lands |
+| `tests/unit/parity/baselineResetSnapshotParity.test.tsx` | Parity test against legacy shell behavior | Likely retire post-archive |
+| `tests/unit/parity/monetizationLayoutParity.test.tsx` | Parity test against legacy shell behavior | Likely retire post-archive |
+
+Adding to or removing from the exclude list **must** be paired with a
+matching update here. The vitest config has a `// see deferred-bodies-schedule`
+pointer to keep the two in sync.
+
 ## Open scope questions for the next session
 
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)

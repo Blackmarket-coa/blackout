@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import React, { act } from 'react';
+import React from 'react';
+import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import { userIdAtom } from '../../../../src/app/state/bmc-auth';
