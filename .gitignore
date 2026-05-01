@@ -51,17 +51,17 @@ storybook-static
 # blackout-client vite output
 /apps/blackout-client/dist
 
-# blackout-web vite output
-/apps/blackout-web/dist
-/apps/blackout-web/test-results
-/apps/blackout-web/playwright-report
-
 # Local archived client checkout
 /apps/blackout-app
 
 # Workspace package build outputs
 /apps/blackout-gov/dist
-/apps/web/dist
+
+# Archived legacy shells (moved from apps/ on 2026-05-01)
+/legacy/blackout-web/dist
+/legacy/blackout-web/test-results
+/legacy/blackout-web/playwright-report
+/legacy/web/dist
 /packages/blackout-protocol/dist
 /packages/blackout-sdk/dist
 /packages/config/dist
