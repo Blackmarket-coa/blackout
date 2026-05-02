@@ -4,7 +4,6 @@ import {
   getHomeJoinPath,
   getHomePath,
   getHomeSearchPath,
-  getHomeDeepDivePath,
 } from '../../pages/pathUtils';
 
 export const useHomeSelected = (): boolean => {
@@ -40,16 +39,6 @@ export const useHomeJoinSelected = (): boolean => {
 export const useHomeSearchSelected = (): boolean => {
   const match = useMatch({
     path: getHomeSearchPath(),
-    caseSensitive: true,
-    end: false,
-  });
-
-  return !!match;
-};
-
-export const useHomeDeepDiveSelected = (): boolean => {
-  const match = useMatch({
-    path: getHomeDeepDivePath(),
     caseSensitive: true,
     end: false,
   });

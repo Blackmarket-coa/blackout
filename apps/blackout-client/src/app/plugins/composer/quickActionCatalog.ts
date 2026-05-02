@@ -64,7 +64,7 @@ export const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
     governance: ['Active votes', 'Results', 'Proposals', 'Delegates'],
     trade: ['Marketplace', 'Payments', 'My orders'],
     logistics: ['Tracking', 'Fleet', 'Routing'],
-    discover: ['DeepDive', 'Communities', 'Featured'],
+    discover: ['Coliseum', 'Communities', 'Featured'],
 };
 
 export const RADIAL_ACTIONS: RadialAction[] = [

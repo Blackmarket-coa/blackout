@@ -12,3 +12,4 @@ export * from './marketplace';
 export * from './apps';
 
 export * from './coalition';
+export * from './coliseum';

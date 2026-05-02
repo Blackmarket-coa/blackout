@@ -10,11 +10,6 @@ export const createClientQueries = (client: ApiClient) => ({
             method: 'GET',
             path: new URL('/.well-known/matrix/client', homeserverUrl).toString(),
         }),
-    getDeepDiveFeed: <TItem>(path = '/deep-dive-feed.json') =>
-        client<TItem[]>({
-            method: 'GET',
-            path,
-        }),
     getEntitlementSnapshot: () =>
         client<EntitlementReadResponse>({
             method: 'GET',
