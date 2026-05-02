@@ -34,6 +34,7 @@ export type FeatureFlags = {
     notificationsAdapter: boolean;
     rightPanelPlugins: boolean;
     liveInteractionBundle: boolean;
+    coalition: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -72,6 +73,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     notificationsAdapter: true,
     rightPanelPlugins: true,
     liveInteractionBundle: true,
+    coalition: true,
 };
 
 /**
@@ -251,6 +253,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_EDUCATION === 'false') {
             nextFlags.education = false;
         }
+        if (env.BLACKOUT_COALITION === 'true') {
+            nextFlags.coalition = true;
+        }
+        if (env.BLACKOUT_COALITION === 'false') {
+            nextFlags.coalition = false;
+        }
         return nextFlags;
     }
 
@@ -316,6 +324,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_EDUCATION === 'false') {
         nextFlags.education = false;
+    }
+    if (env.BLACKOUT_COALITION === 'true') {
+        nextFlags.coalition = true;
+    }
+    if (env.BLACKOUT_COALITION === 'false') {
+        nextFlags.coalition = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
