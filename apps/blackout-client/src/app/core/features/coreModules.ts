@@ -1,4 +1,5 @@
 import { coalitionFeature } from '../../features/coalition';
+import { coliseumFeature } from '../../features/coliseum';
 import { deaddropFeature } from '../../features/deaddrop';
 import { forumFeature } from '../../features/forum';
 import { governanceFeature } from '../../features/governance';
@@ -70,5 +71,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: coalitionFeature,
         flag: 'coalition',
+    },
+    {
+        feature: coliseumFeature,
+        flag: 'coliseum',
     },
 ];

@@ -35,6 +35,7 @@ export type FeatureFlags = {
     rightPanelPlugins: boolean;
     liveInteractionBundle: boolean;
     coalition: boolean;
+    coliseum: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -74,6 +75,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     rightPanelPlugins: true,
     liveInteractionBundle: true,
     coalition: true,
+    coliseum: true,
 };
 
 /**
@@ -258,6 +260,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_COALITION === 'false') {
             nextFlags.coalition = false;
+        }
+        if (env.BLACKOUT_COLISEUM === 'true') {
+            nextFlags.coliseum = true;
+        }
+        if (env.BLACKOUT_COLISEUM === 'false') {
+            nextFlags.coliseum = false;
         }
         return nextFlags;
     }
