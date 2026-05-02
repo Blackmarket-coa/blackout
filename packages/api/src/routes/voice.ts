@@ -5,6 +5,7 @@ import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
+import { hasCanopy } from '../services/canopyDirectory';
 
 function roleFromRequest(input: unknown): VoiceRole {
   if (input === 'admin' || input === 'moderator') return input;
@@ -55,6 +56,10 @@ voice.post('/rooms/create', async (c) => {
   if (parsed instanceof Response) return parsed;
   const { canopyId, channelId } = parsed;
   const role = roleFromRequest(parsed.role);
+
+  if (!hasCanopy(canopyId)) {
+    return c.json({ code: 'unknown_canopy', message: 'Canopy is not registered', canopyId }, 404);
+  }
 
   if (!hasPremiumCanopyEntitlement(user.sub)) {
     return c.json({ code: 'premium_required', message: 'Premium canopy subscription required' }, 402);

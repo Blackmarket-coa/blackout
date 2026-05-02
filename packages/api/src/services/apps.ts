@@ -7,6 +7,7 @@ import {
   type AppEventType,
   type InstallState,
 } from '@blackout/core';
+import { hasCanopy } from './canopyDirectory';
 
 export interface AppDirectoryEntry {
   id: string;
@@ -105,6 +106,10 @@ export function listInstallations(canopyId?: string) {
 export function installApp(input: { appId: string; canopyId: string; permissions?: readonly string[] }) {
   const app = directory.find((entry) => entry.id === input.appId);
   if (!app) return { ok: false as const, code: 'app_not_found' };
+
+  if (!hasCanopy(input.canopyId)) {
+    return { ok: false as const, code: 'unknown_canopy', canopyId: input.canopyId };
+  }
 
   const requested = (input.permissions?.length ? input.permissions : app.defaultScopes) as readonly string[];
   const unknownPermission = requested.find((scope) => !(appScopes as readonly string[]).includes(scope));

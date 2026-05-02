@@ -1,6 +1,11 @@
-import React, { useState, type CSSProperties, type FormEvent } from 'react';
+import React, { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { atom, useAtom } from 'jotai';
 import type { ProfileWallSettings } from './profileTypes';
+import {
+    fetchWall as fetchWallDefault,
+    postWall as postWallDefault,
+    type WallPost as WallPostRecord,
+} from './profileClient';
 
 export interface WallPost {
     id: string;
@@ -10,13 +15,15 @@ export interface WallPost {
     createdAt: string;
 }
 
-/**
- * Local-only wall draft store. Production wiring will replace this with a
- * `co.bmc.profile.wall` Matrix room (see plan: forum event shape gives us
- * federation, threading, and reactions for free). Today's component is shape
- * complete so the rest of the profile UI can compose against it.
- */
 const wallPostsAtom = atom<Record<string, WallPost[]>>({});
+
+const adapt = (post: WallPostRecord): WallPost => ({
+    id: post.id,
+    profileId: post.profileUserId,
+    authorId: post.authorId,
+    body: post.body,
+    createdAt: post.createdAt,
+});
 
 export interface ProfileWallProps {
     profileId: string;
@@ -26,6 +33,9 @@ export interface ProfileWallProps {
     viewerId?: string;
     /** Whether the viewer is in the profile owner's friends graph. */
     viewerIsFriend?: boolean;
+    /** Hooks for tests; defaults to the live profile API. */
+    fetchWall?: typeof fetchWallDefault;
+    postWall?: typeof postWallDefault;
 }
 
 const containerStyle: CSSProperties = {
@@ -109,13 +119,36 @@ export function ProfileWall({
     settings,
     viewerId,
     viewerIsFriend = false,
+    fetchWall = fetchWallDefault,
+    postWall = postWallDefault,
 }: ProfileWallProps) {
     const [postsByProfile, setPostsByProfile] = useAtom(wallPostsAtom);
     const [draft, setDraft] = useState('');
+    const [postError, setPostError] = useState<string | null>(null);
+    const [posting, setPosting] = useState(false);
 
     const posts = postsByProfile[profileId] ?? [];
     const canRead = canViewWall(settings, profileId, viewerId, viewerIsFriend);
     const canPost = canPostOnWall(settings, profileId, viewerId, viewerIsFriend);
+
+    useEffect(() => {
+        if (!canRead) return;
+        let cancelled = false;
+        fetchWall(profileId)
+            .then((response) => {
+                if (cancelled) return;
+                setPostsByProfile((prev) => ({
+                    ...prev,
+                    [profileId]: response.posts.map(adapt),
+                }));
+            })
+            .catch(() => {
+                /* leave whatever was hydrated; show no error to non-owner viewers */
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [canRead, fetchWall, profileId, setPostsByProfile]);
 
     if (!canRead) {
         return (
@@ -126,12 +159,14 @@ export function ProfileWall({
         );
     }
 
-    const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!viewerId) return;
         const body = draft.trim();
         if (body.length === 0) return;
-        const post: WallPost = {
+        setPosting(true);
+        setPostError(null);
+        const optimistic: WallPost = {
             id: newPostId(),
             profileId,
             authorId: viewerId,
@@ -140,15 +175,38 @@ export function ProfileWall({
         };
         setPostsByProfile((prev) => ({
             ...prev,
-            [profileId]: [post, ...(prev[profileId] ?? [])],
+            [profileId]: [optimistic, ...(prev[profileId] ?? [])],
         }));
         setDraft('');
+        try {
+            const created = await postWall(profileId, optimistic.body);
+            setPostsByProfile((prev) => ({
+                ...prev,
+                [profileId]: [
+                    adapt(created),
+                    ...(prev[profileId] ?? []).filter((entry) => entry.id !== optimistic.id),
+                ],
+            }));
+        } catch (error) {
+            setPostError(error instanceof Error ? error.message : 'Failed to post.');
+            setPostsByProfile((prev) => ({
+                ...prev,
+                [profileId]: (prev[profileId] ?? []).filter((entry) => entry.id !== optimistic.id),
+            }));
+        } finally {
+            setPosting(false);
+        }
     };
 
     return (
         <div style={containerStyle} data-testid="profile-wall">
             {canPost ? (
-                <form style={composerStyle} onSubmit={handleSubmit}>
+                <form
+                    style={composerStyle}
+                    onSubmit={(event) => {
+                        void handleSubmit(event);
+                    }}
+                >
                     <textarea
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
@@ -160,9 +218,19 @@ export function ProfileWall({
                         style={textareaStyle}
                         maxLength={4000}
                     />
+                    {postError ? (
+                        <p
+                            role="alert"
+                            data-testid="profile-wall-post-error"
+                            style={{ margin: 0, color: 'var(--danger)', fontSize: 12 }}
+                        >
+                            {postError}
+                        </p>
+                    ) : null}
                     <button
                         type="submit"
-                        disabled={draft.trim().length === 0}
+                        data-testid="profile-wall-submit"
+                        disabled={posting || draft.trim().length === 0}
                         style={{
                             alignSelf: 'flex-end',
                             padding: '6px 12px',
@@ -171,10 +239,10 @@ export function ProfileWall({
                             background: 'var(--accent-primary, #1ABC9C)',
                             color: '#0d1f14',
                             fontWeight: 700,
-                            cursor: 'pointer',
+                            cursor: posting ? 'progress' : 'pointer',
                         }}
                     >
-                        Post
+                        {posting ? 'Posting…' : 'Post'}
                     </button>
                 </form>
             ) : (

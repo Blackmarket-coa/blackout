@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import AvatarDecoration from './AvatarDecoration';
 import ProfileThemeEditor from './ProfileThemeEditor';
 import { availableDecorations, myProfileAtom } from './profileAtoms';
+import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
 import type {
     ConnectionType,
     ProfileConnection,
@@ -61,13 +62,39 @@ function nextTopFriends(rawText: string): ProfileTopFriends | undefined {
     return deduped.length > 0 ? { userIds: deduped } : undefined;
 }
 
-export const ProfileEditor = () => {
+export interface ProfileEditorProps {
+    saveProfile?: (userId: string, input: SaveProfileInput) => Promise<unknown>;
+}
+
+export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEditorProps = {}) => {
     const [profile, setProfile] = useAtom(myProfileAtom);
     const [nextConnection, setNextConnection] = useState<ProfileConnection>(defaultConnection());
     const [bannerCrop, setBannerCrop] = useState(50);
     const [avatarCrop, setAvatarCrop] = useState(50);
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [saveError, setSaveError] = useState<string | null>(null);
 
     const bioLength = useMemo(() => profile.profile.bio?.length ?? 0, [profile.profile.bio]);
+
+    const onSave = useCallback(async () => {
+        setSaveState('saving');
+        setSaveError(null);
+        try {
+            await saveProfile(profile.userId, {
+                displayName: profile.displayName,
+                avatarUrl: profile.avatarUrl,
+                primaryRole: profile.primaryRole,
+                roleBadges: profile.roleBadges,
+                mutualSpaces: profile.mutualSpaces,
+                isFriend: profile.isFriend,
+                profile: profile.profile,
+            });
+            setSaveState('saved');
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : 'Failed to save profile.');
+            setSaveState('error');
+        }
+    }, [profile, saveProfile]);
 
     const onImageUpload = (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
@@ -105,7 +132,51 @@ export const ProfileEditor = () => {
 
     return (
         <div style={{ display: 'grid', gap: 16 }}>
-            <h3 style={{ margin: 0 }}>Edit Profile</h3>
+            <header
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                }}
+            >
+                <h3 style={{ margin: 0 }}>Edit Profile</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {saveState === 'saved' ? (
+                        <span
+                            data-testid="profile-editor-save-confirm"
+                            style={{ fontSize: 12, color: 'var(--success, #2ECC71)' }}
+                        >
+                            Saved
+                        </span>
+                    ) : null}
+                    <button
+                        type="button"
+                        data-testid="profile-editor-save"
+                        onClick={() => void onSave()}
+                        disabled={saveState === 'saving'}
+                        style={{
+                            padding: '6px 14px',
+                            borderRadius: 8,
+                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                            background: 'var(--accent-primary, #1ABC9C)',
+                            color: '#fff',
+                            cursor: saveState === 'saving' ? 'progress' : 'pointer',
+                        }}
+                    >
+                        {saveState === 'saving' ? 'Saving…' : 'Save profile'}
+                    </button>
+                </div>
+            </header>
+            {saveError ? (
+                <p
+                    role="alert"
+                    data-testid="profile-editor-save-error"
+                    style={{ margin: 0, color: 'var(--danger)', fontSize: 12 }}
+                >
+                    {saveError}
+                </p>
+            ) : null}
 
             <section>
                 <h4>Banner upload with crop</h4>

@@ -1,10 +1,12 @@
-import { createElement } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router-dom';
 import type { FeatureRoute } from '../../core/features/types';
 import ProfilePage from './ProfilePage';
 import ProfileEditor from './ProfileEditor';
 import { myProfileAtom, viewedProfileAtom } from './profileAtoms';
+import { fetchProfile } from './profileClient';
+import type { MemberProfile } from './profileTypes';
 
 const MyProfileRoutePage = () => {
     const profile = useAtomValue(myProfileAtom);
@@ -30,8 +32,27 @@ const UserProfileRoutePage = () => {
     const { userId } = useParams();
     const ownProfile = useAtomValue(myProfileAtom);
     const viewedProfile = useAtomValue(viewedProfileAtom);
+    const [hydrated, setHydrated] = useState<MemberProfile | null>(null);
 
     const decodedUserId = userId ? decodeURIComponent(userId) : undefined;
+
+    useEffect(() => {
+        if (!decodedUserId) return;
+        if (ownProfile.userId === decodedUserId) return;
+        if (viewedProfile?.userId === decodedUserId) return;
+
+        let cancelled = false;
+        fetchProfile(decodedUserId)
+            .then((profile) => {
+                if (!cancelled) setHydrated(profile);
+            })
+            .catch(() => {
+                if (!cancelled) setHydrated(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [decodedUserId, ownProfile.userId, viewedProfile?.userId]);
 
     if (decodedUserId && ownProfile.userId === decodedUserId) {
         return createElement(ProfilePage, {
@@ -46,6 +67,14 @@ const UserProfileRoutePage = () => {
             profile: viewedProfile,
             viewerId: ownProfile.userId,
             viewerIsFriend: viewedProfile.isFriend,
+        });
+    }
+
+    if (hydrated && (!decodedUserId || hydrated.userId === decodedUserId)) {
+        return createElement(ProfilePage, {
+            profile: hydrated,
+            viewerId: ownProfile.userId,
+            viewerIsFriend: hydrated.isFriend,
         });
     }
 
