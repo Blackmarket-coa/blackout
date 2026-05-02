@@ -36,6 +36,7 @@ export type FeatureFlags = {
     liveInteractionBundle: boolean;
     coalition: boolean;
     coliseum: boolean;
+    profile: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -76,6 +77,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     liveInteractionBundle: true,
     coalition: true,
     coliseum: true,
+    profile: true,
 };
 
 /**
@@ -267,6 +269,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_COLISEUM === 'false') {
             nextFlags.coliseum = false;
         }
+        if (env.BLACKOUT_PROFILE === 'true') {
+            nextFlags.profile = true;
+        }
+        if (env.BLACKOUT_PROFILE === 'false') {
+            nextFlags.profile = false;
+        }
         return nextFlags;
     }
 
@@ -338,6 +346,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_COALITION === 'false') {
         nextFlags.coalition = false;
+    }
+    if (env.BLACKOUT_COLISEUM === 'true') {
+        nextFlags.coliseum = true;
+    }
+    if (env.BLACKOUT_COLISEUM === 'false') {
+        nextFlags.coliseum = false;
+    }
+    if (env.BLACKOUT_PROFILE === 'true') {
+        nextFlags.profile = true;
+    }
+    if (env.BLACKOUT_PROFILE === 'false') {
+        nextFlags.profile = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

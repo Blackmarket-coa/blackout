@@ -26,6 +26,7 @@ describe('feature allowlist manifest', () => {
             'education',
             'coalition',
             'coliseum',
+            'profile',
         ]);
     });
 
