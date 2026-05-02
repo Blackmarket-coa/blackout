@@ -5,6 +5,8 @@ import { deaddropModule } from './deaddrop';
 import { moderationModule } from './moderation';
 import { streamingModule } from './streaming';
 import { discoveryModule } from './discovery';
+import { profileModule } from './profile';
+import { stegoModule } from './stego';
 import type { FeatureModule } from './types';
 
 export const featureModules: FeatureModule[] = [
@@ -14,6 +16,8 @@ export const featureModules: FeatureModule[] = [
   moderationModule,
   streamingModule,
   discoveryModule,
+  profileModule,
+  stegoModule,
 ];
 
 export function registerFeatureModules(app: Hono, apiRoot: string): void {

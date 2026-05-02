@@ -273,8 +273,21 @@ test('v1 subscriptions checkout + webhook + entitlement state works end-to-end',
   assert.equal(duplicateBody.processed, false);
 });
 
+async function registerTestCanopy(canopyId: string, token: string): Promise<void> {
+  await app.request('/v1/discovery/index/canopies', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'x-blackout-capabilities': 'discovery.write',
+    },
+    body: JSON.stringify({ canopyId, name: canopyId }),
+  });
+}
+
 test('v1 voice join is gated by backend subscription entitlement', async () => {
   const { token, userId } = await registerUser();
+  await registerTestCanopy('canopy-1', token);
 
   const denied = await app.request('/v1/voice/rooms/join', {
     method: 'POST',
@@ -361,6 +374,9 @@ test('v1 apps contract, events, and actions are exposed', async () => {
 });
 
 test('v1 app directory install review and revoke flow works', async () => {
+  const { token } = await registerUser();
+  await registerTestCanopy('main', token);
+
   const directory = await app.request('/v1/apps/directory?canopyId=main');
   assert.equal(directory.status, 200);
   const directoryBody = await json(directory);

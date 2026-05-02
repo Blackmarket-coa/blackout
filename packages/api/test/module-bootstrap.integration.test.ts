@@ -33,7 +33,16 @@ async function issueToken(): Promise<string> {
 test('feature module registry contains canonical frontend domains', () => {
   assert.deepEqual(
     featureModules.map((module) => module.id),
-    ['governance', 'forum', 'deaddrop', 'moderation', 'streaming', 'discovery'],
+    [
+      'governance',
+      'forum',
+      'deaddrop',
+      'moderation',
+      'streaming',
+      'discovery',
+      'profile',
+      'stego',
+    ],
   );
 });
 

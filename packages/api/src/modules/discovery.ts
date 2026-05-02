@@ -3,6 +3,11 @@ import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireDomainCapability } from './authz';
 import { discoveryService } from '../services/discovery';
+import {
+    listCanopies,
+    upsertCanopy,
+    type CanopyFederationTier,
+} from '../services/canopyDirectory';
 import type { FeatureModule } from './types';
 
 const profileSchema = z.object({
@@ -28,6 +33,13 @@ const activitySchema = z.object({
 const funnelEventSchema = z.object({
   entityId: z.string().min(1),
   stage: z.enum(['impression', 'click', 'join', 'subscribe']),
+});
+
+const canopyIndexSchema = z.object({
+  canopyId: z.string().min(1).max(200),
+  name: z.string().min(1).max(200),
+  summary: z.string().max(2000).optional(),
+  federationTier: z.enum(['local', 'zone', 'global']).optional(),
 });
 
 function createDiscoveryRouter() {
@@ -167,6 +179,28 @@ function createDiscoveryRouter() {
     if (denied) return denied;
 
     return c.json({ module: 'discovery', status: 'ok' });
+  });
+
+  discovery.post('/index/canopies', async (c) => {
+    const denied = requireDomainCapability(c, 'discovery', 'write');
+    if (denied) return denied;
+    const parsed = await readJsonBody(c, canopyIndexSchema);
+    if (parsed instanceof Response) return parsed;
+    const entry = upsertCanopy({
+      canopyId: parsed.canopyId,
+      name: parsed.name,
+      summary: parsed.summary,
+      federationTier: parsed.federationTier,
+    });
+    return c.json(entry, 202);
+  });
+
+  discovery.get('/canopies', (c) => {
+    const denied = requireDomainCapability(c, 'discovery', 'read');
+    if (denied) return denied;
+    const tier = c.req.query('federationTier') as CanopyFederationTier | undefined;
+    const filter = tier && ['local', 'zone', 'global'].includes(tier) ? { federationTier: tier } : {};
+    return c.json({ items: listCanopies(filter) });
   });
 
   return discovery;
