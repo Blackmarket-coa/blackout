@@ -1,3 +1,6 @@
+export { profileFeature } from './manifest';
+export { profileNavItems } from './nav';
+export { profileRoutes } from './routes';
 export { default as AvatarDecoration } from './AvatarDecoration';
 export { default as ProfileModal } from './ProfileModal';
 export { default as ProfileEditor } from './ProfileEditor';

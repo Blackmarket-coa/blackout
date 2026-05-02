@@ -1,6 +1,7 @@
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
 import { deaddropFeature } from '../../features/deaddrop';
+import { profileFeature } from '../../features/profile';
 import { forumFeature } from '../../features/forum';
 import { governanceFeature } from '../../features/governance';
 import { mediaCallFeature } from '../../features/media-call';
@@ -75,5 +76,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: coliseumFeature,
         flag: 'coliseum',
+    },
+    {
+        feature: profileFeature,
+        flag: 'profile',
     },
 ];
