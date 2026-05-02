@@ -11,6 +11,7 @@ export const coalitionFeature: BlackoutFeature = {
             name: 'Coalition Shell',
             category: 'visual/layout plugin',
             capabilityGate: {
+                allOf: ['coalition.read'],
                 flags: ['coalition'],
             },
             routes: coalitionRoutes,

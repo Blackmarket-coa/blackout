@@ -24,6 +24,7 @@ describe('feature allowlist manifest', () => {
             'federated-ops',
             'auth-threads',
             'education',
+            'coalition',
         ]);
     });
 
