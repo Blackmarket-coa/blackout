@@ -5,9 +5,9 @@
 - `src/app/features/call/CallProvider.tsx`:
   - Matrix well-known call focus lookup (`/.well-known/matrix/client`) via
     `clientQueries.getWellKnownMatrixClient`.
-- `src/app/pages/client/home/DeepDive.tsx`:
-  - Deep dive feed retrieval (`/deep-dive-feed.json`) via
-    `clientQueries.getDeepDiveFeed`.
+- `src/app/features/coliseum/coliseumClient.ts`:
+  - Coliseum topic, argument, vote, and verdict reads/writes via
+    `createAuthorizedApiClient` against `/v1/coliseum/*`.
 - `src/app/features/steganography/RevealMessagePanel.tsx`:
   - Image blob retrieval via SDK `fetchBlob` media helper.
 - `src/app/components/messages/mediaShared.tsx`:

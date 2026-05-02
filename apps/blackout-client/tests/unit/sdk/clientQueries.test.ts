@@ -28,16 +28,4 @@ describe('clientQueries', () => {
         expect(fetchFn).toHaveBeenCalledWith('https://cdn.example.org/file.png');
     });
 
-    it('loads deep-dive feed from the default feed endpoint', async () => {
-        const apiClient: ApiClient = vi.fn(async () => [{ id: 'item-1' }]);
-
-        const queries = createClientQueries(apiClient);
-        const feed = await queries.getDeepDiveFeed<{ id: string }>();
-
-        expect(feed).toEqual([{ id: 'item-1' }]);
-        expect(apiClient).toHaveBeenCalledWith({
-            method: 'GET',
-            path: '/deep-dive-feed.json',
-        });
-    });
 });

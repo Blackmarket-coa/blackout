@@ -11,7 +11,6 @@ import {
     HOME_PATH,
     HOME_ROOM_PATH,
     HOME_SEARCH_PATH,
-    HOME_DEEP_DIVE_PATH,
     LOGIN_PATH,
     INBOX_INVITES_PATH,
     INBOX_NOTIFICATIONS_PATH,
@@ -102,7 +101,6 @@ export const getHomePath = (): string => HOME_PATH;
 export const getHomeCreatePath = (): string => HOME_CREATE_PATH;
 export const getHomeJoinPath = (): string => HOME_JOIN_PATH;
 export const getHomeSearchPath = (): string => HOME_SEARCH_PATH;
-export const getHomeDeepDivePath = (): string => HOME_DEEP_DIVE_PATH;
 export const getHomeRoomPath = (roomIdOrAlias: string, eventId?: string): string => {
     const params = {
         roomIdOrAlias: encodeURIComponent(roomIdOrAlias),

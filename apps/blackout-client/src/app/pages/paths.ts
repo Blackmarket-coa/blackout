@@ -35,7 +35,6 @@ export type _SearchPathSearchParams = {
     senders?: string;
 };
 export const _SEARCH_PATH = 'search/';
-export const _DEEP_DIVE_PATH = 'deep-dive/';
 
 export type _RoomSearchParams = {
     /* comma separated string of servers */
@@ -47,7 +46,6 @@ export const HOME_PATH = '/home/';
 export const HOME_CREATE_PATH = `/home/${_CREATE_PATH}`;
 export const HOME_JOIN_PATH = `/home/${_JOIN_PATH}`;
 export const HOME_SEARCH_PATH = `/home/${_SEARCH_PATH}`;
-export const HOME_DEEP_DIVE_PATH = `/home/${_DEEP_DIVE_PATH}`;
 export const HOME_ROOM_PATH = `/home/${_ROOM_PATH}`;
 
 export const LEGACY_DIRECT_PATH = '/direct/';
