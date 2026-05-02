@@ -1,12 +1,65 @@
 import { useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import AvatarDecoration from './AvatarDecoration';
+import ProfileThemeEditor from './ProfileThemeEditor';
 import { availableDecorations, myProfileAtom } from './profileAtoms';
-import type { ConnectionType, ProfileConnection } from './profileTypes';
+import type {
+    ConnectionType,
+    ProfileConnection,
+    ProfileCustomTheme,
+    ProfilePinnedMedia,
+    ProfileStatus,
+    ProfileTopFriends,
+    ProfileWallModeration,
+    ProfileWallSettings,
+    ProfileWallVisibility,
+    ProfileWallWhoCanPost,
+} from './profileTypes';
 
 const fileToObjectUrl = (file: File): string => URL.createObjectURL(file);
 
 const defaultConnection = (): ProfileConnection => ({ type: 'website', label: '', url: '' });
+
+function nextStatus(
+    current: ProfileStatus | undefined,
+    patch: Partial<ProfileStatus>,
+): ProfileStatus | undefined {
+    const merged: ProfileStatus = {
+        text: current?.text ?? '',
+        emoji: current?.emoji,
+        expiresAt: current?.expiresAt,
+        ...patch,
+    };
+    if (!merged.text || merged.text.trim().length === 0) return undefined;
+    return merged;
+}
+
+function nextWall(
+    current: ProfileWallSettings | undefined,
+    patch: Partial<ProfileWallSettings>,
+): ProfileWallSettings {
+    return {
+        visibility: current?.visibility ?? 'public',
+        whoCanPost: current?.whoCanPost ?? 'friends',
+        moderation: current?.moderation ?? 'open',
+        ...patch,
+    };
+}
+
+const MATRIX_USER_ID_RE = /^@[^:\s]+:[^:\s]+$/;
+
+function nextTopFriends(rawText: string): ProfileTopFriends | undefined {
+    const ids = rawText
+        .split(/[\n,]+/)
+        .map((id) => id.trim())
+        .filter((id) => MATRIX_USER_ID_RE.test(id));
+    const deduped: string[] = [];
+    for (const id of ids) {
+        if (!deduped.includes(id)) deduped.push(id);
+        if (deduped.length >= 12) break;
+    }
+    return deduped.length > 0 ? { userIds: deduped } : undefined;
+}
 
 export const ProfileEditor = () => {
     const [profile, setProfile] = useAtom(myProfileAtom);
@@ -282,6 +335,178 @@ export const ProfileEditor = () => {
                         </button>
                     </div>
                 </div>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Status</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 200px', gap: 8 }}>
+                    <input
+                        placeholder="🌱"
+                        value={profile.profile.status?.emoji ?? ''}
+                        onChange={(event) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                profile: {
+                                    ...prev.profile,
+                                    status: nextStatus(prev.profile.status, {
+                                        emoji: event.target.value,
+                                    }),
+                                },
+                            }))
+                        }
+                    />
+                    <input
+                        placeholder="What's on your mind?"
+                        maxLength={140}
+                        value={profile.profile.status?.text ?? ''}
+                        onChange={(event) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                profile: {
+                                    ...prev.profile,
+                                    status: nextStatus(prev.profile.status, {
+                                        text: event.target.value,
+                                    }),
+                                },
+                            }))
+                        }
+                    />
+                    <input
+                        type="datetime-local"
+                        value={profile.profile.status?.expiresAt?.slice(0, 16) ?? ''}
+                        onChange={(event) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                profile: {
+                                    ...prev.profile,
+                                    status: nextStatus(prev.profile.status, {
+                                        expiresAt: event.target.value
+                                            ? new Date(event.target.value).toISOString()
+                                            : undefined,
+                                    }),
+                                },
+                            }))
+                        }
+                    />
+                </div>
+                {profile.profile.status?.text ? (
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                profile: { ...prev.profile, status: undefined },
+                            }))
+                        }
+                        style={{ alignSelf: 'flex-start' }}
+                    >
+                        Clear status
+                    </button>
+                ) : null}
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Wall settings</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    <label>
+                        Visibility
+                        <select
+                            value={profile.profile.wall?.visibility ?? 'public'}
+                            onChange={(event) =>
+                                setProfile((prev) => ({
+                                    ...prev,
+                                    profile: {
+                                        ...prev.profile,
+                                        wall: nextWall(prev.profile.wall, {
+                                            visibility: event.target.value as ProfileWallVisibility,
+                                        }),
+                                    },
+                                }))
+                            }
+                            style={{ display: 'block', width: '100%' }}
+                        >
+                            <option value="public">Public</option>
+                            <option value="friends">Friends</option>
+                            <option value="private">Private</option>
+                        </select>
+                    </label>
+                    <label>
+                        Who can post
+                        <select
+                            value={profile.profile.wall?.whoCanPost ?? 'friends'}
+                            onChange={(event) =>
+                                setProfile((prev) => ({
+                                    ...prev,
+                                    profile: {
+                                        ...prev.profile,
+                                        wall: nextWall(prev.profile.wall, {
+                                            whoCanPost: event.target.value as ProfileWallWhoCanPost,
+                                        }),
+                                    },
+                                }))
+                            }
+                            style={{ display: 'block', width: '100%' }}
+                        >
+                            <option value="owner">Only me</option>
+                            <option value="friends">Friends</option>
+                            <option value="anyone">Anyone</option>
+                        </select>
+                    </label>
+                    <label>
+                        Moderation
+                        <select
+                            value={profile.profile.wall?.moderation ?? 'open'}
+                            onChange={(event) =>
+                                setProfile((prev) => ({
+                                    ...prev,
+                                    profile: {
+                                        ...prev.profile,
+                                        wall: nextWall(prev.profile.wall, {
+                                            moderation: event.target.value as ProfileWallModeration,
+                                        }),
+                                    },
+                                }))
+                            }
+                            style={{ display: 'block', width: '100%' }}
+                        >
+                            <option value="open">Open</option>
+                            <option value="approval">Require approval</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Top friends (max 12)</h4>
+                <textarea
+                    rows={3}
+                    placeholder="@friend:server, one per line or comma-separated"
+                    value={(profile.profile.topFriends?.userIds ?? []).join('\n')}
+                    onChange={(event) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: {
+                                ...prev.profile,
+                                topFriends: nextTopFriends(event.target.value),
+                            },
+                        }))
+                    }
+                    style={{ width: '100%' }}
+                />
+                <small>{profile.profile.topFriends?.userIds.length ?? 0} of 12</small>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Profile theme</h4>
+                <ProfileThemeEditor
+                    theme={profile.profile.customTheme}
+                    onChange={(next) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: { ...prev.profile, customTheme: next },
+                        }))
+                    }
+                />
             </section>
 
             <section>
