@@ -20,6 +20,7 @@ export const featureModuleManifest = [
     'federated-ops',
     'auth-threads',
     'education',
+    'coalition',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

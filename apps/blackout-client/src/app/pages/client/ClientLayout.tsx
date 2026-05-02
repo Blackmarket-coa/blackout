@@ -24,6 +24,8 @@ import {
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
 import ForumView from '../../features/forum/ForumView';
+import CoalitionView from '../../features/coalition/CoalitionView';
+import { useCoalitionStateForRoom } from '../../features/coalition/useCoalitionState';
 import { QuickSwitcher as NavigationQuickSwitcher } from '../../features/navigation/QuickSwitcher';
 import { useMentionNavigation } from '../../features/navigation/useMentionNavigation';
 import GlobalMentionsInbox from '../../features/navigation/GlobalMentionsInbox';
@@ -97,7 +99,7 @@ export const ClientLayout = () => {
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum'>('timeline');
+    const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
     const previousRoomIdRef = useRef<string | null>(null);
@@ -128,6 +130,8 @@ export const ClientLayout = () => {
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
     const callEnabled = featureFlags['features.call.elementCall'] ?? false;
     const forumEnabled = featureFlags['features.bmc.forum'] ?? false;
+    const coalitionEnabled = featureFlags['features.bmc.coalition'] ?? true;
+    const coalitionDenState = useCoalitionStateForRoom(selectedRoomId ?? null);
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
         [rolesEnabled],
@@ -484,7 +488,20 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
-                        {forumEnabled && isForumRoom && roomSurface === 'forum' ? (
+                        {coalitionEnabled && coalitionDenState.enabled && roomSurface === 'coalition' ? (
+                            <CoalitionView
+                                denId={selectedRoomId}
+                                canopyId={coalitionDenState.canopyId ?? selectedSpaceId ?? null}
+                                enabledTabs={
+                                    coalitionDenState.enabledTabs.length > 0
+                                        ? coalitionDenState.enabledTabs
+                                        : undefined
+                                }
+                                scopeLabel={`Den · ${
+                                    rooms.find((room) => room.roomId === selectedRoomId)?.name ?? selectedRoomId
+                                }`}
+                            />
+                        ) : forumEnabled && isForumRoom && roomSurface === 'forum' ? (
                             <ForumView roomId={selectedRoomId} />
                         ) : (
                             <RoomTimeline
@@ -1460,6 +1477,28 @@ export const ClientLayout = () => {
                             Forum unavailable
                         </span>
                     )}
+                    {coalitionEnabled && coalitionDenState.enabled ? (
+                        <button
+                            type="button"
+                            data-testid="feature-room-bmc-coalition-toggle"
+                            onClick={() =>
+                                setRoomSurface((prev) =>
+                                    prev === 'coalition' ? 'timeline' : 'coalition',
+                                )
+                            }
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background:
+                                    roomSurface === 'coalition'
+                                        ? 'var(--accent-muted)'
+                                        : 'var(--bg-input)',
+                                borderRadius: 8,
+                                padding: '4px 8px',
+                            }}
+                        >
+                            Coalition
+                        </button>
+                    ) : null}
                     {rightPanels.map((panel) => (
                         <button
                             key={panel}

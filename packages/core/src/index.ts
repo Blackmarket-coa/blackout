@@ -10,3 +10,5 @@ export * from './themes';
 export * from './marketplace';
 
 export * from './apps';
+
+export * from './coalition';

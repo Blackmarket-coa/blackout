@@ -11,6 +11,7 @@ import marketplaceRoutes from './routes/marketplace';
 import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
 import appRoutes from './routes/apps';
+import coalitionRoutes from './routes/coalition';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
@@ -51,6 +52,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/voice`, voiceRoutes);
   app.route(`${root}/subscriptions`, subscriptionRoutes);
   app.route(`${root}/apps`, appRoutes);
+  app.route(`${root}/coalition`, coalitionRoutes);
   registerFeatureModules(app, root);
 }
 
