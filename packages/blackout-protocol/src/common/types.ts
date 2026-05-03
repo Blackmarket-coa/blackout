@@ -30,7 +30,7 @@ export type BlackoutEventName =
     | 'blackout.deadman.switch.checked_in'
     | 'blackout.deadman.switch.grace'
     | 'blackout.deadman.switch.triggered'
-    | 'blackout.deadman.switch.cancelled';
+    | 'blackout.deadman.switch.cancelled'
     | 'blackout.deaddrop.share.submitted'
     | 'blackout.deaddrop.audit';
 
