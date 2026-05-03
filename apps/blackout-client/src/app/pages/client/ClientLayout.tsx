@@ -52,6 +52,10 @@ import {
 } from '../../features/quick-actions/featureEntrypoints';
 import { customizationAtom } from '../../state/customization';
 import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
+import { CreateSpaceModalRenderer } from '../../features/create-space/CreateSpaceModal';
+import { CreateRoomModalRenderer } from '../../features/create-room/CreateRoomModal';
+import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
+import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -341,6 +345,18 @@ export const ClientLayout = () => {
         openRoomWithContext(roomId, jumpToEventId);
     };
 
+    const openCreateSpaceModal = useOpenCreateSpaceModal();
+    const openCreateRoomModal = useOpenCreateRoomModal();
+    const startNewDen = () => {
+        if (selectedSpaceId) {
+            openCreateRoomModal(selectedSpaceId);
+        } else if (orderedSpaces.length === 0) {
+            openCreateSpaceModal();
+        } else {
+            openCreateRoomModal(orderedSpaces[0]?.roomId);
+        }
+    };
+
     const markAllMentionsRead = async () => {
         await markAllRead();
     };
@@ -556,9 +572,13 @@ export const ClientLayout = () => {
                 ) : null}
                 <WelcomeScreen
                     spaceId={onboardingSpaceId}
-                    actionLabel={`Explore ${BLACKOUT_TERMS.den.plural}`}
+                    actionLabel={
+                        orderedSpaces.length === 0
+                            ? `Create your first ${BLACKOUT_TERMS.canopy.singular}`
+                            : `New ${BLACKOUT_TERMS.den.singular}`
+                    }
                     onPickChannel={(roomId) => openRoom(roomId)}
-                    onJoinOrExplore={() => setSelectedRoomId(null)}
+                    onJoinOrExplore={startNewDen}
                 />
             </div>
         );
@@ -682,12 +702,17 @@ export const ClientLayout = () => {
                     </div>
                     <button
                         type="button"
+                        onClick={() => openCreateSpaceModal()}
+                        title={`New ${BLACKOUT_TERMS.canopy.singular}`}
+                        aria-label={`New ${BLACKOUT_TERMS.canopy.singular}`}
                         style={{
                             width: 40,
                             height: 40,
                             borderRadius: 10,
                             border: '1px dashed var(--border-default)',
                             background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
                         }}
                     >
                         ＋
@@ -790,10 +815,16 @@ export const ClientLayout = () => {
                                         </button>
                                         <button
                                             type="button"
+                                            onClick={startNewDen}
+                                            title={`New ${BLACKOUT_TERMS.den.singular}`}
+                                            aria-label={`New ${BLACKOUT_TERMS.den.singular}`}
                                             style={{
                                                 border: '1px solid var(--border-default)',
                                                 borderRadius: 6,
                                                 background: 'var(--bg-input)',
+                                                color: 'var(--text-primary)',
+                                                cursor: 'pointer',
+                                                padding: '0 6px',
                                             }}
                                         >
                                             +
@@ -1611,6 +1642,9 @@ export const ClientLayout = () => {
                     />
                 </>
             ) : null}
+
+            <CreateSpaceModalRenderer />
+            <CreateRoomModalRenderer />
         </section>
     );
 };
