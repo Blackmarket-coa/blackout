@@ -13,6 +13,7 @@ import {
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import { sanitizeMatrixHtml } from '../../utils/bmc-markdown';
 import { designSpacing } from '../../../../../../packages/design/src';
+import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { useRoom } from '../../hooks/bmc-useRoom';
 import { useRoomTimeline, useTimelineScroll } from '../../hooks/bmc-useTimeline';
 import { useTypingIndicator } from '../../hooks/bmc-useTyping';
@@ -600,6 +601,7 @@ export const RoomTimeline = ({
     hasMoreBackPagination = true,
     onJumpResolved,
 }: RoomTimelineProps) => {
+    const client = useMatrixClient();
     const { data: events, loadMore } = useRoomTimeline(roomId);
     const { data: room } = useRoom(roomId);
     const { data: typingMembers } = useTypingIndicator(roomId);
@@ -682,6 +684,25 @@ export const RoomTimeline = ({
         el.scrollTop = el.scrollHeight;
         setScrollTop(el.scrollTop);
     }, [events.length, isAtBottom]);
+
+    const lastReceiptRef = useRef<string | null>(null);
+    useEffect(() => {
+        lastReceiptRef.current = null;
+    }, [roomId]);
+    useEffect(() => {
+        if (!isAtBottom || !room || events.length === 0) return;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        const latest = events[events.length - 1];
+        const eventId = latest.getId();
+        if (!eventId || lastReceiptRef.current === eventId) return;
+        const handle = window.setTimeout(() => {
+            client.sendReadReceipt(latest).catch(() => {
+                lastReceiptRef.current = null;
+            });
+            lastReceiptRef.current = eventId;
+        }, 350);
+        return () => window.clearTimeout(handle);
+    }, [client, events, isAtBottom, room]);
 
     useEffect(() => {
         if (!jumpToEventId) return;

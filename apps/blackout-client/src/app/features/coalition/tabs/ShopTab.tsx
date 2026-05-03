@@ -63,20 +63,48 @@ export function ShopTab({ scope }: ShopTabProps) {
                                         {listing.body}
                                     </small>
                                 ) : null}
-                                <button
-                                    type="button"
-                                    style={{
-                                        marginTop: 4,
-                                        border: '1px solid var(--accent-primary, #1ABC9C)',
-                                        background: 'transparent',
-                                        color: 'var(--accent-primary, #1ABC9C)',
-                                        borderRadius: 8,
-                                        padding: '6px 10px',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    View listing
-                                </button>
+                                {listing.denId ? (
+                                    <a
+                                        href={`/room/${encodeURIComponent(listing.denId)}`}
+                                        data-testid={`coalition-shop-view-${listing.id}`}
+                                        style={{
+                                            marginTop: 4,
+                                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                                            background: 'transparent',
+                                            color: 'var(--accent-primary, #1ABC9C)',
+                                            borderRadius: 8,
+                                            padding: '6px 10px',
+                                            cursor: 'pointer',
+                                            textDecoration: 'none',
+                                            textAlign: 'center',
+                                            fontSize: 13,
+                                        }}
+                                    >
+                                        Open den →
+                                    </a>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        data-testid={`coalition-shop-view-${listing.id}`}
+                                        onClick={() => {
+                                            const url = `${window.location.origin}/coalition/listing/${encodeURIComponent(listing.id)}`;
+                                            if (navigator.clipboard) {
+                                                void navigator.clipboard.writeText(url);
+                                            }
+                                        }}
+                                        style={{
+                                            marginTop: 4,
+                                            border: '1px solid var(--accent-primary, #1ABC9C)',
+                                            background: 'transparent',
+                                            color: 'var(--accent-primary, #1ABC9C)',
+                                            borderRadius: 8,
+                                            padding: '6px 10px',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Copy listing link
+                                    </button>
+                                )}
                             </div>
                         </article>
                     ))}
