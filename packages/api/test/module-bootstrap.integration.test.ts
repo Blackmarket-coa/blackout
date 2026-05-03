@@ -37,6 +37,7 @@ test('feature module registry contains canonical frontend domains', () => {
       'governance',
       'forum',
       'deaddrop',
+      'deadman',
       'moderation',
       'streaming',
       'discovery',
@@ -50,13 +51,14 @@ test('feature module routes bootstrap under /v1', async () => {
   const token = await issueToken();
   const headers = {
     authorization: `Bearer ${token}`,
-    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,moderation.read,streaming.read,discovery.read',
+    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,deadman.read,moderation.read,streaming.read,discovery.read',
   };
 
   const checks = await Promise.all([
     app.request('/v1/governance/events', { headers }),
     app.request('/v1/forum/events', { headers }),
     app.request('/v1/deaddrop/events', { headers }),
+    app.request('/v1/deadman/events', { headers }),
     app.request('/v1/moderation/events', { headers }),
     app.request('/v1/streaming/events', { headers }),
     app.request('/v1/discovery/events', { headers }),

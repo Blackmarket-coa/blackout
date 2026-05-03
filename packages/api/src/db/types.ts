@@ -102,6 +102,25 @@ export interface DeadDropRecord {
   createdAt: string;
 }
 
+export type DeadmanSwitchStatus = 'armed' | 'grace' | 'triggered' | 'cancelled';
+
+export interface DeadmanSwitchRecord {
+  id: UUID;
+  ownerId: UUID;
+  roomId: string;
+  status: DeadmanSwitchStatus;
+  checkInIntervalSeconds: number;
+  gracePeriodSeconds: number;
+  lastCheckInAt: string;
+  triggerAt: string;
+  releaseAt: string;
+  recipients: string[];
+  encryptedPayload: string;
+  headline?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ModerationActionRecord {
   id: UUID;
   communityId: UUID;

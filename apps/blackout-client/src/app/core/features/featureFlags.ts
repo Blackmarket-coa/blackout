@@ -4,6 +4,7 @@ export type FeatureFlags = {
     governance: boolean;
     forum: boolean;
     deaddrop: boolean;
+    deadman: boolean;
     steganography: boolean;
     moderation: boolean;
     monetization: boolean;
@@ -45,6 +46,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     governance: true,
     forum: true,
     deaddrop: true,
+    deadman: true,
     steganography: true,
     moderation: false,
     monetization: false,
@@ -275,6 +277,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_PROFILE === 'false') {
             nextFlags.profile = false;
         }
+        if (env.BLACKOUT_DEADMAN === 'true') {
+            nextFlags.deadman = true;
+        }
+        if (env.BLACKOUT_DEADMAN === 'false') {
+            nextFlags.deadman = false;
+        }
         return nextFlags;
     }
 
@@ -358,6 +366,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PROFILE === 'false') {
         nextFlags.profile = false;
+    }
+    if (env.BLACKOUT_DEADMAN === 'true') {
+        nextFlags.deadman = true;
+    }
+    if (env.BLACKOUT_DEADMAN === 'false') {
+        nextFlags.deadman = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
