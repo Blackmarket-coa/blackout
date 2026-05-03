@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import type { EntitlementAccessPayload, EntitlementFamily, EntitlementReadResponse } from '@blackout/protocol';
-import { parseEntitlementAccessPayload } from '@blackout/protocol';
+import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
+import { DEAD_DROP_TIER_ENTITLEMENTS, parseEntitlementAccessPayload } from '@blackout/protocol';
 import { getSubscription } from '../services/subscriptions';
 
 const entitlements = new Hono();
@@ -8,7 +8,11 @@ const entitlements = new Hono();
 const featurePrefixes: Record<EntitlementFamily, string> = {
   stego: 'features.stego.',
   governance: 'features.governance.',
+  deaddrop: 'features.deaddrop.',
 };
+
+const deaddropEntitlementsForTier = (tier: EntitlementTier): EntitlementMap =>
+  DEAD_DROP_TIER_ENTITLEMENTS[tier] as EntitlementMap;
 
 function defaultPayload(): EntitlementAccessPayload {
   return {
@@ -17,12 +21,14 @@ function defaultPayload(): EntitlementAccessPayload {
       'features.stego.enabled': true,
       'features.stego.ephemeral': false,
       'features.governance.entitlements': false,
+      ...deaddropEntitlementsForTier('free'),
     },
     orgTier: 'free',
     orgTierEntitlements: {
       'features.stego.enabled': true,
       'features.stego.ephemeral': false,
       'features.governance.entitlements': false,
+      ...deaddropEntitlementsForTier('free'),
     },
     planState: {
       tier: 'free',
@@ -42,22 +48,25 @@ function canonicalPayloadFromSubscription(userId: string): EntitlementAccessPayl
   const subscription = getSubscription(userId);
   const paid = subscription.entitlementActive;
   const premium = subscription.tier !== 'free';
+  const tier: EntitlementTier =
+    subscription.tier === 'canopy_pro' ? 'enterprise' : subscription.tier === 'sprout' ? 'pro' : 'free';
 
-  const entitlementSet = {
+  const entitlementSet: EntitlementMap = {
     'features.stego.enabled': true,
     'features.stego.ephemeral': paid,
     'features.governance.entitlements': paid,
     'features.canopy.premium': paid,
     'features.canopy.priority_support': premium,
-  } as const;
+    ...deaddropEntitlementsForTier(tier),
+  };
 
   return {
     deploymentPreset: 'starter',
     deploymentPresetEntitlements: entitlementSet,
-    orgTier: subscription.tier === 'canopy_pro' ? 'enterprise' : subscription.tier === 'sprout' ? 'pro' : 'free',
+    orgTier: tier,
     orgTierEntitlements: entitlementSet,
     planState: {
-      tier: subscription.tier === 'canopy_pro' ? 'enterprise' : subscription.tier === 'sprout' ? 'pro' : 'free',
+      tier,
       status: subscription.status,
       isPaid: paid,
       trialEndsAt: subscription.trialEndsAt ?? undefined,
@@ -102,8 +111,8 @@ entitlements.get('/me', (c) => {
 
 entitlements.get('/:family', (c) => {
   const family = c.req.param('family');
-  if (family !== 'stego' && family !== 'governance') {
-    return c.json({ code: 'invalid_entitlement_family', message: 'Family must be stego or governance.' }, 400);
+  if (family !== 'stego' && family !== 'governance' && family !== 'deaddrop') {
+    return c.json({ code: 'invalid_entitlement_family', message: 'Family must be stego, governance, or deaddrop.' }, 400);
   }
 
   try {

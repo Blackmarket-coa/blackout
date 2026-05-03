@@ -27,3 +27,4 @@ export {
     type DeadDropSchedule,
     type DeadDropScheduleType,
 } from './useDeadDrop';
+export { useDeadDropQuota, type DeadDropQuotaSnapshot } from './useDeadDropQuota';
