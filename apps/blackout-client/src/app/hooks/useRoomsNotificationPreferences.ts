@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ConditionKind, IPushRules, MatrixClient, PushRuleKind } from 'matrix-js-sdk';
 import { Icons, IconSrc } from 'folds';
 import { AccountDataEvent } from '../../types/matrix/accountData';
@@ -16,21 +16,6 @@ export type RoomsNotificationPreferences = {
   mute: Set<string>;
   specialMessages: Set<string>;
   allMessages: Set<string>;
-};
-
-const RoomsNotificationPreferencesContext = createContext<RoomsNotificationPreferences | null>(
-  null
-);
-export const RoomsNotificationPreferencesProvider = RoomsNotificationPreferencesContext.Provider;
-
-export const useRoomsNotificationPreferencesContext = (): RoomsNotificationPreferences => {
-  const preferences = useContext(RoomsNotificationPreferencesContext);
-
-  if (!preferences) {
-    throw new Error('No RoomsNotificationPreferences provided!');
-  }
-
-  return preferences;
 };
 
 export const useRoomsNotificationPreferences = (): RoomsNotificationPreferences => {
