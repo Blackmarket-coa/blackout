@@ -5,31 +5,13 @@ import type {
     NormalizedEntitlement,
     NormalizedLifecycleEvent,
 } from '@blackout/core';
-
-interface WebhookAuditRecord {
-    providerId: MarketplaceProviderId;
-    eventId: string;
-    receivedAt: string;
-    processedAt: string | null;
-    signatureOk: boolean;
-    payload: unknown;
-}
-
-interface LicenseKeyRecord {
-    entitlementId: string;
-    key: string;
-    activationsUsed: number;
-    activationsMax: number;
-}
-
-const entitlementsByUser = new Map<string, NormalizedEntitlement[]>();
-const entitlementsById = new Map<string, NormalizedEntitlement>();
-const webhookAudit = new Map<string, WebhookAuditRecord>();
-const licenseKeys = new Map<string, LicenseKeyRecord>();
-
-function auditKey(providerId: MarketplaceProviderId, eventId: string): string {
-    return `${providerId}:${eventId}`;
-}
+import { db } from '../db/store';
+import type {
+    MarketplaceEntitlementRecord,
+    MarketplaceLicenseKeyRecord,
+    MarketplaceProviderIdString,
+} from '../db/types';
+import { incrementCounter, logEvent } from './marketplaceObservability';
 
 function generateLicenseKey(): string {
     const bytes = crypto.randomBytes(16);
@@ -37,23 +19,32 @@ function generateLicenseKey(): string {
     return `${hex.slice(0, 8)}-${hex.slice(8, 16)}-${hex.slice(16, 24)}-${hex.slice(24, 32)}`;
 }
 
-function putEntitlement(entitlement: NormalizedEntitlement): void {
-    entitlementsById.set(entitlement.id, entitlement);
-    const list = entitlementsByUser.get(entitlement.userId) ?? [];
-    const filtered = list.filter((candidate) => candidate.id !== entitlement.id);
-    filtered.push(entitlement);
-    entitlementsByUser.set(entitlement.userId, filtered);
+function nowIso(): string {
+    return new Date().toISOString();
 }
 
-function updateStatus(entitlement: NormalizedEntitlement, status: EntitlementStatus): NormalizedEntitlement {
-    const next = { ...entitlement, status };
-    putEntitlement(next);
-    return next;
+function toNormalized(record: MarketplaceEntitlementRecord): NormalizedEntitlement {
+    return {
+        id: record.id,
+        userId: record.userId,
+        providerId: record.providerId as MarketplaceProviderId,
+        providerListingId: record.providerListingId,
+        sku: record.sku,
+        kind: record.kind,
+        status: record.status,
+        grantedAt: record.grantedAt,
+        expiresAt: record.expiresAt,
+        sourceEventId: record.sourceEventId,
+        metadata: record.metadata,
+    };
 }
 
-export function hasProcessedWebhookEvent(providerId: MarketplaceProviderId, eventId: string): boolean {
-    const record = webhookAudit.get(auditKey(providerId, eventId));
-    return record?.processedAt !== null && record?.processedAt !== undefined;
+export function hasProcessedWebhookEvent(
+    providerId: MarketplaceProviderId,
+    eventId: string
+): boolean {
+    const audit = db.getMarketplaceWebhook(providerId as MarketplaceProviderIdString, eventId);
+    return audit?.processedAt !== null && audit?.processedAt !== undefined;
 }
 
 export function recordWebhookReceipt(
@@ -62,55 +53,59 @@ export function recordWebhookReceipt(
     signatureOk: boolean,
     payload: unknown
 ): void {
-    webhookAudit.set(auditKey(providerId, eventId), {
-        providerId,
+    const existing = db.getMarketplaceWebhook(providerId as MarketplaceProviderIdString, eventId);
+    if (existing) return;
+    db.recordMarketplaceWebhook({
+        id: crypto.randomUUID(),
+        providerId: providerId as MarketplaceProviderIdString,
         eventId,
-        receivedAt: new Date().toISOString(),
+        receivedAt: nowIso(),
         processedAt: null,
         signatureOk,
         payload,
     });
+    incrementCounter('marketplace_webhook_received_total', { providerId, signatureOk });
 }
 
-export function markWebhookProcessed(providerId: MarketplaceProviderId, eventId: string): void {
-    const record = webhookAudit.get(auditKey(providerId, eventId));
-    if (record) {
-        record.processedAt = new Date().toISOString();
-        webhookAudit.set(auditKey(providerId, eventId), record);
-    }
-}
-
-function findEntitlementForEvent(event: NormalizedLifecycleEvent): NormalizedEntitlement | undefined {
-    const list = entitlementsByUser.get(event.userId) ?? [];
-    return list.find(
-        (candidate) =>
-            candidate.providerId === event.providerId &&
-            candidate.providerListingId === event.providerListingId &&
-            (event.sku ? candidate.sku === event.sku : true)
+export function markWebhookProcessed(
+    providerId: MarketplaceProviderId,
+    eventId: string
+): void {
+    db.markMarketplaceWebhookProcessed(
+        providerId as MarketplaceProviderIdString,
+        eventId,
+        nowIso()
     );
 }
 
 export interface ApplyEventResult {
     entitlement: NormalizedEntitlement | null;
-    licenseKey: LicenseKeyRecord | null;
+    licenseKey: MarketplaceLicenseKeyRecord | null;
     alreadyProcessed: boolean;
 }
 
 export function applyLifecycleEvent(event: NormalizedLifecycleEvent): ApplyEventResult {
     if (hasProcessedWebhookEvent(event.providerId, event.eventId)) {
-        const existing = findEntitlementForEvent(event);
+        const existing = db.findMarketplaceEntitlement({
+            userId: event.userId,
+            providerId: event.providerId as MarketplaceProviderIdString,
+            providerListingId: event.providerListingId,
+            sku: event.sku,
+        });
         return {
-            entitlement: existing ?? null,
-            licenseKey: existing ? licenseKeys.get(existing.id) ?? null : null,
+            entitlement: existing ? toNormalized(existing) : null,
+            licenseKey: existing ? db.getMarketplaceLicenseKey(existing.id) ?? null : null,
             alreadyProcessed: true,
         };
     }
 
     if (event.type === 'purchase.succeeded') {
-        const entitlement: NormalizedEntitlement = {
-            id: crypto.randomUUID(),
+        const id = crypto.randomUUID();
+        const timestamp = nowIso();
+        const record: MarketplaceEntitlementRecord = {
+            id,
             userId: event.userId,
-            providerId: event.providerId,
+            providerId: event.providerId as MarketplaceProviderIdString,
             providerListingId: event.providerListingId,
             sku: event.sku,
             kind: event.kind,
@@ -119,27 +114,46 @@ export function applyLifecycleEvent(event: NormalizedLifecycleEvent): ApplyEvent
             expiresAt: null,
             sourceEventId: event.eventId,
             metadata: event.metadata,
+            createdAt: timestamp,
+            updatedAt: timestamp,
         };
-        putEntitlement(entitlement);
+        db.upsertMarketplaceEntitlement(record);
 
-        let licenseKey: LicenseKeyRecord | null = null;
+        let licenseKey: MarketplaceLicenseKeyRecord | null = null;
         if (event.kind === 'software_license') {
-            licenseKey = {
-                entitlementId: entitlement.id,
-                key: generateLicenseKey(),
+            licenseKey = db.upsertMarketplaceLicenseKey({
+                entitlementId: id,
+                licenseKey: generateLicenseKey(),
                 activationsUsed: 0,
-                activationsMax: typeof event.metadata['activationsMax'] === 'number'
-                    ? (event.metadata['activationsMax'] as number)
-                    : 3,
-            };
-            licenseKeys.set(entitlement.id, licenseKey);
+                activationsMax:
+                    typeof event.metadata['activationsMax'] === 'number'
+                        ? (event.metadata['activationsMax'] as number)
+                        : 3,
+                createdAt: timestamp,
+            });
         }
 
         markWebhookProcessed(event.providerId, event.eventId);
-        return { entitlement, licenseKey, alreadyProcessed: false };
+        incrementCounter('marketplace_entitlement_granted_total', {
+            providerId: event.providerId,
+            kind: event.kind,
+        });
+        logEvent('marketplace.entitlement.granted', {
+            entitlementId: id,
+            userId: event.userId,
+            providerId: event.providerId,
+            providerListingId: event.providerListingId,
+            sourceEventId: event.eventId,
+        });
+        return { entitlement: toNormalized(record), licenseKey, alreadyProcessed: false };
     }
 
-    const existing = findEntitlementForEvent(event);
+    const existing = db.findMarketplaceEntitlement({
+        userId: event.userId,
+        providerId: event.providerId as MarketplaceProviderIdString,
+        providerListingId: event.providerListingId,
+        sku: event.sku,
+    });
     if (!existing) {
         markWebhookProcessed(event.providerId, event.eventId);
         return { entitlement: null, licenseKey: null, alreadyProcessed: false };
@@ -150,30 +164,45 @@ export function applyLifecycleEvent(event: NormalizedLifecycleEvent): ApplyEvent
     if (event.type === 'purchase.chargebacked') nextStatus = 'chargebacked';
     if (event.type === 'purchase.failed') nextStatus = 'revoked';
 
-    const updated = updateStatus(existing, nextStatus);
+    const updated = db.upsertMarketplaceEntitlement({
+        ...existing,
+        status: nextStatus,
+        updatedAt: nowIso(),
+    });
     markWebhookProcessed(event.providerId, event.eventId);
+    incrementCounter('marketplace_entitlement_status_change_total', {
+        providerId: event.providerId,
+        status: nextStatus,
+    });
+    logEvent('marketplace.entitlement.status_change', {
+        entitlementId: updated.id,
+        userId: updated.userId,
+        providerId: updated.providerId,
+        sourceEventId: event.eventId,
+        nextStatus,
+    });
     return {
-        entitlement: updated,
-        licenseKey: licenseKeys.get(updated.id) ?? null,
+        entitlement: toNormalized(updated),
+        licenseKey: db.getMarketplaceLicenseKey(updated.id) ?? null,
         alreadyProcessed: false,
     };
 }
 
 export function listEntitlementsForUser(userId: string): NormalizedEntitlement[] {
-    return [...(entitlementsByUser.get(userId) ?? [])];
+    return db.listMarketplaceEntitlementsByUser(userId).map(toNormalized);
 }
 
 export function getEntitlementById(entitlementId: string): NormalizedEntitlement | undefined {
-    return entitlementsById.get(entitlementId);
+    const record = db.getMarketplaceEntitlement(entitlementId);
+    return record ? toNormalized(record) : undefined;
 }
 
-export function getLicenseKey(entitlementId: string): LicenseKeyRecord | undefined {
-    return licenseKeys.get(entitlementId);
+export function getLicenseKey(
+    entitlementId: string
+): MarketplaceLicenseKeyRecord | undefined {
+    return db.getMarketplaceLicenseKey(entitlementId);
 }
 
 export function resetMarketplaceEntitlementsForTest(): void {
-    entitlementsByUser.clear();
-    entitlementsById.clear();
-    webhookAudit.clear();
-    licenseKeys.clear();
+    db.resetMarketplaceForTest();
 }

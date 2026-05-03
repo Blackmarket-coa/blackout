@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { getMessageActions } from '../../../../../src/lib/bmc-core/quick-actions';
+import { getMessageActions } from '../../../../src/lib/bmc-core/quick-actions';
 import {
     composerQuickActionsPlugin,
     resolveComposerMessageSpacingItems,
-} from '../../../../../src/app/plugins/composer';
+} from '../../../../src/app/plugins/composer';
 import {
     isRuntimePluginEnabled,
     orderedRuntimePlugins,
-} from '../../../../../src/app/plugins/manifest';
-import { runtimeFeatureFlags } from '../../../../../src/app/core/features/featureFlags';
+} from '../../../../src/app/plugins/manifest';
+import { runtimeFeatureFlags } from '../../../../src/app/core/features/featureFlags';
 
 describe('composer quick actions plugin', () => {
     it('uses deterministic manifest ordering and explicit toggle', () => {
@@ -19,6 +19,7 @@ describe('composer quick actions plugin', () => {
             'navigation.space-hierarchy',
             'notifications.adapter',
             'right-panel.slots',
+            'live-interaction.bundle',
         ]);
         expect(isRuntimePluginEnabled('composer.quick-actions')).toBe(
             runtimeFeatureFlags.composerQuickActions

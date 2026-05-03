@@ -351,18 +351,18 @@ When CI was repointed from `@blackout/blackout-web` (legacy shell archived
 2026-05-01) to `@blackout/client`, 17 pre-existing broken test files
 surfaced. Two were fixed in-place (an `act` import was being read from
 `react` instead of `react-dom/test-utils`, breaking `GovernanceDashboard`
-and `GlobalMentionsInbox`). The remaining 14 are quarantined in
+and `GlobalMentionsInbox`). Six plugin-test files were un-quarantined on
+2026-05-02 after the underlying source modules landed and the test import
+paths were corrected from a stale `../../../../../src` (5 levels up) to
+the canonical `../../../../src` (4 levels up — project root); the
+composer / notifications manifest-order assertions were updated to
+include the `live-interaction.bundle` plugin added after the tests were
+quarantined. The remaining 8 are quarantined in
 `apps/blackout-client/vitest.config.ts`'s `exclude` list pending
 feature-level fixes:
 
 | File | Failure mode | Likely fix |
 | --- | --- | --- |
-| `tests/unit/plugins/composer/composerQuickActionsPlugin.test.ts` | Imports `src/lib/bmc-core/quick-actions` (missing) | Build the missing source module or rewrite the plugin |
-| `tests/unit/plugins/matrix-adapters/readOnlyMatrixAdapters.test.ts` | Imports `src/app/plugins/matrix-adapters` (missing) | Build the missing source module |
-| `tests/unit/plugins/navigation/spaceHierarchyPlugin.test.ts` | Imports `src/app/plugins/navigation` (missing) | Build the missing source module |
-| `tests/unit/plugins/notifications/notificationsPlugin.test.ts` | Imports `src/app/plugins/notifications` (missing) | Build the missing source module |
-| `tests/unit/plugins/shell/shellLayoutPlugin.test.tsx` | Imports `src/app/plugins/shell/shellLayoutPlugin` (missing) | Build the missing source module |
-| `tests/unit/plugins/theme/legacyThemePlugin.test.ts` | Imports `src/app/plugins/theme/legacyThemePlugin` (missing) | Build the missing source module |
 | `tests/unit/utils/room.test.ts` | Imports util fns from `src/app/utils/room` that aren't exported | Restore exports or rewrite the test |
 | `tests/unit/features/navigation/QuickSwitcher.test.tsx` | `buildQuickSwitcherIndex` not implemented; assertion-level test drift | Implement helper + refresh DOM assertions; tracked under Workstream F |
 | `tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx` | Asserts a "Moderation" nav link the modern shell does not render yet | Refresh after Workstream A Port 1 lands |

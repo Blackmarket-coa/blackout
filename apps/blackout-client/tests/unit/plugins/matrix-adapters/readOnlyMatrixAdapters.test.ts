@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     createReadOnlyMatrixAdapters,
     matrixReadOnlyAdaptersPlugin,
-} from '../../../../../src/app/plugins/matrix-adapters';
+} from '../../../../src/app/plugins/matrix-adapters';
 
 describe('matrix read-only adapters plugin boundary', () => {
     it('defines register/unregister lifecycle hooks', () => {

@@ -24,13 +24,13 @@ import {
     listEntitlementsForUser,
 } from '../services/marketplaceEntitlements';
 import { dispatchMarketplaceWebhook } from '../services/marketplaceWebhook';
+import { incrementCounter, logEvent } from '../services/marketplaceObservability';
+import { db } from '../db/store';
+import type { MarketplaceProviderIdString } from '../db/types';
 
 const marketplace = new Hono();
 
 const LISTING_TTL_MS = 60_000;
-
-type CachedListings = { at: number; listings: NormalizedListing[] };
-const listingsCache = new Map<string, CachedListings>();
 
 function cacheKey(providerId: MarketplaceProviderId, query: CatalogQuery): string {
     return `${providerId}|${query.category ?? ''}|${query.q ?? ''}|${query.cursor ?? ''}|${query.limit ?? ''}`;
@@ -93,16 +93,33 @@ marketplace.get('/listings', async (c) => {
     const results = await Promise.all(
         targets.map(async (provider) => {
             const key = cacheKey(provider.id, query);
-            const cached = listingsCache.get(key);
-            if (cached && Date.now() - cached.at < LISTING_TTL_MS) {
-                return cached.listings;
+            const cached = db.getMarketplaceListingsCache(key);
+            const cachedAge = cached ? Date.now() - Date.parse(cached.refreshedAt) : Infinity;
+            if (cached && cachedAge < LISTING_TTL_MS) {
+                return cached.listings as NormalizedListing[];
             }
             try {
                 const listings = await provider.fetchCatalog(query);
-                listingsCache.set(key, { at: Date.now(), listings });
+                db.upsertMarketplaceListingsCache({
+                    cacheKey: key,
+                    providerId: provider.id as MarketplaceProviderIdString,
+                    listings,
+                    refreshedAt: new Date().toISOString(),
+                });
+                incrementCounter('marketplace_catalog_fetch_total', { providerId: provider.id });
                 return listings;
             } catch (error) {
-                console.warn(`[marketplace] provider ${provider.id} catalog fetch failed`, error);
+                logEvent('marketplace.catalog.fetch_failed', {
+                    providerId: provider.id,
+                    error: error instanceof Error ? error.message : String(error),
+                    fellBackToStaleSnapshot: Boolean(cached),
+                });
+                incrementCounter('marketplace_catalog_fetch_failed_total', {
+                    providerId: provider.id,
+                });
+                if (cached) {
+                    return cached.listings as NormalizedListing[];
+                }
                 return [] as NormalizedListing[];
             }
         })
@@ -150,6 +167,15 @@ marketplace.post('/checkout', async (c) => {
         sku,
         idempotencyKey,
         returnUrl,
+    });
+    incrementCounter('marketplace_checkout_created_total', { providerId });
+    logEvent('marketplace.checkout.created', {
+        providerId,
+        userId: user.sub,
+        listingId,
+        sku: sku ?? null,
+        sessionId: result.sessionId,
+        idempotencyKey,
     });
     return c.json({
         redirectUrl: result.redirectUrl,
@@ -206,7 +232,7 @@ marketplace.get('/fulfillment/:entitlementId/asset', (c) => {
     if (entitlement.kind === 'software_license') {
         const key = getLicenseKey(entitlement.id);
         if (key) {
-            response['licenseKey'] = key.key;
+            response['licenseKey'] = key.licenseKey;
             response['activationsUsed'] = key.activationsUsed;
             response['activationsMax'] = key.activationsMax;
         }

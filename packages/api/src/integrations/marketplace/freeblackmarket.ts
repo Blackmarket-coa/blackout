@@ -12,8 +12,12 @@ import { parseNormalizedLifecycleEvent, parseNormalizedListing } from '@blackout
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 
-function envBool(key: string, fallback: boolean): boolean {
-    const raw = process.env[key];
+function envBool(
+    key: string,
+    fallback: boolean,
+    env: NodeJS.ProcessEnv = process.env
+): boolean {
+    const raw = env[key];
     if (raw === undefined) return fallback;
     return raw === '1' || raw.toLowerCase() === 'true';
 }
@@ -50,11 +54,26 @@ function toNormalized(raw: UpstreamListing): NormalizedListing {
     });
 }
 
+export function assertFreeblackmarketSecretsForProduction(env: NodeJS.ProcessEnv = process.env): void {
+    if (env.NODE_ENV !== 'production') return;
+    if (envBool('FREEBLACKMARKET_ENABLED', true, env) === false) return;
+    const missing: string[] = [];
+    if (!env.FREEBLACKMARKET_API_KEY) missing.push('FREEBLACKMARKET_API_KEY');
+    if (!env.FREEBLACKMARKET_WEBHOOK_SECRET) missing.push('FREEBLACKMARKET_WEBHOOK_SECRET');
+    if (missing.length > 0) {
+        throw new Error(
+            `[freeblackmarket] Refusing to start in production with missing secrets: ${missing.join(', ')}. ` +
+                `Set FREEBLACKMARKET_ENABLED=false to opt out, or supply both secrets.`
+        );
+    }
+}
+
 export function createFreeblackmarketProvider(): MarketplaceProvider {
     const baseUrl = process.env.FREEBLACKMARKET_BASE_URL ?? 'https://api.freeblackmarket.com';
     const apiKey = process.env.FREEBLACKMARKET_API_KEY ?? '';
     const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);
+    assertFreeblackmarketSecretsForProduction();
 
     async function call<T>(path: string, init?: RequestInit): Promise<T> {
         const response = await fetch(new URL(path, baseUrl), {
