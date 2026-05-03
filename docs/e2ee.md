@@ -43,6 +43,15 @@ this behaviour will be overridden.
 By default, Element strongly encourages (but does not require) users to set up
 recovery so that you can access history on your new devices as well as retain access to your message history and cryptographic identity when you lose all of your devices.
 
+## Blackout policy override
+
+Blackout can enforce recovery setup as a hard onboarding gate via the
+policy in
+`apps/blackout-client/src/app/features/settings/security/encryptionPosture.ts`.
+Pass a custom `OnboardingPolicy` to `onboardingBlocked()` to relax the
+default. The default policy requires both cross-signing and recovery
+to align with the Element April-2026 verified-device-only norm.
+
 ## Removal of old settings
 
 Support for the configuration options `secure_backup_required` and `secure_backup_setup_methods`

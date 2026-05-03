@@ -19,6 +19,22 @@ import { clientQueries } from '../../sdk/client';
 
 const MSC3401_EVENT_TYPES = ['m.call.member', 'org.matrix.msc3401.call.member'];
 
+/**
+ * Whether to negotiate per-call media E2EE (Megolm via the matrix-js-sdk
+ * RTCEncryptionManager + LiveKit insertable streams). This adds a frame-level
+ * encryption layer on top of DTLS-SRTP so the SFU cannot read media plaintext.
+ * Townhall broadcast mode uses sender-keys (one-way) and is selected by
+ * passing { mode: 'broadcast' } to joinCall.
+ */
+export type CallE2eeMode = 'symmetric' | 'broadcast' | 'off';
+export type CallE2eeStatus = 'pending' | 'active' | 'unavailable' | 'disabled';
+
+export interface CallE2eeState {
+    mode: CallE2eeMode;
+    status: CallE2eeStatus;
+    reason: string;
+}
+
 export interface CallMemberState {
     userId: string;
     deviceId?: string;
@@ -51,6 +67,10 @@ interface MatrixRtcSessionStarter {
     };
 }
 
+export interface JoinCallOptions {
+    mode?: CallE2eeMode;
+}
+
 interface CallContextValue {
     roomId: string | null;
     joined: boolean;
@@ -62,9 +82,10 @@ interface CallContextValue {
     focusStatus: CallFocusResolution['status'];
     focusReason: string;
     focusMessage: string;
+    e2ee: CallE2eeState;
     membership: Record<string, CallMemberState>;
     audioLevels: Record<string, AudioLevelState>;
-    joinCall: (roomId: string) => Promise<void>;
+    joinCall: (roomId: string, options?: JoinCallOptions) => Promise<void>;
     leaveCall: () => Promise<void>;
     setMuted: (value: boolean) => void;
     setDeafened: (value: boolean) => void;
@@ -121,6 +142,30 @@ const readRtcFocus = async (client: MatrixClient): Promise<CallFocusResolution> 
 const getSessionStarter = (client: MatrixClient): MatrixRtcSessionStarter =>
     client as unknown as MatrixRtcSessionStarter;
 
+/**
+ * Build the matrixRTC session options for a given E2EE mode.
+ * - symmetric: per-call Megolm key shared between participants (default).
+ * - broadcast: sender-key model used for townhalls; presenters publish, audience subscribes.
+ * - off: no media E2EE (DTLS-SRTP only). Only acceptable for explicitly-public, non-sensitive calls.
+ */
+export const buildRtcSessionOptions = (
+    mode: CallE2eeMode,
+    focusUrl: string | null,
+): Record<string, unknown> => {
+    const base: Record<string, unknown> = {
+        focusPreferred: focusUrl ? [focusUrl] : undefined,
+    };
+    switch (mode) {
+        case 'broadcast':
+            return { ...base, manageMediaKeys: true, encryptionMode: 'broadcast' };
+        case 'off':
+            return { ...base, manageMediaKeys: false };
+        case 'symmetric':
+        default:
+            return { ...base, manageMediaKeys: true, encryptionMode: 'symmetric' };
+    }
+};
+
 export const CallProvider = ({ children }: { children: ReactNode }) => {
     const client = useMatrixClient();
 
@@ -137,6 +182,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const [preferredVideoDeviceId, setPreferredVideoDeviceId] = useState<string | null>(null);
     const [membership, setMembership] = useState<Record<string, CallMemberState>>({});
     const [audioLevels, setAudioLevels] = useState<Record<string, AudioLevelState>>({});
+    const [e2ee, setE2ee] = useState<CallE2eeState>({
+        mode: 'symmetric',
+        status: 'pending',
+        reason: 'not joined',
+    });
 
     const activeSessionRef = useRef<MatrixRtcSessionLike | null>(null);
     const activeDeviceStreamRef = useRef<{ getTracks: () => Array<{ stop: () => void }> } | null>(
@@ -227,36 +277,53 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         setAudioLevels({});
         setScreenSharing(false);
         setCameraEnabled(false);
+        setE2ee({ mode: 'symmetric', status: 'pending', reason: 'not joined' });
     }, []);
 
     const joinCall = useCallback(
-        async (nextRoomId: string) => {
+        async (nextRoomId: string, options: JoinCallOptions = {}) => {
             if (roomId && roomId !== nextRoomId) {
                 await leaveCall();
             }
 
             setRoomId(nextRoomId);
 
+            const mode = options.mode ?? 'symmetric';
+            setE2ee({ mode, status: 'pending', reason: 'starting session' });
+
             const matrixRtc = getSessionStarter(client).matrixRTC;
             if (!matrixRtc?.startRoomSession) {
                 setFocusStatus('degraded');
                 setFocusReason('matrixRTC startRoomSession unavailable');
+                setE2ee({
+                    mode,
+                    status: 'unavailable',
+                    reason: 'matrixRTC unavailable; media-plane E2EE could not be negotiated',
+                });
                 setJoined(true);
                 return;
             }
 
             try {
-                const session = await matrixRtc.startRoomSession(nextRoomId, {
-                    manageMediaKeys: true,
-                    focusPreferred: focusUrl ? [focusUrl] : undefined,
-                });
+                const sessionOptions = buildRtcSessionOptions(mode, focusUrl);
+                const session = await matrixRtc.startRoomSession(nextRoomId, sessionOptions);
 
                 await session.joinRoomSession?.();
                 activeSessionRef.current = session;
                 setJoined(true);
+                setE2ee({
+                    mode,
+                    status: mode === 'off' ? 'disabled' : 'active',
+                    reason:
+                        mode === 'off'
+                            ? 'E2EE disabled by caller; DTLS-SRTP only'
+                            : 'per-call media keys negotiated',
+                });
             } catch (error) {
                 setFocusStatus('degraded');
-                setFocusReason(error instanceof Error ? error.message : 'session start failed');
+                const reason = error instanceof Error ? error.message : 'session start failed';
+                setFocusReason(reason);
+                setE2ee({ mode, status: 'unavailable', reason });
                 setJoined(true);
             }
         },
@@ -285,6 +352,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             focusStatus,
             focusReason,
             focusMessage: getActionableCallMessage(focusStatus, focusReason),
+            e2ee,
             membership,
             audioLevels,
             joinCall,
@@ -303,6 +371,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             audioLevels,
             cameraEnabled,
             deafened,
+            e2ee,
             focusReason,
             focusStatus,
             focusUrl,

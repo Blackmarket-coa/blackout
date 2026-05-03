@@ -33,6 +33,8 @@ Owner: `@blackout-release-eng`
 - [x] Updated `release/train/image_provenance.json`
 - [x] `source_revision` and `upstream_base_revision` set
 - [x] `sbom_artifact_uri` and `provenance_artifact_uri` point to published or pre-publish artifact locations
+- [x] Release workflow produces SPDX SBOM for the web bundle and embedded SBOM for the Docker image
+- [x] Release artifacts and Docker image are signed via cosign keyless OIDC; verification documented in `docs/security/release-signing.md`
 
 ## Sign-off
 

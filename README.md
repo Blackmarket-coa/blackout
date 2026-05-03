@@ -24,6 +24,11 @@ Key areas:
 - Steganography code: `src/steganography/*`
 - Feature and rollout documentation: `docs/*`
 
+For security context, start with:
+
+- [`THREAT_MODEL.md`](THREAT_MODEL.md) — top-level adversary model, trust boundaries, accepted residual risks
+- [`SECURITY.md`](SECURITY.md) — vulnerability disclosure process
+
 For deeper architecture context:
 
 - `docs/repository_functionality_analysis.md`
