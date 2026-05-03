@@ -46,7 +46,14 @@ The split is intentional:
    - `SYNAPSE_MACAROON_SECRET_KEY`
    - `SYNAPSE_FORM_SECRET`
    - `TURN_STATIC_AUTH_SECRET`
-2. Render `synapse/homeserver.yaml` from template with environment substitution.
+2. Render `synapse/homeserver.yaml` once via `synapse/render-homeserver.sh`.
+   The script reads `infra/single-server-baseline/.env` and runs `envsubst`
+   against `homeserver.yaml.template`. **It refuses to overwrite an existing
+   `homeserver.yaml` unless you pass `--force`** — re-rendering rotates
+   `SYNAPSE_MACAROON_SECRET_KEY` and instantly invalidates every issued
+   access token (`M_UNKNOWN_TOKEN`), forcing all users and devices to log in
+   again. Treat the rendered file (and the secrets in `.env`) as long-lived
+   state: back them up alongside Postgres and the Synapse signing key.
 3. Start `postgres`, `redis`, `synapse`, and `coturn`.
 4. Create first admin with shared-secret registration:
    - `register_new_matrix_user -c /data/homeserver.yaml http://127.0.0.1:8008`
