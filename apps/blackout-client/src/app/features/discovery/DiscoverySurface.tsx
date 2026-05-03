@@ -35,7 +35,12 @@ const SORT_OPTIONS: Array<{ label: string; value: DiscoverySort }> = [
   { label: 'New to You', value: 'new_to_you' },
 ];
 
-export function DiscoverySurface() {
+export type DiscoverySurfaceProps = {
+  onSelectRoom?: (roomId: string) => void;
+  onSelectSpace?: (spaceId: string) => void;
+};
+
+export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfaceProps = {}) {
   const { server } = useParams();
   const mx = useMatrixClient();
   const allRooms = useAtomValue(allRoomsAtom);
@@ -127,8 +132,8 @@ export function DiscoverySurface() {
   const openOrJoin = async (item: DiscoveryItem) => {
     await performDiscoveryAction(item, {
       joinRoom: (roomIdOrAlias, viaServers) => mx.joinRoom(roomIdOrAlias, { viaServers }),
-      openRoom: navigateRoom,
-      openSpace: navigateSpace,
+      openRoom: onSelectRoom ?? navigateRoom,
+      openSpace: onSelectSpace ?? navigateSpace,
     });
   };
 

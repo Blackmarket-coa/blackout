@@ -56,6 +56,9 @@ import { CreateSpaceModalRenderer } from '../../features/create-space/CreateSpac
 import { CreateRoomModalRenderer } from '../../features/create-room/CreateRoomModal';
 import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
 import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
+import { useBindAtoms } from '../../state/hooks/useBindAtoms';
+import { DiscoverySurface } from '../../features/discovery/DiscoverySurface';
+import { OnboardingFlow } from '../../features/onboarding/OnboardingFlow';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -81,6 +84,7 @@ const isMobile = (width: number): boolean => width < 760;
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
+    useBindAtoms(client);
     const rooms = useAtomValue(joinedRoomsAtom);
     const userId = useAtomValue(userIdAtom);
     const [storedSettings, setSettings] = useAtom(settingsAtom);
@@ -103,6 +107,8 @@ export const ClientLayout = () => {
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [exploreOpen, setExploreOpen] = useState(false);
+    const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
@@ -357,6 +363,14 @@ export const ClientLayout = () => {
         }
     };
 
+    const exploreOrCreate = () => {
+        if (orderedSpaces.length === 0) {
+            setExploreOpen(true);
+        } else {
+            startNewDen();
+        }
+    };
+
     const markAllMentionsRead = async () => {
         await markAllRead();
     };
@@ -574,11 +588,11 @@ export const ClientLayout = () => {
                     spaceId={onboardingSpaceId}
                     actionLabel={
                         orderedSpaces.length === 0
-                            ? `Create your first ${BLACKOUT_TERMS.canopy.singular}`
+                            ? `Explore ${BLACKOUT_TERMS.canopy.plural}`
                             : `New ${BLACKOUT_TERMS.den.singular}`
                     }
                     onPickChannel={(roomId) => openRoom(roomId)}
-                    onJoinOrExplore={startNewDen}
+                    onJoinOrExplore={exploreOrCreate}
                 />
             </div>
         );
@@ -716,6 +730,24 @@ export const ClientLayout = () => {
                         }}
                     >
                         ＋
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setExploreOpen(true)}
+                        title="Explore public communities"
+                        aria-label="Explore"
+                        style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 10,
+                            border: '1px solid var(--border-default)',
+                            background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            fontSize: 18,
+                        }}
+                    >
+                        🧭
                     </button>
                     {desktop && userId ? (
                         <button
@@ -1241,6 +1273,27 @@ export const ClientLayout = () => {
                     />
                 ) : null}
 
+                {!selectedRoomId && selectedSpaceId ? (
+                    <button
+                        type="button"
+                        onClick={() => setOnboardingOpen(true)}
+                        style={{
+                            position: 'absolute',
+                            top: 12,
+                            right: 12,
+                            border: '1px solid var(--border-default)',
+                            background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            borderRadius: 999,
+                            padding: '4px 12px',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Continue setup →
+                    </button>
+                ) : null}
+
                 {rightPanel ? (
                     <aside
                         style={{
@@ -1641,6 +1694,112 @@ export const ClientLayout = () => {
                         }}
                     />
                 </>
+            ) : null}
+
+            {exploreOpen ? (
+                <aside
+                    role="dialog"
+                    aria-label="Explore"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        overflow: 'auto',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 16px',
+                            borderBottom: '1px solid var(--border-default)',
+                        }}
+                    >
+                        <strong>Explore {BLACKOUT_TERMS.canopy.plural}</strong>
+                        <button
+                            type="button"
+                            onClick={() => setExploreOpen(false)}
+                            aria-label="Close explore"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <DiscoverySurface
+                        onSelectRoom={(roomId) => {
+                            setExploreOpen(false);
+                            openRoom(roomId);
+                        }}
+                        onSelectSpace={(spaceId) => {
+                            setExploreOpen(false);
+                            setSelectedSpaceId(spaceId);
+                            setSelectedRoomId(null);
+                        }}
+                    />
+                </aside>
+            ) : null}
+
+            {onboardingOpen ? (
+                <aside
+                    role="dialog"
+                    aria-label="Community onboarding"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        overflow: 'auto',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                        padding: 16,
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingBottom: 8,
+                            borderBottom: '1px solid var(--border-default)',
+                            marginBottom: 12,
+                        }}
+                    >
+                        <strong>Community onboarding</strong>
+                        <button
+                            type="button"
+                            onClick={() => setOnboardingOpen(false)}
+                            aria-label="Close onboarding"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <OnboardingFlow
+                        spaceId={onboardingSpaceId}
+                        onClose={() => setOnboardingOpen(false)}
+                        onCompleted={() => setOnboardingOpen(false)}
+                    />
+                </aside>
             ) : null}
 
             <CreateSpaceModalRenderer />
