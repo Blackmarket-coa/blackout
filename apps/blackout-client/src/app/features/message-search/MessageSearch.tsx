@@ -42,6 +42,7 @@ type MessageSearchProps = {
   rooms: string[];
   senders?: string[];
   scrollRef: RefObject<HTMLDivElement>;
+  onOpen?: (roomId: string, eventId?: string) => void;
 };
 export function MessageSearch({
   defaultRoomsFilterName,
@@ -49,6 +50,7 @@ export function MessageSearch({
   rooms,
   senders,
   scrollRef,
+  onOpen,
 }: MessageSearchProps) {
   const mx = useMatrixClient();
   const mDirects = useAtomValue(mDirectAtom);
@@ -290,7 +292,7 @@ export function MessageSearch({
                     items={group.items}
                     mediaAutoLoad={mediaAutoLoad}
                     urlPreview={urlPreview}
-                    onOpen={navigateRoom}
+                    onOpen={onOpen ?? navigateRoom}
                     legacyUsernameColor={legacyUsernameColor || mDirects.has(groupRoom.roomId)}
                     hour24Clock={hour24Clock}
                     dateFormatString={dateFormatString}
