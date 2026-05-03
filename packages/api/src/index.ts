@@ -13,9 +13,13 @@ import subscriptionRoutes from './routes/subscriptions';
 import appRoutes from './routes/apps';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
+import webauthnRoutes from './routes/webauthn';
+import keyTransparencyRoutes from './routes/keyTransparency';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
+import { securityHeaders } from './middleware/security-headers';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
+import { log } from './telemetry/logger';
 import { runSecurityPreflight } from './config/security';
 import { registerFeatureModules } from './modules';
 
@@ -24,6 +28,18 @@ const app = new Hono();
 const API_ALIAS_REMOVAL_DATE = '2026-08-31';
 const legacyAliasEnabled = new Date() < new Date(`${API_ALIAS_REMOVAL_DATE}T00:00:00.000Z`);
 
+const cspConnectExtra = (process.env.CSP_CONNECT_SRC ?? '').split(/\s+/).filter(Boolean);
+const cspMediaExtra = (process.env.CSP_MEDIA_SRC ?? '').split(/\s+/).filter(Boolean);
+
+app.use(
+  '*',
+  securityHeaders({
+    connectSrc: cspConnectExtra,
+    mediaSrc: cspMediaExtra,
+    reportOnly: process.env.CSP_REPORT_ONLY === '1',
+    reportUri: process.env.CSP_REPORT_URI,
+  }),
+);
 app.use('*', cors());
 app.use('*', rateLimit);
 app.use(`${API_ROOTS.v1}/*`, authMiddleware);
@@ -37,7 +53,7 @@ if (legacyAliasEnabled) {
     c.header('Deprecation', 'true');
     c.header('Sunset', API_ALIAS_REMOVAL_DATE);
     c.header('Link', '</docs/api/versioning.md>; rel="deprecation"; type="text/markdown"');
-    console.warn(`[api] deprecated namespace used: ${c.req.method} ${c.req.path}`);
+    log.warn('legacy api namespace used', { method: c.req.method, path: c.req.path });
   });
 
   startLegacyApiAliasWeeklyReporter();
@@ -55,6 +71,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/apps`, appRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
+  app.route(`${root}/auth/webauthn`, webauthnRoutes);
+  app.route(`${root}/key-transparency`, keyTransparencyRoutes);
   registerFeatureModules(app, root);
 }
 
@@ -65,7 +83,7 @@ const shouldListen = process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API
 
 if (shouldListen) {
   serve({ fetch: app.fetch, port: PORT }, (info) => {
-    console.log(`[blackout-server] listening on http://localhost:${info.port}`);
+    log.info('blackout-server listening', { port: info.port });
   });
 }
 

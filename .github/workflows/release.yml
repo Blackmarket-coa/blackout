@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
   packages: write
+  # required for cosign keyless signing via Sigstore
+  id-token: write
+  attestations: write
 
 jobs:
   build-web:
@@ -24,6 +27,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @blackout/client run build
+
+      - name: Generate SPDX SBOM for web bundle
+        uses: anchore/sbom-action@v0
+        with:
+          path: apps/blackout-client
+          format: spdx-json
+          artifact-name: blackout-web-${{ github.ref_name }}.spdx.json
+          output-file: apps/blackout-client/dist/sbom.spdx.json
+
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: blackout-web-${{ github.ref_name }}
@@ -146,15 +158,57 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker image build + push to GHCR
+        id: docker_build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: |
             ghcr.io/blackmarket-coa/blackout:latest
             ghcr.io/blackmarket-coa/blackout:${{ github.ref_name }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Sign published Docker image (keyless / OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          cosign sign --yes \
+            "ghcr.io/blackmarket-coa/blackout@${{ steps.docker_build.outputs.digest }}"
+
+      - name: Sign release artifacts (keyless / OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          for f in artifacts/**/*; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.sig|*.pem|*.bundle) continue ;;
+            esac
+            echo "Signing $f"
+            cosign sign-blob --yes \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.pem" \
+              --bundle "$f.bundle" \
+              "$f"
+          done
+
+      - name: Attach signatures to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.sig
+            artifacts/**/*.pem
+            artifacts/**/*.bundle
 
       - name: Deploy to production
         run: |

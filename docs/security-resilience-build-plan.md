@@ -103,6 +103,21 @@ jobs:
 2. Input validation standard for all new endpoints.
 3. Consistent authz checks (least privilege).
 
+### Enforced HTTP security headers (current)
+
+The Blackout API enforces a strict, default-deny CSP plus a hardening header
+suite via `packages/api/src/middleware/security-headers.ts`. Operator knobs:
+
+- `CSP_CONNECT_SRC` — space-separated list of extra `connect-src` hosts (e.g.
+  homeserver, push gateway, identity provider).
+- `CSP_MEDIA_SRC` — extra `media-src` hosts (LiveKit ingress URLs, etc.).
+- `CSP_REPORT_ONLY=1` — emit `Content-Security-Policy-Report-Only` for
+  staged rollout.
+- `CSP_REPORT_URI` — endpoint that receives violation reports.
+
+The static client also emits per-asset Subresource Integrity hashes at build
+time (sha384) via `apps/blackout-client/vite-plugin-sri.ts`.
+
 ### Open source packages
 
 - **helmet**

@@ -1,3 +1,5 @@
+import { log } from './logger';
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 type UsageBucket = {
@@ -33,10 +35,13 @@ export function emitWeeklyLegacyApiAliasReport(now = new Date()) {
     const topPaths = [...bucket.byPath.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([path, count]) => `${path}:${count}`)
-      .join(', ');
+      .map(([path, count]) => ({ path, count }));
 
-    console.info(`[api][legacy-alias][weekly] week=${weekKey} total=${bucket.total} top_paths=[${topPaths}]`);
+    log.info('legacy-alias weekly report', {
+      week: weekKey,
+      total: bucket.total,
+      top_paths: topPaths,
+    });
     usageByWeek.delete(weekKey);
   }
 }

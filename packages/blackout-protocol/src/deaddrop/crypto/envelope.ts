@@ -21,12 +21,15 @@ import { randomId } from './random';
 import { importRecipientPrivateKey } from './keys';
 
 export const ENVELOPE_VERSION = 1;
-export const SUPPORTED_SUITES = ['sealedbox-x25519-aes256gcm-v1'] as const;
+export const SUPPORTED_SUITES = [
+    'sealedbox-x25519-aes256gcm-v1',
+    'sealedbox-x25519-mlkem768-aes256gcm-v2',
+] as const;
 export type EnvelopeSuite = (typeof SUPPORTED_SUITES)[number];
 
 export type DeadDropEnvelopeV1 = {
     v: 1;
-    suite: EnvelopeSuite;
+    suite: 'sealedbox-x25519-aes256gcm-v1';
     pad: PaddingStrategy;
     /** opaque drop id, server-issued at create time can override */
     dropId: string;
@@ -41,6 +44,35 @@ export type DeadDropEnvelopeV1 = {
     /** ISO 8601 server-enforced expiry */
     expiresAt: string;
 };
+
+/**
+ * Post-quantum hybrid envelope. Adds an ML-KEM-768 ciphertext leg next
+ * to the existing X25519 ephemeral public key. Recipients combine both
+ * shared secrets through HKDF (see `pqHybrid.ts`), so an attacker must
+ * break both X25519 AND ML-KEM-768 to recover the AEAD key.
+ *
+ * Field naming preserves wire-compat with v1 where it makes sense
+ * (`ek`, `nonce`, `ct`, `clue`, `pad`, `dropId`, `expiresAt`) and adds
+ * the new leg (`pqCt`).
+ */
+export type DeadDropEnvelopeV2 = {
+    v: 2;
+    suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2';
+    pad: PaddingStrategy;
+    dropId: string;
+    clue: string;
+    /** base64, 32 bytes — sender's ephemeral X25519 public key. */
+    ek: string;
+    /** base64, 1088 bytes — ML-KEM-768 KEM ciphertext. */
+    pqCt: string;
+    /** base64, 12 bytes. */
+    nonce: string;
+    /** base64 — AES-GCM ciphertext+tag. */
+    ct: string;
+    expiresAt: string;
+};
+
+export type AnyDeadDropEnvelope = DeadDropEnvelopeV1 | DeadDropEnvelopeV2;
 
 export type EncryptInput = {
     plaintext: Uint8Array;
@@ -106,7 +138,7 @@ export const decryptDeadDrop = async (
  * and contains no fields outside the published wire format. Used by the
  * appservice to reject any cleartext-leaking submissions.
  */
-const SERVER_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+const V1_ALLOWED_KEYS: ReadonlySet<string> = new Set([
     'v',
     'suite',
     'pad',
@@ -118,19 +150,51 @@ const SERVER_ALLOWED_KEYS: ReadonlySet<string> = new Set([
     'expiresAt',
 ]);
 
-export const isOpaqueEnvelope = (input: unknown): input is DeadDropEnvelopeV1 => {
+const V2_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+    'v',
+    'suite',
+    'pad',
+    'dropId',
+    'clue',
+    'ek',
+    'pqCt',
+    'nonce',
+    'ct',
+    'expiresAt',
+]);
+
+const padIsValid = (pad: unknown): boolean => pad === 'minimal' || pad === 'bucket';
+
+export const isOpaqueEnvelopeV1 = (input: unknown): input is DeadDropEnvelopeV1 => {
     if (!input || typeof input !== 'object') return false;
     const obj = input as Record<string, unknown>;
     for (const key of Object.keys(obj)) {
-        if (!SERVER_ALLOWED_KEYS.has(key)) return false;
+        if (!V1_ALLOWED_KEYS.has(key)) return false;
     }
     if (obj.v !== 1) return false;
-    if (typeof obj.suite !== 'string' || !SUPPORTED_SUITES.includes(obj.suite as EnvelopeSuite)) {
-        return false;
-    }
-    if (obj.pad !== 'minimal' && obj.pad !== 'bucket') return false;
+    if (obj.suite !== 'sealedbox-x25519-aes256gcm-v1') return false;
+    if (!padIsValid(obj.pad)) return false;
     for (const k of ['dropId', 'clue', 'ek', 'nonce', 'ct', 'expiresAt']) {
         if (typeof obj[k] !== 'string' || (obj[k] as string).length === 0) return false;
     }
     return true;
 };
+
+export const isOpaqueEnvelopeV2 = (input: unknown): input is DeadDropEnvelopeV2 => {
+    if (!input || typeof input !== 'object') return false;
+    const obj = input as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+        if (!V2_ALLOWED_KEYS.has(key)) return false;
+    }
+    if (obj.v !== 2) return false;
+    if (obj.suite !== 'sealedbox-x25519-mlkem768-aes256gcm-v2') return false;
+    if (!padIsValid(obj.pad)) return false;
+    for (const k of ['dropId', 'clue', 'ek', 'pqCt', 'nonce', 'ct', 'expiresAt']) {
+        if (typeof obj[k] !== 'string' || (obj[k] as string).length === 0) return false;
+    }
+    return true;
+};
+
+/** Accept either a v1 or v2 envelope. */
+export const isOpaqueEnvelope = (input: unknown): input is AnyDeadDropEnvelope =>
+    isOpaqueEnvelopeV1(input) || isOpaqueEnvelopeV2(input);

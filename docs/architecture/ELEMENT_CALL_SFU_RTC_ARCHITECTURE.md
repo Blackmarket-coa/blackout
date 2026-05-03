@@ -1,7 +1,25 @@
 # Element Call + SFU RTC Architecture
 
 Status: Proposed (baseline for implementation planning)  
-Last updated: 2026-04-09
+Last updated: 2026-05-03
+
+## Media-plane end-to-end encryption
+
+Per-call media E2EE is negotiated at session start by `CallProvider.tsx`
+via `buildRtcSessionOptions(mode, focus)`. Three modes are supported:
+
+| Mode | When to use | matrixRTC options |
+|------|-------------|-------------------|
+| `symmetric` (default) | 1:1, group, voice channels | `manageMediaKeys: true, encryptionMode: 'symmetric'` |
+| `broadcast` | Townhalls (presenter→audience fanout) | `manageMediaKeys: true, encryptionMode: 'broadcast'` |
+| `off` | Explicitly-public, non-sensitive calls only | `manageMediaKeys: false` |
+
+The `EncryptionBadge` component surfaces the negotiated state in the call
+UI. When the matrixRTC SDK is unavailable, the call still establishes (so
+users are not silently dropped) but the badge shows `No media E2EE` and the
+call provider records `e2ee.status = 'unavailable'`.
+
+This addresses residual risk **R2** in `THREAT_MODEL.md` §7.
 
 ## 1) Scope and goals
 
