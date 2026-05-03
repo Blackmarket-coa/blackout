@@ -1,7 +1,7 @@
 # Deaddrop Post-Quantum Hybrid (v2 envelope)
 
-Status: **wire format + KDF combiner shipped**; ML-KEM-768 primitive
-deferred to a follow-up that adds a vetted dependency.
+Status: **shipped end-to-end**, including the ML-KEM-768 primitive via
+`@noble/post-quantum`.
 
 ## Why hybrid
 
@@ -41,34 +41,36 @@ key, so the hybrid is strictly stronger than either primitive alone.
 - Pluggable `KemProvider` interface with `setKemProvider()` /
   `getKemProvider()`. The default is `NULL_KEM_PROVIDER`, which throws
   on every operation so we cannot accidentally encrypt with a zero-
-  strength KEM.
-- 19 regression tests (`apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`)
+  strength KEM. The production provider `mlKem768Provider` is exported
+  from `@blackout/protocol`; operators wire it during protocol bootstrap
+  with `setKemProvider(mlKem768Provider)`.
+- `encryptDeadDrop({ suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+  recipientPqPublicKey })` produces a `DeadDropEnvelopeV2` with a real
+  ML-KEM-768 KEM ciphertext. `decryptDeadDrop` dispatches on
+  `envelope.v` and accepts `recipientPqSecretKey` for v2.
+- 30 regression tests (`apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`)
   covering KDF determinism, salt binding, transcript binding, empty-
-  secret rejection, and v1↔v2 envelope validators.
+  secret rejection, v1↔v2 envelope validators, ML-KEM-768 size constants
+  (FIPS 203 Table 3), real keypair generation, encapsulate / decapsulate
+  round-trip, IND-CCA2 implicit rejection on tampered ciphertext, length
+  guards, end-to-end v2 envelope round-trip, and rejection of mismatched
+  PQ keys.
 
 ## What is deferred
 
-The ML-KEM-768 primitive itself is not implemented. WebCrypto does not
-yet expose ML-KEM, so the production provider must wrap a vetted
-library (recommended: `@noble/post-quantum`'s `ml_kem768`). That
-follow-up should:
+Nothing in the v2 path. The KEM module follows FIPS 203 ML-KEM-768
+exactly through `@noble/post-quantum`. Future work is upgrades, not
+deferrals:
 
-1. Add `@noble/post-quantum` to `packages/blackout-protocol`.
-2. Implement a `KemProvider` backed by `ml_kem768.{keygen,encapsulate,decapsulate}`.
-3. Wire the provider in protocol bootstrap (`setKemProvider(...)`).
-4. Extend `encryptDeadDrop` to accept a `suite: 'v1' | 'v2'` selector
-   and produce a `DeadDropEnvelopeV2` when v2 is requested.
-5. Extend `decryptDeadDrop` to dispatch on `envelope.v`.
-6. Add round-trip tests using the real KEM.
-
-Until that follow-up ships, calling `deriveHybridAeadKey()` works (it
-is pure HKDF over caller-supplied bytes) but `encryptDeadDrop` /
-`decryptDeadDrop` remain v1-only — there is no path that accidentally
-emits a v2 envelope without the operator opting in via `setKemProvider`.
+- ML-KEM-1024 for higher-strength deployments (drop-in via the same
+  `KemProvider` interface).
+- Sender-binding signatures over the envelope so v2 also authenticates
+  the sender (today it is sealed-box / anonymous-from-the-server).
 
 ## Tracking
 
 - Source: `packages/blackout-protocol/src/deaddrop/crypto/pqHybrid.ts`,
+  `packages/blackout-protocol/src/deaddrop/crypto/mlkem768Provider.ts`,
   `packages/blackout-protocol/src/deaddrop/crypto/envelope.ts`.
 - Tests: `apps/blackout-client/tests/unit/sdk/deaddropPqHybrid.test.ts`.
 - Threat model entry: `THREAT_MODEL.md` §7 R3.

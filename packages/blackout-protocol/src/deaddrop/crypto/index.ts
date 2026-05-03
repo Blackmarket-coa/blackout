@@ -40,3 +40,4 @@ export {
     type KemEncapsulation,
     type DeriveHybridKeyInput,
 } from './pqHybrid';
+export { mlKem768Provider } from './mlkem768Provider';

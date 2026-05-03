@@ -89,9 +89,8 @@ router.post('/register/finish', async (c) => {
     });
     if (!challenge) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
 
-    const result = verifyAttestation({
-        clientDataJSON: parsed.credential.response.clientDataJSON,
-        attestationObject: parsed.credential.response.attestationObject,
+    const result = await verifyAttestation({
+        response: parsed.credential as Parameters<typeof verifyAttestation>[0]['response'],
         expectedChallenge: challenge.challenge,
         config: status.cfg,
     });
@@ -102,18 +101,20 @@ router.post('/register/finish', async (c) => {
     }
 
     storeCredential({
-        credentialId: parsed.credential.id,
+        credentialId: result.credentialId,
         userId: parsed.userId,
-        publicKeyCose: result.publicKeyCose ?? '',
-        signCount: result.signCount ?? 0,
-        transports: parsed.credential.response.transports ?? [],
+        publicKeyCose: result.publicKeyCose,
+        signCount: result.signCount,
+        transports: result.transports.length > 0
+            ? result.transports
+            : parsed.credential.response.transports ?? [],
         createdAt: Date.now(),
         lastUsedAt: null,
         label: parsed.label,
     });
 
-    log.info('webauthn credential registered', { user_id: parsed.userId, credential_id: parsed.credential.id });
-    return c.json({ ok: true, credentialId: parsed.credential.id });
+    log.info('webauthn credential registered', { user_id: parsed.userId, credential_id: result.credentialId });
+    return c.json({ ok: true, credentialId: result.credentialId });
 });
 
 const loginBeginSchema = z.object({ userId: z.string().min(1) });
@@ -178,11 +179,8 @@ router.post('/login/finish', async (c) => {
     });
     if (!challenge) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
 
-    const result = verifyAssertion({
-        clientDataJSON: parsed.credential.response.clientDataJSON,
-        authenticatorData: parsed.credential.response.authenticatorData,
-        signature: parsed.credential.response.signature,
-        credentialId: parsed.credential.id,
+    const result = await verifyAssertion({
+        response: parsed.credential as Parameters<typeof verifyAssertion>[0]['response'],
         expectedChallenge: challenge.challenge,
         config: status.cfg,
     });
@@ -192,7 +190,7 @@ router.post('/login/finish', async (c) => {
         return c.json({ code: result.code, detail: result.detail }, 400);
     }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, credentialId: result.credentialId, signCount: result.signCount });
 });
 
 export default router;

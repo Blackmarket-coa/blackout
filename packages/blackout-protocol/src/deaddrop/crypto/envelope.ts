@@ -18,7 +18,15 @@ import { pad, unpad, type PaddingStrategy } from './padding';
 import { open, seal } from './sealedBox';
 import { deriveClue } from './clue';
 import { randomId } from './random';
-import { importRecipientPrivateKey } from './keys';
+import {
+    deriveSharedSecret,
+    generateEphemeralKeyPair,
+    importRecipientPrivateKey,
+    importRecipientPublicKey,
+} from './keys';
+import { importAesGcmKey } from './hkdf';
+import { deriveHybridAeadKey, getKemProvider } from './pqHybrid';
+import { randomBytes } from './random';
 
 export const ENVELOPE_VERSION = 1;
 export const SUPPORTED_SUITES = [
@@ -81,56 +89,169 @@ export type EncryptInput = {
     expiresAt: string;
     /** Optional caller-supplied id; otherwise a 16-byte random hex id is generated. */
     dropId?: string;
+    /**
+     * Suite selector. Defaults to v1 for compatibility. Pick v2 for the
+     * post-quantum hybrid envelope; this requires an ML-KEM provider to
+     * have been wired via `setKemProvider` (see `mlkem768Provider`) and a
+     * recipient PQ public key (`recipientPqPublicKey`, raw 1184 bytes).
+     */
+    suite?: EnvelopeSuite;
+    /**
+     * Recipient ML-KEM-768 raw public key (1184 bytes). Required when
+     * `suite === 'sealedbox-x25519-mlkem768-aes256gcm-v2'`.
+     */
+    recipientPqPublicKey?: Uint8Array;
 };
 
-export const encryptDeadDrop = async (
+const subtle = (): SubtleCrypto => globalThis.crypto.subtle;
+
+export type EncryptInputV1 = Omit<EncryptInput, 'suite' | 'recipientPqPublicKey'> & {
+    suite?: 'sealedbox-x25519-aes256gcm-v1';
+};
+
+export type EncryptInputV2 = EncryptInput & {
+    suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2';
+    recipientPqPublicKey: Uint8Array;
+};
+
+export function encryptDeadDrop(input: EncryptInputV1): Promise<DeadDropEnvelopeV1>;
+export function encryptDeadDrop(input: EncryptInputV2): Promise<DeadDropEnvelopeV2>;
+export function encryptDeadDrop(input: EncryptInput): Promise<AnyDeadDropEnvelope>;
+export async function encryptDeadDrop(
     input: EncryptInput
-): Promise<DeadDropEnvelopeV1> => {
+): Promise<AnyDeadDropEnvelope> {
     if (input.plaintext.length === 0) {
         throw new Error('plaintext must not be empty');
     }
     const dropId = input.dropId ?? randomId(16);
+    const suite = input.suite ?? 'sealedbox-x25519-aes256gcm-v1';
     const { padded } = pad(input.plaintext, input.paddingStrategy);
-    const sealed = await seal(padded, input.recipientPublicKeyBase64);
     const clue = await deriveClue(input.recipientPublicKeyBase64, dropId);
-    return {
-        v: 1,
-        suite: 'sealedbox-x25519-aes256gcm-v1',
-        pad: input.paddingStrategy,
-        dropId,
-        clue: toBase64(clue),
-        ek: toBase64(sealed.ephemeralPubKey),
-        nonce: toBase64(sealed.nonce),
-        ct: toBase64(sealed.ciphertext),
-        expiresAt: input.expiresAt,
-    };
-};
+
+    if (suite === 'sealedbox-x25519-aes256gcm-v1') {
+        const sealed = await seal(padded, input.recipientPublicKeyBase64);
+        return {
+            v: 1,
+            suite: 'sealedbox-x25519-aes256gcm-v1',
+            pad: input.paddingStrategy,
+            dropId,
+            clue: toBase64(clue),
+            ek: toBase64(sealed.ephemeralPubKey),
+            nonce: toBase64(sealed.nonce),
+            ct: toBase64(sealed.ciphertext),
+            expiresAt: input.expiresAt,
+        };
+    }
+
+    if (suite === 'sealedbox-x25519-mlkem768-aes256gcm-v2') {
+        if (!input.recipientPqPublicKey) {
+            throw new Error('recipientPqPublicKey is required for v2 suite');
+        }
+        const kem = getKemProvider();
+        if (input.recipientPqPublicKey.length !== kem.publicKeyLength) {
+            throw new Error(
+                `recipientPqPublicKey must be ${kem.publicKeyLength} bytes, got ${input.recipientPqPublicKey.length}`,
+            );
+        }
+        const recipientEcPub = await importRecipientPublicKey(input.recipientPublicKeyBase64);
+        const ephemeral = await generateEphemeralKeyPair();
+        const ecSecret = await deriveSharedSecret(ephemeral.privateKey, recipientEcPub);
+        const { ciphertext: pqCiphertext, sharedSecret: pqSecret } = await kem.encapsulate(
+            input.recipientPqPublicKey,
+        );
+        const aeadKeyBytes = await deriveHybridAeadKey({
+            ecSecret,
+            pqSecret,
+            ephemeralX25519Pub: ephemeral.publicKeyBytes,
+            pqCiphertext,
+        });
+        const aeadKey = await importAesGcmKey(aeadKeyBytes);
+        const nonce = randomBytes(12);
+        const ct = new Uint8Array(
+            await subtle().encrypt(
+                { name: 'AES-GCM', iv: nonce as unknown as BufferSource },
+                aeadKey,
+                padded as unknown as BufferSource,
+            ),
+        );
+        return {
+            v: 2,
+            suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+            pad: input.paddingStrategy,
+            dropId,
+            clue: toBase64(clue),
+            ek: toBase64(ephemeral.publicKeyBytes),
+            pqCt: toBase64(pqCiphertext),
+            nonce: toBase64(nonce),
+            ct: toBase64(ct),
+            expiresAt: input.expiresAt,
+        };
+    }
+
+    throw new Error(`unsupported suite: ${suite as string}`);
+}
 
 export type DecryptInput = {
-    envelope: DeadDropEnvelopeV1;
+    envelope: AnyDeadDropEnvelope;
     recipientPrivateKeyJwk: JsonWebKey;
+    /**
+     * Recipient ML-KEM-768 raw secret key (2400 bytes). Required when
+     * decrypting a v2 envelope.
+     */
+    recipientPqSecretKey?: Uint8Array;
 };
 
 export const decryptDeadDrop = async (
     input: DecryptInput
 ): Promise<Uint8Array> => {
     const env = input.envelope;
-    if (env.v !== 1) {
-        throw new Error(`unsupported envelope version: ${env.v as number}`);
+    if (env.v === 1) {
+        if (!SUPPORTED_SUITES.includes(env.suite)) {
+            throw new Error(`unsupported suite: ${env.suite as string}`);
+        }
+        const privateKey = await importRecipientPrivateKey(input.recipientPrivateKeyJwk);
+        const padded = await open(
+            {
+                ephemeralPubKey: fromBase64(env.ek),
+                nonce: fromBase64(env.nonce),
+                ciphertext: fromBase64(env.ct),
+            },
+            privateKey
+        );
+        return unpad(padded);
     }
-    if (!SUPPORTED_SUITES.includes(env.suite)) {
-        throw new Error(`unsupported suite: ${env.suite as string}`);
+
+    if (env.v === 2) {
+        if (!input.recipientPqSecretKey) {
+            throw new Error('recipientPqSecretKey is required to decrypt a v2 envelope');
+        }
+        const kem = getKemProvider();
+        const ephemeralPubBytes = fromBase64(env.ek);
+        const pqCiphertext = fromBase64(env.pqCt);
+        const ephemeralPub = await importRecipientPublicKey(env.ek);
+        const privateKey = await importRecipientPrivateKey(input.recipientPrivateKeyJwk);
+        const ecSecret = await deriveSharedSecret(privateKey, ephemeralPub);
+        const pqSecret = await kem.decapsulate(pqCiphertext, input.recipientPqSecretKey);
+        const aeadKeyBytes = await deriveHybridAeadKey({
+            ecSecret,
+            pqSecret,
+            ephemeralX25519Pub: ephemeralPubBytes,
+            pqCiphertext,
+        });
+        const aeadKey = await importAesGcmKey(aeadKeyBytes);
+        const nonce = fromBase64(env.nonce);
+        const ct = fromBase64(env.ct);
+        const padded = new Uint8Array(
+            await subtle().decrypt(
+                { name: 'AES-GCM', iv: nonce as unknown as BufferSource },
+                aeadKey,
+                ct as unknown as BufferSource,
+            ),
+        );
+        return unpad(padded);
     }
-    const privateKey = await importRecipientPrivateKey(input.recipientPrivateKeyJwk);
-    const padded = await open(
-        {
-            ephemeralPubKey: fromBase64(env.ek),
-            nonce: fromBase64(env.nonce),
-            ciphertext: fromBase64(env.ct),
-        },
-        privateKey
-    );
-    return unpad(padded);
+
+    throw new Error(`unsupported envelope version: ${(env as { v: number }).v}`);
 };
 
 /**

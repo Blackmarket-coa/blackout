@@ -13,11 +13,22 @@
  * own published key on session start, and a regular auditor fetches
  * consistency proofs between roots to ensure the log is append-only.
  *
- * This module is pure: it does not pin a storage backend. Callers wrap
- * it with persistence.
+ * Storage is pluggable via `KeyTransparencyStorage` (see
+ * `./keyTransparencyStorage.ts`); the default in-memory adapter keeps
+ * the historical pure-function behaviour for tests.
+ *
+ * Witnesses are pluggable via `LogWitness`. A witness binds a tree root
+ * to a signed-tree-head (STH) so a third-party auditor can detect a
+ * homeserver showing different roots to different clients. The default
+ * `nullWitness` returns no signature; an Ed25519 witness sourced from a
+ * deployment-secret seed is provided as `ed25519Witness`.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
+import {
+    InMemoryKtStorage,
+    type KeyTransparencyStorage,
+} from './keyTransparencyStorage';
 
 const sha256 = (input: Buffer): Buffer => createHash('sha256').update(input).digest();
 
@@ -115,16 +126,126 @@ const subProof = (m: number, leaves: Buffer[], b: boolean): Buffer[] => {
     throw new Error(`m=${m} out of range for leaves.length=${leaves.length}`);
 };
 
+export interface SignedTreeHead {
+    treeSize: number;
+    rootHash: string; // base64url
+    /** ISO 8601 issuance time. */
+    issuedAt: string;
+    /** Witness public key, base64url; '' when unsigned. */
+    witnessKey: string;
+    /** Detached signature, base64url over `treeSize||rootHash||issuedAt`. */
+    signature: string;
+    /** Witness scheme identifier — currently `ed25519` or `none`. */
+    scheme: 'ed25519' | 'none';
+}
+
+export interface LogWitness {
+    readonly scheme: 'ed25519' | 'none';
+    /** Public key bytes, base64url; empty for `none`. */
+    readonly publicKey: string;
+    sign(treeSize: number, rootHash: string, issuedAt: string): string;
+}
+
+export const nullWitness: LogWitness = {
+    scheme: 'none',
+    publicKey: '',
+    sign: () => '',
+};
+
+const sthBytes = (treeSize: number, rootHash: string, issuedAt: string): Buffer =>
+    Buffer.from(`${treeSize}|${rootHash}|${issuedAt}`, 'utf8');
+
+/**
+ * Ed25519 witness backed by a 32-byte seed. The seed should be sourced
+ * from operator-controlled deployment secrets (env var, KMS, etc.). A
+ * deployment can publish multiple witness keys for redundancy; clients
+ * only need one trusted witness per audit run.
+ */
+export const ed25519Witness = (seed: Buffer): LogWitness => {
+    if (seed.length !== 32) {
+        throw new Error(`ed25519 witness seed must be 32 bytes, got ${seed.length}`);
+    }
+    const pkcs8Prefix = Buffer.from('302e020100300506032b657004220420', 'hex');
+    const privateKeyDer = Buffer.concat([pkcs8Prefix, seed]);
+    const privateKey = createPrivateKey({
+        key: privateKeyDer,
+        format: 'der',
+        type: 'pkcs8',
+    });
+    const publicKey = createPublicKey(privateKey);
+    const rawPub = publicKey.export({ format: 'der', type: 'spki' }).slice(-32);
+    return {
+        scheme: 'ed25519',
+        publicKey: Buffer.from(rawPub).toString('base64url'),
+        sign: (treeSize, rootHash, issuedAt) =>
+            sign(null, sthBytes(treeSize, rootHash, issuedAt), privateKey).toString('base64url'),
+    };
+};
+
+/**
+ * Reference verifier for a signed tree head. Returns true iff the
+ * signature was produced by the witness whose public key is embedded in
+ * the STH. Pure function so clients run identical code.
+ */
+export const verifySignedTreeHead = (sth: SignedTreeHead): boolean => {
+    if (sth.scheme === 'none') return sth.signature === '' && sth.witnessKey === '';
+    if (sth.scheme !== 'ed25519') return false;
+    if (sth.witnessKey.length === 0) return false;
+    try {
+        const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+        const spki = Buffer.concat([spkiPrefix, Buffer.from(sth.witnessKey, 'base64url')]);
+        const publicKey = createPublicKey({ key: spki, format: 'der', type: 'spki' });
+        const data = sthBytes(sth.treeSize, sth.rootHash, sth.issuedAt);
+        const sig = Buffer.from(sth.signature, 'base64url');
+        return verify(null, data, publicKey, sig);
+    } catch {
+        return false;
+    }
+};
+
 export class KeyTransparencyLog {
     private leaves: Buffer[] = [];
     private entries: KeyEntry[] = [];
+    private readonly storage: KeyTransparencyStorage;
+    private readonly witness: LogWitness;
+
+    constructor(opts?: { storage?: KeyTransparencyStorage; witness?: LogWitness }) {
+        this.storage = opts?.storage ?? new InMemoryKtStorage();
+        this.witness = opts?.witness ?? nullWitness;
+        // Hydrate from durable storage if any leaves were persisted.
+        const persisted = this.storage.load();
+        for (const entry of persisted) {
+            this.entries.push(entry);
+            this.leaves.push(encodeEntry(entry));
+        }
+    }
 
     append(entry: KeyEntry): { leafIndex: number; root: TreeRoot } {
         const encoded = encodeEntry(entry);
         const idx = this.leaves.length;
         this.leaves.push(encoded);
         this.entries.push(entry);
+        this.storage.append(entry);
         return { leafIndex: idx, root: this.root() };
+    }
+
+    /**
+     * Issue a Signed Tree Head over the current root using the configured
+     * witness. With the default `nullWitness` the result has empty
+     * `signature` / `witnessKey` and `scheme === 'none'` — explicit, not
+     * pretending to be authenticated.
+     */
+    signedTreeHead(now = new Date()): SignedTreeHead {
+        const root = this.root();
+        const issuedAt = now.toISOString();
+        return {
+            treeSize: root.treeSize,
+            rootHash: root.rootHash,
+            issuedAt,
+            witnessKey: this.witness.publicKey,
+            signature: this.witness.sign(root.treeSize, root.rootHash, issuedAt),
+            scheme: this.witness.scheme,
+        };
     }
 
     size(): number {

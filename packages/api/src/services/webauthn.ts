@@ -1,25 +1,32 @@
 /**
- * Native WebAuthn / passkey scaffold for the Blackout API.
+ * Native WebAuthn / passkey verification for the Blackout API.
  *
- * This module ships the parts of WebAuthn that are safe in isolation:
+ * Cryptographic verification is delegated to `@simplewebauthn/server`,
+ * which handles CBOR decoding of the attestationObject, COSE_Key
+ * extraction, rpIdHash check, attestation-statement format verification
+ * (`packed`, `none`, `tpm`, `android-key`, `apple`, `fido-u2f`), signature
+ * verification (ES256, EdDSA, RS256, …), and sign-counter monotonicity.
  *
- *   - Random challenge generation with TTL.
- *   - Challenge consumption (single-use, time-bounded, RP-bound).
- *   - clientDataJSON shape + origin + type + challenge-match validation.
- *   - Credential record storage shape.
+ * In addition to the library's checks, this module:
  *
- * The cryptographic verification of attestation and assertion signatures is
- * intentionally NOT implemented here — that surface is large (CBOR parsing,
- * COSE key decoding, ES256/EdDSA signature verification, attestation
- * statement formats, MDS root trust) and should be delegated to a vetted
- * library such as @simplewebauthn/server in a focused, security-reviewed
- * follow-up. Until then this module returns `{ ok: false,
- * code: 'verification_not_implemented' }` from `verifyAttestation` and
- * `verifyAssertion`, and the whole feature is gated behind
- * WEBAUTHN_ENABLED=1.
+ *   - Issues / consumes single-use, time-bounded challenges with strict
+ *     user + purpose binding (independent of the library).
+ *   - Pre-validates clientDataJSON shape, origin allow-list, type
+ *     pinning, cross-origin rejection — fast-failing before any CBOR
+ *     parse.
+ *   - Stores credentials and enforces sign-counter monotonicity to
+ *     detect cloned authenticators.
+ *
+ * Feature flag remains: nothing happens unless `WEBAUTHN_ENABLED=1`.
  */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+    verifyAuthenticationResponse,
+    verifyRegistrationResponse,
+    type AuthenticationResponseJSON,
+    type RegistrationResponseJSON,
+} from '@simplewebauthn/server';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -159,32 +166,44 @@ export const listCredentialsByUser = (userId: string): PasskeyCredential[] =>
     [...credentials.values()].filter((c) => c.userId === userId);
 
 export interface AttestationVerifyInput {
-    clientDataJSON: string;
-    attestationObject: string;
+    /** Full RegistrationResponseJSON as returned by `@simplewebauthn/browser`. */
+    response: RegistrationResponseJSON;
     expectedChallenge: string;
     config: WebAuthnConfig;
 }
 
 export interface AssertionVerifyInput {
-    clientDataJSON: string;
-    authenticatorData: string;
-    signature: string;
-    credentialId: string;
+    /** Full AuthenticationResponseJSON as returned by `@simplewebauthn/browser`. */
+    response: AuthenticationResponseJSON;
     expectedChallenge: string;
     config: WebAuthnConfig;
 }
 
 export type VerifyResult =
-    | { ok: true; credentialId: string; publicKeyCose?: string; signCount?: number }
+    | {
+          ok: true;
+          credentialId: string;
+          publicKeyCose: string;
+          signCount: number;
+          transports: string[];
+      }
     | { ok: false; code: string; detail?: string };
 
+const toBase64Url = (bytes: Uint8Array): string =>
+    Buffer.from(bytes).toString('base64url');
+
+const fromBase64Url = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'base64url'));
+
 /**
- * Server-side attestation verification. NOT IMPLEMENTED — needs CBOR
- * decoding of attestationObject, COSE key extraction, attestation-statement
- * verification, and rpIdHash check. Track in TODO(WEBAUTHN-VERIFY).
+ * Server-side attestation verification. Delegates to
+ * `@simplewebauthn/server` for CBOR / COSE / signature work, after our own
+ * clientDataJSON pre-checks (which give clearer error codes for the most
+ * common operator misconfigurations: wrong origin, wrong type, etc.).
  */
-export const verifyAttestation = (input: AttestationVerifyInput): VerifyResult => {
-    const cd = parseClientData(input.clientDataJSON);
+export const verifyAttestation = async (
+    input: AttestationVerifyInput,
+): Promise<VerifyResult> => {
+    const cd = parseClientData(input.response.response.clientDataJSON);
     if (!cd) return { ok: false, code: 'malformed_client_data' };
     const validation = validateClientData(cd, {
         type: 'webauthn.create',
@@ -192,11 +211,48 @@ export const verifyAttestation = (input: AttestationVerifyInput): VerifyResult =
         origins: input.config.expectedOrigins,
     });
     if (!validation.ok) return validation;
-    return { ok: false, code: 'verification_not_implemented' };
+
+    let verified;
+    try {
+        verified = await verifyRegistrationResponse({
+            response: input.response,
+            expectedChallenge: input.expectedChallenge,
+            expectedOrigin: input.config.expectedOrigins,
+            expectedRPID: input.config.rpId,
+            requireUserVerification: false,
+        });
+    } catch (error) {
+        return {
+            ok: false,
+            code: 'verification_failed',
+            detail: (error as Error).message,
+        };
+    }
+
+    if (!verified.verified || !verified.registrationInfo) {
+        return { ok: false, code: 'verification_failed' };
+    }
+
+    const info = verified.registrationInfo;
+    return {
+        ok: true,
+        credentialId: info.credential.id,
+        publicKeyCose: toBase64Url(info.credential.publicKey),
+        signCount: info.credential.counter,
+        transports: info.credential.transports ?? [],
+    };
 };
 
-export const verifyAssertion = (input: AssertionVerifyInput): VerifyResult => {
-    const cd = parseClientData(input.clientDataJSON);
+/**
+ * Server-side assertion verification. Looks up the stored credential,
+ * delegates signature checking to `@simplewebauthn/server`, and persists
+ * the new sign counter on success so that a cloned authenticator (counter
+ * regression) is rejected on the next login.
+ */
+export const verifyAssertion = async (
+    input: AssertionVerifyInput,
+): Promise<VerifyResult> => {
+    const cd = parseClientData(input.response.response.clientDataJSON);
     if (!cd) return { ok: false, code: 'malformed_client_data' };
     const validation = validateClientData(cd, {
         type: 'webauthn.get',
@@ -204,10 +260,51 @@ export const verifyAssertion = (input: AssertionVerifyInput): VerifyResult => {
         origins: input.config.expectedOrigins,
     });
     if (!validation.ok) return validation;
-    if (!findCredential(input.credentialId)) {
-        return { ok: false, code: 'unknown_credential' };
+
+    const stored = findCredential(input.response.id);
+    if (!stored) return { ok: false, code: 'unknown_credential' };
+
+    let verified;
+    try {
+        verified = await verifyAuthenticationResponse({
+            response: input.response,
+            expectedChallenge: input.expectedChallenge,
+            expectedOrigin: input.config.expectedOrigins,
+            expectedRPID: input.config.rpId,
+            credential: {
+                id: stored.credentialId,
+                publicKey: fromBase64Url(stored.publicKeyCose),
+                counter: stored.signCount,
+                transports: stored.transports as never,
+            },
+            requireUserVerification: false,
+        });
+    } catch (error) {
+        return {
+            ok: false,
+            code: 'verification_failed',
+            detail: (error as Error).message,
+        };
     }
-    return { ok: false, code: 'verification_not_implemented' };
+
+    if (!verified.verified) return { ok: false, code: 'verification_failed' };
+
+    const newCounter = verified.authenticationInfo.newCounter;
+    // Clone detection: WebAuthn requires the counter to strictly increase
+    // (unless the authenticator stays at 0 forever, which is allowed by spec).
+    if (newCounter !== 0 && newCounter <= stored.signCount) {
+        return { ok: false, code: 'sign_counter_regression' };
+    }
+    stored.signCount = newCounter;
+    stored.lastUsedAt = Date.now();
+
+    return {
+        ok: true,
+        credentialId: stored.credentialId,
+        publicKeyCose: stored.publicKeyCose,
+        signCount: stored.signCount,
+        transports: stored.transports,
+    };
 };
 
 export const __test__ = { challenges, credentials, safeChallengeEquals };

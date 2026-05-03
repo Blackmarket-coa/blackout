@@ -12,7 +12,9 @@
     "test": "tsc --noEmit",
     "clean": "rimraf dist"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@noble/post-quantum": "^0.6.1"
+  },
   "devDependencies": {
     "typescript": "5.9.3"
   },

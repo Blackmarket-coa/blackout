@@ -1,7 +1,7 @@
 # Key Transparency Log
 
-Status: **shipped** (in-memory backend; persistence is a deployment
-follow-up).
+Status: **shipped**. Pluggable persistence (in-memory or JSON-file) and
+optional Ed25519 witness signatures over each tree head.
 
 ## What it is
 
@@ -29,11 +29,13 @@ node_hash(L, R)     = SHA-256(0x01 || L || R)
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/append` | Append a new `(userId, masterKey)` leaf. Returns the new leaf index and root. |
-| `GET` | `/root` | Current signed tree head (size + root hash). |
+| `GET` | `/root` | Current tree head (size + root hash). |
+| `GET` | `/sth` | Current Signed Tree Head (size + root hash + witness signature + scheme). |
 | `GET` | `/inclusion/:leafIndex` | Inclusion proof (leaf-up audit path) for a specific leaf. |
 | `GET` | `/consistency?from=&to=` | Consistency proof between two tree sizes. |
 | `GET` | `/lookup/:userId` | All leaves for a user. |
-| `POST` | `/verify` | Server-side verifier (mirror of the client function for diagnostics). |
+| `POST` | `/verify` | Server-side inclusion verifier (mirror of the client function for diagnostics). |
+| `POST` | `/verify-sth` | Server-side STH verifier — pure function, identical to the client verifier. |
 
 The service module (`packages/api/src/services/keyTransparency.ts`) is
 storage-agnostic. `verifyInclusion` is a pure function so the client
@@ -52,26 +54,55 @@ A regular auditor (every N minutes) should fetch successive roots and
 run `consistencyProof(from, to)` to ensure the log is genuinely
 append-only — no rewrites, no truncations.
 
-## What is NOT done yet
+## Persistence (operator config)
 
-- **Persistence.** The log lives in process memory, which is fine for
-  tests and small operators but not for production. A follow-up should
-  back it with a Postgres `(leaf_index, leaf_data)` table plus an
-  S3/object-store snapshot of root hashes. The data structure does not
-  change; only the storage adapter.
-- **Witnesses.** A second-party witness (e.g. a third-party auditor
-  that signs the root every minute and gossips it) would close the
-  "signed-but-divergent-views" attack. Plumb in a follow-up.
-- **Rate-limiting append.** Currently any authenticated user can
-  append. Tighten to "user can only append their own master key, and
-  rotation is bounded to N times/day" before exposing externally.
+Set `KT_LOG_FILE` to a writable path on the API host (e.g.
+`/var/lib/blackout/key-transparency.json`) and the log is loaded from
+that file on boot and atomically rewritten on every append. Without
+the env var the log defaults to in-memory, which is the right choice
+for unit tests and ephemeral CI runs but explicitly *not* for
+production.
+
+The JSON shape is `{ "version": 1, "entries": [...] }`. A future SQL
+adapter slots in by implementing `KeyTransparencyStorage` (see
+`packages/api/src/services/keyTransparencyStorage.ts`); the Merkle
+construction does not need to change.
+
+## Witnesses (operator config)
+
+Set `KT_WITNESS_ED25519_SEED` to a 32-byte secret (hex or base64url)
+and the API will sign every Signed Tree Head with that key. The
+public key is published in the STH itself so any third party can
+fetch `GET /v1/key-transparency/sth` and verify the signature using
+`verifySignedTreeHead` (re-exported in the same module so client and
+auditor run identical code).
+
+Multi-witness deployments work today by running multiple API replicas
+with different seeds and gossiping the STHs out-of-band — clients
+treat divergent witnessed roots as a security incident. Without the
+env var the STH endpoint returns an explicitly-unsigned response
+(`scheme: 'none'`), not a forged one.
+
+## Still left (rate-limiting & federation)
+
+- **Rate-limiting append.** Any caller that can hit the API can
+  currently append. Tighten to "the authenticated user can only
+  append their own master key, and rotation is bounded to N times/day"
+  before exposing externally.
+- **Federation gossip.** The witness scheme is per-deployment.
+  Federated deployments should periodically gossip STHs so that a
+  malicious operator running both the homeserver and the witness key
+  cannot fork the log. This is a topology decision, not a code change.
 
 ## Tracking
 
 - Source: `packages/api/src/services/keyTransparency.ts`,
+  `packages/api/src/services/keyTransparencyStorage.ts`,
   `packages/api/src/routes/keyTransparency.ts`.
 - Tests: `packages/api/test/keyTransparency.integration.test.ts`
-  (16 tests covering empty/append/root, RFC 6962 hash vectors,
+  (27 tests covering empty/append/root, RFC 6962 hash vectors,
   inclusion verification across many tree sizes, consistency proofs,
-  tampering rejection).
+  tampering rejection, JSON-file persistence round-trip + corruption
+  guard + cross-process growth, and Ed25519 witness STH sign/verify
+  including tampering and witness-key-swap rejection).
 - Threat model entry: `THREAT_MODEL.md` §7 R5.
