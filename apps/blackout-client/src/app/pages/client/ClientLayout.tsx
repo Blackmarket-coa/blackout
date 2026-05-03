@@ -52,6 +52,16 @@ import {
 } from '../../features/quick-actions/featureEntrypoints';
 import { customizationAtom } from '../../state/customization';
 import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
+import { CreateSpaceModalRenderer } from '../../features/create-space/CreateSpaceModal';
+import { CreateRoomModalRenderer } from '../../features/create-room/CreateRoomModal';
+import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
+import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
+import { useBindAtoms } from '../../state/hooks/useBindAtoms';
+import { DiscoverySurface } from '../../features/discovery/DiscoverySurface';
+import { OnboardingFlow } from '../../features/onboarding/OnboardingFlow';
+import { MessageSearch } from '../../features/message-search/MessageSearch';
+import { Lobby } from '../../features/lobby/Lobby';
+import { SpaceProvider } from '../../hooks/useSpace';
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -77,6 +87,7 @@ const isMobile = (width: number): boolean => width < 760;
 
 export const ClientLayout = () => {
     const client = useMatrixClient();
+    useBindAtoms(client);
     const rooms = useAtomValue(joinedRoomsAtom);
     const userId = useAtomValue(userIdAtom);
     const [storedSettings, setSettings] = useAtom(settingsAtom);
@@ -99,6 +110,11 @@ export const ClientLayout = () => {
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [exploreOpen, setExploreOpen] = useState(false);
+    const [onboardingOpen, setOnboardingOpen] = useState(false);
+    const [messageSearchOpen, setMessageSearchOpen] = useState(false);
+    const messageSearchScrollRef = useRef<HTMLDivElement>(null);
+    const [lobbyOpen, setLobbyOpen] = useState(false);
     const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
@@ -341,6 +357,26 @@ export const ClientLayout = () => {
         openRoomWithContext(roomId, jumpToEventId);
     };
 
+    const openCreateSpaceModal = useOpenCreateSpaceModal();
+    const openCreateRoomModal = useOpenCreateRoomModal();
+    const startNewDen = () => {
+        if (selectedSpaceId) {
+            openCreateRoomModal(selectedSpaceId);
+        } else if (orderedSpaces.length === 0) {
+            openCreateSpaceModal();
+        } else {
+            openCreateRoomModal(orderedSpaces[0]?.roomId);
+        }
+    };
+
+    const exploreOrCreate = () => {
+        if (orderedSpaces.length === 0) {
+            setExploreOpen(true);
+        } else {
+            startNewDen();
+        }
+    };
+
     const markAllMentionsRead = async () => {
         await markAllRead();
     };
@@ -556,9 +592,13 @@ export const ClientLayout = () => {
                 ) : null}
                 <WelcomeScreen
                     spaceId={onboardingSpaceId}
-                    actionLabel={`Explore ${BLACKOUT_TERMS.den.plural}`}
+                    actionLabel={
+                        orderedSpaces.length === 0
+                            ? `Explore ${BLACKOUT_TERMS.canopy.plural}`
+                            : `New ${BLACKOUT_TERMS.den.singular}`
+                    }
                     onPickChannel={(roomId) => openRoom(roomId)}
-                    onJoinOrExplore={() => setSelectedRoomId(null)}
+                    onJoinOrExplore={exploreOrCreate}
                 />
             </div>
         );
@@ -682,15 +722,38 @@ export const ClientLayout = () => {
                     </div>
                     <button
                         type="button"
+                        onClick={() => openCreateSpaceModal()}
+                        title={`New ${BLACKOUT_TERMS.canopy.singular}`}
+                        aria-label={`New ${BLACKOUT_TERMS.canopy.singular}`}
                         style={{
                             width: 40,
                             height: 40,
                             borderRadius: 10,
                             border: '1px dashed var(--border-default)',
                             background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
                         }}
                     >
                         ＋
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setExploreOpen(true)}
+                        title="Explore public communities"
+                        aria-label="Explore"
+                        style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 10,
+                            border: '1px solid var(--border-default)',
+                            background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            fontSize: 18,
+                        }}
+                    >
+                        🧭
                     </button>
                     {desktop && userId ? (
                         <button
@@ -790,10 +853,16 @@ export const ClientLayout = () => {
                                         </button>
                                         <button
                                             type="button"
+                                            onClick={startNewDen}
+                                            title={`New ${BLACKOUT_TERMS.den.singular}`}
+                                            aria-label={`New ${BLACKOUT_TERMS.den.singular}`}
                                             style={{
                                                 border: '1px solid var(--border-default)',
                                                 borderRadius: 6,
                                                 background: 'var(--bg-input)',
+                                                color: 'var(--text-primary)',
+                                                cursor: 'pointer',
+                                                padding: '0 6px',
                                             }}
                                         >
                                             +
@@ -936,6 +1005,23 @@ export const ClientLayout = () => {
                                             : ''}
                                     </div>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setMessageSearchOpen(true)}
+                                    title="Search messages"
+                                    aria-label="Search messages"
+                                    style={{
+                                        flex: '0 0 auto',
+                                        width: 28,
+                                        height: 28,
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 6,
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--text-primary)',
+                                    }}
+                                >
+                                    🔍
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => openSettingsSection('voice-video')}
@@ -1208,6 +1294,49 @@ export const ClientLayout = () => {
                             }))
                         }
                     />
+                ) : null}
+
+                {!selectedRoomId && selectedSpaceId ? (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            top: 12,
+                            right: 12,
+                            display: 'flex',
+                            gap: 8,
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setLobbyOpen(true)}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 999,
+                                padding: '4px 12px',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Hierarchy
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOnboardingOpen(true)}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 999,
+                                padding: '4px 12px',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Continue setup →
+                        </button>
+                    </div>
                 ) : null}
 
                 {rightPanel ? (
@@ -1611,6 +1740,247 @@ export const ClientLayout = () => {
                     />
                 </>
             ) : null}
+
+            {exploreOpen ? (
+                <aside
+                    role="dialog"
+                    aria-label="Explore"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        overflow: 'auto',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 16px',
+                            borderBottom: '1px solid var(--border-default)',
+                        }}
+                    >
+                        <strong>Explore {BLACKOUT_TERMS.canopy.plural}</strong>
+                        <button
+                            type="button"
+                            onClick={() => setExploreOpen(false)}
+                            aria-label="Close explore"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <DiscoverySurface
+                        onSelectRoom={(roomId) => {
+                            setExploreOpen(false);
+                            openRoom(roomId);
+                        }}
+                        onSelectSpace={(spaceId) => {
+                            setExploreOpen(false);
+                            setSelectedSpaceId(spaceId);
+                            setSelectedRoomId(null);
+                        }}
+                    />
+                </aside>
+            ) : null}
+
+            {lobbyOpen && selectedSpaceId ? (
+                <aside
+                    role="dialog"
+                    aria-label="Canopy hierarchy"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 16px',
+                            borderBottom: '1px solid var(--border-default)',
+                        }}
+                    >
+                        <strong>
+                            {rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
+                                BLACKOUT_TERMS.canopy.title}{' '}
+                            · Hierarchy
+                        </strong>
+                        <button
+                            type="button"
+                            onClick={() => setLobbyOpen(false)}
+                            aria-label="Close hierarchy"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <SpaceProvider
+                            value={
+                                rooms.find((room) => room.roomId === selectedSpaceId) ?? null
+                            }
+                        >
+                            <Lobby
+                                onOpenRoom={(roomId) => {
+                                    setLobbyOpen(false);
+                                    openRoom(roomId);
+                                }}
+                            />
+                        </SpaceProvider>
+                    </div>
+                </aside>
+            ) : null}
+
+            {messageSearchOpen ? (
+                <aside
+                    role="dialog"
+                    aria-label="Search messages"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 16px',
+                            borderBottom: '1px solid var(--border-default)',
+                        }}
+                    >
+                        <strong>Search messages</strong>
+                        <button
+                            type="button"
+                            onClick={() => setMessageSearchOpen(false)}
+                            aria-label="Close search"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <div
+                        ref={messageSearchScrollRef}
+                        style={{ flex: 1, overflowY: 'auto', padding: 16 }}
+                    >
+                        <MessageSearch
+                            defaultRoomsFilterName={
+                                selectedRoomId
+                                    ? (rooms.find((room) => room.roomId === selectedRoomId)?.name ?? 'Current den')
+                                    : `All ${BLACKOUT_TERMS.den.plural}`
+                            }
+                            allowGlobal
+                            rooms={
+                                selectedRoomId
+                                    ? [selectedRoomId]
+                                    : homeRooms.map((room) => room.roomId)
+                            }
+                            scrollRef={messageSearchScrollRef}
+                            onOpen={(roomId, eventId) => {
+                                setMessageSearchOpen(false);
+                                openRoom(roomId, eventId);
+                            }}
+                        />
+                    </div>
+                </aside>
+            ) : null}
+
+            {onboardingOpen ? (
+                <aside
+                    role="dialog"
+                    aria-label="Community onboarding"
+                    style={{
+                        position: 'fixed',
+                        inset: 24,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        zIndex: 20,
+                        overflow: 'auto',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                        padding: 16,
+                    }}
+                >
+                    <header
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingBottom: 8,
+                            borderBottom: '1px solid var(--border-default)',
+                            marginBottom: 12,
+                        }}
+                    >
+                        <strong>Community onboarding</strong>
+                        <button
+                            type="button"
+                            onClick={() => setOnboardingOpen(false)}
+                            aria-label="Close onboarding"
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 6,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✕
+                        </button>
+                    </header>
+                    <OnboardingFlow
+                        spaceId={onboardingSpaceId}
+                        onClose={() => setOnboardingOpen(false)}
+                        onCompleted={() => setOnboardingOpen(false)}
+                    />
+                </aside>
+            ) : null}
+
+            <CreateSpaceModalRenderer />
+            <CreateRoomModalRenderer />
         </section>
     );
 };

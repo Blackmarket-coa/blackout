@@ -148,7 +148,11 @@ const useCanDropLobbyItem = (
   return canDrop;
 };
 
-export function Lobby() {
+export type LobbyProps = {
+  onOpenRoom?: (roomId: string) => void;
+};
+
+export function Lobby({ onOpenRoom }: LobbyProps = {}) {
   const navigate = useNavigate();
   const mx = useMatrixClient();
   const mDirects = useAtomValue(mDirectAtom);
@@ -411,6 +415,10 @@ export function Lobby() {
   const handleOpenRoom: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const rId = evt.currentTarget.getAttribute('data-room-id');
     if (!rId) return;
+    if (onOpenRoom) {
+      onOpenRoom(rId);
+      return;
+    }
     const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
     navigate(getSpaceRoomPath(pSpaceIdOrAlias, getCanonicalAliasOrRoomId(mx, rId)));
   };
