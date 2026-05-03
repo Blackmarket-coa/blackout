@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legacyThemePlugin } from '../../../../../src/app/plugins/theme/legacyThemePlugin';
+import { legacyThemePlugin } from '../../../../src/app/plugins/theme/legacyThemePlugin';
 
 describe('legacy theme override plugin', () => {
     it('defaults disabled for Cinny baseline-compatible theme behavior', () => {

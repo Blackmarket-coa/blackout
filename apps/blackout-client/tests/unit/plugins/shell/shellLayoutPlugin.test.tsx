@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { shellLayoutPlugin } from '../../../../../src/app/plugins/shell/shellLayoutPlugin';
+import { shellLayoutPlugin } from '../../../../src/app/plugins/shell/shellLayoutPlugin';
 
 describe('shell layout plugin', () => {
     it('is disabled by default to preserve default shell composition parity', () => {

@@ -19,13 +19,6 @@ export default defineConfig({
             '**/dist/**',
             '**/.{idea,git,cache,output,temp}/**',
             // Quarantined pre-existing broken files (see deferred-bodies-schedule):
-            // missing source modules at src/app/plugins/...
-            'tests/unit/plugins/composer/composerQuickActionsPlugin.test.ts',
-            'tests/unit/plugins/matrix-adapters/readOnlyMatrixAdapters.test.ts',
-            'tests/unit/plugins/navigation/spaceHierarchyPlugin.test.ts',
-            'tests/unit/plugins/notifications/notificationsPlugin.test.ts',
-            'tests/unit/plugins/shell/shellLayoutPlugin.test.tsx',
-            'tests/unit/plugins/theme/legacyThemePlugin.test.ts',
             // missing util exports in src/app/utils/room.ts
             'tests/unit/utils/room.test.ts',
             // missing src/app/features/navigation/QuickSwitcher index helper (buildQuickSwitcherIndex)

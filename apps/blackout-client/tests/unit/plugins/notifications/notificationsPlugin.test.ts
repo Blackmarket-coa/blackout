@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
     notificationsAdapterPlugin,
     resolveNotificationsAdapter,
-} from '../../../../../src/app/plugins/notifications';
+} from '../../../../src/app/plugins/notifications';
 import {
     isRuntimePluginEnabled,
     orderedRuntimePlugins,
-} from '../../../../../src/app/plugins/manifest';
+} from '../../../../src/app/plugins/manifest';
 
 describe('notifications adapter plugin', () => {
     it('has deterministic manifest order and kill-switch wiring', () => {
@@ -17,6 +17,7 @@ describe('notifications adapter plugin', () => {
             'navigation.space-hierarchy',
             'notifications.adapter',
             'right-panel.slots',
+            'live-interaction.bundle',
         ]);
         expect(notificationsAdapterPlugin.isEnabled()).toBe(
             isRuntimePluginEnabled('notifications.adapter')

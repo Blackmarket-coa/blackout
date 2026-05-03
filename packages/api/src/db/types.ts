@@ -189,3 +189,65 @@ export interface VoiceRoomEventRecord {
   metadata?: Record<string, string>;
   createdAt: string;
 }
+
+export type MarketplaceProviderIdString =
+  | 'freeblackmarket'
+  | 'blamazon'
+  | 'mayhem-marketplaze'
+  | 'antin-amazon';
+
+export type MarketplaceEntitlementStatus =
+  | 'granted'
+  | 'pending'
+  | 'refunded'
+  | 'chargebacked'
+  | 'revoked'
+  | 'expired';
+
+export type MarketplaceEntitlementKind =
+  | 'emoji_pack'
+  | 'asset_bundle'
+  | 'software_license'
+  | 'plugin_flag'
+  | 'subscription_tier';
+
+export interface MarketplaceEntitlementRecord {
+  id: UUID;
+  userId: string;
+  providerId: MarketplaceProviderIdString;
+  providerListingId: string;
+  sku: string | null;
+  kind: MarketplaceEntitlementKind;
+  status: MarketplaceEntitlementStatus;
+  grantedAt: string;
+  expiresAt: string | null;
+  sourceEventId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MarketplaceWebhookAuditRecord {
+  id: UUID;
+  providerId: MarketplaceProviderIdString;
+  eventId: string;
+  receivedAt: string;
+  processedAt: string | null;
+  signatureOk: boolean;
+  payload: unknown;
+}
+
+export interface MarketplaceLicenseKeyRecord {
+  entitlementId: UUID;
+  licenseKey: string;
+  activationsUsed: number;
+  activationsMax: number;
+  createdAt: string;
+}
+
+export interface MarketplaceListingsCacheRecord {
+  cacheKey: string;
+  providerId: MarketplaceProviderIdString;
+  listings: unknown[];
+  refreshedAt: string;
+}

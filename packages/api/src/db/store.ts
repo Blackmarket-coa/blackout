@@ -5,6 +5,11 @@ import type {
   CanopyVoiceRoomRecord,
   ChannelRecord,
   FederationLinkRecord,
+  MarketplaceEntitlementRecord,
+  MarketplaceLicenseKeyRecord,
+  MarketplaceListingsCacheRecord,
+  MarketplaceProviderIdString,
+  MarketplaceWebhookAuditRecord,
   MessageRecord,
   ModerationActionRecord,
   DeadDropRecord,
@@ -44,6 +49,10 @@ type PersistedState = {
   canopyVoiceRooms: CanopyVoiceRoomRecord[];
   voiceRoomParticipants: VoiceRoomParticipantRecord[];
   voiceRoomEvents: VoiceRoomEventRecord[];
+  marketplaceEntitlements: MarketplaceEntitlementRecord[];
+  marketplaceWebhookAudit: MarketplaceWebhookAuditRecord[];
+  marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
+  marketplaceListingsCache: MarketplaceListingsCacheRecord[];
 };
 
 class InMemoryDb {
@@ -63,6 +72,10 @@ class InMemoryDb {
   canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
   voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
   voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
+  marketplaceEntitlements = new Map<string, MarketplaceEntitlementRecord>();
+  marketplaceWebhookAudit = new Map<string, MarketplaceWebhookAuditRecord>();
+  marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
+  marketplaceListingsCache = new Map<string, MarketplaceListingsCacheRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -374,6 +387,96 @@ class InMemoryDb {
       .filter((event) => event.roomId === roomId)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
+
+  upsertMarketplaceEntitlement(
+    record: MarketplaceEntitlementRecord
+  ): MarketplaceEntitlementRecord {
+    this.marketplaceEntitlements.set(record.id, record);
+    return record;
+  }
+
+  getMarketplaceEntitlement(id: string): MarketplaceEntitlementRecord | undefined {
+    return this.marketplaceEntitlements.get(id);
+  }
+
+  listMarketplaceEntitlementsByUser(userId: string): MarketplaceEntitlementRecord[] {
+    return [...this.marketplaceEntitlements.values()].filter((row) => row.userId === userId);
+  }
+
+  findMarketplaceEntitlement(criteria: {
+    userId: string;
+    providerId: MarketplaceProviderIdString;
+    providerListingId: string;
+    sku: string | null;
+  }): MarketplaceEntitlementRecord | undefined {
+    return [...this.marketplaceEntitlements.values()].find(
+      (row) =>
+        row.userId === criteria.userId &&
+        row.providerId === criteria.providerId &&
+        row.providerListingId === criteria.providerListingId &&
+        (criteria.sku === null ? true : row.sku === criteria.sku)
+    );
+  }
+
+  recordMarketplaceWebhook(
+    record: MarketplaceWebhookAuditRecord
+  ): MarketplaceWebhookAuditRecord {
+    this.marketplaceWebhookAudit.set(this.webhookKey(record.providerId, record.eventId), record);
+    return record;
+  }
+
+  markMarketplaceWebhookProcessed(
+    providerId: MarketplaceProviderIdString,
+    eventId: string,
+    processedAt: string
+  ): MarketplaceWebhookAuditRecord | undefined {
+    const key = this.webhookKey(providerId, eventId);
+    const existing = this.marketplaceWebhookAudit.get(key);
+    if (!existing) return undefined;
+    const updated = { ...existing, processedAt };
+    this.marketplaceWebhookAudit.set(key, updated);
+    return updated;
+  }
+
+  getMarketplaceWebhook(
+    providerId: MarketplaceProviderIdString,
+    eventId: string
+  ): MarketplaceWebhookAuditRecord | undefined {
+    return this.marketplaceWebhookAudit.get(this.webhookKey(providerId, eventId));
+  }
+
+  upsertMarketplaceLicenseKey(
+    record: MarketplaceLicenseKeyRecord
+  ): MarketplaceLicenseKeyRecord {
+    this.marketplaceLicenseKeys.set(record.entitlementId, record);
+    return record;
+  }
+
+  getMarketplaceLicenseKey(entitlementId: string): MarketplaceLicenseKeyRecord | undefined {
+    return this.marketplaceLicenseKeys.get(entitlementId);
+  }
+
+  upsertMarketplaceListingsCache(
+    record: MarketplaceListingsCacheRecord
+  ): MarketplaceListingsCacheRecord {
+    this.marketplaceListingsCache.set(record.cacheKey, record);
+    return record;
+  }
+
+  getMarketplaceListingsCache(cacheKey: string): MarketplaceListingsCacheRecord | undefined {
+    return this.marketplaceListingsCache.get(cacheKey);
+  }
+
+  resetMarketplaceForTest(): void {
+    this.marketplaceEntitlements.clear();
+    this.marketplaceWebhookAudit.clear();
+    this.marketplaceLicenseKeys.clear();
+    this.marketplaceListingsCache.clear();
+  }
+
+  private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
+    return `${providerId}:${eventId}`;
+  }
 }
 
 class FileBackedDb extends InMemoryDb {
@@ -405,6 +508,21 @@ class FileBackedDb extends InMemoryDb {
     this.canopyVoiceRooms = new Map((parsed.canopyVoiceRooms ?? []).map((row) => [row.id, row]));
     this.voiceRoomParticipants = new Map((parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row]));
     this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
+    this.marketplaceEntitlements = new Map(
+      (parsed.marketplaceEntitlements ?? []).map((row) => [row.id, row])
+    );
+    this.marketplaceWebhookAudit = new Map(
+      (parsed.marketplaceWebhookAudit ?? []).map((row) => [
+        `${row.providerId}:${row.eventId}`,
+        row,
+      ])
+    );
+    this.marketplaceLicenseKeys = new Map(
+      (parsed.marketplaceLicenseKeys ?? []).map((row) => [row.entitlementId, row])
+    );
+    this.marketplaceListingsCache = new Map(
+      (parsed.marketplaceListingsCache ?? []).map((row) => [row.cacheKey, row])
+    );
   }
 
   private snapshot(): PersistedState {
@@ -425,6 +543,10 @@ class FileBackedDb extends InMemoryDb {
       canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
       voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
       voiceRoomEvents: [...this.voiceRoomEvents.values()],
+      marketplaceEntitlements: [...this.marketplaceEntitlements.values()],
+      marketplaceWebhookAudit: [...this.marketplaceWebhookAudit.values()],
+      marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
+      marketplaceListingsCache: [...this.marketplaceListingsCache.values()],
     };
   }
 
@@ -566,6 +688,53 @@ class FileBackedDb extends InMemoryDb {
     const event = super.logVoiceRoomEvent(input);
     this.persist();
     return event;
+  }
+
+  override upsertMarketplaceEntitlement(
+    record: MarketplaceEntitlementRecord
+  ): MarketplaceEntitlementRecord {
+    const created = super.upsertMarketplaceEntitlement(record);
+    this.persist();
+    return created;
+  }
+
+  override recordMarketplaceWebhook(
+    record: MarketplaceWebhookAuditRecord
+  ): MarketplaceWebhookAuditRecord {
+    const created = super.recordMarketplaceWebhook(record);
+    this.persist();
+    return created;
+  }
+
+  override markMarketplaceWebhookProcessed(
+    providerId: MarketplaceProviderIdString,
+    eventId: string,
+    processedAt: string
+  ): MarketplaceWebhookAuditRecord | undefined {
+    const updated = super.markMarketplaceWebhookProcessed(providerId, eventId, processedAt);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override upsertMarketplaceLicenseKey(
+    record: MarketplaceLicenseKeyRecord
+  ): MarketplaceLicenseKeyRecord {
+    const created = super.upsertMarketplaceLicenseKey(record);
+    this.persist();
+    return created;
+  }
+
+  override upsertMarketplaceListingsCache(
+    record: MarketplaceListingsCacheRecord
+  ): MarketplaceListingsCacheRecord {
+    const created = super.upsertMarketplaceListingsCache(record);
+    this.persist();
+    return created;
+  }
+
+  override resetMarketplaceForTest(): void {
+    super.resetMarketplaceForTest();
+    this.persist();
   }
 }
 

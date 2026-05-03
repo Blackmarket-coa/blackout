@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     flattenSpaceHierarchyForNav,
     navigationSpaceHierarchyPlugin,
-} from '../../../../../src/app/plugins/navigation';
-import { isRuntimePluginEnabled } from '../../../../../src/app/plugins/manifest';
+} from '../../../../src/app/plugins/navigation';
+import { isRuntimePluginEnabled } from '../../../../src/app/plugins/manifest';
 
 describe('navigation space hierarchy plugin', () => {
     it('keeps placement deterministic for nested spaces', () => {
