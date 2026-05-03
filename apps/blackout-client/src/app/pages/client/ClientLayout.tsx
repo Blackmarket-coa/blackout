@@ -692,254 +692,27 @@ export const ClientLayout = () => {
                     >
                         ＋
                     </button>
-                    {desktop ? (
-                        <section
+                    {desktop && userId ? (
+                        <button
+                            type="button"
+                            onClick={() => openSettingsSection('appearance')}
+                            title={`${userId} — open settings`}
+                            aria-label="Open settings"
                             style={{
-                                width: '100%',
-                                borderTop: '1px solid var(--border-default)',
-                                padding: 8,
-                                display: 'grid',
-                                gap: 6,
+                                width: 40,
+                                height: 40,
+                                borderRadius: '50%',
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--accent-muted)',
+                                color: 'var(--text-primary)',
+                                fontSize: 14,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
                             }}
                         >
-                            {userId ? (
-                                <section
-                                    style={{
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 8,
-                                        padding: 6,
-                                        display: 'grid',
-                                        gap: 6,
-                                    }}
-                                >
-                                    <div
-                                        style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: 6,
-                                        }}
-                                    >
-                                        <strong style={{ fontSize: 12 }}>Quick actions</strong>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setQuickActionsCollapsed((prev) => !prev)
-                                            }
-                                            style={{
-                                                border: '1px solid var(--border-default)',
-                                                borderRadius: 6,
-                                                background: 'var(--bg-input)',
-                                                fontSize: 11,
-                                            }}
-                                        >
-                                            {quickActionsCollapsed ? 'Expand' : 'Collapse'}
-                                        </button>
-                                    </div>
-                                    {!quickActionsCollapsed ? (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                            {desktopQuickActions.map((entry) => (
-                                                <button
-                                                    key={entry.id}
-                                                    type="button"
-                                                    onClick={() => handleQuickAction(entry.id)}
-                                                    style={{
-                                                        border: '1px solid var(--border-default)',
-                                                        borderRadius: 6,
-                                                        background: 'var(--bg-input)',
-                                                        fontSize: 11,
-                                                    }}
-                                                >
-                                                    {entry.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                    {unseenQuickActionIds.length > 0 ? (
-                                        <small style={{ color: 'var(--text-secondary)' }}>
-                                            New shortcuts available:{' '}
-                                            {unseenQuickActionIds.slice(0, 2).join(', ')}
-                                        </small>
-                                    ) : null}
-                                </section>
-                            ) : null}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div
-                                    style={{
-                                        width: 24,
-                                        height: 24,
-                                        borderRadius: '50%',
-                                        background: 'var(--accent-muted)',
-                                    }}
-                                />
-                                <div style={{ minWidth: 0 }}>
-                                    <div
-                                        style={{
-                                            fontSize: 12,
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                        }}
-                                    >
-                                        {userId ?? 'Anonymous'}
-                                    </div>
-                                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                        Status: {myPresence}
-                                    </div>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                    type="button"
-                                    onClick={() => openSettingsSection('appearance')}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    Settings
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => openSettingsSection('voice-video')}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    Devices
-                                </button>
-                            </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setMuted(!callState.muted)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.muted
-                                            ? 'Unmute'
-                                            : 'Mute'
-                                        : 'No Call'}
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={!callState?.joined || !callState.roomId}
-                                    onClick={() => callState?.setDeafened(!callState.deafened)}
-                                    style={{
-                                        flex: 1,
-                                        border: '1px solid var(--border-default)',
-                                        borderRadius: 6,
-                                        background: 'var(--bg-input)',
-                                        fontSize: 11,
-                                        opacity: callState?.joined ? 1 : 0.6,
-                                    }}
-                                >
-                                    {callState?.joined
-                                        ? callState.deafened
-                                            ? 'Undeafen'
-                                            : 'Deafen'
-                                        : 'No Call'}
-                                </button>
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                Call:{' '}
-                                {callState?.joined
-                                    ? `Connected (${Object.keys(callState.membership).length} participants)`
-                                    : 'Idle'}
-                            </div>
-                            <div style={{ display: 'grid', gap: 4 }}>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Mic
-                                    <select
-                                        value={selectedAudioDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedAudioDeviceId(next);
-                                            callState?.setPreferredAudioDeviceId(next);
-                                            setSettings({
-                                                ...settings,
-                                                preferredAudioDeviceId: next,
-                                            });
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {audioDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Microphone ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                                    Camera
-                                    <select
-                                        value={selectedVideoDeviceId}
-                                        onChange={(event) => {
-                                            const next = event.target.value;
-                                            setSelectedVideoDeviceId(next);
-                                            callState?.setPreferredVideoDeviceId(next);
-                                            setSettings({
-                                                ...settings,
-                                                preferredVideoDeviceId: next,
-                                            });
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 2,
-                                            border: '1px solid var(--border-default)',
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            borderRadius: 6,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {videoDevices.map((device) => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label ||
-                                                    `Camera ${device.deviceId.slice(0, 6)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                            </div>
-                        </section>
-                    ) : null}
-                    {desktop ? (
-                        <section
-                            data-testid="client-layout-registry-sidebar"
-                            style={{
-                                width: '100%',
-                                borderTop: '1px solid var(--border-default)',
-                                padding: 8,
-                                display: 'grid',
-                                gap: 4,
-                            }}
-                        >
-                            <RegistrySidebarList />
-                        </section>
+                            {userId.replace(/^@/, '').charAt(0).toUpperCase()}
+                        </button>
                     ) : null}
                 </aside>
             ) : null}
@@ -949,12 +722,16 @@ export const ClientLayout = () => {
                     style={{
                         borderRight: '1px solid var(--border-default)',
                         background: 'var(--bg-surface)',
-                        display: mobile && selectedRoomId ? 'none' : 'block',
+                        display: mobile && selectedRoomId ? 'none' : 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                        height: '100vh',
                     }}
                 >
                     <header
                         style={{
                             height: 52,
+                            flex: '0 0 auto',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -962,7 +739,13 @@ export const ClientLayout = () => {
                             padding: '0 10px',
                         }}
                     >
-                        <strong>
+                        <strong
+                            style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
                             {selectedSpaceId
                                 ? (rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
                                   BLACKOUT_TERMS.canopy.title)
@@ -970,7 +753,14 @@ export const ClientLayout = () => {
                         </strong>
                     </header>
 
-                    <div style={{ padding: 8, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+                    <div
+                        style={{
+                            flex: 1,
+                            minHeight: 0,
+                            padding: 8,
+                            overflowY: 'auto',
+                        }}
+                    >
                         {groups.map((group) => {
                             const collapsed = collapsedFolders[group.id] ?? false;
                             return (
@@ -1085,10 +875,197 @@ export const ClientLayout = () => {
                             );
                         })}
                     </div>
+
+                    {desktop ? (
+                        <footer
+                            style={{
+                                flex: '0 0 auto',
+                                borderTop: '1px solid var(--border-default)',
+                                padding: 8,
+                                display: 'grid',
+                                gap: 6,
+                                background: 'var(--bg-nav)',
+                            }}
+                        >
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    minWidth: 0,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        background: 'var(--accent-muted)',
+                                        flex: '0 0 auto',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    {(userId ?? 'A').replace(/^@/, '').charAt(0).toUpperCase()}
+                                </div>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div
+                                        style={{
+                                            fontSize: 13,
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {userId ?? 'Anonymous'}
+                                    </div>
+                                    <div
+                                        style={{
+                                            fontSize: 11,
+                                            color: 'var(--text-secondary)',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {myPresence}
+                                        {callState?.joined
+                                            ? ` • In call (${Object.keys(callState.membership).length})`
+                                            : ''}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => openSettingsSection('voice-video')}
+                                    title="Audio & video devices"
+                                    aria-label="Devices"
+                                    style={{
+                                        flex: '0 0 auto',
+                                        width: 28,
+                                        height: 28,
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 6,
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--text-primary)',
+                                    }}
+                                >
+                                    🎧
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => openSettingsSection('appearance')}
+                                    title="Settings"
+                                    aria-label="Settings"
+                                    style={{
+                                        flex: '0 0 auto',
+                                        width: 28,
+                                        height: 28,
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 6,
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--text-primary)',
+                                    }}
+                                >
+                                    ⚙
+                                </button>
+                            </div>
+
+                            {callState?.joined ? (
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => callState.setMuted(!callState.muted)}
+                                        style={{
+                                            flex: 1,
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 6,
+                                            background: 'var(--bg-input)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: 12,
+                                            padding: '4px 6px',
+                                        }}
+                                    >
+                                        {callState.muted ? 'Unmute' : 'Mute'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => callState.setDeafened(!callState.deafened)}
+                                        style={{
+                                            flex: 1,
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 6,
+                                            background: 'var(--bg-input)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: 12,
+                                            padding: '4px 6px',
+                                        }}
+                                    >
+                                        {callState.deafened ? 'Undeafen' : 'Deafen'}
+                                    </button>
+                                </div>
+                            ) : null}
+
+                            {desktopQuickActions.length > 0 ? (
+                                <details>
+                                    <summary
+                                        style={{
+                                            fontSize: 11,
+                                            color: 'var(--text-secondary)',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Quick actions
+                                        {unseenQuickActionIds.length > 0
+                                            ? ` (${unseenQuickActionIds.length} new)`
+                                            : ''}
+                                    </summary>
+                                    <div
+                                        style={{
+                                            marginTop: 6,
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            gap: 4,
+                                        }}
+                                    >
+                                        {desktopQuickActions.map((entry) => (
+                                            <button
+                                                key={entry.id}
+                                                type="button"
+                                                onClick={() => handleQuickAction(entry.id)}
+                                                style={{
+                                                    border: '1px solid var(--border-default)',
+                                                    borderRadius: 6,
+                                                    background: 'var(--bg-input)',
+                                                    color: 'var(--text-primary)',
+                                                    fontSize: 11,
+                                                    padding: '2px 8px',
+                                                }}
+                                            >
+                                                {entry.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </details>
+                            ) : null}
+
+                            <RegistrySidebarList />
+                        </footer>
+                    ) : null}
                 </aside>
             ) : null}
 
-            <main style={{ position: 'relative', minWidth: 0 }}>
+            <main
+                style={{
+                    position: 'relative',
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100vh',
+                    overflow: 'hidden',
+                }}
+            >
                 {mobile ? (
                     <header
                         style={{
@@ -1203,7 +1180,16 @@ export const ClientLayout = () => {
                     </section>
                 ) : null}
 
-                {renderRoomContent()}
+                <div
+                    style={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: 'auto',
+                        paddingTop: 44,
+                    }}
+                >
+                    {renderRoomContent()}
+                </div>
 
                 {!selectedRoomId && !onboardingSuppressed ? (
                     <OnboardingWizard
@@ -1390,7 +1376,23 @@ export const ClientLayout = () => {
                     </aside>
                 ) : null}
 
-                <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        justifyContent: 'flex-end',
+                        alignItems: 'center',
+                        gap: 6,
+                        maxWidth: 'calc(100% - 16px)',
+                        zIndex: 4,
+                        background: 'var(--bg-surface)',
+                        padding: 4,
+                        borderRadius: 10,
+                    }}
+                >
                     {canOpenModerationDashboard ? (
                         inRouterContext ? (
                             <Link
@@ -1403,6 +1405,7 @@ export const ClientLayout = () => {
                                     color: 'var(--text-primary)',
                                     textDecoration: 'none',
                                     fontSize: 13,
+                                    whiteSpace: 'nowrap',
                                 }}
                             >
                                 Moderation
@@ -1418,6 +1421,7 @@ export const ClientLayout = () => {
                                     color: 'var(--text-primary)',
                                     textDecoration: 'none',
                                     fontSize: 13,
+                                    whiteSpace: 'nowrap',
                                 }}
                             >
                                 Moderation
@@ -1430,13 +1434,16 @@ export const ClientLayout = () => {
                         style={{
                             border: '1px solid var(--border-default)',
                             background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
                             borderRadius: 8,
                             padding: '4px 8px',
+                            fontSize: 13,
+                            whiteSpace: 'nowrap',
                         }}
                     >
                         Inbox {mentionItems.length > 0 ? `(${mentionItems.length})` : ''}
                     </button>
-                    {forumEnabled && isForumRoom ? (
+                    {selectedRoomId && forumEnabled && isForumRoom ? (
                         <>
                             <button
                                 type="button"
@@ -1447,8 +1454,11 @@ export const ClientLayout = () => {
                                         roomSurface === 'timeline'
                                             ? 'var(--accent-muted)'
                                             : 'var(--bg-input)',
+                                    color: 'var(--text-primary)',
                                     borderRadius: 8,
                                     padding: '4px 8px',
+                                    fontSize: 13,
+                                    whiteSpace: 'nowrap',
                                 }}
                             >
                                 Timeline
@@ -1462,22 +1472,30 @@ export const ClientLayout = () => {
                                         roomSurface === 'forum'
                                             ? 'var(--accent-muted)'
                                             : 'var(--bg-input)',
+                                    color: 'var(--text-primary)',
                                     borderRadius: 8,
                                     padding: '4px 8px',
+                                    fontSize: 13,
+                                    whiteSpace: 'nowrap',
                                 }}
                             >
                                 Forum
                             </button>
                         </>
-                    ) : (
+                    ) : selectedRoomId ? (
                         <span
                             data-testid="feature-room-bmc-forum-unavailable"
-                            style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                                whiteSpace: 'nowrap',
+                                padding: '0 4px',
+                            }}
                         >
                             Forum unavailable
                         </span>
-                    )}
-                    {coalitionEnabled && coalitionDenState.enabled ? (
+                    ) : null}
+                    {selectedRoomId && coalitionEnabled && coalitionDenState.enabled ? (
                         <button
                             type="button"
                             data-testid="feature-room-bmc-coalition-toggle"
@@ -1492,28 +1510,36 @@ export const ClientLayout = () => {
                                     roomSurface === 'coalition'
                                         ? 'var(--accent-muted)'
                                         : 'var(--bg-input)',
+                                color: 'var(--text-primary)',
                                 borderRadius: 8,
                                 padding: '4px 8px',
+                                fontSize: 13,
+                                whiteSpace: 'nowrap',
                             }}
                         >
                             Coalition
                         </button>
                     ) : null}
-                    {rightPanels.map((panel) => (
-                        <button
-                            key={panel}
-                            type="button"
-                            onClick={() => setRightPanel(panel)}
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                borderRadius: 8,
-                                padding: '4px 8px',
-                            }}
-                        >
-                            {panel}
-                        </button>
-                    ))}
+                    {selectedRoomId
+                        ? rightPanels.map((panel) => (
+                              <button
+                                  key={panel}
+                                  type="button"
+                                  onClick={() => setRightPanel(panel)}
+                                  style={{
+                                      border: '1px solid var(--border-default)',
+                                      background: 'var(--bg-input)',
+                                      color: 'var(--text-primary)',
+                                      borderRadius: 8,
+                                      padding: '4px 8px',
+                                      fontSize: 13,
+                                      whiteSpace: 'nowrap',
+                                  }}
+                              >
+                                  {panel}
+                              </button>
+                          ))
+                        : null}
                 </div>
             </main>
 
