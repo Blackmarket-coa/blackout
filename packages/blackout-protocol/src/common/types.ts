@@ -25,7 +25,12 @@ export type BlackoutEventName =
     | 'blackout.auth.session.continued'
     | 'blackout.education.module.progress'
     | 'blackout.deaddrop.mutual-aid.thread.opened'
-    | 'blackout.deaddrop.mutual-aid.thread.updated';
+    | 'blackout.deaddrop.mutual-aid.thread.updated'
+    | 'blackout.deadman.switch.armed'
+    | 'blackout.deadman.switch.checked_in'
+    | 'blackout.deadman.switch.grace'
+    | 'blackout.deadman.switch.triggered'
+    | 'blackout.deadman.switch.cancelled';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

@@ -10,6 +10,7 @@ export const featureModuleManifest = [
     'governance',
     'forum',
     'deaddrop',
+    'deadman',
     'moderation',
     'monetization',
     'platform-ops',

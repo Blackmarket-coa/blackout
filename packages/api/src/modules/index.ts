@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { governanceModule } from './governance';
 import { forumModule } from './forum';
 import { deaddropModule } from './deaddrop';
+import { deadmanModule } from './deadman';
 import { moderationModule } from './moderation';
 import { streamingModule } from './streaming';
 import { discoveryModule } from './discovery';
@@ -13,6 +14,7 @@ export const featureModules: FeatureModule[] = [
   governanceModule,
   forumModule,
   deaddropModule,
+  deadmanModule,
   moderationModule,
   streamingModule,
   discoveryModule,

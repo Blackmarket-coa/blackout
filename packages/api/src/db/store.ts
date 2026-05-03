@@ -13,6 +13,8 @@ import type {
   MessageRecord,
   ModerationActionRecord,
   DeadDropRecord,
+  DeadmanSwitchRecord,
+  DeadmanSwitchStatus,
   ForumPostRecord,
   UserRecord,
   VoiceRoomEventRecord,
@@ -41,6 +43,7 @@ type PersistedState = {
   federationLinks: FederationLinkRecord[];
   forumPosts: ForumPostRecord[];
   deadDrops: DeadDropRecord[];
+  deadmanSwitches: DeadmanSwitchRecord[];
   moderationActions: ModerationActionRecord[];
   creatorStreamAuth: CreatorStreamAuthRecord[];
   streams: StreamRecord[];
@@ -64,6 +67,7 @@ class InMemoryDb {
   federationLinks = new Map<string, FederationLinkRecord>();
   forumPosts = new Map<string, ForumPostRecord>();
   deadDrops = new Map<string, DeadDropRecord>();
+  deadmanSwitches = new Map<string, DeadmanSwitchRecord>();
   moderationActions = new Map<string, ModerationActionRecord>();
   creatorStreamAuth = new Map<string, CreatorStreamAuthRecord>();
   streams = new Map<string, StreamRecord>();
@@ -206,6 +210,49 @@ class InMemoryDb {
     }
 
     return this.deadDrops.get(id);
+  }
+
+  createDeadmanSwitch(input: Omit<DeadmanSwitchRecord, 'createdAt' | 'updatedAt'>): DeadmanSwitchRecord {
+    const ts = nowIso();
+    const record: DeadmanSwitchRecord = { ...input, createdAt: ts, updatedAt: ts };
+    this.deadmanSwitches.set(record.id, record);
+    return record;
+  }
+
+  getDeadmanSwitch(id: string): DeadmanSwitchRecord | undefined {
+    return this.deadmanSwitches.get(id);
+  }
+
+  listDeadmanSwitchesForOwner(ownerId: string): DeadmanSwitchRecord[] {
+    return [...this.deadmanSwitches.values()].filter((entry) => entry.ownerId === ownerId);
+  }
+
+  listDeadmanSwitchesForRecipient(recipient: string): DeadmanSwitchRecord[] {
+    return [...this.deadmanSwitches.values()].filter((entry) =>
+      entry.recipients.includes(recipient)
+    );
+  }
+
+  listAllDeadmanSwitches(): DeadmanSwitchRecord[] {
+    return [...this.deadmanSwitches.values()];
+  }
+
+  updateDeadmanSwitch(
+    id: string,
+    patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt'>>
+  ): DeadmanSwitchRecord | undefined {
+    const existing = this.deadmanSwitches.get(id);
+    if (!existing) return undefined;
+    const next: DeadmanSwitchRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.deadmanSwitches.set(id, next);
+    return next;
+  }
+
+  setDeadmanSwitchStatus(
+    id: string,
+    status: DeadmanSwitchStatus
+  ): DeadmanSwitchRecord | undefined {
+    return this.updateDeadmanSwitch(id, { status });
   }
 
   createModerationAction(input: Omit<ModerationActionRecord, 'createdAt'>): ModerationActionRecord {
@@ -500,6 +547,9 @@ class FileBackedDb extends InMemoryDb {
     this.federationLinks = new Map(parsed.federationLinks.map((row) => [row.id, row]));
     this.forumPosts = new Map((parsed.forumPosts ?? []).map((row) => [row.id, row]));
     this.deadDrops = new Map((parsed.deadDrops ?? []).map((row) => [row.id, row]));
+    this.deadmanSwitches = new Map(
+      (parsed.deadmanSwitches ?? []).map((row) => [row.id, row])
+    );
     this.moderationActions = new Map((parsed.moderationActions ?? []).map((row) => [row.id, row]));
     this.creatorStreamAuth = new Map((parsed.creatorStreamAuth ?? []).map((row) => [row.id, row]));
     this.streams = new Map((parsed.streams ?? []).map((row) => [row.id, row]));
@@ -535,6 +585,7 @@ class FileBackedDb extends InMemoryDb {
       federationLinks: [...this.federationLinks.values()],
       forumPosts: [...this.forumPosts.values()],
       deadDrops: [...this.deadDrops.values()],
+      deadmanSwitches: [...this.deadmanSwitches.values()],
       moderationActions: [...this.moderationActions.values()],
       creatorStreamAuth: [...this.creatorStreamAuth.values()],
       streams: [...this.streams.values()],
@@ -616,6 +667,23 @@ class FileBackedDb extends InMemoryDb {
     }
 
     return opened;
+  }
+
+  override createDeadmanSwitch(
+    input: Omit<DeadmanSwitchRecord, 'createdAt' | 'updatedAt'>
+  ): DeadmanSwitchRecord {
+    const created = super.createDeadmanSwitch(input);
+    this.persist();
+    return created;
+  }
+
+  override updateDeadmanSwitch(
+    id: string,
+    patch: Partial<Omit<DeadmanSwitchRecord, 'id' | 'createdAt'>>
+  ): DeadmanSwitchRecord | undefined {
+    const updated = super.updateDeadmanSwitch(id, patch);
+    if (updated) this.persist();
+    return updated;
   }
 
   override createModerationAction(input: Omit<ModerationActionRecord, 'createdAt'>): ModerationActionRecord {
