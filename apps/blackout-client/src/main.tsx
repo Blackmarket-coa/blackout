@@ -25,7 +25,6 @@ import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProv
 import { buildRegistryFetchers } from './app/core/features/registryFetchers';
 import { createFetchApiClient } from '@blackout/sdk';
 import { useStore } from 'jotai';
-import GlobalHeaderInboxLauncher from './app/features/navigation/GlobalHeaderInboxLauncher';
 import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
@@ -157,12 +156,7 @@ const BootstrapStatus = () => {
     );
 
     if (authState === 'logged_in') {
-        return (
-            <>
-                <GlobalHeaderInboxLauncher />
-                <RouterProvider router={router} />
-            </>
-        );
+        return <RouterProvider router={router} />;
     }
 
     const title =
