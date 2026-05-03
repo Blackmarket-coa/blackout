@@ -63,7 +63,7 @@ import { RoomNotificationModeSwitcher } from '../../components/RoomNotificationS
 import {
   getRoomNotificationMode,
   getRoomNotificationModeIcon,
-  useRoomsNotificationPreferencesContext,
+  useRoomsNotificationPreferences,
 } from '../../hooks/useRoomsNotificationPreferences';
 import { JumpToTime } from './jump-to-time';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
@@ -85,7 +85,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canInvite = permissions.action('invite', mx.getSafeUserId());
-  const notificationPreferences = useRoomsNotificationPreferencesContext();
+  const notificationPreferences = useRoomsNotificationPreferences();
   const notificationMode = getRoomNotificationMode(notificationPreferences, room.roomId);
   const { navigateRoom } = useRoomNavigate();
 
