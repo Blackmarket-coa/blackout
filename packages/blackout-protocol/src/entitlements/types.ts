@@ -2,7 +2,7 @@ export type EntitlementKey = `features.${string}`;
 
 export type EntitlementTier = 'free' | 'pro' | 'team' | 'enterprise';
 
-export type EntitlementFamily = 'stego' | 'governance';
+export type EntitlementFamily = 'stego' | 'governance' | 'deaddrop';
 
 export type PlanStateStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'inactive';
 

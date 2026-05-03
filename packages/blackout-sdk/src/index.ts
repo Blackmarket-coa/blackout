@@ -12,6 +12,7 @@ export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
 export * from './deadman/actions';
 export * from './deadman/matrixActions';
+export * from './deaddrop/entitlementGate';
 export * from './moderation/actions';
 export * from './matrix/types';
 export * from './shell/panelMetadata';
