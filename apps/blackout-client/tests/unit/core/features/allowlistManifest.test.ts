@@ -14,6 +14,7 @@ describe('feature allowlist manifest', () => {
             'governance',
             'forum',
             'deaddrop',
+            'deadman',
             'moderation',
             'monetization',
             'platform-ops',
