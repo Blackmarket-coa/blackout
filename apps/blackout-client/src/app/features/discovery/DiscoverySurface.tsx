@@ -72,7 +72,20 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
           filter: { generic_search_term: searchTerm },
         }
       ),
+    retry: false,
   });
+
+  const friendlyError = useMemo(() => {
+    if (!error) return undefined;
+    const err = error as { errcode?: string; httpStatus?: number; message?: string };
+    if (err.errcode === 'M_UNKNOWN_TOKEN' || err.httpStatus === 401) {
+      return 'Your session has expired. Please sign out and sign back in to browse public rooms.';
+    }
+    if (err.httpStatus === 403 || err.errcode === 'M_FORBIDDEN') {
+      return 'This homeserver does not allow browsing public rooms.';
+    }
+    return err.message ?? 'Failed to load discovery rooms.';
+  }, [error]);
 
   const hierarchyRoomMeta = useMemo(() => {
     const metadata = new Map<string, { ts: number; parents: string[] }>();
@@ -197,10 +210,8 @@ export function DiscoverySurface({ onSelectRoom, onSelectSpace }: DiscoverySurfa
               </Box>
             </Box>
 
-            {error && (
-              <Text style={{ color: color.Critical.Main }}>
-                {(error as Error).message || 'Failed to load discovery rooms.'}
-              </Text>
+            {friendlyError && (
+              <Text style={{ color: color.Critical.Main }}>{friendlyError}</Text>
             )}
 
             <Box gap="300" alignItems="Start">
