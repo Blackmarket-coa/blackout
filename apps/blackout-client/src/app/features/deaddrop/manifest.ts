@@ -35,5 +35,12 @@ export const deaddropFeature: BlackoutFeature = {
             settings: mutualAidSettings,
         },
     ],
-    capabilities: ['deaddrop.read', 'deaddrop.write', 'deaddrop.mutual-aid.read'],
+    capabilities: [
+        'deaddrop.read',
+        'deaddrop.write',
+        'deaddrop.mutual-aid.read',
+        'deaddrop.team.quorum',
+        'deaddrop.team.audit',
+        'deaddrop.anonymity.cover',
+    ],
 };

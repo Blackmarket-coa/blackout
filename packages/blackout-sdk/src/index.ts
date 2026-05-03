@@ -10,6 +10,7 @@ export * from './governance/matrixActions';
 export * from './forum/actions';
 export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
+export * from './deaddrop/entitlementGate';
 export * from './moderation/actions';
 export * from './matrix/types';
 export * from './shell/panelMetadata';

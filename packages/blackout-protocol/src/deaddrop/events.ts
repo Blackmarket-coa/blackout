@@ -1,8 +1,11 @@
 import type { EventEnvelope } from '../common/types';
+import type { DeadDropEnvelopeV1 } from './crypto';
 
 export const DEAD_DROP_EVENT_TYPE = 'co.bmc.deaddrop';
 export const DEAD_DROP_QUEUE_EVENT_TYPE = 'co.bmc.deaddrop.queue';
 export const DEAD_DROP_COMMAND_EVENT_TYPE = 'co.bmc.deaddrop.command';
+export const DEAD_DROP_SHARE_EVENT_TYPE = 'co.bmc.deaddrop.share';
+export const DEAD_DROP_AUDIT_EVENT_TYPE = 'co.bmc.deaddrop.audit';
 export const DEAD_DROP_SCHEMA_VERSION = 1;
 
 export type DeadDropCreated = EventEnvelope<
@@ -10,7 +13,12 @@ export type DeadDropCreated = EventEnvelope<
     {
         deadDropId: string;
         expiresAt: string;
-        encryptedPayload: string;
+        /**
+         * The opaque ciphertext envelope. Servers MUST treat this as a
+         * black box: they may store it, expire it, and serve it back
+         * verbatim, but they MUST NOT inspect or modify it.
+         */
+        envelope: DeadDropEnvelopeV1;
     }
 >;
 
@@ -19,6 +27,45 @@ export type DeadDropOpened = EventEnvelope<
     {
         deadDropId: string;
         openedBy: string;
+    }
+>;
+
+/**
+ * Quorum share submission (Team / Enterprise tiers). When a drop is
+ * configured with k-of-n quorum, each team member contributes one share
+ * via this event; the recipient client reconstructs the AES key from
+ * any k shares using `combine()` from crypto/quorum.
+ *
+ * The share itself is encrypted to the recipient's pickup pubkey, so
+ * the appservice and other room members never see the raw share bytes.
+ */
+export type DeadDropShareSubmitted = EventEnvelope<
+    'blackout.deaddrop.share.submitted',
+    {
+        deadDropId: string;
+        /** 1..255 — the GF(256) x-coordinate */
+        shareIndex: number;
+        /** Sealed-box ciphertext of the share bytes, base64. */
+        encryptedShare: string;
+        /** Submitting member id (matrix user id). */
+        submittedBy: string;
+    }
+>;
+
+/**
+ * Per-org encrypted audit trail. Written to a Megolm-encrypted audit
+ * room (`#deaddrop-audit:<server>`) so only org admins holding the room
+ * key can read it.
+ */
+export type DeadDropAuditEntry = EventEnvelope<
+    'blackout.deaddrop.audit',
+    {
+        deadDropId: string;
+        action: 'created' | 'opened' | 'share-submitted' | 'expired' | 'rejected';
+        actor: string;
+        at: string;
+        /** Optional human-readable reason (e.g. for `rejected`). */
+        reason?: string;
     }
 >;
 

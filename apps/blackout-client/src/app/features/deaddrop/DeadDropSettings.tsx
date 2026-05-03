@@ -6,17 +6,23 @@ import {
     type DeadDropConfig,
     type DeadDropScheduleType,
 } from './useDeadDrop';
+import { useDeadDropQuota } from './useDeadDropQuota';
 
 export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
     const deadDrop = useDeadDrop(roomId);
     const setDeadDrop = useSetDeadDrop(roomId);
     const queueActions = useDeadDropQueueActions(roomId);
+    const quota = useDeadDropQuota();
     const [saving, setSaving] = useState(false);
     const [draft, setDraft] = useState<DeadDropConfig>(deadDrop.data);
 
     useEffect(() => {
         setDraft(deadDrop.data);
     }, [deadDrop.data]);
+
+    const retentionExceeded = draft.retentionHours > quota.quotas.maxRetentionHours;
+    const cantSchedule = !quota.canUseScheduledFlush && draft.schedule.type !== 'manual';
+    const cantAnonymize = draft.anonymize && !quota.canUseCoverSender;
 
     const onScheduleTypeChange = (type: DeadDropScheduleType) => {
         setDraft((prev) => ({
@@ -48,6 +54,53 @@ export const DeadDropSettings = ({ roomId }: { roomId: string }) => {
             }}
         >
             <h4 style={{ margin: 0 }}>Dead Drop Settings</h4>
+
+            <div
+                data-testid="deaddrop-tier-banner"
+                style={{
+                    border: '1px dashed var(--border-default)',
+                    borderRadius: 8,
+                    padding: 8,
+                    fontSize: 12,
+                    opacity: 0.85,
+                }}
+            >
+                <strong>Tier: {quota.tier}</strong> — max payload{' '}
+                {quota.quotas.maxPayloadBytes.toLocaleString()} bytes · max retention{' '}
+                {quota.quotas.maxRetentionHours} h · recipients{' '}
+                {quota.quotas.maxRecipients === -1 ? 'unlimited' : quota.quotas.maxRecipients} ·
+                decoys per fetch {quota.quotas.decoysPerFetch}
+                {quota.canUseQuorum ? ' · quorum opens enabled' : ''}
+            </div>
+
+            {retentionExceeded ? (
+                <p
+                    role="alert"
+                    data-testid="deaddrop-retention-warning"
+                    style={{ margin: 0, color: 'var(--accent-warning)' }}
+                >
+                    Retention exceeds your tier limit ({quota.quotas.maxRetentionHours} h). Lower it
+                    or upgrade.
+                </p>
+            ) : null}
+            {cantSchedule ? (
+                <p
+                    role="alert"
+                    data-testid="deaddrop-schedule-warning"
+                    style={{ margin: 0, color: 'var(--accent-warning)' }}
+                >
+                    Scheduled flush requires the Pro tier or higher. Switch to Manual or upgrade.
+                </p>
+            ) : null}
+            {cantAnonymize ? (
+                <p
+                    role="alert"
+                    data-testid="deaddrop-anonymize-warning"
+                    style={{ margin: 0, color: 'var(--accent-warning)' }}
+                >
+                    Anonymized delivery (cover sender) requires the Pro tier or higher.
+                </p>
+            ) : null}
 
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
