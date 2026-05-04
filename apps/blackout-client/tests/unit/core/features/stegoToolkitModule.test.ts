@@ -78,7 +78,11 @@ describe('stego-toolkit feature module (BKL-005)', () => {
 
         const tab = { capabilities: ['stego.settings.read'], flags };
         // Tab carries no routes/panels — it's a settings-only customization.
-        expect(composeFeatureRoutes(registry, tab).map((r) => r.path)).toEqual([]);
+        expect(
+            composeFeatureRoutes(registry, tab)
+                .map((r) => r.path)
+                .filter((path) => path.startsWith('/stego'))
+        ).toEqual([]);
         expect(
             composeShellPanels(registry, tab)
                 .map((p) => p.id)

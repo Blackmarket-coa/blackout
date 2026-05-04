@@ -40,7 +40,8 @@ beforeEach(() => {
 
 describe('RegistrySidebarList', () => {
     it('renders nothing when the capability context grants no panels', async () => {
-        const store = seedStore([]);
+        // Disable always-on flag-only-gated features so the "no panels" condition holds.
+        const store = seedStore([], { communities: false, plugins: false });
         const { container } = await mount(
             <MemoryRouter>
                 <RegistrySidebarList />
@@ -167,9 +168,10 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
     });
 
     it('returns an empty RouteObject[] when no capability matches', () => {
+        // Disable always-on flag-only-gated features so the "no routes" condition holds.
         const objects = buildRegistryRouteObjects({
             capabilities: [],
-            flags: runtimeFeatureFlags,
+            flags: { ...runtimeFeatureFlags, communities: false, plugins: false },
         });
         expect(objects).toEqual([]);
     });

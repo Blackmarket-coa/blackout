@@ -42,7 +42,11 @@ describe('federated-ops feature module (BKL-010)', () => {
         const registry = buildFeatureRegistry(flags);
 
         const ctx = { capabilities: ['townhall.ops.manage'], flags };
-        expect(composeFeatureRoutes(registry, ctx).map((r) => r.path)).toEqual(['/ops/townhall']);
+        expect(
+            composeFeatureRoutes(registry, ctx)
+                .map((r) => r.path)
+                .filter((path) => path.startsWith('/ops/'))
+        ).toEqual(['/ops/townhall']);
         expect(composeFeatureSettings(registry, ctx).map((s) => s.section)).toEqual([
             'Ops / Townhall',
         ]);
@@ -53,7 +57,11 @@ describe('federated-ops feature module (BKL-010)', () => {
         const registry = buildFeatureRegistry(flags);
 
         const ctx = { capabilities: ['revenue.ops.read'], flags };
-        expect(composeFeatureRoutes(registry, ctx).map((r) => r.path)).toEqual(['/ops/revenue']);
+        expect(
+            composeFeatureRoutes(registry, ctx)
+                .map((r) => r.path)
+                .filter((path) => path.startsWith('/ops/'))
+        ).toEqual(['/ops/revenue']);
         expect(composeFeatureSettings(registry, ctx).map((s) => s.section)).toEqual([
             'Ops / Revenue',
         ]);
