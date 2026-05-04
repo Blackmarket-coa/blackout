@@ -51,13 +51,12 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { customizationAtom } from '../../state/customization';
-import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
+import { PrimaryRail } from './PrimaryRail';
 import { CreateSpaceModalRenderer } from '../../features/create-space/CreateSpaceModal';
 import { CreateRoomModalRenderer } from '../../features/create-room/CreateRoomModal';
 import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
 import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
 import { useBindAtoms } from '../../state/hooks/useBindAtoms';
-import { DiscoverySurface } from '../../features/discovery/DiscoverySurface';
 import { OnboardingFlow } from '../../features/onboarding/OnboardingFlow';
 import { MessageSearch } from '../../features/message-search/MessageSearch';
 import { Lobby } from '../../features/lobby/Lobby';
@@ -110,7 +109,6 @@ export const ClientLayout = () => {
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [exploreOpen, setExploreOpen] = useState(false);
     const [onboardingOpen, setOnboardingOpen] = useState(false);
     const [messageSearchOpen, setMessageSearchOpen] = useState(false);
     const messageSearchScrollRef = useRef<HTMLDivElement>(null);
@@ -371,7 +369,7 @@ export const ClientLayout = () => {
 
     const exploreOrCreate = () => {
         if (orderedSpaces.length === 0) {
-            setExploreOpen(true);
+            navigate('/communities');
         } else {
             startNewDen();
         }
@@ -629,155 +627,108 @@ export const ClientLayout = () => {
             />
 
             {desktop || (!mobile && !selectedRoomId) ? (
-                <aside
-                    style={{
-                        borderRight: '1px solid var(--border-default)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        padding: '8px 0',
-                        gap: 8,
-                        background: 'var(--bg-nav)',
-                    }}
-                >
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setSelectedSpaceId(null);
-                            setSelectedRoomId(null);
-                        }}
-                        style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 10,
-                            border: '1px solid var(--border-default)',
-                            background: 'var(--bg-input)',
-                        }}
-                    >
-                        🏠
-                    </button>
-                    <div
-                        style={{
-                            flex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 6,
-                            overflowY: 'auto',
-                        }}
-                    >
-                        {orderedSpaces.map((space, idx) => (
-                            <button
-                                key={space.roomId}
-                                type="button"
-                                draggable
-                                onDragStart={(event: DragEvent<HTMLButtonElement>) =>
-                                    event.dataTransfer.setData('text/plain', space.roomId)
-                                }
-                                onDragOver={(event: DragEvent<HTMLButtonElement>) =>
-                                    event.preventDefault()
-                                }
-                                onDrop={(event: DragEvent<HTMLButtonElement>) => {
-                                    event.preventDefault();
-                                    const dragged = event.dataTransfer.getData('text/plain');
-                                    const next = [...spaceOrder.filter((id) => id !== dragged)];
-                                    next.splice(idx, 0, dragged);
-                                    void persistSpaceOrder(next);
-                                }}
-                                onClick={() => {
-                                    setSelectedSpaceId(space.roomId);
-                                    setSelectedRoomId(null);
-                                }}
-                                style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: 12,
-                                    border:
-                                        selectedSpaceId === space.roomId
-                                            ? '1px solid var(--accent-primary)'
-                                            : '1px solid var(--border-default)',
-                                    background: 'var(--bg-input)',
-                                    position: 'relative',
-                                }}
-                                title={space.name}
-                            >
-                                {space.name.charAt(0)}
-                                {roomUnread(space) > 0 ? (
-                                    <span
-                                        style={{
-                                            position: 'absolute',
-                                            top: -4,
-                                            right: -4,
-                                            background: 'var(--danger)',
-                                            color: '#fff',
-                                            borderRadius: 999,
-                                            minWidth: 16,
-                                            fontSize: 10,
-                                        }}
-                                    >
-                                        {roomUnread(space)}
-                                    </span>
-                                ) : null}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => openCreateSpaceModal()}
-                        title={`New ${BLACKOUT_TERMS.canopy.singular}`}
-                        aria-label={`New ${BLACKOUT_TERMS.canopy.singular}`}
-                        style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 10,
-                            border: '1px dashed var(--border-default)',
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        ＋
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setExploreOpen(true)}
-                        title="Explore public communities"
-                        aria-label="Explore"
-                        style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 10,
-                            border: '1px solid var(--border-default)',
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            cursor: 'pointer',
-                            fontSize: 18,
-                        }}
-                    >
-                        🧭
-                    </button>
-                    {desktop && userId ? (
+                <PrimaryRail
+                    onCreateCanopy={() => openCreateSpaceModal()}
+                    homeButton={
                         <button
                             type="button"
-                            onClick={() => openSettingsSection('appearance')}
-                            title={`${userId} — open settings`}
-                            aria-label="Open settings"
+                            onClick={() => {
+                                setSelectedSpaceId(null);
+                                setSelectedRoomId(null);
+                                navigate('/');
+                            }}
+                            title="Home"
+                            aria-label="Home"
                             style={{
                                 width: 40,
                                 height: 40,
-                                borderRadius: '50%',
+                                borderRadius: 10,
                                 border: '1px solid var(--border-default)',
-                                background: 'var(--accent-muted)',
-                                color: 'var(--text-primary)',
-                                fontSize: 14,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                background: 'var(--bg-input)',
                             }}
                         >
-                            {userId.replace(/^@/, '').charAt(0).toUpperCase()}
+                            🏠
                         </button>
-                    ) : null}
-                </aside>
+                    }
+                    canopyBlock={orderedSpaces.map((space, idx) => (
+                        <button
+                            key={space.roomId}
+                            type="button"
+                            draggable
+                            onDragStart={(event: DragEvent<HTMLButtonElement>) =>
+                                event.dataTransfer.setData('text/plain', space.roomId)
+                            }
+                            onDragOver={(event: DragEvent<HTMLButtonElement>) =>
+                                event.preventDefault()
+                            }
+                            onDrop={(event: DragEvent<HTMLButtonElement>) => {
+                                event.preventDefault();
+                                const dragged = event.dataTransfer.getData('text/plain');
+                                const next = [...spaceOrder.filter((id) => id !== dragged)];
+                                next.splice(idx, 0, dragged);
+                                void persistSpaceOrder(next);
+                            }}
+                            onClick={() => {
+                                setSelectedSpaceId(space.roomId);
+                                setSelectedRoomId(null);
+                            }}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 12,
+                                border:
+                                    selectedSpaceId === space.roomId
+                                        ? '1px solid var(--accent-primary)'
+                                        : '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                position: 'relative',
+                            }}
+                            title={space.name}
+                        >
+                            {space.name.charAt(0)}
+                            {roomUnread(space) > 0 ? (
+                                <span
+                                    style={{
+                                        position: 'absolute',
+                                        top: -4,
+                                        right: -4,
+                                        background: 'var(--danger)',
+                                        color: '#fff',
+                                        borderRadius: 999,
+                                        minWidth: 16,
+                                        fontSize: 10,
+                                    }}
+                                >
+                                    {roomUnread(space)}
+                                </span>
+                            ) : null}
+                        </button>
+                    ))}
+                    avatarButton={
+                        desktop && userId ? (
+                            <button
+                                type="button"
+                                onClick={() => openSettingsSection('appearance')}
+                                title={`${userId} — open settings`}
+                                aria-label="Open settings"
+                                style={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: '50%',
+                                    border: '1px solid var(--border-default)',
+                                    background: 'var(--accent-muted)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: 14,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                {userId.replace(/^@/, '').charAt(0).toUpperCase()}
+                            </button>
+                        ) : null
+                    }
+                />
             ) : null}
 
             {desktop || !mobile ? (
@@ -1135,8 +1086,6 @@ export const ClientLayout = () => {
                                     </div>
                                 </details>
                             ) : null}
-
-                            <RegistrySidebarList />
                         </footer>
                     ) : null}
                 </aside>
@@ -1739,61 +1688,6 @@ export const ClientLayout = () => {
                         }}
                     />
                 </>
-            ) : null}
-
-            {exploreOpen ? (
-                <aside
-                    role="dialog"
-                    aria-label="Explore"
-                    style={{
-                        position: 'fixed',
-                        inset: 24,
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 12,
-                        zIndex: 20,
-                        overflow: 'auto',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-                    }}
-                >
-                    <header
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '10px 16px',
-                            borderBottom: '1px solid var(--border-default)',
-                        }}
-                    >
-                        <strong>Explore {BLACKOUT_TERMS.canopy.plural}</strong>
-                        <button
-                            type="button"
-                            onClick={() => setExploreOpen(false)}
-                            aria-label="Close explore"
-                            style={{
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                borderRadius: 6,
-                                padding: '4px 10px',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            ✕
-                        </button>
-                    </header>
-                    <DiscoverySurface
-                        onSelectRoom={(roomId) => {
-                            setExploreOpen(false);
-                            openRoom(roomId);
-                        }}
-                        onSelectSpace={(spaceId) => {
-                            setExploreOpen(false);
-                            setSelectedSpaceId(spaceId);
-                            setSelectedRoomId(null);
-                        }}
-                    />
-                </aside>
             ) : null}
 
             {lobbyOpen && selectedSpaceId ? (

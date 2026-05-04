@@ -1,5 +1,6 @@
 import type { BlackoutFeature } from '../../core/features/types';
 import { coalitionNavItems } from './nav';
+import { coalitionPanels } from './panels';
 import { coalitionRoutes } from './routes';
 
 export const coalitionFeature: BlackoutFeature = {
@@ -16,6 +17,7 @@ export const coalitionFeature: BlackoutFeature = {
             },
             routes: coalitionRoutes,
             navItems: coalitionNavItems,
+            panels: coalitionPanels,
         },
     ],
     capabilities: ['coalition.read', 'coalition.write'],

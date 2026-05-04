@@ -1,18 +1,25 @@
 import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
+import { useNavigate } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { buildFeatureRegistry } from '../../core/features/buildRegistry';
+import { composeShellPanels, selectPanelsByKind } from '../../core/features/composition';
+import { defaultFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
+import { useCapabilityContext } from '../../core/features/capabilityContext';
 
 interface BaseResult {
     id: string;
-    category: 'Rooms' | 'Spaces' | 'Users' | 'Commands' | 'Actions';
+    category: 'Pages' | 'Rooms' | 'Spaces' | 'Users' | 'Commands' | 'Actions';
     title: string;
     subtitle?: string;
     avatarUrl?: string;
     badge?: string;
     keywords: string;
+    /** Navigation target for `Pages` results. */
+    to?: string;
 }
 
 export type QuickSwitcherActionId = 'mark-read' | 'jump-mentions' | 'open-inbox';
@@ -52,9 +59,22 @@ const fuzzyIncludes = (text: string, query: string): boolean => {
     return hay.includes(needle);
 };
 
-const buildIndex = (rooms: Room[]): BaseResult[] => {
+type PageEntry = { id: string; label: string; to: string };
+
+const buildIndex = (rooms: Room[], pages: PageEntry[]): BaseResult[] => {
     const list: BaseResult[] = [];
     const seenUsers = new Set<string>();
+
+    pages.forEach((page) => {
+        list.push({
+            id: page.id,
+            category: 'Pages',
+            title: page.label,
+            subtitle: page.to,
+            keywords: `${page.label} ${page.to}`,
+            to: page.to,
+        });
+    });
 
     rooms.forEach((room) => {
         const alias = room.getCanonicalAlias() ?? '';
@@ -112,6 +132,21 @@ const categoryLabel = (category: BaseResult['category']): string => {
     return category;
 };
 
+const usePageEntries = (): PageEntry[] => {
+    const ctx = useCapabilityContext();
+    return useMemo(() => {
+        const registry = buildFeatureRegistry(
+            { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags,
+        );
+        const panels = selectPanelsByKind(composeShellPanels(registry, ctx), 'sidebar');
+        return panels.map((panel) => ({
+            id: panel.id,
+            label: panel.label,
+            to: panel.to,
+        }));
+    }, [ctx]);
+};
+
 export const QuickSwitcher = ({
     open,
     onClose,
@@ -119,6 +154,8 @@ export const QuickSwitcher = ({
     onActionPicked,
 }: QuickSwitcherProps) => {
     const client = useMatrixClient();
+    const navigate = useNavigate();
+    const pageEntries = usePageEntries();
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
 
@@ -133,7 +170,7 @@ export const QuickSwitcher = ({
     }, [search]);
 
     useEffect(() => {
-        const rebuild = () => setIndex(buildIndex(client.getRooms()));
+        const rebuild = () => setIndex(buildIndex(client.getRooms(), pageEntries));
         rebuild();
 
         const emitter = client as unknown as {
@@ -157,11 +194,12 @@ export const QuickSwitcher = ({
             emitter.off('RoomState.events', onRoomUpdate);
             emitter.off('RoomMember.name', onRoomUpdate);
         };
-    }, [client]);
+    }, [client, pageEntries]);
 
     const grouped = useMemo(() => {
         const filtered = index.filter((entry) => fuzzyIncludes(entry.keywords, debouncedSearch));
         const groups: Record<BaseResult['category'], BaseResult[]> = {
+            Pages: [],
             Rooms: [],
             Spaces: [],
             Users: [],
@@ -192,6 +230,12 @@ export const QuickSwitcher = ({
 
     const activate = useCallback(
         async (result: BaseResult) => {
+            if (result.category === 'Pages') {
+                if (result.to) navigate(result.to);
+                onClose();
+                return;
+            }
+
             if (result.category === 'Rooms') {
                 setSelectedRoomId(result.id);
                 setSelectedSpaceId(null);
@@ -230,6 +274,7 @@ export const QuickSwitcher = ({
         },
         [
             client,
+            navigate,
             onActionPicked,
             onClose,
             onCommandPicked,
@@ -387,6 +432,8 @@ export const QuickSwitcher = ({
                                                     '👤'
                                                 ) : item.category === 'Spaces' ? (
                                                     '🗂️'
+                                                ) : item.category === 'Pages' ? (
+                                                    '📄'
                                                 ) : (
                                                     '💬'
                                                 )}

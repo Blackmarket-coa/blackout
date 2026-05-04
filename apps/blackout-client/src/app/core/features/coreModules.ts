@@ -1,7 +1,9 @@
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
+import { communitiesFeature } from '../../features/communities';
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
+import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
 import { forumFeature } from '../../features/forum';
 import { governanceFeature } from '../../features/governance';
@@ -18,6 +20,10 @@ import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
+    {
+        feature: communitiesFeature,
+        flag: 'communities',
+    },
     {
         feature: governanceFeature,
         flag: 'governance',
@@ -85,5 +91,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: profileFeature,
         flag: 'profile',
+    },
+    {
+        feature: pluginsFeature,
+        flag: 'plugins',
     },
 ];
