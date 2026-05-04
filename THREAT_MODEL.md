@@ -2,7 +2,7 @@
 
 This document is the authoritative top-level threat model for Blackout. It defines the adversary classes we defend against, the trust boundaries in the system, the assets we protect, and the residual risks we have explicitly accepted. Narrow per-feature threat models live alongside their features and are linked from §6.
 
-Last updated: 2026-05-03
+Last updated: 2026-05-03 (deferral landings: ML-KEM-768 wired, WebAuthn verification wired, KT log persistence + Ed25519 witness wired)
 
 ---
 
@@ -41,7 +41,7 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 | A6 | **Malicious room/community member** | Legitimate credential, abuses APIs, fishes for IDOR, governance manipulation | Yes |
 | A7 | **Attacker with stolen device or active session** | Can read everything that device can | Partial — addressed by per-device verification + session revocation |
 | A8 | **Malicious dependency / supply-chain attacker** | Publishes a poisoned npm/cargo package | Yes — addressed by SBOM gating, lockfile pinning, signed releases |
-| A9 | **Nation-state with future quantum compute** | Records ciphertext today, decrypts later ("harvest now, decrypt later") | Partial — PQ hybrid for deaddrops planned; Megolm PQ deferred to upstream |
+| A9 | **Nation-state with future quantum compute** | Records ciphertext today, decrypts later ("harvest now, decrypt later") | Partial — PQ hybrid for deaddrops shipped (X25519 + ML-KEM-768); Megolm PQ deferred to upstream |
 | A10 | **Physical adversary with device seizure** | Cold-boot attacks, forensic imaging | Out of scope (delegated to OS keystore / FDE) |
 | A11 | **Malicious client build** | Distributes a tampered client | Yes — addressed by signed releases + reproducible builds |
 
@@ -75,7 +75,7 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 | Message plaintext | E2EE (Megolm) | Megolm AEAD + Matrix event sigs | Best-effort across federation |
 | Call/townhall media | **TLS-only today**; SFrame E2EE planned (A1) | DTLS + planned SFrame | SFU HA |
 | Attachments | E2EE (Matrix file encryption) | AES-GCM AEAD | Media repo HA |
-| Deaddrops | E2EE (X25519+AES-GCM; PQ hybrid planned A3) | AES-GCM AEAD | Server-opaque storage |
+| Deaddrops | E2EE (X25519+AES-GCM v1, X25519+ML-KEM-768+AES-GCM v2 hybrid) | AES-GCM AEAD | Server-opaque storage |
 | Cross-signing keys | SSSS (passphrase/recovery key) | Self-signed | User-managed |
 | OIDC tokens | TLS + secure storage | OIDC sigs | IdP HA |
 | Governance ballots | Tamper-evident ledger | Hash chain + sigs | HA |
@@ -102,9 +102,9 @@ These risks are known and accepted, with the rationale recorded so reviewers do 
 |----|------|-----------|--------------|
 | R1 | Homeserver sees who-talks-to-whom and when | Inherent to Matrix protocol; sealed-sender-style metadata privacy is out of scope today | Sealed sender lands in upstream Matrix |
 | R2 | SFU sees plaintext A/V media | Mitigated: per-call media E2EE (symmetric for 1:1/group, broadcast sender keys for townhalls) is negotiated by default in `CallProvider.tsx`. Status surfaced by `EncryptionBadge`. Operators must keep the matrixRTC-capable SDK installed. | New SFU deployment patterns |
-| R3 | Megolm not post-quantum | Awaiting upstream Matrix PQ work. Deaddrop v2 hybrid wire format + HKDF combiner landed (see `docs/security/deaddrop-pq-hybrid.md`); ML-KEM-768 primitive pending a vetted dependency follow-up. | Upstream PQ Megolm draft published; ML-KEM provider wired |
-| R4 | OIDC IdP compromise = identity compromise | Standard OIDC trust model; mitigated by short token TTLs and per-device keys. Native passkey scaffold (challenges, storage, clientDataJSON validation) landed; cryptographic verification deferred — see `docs/security/webauthn-passkeys.md`. | Passkey verification ships |
-| R5 | Client supply chain | Mitigated by lockfile pinning, SBOM (SPDX + Docker embedded), Sigstore-keyless cosign signatures pinned to the release workflow identity, and an RFC 6962-compatible key-transparency log (`docs/security/key-transparency.md`) so clients can detect homeserver-side key substitution. Persistence + witnesses are deployment follow-ups. | KT log gets persistence + witnesses |
+| R3 | Megolm not post-quantum | Awaiting upstream Matrix PQ work. Deaddrop v2 hybrid (X25519 + ML-KEM-768) shipped end-to-end via `@noble/post-quantum`; v2 envelopes encrypt and decrypt round-trip in-tree (see `docs/security/deaddrop-pq-hybrid.md`). | Upstream PQ Megolm draft published |
+| R4 | OIDC IdP compromise = identity compromise | Standard OIDC trust model; mitigated by short token TTLs and per-device keys. Native passkey support shipped — challenges, storage, clientDataJSON validation, and cryptographic attestation/assertion verification (delegated to `@simplewebauthn/server`) plus sign-counter monotonicity for clone detection. Gated behind `WEBAUTHN_ENABLED=1`. See `docs/security/webauthn-passkeys.md`. | Mandatory passkey enrolment policy |
+| R5 | Client supply chain | Mitigated by lockfile pinning, SBOM (SPDX + Docker embedded), Sigstore-keyless cosign signatures pinned to the release workflow identity, and an RFC 6962-compatible key-transparency log (`docs/security/key-transparency.md`) so clients can detect homeserver-side key substitution. Persistence is operator-configurable (in-memory default; JSON-file via `KT_LOG_FILE`). Ed25519 witness signatures over each Signed Tree Head ship (operator-configurable via `KT_WITNESS_ED25519_SEED`); pure-function `verifySignedTreeHead` so clients and auditors run identical code. | Federated witness gossip |
 | R6 | Physical device seizure | Delegated to OS keystore + FDE | New mobile threat model |
 | R7 | DoS via federation amplification | Rate limits + per-peer reputation; not a confidentiality risk | New federation abuse incidents |
 

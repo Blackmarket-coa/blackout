@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+    decryptDeadDrop,
     deriveHybridAeadKey,
-    NULL_KEM_PROVIDER,
-    setKemProvider,
-    getKemProvider,
+    encryptDeadDrop,
+    generateRecipientKeyPair,
     isOpaqueEnvelope,
     isOpaqueEnvelopeV1,
     isOpaqueEnvelopeV2,
+    mlKem768Provider,
+    NULL_KEM_PROVIDER,
+    setKemProvider,
+    getKemProvider,
     PQ_HYBRID_INFO,
     SUPPORTED_SUITES,
     type DeadDropEnvelopeV1,
@@ -240,5 +244,181 @@ describe('envelope shape (v1 ↔ v2)', () => {
                 suite: 'sealedbox-x25519-aes256gcm-v1',
             } as unknown),
         ).toBe(false);
+    });
+});
+
+describe('mlKem768Provider (FIPS 203 ML-KEM-768)', () => {
+    it('exports the FIPS 203 Table 3 sizes', () => {
+        expect(mlKem768Provider.publicKeyLength).toBe(1184);
+        expect(mlKem768Provider.secretKeyLength).toBe(2400);
+        expect(mlKem768Provider.ciphertextLength).toBe(1088);
+        expect(mlKem768Provider.sharedSecretLength).toBe(32);
+    });
+
+    it('generates keypairs with the published byte lengths', async () => {
+        const { publicKey, secretKey } = await mlKem768Provider.generateKeyPair();
+        expect(publicKey.length).toBe(mlKem768Provider.publicKeyLength);
+        expect(secretKey.length).toBe(mlKem768Provider.secretKeyLength);
+    });
+
+    it('encapsulate / decapsulate round-trips a 32-byte shared secret', async () => {
+        const { publicKey, secretKey } = await mlKem768Provider.generateKeyPair();
+        const enc = await mlKem768Provider.encapsulate(publicKey);
+        expect(enc.ciphertext.length).toBe(mlKem768Provider.ciphertextLength);
+        expect(enc.sharedSecret.length).toBe(mlKem768Provider.sharedSecretLength);
+        const recovered = await mlKem768Provider.decapsulate(enc.ciphertext, secretKey);
+        expect(Array.from(recovered)).toEqual(Array.from(enc.sharedSecret));
+    });
+
+    it('decapsulate produces an implicit-rejection secret for a tampered ciphertext', async () => {
+        // ML-KEM is IND-CCA2: a tampered ciphertext does not raise — it
+        // returns a deterministic pseudo-random secret derived from the
+        // ciphertext + secret key (FIPS 203 §7.3, "implicit rejection").
+        // The recovered secret must NOT equal the original shared secret.
+        const { publicKey, secretKey } = await mlKem768Provider.generateKeyPair();
+        const enc = await mlKem768Provider.encapsulate(publicKey);
+        const tampered = new Uint8Array(enc.ciphertext);
+        tampered[0] ^= 0xff;
+        const recovered = await mlKem768Provider.decapsulate(tampered, secretKey);
+        expect(recovered.length).toBe(mlKem768Provider.sharedSecretLength);
+        expect(Array.from(recovered)).not.toEqual(Array.from(enc.sharedSecret));
+    });
+
+    it('encapsulate rejects a wrong-length recipient public key', async () => {
+        await expect(mlKem768Provider.encapsulate(new Uint8Array(100))).rejects.toThrow(
+            /publicKey/,
+        );
+    });
+
+    it('decapsulate rejects wrong-length ciphertext or secret key', async () => {
+        const { secretKey } = await mlKem768Provider.generateKeyPair();
+        await expect(
+            mlKem768Provider.decapsulate(new Uint8Array(10), secretKey),
+        ).rejects.toThrow(/ciphertext/);
+        await expect(
+            mlKem768Provider.decapsulate(new Uint8Array(1088), new Uint8Array(10)),
+        ).rejects.toThrow(/secretKey/);
+    });
+});
+
+describe('encryptDeadDrop / decryptDeadDrop with v2 hybrid envelope', () => {
+    const ENC = new TextEncoder();
+    const DEC = new TextDecoder();
+
+    it('round-trips a plaintext through v2 (X25519 + ML-KEM-768) hybrid', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const ec = await generateRecipientKeyPair();
+            const pq = await mlKem768Provider.generateKeyPair();
+            const plaintext = ENC.encode('classified — drop at the broken arcade @ 23:00');
+
+            const envelope = await encryptDeadDrop({
+                plaintext,
+                recipientPublicKeyBase64: ec.publicKeyBase64,
+                paddingStrategy: 'minimal',
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+                recipientPqPublicKey: pq.publicKey,
+            });
+
+            expect(isOpaqueEnvelopeV2(envelope)).toBe(true);
+            expect(envelope.v).toBe(2);
+            expect(envelope.suite).toBe('sealedbox-x25519-mlkem768-aes256gcm-v2');
+
+            const recovered = await decryptDeadDrop({
+                envelope,
+                recipientPrivateKeyJwk: ec.privateKeyJwk,
+                recipientPqSecretKey: pq.secretKey,
+            });
+            expect(DEC.decode(recovered)).toBe('classified — drop at the broken arcade @ 23:00');
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('v2 envelope decryption fails if the PQ secret is wrong (hybrid binding)', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const ec = await generateRecipientKeyPair();
+            const pq = await mlKem768Provider.generateKeyPair();
+            const wrong = await mlKem768Provider.generateKeyPair();
+            const envelope = await encryptDeadDrop({
+                plaintext: ENC.encode('zzz'),
+                recipientPublicKeyBase64: ec.publicKeyBase64,
+                paddingStrategy: 'minimal',
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+                recipientPqPublicKey: pq.publicKey,
+            });
+            await expect(
+                decryptDeadDrop({
+                    envelope,
+                    recipientPrivateKeyJwk: ec.privateKeyJwk,
+                    recipientPqSecretKey: wrong.secretKey,
+                }),
+            ).rejects.toBeDefined();
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('v2 encrypt rejects a missing PQ public key', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const ec = await generateRecipientKeyPair();
+            await expect(
+                encryptDeadDrop({
+                    plaintext: ENC.encode('x'),
+                    recipientPublicKeyBase64: ec.publicKeyBase64,
+                    paddingStrategy: 'minimal',
+                    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                    // @ts-expect-error — overload requires recipientPqPublicKey, runtime check too
+                    suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+                }),
+            ).rejects.toThrow(/recipientPqPublicKey/);
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('v2 decrypt rejects a missing PQ secret key', async () => {
+        setKemProvider(mlKem768Provider);
+        try {
+            const ec = await generateRecipientKeyPair();
+            const pq = await mlKem768Provider.generateKeyPair();
+            const envelope = await encryptDeadDrop({
+                plaintext: ENC.encode('x'),
+                recipientPublicKeyBase64: ec.publicKeyBase64,
+                paddingStrategy: 'minimal',
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                suite: 'sealedbox-x25519-mlkem768-aes256gcm-v2',
+                recipientPqPublicKey: pq.publicKey,
+            });
+            await expect(
+                decryptDeadDrop({
+                    envelope,
+                    recipientPrivateKeyJwk: ec.privateKeyJwk,
+                }),
+            ).rejects.toThrow(/recipientPqSecretKey/);
+        } finally {
+            setKemProvider(NULL_KEM_PROVIDER);
+        }
+    });
+
+    it('default (no suite) still produces a v1 envelope and does not need PQ keys', async () => {
+        const ec = await generateRecipientKeyPair();
+        const envelope = await encryptDeadDrop({
+            plaintext: ENC.encode('legacy'),
+            recipientPublicKeyBase64: ec.publicKeyBase64,
+            paddingStrategy: 'minimal',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        });
+        expect(envelope.v).toBe(1);
+        expect(envelope.suite).toBe('sealedbox-x25519-aes256gcm-v1');
+        const recovered = await decryptDeadDrop({
+            envelope,
+            recipientPrivateKeyJwk: ec.privateKeyJwk,
+        });
+        expect(DEC.decode(recovered)).toBe('legacy');
     });
 });

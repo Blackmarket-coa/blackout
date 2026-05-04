@@ -1,10 +1,10 @@
 # Native WebAuthn / Passkey Support
 
-Status: **scaffold** (gated behind `WEBAUTHN_ENABLED=1`).
+Status: **shipped** (gated behind `WEBAUTHN_ENABLED=1`). Verification is
+backed by `@simplewebauthn/server`.
 
-This document describes the native WebAuthn / passkey surface added to
-the Blackout API, what it does today, and what must land before the
-feature flag can be flipped on in production.
+This document describes the native WebAuthn / passkey surface in the
+Blackout API and the operator knobs that govern it.
 
 ## What ships today
 
@@ -29,33 +29,34 @@ feature flag can be flipped on in production.
   - `WEBAUTHN_RP_ID` — Relying Party ID (eTLD+1 of the app domain).
   - `WEBAUTHN_RP_NAME` — display name.
   - `WEBAUTHN_ORIGINS` — comma-separated origin allow-list.
-- 14 regression tests covering challenge handling, parsing, validation,
-  storage, and the safety stops in `verifyAttestation` /
-  `verifyAssertion`.
+- 16 regression tests covering challenge handling, parsing, validation,
+  storage, the clientData pre-checks in `verifyAttestation` /
+  `verifyAssertion`, and the failure paths after delegation to
+  `@simplewebauthn/server` (`verification_failed`).
 
-## What is NOT implemented yet
+## Verification (now wired)
 
-`verifyAttestation` and `verifyAssertion` currently return
-`{ ok: false, code: 'verification_not_implemented' }` after the
-clientDataJSON checks pass. The remaining cryptographic surface is:
+Cryptographic verification is delegated to `@simplewebauthn/server`,
+which covers:
 
 1. CBOR decoding of `attestationObject` and `authenticatorData`.
 2. COSE_Key extraction (kty, alg, crv, x/y or n/e).
 3. rpIdHash equality check against `SHA-256(rpId)`.
 4. User-Present / User-Verified flag enforcement.
 5. Signature verification (ES256, EdDSA, RS256 at minimum).
-6. Sign-counter monotonicity check (cloning detection).
-7. Attestation-statement format verification (`packed`, `none`,
-   optionally `tpm`, `android-key`, `apple`).
-8. Optional MDS-rooted authenticator trust.
+6. Attestation-statement format verification (`packed`, `none`, `tpm`,
+   `android-key`, `apple`, `fido-u2f`).
 
-This work should be delivered in a focused follow-up that adds a vetted
-dependency (recommended: `@simplewebauthn/server`) rather than a hand-
-rolled implementation. Until then, **do not enable
-`WEBAUTHN_ENABLED=1` in production** — `register/finish` and
-`login/finish` will reject every credential with the
-`verification_not_implemented` code, which is the safe-by-default
-posture.
+In addition, `verifyAssertion` enforces sign-counter monotonicity in
+this module: if the new counter is not strictly greater than the stored
+one (and the authenticator is not the always-zero variant) the assertion
+is rejected with `sign_counter_regression`, which is how cloned
+authenticators are detected.
+
+`requireUserVerification` defaults to `false` so that platform
+authenticators that surface UV via biometrics, but report it as a
+flag, are accepted. Operators that want strict UV can flip this in
+`packages/api/src/services/webauthn.ts`.
 
 ## Tracking
 
@@ -63,4 +64,4 @@ posture.
   `packages/api/src/routes/webauthn.ts`.
 - Tests: `packages/api/test/webauthn.integration.test.ts`.
 - Threat model entry: `THREAT_MODEL.md` §7 R4.
-- Follow-up tag: `TODO(WEBAUTHN-VERIFY)` in `webauthn.ts`.
+- Dependency: `@simplewebauthn/server`.

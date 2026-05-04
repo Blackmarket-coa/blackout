@@ -154,10 +154,15 @@ test('credential storage is per-user and lookup works', () => {
     assert.equal(listCredentialsByUser('u-cs').length, 2);
 });
 
-test('verifyAttestation rejects malformed clientData before reaching crypto', () => {
-    const result = verifyAttestation({
-        clientDataJSON: 'garbage',
-        attestationObject: 'unused',
+test('verifyAttestation rejects malformed clientData before reaching crypto', async () => {
+    const result = await verifyAttestation({
+        response: {
+            id: 'x',
+            rawId: 'x',
+            response: { clientDataJSON: 'garbage', attestationObject: 'AAAA' },
+            clientExtensionResults: {},
+            type: 'public-key',
+        },
         expectedChallenge: 'c1',
         config: {
             enabled: true,
@@ -170,15 +175,23 @@ test('verifyAttestation rejects malformed clientData before reaching crypto', ()
     assert.equal((result as { code: string }).code, 'malformed_client_data');
 });
 
-test('verifyAttestation reports verification_not_implemented after clientData passes', () => {
+test('verifyAttestation passes clientData pre-checks then fails crypto with verification_failed on a placeholder attestation', async () => {
     const challenge = 'chal-aaa';
-    const result = verifyAttestation({
-        clientDataJSON: encodeClientData({
-            type: 'webauthn.create',
-            challenge,
-            origin: 'https://example.com',
-        }),
-        attestationObject: 'placeholder',
+    const result = await verifyAttestation({
+        response: {
+            id: 'x',
+            rawId: 'x',
+            response: {
+                clientDataJSON: encodeClientData({
+                    type: 'webauthn.create',
+                    challenge,
+                    origin: 'https://example.com',
+                }),
+                attestationObject: 'AAAA',
+            },
+            clientExtensionResults: {},
+            type: 'public-key',
+        },
         expectedChallenge: challenge,
         config: {
             enabled: true,
@@ -188,20 +201,27 @@ test('verifyAttestation reports verification_not_implemented after clientData pa
         },
     });
     assert.equal(result.ok, false);
-    assert.equal((result as { code: string }).code, 'verification_not_implemented');
+    assert.equal((result as { code: string }).code, 'verification_failed');
 });
 
-test('verifyAssertion fails fast on unknown credentialId', () => {
+test('verifyAssertion fails fast on unknown credentialId', async () => {
     const challenge = 'chal-bbb';
-    const result = verifyAssertion({
-        clientDataJSON: encodeClientData({
-            type: 'webauthn.get',
-            challenge,
-            origin: 'https://example.com',
-        }),
-        authenticatorData: '',
-        signature: '',
-        credentialId: 'does-not-exist',
+    const result = await verifyAssertion({
+        response: {
+            id: 'does-not-exist',
+            rawId: 'does-not-exist',
+            response: {
+                clientDataJSON: encodeClientData({
+                    type: 'webauthn.get',
+                    challenge,
+                    origin: 'https://example.com',
+                }),
+                authenticatorData: 'AAAA',
+                signature: 'AAAA',
+            },
+            clientExtensionResults: {},
+            type: 'public-key',
+        },
         expectedChallenge: challenge,
         config: {
             enabled: true,
@@ -211,6 +231,50 @@ test('verifyAssertion fails fast on unknown credentialId', () => {
         },
     });
     assert.equal((result as { code: string }).code, 'unknown_credential');
+});
+
+test('verifyAssertion fails with verification_failed when stored credential public key cannot validate the signature', async () => {
+    // Store a credential with a real-shaped (32-byte) but bogus public key,
+    // then prove that verifyAssertion delegates to @simplewebauthn/server
+    // and the library's signature check rejects it.
+    const challenge = 'chal-fail';
+    storeCredential({
+        credentialId: 'cred-ver-fail',
+        userId: 'u-ver-fail',
+        publicKeyCose: Buffer.from(new Uint8Array(77)).toString('base64url'),
+        signCount: 0,
+        transports: [],
+        createdAt: Date.now(),
+        lastUsedAt: null,
+        label: 'fake',
+    });
+
+    const result = await verifyAssertion({
+        response: {
+            id: 'cred-ver-fail',
+            rawId: 'cred-ver-fail',
+            response: {
+                clientDataJSON: encodeClientData({
+                    type: 'webauthn.get',
+                    challenge,
+                    origin: 'https://example.com',
+                }),
+                authenticatorData: 'AAAA',
+                signature: 'AAAA',
+            },
+            clientExtensionResults: {},
+            type: 'public-key',
+        },
+        expectedChallenge: challenge,
+        config: {
+            enabled: true,
+            rpId: 'example.com',
+            rpName: 'X',
+            expectedOrigins: ['https://example.com'],
+        },
+    });
+    assert.equal(result.ok, false);
+    assert.equal((result as { code: string }).code, 'verification_failed');
 });
 
 test('readWebAuthnConfig reflects env vars', () => {

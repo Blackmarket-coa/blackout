@@ -18,6 +18,7 @@
     "@blackout/core": "workspace:*",
     "@blackout/protocol": "workspace:*",
     "@hono/node-server": "1.19.13",
+    "@simplewebauthn/server": "13.3.0",
     "hono": "4.12.14",
     "zod": "^4.3.6"
   }

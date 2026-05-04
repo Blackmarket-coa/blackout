@@ -41,6 +41,7 @@ export {
     setKemProvider,
     getKemProvider,
     NULL_KEM_PROVIDER,
+    mlKem768Provider,
     PQ_HYBRID_INFO,
     type KemProvider,
     type KemEncapsulation,
