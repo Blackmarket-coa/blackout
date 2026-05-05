@@ -265,7 +265,7 @@ test('fails when core module flag is missing from registration allowlist', () =>
   const coreModulesTs = writeFile(
     dir,
     'coreModules.ts',
-    "export const coreFeatureModules = [{ feature: { id: 'governance' }, flag: 'deaddrop' }];\n"
+    "export const coreFeatureModules = [{ feature: deaddropFeature, flag: 'deaddrop' }];\n"
   );
   const pluginsTs = writeFile(dir, 'plugins.ts', 'export const featurePlugins = [];\n');
   const runtimePluginsTs = writeFile(dir, 'runtimePlugins.ts', "export const runtimePluginEntries = [{ id: 'runtime.alpha' }];\n");
