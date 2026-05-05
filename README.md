@@ -172,7 +172,6 @@ System ownership rules:
 - `blackout-server` owns backend behavior.
 - `blackout-protocol` owns shared meaning.
 - `blackout-sdk` owns client/server wiring.
-- Legacy Element code stays isolated under `legacy/element`.
 
 In shorthand: **Cinny UI shell + modular features + shared SDK + shared protocol + modular backend**.
 

@@ -30,6 +30,5 @@ pnpm dev
 
 ## Notes
 
-- Legacy Element code remains isolated under `legacy/element` and is not part of canonical runtime startup.
 - Existing deployment assets in `deploy/` remain supported while `infra/` is the canonical organization target.
 - CI already enforces a minimal deployment-readiness file/script contract via `tools/ci/check-deployment-readiness.mjs`.

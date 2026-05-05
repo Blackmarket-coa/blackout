@@ -22,7 +22,6 @@ const requiredPaths = [
   'infra/railway/README.md',
   'infra/docker',
   'infra/env',
-  'legacy/element/README.md',
   '.github/workflows/ci.yml',
   'docs/architecture/overview.md',
   'docs/deployment/local.md',

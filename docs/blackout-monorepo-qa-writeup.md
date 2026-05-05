@@ -5,7 +5,7 @@
 After the reorganization, the `blackout` repository becomes the canonical monorepo containing:
 
 - Frontend: `blackout_app` (Cinny-based client)
-- Backend runtime package: `@blackout/server` (implemented in `packages/api`, with alias wrapper in `packages/server`)
+- Backend runtime package: `@blackout/server` (implemented in `packages/api`, with canonical app entrypoint in `apps/blackout-server`)
 - Shared packages: protocol, SDK, UI, and core modules
 - Legacy or supplemental code: retained only when not already present in the Cinny client
 
@@ -91,7 +91,7 @@ Each feature registers itself using a manifest pattern.
 
 `@blackout/server` is the canonical JS/TS backend runtime target.
 
-Current executable implementation lives in `packages/api` and is invoked through `packages/server` scripts. The repository also retains `apps/blackout-server` for the Synapse/Python server stack.
+Current executable implementation lives in `packages/api` and is invoked through `apps/blackout-server` scripts (which expose the `@blackout/server` name). The repository also retains `apps/blackout-server` for the Synapse/Python server stack.
 
 ```text
 packages/api/src/
@@ -155,7 +155,7 @@ Examples:
 During migration:
 
 - `blackout_app` is copied into `apps/blackout-client`
-- backend runtime entrypoints are consolidated on `@blackout/server` (currently `packages/api` + `packages/server`)
+- backend runtime entrypoints are consolidated on `@blackout/server` (currently `packages/api` + `apps/blackout-server`)
 - useful modules from the Element repo are retained if they are missing from Cinny
 - duplicates and conflicting implementations are removed
 
@@ -313,7 +313,7 @@ The checklist above describes the intended target state. Running it against the 
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Workspace contains `@blackout/client` | ✅ Pass | `apps/blackout-client/package.json` is named `@blackout/client`. |
-| Workspace contains `@blackout/server` | ✅ Pass | `packages/server/package.json` and `packages/api/package.json` expose server runtime scripts/name. |
+| Workspace contains `@blackout/server` | ✅ Pass | `apps/blackout-server/package.json` and `packages/api/package.json` expose server runtime scripts/name. |
 | Workspace contains `@blackout/protocol` and `@blackout/sdk` | ✅ Pass | `packages/blackout-protocol` and `packages/blackout-sdk` are named correctly. |
 | `pnpm dev --filter @blackout/client` resolves | ✅ Pass | Root scripts and client package scripts are aligned for `dev`. |
 | `pnpm dev --filter @blackout/server` resolves | ✅ Pass | Root scripts and server package scripts are aligned for `dev`. |

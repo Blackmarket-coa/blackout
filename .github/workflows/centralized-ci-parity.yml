@@ -9,7 +9,6 @@ on:
       - 'tools/ci/**'
       - '.github/workflows/centralized-ci-parity.yml'
       - 'docs/**'
-      - '_port/**'
 
 jobs:
   parity:
@@ -34,10 +33,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Guard _port changes in PR range
-        if: github.event_name == 'pull_request'
-        run: node tools/ci/check-no-port-changes.mjs --range origin/${{ github.base_ref }}...HEAD
 
       - name: Run parity pipeline
         run: pnpm ci:parity

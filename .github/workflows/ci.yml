@@ -197,7 +197,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Anti-drift check for consolidation artifacts
         run: pnpm guard:frontend-consolidation
-      - name: Legacy docs integrity gate
-        run: node _port/scripts/operations/docs_integrity_check.cjs
       - name: Keep canonical migration surfaces green
         run: pnpm --filter @blackout/blackout-gov test

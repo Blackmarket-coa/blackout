@@ -25,7 +25,6 @@ function assertIncludes(actual, expectedSubstring, message) {
 
 const rootPackage = readJson('package.json');
 const mobilePackage = readJson('blackout-mobile/package.json');
-const legacyWebPackage = readJson('legacy/web/package.json');
 
 assertIncludes(rootPackage.scripts?.['web:dev'], '@blackout/client dev', 'Root web:dev must target canonical web app');
 assertIncludes(rootPackage.scripts?.['web:build'], '@blackout/client build', 'Root web:build must target canonical web app');
@@ -33,7 +32,6 @@ assertIncludes(rootPackage.scripts?.['web:test'], '@blackout/client test', 'Root
 assertIncludes(rootPackage.scripts?.['mobile:build'], 'blackout-mobile build', 'Root mobile:build must target canonical mobile wrapper package');
 
 assertIncludes(mobilePackage.scripts?.['build:web'], '@blackout/client build', 'blackout-mobile build:web must consume canonical @blackout/client bundle');
-assertIncludes(legacyWebPackage.description, 'canonical frontend is @blackout/client', 'Legacy legacy/web package must remain explicitly marked as non-deploy');
 
 if (failures.length > 0) {
   console.error('Canonical runtime target check failed:');
