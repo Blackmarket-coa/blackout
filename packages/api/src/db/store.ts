@@ -28,6 +28,7 @@ import type {
   StreamRecord,
   StreamSessionRecord,
   StreamModerationRecord,
+  TipRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -56,6 +57,7 @@ type PersistedState = {
   marketplaceWebhookAudit: MarketplaceWebhookAuditRecord[];
   marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
   marketplaceListingsCache: MarketplaceListingsCacheRecord[];
+  tips: TipRecord[];
 };
 
 class InMemoryDb {
@@ -80,6 +82,7 @@ class InMemoryDb {
   marketplaceWebhookAudit = new Map<string, MarketplaceWebhookAuditRecord>();
   marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
   marketplaceListingsCache = new Map<string, MarketplaceListingsCacheRecord>();
+  tips = new Map<string, TipRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -521,6 +524,47 @@ class InMemoryDb {
     this.marketplaceListingsCache.clear();
   }
 
+  insertTip(record: TipRecord): TipRecord {
+    this.tips.set(record.id, record);
+    return record;
+  }
+
+  updateTip(record: TipRecord): TipRecord {
+    this.tips.set(record.id, record);
+    return record;
+  }
+
+  getTip(id: string): TipRecord | undefined {
+    return this.tips.get(id);
+  }
+
+  findTipByOrderId(
+    providerId: MarketplaceProviderIdString,
+    fbmOrderId: string
+  ): TipRecord | undefined {
+    return [...this.tips.values()].find(
+      (row) => row.providerId === providerId && row.fbmOrderId === fbmOrderId
+    );
+  }
+
+  listTipsByRecipient(recipientUserId: string, limit = 100): TipRecord[] {
+    return [...this.tips.values()]
+      .filter((row) => row.recipientUserId === recipientUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
+  listTipsBySender(senderUserId: string, limit = 100): TipRecord[] {
+    return [...this.tips.values()]
+      .filter((row) => row.senderUserId === senderUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  }
+
+  resetTipsForTest(): void {
+    this.tips.clear();
+  }
+
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
@@ -573,6 +617,7 @@ class FileBackedDb extends InMemoryDb {
     this.marketplaceListingsCache = new Map(
       (parsed.marketplaceListingsCache ?? []).map((row) => [row.cacheKey, row])
     );
+    this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
   }
 
   private snapshot(): PersistedState {
@@ -598,6 +643,7 @@ class FileBackedDb extends InMemoryDb {
       marketplaceWebhookAudit: [...this.marketplaceWebhookAudit.values()],
       marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
       marketplaceListingsCache: [...this.marketplaceListingsCache.values()],
+      tips: [...this.tips.values()],
     };
   }
 
@@ -802,6 +848,23 @@ class FileBackedDb extends InMemoryDb {
 
   override resetMarketplaceForTest(): void {
     super.resetMarketplaceForTest();
+    this.persist();
+  }
+
+  override insertTip(record: TipRecord): TipRecord {
+    const created = super.insertTip(record);
+    this.persist();
+    return created;
+  }
+
+  override updateTip(record: TipRecord): TipRecord {
+    const updated = super.updateTip(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetTipsForTest(): void {
+    super.resetTipsForTest();
     this.persist();
   }
 }

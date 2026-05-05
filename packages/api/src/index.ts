@@ -11,6 +11,7 @@ import marketplaceRoutes from './routes/marketplace';
 import creatorRoutes from './routes/creator';
 import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
+import tipRoutes from './routes/tips';
 import appRoutes from './routes/apps';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
@@ -70,6 +71,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/creator`, creatorRoutes);
   app.route(`${root}/voice`, voiceRoutes);
   app.route(`${root}/subscriptions`, subscriptionRoutes);
+  app.route(`${root}/tips`, tipRoutes);
   app.route(`${root}/apps`, appRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);

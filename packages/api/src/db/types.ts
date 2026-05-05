@@ -270,3 +270,26 @@ export interface MarketplaceListingsCacheRecord {
   listings: unknown[];
   refreshedAt: string;
 }
+
+export type TipContextKind = 'profile' | 'stream' | 'post' | 'channel_message' | 'aid_pool';
+
+export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
+
+export interface TipRecord {
+  id: UUID;
+  senderUserId: UUID;
+  recipientUserId: UUID;
+  contextKind: TipContextKind;
+  contextRef: string | null;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmOrderId: string | null;
+  status: TipStatus;
+  note: string | null;
+  createdAt: string;
+  capturedAt: string | null;
+  refundedAt: string | null;
+}
