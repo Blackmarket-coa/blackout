@@ -37,6 +37,25 @@ export type SubscriptionSnapshot = SubscriptionRecord & {
   entitlementActive: boolean;
 };
 
+export type GiftStatus = 'pending' | 'claimed' | 'forwarded' | 'expired';
+
+export type SubscriptionGift = {
+  id: string;
+  donorUserId: string;
+  donorPlanCode: string;
+  donorTier: Exclude<CanopyTier, 'free'>;
+  status: GiftStatus;
+  claimedByUserId: string | null;
+  claimedAt: string | null;
+  forwardedToGiftId: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  rootGiftId: string;
+  chainDepth: number;
+  metadata: Record<string, unknown>;
+};
+
 const CANOPY_PRODUCTS = [
   { planCode: 'canopy_sprout_monthly', tier: 'sprout', interval: 'monthly', trialDays: 14, graceDays: 7 },
   { planCode: 'canopy_sprout_annual', tier: 'sprout', interval: 'annual', trialDays: 14, graceDays: 10 },
@@ -55,6 +74,9 @@ const productsByPlan = new Map(CANOPY_PRODUCTS.map((p) => [p.planCode, p]));
 const subscriptions = new Map<string, SubscriptionRecord>();
 const auditTimelineByUser = new Map<string, SubscriptionAuditEvent[]>();
 const processedWebhookEvents = new Set<string>();
+const subscriptionGifts = new Map<string, SubscriptionGift>();
+
+const DEFAULT_GIFT_EXPIRY_DAYS = 30;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -336,4 +358,169 @@ export function getSubscriptionAuditTimeline(userId: string): SubscriptionAuditE
 
 export function hasPremiumCanopyEntitlement(userId: string): boolean {
   return getSubscription(userId).entitlementActive;
+}
+
+function expireStaleGifts(): void {
+  const now = Date.now();
+  for (const [id, gift] of subscriptionGifts) {
+    if (gift.status === 'pending' && Date.parse(gift.expiresAt) <= now) {
+      subscriptionGifts.set(id, { ...gift, status: 'expired', updatedAt: nowIso() });
+    }
+  }
+}
+
+export type DonateForwardOptions = {
+  expiresInDays?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export function donateForward(userId: string, actor: string, opts?: DonateForwardOptions): SubscriptionGift {
+  const sub = getSubscription(userId);
+  if (!sub.entitlementActive) {
+    throw new Error('no_active_subscription');
+  }
+  if (sub.tier === 'free') {
+    throw new Error('free_tier_cannot_donate');
+  }
+
+  const id = `gift_${crypto.randomUUID()}`;
+  const gift: SubscriptionGift = {
+    id,
+    donorUserId: userId,
+    donorPlanCode: sub.planCode,
+    donorTier: sub.tier as Exclude<CanopyTier, 'free'>,
+    status: 'pending',
+    claimedByUserId: null,
+    claimedAt: null,
+    forwardedToGiftId: null,
+    expiresAt: daysFromNow(opts?.expiresInDays ?? DEFAULT_GIFT_EXPIRY_DAYS),
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    rootGiftId: id,
+    chainDepth: 0,
+    metadata: opts?.metadata ?? {},
+  };
+  subscriptionGifts.set(id, gift);
+  addAudit(userId, 'gift.donated', actor, {
+    giftId: id,
+    rootGiftId: id,
+    chainDepth: 0,
+    tier: gift.donorTier,
+  });
+  return gift;
+}
+
+export function listAvailableGifts(opts?: { limit?: number }): SubscriptionGift[] {
+  expireStaleGifts();
+  const limit = opts?.limit ?? 50;
+  const list: SubscriptionGift[] = [];
+  for (const gift of subscriptionGifts.values()) {
+    if (gift.status === 'pending') list.push(gift);
+  }
+  list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return list.slice(0, limit);
+}
+
+export function getGift(giftId: string): SubscriptionGift | undefined {
+  return subscriptionGifts.get(giftId);
+}
+
+export function claimGift(
+  giftId: string,
+  userId: string,
+  actor: string,
+): { gift: SubscriptionGift; subscription: SubscriptionSnapshot } {
+  const gift = subscriptionGifts.get(giftId);
+  if (!gift) throw new Error('gift_not_found');
+  if (gift.status !== 'pending') throw new Error('gift_unavailable');
+  if (Date.parse(gift.expiresAt) <= Date.now()) {
+    subscriptionGifts.set(gift.id, { ...gift, status: 'expired', updatedAt: nowIso() });
+    throw new Error('gift_expired');
+  }
+  if (gift.donorUserId === userId) throw new Error('cannot_claim_own_gift');
+
+  const updated: SubscriptionGift = {
+    ...gift,
+    status: 'claimed',
+    claimedByUserId: userId,
+    claimedAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  subscriptionGifts.set(gift.id, updated);
+
+  const subscription = applyManualComp(userId, actor, `pay_forward:${gift.id}`);
+  addAudit(userId, 'gift.claimed', actor, {
+    giftId: gift.id,
+    rootGiftId: gift.rootGiftId,
+    chainDepth: gift.chainDepth,
+    donorUserId: gift.donorUserId,
+  });
+  return { gift: updated, subscription };
+}
+
+export function forwardGift(
+  giftId: string,
+  recipientUserId: string,
+  actor: string,
+  opts?: DonateForwardOptions,
+): { previous: SubscriptionGift; next: SubscriptionGift } {
+  const gift = subscriptionGifts.get(giftId);
+  if (!gift) throw new Error('gift_not_found');
+  if (gift.status !== 'pending') throw new Error('gift_unavailable');
+  if (Date.parse(gift.expiresAt) <= Date.now()) {
+    subscriptionGifts.set(gift.id, { ...gift, status: 'expired', updatedAt: nowIso() });
+    throw new Error('gift_expired');
+  }
+  if (gift.donorUserId === recipientUserId) throw new Error('cannot_forward_own_gift');
+
+  const nextId = `gift_${crypto.randomUUID()}`;
+  const next: SubscriptionGift = {
+    id: nextId,
+    donorUserId: recipientUserId,
+    donorPlanCode: gift.donorPlanCode,
+    donorTier: gift.donorTier,
+    status: 'pending',
+    claimedByUserId: null,
+    claimedAt: null,
+    forwardedToGiftId: null,
+    expiresAt: daysFromNow(opts?.expiresInDays ?? DEFAULT_GIFT_EXPIRY_DAYS),
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    rootGiftId: gift.rootGiftId,
+    chainDepth: gift.chainDepth + 1,
+    metadata: { ...(opts?.metadata ?? {}), previousGiftId: gift.id },
+  };
+  subscriptionGifts.set(nextId, next);
+
+  const previous: SubscriptionGift = {
+    ...gift,
+    status: 'forwarded',
+    claimedByUserId: recipientUserId,
+    claimedAt: nowIso(),
+    forwardedToGiftId: nextId,
+    updatedAt: nowIso(),
+  };
+  subscriptionGifts.set(gift.id, previous);
+
+  addAudit(recipientUserId, 'gift.forwarded', actor, {
+    giftId: gift.id,
+    nextGiftId: nextId,
+    rootGiftId: gift.rootGiftId,
+    chainDepth: next.chainDepth,
+  });
+  return { previous, next };
+}
+
+export function getMyGifts(userId: string): { donated: SubscriptionGift[]; received: SubscriptionGift[] } {
+  expireStaleGifts();
+  const donated: SubscriptionGift[] = [];
+  const received: SubscriptionGift[] = [];
+  for (const gift of subscriptionGifts.values()) {
+    if (gift.donorUserId === userId) donated.push(gift);
+    if (gift.claimedByUserId === userId) received.push(gift);
+  }
+  const byCreatedDesc = (a: SubscriptionGift, b: SubscriptionGift) => b.createdAt.localeCompare(a.createdAt);
+  donated.sort(byCreatedDesc);
+  received.sort(byCreatedDesc);
+  return { donated, received };
 }

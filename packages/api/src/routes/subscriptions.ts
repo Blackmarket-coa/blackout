@@ -6,10 +6,15 @@ import { readJsonBody } from '../middleware/validate';
 import {
   applyManualComp,
   applySubscriptionWebhookEvent,
+  claimGift,
   createCheckoutSession,
   createCustomerPortalSession,
+  donateForward,
+  forwardGift,
+  getMyGifts,
   getSubscription,
   getSubscriptionAuditTimeline,
+  listAvailableGifts,
   listCanopyProducts,
   syncRefund,
   type SubscriptionWebhookEvent,
@@ -127,6 +132,98 @@ subscriptions.get('/admin/audit/:userId', (c) => {
   if (admin instanceof Response) return admin;
   const userId = c.req.param('userId');
   return c.json({ userId, timeline: getSubscriptionAuditTimeline(userId), subscription: getSubscription(userId) });
+});
+
+const forwardSchema = z
+  .object({
+    expiresInDays: z.number().int().positive().max(365).optional(),
+  })
+  .loose();
+
+const giftErrorMap: Record<string, { code: string; status: 400 | 404 | 409 | 410; message: string }> = {
+  no_active_subscription: {
+    code: 'no_active_subscription',
+    status: 409,
+    message: 'An active paid subscription is required to pay it forward.',
+  },
+  free_tier_cannot_donate: {
+    code: 'free_tier_cannot_donate',
+    status: 409,
+    message: 'Free-tier users cannot donate a subscription forward.',
+  },
+  gift_not_found: { code: 'gift_not_found', status: 404, message: 'Gift does not exist.' },
+  gift_unavailable: { code: 'gift_unavailable', status: 409, message: 'Gift has already been claimed or forwarded.' },
+  gift_expired: { code: 'gift_expired', status: 410, message: 'Gift has expired.' },
+  cannot_claim_own_gift: { code: 'cannot_claim_own_gift', status: 409, message: 'You cannot claim a gift you donated.' },
+  cannot_forward_own_gift: {
+    code: 'cannot_forward_own_gift',
+    status: 409,
+    message: 'You cannot forward a gift you donated.',
+  },
+};
+
+function giftError(c: Context, err: unknown): Response {
+  const message = err instanceof Error ? err.message : String(err);
+  const mapped = giftErrorMap[message];
+  if (mapped) return c.json({ code: mapped.code, message: mapped.message }, mapped.status);
+  return c.json({ code: 'gift_error', message: 'Unable to process gift.' }, 400);
+}
+
+subscriptions.post('/forward', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  const parsed = await readJsonBody(c, forwardSchema);
+  const opts = parsed instanceof Response ? {} : parsed;
+
+  try {
+    const gift = donateForward(user.sub, user.sub, { expiresInDays: opts.expiresInDays });
+    return c.json({ ok: true, gift }, 201);
+  } catch (err) {
+    return giftError(c, err);
+  }
+});
+
+subscriptions.get('/forward/available', (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  const limitParam = c.req.query('limit');
+  const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
+  const gifts = listAvailableGifts({ limit: Number.isFinite(limit) ? limit : undefined }).filter(
+    (gift) => gift.donorUserId !== user.sub,
+  );
+  return c.json({ gifts });
+});
+
+subscriptions.get('/forward/me', (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  return c.json(getMyGifts(user.sub));
+});
+
+subscriptions.post('/forward/:giftId/claim', (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  const giftId = c.req.param('giftId');
+  try {
+    const result = claimGift(giftId, user.sub, user.sub);
+    return c.json({ ok: true, ...result });
+  } catch (err) {
+    return giftError(c, err);
+  }
+});
+
+subscriptions.post('/forward/:giftId/pass', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  const giftId = c.req.param('giftId');
+  const parsed = await readJsonBody(c, forwardSchema);
+  const opts = parsed instanceof Response ? {} : parsed;
+  try {
+    const result = forwardGift(giftId, user.sub, user.sub, { expiresInDays: opts.expiresInDays });
+    return c.json({ ok: true, ...result }, 201);
+  } catch (err) {
+    return giftError(c, err);
+  }
 });
 
 export default subscriptions;
