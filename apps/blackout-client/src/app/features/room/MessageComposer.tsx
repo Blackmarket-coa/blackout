@@ -21,13 +21,16 @@ import {
 import { withHistory } from 'slate-history';
 import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
-import { useRoomMembers } from '../../hooks/bmc-useRoom';
+import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
-import { useSendMessage, useEditMessage } from '../../hooks/bmc-useTimeline';
-import { useSendTyping } from '../../hooks/bmc-useTyping';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import {
+    useLegacySendMessageAdapter as useSendMessage,
+    useLegacyEditMessageAdapter as useEditMessage,
+} from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useLegacySendTypingAdapter as useSendTyping } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { composerCommandPayloadAtom } from '../../state/bmc-composer';
-import { uploadMedia } from '../../utils/bmc-media';
+import { uploadMedia } from '../media/utils/matrixMedia';
 import { HideMessageDialog } from '../steganography';
 import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';
 

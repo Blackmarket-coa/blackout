@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-import { mdToHtml, sanitizeMatrixHtml } from '../../utils/bmc-markdown';
+import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';

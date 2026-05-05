@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import { useMatrixClient } from './bmc-useMatrixClient';
-import { useRoom } from './bmc-useRoom';
+import { useMatrixClient } from './useMatrixClient';
+import { useLegacyRoomAdapter as useRoom } from '../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { uploadMedia } from '../utils/media';
 
 export interface HookResult<T> {

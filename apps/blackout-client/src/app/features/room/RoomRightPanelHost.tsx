@@ -3,7 +3,7 @@ import { Line } from 'folds';
 import type { Room } from 'matrix-js-sdk';
 import { useAtom } from 'jotai';
 import RightPanelContent from '../right-panel/RightPanelContent';
-import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
+import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { rightPanelAtom, roomJumpTargetEventIdAtom } from '../../state/bmc-navigation';
 import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
 

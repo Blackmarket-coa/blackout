@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 import { userIdAtom } from '../../state/bmc-auth';
 import { inboxReadEventIdsAtom, inboxReadLoadedAtom } from '../../state/inbox';

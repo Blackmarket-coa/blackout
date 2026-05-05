@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent, RoomMember } from 'matrix-js-sdk';
-import { useRoomMembers } from '../../hooks/bmc-useRoom';
-import { useRoomTimeline, useSendMessage } from '../../hooks/bmc-useTimeline';
+import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
+import {
+    useLegacyRoomTimelineAdapter as useRoomTimeline,
+    useLegacySendMessageAdapter as useSendMessage,
+} from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { CreatePostModal } from './CreatePostModal';
 import { ForumPost } from './ForumPost';
 import { useForumPosts, useForumSettings, type ForumPostModel } from './useForum';

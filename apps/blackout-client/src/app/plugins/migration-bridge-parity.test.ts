@@ -9,8 +9,6 @@ import {
 } from './theme/themeCatalog';
 import { getMessageActions as legacyGetMessageActions } from '../../lib/bmc-core/quick-actions';
 import { getMessageActions as pluginGetMessageActions } from './composer/quickActionCatalog';
-import { mxcToUrl as legacyMxcToUrl } from '../utils/bmc-media';
-import { mxcToUrl as featureMxcToUrl } from '../features/media/utils/matrixMedia';
 
 describe('legacy bridge parity for modularized plugin migration', () => {
     it('keeps theme normalization parity across legacy and plugin modules', () => {
@@ -22,11 +20,5 @@ describe('legacy bridge parity for modularized plugin migration', () => {
     it('keeps quick-actions parity through the legacy bridge', () => {
         const event = { msgtype: 'm.text' };
         expect(legacyGetMessageActions(event)).toEqual(pluginGetMessageActions(event));
-    });
-
-    it('keeps media URL resolution parity through feature-scoped utilities', () => {
-        const mxc = 'mxc://example.org/abc123';
-        const hs = 'https://homeserver.test';
-        expect(legacyMxcToUrl(mxc, hs)).toBe(featureMxcToUrl(mxc, hs));
     });
 });

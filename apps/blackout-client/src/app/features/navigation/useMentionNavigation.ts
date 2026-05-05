@@ -1,7 +1,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import type { Room } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 import {
     selectedRoomIdAtom,

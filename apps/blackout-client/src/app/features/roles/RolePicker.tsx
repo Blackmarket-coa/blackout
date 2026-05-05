@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useMyPowerLevel } from '../../hooks/bmc-usePowerLevels';
+import { useLegacyMyPowerLevelAdapter as useMyPowerLevel } from '../../plugins/matrix-adapters/hooks/useLegacyPowerLevelsAdapter';
 import { useRoles, useSetRole, useUserRoles, type RoleDefinition } from './useRoles';
 
 export const RolePicker = ({ roomId, userId }: { roomId: string; userId: string }) => {

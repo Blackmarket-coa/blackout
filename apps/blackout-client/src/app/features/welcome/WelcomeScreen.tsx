@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { useRoomName } from '../../hooks/bmc-useRoom';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useLegacyRoomNameAdapter as useRoomName } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useSpaceMemberStats, useWelcomeContent } from './useWelcome';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 

@@ -2,7 +2,7 @@ import React, { type DragEvent, useEffect, useMemo, useRef, useState } from 'rea
 import { useAtom, useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 import { userIdAtom } from '../../state/bmc-auth';
 import {
@@ -33,8 +33,7 @@ import { useInboxModel } from '../../features/navigation/useInboxModel';
 import { SettingsPage } from '../../features/settings';
 import { useOptionalCall } from '../../features/call';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
-import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
-import { useRoom } from '../../hooks/bmc-useRoom';
+import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegacy';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';

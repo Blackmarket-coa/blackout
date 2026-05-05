@@ -2,7 +2,7 @@ import { type DragEvent, type MouseEvent, useEffect, useState } from 'react';
 import { atom, useAtom, useAtomValue } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import type { Room } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { selectedRoomIdAtom } from '../../state/bmc-navigation';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 

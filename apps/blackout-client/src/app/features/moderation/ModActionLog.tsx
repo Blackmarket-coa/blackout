@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
-import { useRoom } from '../../hooks/bmc-useRoom';
+import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 
 export interface ModActionEntry {
     eventId: string;

@@ -3,7 +3,7 @@ import { useAtom } from 'jotai';
 import { useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/bmc-rooms';
 import { userIdAtom } from '../../state/bmc-auth';
 import {
@@ -36,8 +36,8 @@ import {
     isLiveInteractionWidgetPanelId,
 } from '../../features/call/liveInteractionBundle';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
-import { useRoomTimeline } from '../../hooks/bmc-useTimeline';
-import { useRoom } from '../../hooks/bmc-useRoom';
+import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { rightPanelPlugin } from '../../plugins/right-panel';
