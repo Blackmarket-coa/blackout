@@ -12,7 +12,6 @@ function readJson(relativePath) {
 
 const failures = [];
 const root = readJson('package.json');
-const legacyPackage = readJson('packages/web/package.json');
 
 const expectedFilters = [
   '@blackout/contracts',
@@ -33,10 +32,6 @@ for (const scriptName of ['build:runtime', 'lint:runtime', 'test:runtime']) {
   for (const filter of expectedFilters) {
     assertScriptIncludes(scriptName, `--filter ${filter}`);
   }
-}
-
-if (!String(legacyPackage.description ?? '').includes('non-deploy')) {
-  failures.push('packages/web must be explicitly marked non-deploy to avoid runtime ambiguity');
 }
 
 if (failures.length > 0) {

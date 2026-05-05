@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { useRoom } from '../../hooks/bmc-useRoom';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { KeywordFilterEditor } from './KeywordFilterEditor';
 
 export type KeywordFilterType = 'exact' | 'wildcard' | 'regex';

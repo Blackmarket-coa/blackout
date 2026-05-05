@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import type { RightPanelType } from '../../state/bmc-navigation';
+import type { RightPanelType } from '../../state/navigation';
 import { rightPanelPlugin, resolveRightPanelSlotRegistry } from '../../plugins/right-panel';
 import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
 

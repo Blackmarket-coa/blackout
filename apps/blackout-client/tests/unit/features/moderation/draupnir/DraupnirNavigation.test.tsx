@@ -12,7 +12,7 @@ import {
     authStateAtom,
     matrixClientAtom,
     userIdAtom,
-} from '../../../../../src/app/state/bmc-auth';
+} from '../../../../../src/app/state/auth';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

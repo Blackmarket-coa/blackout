@@ -70,7 +70,7 @@ import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
-import { rightPanelAtom } from '../../state/bmc-navigation';
+import { rightPanelAtom } from '../../state/navigation';
 
 type RoomMenuProps = {
   room: Room;

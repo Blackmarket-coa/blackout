@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from 'jotai';
-import { authStateAtom, cryptoInitErrorAtom } from '../../state/bmc-auth';
+import { authStateAtom, cryptoInitErrorAtom } from '../../state/auth';
 import { initMatrixFromStoredSession } from '../../../client/initMatrix';
 import { CryptoInitError, initCrypto } from '../../../client/crypto';
 

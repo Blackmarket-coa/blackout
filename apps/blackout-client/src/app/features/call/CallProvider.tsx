@@ -9,7 +9,7 @@ import {
     useState,
 } from 'react';
 import type { MatrixClient, MatrixEvent, RoomState } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
     getActionableCallMessage,
     resolveLivekitFocusFromWellKnown,

@@ -1,5 +1,7 @@
 # Frontend consolidation assessment
 
+> Status (2026-05): `legacy/element` and `_port` have been decommissioned. This document is retained for historical context of the consolidation effort; references to those legacy surfaces describe pre-archive state.
+
 ## Question
 
 Can Blackout reuse features from the current frontends and create a single frontend that reads them cleanly while preserving custom and legacy behavior?

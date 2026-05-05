@@ -10,7 +10,7 @@ import {
     roomToUnreadAtom as legacyRoomToUnreadAtom,
 } from '../../state/bmc-unreads';
 import { useMatrixClient as useBaselineMatrixClient } from '../../hooks/useMatrixClient';
-import { useMatrixClient as useLegacyMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient as useLegacyMatrixClient } from '../../hooks/useMatrixClient';
 import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 

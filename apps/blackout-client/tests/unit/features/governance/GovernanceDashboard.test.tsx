@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { userIdAtom } from '../../../../src/app/state/bmc-auth';
+import { userIdAtom } from '../../../../src/app/state/auth';
 import { GovernanceDashboard } from '../../../../src/app/features/governance/GovernanceDashboard';
 import type {
     ProposalModel,

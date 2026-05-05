@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { userIdAtom } from '../../state/bmc-auth';
+import { userIdAtom } from '../../state/auth';
 import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';

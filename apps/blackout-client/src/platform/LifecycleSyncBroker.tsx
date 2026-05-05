@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAtomValue } from 'jotai';
-import { matrixClientAtom } from '../app/state/bmc-auth';
+import { matrixClientAtom } from '../app/state/auth';
 import {
     dispatchNativeBridgeEvent,
     listenForNativeBridgeEvents,

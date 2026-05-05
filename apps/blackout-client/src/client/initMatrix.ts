@@ -7,7 +7,7 @@ import {
     type MatrixError,
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/bmc-auth';
+import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
 import { clearSession, restoreActiveSession, type StoredSession } from './sessionManager';
 
 type AtomStore = ReturnType<typeof createStore>;

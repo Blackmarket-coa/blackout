@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { isValidColiseumTab, type ColiseumTabId } from '@blackout/core';
-import { coliseumTabAtom, COLISEUM_TAB_ORDER } from '../../state/bmc-coliseum';
+import { coliseumTabAtom, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import ColiseumTabStrip from './ColiseumTabStrip';
 import TopicsTab from './tabs/TopicsTab';
 import DebateTab from './tabs/DebateTab';

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { settingsAtom } from '../state/bmc-settings';
+import { settingsAtom } from '../state/settings';
 import {
     accessibilitySettingsAtom,
     appearanceSettingsAtom,

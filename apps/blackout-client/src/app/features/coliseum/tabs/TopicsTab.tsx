@@ -2,7 +2,7 @@ import React, { type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
 import type { ColiseumTopic } from '@blackout/core';
 import { useColiseumTopics, type ColiseumScopeQuery } from '../hooks/useColiseumTopics';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/bmc-coliseum';
+import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 
 export interface TopicsTabProps {
     scope: ColiseumScopeQuery;

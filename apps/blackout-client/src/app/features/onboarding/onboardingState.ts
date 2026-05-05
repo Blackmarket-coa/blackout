@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 
 export type OnboardingStepId =
     | 'welcome_context'

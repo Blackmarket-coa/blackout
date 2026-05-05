@@ -15,6 +15,20 @@ workflows, runtime guards) were repointed to `@blackout/client` /
 **superseded** for the duplicate-shell scope; `apps/blackout-gov`, `_port`,
 and `legacy/element` are unchanged and remain candidate-only.
 
+## Status update — 2026-05-05
+
+Dead-code purge in progress on this branch: `legacy/element`, `_port`,
+`legacy/web`, `packages/web` (`@blackout/web-ui`), `packages/server`
+(`@blackout/server-legacy-alias`), and `migration/` are being
+decommissioned along with their CI-guard hooks. `legacy/blackout-web` is
+explicitly retained on this branch as a parity reference because its
+integration test suite under `legacy/blackout-web/tests/integration/` is
+still consumed by `tools/ci/check-feature-ui-test-coverage.mjs`,
+`tools/ci/check-preset-complete-features.mjs`, and the
+`uiTestRefs` entries in `docs/features/feature_registry.json`; migrating
+that coverage onto canonical `apps/blackout-client` fixtures is tracked
+as separate follow-up work.
+
 Caveats:
 - The migration backlog
   (`docs/architecture/frontend-consolidation-migration-backlog.md`) still has

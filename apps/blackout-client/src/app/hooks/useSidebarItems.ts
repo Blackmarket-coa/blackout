@@ -19,6 +19,12 @@ export type BlackoutSpacesContent = {
   sidebar?: SidebarItems;
 };
 
+declare module 'matrix-js-sdk' {
+  interface AccountDataEvents {
+    'in.cinny.spaces': BlackoutSpacesContent;
+  }
+}
+
 export const parseSidebar = (
   mx: MatrixClient,
   orphanSpaces: string[],

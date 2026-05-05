@@ -2,11 +2,9 @@
 import { spawn } from 'node:child_process';
 
 const commands = [
-  ['pnpm', ['guard:port']],
   ['pnpm', ['lint']],
   ['pnpm', ['test']],
   ['pnpm', ['build']],
-  ['node', ['_port/scripts/operations/docs_integrity_check.cjs']],
   ['node', ['tools/ci/run-smoke-aligned-checks.mjs']],
 ];
 

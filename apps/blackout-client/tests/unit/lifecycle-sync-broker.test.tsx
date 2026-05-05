@@ -5,7 +5,7 @@ import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider, createStore } from 'jotai';
 
-import { matrixClientAtom } from '../../src/app/state/bmc-auth';
+import { matrixClientAtom } from '../../src/app/state/auth';
 import {
     dispatchNativeBridgeEvent,
     listenForNativeBridgeEvents,

@@ -6,8 +6,8 @@ import {
     DEAD_DROP_SCHEMA_VERSION,
 } from '@blackout/protocol';
 import { createDeadDropMatrixActions } from '@blackout/sdk';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { useRoom } from '../../hooks/bmc-useRoom';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 
 export type DeadDropScheduleType = 'interval' | 'cron' | 'manual';
 

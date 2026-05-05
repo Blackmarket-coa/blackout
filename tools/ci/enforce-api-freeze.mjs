@@ -7,7 +7,7 @@ const ALLOWED = new Set([
   'docs/api/operations/api-alias-freeze-plan.md',
 ]);
 
-const scanPaths = ['packages/api/src', 'packages/web/src', 'packages/contracts/src', 'docs/api'];
+const scanPaths = ['packages/api/src', 'packages/contracts/src', 'docs/api'];
 const output = execFileSync('rg', ['-n', '/api/', ...scanPaths], { encoding: 'utf8' });
 const lines = output.split('\n').filter(Boolean);
 

@@ -13,8 +13,6 @@ const requiredSurfaces = new Set([
   'apps/blackout-web',
   'apps/web',
   'apps/blackout-gov',
-  '_port',
-  'legacy/element',
 ]);
 
 const requiredSecurityCoreWorkflowIds = [

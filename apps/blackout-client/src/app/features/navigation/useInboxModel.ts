@@ -1,8 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { joinedRoomsAtom } from '../../state/bmc-rooms';
-import { userIdAtom } from '../../state/bmc-auth';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { joinedRoomsAtom } from '../../state/rooms';
+import { userIdAtom } from '../../state/auth';
 import { inboxReadEventIdsAtom, inboxReadLoadedAtom } from '../../state/inbox';
 import { getMentionInboxItems } from '../right-panel/rightPanelUtils';
 import { useMentionNavigation } from './useMentionNavigation';

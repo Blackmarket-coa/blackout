@@ -1,6 +1,6 @@
 import { Editor, Transforms } from 'slate';
 
-import type { ComposerCommandPayload } from '../../state/bmc-composer';
+import type { ComposerCommandPayload } from '../../state/composer';
 import { resetEditor } from '../../components/editor';
 
 export const isComposerPayloadForRoom = (

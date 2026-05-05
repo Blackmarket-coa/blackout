@@ -16,8 +16,8 @@ Script:
 - `tools/ci/check-frontend-consolidation-gates.mjs`
 
 Checks:
-- Parity matrix includes all required source surfaces (`apps/blackout-client`, `apps/blackout-web`, `apps/web`, `apps/blackout-gov`, `_port`, `legacy/element`).
-- Legacy/canonical route anchors are present in parity matrix (e.g., `_port` blackout routes and canonical governance/forum/deaddrop routes).
+- Parity matrix includes all required source surfaces (`apps/blackout-client`, `apps/blackout-web`, `apps/web`, `apps/blackout-gov`).
+- Legacy/canonical route anchors are present in parity matrix (canonical governance/forum/deaddrop routes plus their pre-archive `/blackout/...` historical anchors).
 - `frontend-consolidation-parity-matrix.md` and `frontend-consolidation-disposition.md` remain in sync on `feature_id` and `status_seed`.
 - Every disposition row has rationale; every `ported` row has owner.
 - Every `ported` disposition row appears in migration backlog traceability table.
@@ -25,28 +25,16 @@ Checks:
 Failure output:
 - Includes exact file and table row context where applicable (e.g., `docs/architecture/frontend-consolidation-disposition.md:<line> feature_id=...`).
 
-### 2) Legacy docs integrity gate
-
-Command:
-
-```bash
-node _port/scripts/operations/docs_integrity_check.cjs
-```
-
-Purpose:
-- Keeps legacy docs evidence/status schema coherent while consolidation is in progress.
-
-### 3) Legacy surface health gate
+### 2) Legacy surface health gate
 
 Commands:
 
 ```bash
-pnpm --filter @blackout/web test
 pnpm --filter @blackout/blackout-gov test
 ```
 
 Purpose:
-- Ensures legacy/migration surfaces stay green during staged migration, avoiding regressions while parity work is incomplete.
+- Ensures the remaining legacy/migration surface (`apps/blackout-gov`) stays green during staged migration, avoiding regressions while parity work is incomplete.
 
 ## CI wiring
 
@@ -54,8 +42,7 @@ Workflow job: `.github/workflows/ci.yml` → `frontend-consolidation-safety-gate
 
 The job runs:
 1. `pnpm guard:frontend-consolidation`
-2. `node _port/scripts/operations/docs_integrity_check.cjs`
-3. legacy surface tests (`@blackout/web`, `@blackout/blackout-gov`)
+2. legacy surface tests (`@blackout/blackout-gov`)
 
 ## Failure handling
 
@@ -64,7 +51,6 @@ When a gate fails:
 2. Update the referenced consolidation artifact rows (matrix/disposition/backlog) or route anchors.
 3. Re-run locally:
    - `pnpm guard:frontend-consolidation`
-   - `node _port/scripts/operations/docs_integrity_check.cjs`
 4. If failure is a true exception, document it in:
    - `docs/architecture/frontend-consolidation-boundary-audit.md` (owner/date), and
    - the relevant disposition/backlog row(s).

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { allRoomsAtom } from '../../state/bmc-rooms';
-import { spaceChildrenAtom, spaceHierarchyAtom, type SpaceNode } from '../../state/bmc-spaces';
+import { allRoomsAtom } from '../../state/rooms';
+import { spaceChildrenAtom, spaceHierarchyAtom, type SpaceNode } from '../../state/spaces';
 
 export interface HookResult<T> {
     data: T;

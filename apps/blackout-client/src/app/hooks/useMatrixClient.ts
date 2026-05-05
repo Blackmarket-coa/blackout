@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import { useAtomValue } from 'jotai';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { matrixClientAtom } from '../state/bmc-auth';
+import { matrixClientAtom } from '../state/auth';
 
 const MatrixClientContext = createContext<MatrixClient | null>(null);
 

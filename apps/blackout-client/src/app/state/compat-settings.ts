@@ -4,7 +4,7 @@ import {
     defaultAppSettings,
     settingsAtom as appSettingsAtom,
     type AppSettings,
-} from './bmc-settings';
+} from './settings';
 
 /**
  * Compatibility settings bridge for retained legacy UI surfaces.

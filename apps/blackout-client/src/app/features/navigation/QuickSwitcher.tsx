@@ -2,8 +2,8 @@ import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } 
 import { useAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
 import { useNavigate } from 'react-router-dom';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { buildFeatureRegistry } from '../../core/features/buildRegistry';
 import { composeShellPanels, selectPanelsByKind } from '../../core/features/composition';

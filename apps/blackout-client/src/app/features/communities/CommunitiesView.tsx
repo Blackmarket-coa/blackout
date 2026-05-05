@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { joinedRoomsAtom } from '../../state/bmc-rooms';
+import { joinedRoomsAtom } from '../../state/rooms';
 import {
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
-} from '../../state/bmc-navigation';
+} from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
 

@@ -5,7 +5,7 @@ import {
     designShellLayout,
     designSpacing,
 } from '../../../../../../packages/design/src';
-import { normalizeAppSettingsTheme } from '../../state/bmc-settings';
+import { normalizeAppSettingsTheme } from '../../state/settings';
 import { normalizeAppearanceTheme } from './settingsAtoms';
 import { isSettingsMobileViewport, settingsLayoutMetrics } from './SettingsPage';
 import { themePreviews } from './theme-previews';

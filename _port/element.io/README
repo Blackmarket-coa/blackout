@@ -1,5 +1,0 @@
-Deprecated location for legacy Element artifacts.
-
-Canonical path: ../../legacy/element
-
-Do not add new files here. Keep this folder only as a compatibility alias during migration.

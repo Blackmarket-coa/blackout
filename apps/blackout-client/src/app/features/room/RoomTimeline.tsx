@@ -11,12 +11,15 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import { sanitizeMatrixHtml } from '../../utils/bmc-markdown';
+import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
-import { useRoom } from '../../hooks/bmc-useRoom';
-import { useRoomTimeline, useTimelineScroll } from '../../hooks/bmc-useTimeline';
-import { useTypingIndicator } from '../../hooks/bmc-useTyping';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
+import {
+    useLegacyRoomTimelineAdapter as useRoomTimeline,
+    useLegacyTimelineScrollAdapter as useTimelineScroll,
+} from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useLegacyTypingIndicatorAdapter as useTypingIndicator } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
 import {
     AudioMessage as TimelineAudioMessage,
     FileMessage as TimelineFileMessage,

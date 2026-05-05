@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
-import { selectedColiseumTopicIdAtom } from '../../../../src/app/state/bmc-coliseum';
+import { selectedColiseumTopicIdAtom } from '../../../../src/app/state/coliseum';
 import {
     DebateTab,
     type DebateTabClient,

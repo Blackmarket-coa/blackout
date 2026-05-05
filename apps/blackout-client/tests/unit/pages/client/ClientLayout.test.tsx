@@ -10,8 +10,8 @@ import {
     rightPanelAtom,
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
-} from '../../../../src/app/state/bmc-navigation';
-import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/bmc-auth';
+} from '../../../../src/app/state/navigation';
+import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
 import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
 vi.mock('react-router-dom', async () => {

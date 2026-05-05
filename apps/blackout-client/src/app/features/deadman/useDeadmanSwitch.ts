@@ -6,7 +6,7 @@ import {
     type DeadmanSwitchPayload,
 } from '@blackout/protocol';
 import { createDeadmanMatrixActions } from '@blackout/sdk';
-import { useMatrixClient } from '../../hooks/bmc-useMatrixClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 
 /**
  * React hook exposing room-scoped deadman switch helpers. Mirrors the
