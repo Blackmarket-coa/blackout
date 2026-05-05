@@ -36,6 +36,7 @@ export interface CreateTipInput {
     grossCents: number;
     currency: string;
     note?: string | null;
+    giftSku?: string | null;
     providerId?: MarketplaceProviderId;
     fbmOrderId?: string | null;
 }
@@ -54,6 +55,7 @@ export interface TipView {
     fbmOrderId: string | null;
     status: TipStatus;
     note: string | null;
+    giftSku: string | null;
     createdAt: string;
     capturedAt: string | null;
     refundedAt: string | null;
@@ -78,6 +80,7 @@ function toView(record: TipRecord): TipView {
         fbmOrderId: record.fbmOrderId,
         status: record.status,
         note: record.note,
+        giftSku: record.giftSku,
         createdAt: record.createdAt,
         capturedAt: record.capturedAt,
         refundedAt: record.refundedAt,
@@ -146,6 +149,7 @@ export function createTip(input: CreateTipInput): TipView {
         fbmOrderId: input.fbmOrderId ?? null,
         status: 'pending',
         note: input.note ?? null,
+        giftSku: input.giftSku ?? null,
         createdAt: nowIso(),
         capturedAt: null,
         refundedAt: null,

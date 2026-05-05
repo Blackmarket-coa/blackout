@@ -35,6 +35,8 @@ const draftSchema = z.object({
         'software_license',
         'plugin_flag',
         'subscription_tier',
+        'post_unlock',
+        'event_ticket',
     ]),
     title: z.string().min(1),
     description: z.string().min(1),

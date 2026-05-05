@@ -31,7 +31,9 @@ export type EntitlementKind =
     | 'asset_bundle'
     | 'software_license'
     | 'plugin_flag'
-    | 'subscription_tier';
+    | 'subscription_tier'
+    | 'post_unlock'
+    | 'event_ticket';
 
 export type EntitlementStatus =
     | 'granted'

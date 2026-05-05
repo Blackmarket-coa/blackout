@@ -1,7 +1,17 @@
 import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
 import { DEAD_DROP_TIER_ENTITLEMENTS, parseEntitlementAccessPayload } from '@blackout/protocol';
+import type { MarketplaceProviderId } from '@blackout/core';
 import { getSubscription } from '../services/subscriptions';
+import { requireUser } from '../middleware/require-user';
+import { entitlementForListing } from '../services/entitlementChecks';
+
+const VALID_PROVIDER_IDS: MarketplaceProviderId[] = [
+  'freeblackmarket',
+  'blamazon',
+  'mayhem-marketplaze',
+  'antin-amazon',
+];
 
 const entitlements = new Hono();
 
@@ -96,6 +106,27 @@ function toResponse(payload: EntitlementAccessPayload, family: EntitlementFamily
     payload,
   };
 }
+
+// Single-listing access gate used by paywalled posts and event tickets.
+// Returns `canAccess: true` iff the authenticated user currently holds an
+// active (granted/pending) entitlement for this provider+listing pair.
+// Optional `sku` query narrows the match for variant-bearing listings.
+entitlements.get('/listings/:providerId/:providerListingId', (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+  const providerId = c.req.param('providerId') as MarketplaceProviderId;
+  if (!VALID_PROVIDER_IDS.includes(providerId)) {
+    return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
+  }
+  const sku = c.req.query('sku') ?? null;
+  const gate = entitlementForListing(
+    user.sub,
+    providerId,
+    c.req.param('providerListingId'),
+    sku
+  );
+  return c.json(gate);
+});
 
 entitlements.get('/me', (c) => {
   try {

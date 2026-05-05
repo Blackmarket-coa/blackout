@@ -228,7 +228,9 @@ export type MarketplaceEntitlementKind =
   | 'asset_bundle'
   | 'software_license'
   | 'plugin_flag'
-  | 'subscription_tier';
+  | 'subscription_tier'
+  | 'post_unlock'
+  | 'event_ticket';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;
@@ -327,6 +329,7 @@ export interface TipRecord {
   fbmOrderId: string | null;
   status: TipStatus;
   note: string | null;
+  giftSku: string | null;
   createdAt: string;
   capturedAt: string | null;
   refundedAt: string | null;

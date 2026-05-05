@@ -6,6 +6,7 @@ import { generateManagedStreamKey, getOwncastOriginConfig } from '../integration
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
+import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
 import type { FeatureModule } from './types';
 
 const streamKeySchema = z
@@ -269,6 +270,24 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     return c.json(listDomainEvents('streaming'));
+  });
+
+  streaming.get('/streams/:streamId/revenue', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+    return c.json(aggregateStreamRevenue(c.req.param('streamId')));
+  });
+
+  streaming.get('/streams/:streamId/goal', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+    const targetCentsRaw = c.req.query('targetCents');
+    const currency = c.req.query('currency') ?? 'USD';
+    const targetCents = targetCentsRaw ? Number(targetCentsRaw) : NaN;
+    if (!Number.isFinite(targetCents) || !Number.isInteger(targetCents) || targetCents < 0) {
+      return c.json({ code: 'invalid_target', message: 'targetCents must be a non-negative integer' }, 400);
+    }
+    return c.json(evaluateStreamGoal(c.req.param('streamId'), targetCents, currency));
   });
 
   return streaming;
