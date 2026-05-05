@@ -18,7 +18,7 @@ const mockClient = {
     off: vi.fn(),
 };
 
-vi.mock('../../../../src/app/hooks/bmc-useMatrixClient', () => ({
+vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
     useMatrixClient: () => mockClient,
 }));
 
