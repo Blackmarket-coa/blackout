@@ -133,6 +133,31 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
     publishCreatorListing?(providerListingId: string): Promise<CreatorListingResult>;
     archiveCreatorListing?(providerListingId: string): Promise<void>;
     startCreatorOnboarding?(sellerUserId: string, returnUrl?: string): Promise<CreatorOnboardingHandle>;
+
+    /**
+     * Optional bundle issuer for direct fulfillment. Used by stub/test
+     * deployments to deliver a signed bundle from the same process; real
+     * providers serve bundles from a CDN behind the asset-url flow.
+     */
+    issueSignedBundle?(entitlement: NormalizedEntitlement): Promise<SignedPluginBundleEnvelope>;
+}
+
+/**
+ * Wire shape for direct bundle delivery. Mirrors `SignedPluginBundle`
+ * from `@blackout/protocol` but is re-declared here as a plain object
+ * so the marketplace provider interface stays free of cross-package
+ * imports.
+ */
+export interface SignedPluginBundleEnvelope {
+    manifest: Record<string, unknown>;
+    bundleBase64: string;
+    signature: {
+        keyId: string;
+        signature: string;
+        manifestSha256: string;
+        sha256: string;
+        issuedAt: string;
+    };
 }
 
 export interface NormalizedListing {

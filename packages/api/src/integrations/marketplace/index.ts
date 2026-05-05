@@ -1,5 +1,9 @@
 import type { MarketplaceProvider, MarketplaceProviderId } from '@blackout/core';
 import { createFreeblackmarketProvider } from './freeblackmarket';
+import {
+    createFreeblackmarketStubProvider,
+    shouldUseFreeblackmarketStub,
+} from './freeblackmarketStub';
 import { createBlamazonProvider } from './blamazon';
 import { createMayhemMarketplazeProvider } from './mayhemMarketplaze';
 import { createAntinAmazonProvider } from './antinAmazon';
@@ -7,8 +11,11 @@ import { createAntinAmazonProvider } from './antinAmazon';
 let cachedRegistry: Map<MarketplaceProviderId, MarketplaceProvider> | null = null;
 
 function buildRegistry(): Map<MarketplaceProviderId, MarketplaceProvider> {
+    const fbm = shouldUseFreeblackmarketStub()
+        ? createFreeblackmarketStubProvider()
+        : createFreeblackmarketProvider();
     const providers: MarketplaceProvider[] = [
-        createFreeblackmarketProvider(),
+        fbm,
         createBlamazonProvider(),
         createMayhemMarketplazeProvider(),
         createAntinAmazonProvider(),
@@ -33,4 +40,11 @@ export function listEnabledProviders(): MarketplaceProvider[] {
     return [...getMarketplaceRegistry().values()].filter((provider) => provider.enabled);
 }
 
-export { createFreeblackmarketProvider, createBlamazonProvider, createMayhemMarketplazeProvider, createAntinAmazonProvider };
+export {
+    createFreeblackmarketProvider,
+    createFreeblackmarketStubProvider,
+    shouldUseFreeblackmarketStub,
+    createBlamazonProvider,
+    createMayhemMarketplazeProvider,
+    createAntinAmazonProvider,
+};

@@ -18,6 +18,7 @@ import {
     getMarketplaceRegistry,
     listEnabledProviders,
 } from '../integrations/marketplace';
+import { getFreeblackmarketStubInternals } from '../integrations/marketplace/freeblackmarketStub';
 import {
     getEntitlementById,
     getLicenseKey,
@@ -243,6 +244,105 @@ marketplace.get('/fulfillment/:entitlementId/asset', (c) => {
     }
 
     return c.json(response);
+});
+
+marketplace.get('/fulfillment/:entitlementId/bundle', async (c) => {
+    const user = requireUser(c, 'Sign in to access fulfillment');
+    if (user instanceof Response) return user;
+    const entitlement = getEntitlementById(c.req.param('entitlementId'));
+    if (!entitlement || entitlement.userId !== user.sub) {
+        return c.json({ code: 'entitlement_not_found', message: 'No such entitlement' }, 404);
+    }
+    if (entitlement.status !== 'granted') {
+        return c.json(
+            { code: 'entitlement_revoked', message: `Entitlement is ${entitlement.status}` },
+            403
+        );
+    }
+    const provider = getMarketplaceProvider(entitlement.providerId);
+    if (!provider?.issueSignedBundle) {
+        return c.json(
+            { code: 'bundle_unsupported', message: 'Provider does not deliver bundles directly' },
+            400
+        );
+    }
+    try {
+        const bundle = await provider.issueSignedBundle(entitlement);
+        return c.json(bundle);
+    } catch (error) {
+        return c.json(
+            {
+                code: 'bundle_failed',
+                message: error instanceof Error ? error.message : String(error),
+            },
+            502
+        );
+    }
+});
+
+// Stub embed page: mounts a tiny HTML checkout that postMessages lifecycle
+// events back to the parent and POSTs a signed webhook into this server's
+// canonical webhook handler. Only mounted when the FBM stub provider is
+// installed; otherwise it 404s.
+marketplace.get('/stub/checkout/:sessionId', (c) => {
+    const provider = getMarketplaceProvider('freeblackmarket');
+    const internals = provider ? getFreeblackmarketStubInternals(provider) : undefined;
+    if (!provider || !internals) {
+        return c.json({ code: 'stub_disabled', message: 'FBM stub is not enabled' }, 404);
+    }
+    const sessionId = c.req.param('sessionId');
+    const session = internals.getSession(sessionId);
+    if (!session) {
+        return c.json({ code: 'session_not_found', message: 'Unknown stub session' }, 404);
+    }
+    const sessionJson = JSON.stringify({ sessionId, listingId: session.listingId });
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Stub checkout</title></head><body style="font-family: system-ui; padding: 24px;">
+<h1>Stub checkout</h1>
+<p>Session <code>${sessionId}</code> for listing <code>${session.listingId}</code>.</p>
+<button id="complete">Complete purchase</button>
+<button id="cancel">Cancel</button>
+<script>
+const session = ${sessionJson};
+async function complete() {
+    const res = await fetch('/v1/marketplace/stub/checkout/' + session.sessionId + '/complete', { method: 'POST' });
+    if (!res.ok) {
+        parent.postMessage({ type: 'checkout.error', sessionId: session.sessionId, reason: 'webhook-failed' }, '*');
+        return;
+    }
+    parent.postMessage({ type: 'checkout.completed', sessionId: session.sessionId }, '*');
+}
+document.getElementById('complete').addEventListener('click', () => { complete(); });
+document.getElementById('cancel').addEventListener('click', () => {
+    parent.postMessage({ type: 'checkout.cancelled', sessionId: session.sessionId }, '*');
+});
+</script>
+</body></html>`;
+    return c.html(html);
+});
+
+marketplace.post('/stub/checkout/:sessionId/complete', async (c) => {
+    const provider = getMarketplaceProvider('freeblackmarket');
+    const internals = provider ? getFreeblackmarketStubInternals(provider) : undefined;
+    if (!provider || !internals) {
+        return c.json({ code: 'stub_disabled', message: 'FBM stub is not enabled' }, 404);
+    }
+    const sessionId = c.req.param('sessionId');
+    const materialized = internals.materializeWebhook(sessionId);
+    if (!materialized) {
+        return c.json({ code: 'session_not_found', message: 'Unknown stub session' }, 404);
+    }
+    const result = await dispatchMarketplaceWebhook(provider, materialized.body, {
+        'x-fbm-event-id': materialized.eventId,
+        'x-fbm-signature': materialized.signature,
+    });
+    return c.json(
+        {
+            ok: result.ok,
+            entitlementId: result.applied?.entitlement?.id,
+            eventId: materialized.eventId,
+        },
+        result.status === 200 ? 200 : 502
+    );
 });
 
 marketplace.post('/webhooks/:providerId', async (c) => {
