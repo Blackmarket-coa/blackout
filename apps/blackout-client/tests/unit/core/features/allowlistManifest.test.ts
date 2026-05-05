@@ -28,6 +28,9 @@ describe('feature allowlist manifest', () => {
             'coalition',
             'coliseum',
             'profile',
+            'home',
+            'communities',
+            'plugins',
         ]);
     });
 

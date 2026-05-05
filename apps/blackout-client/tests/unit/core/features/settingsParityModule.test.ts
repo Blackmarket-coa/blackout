@@ -49,7 +49,9 @@ describe('settings-parity feature module (BKL-007)', () => {
         const registry = buildFeatureRegistry(flags);
 
         const sidebar = { capabilities: ['settings.sidebar.read'], flags };
-        const sidebarRoutes = composeFeatureRoutes(registry, sidebar).map((r) => r.path);
+        const sidebarRoutes = composeFeatureRoutes(registry, sidebar)
+            .map((r) => r.path)
+            .filter((path) => path.startsWith('/settings/'));
         expect(sidebarRoutes).toEqual(['/settings/sidebar']);
         expect(composeFeatureSettings(registry, sidebar).map((s) => s.section)).toEqual([
             'Sidebar',

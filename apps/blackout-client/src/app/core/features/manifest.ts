@@ -24,6 +24,9 @@ export const featureModuleManifest = [
     'coalition',
     'coliseum',
     'profile',
+    'home',
+    'communities',
+    'plugins',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

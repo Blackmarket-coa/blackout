@@ -1,5 +1,6 @@
 import type { BlackoutFeature } from '../../core/features/types';
 import { coliseumNavItems } from './nav';
+import { coliseumPanels } from './panels';
 import { coliseumRoutes } from './routes';
 
 export const coliseumFeature: BlackoutFeature = {
@@ -16,6 +17,7 @@ export const coliseumFeature: BlackoutFeature = {
             },
             routes: coliseumRoutes,
             navItems: coliseumNavItems,
+            panels: coliseumPanels,
         },
     ],
     capabilities: ['coliseum.read', 'coliseum.write'],

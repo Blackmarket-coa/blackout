@@ -38,6 +38,9 @@ export type FeatureFlags = {
     coalition: boolean;
     coliseum: boolean;
     profile: boolean;
+    home: boolean;
+    communities: boolean;
+    plugins: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -80,6 +83,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     coalition: true,
     coliseum: true,
     profile: true,
+    home: true,
+    communities: true,
+    plugins: true,
 };
 
 /**
@@ -283,6 +289,24 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_DEADMAN === 'false') {
             nextFlags.deadman = false;
         }
+        if (env.BLACKOUT_HOME === 'true') {
+            nextFlags.home = true;
+        }
+        if (env.BLACKOUT_HOME === 'false') {
+            nextFlags.home = false;
+        }
+        if (env.BLACKOUT_COMMUNITIES === 'true') {
+            nextFlags.communities = true;
+        }
+        if (env.BLACKOUT_COMMUNITIES === 'false') {
+            nextFlags.communities = false;
+        }
+        if (env.BLACKOUT_PLUGINS === 'true') {
+            nextFlags.plugins = true;
+        }
+        if (env.BLACKOUT_PLUGINS === 'false') {
+            nextFlags.plugins = false;
+        }
         return nextFlags;
     }
 
@@ -372,6 +396,24 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_DEADMAN === 'false') {
         nextFlags.deadman = false;
+    }
+    if (env.BLACKOUT_HOME === 'true') {
+        nextFlags.home = true;
+    }
+    if (env.BLACKOUT_HOME === 'false') {
+        nextFlags.home = false;
+    }
+    if (env.BLACKOUT_COMMUNITIES === 'true') {
+        nextFlags.communities = true;
+    }
+    if (env.BLACKOUT_COMMUNITIES === 'false') {
+        nextFlags.communities = false;
+    }
+    if (env.BLACKOUT_PLUGINS === 'true') {
+        nextFlags.plugins = true;
+    }
+    if (env.BLACKOUT_PLUGINS === 'false') {
+        nextFlags.plugins = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

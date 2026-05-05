@@ -10,8 +10,14 @@
 // Do NOT add new entries here without also updating that doc.
 
 import { defineConfig } from 'vitest/config';
+import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 
 export default defineConfig({
+    // Vitest needs the vanilla-extract plugin to transform `.css.ts` files.
+    // The runtime build picks it up via vite.config.js (legacy Cinny shell);
+    // tests previously crashed on any module that transitively imported a
+    // `.css.ts` ("Styles were unable to be assigned to a file").
+    plugins: [vanillaExtractPlugin()],
     test: {
         exclude: [
             // Default vitest excludes:
@@ -28,8 +34,6 @@ export default defineConfig({
             'tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx',
             // assertion-level drift (ClientLayout test expects elements the modern shell does not render yet)
             'tests/unit/pages/client/ClientLayout.test.tsx',
-            // vanilla-extract test setup: "Styles were unable to be assigned to a file"
-            'tests/unit/features/settings/SettingsPage.test.tsx',
             // monetization customizations expected count drifted (15 vs 7)
             'tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx',
             // RoomView.layout test environment / assertion drift

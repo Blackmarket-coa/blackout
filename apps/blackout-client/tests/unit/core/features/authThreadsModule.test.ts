@@ -22,7 +22,11 @@ describe('auth-threads feature module (BKL-011)', () => {
         const registry = buildFeatureRegistry(flags);
         const ctx = { capabilities: ['auth.oidc.bootstrap'], flags };
 
-        expect(composeFeatureRoutes(registry, ctx).map((r) => r.path)).toEqual(['/auth/oidc']);
+        expect(
+            composeFeatureRoutes(registry, ctx)
+                .map((r) => r.path)
+                .filter((path) => path.startsWith('/auth/'))
+        ).toEqual(['/auth/oidc']);
         expect(
             composeShellPanels(registry, ctx)
                 .map((p) => p.id)
@@ -38,7 +42,11 @@ describe('auth-threads feature module (BKL-011)', () => {
         const registry = buildFeatureRegistry(flags);
         const ctx = { capabilities: ['threads.activity.read'], flags };
 
-        expect(composeFeatureRoutes(registry, ctx).map((r) => r.path)).toEqual(['/inbox/threads']);
+        expect(
+            composeFeatureRoutes(registry, ctx)
+                .map((r) => r.path)
+                .filter((path) => path.startsWith('/inbox/'))
+        ).toEqual(['/inbox/threads']);
         expect(
             composeShellPanels(registry, ctx)
                 .map((p) => p.id)
