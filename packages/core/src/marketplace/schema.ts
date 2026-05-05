@@ -40,6 +40,9 @@ const lifecycleEventTypes: LifecycleEventType[] = [
     'purchase.failed',
     'purchase.refunded',
     'purchase.chargebacked',
+    'creator.payout.completed',
+    'listing.signed_bundle.published',
+    'creator.account.suspended',
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {

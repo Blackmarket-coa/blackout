@@ -31,7 +31,7 @@ export interface PrivacySettingsState { blockedUsers: BlockedUser[]; dmPermissio
 export interface AccessibilitySettingsState { reducedMotion: boolean; highContrast: boolean; screenReaderHints: boolean; dyslexiaFriendlyFont: boolean; }
 export interface VoiceVideoSettingsState { preferredCamera: 'system' | 'front' | 'rear' | 'virtual'; preferredMicrophone: 'system' | 'headset' | 'built-in'; preferredSpeaker: 'system' | 'headset' | 'built-in'; noiseSuppression: 'off' | 'standard' | 'aggressive'; echoCancellation: boolean; autoGainControl: boolean; mirrorPreview: boolean; }
 export interface KeybindsSettingsState { quickSwitcher: string; toggleMute: string; replyInThread: string; markRoomRead: string; }
-export interface DeveloperSettingsState { diagnosticsEnabled: boolean; includeLocalStorageInBundle: boolean; includeFeatureFlagsInBundle: boolean; }
+export interface DeveloperSettingsState { diagnosticsEnabled: boolean; includeLocalStorageInBundle: boolean; includeFeatureFlagsInBundle: boolean; creatorStudioEnabled: boolean; signingKeyId: string | null; }
 
 const createSafeStorage = () => ({
     getItem: (key: string) => {
@@ -83,4 +83,4 @@ export const privacySettingsAtom = atomWithStorage<PrivacySettingsState>('blacko
 export const accessibilitySettingsAtom = atomWithStorage<AccessibilitySettingsState>('blackout.settings.accessibility.v1', { reducedMotion: false, highContrast: false, screenReaderHints: true, dyslexiaFriendlyFont: false }, createSafeJsonStorage<AccessibilitySettingsState>(), getOnInit);
 export const voiceVideoSettingsAtom = atomWithStorage<VoiceVideoSettingsState>('blackout.settings.voice-video.v1', { preferredCamera: 'system', preferredMicrophone: 'system', preferredSpeaker: 'system', noiseSuppression: 'standard', echoCancellation: true, autoGainControl: true, mirrorPreview: true }, createSafeJsonStorage<VoiceVideoSettingsState>(), getOnInit);
 export const keybindsSettingsAtom = atomWithStorage<KeybindsSettingsState>('blackout.settings.keybinds.v1', { quickSwitcher: 'Ctrl+K', toggleMute: 'Ctrl+Shift+M', replyInThread: 'Shift+R', markRoomRead: 'Esc' }, createSafeJsonStorage<KeybindsSettingsState>(), getOnInit);
-export const developerSettingsAtom = atomWithStorage<DeveloperSettingsState>('blackout.settings.developer.v1', { diagnosticsEnabled: false, includeLocalStorageInBundle: true, includeFeatureFlagsInBundle: true }, createSafeJsonStorage<DeveloperSettingsState>(), getOnInit);
+export const developerSettingsAtom = atomWithStorage<DeveloperSettingsState>('blackout.settings.developer.v1', { diagnosticsEnabled: false, includeLocalStorageInBundle: true, includeFeatureFlagsInBundle: true, creatorStudioEnabled: false, signingKeyId: null }, createSafeJsonStorage<DeveloperSettingsState>(), getOnInit);

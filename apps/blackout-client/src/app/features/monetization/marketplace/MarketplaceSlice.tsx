@@ -16,6 +16,7 @@ import { readBlackoutApiToken } from './useMarketplaceAuth';
 import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
+import { EmbeddedCheckoutOverlay } from './EmbeddedCheckoutOverlay';
 
 type View = 'catalog' | 'library';
 
@@ -63,6 +64,11 @@ export function MarketplaceSlice() {
     const [purchasingId, setPurchasingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+    const [activeCheckout, setActiveCheckout] = useState<{
+        redirectUrl: string;
+        sessionId: string;
+        embed: boolean;
+    } | null>(null);
 
     const token = useMemo(() => readBlackoutApiToken(), []);
 
@@ -141,17 +147,28 @@ export function MarketplaceSlice() {
             setError(null);
             const provider = resolveMarketplaceProvider(listing.providerId, providers);
             setCheckoutNotice(provider.checkoutDisclosure);
+            const summary = providers.find((p) => p.id === listing.providerId);
+            const supportsEmbed = summary?.capabilities.includes('embedded-checkout') ?? false;
             try {
                 const result = await startCheckout(
                     {
                         providerId: listing.providerId,
                         listingId: listing.providerListingId,
                         returnUrl: window.location.href,
+                        embed: supportsEmbed,
                     },
                     token
                 );
-                window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
-                setTimeout(() => void refreshEntitlements(), 3_000);
+                if (result.embed && supportsEmbed) {
+                    setActiveCheckout({
+                        redirectUrl: result.redirectUrl,
+                        sessionId: result.sessionId,
+                        embed: true,
+                    });
+                } else {
+                    window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+                    setTimeout(() => void refreshEntitlements(), 3_000);
+                }
             } catch (err) {
                 setError('Checkout could not be started. Please try again.');
                 console.warn('[marketplace] checkout failed', err);
@@ -161,6 +178,15 @@ export function MarketplaceSlice() {
         },
         [providers, refreshEntitlements, token]
     );
+
+    const closeCheckout = useCallback(() => {
+        setActiveCheckout(null);
+    }, []);
+
+    const handleCheckoutCompleted = useCallback(() => {
+        setActiveCheckout(null);
+        void refreshEntitlements();
+    }, [refreshEntitlements]);
 
     const providerChips = createElement(
         'div',
@@ -322,6 +348,15 @@ export function MarketplaceSlice() {
                   categoryChips,
                   catalog
               )
-            : createElement(LibraryView, { entitlements, providers })
+            : createElement(LibraryView, { entitlements, providers }),
+        activeCheckout
+            ? createElement(EmbeddedCheckoutOverlay, {
+                  redirectUrl: activeCheckout.redirectUrl,
+                  sessionId: activeCheckout.sessionId,
+                  onCompleted: handleCheckoutCompleted,
+                  onCancelled: closeCheckout,
+                  onError: closeCheckout,
+              })
+            : null
     );
 }

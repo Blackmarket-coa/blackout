@@ -3,6 +3,9 @@ import type {
     CatalogQuery,
     CheckoutInput,
     CheckoutResult,
+    CreatorListingDraftInput,
+    CreatorListingResult,
+    CreatorOnboardingHandle,
     MarketplaceProvider,
     NormalizedLifecycleEvent,
     NormalizedListing,
@@ -96,7 +99,16 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         baseUrl,
         enabled,
         auth: 'api-key',
-        capabilities: ['catalog', 'search', 'checkout', 'webhooks', 'payouts', 'creator-sso'],
+        capabilities: [
+            'catalog',
+            'search',
+            'checkout',
+            'webhooks',
+            'payouts',
+            'creator-sso',
+            'creator-write',
+            'embedded-checkout',
+        ],
 
         async fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]> {
             if (!enabled || !apiKey) return [];
@@ -117,7 +129,8 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
         },
 
         async createCheckoutSession(input: CheckoutInput): Promise<CheckoutResult> {
-            const raw = await call<{ url: string; id: string }>('/v1/checkout/sessions', {
+            const path = input.embed ? '/v1/checkout/sessions?embed=1' : '/v1/checkout/sessions';
+            const raw = await call<{ url: string; id: string }>(path, {
                 method: 'POST',
                 headers: { 'idempotency-key': input.idempotencyKey },
                 body: JSON.stringify({
@@ -125,9 +138,59 @@ export function createFreeblackmarketProvider(): MarketplaceProvider {
                     listingId: input.listingId,
                     sku: input.sku,
                     returnUrl: input.returnUrl,
+                    embed: input.embed === true ? true : undefined,
                 }),
             });
             return { redirectUrl: raw.url, sessionId: raw.id };
+        },
+
+        async createCreatorListing(input: CreatorListingDraftInput): Promise<CreatorListingResult> {
+            const raw = await call<{
+                id: string;
+                slug?: string | null;
+                status?: CreatorListingResult['status'];
+            }>('/v1/seller/listings', {
+                method: 'POST',
+                body: JSON.stringify(input),
+            });
+            return {
+                providerListingId: raw.id,
+                publicSlug: raw.slug ?? null,
+                status: raw.status ?? 'draft',
+            };
+        },
+
+        async publishCreatorListing(providerListingId: string): Promise<CreatorListingResult> {
+            const raw = await call<{
+                id: string;
+                slug?: string | null;
+                status?: CreatorListingResult['status'];
+            }>(`/v1/seller/listings/${providerListingId}/publish`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            return {
+                providerListingId: raw.id,
+                publicSlug: raw.slug ?? null,
+                status: raw.status ?? 'pending_review',
+            };
+        },
+
+        async archiveCreatorListing(providerListingId: string): Promise<void> {
+            await call<{ ok: boolean }>(`/v1/seller/listings/${providerListingId}`, {
+                method: 'DELETE',
+            });
+        },
+
+        async startCreatorOnboarding(
+            sellerUserId: string,
+            returnUrl?: string
+        ): Promise<CreatorOnboardingHandle> {
+            const raw = await call<{ url: string; expiresAt: string }>('/v1/seller/onboarding', {
+                method: 'POST',
+                body: JSON.stringify({ sellerUserId, returnUrl }),
+            });
+            return { onboardingUrl: raw.url, expiresAt: raw.expiresAt };
         },
 
         verifyWebhook(rawBody: string, headers: Record<string, string | undefined>): WebhookVerification {

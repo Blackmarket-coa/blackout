@@ -106,9 +106,15 @@ export async function fetchListingDetail(
 }
 
 export async function startCheckout(
-    input: { providerId: MarketplaceProviderId; listingId: string; sku?: string; returnUrl?: string },
+    input: {
+        providerId: MarketplaceProviderId;
+        listingId: string;
+        sku?: string;
+        returnUrl?: string;
+        embed?: boolean;
+    },
     token: string | null
-): Promise<{ redirectUrl: string; sessionId: string }> {
+): Promise<{ redirectUrl: string; sessionId: string; embed?: boolean }> {
     return postJson(`${MARKETPLACE_BASE}/checkout`, input, token);
 }
 
@@ -125,4 +131,23 @@ export async function fetchFulfillmentAsset(
     token: string | null
 ): Promise<FulfillmentAsset> {
     return getJson(`${MARKETPLACE_BASE}/fulfillment/${entitlementId}/asset`, token);
+}
+
+export interface SignedBundlePayload {
+    manifest: Record<string, unknown>;
+    bundleBase64: string;
+    signature: {
+        keyId: string;
+        signature: string;
+        manifestSha256: string;
+        sha256: string;
+        issuedAt: string;
+    };
+}
+
+export async function fetchFulfillmentBundle(
+    entitlementId: string,
+    token: string | null
+): Promise<SignedBundlePayload> {
+    return getJson(`${MARKETPLACE_BASE}/fulfillment/${entitlementId}/bundle`, token);
 }

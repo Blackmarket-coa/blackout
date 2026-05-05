@@ -15,7 +15,9 @@ export type MarketplaceCapability =
     | 'checkout'
     | 'webhooks'
     | 'payouts'
-    | 'creator-sso';
+    | 'creator-sso'
+    | 'creator-write'
+    | 'embedded-checkout';
 
 export type MarketplaceCategory =
     | 'emoji-sticker'
@@ -43,7 +45,10 @@ export type LifecycleEventType =
     | 'purchase.succeeded'
     | 'purchase.failed'
     | 'purchase.refunded'
-    | 'purchase.chargebacked';
+    | 'purchase.chargebacked'
+    | 'creator.payout.completed'
+    | 'listing.signed_bundle.published'
+    | 'creator.account.suspended';
 
 export interface CatalogQuery {
     category?: MarketplaceCategory;
@@ -58,6 +63,13 @@ export interface CheckoutInput {
     sku?: string;
     idempotencyKey: string;
     returnUrl?: string;
+    /**
+     * When true, request an embeddable checkout session that can be rendered in
+     * a sandboxed iframe inside the host app. The provider must emit
+     * `postMessage` lifecycle events (`checkout.completed`, `checkout.cancelled`)
+     * to its parent so the host can refresh entitlements without page reload.
+     */
+    embed?: boolean;
 }
 
 export interface CheckoutResult {
@@ -80,6 +92,32 @@ export interface MarketplaceProviderInfo {
     capabilities: readonly MarketplaceCapability[];
 }
 
+export interface CreatorListingDraftInput {
+    sellerUserId: string;
+    artifactKind: 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+    category: MarketplaceCategory;
+    entitlementKind: EntitlementKind;
+    title: string;
+    description: string;
+    priceCents: number;
+    currency: string;
+    tags?: string[];
+    mediaUrls?: string[];
+    artifactPayload?: unknown;
+    artifactUploadId?: string;
+}
+
+export interface CreatorListingResult {
+    providerListingId: string;
+    publicSlug: string | null;
+    status: 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
+}
+
+export interface CreatorOnboardingHandle {
+    onboardingUrl: string;
+    expiresAt: string;
+}
+
 export interface MarketplaceProvider extends MarketplaceProviderInfo {
     fetchCatalog(query: CatalogQuery): Promise<NormalizedListing[]>;
     getListing(listingId: string): Promise<NormalizedListing | null>;
@@ -89,6 +127,37 @@ export interface MarketplaceProvider extends MarketplaceProviderInfo {
         headers: Record<string, string | undefined>
     ): WebhookVerification;
     parseEvent(payload: unknown): NormalizedLifecycleEvent | null;
+
+    /** Optional creator-side surface — present when `creator-write` capability is advertised. */
+    createCreatorListing?(input: CreatorListingDraftInput): Promise<CreatorListingResult>;
+    publishCreatorListing?(providerListingId: string): Promise<CreatorListingResult>;
+    archiveCreatorListing?(providerListingId: string): Promise<void>;
+    startCreatorOnboarding?(sellerUserId: string, returnUrl?: string): Promise<CreatorOnboardingHandle>;
+
+    /**
+     * Optional bundle issuer for direct fulfillment. Used by stub/test
+     * deployments to deliver a signed bundle from the same process; real
+     * providers serve bundles from a CDN behind the asset-url flow.
+     */
+    issueSignedBundle?(entitlement: NormalizedEntitlement): Promise<SignedPluginBundleEnvelope>;
+}
+
+/**
+ * Wire shape for direct bundle delivery. Mirrors `SignedPluginBundle`
+ * from `@blackout/protocol` but is re-declared here as a plain object
+ * so the marketplace provider interface stays free of cross-package
+ * imports.
+ */
+export interface SignedPluginBundleEnvelope {
+    manifest: Record<string, unknown>;
+    bundleBase64: string;
+    signature: {
+        keyId: string;
+        signature: string;
+        manifestSha256: string;
+        sha256: string;
+        issuedAt: string;
+    };
 }
 
 export interface NormalizedListing {

@@ -2,6 +2,7 @@ import { parseCustomizationBundle, serializeCustomizationBundle } from '../../..
 import { useAtom, useAtomValue } from 'jotai';
 import React, { useMemo, useState } from 'react';
 import { StegoSettings } from '../steganography';
+import { CreatorStudio } from './creator-studio';
 import {
     accessibilitySettingsAtom,
     appearanceSettingsAtom,
@@ -264,6 +265,36 @@ const DeveloperSettings = () => {
                 </div>
             </section>
             <StegoSettings />
+
+            {settings.creatorStudioEnabled ? <CreatorStudio /> : null}
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <header>
+                    <h3 style={{ marginBottom: 4 }}>Creator Studio</h3>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        Author themes, manifest plugins, code plugins, and asset packs and
+                        publish them to a connected marketplace.
+                    </p>
+                </header>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                        type="checkbox"
+                        checked={settings.creatorStudioEnabled}
+                        onChange={(event) => {
+                            setSettings((prev) => ({
+                                ...prev,
+                                creatorStudioEnabled: event.target.checked,
+                            }));
+                            trackSettingsInteraction(
+                                'developer',
+                                'creator-studio-enabled',
+                                event.target.checked,
+                            );
+                        }}
+                    />
+                    Enable Creator Studio
+                </label>
+            </section>
         </div>
     );
 };

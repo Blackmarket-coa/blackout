@@ -94,6 +94,51 @@ Blackout is a federated, end-to-end-encrypted communication platform built on th
 
 When you build a new feature that crosses a trust boundary or introduces a new asset, copy `docs/security/epic_security_review.md` as a starting STRIDE template and link the result here.
 
+### 6a. Third-party plugin code (marketplace installs)
+
+**Asset**: code-bearing plugins purchased through a connected marketplace
+(`code_plugin` artifact kind under `packages/api/src/routes/creator.ts`,
+loaded by `apps/blackout-client/src/app/features/monetization/install/pluginInstaller.ts`).
+
+**Threats**:
+
+- **Spoofing/Tampering**: a man-in-the-middle or compromised CDN serves a
+  malicious bundle. Mitigated by requiring an Ed25519/HMAC signature
+  envelope (`PluginSignatureEnvelope` in
+  `packages/blackout-protocol/src/plugins/index.ts`) covering both the
+  canonical manifest hash and the bundle SHA-256. The blackout client
+  refuses to install if the key id is not on its pinned keyset
+  (`apps/blackout-client/src/app/features/monetization/install/pluginSignature.ts`).
+- **Privilege escalation inside the host**: plugin code attempts to read
+  cookies, call host APIs, or open Matrix sessions. Mitigated by hosting
+  bundles in a `sandbox="allow-scripts"` `srcdoc` iframe with no host
+  DOM or storage access; all interaction goes through a typed postMessage
+  RPC bridge gated by capabilities declared in the manifest
+  (`PluginCapability`, enforced in
+  `apps/blackout-client/src/app/features/monetization/install/sandbox/PluginSandboxHost.ts`).
+- **Lateral movement to other plugins / users**: each sandbox instance is
+  scoped to a single plugin id and does not share state with other
+  plugins. Capability denials are logged and surfaced in
+  Settings → Plugins so the user can revoke.
+- **Repudiation / persistence after revocation**: when an entitlement is
+  revoked or a `creator.account.suspended` lifecycle event arrives, the
+  installer unregisters the dynamic plugin and the sandbox iframe is
+  destroyed. The signed bundle is not retained outside the active
+  install record.
+- **Embedded checkout iframe abuse**: the marketplace embed iframe runs
+  with `sandbox="allow-scripts allow-forms allow-same-origin
+  allow-top-navigation-by-user-activation"`; the host only relays
+  `checkout.completed` / `checkout.cancelled` postMessage events whose
+  origin matches the redirect URL, and refuses any other origin or
+  payload shape.
+
+**Residual risk**: a plugin that is granted broad capabilities (e.g.
+`message.compose`) can still misbehave within those capabilities. The
+manifest is shown to the user before install and capabilities can be
+revoked from Settings → Plugins. Production releases must pin the
+freeblackmarket publishing keyset at build time (no
+`BLACKOUT_PLUGIN_DEV_HMAC` shortcut).
+
 ## 7. Accepted residual risks
 
 These risks are known and accepted, with the rationale recorded so reviewers do not need to re-litigate them.

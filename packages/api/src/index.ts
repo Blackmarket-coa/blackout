@@ -8,6 +8,7 @@ import federationRoutes from './routes/federation';
 import channelRoutes from './routes/channels';
 import entitlementRoutes from './routes/entitlements';
 import marketplaceRoutes from './routes/marketplace';
+import creatorRoutes from './routes/creator';
 import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
 import appRoutes from './routes/apps';
@@ -66,6 +67,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/channels`, channelRoutes);
   app.route(`${root}/entitlements`, entitlementRoutes);
   app.route(`${root}/marketplace`, marketplaceRoutes);
+  app.route(`${root}/creator`, creatorRoutes);
   app.route(`${root}/voice`, voiceRoutes);
   app.route(`${root}/subscriptions`, subscriptionRoutes);
   app.route(`${root}/apps`, appRoutes);

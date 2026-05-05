@@ -36,4 +36,15 @@ export type {
   ResolvedEntitlement,
 } from '@blackout/protocol';
 
+export type {
+  PluginArtifactKind,
+  PluginCapability,
+  PluginManifest,
+  PluginSignatureEnvelope,
+  SignedPluginBundle,
+  PluginEventType,
+  PluginInstallEvent,
+} from '@blackout/protocol';
+export { PLUGINS_PROTOCOL_VERSION, PLUGIN_EVENT_TYPES } from '@blackout/protocol';
+
 export * from './entitlements';
