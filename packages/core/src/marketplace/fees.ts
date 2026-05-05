@@ -16,10 +16,10 @@ export const marketplaceProviderFees: Record<
 > = {
     freeblackmarket: {
         providerId: 'freeblackmarket',
-        feeBps: 1_000,
+        feeBps: 300,
         processingHandledByProvider: true,
         payoutCadence: 'weekly',
-        displayFeePercent: 10,
+        displayFeePercent: 3,
     },
     blamazon: {
         providerId: 'blamazon',
@@ -46,4 +46,34 @@ export const marketplaceProviderFees: Record<
 
 export function feeForProvider(providerId: MarketplaceProviderId): MarketplaceProviderFeeSchedule {
     return marketplaceProviderFees[providerId];
+}
+
+export interface PlatformCommissionSplit {
+    grossCents: number;
+    feeCents: number;
+    netCents: number;
+    feeBps: number;
+    providerId: MarketplaceProviderId;
+}
+
+// Single split used by every monetary flow Blackout records (tips, creator
+// subs, gifts, tickets, boosts, paywalls). The provider is still merchant of
+// record — this only computes the display/reconciliation breakdown.
+export function computePlatformCommission(
+    grossCents: number,
+    providerId: MarketplaceProviderId = 'freeblackmarket'
+): PlatformCommissionSplit {
+    if (!Number.isFinite(grossCents) || grossCents < 0 || !Number.isInteger(grossCents)) {
+        throw new RangeError('grossCents must be a non-negative integer');
+    }
+    const schedule = marketplaceProviderFees[providerId];
+    const feeBps = schedule?.feeBps ?? DEFAULT_MARKETPLACE_FEE_BPS;
+    const feeCents = Math.round((grossCents * feeBps) / 10_000);
+    return {
+        grossCents,
+        feeCents,
+        netCents: grossCents - feeCents,
+        feeBps,
+        providerId,
+    };
 }
