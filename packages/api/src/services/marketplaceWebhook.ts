@@ -9,6 +9,7 @@ import {
 import { incrementCounter, logEvent } from './marketplaceObservability';
 import { captureTip, refundTip } from './tips';
 import { captureSubscription, refundSubscription } from './creatorSubscriptions';
+import { captureBoostPledge, refundBoostPledge } from './communityBoosts';
 
 const CREATOR_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set([
     'creator.payout.completed',
@@ -174,6 +175,43 @@ function dispatchMonetizationEvent(
             eventType: event.type,
             creatorSubscriptionId,
         });
+    }
+
+    const boostPledgeId =
+        typeof meta['boostPledgeId'] === 'string' ? (meta['boostPledgeId'] as string) : null;
+    if (boostPledgeId) {
+        const fbmSubscriptionId =
+            typeof meta['fbmSubscriptionId'] === 'string'
+                ? (meta['fbmSubscriptionId'] as string)
+                : null;
+        const periodDays =
+            typeof meta['periodDays'] === 'number' ? (meta['periodDays'] as number) : undefined;
+        if (event.type === 'purchase.succeeded') {
+            captureBoostPledge(boostPledgeId, {
+                fbmSubscriptionId,
+                periodDays,
+                effectiveAt: event.occurredAt,
+            });
+            incrementCounter('marketplace_boost_captured_total', { providerId: provider.id });
+        } else if (event.type === 'purchase.refunded' || event.type === 'purchase.chargebacked') {
+            refundBoostPledge(boostPledgeId);
+            incrementCounter('marketplace_boost_refunded_total', { providerId: provider.id });
+        }
+        logEvent('marketplace.webhook.community_boost', {
+            providerId: provider.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            boostPledgeId,
+        });
+        // Boost pledges don't grant marketplace entitlements (the perks
+        // come from the aggregate boost level), so short-circuit.
+        markWebhookProcessed(event.providerId, event.eventId);
+        return {
+            ok: true,
+            status: 200,
+            event,
+            applied: { entitlement: null, licenseKey: null, alreadyProcessed: false },
+        };
     }
 
     return null;

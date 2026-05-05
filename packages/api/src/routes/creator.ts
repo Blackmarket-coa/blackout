@@ -37,6 +37,8 @@ const draftSchema = z.object({
         'subscription_tier',
         'post_unlock',
         'event_ticket',
+        'role_grant',
+        'channel_access',
     ]),
     title: z.string().min(1),
     description: z.string().min(1),

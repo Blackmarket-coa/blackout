@@ -31,6 +31,7 @@ import type {
   TipRecord,
   CreatorSubscriptionTierRecord,
   CreatorSubscriptionRecord,
+  CommunityBoostPledgeRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -62,6 +63,7 @@ type PersistedState = {
   tips: TipRecord[];
   creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
   creatorSubscriptions: CreatorSubscriptionRecord[];
+  communityBoostPledges: CommunityBoostPledgeRecord[];
 };
 
 class InMemoryDb {
@@ -89,6 +91,7 @@ class InMemoryDb {
   tips = new Map<string, TipRecord>();
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
+  communityBoostPledges = new Map<string, CommunityBoostPledgeRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -634,6 +637,48 @@ class InMemoryDb {
     this.creatorSubscriptions.clear();
   }
 
+  insertCommunityBoostPledge(record: CommunityBoostPledgeRecord): CommunityBoostPledgeRecord {
+    this.communityBoostPledges.set(record.id, record);
+    return record;
+  }
+
+  updateCommunityBoostPledge(record: CommunityBoostPledgeRecord): CommunityBoostPledgeRecord {
+    this.communityBoostPledges.set(record.id, record);
+    return record;
+  }
+
+  getCommunityBoostPledge(id: string): CommunityBoostPledgeRecord | undefined {
+    return this.communityBoostPledges.get(id);
+  }
+
+  findActiveBoostPledgeForUser(
+    communityId: string,
+    pledgerUserId: string
+  ): CommunityBoostPledgeRecord | undefined {
+    return [...this.communityBoostPledges.values()].find(
+      (row) =>
+        row.communityId === communityId &&
+        row.pledgerUserId === pledgerUserId &&
+        row.status === 'active'
+    );
+  }
+
+  listBoostPledgesForCommunity(communityId: string): CommunityBoostPledgeRecord[] {
+    return [...this.communityBoostPledges.values()]
+      .filter((row) => row.communityId === communityId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listBoostPledgesByUser(pledgerUserId: string): CommunityBoostPledgeRecord[] {
+    return [...this.communityBoostPledges.values()]
+      .filter((row) => row.pledgerUserId === pledgerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  resetCommunityBoostsForTest(): void {
+    this.communityBoostPledges.clear();
+  }
+
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
@@ -693,6 +738,9 @@ class FileBackedDb extends InMemoryDb {
     this.creatorSubscriptions = new Map(
       (parsed.creatorSubscriptions ?? []).map((row) => [row.id, row])
     );
+    this.communityBoostPledges = new Map(
+      (parsed.communityBoostPledges ?? []).map((row) => [row.id, row])
+    );
   }
 
   private snapshot(): PersistedState {
@@ -721,6 +769,7 @@ class FileBackedDb extends InMemoryDb {
       tips: [...this.tips.values()],
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
+      communityBoostPledges: [...this.communityBoostPledges.values()],
     };
   }
 
@@ -979,6 +1028,27 @@ class FileBackedDb extends InMemoryDb {
 
   override resetCreatorSubscriptionsForTest(): void {
     super.resetCreatorSubscriptionsForTest();
+    this.persist();
+  }
+
+  override insertCommunityBoostPledge(
+    record: CommunityBoostPledgeRecord
+  ): CommunityBoostPledgeRecord {
+    const created = super.insertCommunityBoostPledge(record);
+    this.persist();
+    return created;
+  }
+
+  override updateCommunityBoostPledge(
+    record: CommunityBoostPledgeRecord
+  ): CommunityBoostPledgeRecord {
+    const updated = super.updateCommunityBoostPledge(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetCommunityBoostsForTest(): void {
+    super.resetCommunityBoostsForTest();
     this.persist();
   }
 }

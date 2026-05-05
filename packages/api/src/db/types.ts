@@ -230,7 +230,9 @@ export type MarketplaceEntitlementKind =
   | 'plugin_flag'
   | 'subscription_tier'
   | 'post_unlock'
-  | 'event_ticket';
+  | 'event_ticket'
+  | 'role_grant'
+  | 'channel_access';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;
@@ -304,6 +306,31 @@ export interface CreatorSubscriptionRecord {
   providerId: MarketplaceProviderIdString;
   fbmSubscriptionId: string | null;
   status: CreatorSubscriptionStatus;
+  startedAt: string | null;
+  currentPeriodEndsAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CommunityBoostPledgeStatus =
+  | 'pending'
+  | 'active'
+  | 'canceled'
+  | 'refunded'
+  | 'expired';
+
+export interface CommunityBoostPledgeRecord {
+  id: UUID;
+  communityId: UUID;
+  pledgerUserId: UUID;
+  monthlyCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmSubscriptionId: string | null;
+  status: CommunityBoostPledgeStatus;
   startedAt: string | null;
   currentPeriodEndsAt: string | null;
   canceledAt: string | null;
