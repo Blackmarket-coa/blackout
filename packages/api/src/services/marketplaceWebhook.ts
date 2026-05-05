@@ -7,6 +7,8 @@ import {
     type ApplyEventResult,
 } from './marketplaceEntitlements';
 import { incrementCounter, logEvent } from './marketplaceObservability';
+import { captureTip, refundTip } from './tips';
+import { captureSubscription, refundSubscription } from './creatorSubscriptions';
 
 const CREATOR_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set([
     'creator.payout.completed',
@@ -56,6 +58,11 @@ export async function dispatchMarketplaceWebhook(
 
     recordWebhookReceipt(provider.id, event.eventId, true, payload);
 
+    const monetization = dispatchMonetizationEvent(provider, event);
+    if (monetization) {
+        return monetization;
+    }
+
     if (CREATOR_EVENT_TYPES.has(event.type)) {
         const alreadyProcessed = hasProcessedWebhookEvent(provider.id, event.eventId);
         if (!alreadyProcessed) markWebhookProcessed(provider.id, event.eventId);
@@ -97,4 +104,77 @@ function safeParse(raw: string): unknown {
     } catch {
         return null;
     }
+}
+
+// Routes purchase events that carry monetization-primitive metadata
+// (tipId / creatorSubscriptionId) to the right service. Tips never grant
+// marketplace entitlements, so we short-circuit and return early. Creator
+// subs DO grant a `subscription_tier` entitlement via the standard
+// pipeline, so we update the subscription row first and then let
+// dispatchMarketplaceWebhook fall through to applyLifecycleEvent.
+function dispatchMonetizationEvent(
+    provider: MarketplaceProvider,
+    event: NormalizedLifecycleEvent
+): WebhookDispatchResult | null {
+    const meta = event.metadata ?? {};
+    const tipId = typeof meta['tipId'] === 'string' ? (meta['tipId'] as string) : null;
+    const creatorSubscriptionId =
+        typeof meta['creatorSubscriptionId'] === 'string'
+            ? (meta['creatorSubscriptionId'] as string)
+            : null;
+
+    if (tipId) {
+        const fbmOrderId = typeof meta['fbmOrderId'] === 'string' ? (meta['fbmOrderId'] as string) : null;
+        if (event.type === 'purchase.succeeded') {
+            captureTip(tipId, { fbmOrderId });
+            incrementCounter('marketplace_tip_captured_total', { providerId: provider.id });
+        } else if (event.type === 'purchase.refunded' || event.type === 'purchase.chargebacked') {
+            refundTip(tipId);
+            incrementCounter('marketplace_tip_refunded_total', { providerId: provider.id });
+        }
+        markWebhookProcessed(event.providerId, event.eventId);
+        logEvent('marketplace.webhook.tip', {
+            providerId: provider.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            tipId,
+        });
+        return {
+            ok: true,
+            status: 200,
+            event,
+            applied: { entitlement: null, licenseKey: null, alreadyProcessed: false },
+        };
+    }
+
+    if (creatorSubscriptionId) {
+        const fbmSubscriptionId =
+            typeof meta['fbmSubscriptionId'] === 'string'
+                ? (meta['fbmSubscriptionId'] as string)
+                : null;
+        const periodDays =
+            typeof meta['periodDays'] === 'number' ? (meta['periodDays'] as number) : undefined;
+        if (event.type === 'purchase.succeeded') {
+            captureSubscription(creatorSubscriptionId, {
+                fbmSubscriptionId,
+                periodDays,
+                effectiveAt: event.occurredAt,
+            });
+            incrementCounter('marketplace_creator_sub_captured_total', { providerId: provider.id });
+        } else if (event.type === 'purchase.refunded' || event.type === 'purchase.chargebacked') {
+            refundSubscription(creatorSubscriptionId);
+            incrementCounter('marketplace_creator_sub_refunded_total', { providerId: provider.id });
+        }
+        // Don't return — let the standard pipeline grant/revoke the
+        // `subscription_tier` entitlement so existing entitlement readers
+        // (routes/entitlements.ts) see the active subscription.
+        logEvent('marketplace.webhook.creator_sub', {
+            providerId: provider.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            creatorSubscriptionId,
+        });
+    }
+
+    return null;
 }

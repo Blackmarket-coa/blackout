@@ -29,6 +29,8 @@ import type {
   StreamSessionRecord,
   StreamModerationRecord,
   TipRecord,
+  CreatorSubscriptionTierRecord,
+  CreatorSubscriptionRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -58,6 +60,8 @@ type PersistedState = {
   marketplaceLicenseKeys: MarketplaceLicenseKeyRecord[];
   marketplaceListingsCache: MarketplaceListingsCacheRecord[];
   tips: TipRecord[];
+  creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
+  creatorSubscriptions: CreatorSubscriptionRecord[];
 };
 
 class InMemoryDb {
@@ -83,6 +87,8 @@ class InMemoryDb {
   marketplaceLicenseKeys = new Map<string, MarketplaceLicenseKeyRecord>();
   marketplaceListingsCache = new Map<string, MarketplaceListingsCacheRecord>();
   tips = new Map<string, TipRecord>();
+  creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
+  creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -565,6 +571,69 @@ class InMemoryDb {
     this.tips.clear();
   }
 
+  insertCreatorSubscriptionTier(record: CreatorSubscriptionTierRecord): CreatorSubscriptionTierRecord {
+    this.creatorSubscriptionTiers.set(record.id, record);
+    return record;
+  }
+
+  updateCreatorSubscriptionTier(record: CreatorSubscriptionTierRecord): CreatorSubscriptionTierRecord {
+    this.creatorSubscriptionTiers.set(record.id, record);
+    return record;
+  }
+
+  getCreatorSubscriptionTier(id: string): CreatorSubscriptionTierRecord | undefined {
+    return this.creatorSubscriptionTiers.get(id);
+  }
+
+  listCreatorSubscriptionTiersForCreator(creatorUserId: string): CreatorSubscriptionTierRecord[] {
+    return [...this.creatorSubscriptionTiers.values()]
+      .filter((row) => row.creatorUserId === creatorUserId)
+      .sort((a, b) => a.priceCents - b.priceCents);
+  }
+
+  insertCreatorSubscription(record: CreatorSubscriptionRecord): CreatorSubscriptionRecord {
+    this.creatorSubscriptions.set(record.id, record);
+    return record;
+  }
+
+  updateCreatorSubscription(record: CreatorSubscriptionRecord): CreatorSubscriptionRecord {
+    this.creatorSubscriptions.set(record.id, record);
+    return record;
+  }
+
+  getCreatorSubscription(id: string): CreatorSubscriptionRecord | undefined {
+    return this.creatorSubscriptions.get(id);
+  }
+
+  findActiveCreatorSubscription(
+    subscriberUserId: string,
+    creatorUserId: string
+  ): CreatorSubscriptionRecord | undefined {
+    return [...this.creatorSubscriptions.values()].find(
+      (row) =>
+        row.subscriberUserId === subscriberUserId &&
+        row.creatorUserId === creatorUserId &&
+        row.status === 'active'
+    );
+  }
+
+  listCreatorSubscriptionsForSubscriber(subscriberUserId: string): CreatorSubscriptionRecord[] {
+    return [...this.creatorSubscriptions.values()]
+      .filter((row) => row.subscriberUserId === subscriberUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listCreatorSubscriptionsForCreator(creatorUserId: string): CreatorSubscriptionRecord[] {
+    return [...this.creatorSubscriptions.values()]
+      .filter((row) => row.creatorUserId === creatorUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  resetCreatorSubscriptionsForTest(): void {
+    this.creatorSubscriptionTiers.clear();
+    this.creatorSubscriptions.clear();
+  }
+
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
@@ -618,6 +687,12 @@ class FileBackedDb extends InMemoryDb {
       (parsed.marketplaceListingsCache ?? []).map((row) => [row.cacheKey, row])
     );
     this.tips = new Map((parsed.tips ?? []).map((row) => [row.id, row]));
+    this.creatorSubscriptionTiers = new Map(
+      (parsed.creatorSubscriptionTiers ?? []).map((row) => [row.id, row])
+    );
+    this.creatorSubscriptions = new Map(
+      (parsed.creatorSubscriptions ?? []).map((row) => [row.id, row])
+    );
   }
 
   private snapshot(): PersistedState {
@@ -644,6 +719,8 @@ class FileBackedDb extends InMemoryDb {
       marketplaceLicenseKeys: [...this.marketplaceLicenseKeys.values()],
       marketplaceListingsCache: [...this.marketplaceListingsCache.values()],
       tips: [...this.tips.values()],
+      creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
+      creatorSubscriptions: [...this.creatorSubscriptions.values()],
     };
   }
 
@@ -865,6 +942,43 @@ class FileBackedDb extends InMemoryDb {
 
   override resetTipsForTest(): void {
     super.resetTipsForTest();
+    this.persist();
+  }
+
+  override insertCreatorSubscriptionTier(
+    record: CreatorSubscriptionTierRecord
+  ): CreatorSubscriptionTierRecord {
+    const created = super.insertCreatorSubscriptionTier(record);
+    this.persist();
+    return created;
+  }
+
+  override updateCreatorSubscriptionTier(
+    record: CreatorSubscriptionTierRecord
+  ): CreatorSubscriptionTierRecord {
+    const updated = super.updateCreatorSubscriptionTier(record);
+    this.persist();
+    return updated;
+  }
+
+  override insertCreatorSubscription(
+    record: CreatorSubscriptionRecord
+  ): CreatorSubscriptionRecord {
+    const created = super.insertCreatorSubscription(record);
+    this.persist();
+    return created;
+  }
+
+  override updateCreatorSubscription(
+    record: CreatorSubscriptionRecord
+  ): CreatorSubscriptionRecord {
+    const updated = super.updateCreatorSubscription(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetCreatorSubscriptionsForTest(): void {
+    super.resetCreatorSubscriptionsForTest();
     this.persist();
   }
 }

@@ -39,3 +39,52 @@ CREATE INDEX idx_tips_sender_recent
 CREATE UNIQUE INDEX idx_tips_provider_order
   ON tips (provider_id, fbm_order_id)
   WHERE fbm_order_id IS NOT NULL;
+
+-- Per-creator subscription tiers (Patreon / Twitch / X creator-subs).
+-- Each tier becomes an FBM `subscription`-category creator listing the
+-- first time it goes active; FBM handles dunning and renewals, we receive
+-- webhook events to extend `current_period_ends_at` on the subscriber row.
+
+CREATE TABLE creator_subscription_tiers (
+  id UUID PRIMARY KEY,
+  creator_user_id UUID NOT NULL REFERENCES users(id),
+  name VARCHAR(64) NOT NULL,
+  description TEXT,
+  price_cents INT NOT NULL CHECK (price_cents >= 199),
+  currency VARCHAR(8) NOT NULL,
+  provider_id VARCHAR(64) NOT NULL,
+  fbm_listing_id VARCHAR(255),
+  status VARCHAR(16) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_creator_subscription_tiers_creator
+  ON creator_subscription_tiers (creator_user_id);
+
+CREATE TABLE creator_subscriptions (
+  id UUID PRIMARY KEY,
+  subscriber_user_id UUID NOT NULL REFERENCES users(id),
+  creator_user_id UUID NOT NULL REFERENCES users(id),
+  tier_id UUID NOT NULL REFERENCES creator_subscription_tiers(id),
+  provider_id VARCHAR(64) NOT NULL,
+  fbm_subscription_id VARCHAR(255),
+  status VARCHAR(16) NOT NULL,
+  started_at TIMESTAMPTZ,
+  current_period_ends_at TIMESTAMPTZ,
+  canceled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT creator_subs_no_self_subscribe
+    CHECK (subscriber_user_id <> creator_user_id)
+);
+
+CREATE INDEX idx_creator_subscriptions_subscriber
+  ON creator_subscriptions (subscriber_user_id);
+
+CREATE INDEX idx_creator_subscriptions_creator
+  ON creator_subscriptions (creator_user_id);
+
+CREATE UNIQUE INDEX idx_creator_subscriptions_active_pair
+  ON creator_subscriptions (subscriber_user_id, creator_user_id)
+  WHERE status = 'active';

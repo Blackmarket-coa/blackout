@@ -271,6 +271,44 @@ export interface MarketplaceListingsCacheRecord {
   refreshedAt: string;
 }
 
+export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
+
+export interface CreatorSubscriptionTierRecord {
+  id: UUID;
+  creatorUserId: UUID;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmListingId: string | null;
+  status: CreatorSubscriptionTierStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreatorSubscriptionStatus =
+  | 'pending'
+  | 'active'
+  | 'canceled'
+  | 'refunded'
+  | 'expired';
+
+export interface CreatorSubscriptionRecord {
+  id: UUID;
+  subscriberUserId: UUID;
+  creatorUserId: UUID;
+  tierId: UUID;
+  providerId: MarketplaceProviderIdString;
+  fbmSubscriptionId: string | null;
+  status: CreatorSubscriptionStatus;
+  startedAt: string | null;
+  currentPeriodEndsAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type TipContextKind = 'profile' | 'stream' | 'post' | 'channel_message' | 'aid_pool';
 
 export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';

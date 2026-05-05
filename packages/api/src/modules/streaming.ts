@@ -5,6 +5,7 @@ import { readJsonBody } from '../middleware/validate';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
+import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
 import type { FeatureModule } from './types';
 
 const streamKeySchema = z
@@ -165,9 +166,15 @@ function createStreamingRouter() {
     const stream = db.getStream(streamId);
     if (!stream) return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
 
-    const canAccess =
-      stream.visibility === 'public' ||
-      (subscriberId ? stream.allowedSubscriberIds.includes(subscriberId) : false);
+    let canAccess = stream.visibility === 'public';
+    if (!canAccess && subscriberId) {
+      const manualOverride = stream.allowedSubscriberIds.includes(subscriberId);
+      if (manualOverride) {
+        canAccess = true;
+      } else if (stream.visibility === 'member_only') {
+        canAccess = hasActiveCreatorSubscription(subscriberId, stream.creatorId);
+      }
+    }
 
     return c.json({
       streamId,
