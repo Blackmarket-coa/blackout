@@ -106,9 +106,15 @@ export async function fetchListingDetail(
 }
 
 export async function startCheckout(
-    input: { providerId: MarketplaceProviderId; listingId: string; sku?: string; returnUrl?: string },
+    input: {
+        providerId: MarketplaceProviderId;
+        listingId: string;
+        sku?: string;
+        returnUrl?: string;
+        embed?: boolean;
+    },
     token: string | null
-): Promise<{ redirectUrl: string; sessionId: string }> {
+): Promise<{ redirectUrl: string; sessionId: string; embed?: boolean }> {
     return postJson(`${MARKETPLACE_BASE}/checkout`, input, token);
 }
 

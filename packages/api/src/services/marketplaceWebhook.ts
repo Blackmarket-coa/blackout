@@ -1,10 +1,18 @@
-import type { MarketplaceProvider, NormalizedLifecycleEvent } from '@blackout/core';
+import type { LifecycleEventType, MarketplaceProvider, NormalizedLifecycleEvent } from '@blackout/core';
 import {
     applyLifecycleEvent,
+    hasProcessedWebhookEvent,
+    markWebhookProcessed,
     recordWebhookReceipt,
     type ApplyEventResult,
 } from './marketplaceEntitlements';
 import { incrementCounter, logEvent } from './marketplaceObservability';
+
+const CREATOR_EVENT_TYPES: ReadonlySet<LifecycleEventType> = new Set([
+    'creator.payout.completed',
+    'listing.signed_bundle.published',
+    'creator.account.suspended',
+]);
 
 export interface WebhookDispatchResult {
     ok: boolean;
@@ -47,6 +55,30 @@ export async function dispatchMarketplaceWebhook(
     }
 
     recordWebhookReceipt(provider.id, event.eventId, true, payload);
+
+    if (CREATOR_EVENT_TYPES.has(event.type)) {
+        const alreadyProcessed = hasProcessedWebhookEvent(provider.id, event.eventId);
+        if (!alreadyProcessed) markWebhookProcessed(provider.id, event.eventId);
+        incrementCounter('marketplace_creator_event_total', {
+            providerId: provider.id,
+            type: event.type,
+        });
+        logEvent('marketplace.webhook.creator_event', {
+            providerId: provider.id,
+            eventId: event.eventId,
+            eventType: event.type,
+            userId: event.userId,
+            providerListingId: event.providerListingId,
+            alreadyProcessed,
+        });
+        return {
+            ok: true,
+            status: 200,
+            event,
+            applied: { entitlement: null, licenseKey: null, alreadyProcessed },
+        };
+    }
+
     const applied = applyLifecycleEvent(event);
     logEvent('marketplace.webhook.applied', {
         providerId: provider.id,

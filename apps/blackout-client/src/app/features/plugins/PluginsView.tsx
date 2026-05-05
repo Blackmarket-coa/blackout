@@ -1,12 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import { useAtom } from 'jotai';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { capabilityContextAtom } from '../../core/features/capabilityContext';
 import { coreFeatureModules } from '../../core/features/coreModules';
-import { featurePlugins } from '../../core/features/plugins';
+import {
+    featurePlugins,
+    getAllFeaturePlugins,
+    subscribeFeaturePlugins,
+} from '../../core/features/plugins';
 import {
     runtimePluginFeatureFlags,
     type FeatureFlags,
 } from '../../core/features/featureFlags';
+import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
 
 const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(
     Object.values(runtimePluginFeatureFlags),
@@ -23,6 +28,9 @@ type PluginRow = {
 export const PluginsView = () => {
     const [ctx, setCtx] = useAtom(capabilityContextAtom);
     const [pendingToggle, setPendingToggle] = useState<keyof FeatureFlags | null>(null);
+    const installed = useAtomValue(installedPluginsAtom);
+    const [allPlugins, setAllPlugins] = useState(() => getAllFeaturePlugins());
+    useEffect(() => subscribeFeaturePlugins(setAllPlugins), []);
 
     const rows = useMemo<PluginRow[]>(
         () =>
@@ -160,16 +168,72 @@ export const PluginsView = () => {
                 </table>
 
                 <h2 style={{ marginTop: 32, fontSize: 16 }}>Module plugins</h2>
-                {featurePlugins.length === 0 ? (
+                {allPlugins.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                        No feature module plugins registered. Plugins added through
-                        `featurePlugins` will appear here with their bundled modules.
+                        No feature module plugins registered. Static plugins are added
+                        through <code>featurePlugins</code>; marketplace installs appear
+                        here once they have been verified and registered.
                     </p>
                 ) : (
                     <ul style={{ paddingLeft: 20 }}>
-                        {featurePlugins.map((plugin) => (
+                        {allPlugins.map((plugin) => (
                             <li key={plugin.id} style={{ padding: '4px 0' }}>
                                 <code>{plugin.id}</code> — {plugin.modules.length} module(s)
+                                {featurePlugins.find((p) => p.id === plugin.id)
+                                    ? null
+                                    : ' (marketplace)'}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                <h2 style={{ marginTop: 32, fontSize: 16 }}>Marketplace installs</h2>
+                {installed.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                        No marketplace plugins installed yet. Purchases from the
+                        marketplace appear here once their signed bundles are verified.
+                    </p>
+                ) : (
+                    <ul style={{ paddingLeft: 20 }}>
+                        {installed.map((record) => (
+                            <li key={record.entitlementId} style={{ padding: '6px 0' }}>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <strong>{record.manifest.name}</strong>
+                                    <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                        {record.manifest.id}@{record.manifest.version}
+                                    </code>
+                                    <span
+                                        style={{
+                                            fontSize: 11,
+                                            padding: '1px 6px',
+                                            borderRadius: 999,
+                                            background:
+                                                record.status === 'enabled'
+                                                    ? 'var(--accent-primary, #4ECDC4)'
+                                                    : 'var(--text-muted, #888)',
+                                            color: '#fff',
+                                        }}
+                                    >
+                                        {record.status}
+                                    </span>
+                                </div>
+                                <small style={{ color: 'var(--text-muted)' }}>
+                                    {record.manifest.artifactKind} ·{' '}
+                                    {record.manifest.listing.providerId}
+                                    {record.manifest.listing.publicSlug
+                                        ? ` · /${record.manifest.listing.publicSlug}`
+                                        : ''}
+                                </small>
+                                {record.lastError ? (
+                                    <div
+                                        style={{
+                                            color: 'var(--danger, #b3261e)',
+                                            fontSize: 12,
+                                        }}
+                                    >
+                                        {record.lastError}
+                                    </div>
+                                ) : null}
                             </li>
                         ))}
                     </ul>

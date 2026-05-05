@@ -56,6 +56,7 @@ const checkoutSchema = z.object({
     listingId: z.string().min(1),
     sku: z.string().optional(),
     returnUrl: z.string().optional(),
+    embed: z.boolean().optional(),
 });
 
 marketplace.get('/providers', (c) => {
@@ -151,7 +152,7 @@ marketplace.post('/checkout', async (c) => {
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, checkoutSchema);
     if (parsed instanceof Response) return parsed;
-    const { providerId, listingId, sku, returnUrl } = parsed;
+    const { providerId, listingId, sku, returnUrl, embed } = parsed;
     if (!isProviderId(providerId)) {
         return c.json({ code: 'invalid_provider', message: 'Unknown provider id' }, 400);
     }
@@ -161,12 +162,14 @@ marketplace.post('/checkout', async (c) => {
     }
 
     const idempotencyKey = `${providerId}:${user.sub}:${listingId}:${crypto.randomUUID()}`;
+    const wantsEmbed = embed === true && provider.capabilities.includes('embedded-checkout');
     const result = await provider.createCheckoutSession({
         userId: user.sub,
         listingId,
         sku,
         idempotencyKey,
         returnUrl,
+        embed: wantsEmbed,
     });
     incrementCounter('marketplace_checkout_created_total', { providerId });
     logEvent('marketplace.checkout.created', {
@@ -182,6 +185,7 @@ marketplace.post('/checkout', async (c) => {
         sessionId: result.sessionId,
         providerId,
         listingId,
+        embed: wantsEmbed,
     });
 });
 
