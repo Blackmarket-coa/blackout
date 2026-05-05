@@ -1,6 +1,6 @@
 import { createElement, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { selectedRoomIdAtom } from '../../state/bmc-navigation';
+import { selectedRoomIdAtom } from '../../state/navigation';
 import type { FeatureRoute } from '../../core/features/types';
 import { DeadmanSwitchPanel } from './DeadmanSwitchPanel';
 import { createAuthorizedApiClient } from '../../sdk/client';

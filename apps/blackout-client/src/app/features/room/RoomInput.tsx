@@ -117,7 +117,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
-import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/bmc-composer';
+import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
 import { applyComposerPayloadToEditor, isComposerPayloadForRoom } from './composerCommandPayload';
 import { getExpressionControlVisibility } from './expressionControls';
 

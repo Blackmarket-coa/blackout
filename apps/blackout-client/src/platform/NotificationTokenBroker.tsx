@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useAtomValue } from 'jotai';
 import type { IPusherRequest } from 'matrix-js-sdk';
-import { matrixClientAtom } from '../app/state/bmc-auth';
+import { matrixClientAtom } from '../app/state/auth';
 import { listenForNativeBridgeEvents } from './native-bridge-contract';
 import { getPushGatewayUrl } from './pushGatewayConfig';
 

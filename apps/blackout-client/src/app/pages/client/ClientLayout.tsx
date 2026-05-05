@@ -3,8 +3,8 @@ import { useAtom, useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { joinedRoomsAtom } from '../../state/bmc-rooms';
-import { userIdAtom } from '../../state/bmc-auth';
+import { joinedRoomsAtom } from '../../state/rooms';
+import { userIdAtom } from '../../state/auth';
 import {
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
@@ -12,9 +12,9 @@ import {
     roomJumpTargetEventIdAtom,
     roomUnreadMarkerEventIdAtom,
     type RightPanelType,
-} from '../../state/bmc-navigation';
-import { defaultAppSettings, settingsAtom } from '../../state/bmc-settings';
-import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/bmc-composer';
+} from '../../state/navigation';
+import { defaultAppSettings, settingsAtom } from '../../state/settings';
+import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
 import {
     DeadDropComposer,
     DeadDropIndicator,

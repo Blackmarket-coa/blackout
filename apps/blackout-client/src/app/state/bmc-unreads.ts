@@ -1,7 +1,7 @@
 import { atom } from 'jotai';
 import { atomFamily, atomWithStorage, selectAtom } from 'jotai/utils';
 import type { NotificationCountType } from 'matrix-js-sdk';
-import { joinedRoomsAtom } from './bmc-rooms';
+import { joinedRoomsAtom } from './rooms';
 
 export interface RoomUnread {
     total: number;

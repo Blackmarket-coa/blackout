@@ -2,7 +2,7 @@ import React, { type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
 import type { ColiseumCitation, RankedColiseumArgument } from '@blackout/core';
 import { useColiseumTopic } from '../hooks/useColiseumTopics';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/bmc-coliseum';
+import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 import ColiseumCitationChip from '../ColiseumCitationChip';
 
 const containerStyle: CSSProperties = {

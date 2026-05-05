@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { useAtomValue } from 'jotai';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/bmc-navigation';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import type { FeatureRoute } from '../../core/features/types';
 import CoalitionView from './CoalitionView';
 import { useCoalitionStateForRoom } from './useCoalitionState';

@@ -1,6 +1,6 @@
 import React, { type CSSProperties } from 'react';
 import type { CoalitionTabId } from '@blackout/core';
-import { COALITION_TAB_LABELS, COALITION_TAB_ORDER } from '../../state/bmc-coalition';
+import { COALITION_TAB_LABELS, COALITION_TAB_ORDER } from '../../state/coalition';
 
 export interface CoalitionTabStripProps {
     activeTab: CoalitionTabId;

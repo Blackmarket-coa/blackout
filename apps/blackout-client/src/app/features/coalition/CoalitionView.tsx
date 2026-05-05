@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { isValidCoalitionTab, type CoalitionTabId } from '@blackout/core';
-import { coalitionTabAtom, COALITION_TAB_ORDER } from '../../state/bmc-coalition';
+import { coalitionTabAtom, COALITION_TAB_ORDER } from '../../state/coalition';
 import CoalitionTabStrip from './CoalitionTabStrip';
 import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';

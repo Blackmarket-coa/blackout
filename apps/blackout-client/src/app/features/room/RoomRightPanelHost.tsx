@@ -4,7 +4,7 @@ import type { Room } from 'matrix-js-sdk';
 import { useAtom } from 'jotai';
 import RightPanelContent from '../right-panel/RightPanelContent';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
-import { rightPanelAtom, roomJumpTargetEventIdAtom } from '../../state/bmc-navigation';
+import { rightPanelAtom, roomJumpTargetEventIdAtom } from '../../state/navigation';
 import { designShellLayout, designSpacing } from '../../../../../../packages/design/src';
 
 interface RoomRightPanelHostProps {

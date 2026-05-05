@@ -6,7 +6,7 @@ import {
     type MatrixError,
 } from 'matrix-js-sdk';
 import { createStore } from 'jotai/vanilla';
-import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/bmc-auth';
+import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/auth';
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
 

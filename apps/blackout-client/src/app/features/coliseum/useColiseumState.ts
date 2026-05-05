@@ -7,7 +7,7 @@ import {
     type ColiseumStateEventContent,
     type ColiseumTabId,
 } from '@blackout/core';
-import { joinedRoomsAtom } from '../../state/bmc-rooms';
+import { joinedRoomsAtom } from '../../state/rooms';
 
 export interface ColiseumStateForRoom {
     enabled: boolean;

@@ -29,7 +29,7 @@ import {
 } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useLegacySendTypingAdapter as useSendTyping } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { composerCommandPayloadAtom } from '../../state/bmc-composer';
+import { composerCommandPayloadAtom } from '../../state/composer';
 import { uploadMedia } from '../media/utils/matrixMedia';
 import { HideMessageDialog } from '../steganography';
 import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';

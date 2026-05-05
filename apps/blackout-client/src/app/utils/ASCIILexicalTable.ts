@@ -44,7 +44,7 @@ export class ASCIILexicalTable {
     }
   }
 
-  private populateWidthToSize() {
+  private populateWidthToSize(): void {
     const chars = this.rangeCount(this.startCode, this.endCode);
     for (let i = 0, count = 0; i < this.maxStrWidth; i += 1) {
       count = count * chars + chars;

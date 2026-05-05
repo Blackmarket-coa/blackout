@@ -10,7 +10,7 @@ vi.mock('../../src/platform/pushGatewayConfig', () => ({
     getPushGatewayUrl: () => pushGatewayHolder.url,
 }));
 
-import { matrixClientAtom } from '../../src/app/state/bmc-auth';
+import { matrixClientAtom } from '../../src/app/state/auth';
 import { dispatchNativeBridgeEvent } from '../../src/platform/native-bridge-contract';
 import {
     MOBILE_PUSH_TOKEN_REGISTERED_STORAGE_KEY,

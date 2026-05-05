@@ -12,7 +12,7 @@ import { usePowerLevels, readPowerLevel } from '../../hooks/usePowerLevels';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useUserRoles } from '../../features/roles/useRoles';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import type { RightPanelType } from '../../state/bmc-navigation';
+import type { RightPanelType } from '../../state/navigation';
 import {
     getEventTimestamp,
     getMemberActivitySummary,

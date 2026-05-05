@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
-import { userIdAtom } from '../../state/bmc-auth';
+import { userIdAtom } from '../../state/auth';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';

@@ -13,7 +13,7 @@ import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
-import { authStateAtom, cryptoInitErrorAtom } from './app/state/bmc-auth';
+import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
 import { capabilityContextAtom } from './app/core/features/capabilityContext';
 import {
     buildCapabilityContextValue,

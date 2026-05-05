@@ -5,7 +5,7 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Provider, createStore } from 'jotai';
 import { RoomRightPanelHost } from '../../../../src/app/features/room/RoomRightPanelHost';
-import { rightPanelAtom, roomJumpTargetEventIdAtom } from '../../../../src/app/state/bmc-navigation';
+import { rightPanelAtom, roomJumpTargetEventIdAtom } from '../../../../src/app/state/navigation';
 
 vi.mock('../../../../src/app/hooks/bmc-useTimeline', () => ({
     useRoomTimeline: () => ({ data: [], loading: false, error: null }),

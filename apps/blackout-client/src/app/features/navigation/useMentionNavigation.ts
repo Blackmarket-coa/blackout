@@ -2,12 +2,12 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { joinedRoomsAtom } from '../../state/bmc-rooms';
+import { joinedRoomsAtom } from '../../state/rooms';
 import {
     selectedRoomIdAtom,
     roomJumpTargetEventIdAtom,
     roomUnreadMarkerEventIdAtom,
-} from '../../state/bmc-navigation';
+} from '../../state/navigation';
 import { getUnreadMarkerEventId } from '../right-panel/rightPanelUtils';
 
 export interface MentionTarget {

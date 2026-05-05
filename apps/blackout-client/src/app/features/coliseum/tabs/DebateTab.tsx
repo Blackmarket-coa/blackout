@@ -5,7 +5,7 @@ import {
     useColiseumTopic,
     useColiseumVerdict,
 } from '../hooks/useColiseumTopics';
-import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/bmc-coliseum';
+import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 import ColiseumCitationChip from '../ColiseumCitationChip';
 import {
     castColiseumVote as castColiseumVoteDefault,

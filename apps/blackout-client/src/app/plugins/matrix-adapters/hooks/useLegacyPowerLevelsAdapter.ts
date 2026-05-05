@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
-import { userIdAtom } from '../../../state/bmc-auth';
+import { userIdAtom } from '../../../state/auth';
 import { useLegacyRoomAdapter as useRoom } from './useLegacyRoomAdapter';
 import { canDoAction, getPowerLevel } from '../../../features/room-metadata/utils/roomMetadata';
 

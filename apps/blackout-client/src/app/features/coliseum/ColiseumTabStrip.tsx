@@ -1,6 +1,6 @@
 import React, { type CSSProperties } from 'react';
 import type { ColiseumTabId } from '@blackout/core';
-import { COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../../state/bmc-coliseum';
+import { COLISEUM_TAB_LABELS, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 
 export interface ColiseumTabStripProps {
     activeTab: ColiseumTabId;

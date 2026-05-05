@@ -1,7 +1,7 @@
 import { atom } from 'jotai';
 import { atomFamily, selectAtom } from 'jotai/utils';
 import type { Room } from 'matrix-js-sdk';
-import { allRoomsAtom } from './bmc-rooms';
+import { allRoomsAtom } from './rooms';
 
 export interface SpaceNode {
     roomId: string;

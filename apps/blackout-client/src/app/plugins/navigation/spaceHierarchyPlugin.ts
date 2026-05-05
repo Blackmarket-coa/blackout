@@ -3,7 +3,7 @@ import {
     useLegacySpaceTreeAdapter as useLegacySpaceTree,
     type HookResult,
 } from './useLegacySpaceHierarchyAdapter';
-import type { SpaceNode } from '../../state/bmc-spaces';
+import type { SpaceNode } from '../../state/spaces';
 import type { PluginDefinition } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 

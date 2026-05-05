@@ -1,7 +1,7 @@
 import { atom } from 'jotai';
 import { atomFamily, selectAtom } from 'jotai/utils';
 import type { Room } from 'matrix-js-sdk';
-import { matrixClientAtom } from './bmc-auth';
+import { matrixClientAtom } from './auth';
 
 /**
  * Snapshot of all rooms currently available from the active Matrix client.

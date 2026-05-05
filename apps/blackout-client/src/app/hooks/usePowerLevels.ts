@@ -43,13 +43,13 @@ const DEFAULT_POWER_LEVELS: Required<IPowerLevels> = {
 
 const fillMissingPowers = (powerLevels: IPowerLevels): IPowerLevels =>
   produce(powerLevels, (draftPl: IPowerLevels) => {
-    const keys = Object.keys(DEFAULT_POWER_LEVELS) as unknown as (keyof IPowerLevels)[];
-    keys.forEach((key) => {
+    const assignDefault = <K extends keyof IPowerLevels>(key: K): void => {
       if (draftPl[key] === undefined) {
         // eslint-disable-next-line no-param-reassign
-        draftPl[key] = DEFAULT_POWER_LEVELS[key] as any;
+        draftPl[key] = DEFAULT_POWER_LEVELS[key];
       }
-    });
+    };
+    (Object.keys(DEFAULT_POWER_LEVELS) as Array<keyof IPowerLevels>).forEach(assignDefault);
     if (draftPl.notifications && typeof draftPl.notifications.room !== 'number') {
       // eslint-disable-next-line no-param-reassign
       draftPl.notifications.room = DEFAULT_POWER_LEVELS.notifications.room;
