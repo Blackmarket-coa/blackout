@@ -1,10 +1,7 @@
-import React, { Suspense, lazy } from 'react';
+import React from 'react';
 import type { UISlotRegistry } from '../contracts';
-import { isRuntimePluginEnabled } from '../manifest';
 import { clientShellLayoutMetrics } from '../../pages/client/layoutMetrics';
 import { settingsLayoutMetrics } from '../../features/settings/SettingsPage';
-
-const LegacyClientLayout = lazy(() => import('../../pages/client/LegacyClientLayout'));
 
 export type ShellMonetizationSlotProps = {
     roomId: string;
@@ -63,19 +60,19 @@ export const buildShellMonetizationSlotProps = (roomId: string): ShellMonetizati
 export const resolveShellMonetizationSlotRegistry = (): ShellMonetizationSlotRegistry =>
     baselineMonetizationSlotRegistry;
 
+// The legacy fallback render path was retired in PR-10. The plugin
+// keeps its `id` and the monetization slot helpers because consumers
+// (right-panel, parity tests) still depend on those exports. The
+// legacy methods are now stubs returning `false` / `null` so any
+// stale call site fails closed rather than throwing.
 export const shellLayoutPlugin = {
     id: 'shell.legacy-layout' as const,
-    hasLegacyFallbackEnabled: (): boolean => isRuntimePluginEnabled('shell.legacy-layout'),
-    renderLegacyFallbackLayout: (): JSX.Element => (
-        <Suspense fallback={null}>
-            <LegacyClientLayout />
-        </Suspense>
-    ),
-    // Back-compat aliases while call sites migrate to explicit fallback naming.
+    hasLegacyFallbackEnabled: (): boolean => false,
+    renderLegacyFallbackLayout: (): JSX.Element | null => null,
     isEnabled(): boolean {
-        return this.hasLegacyFallbackEnabled();
+        return false;
     },
-    renderLegacyLayout(): JSX.Element {
-        return this.renderLegacyFallbackLayout();
+    renderLegacyLayout(): JSX.Element | null {
+        return null;
     },
 };

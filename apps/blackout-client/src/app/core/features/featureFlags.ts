@@ -42,11 +42,12 @@ export type FeatureFlags = {
     communities: boolean;
     plugins: boolean;
     /**
-     * AppShell mode-routing flag. When enabled, every destination renders
-     * inside the AppShell wrapper (bottom-tab bar + mode-aware top bar +
-     * dynamic right panel) and the canonical canopy/den path
-     * `/communities/:canopyId/dens/:denId` becomes the room target.
-     * Default off so the rollout is reversible without code revert.
+     * AppShell mode-routing flag. When enabled (default-on as of PR-10),
+     * every destination renders inside the AppShell wrapper (bottom-tab
+     * bar + mode-aware top bar + dynamic right panel) and the canonical
+     * canopy/den path `/communities/:canopyId/dens/:denId` is the room
+     * target. The legacy `LegacyClientLayout` + `/room/:roomId` redirect
+     * have been retired alongside this flag flip.
      */
     shellAppShell: boolean;
     /**
@@ -216,7 +217,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     home: true,
     communities: true,
     plugins: true,
-    shellAppShell: false,
+    shellAppShell: true,
     discoveryHomeFeed: false,
     topics: false,
     marketTab: false,
