@@ -47,6 +47,9 @@ const lifecycleEventTypes: LifecycleEventType[] = [
     'creator.payout.completed',
     'listing.signed_bundle.published',
     'creator.account.suspended',
+    'referral.attributed',
+    'ambassador.commission_paid',
+    'quest.reward_settled',
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {

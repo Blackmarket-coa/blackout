@@ -8,9 +8,7 @@ import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { NativeBridgeListener } from '../../src/platform/NativeBridgeListener';
 import { dispatchNativeBridgeEvent } from '../../src/platform/native-bridge-contract';
 
-const RoomScreen = () => (
-    <div data-testid="room-screen">{window.location.pathname}</div>
-);
+const RoomScreen = () => <div data-testid="room-screen">{window.location.pathname}</div>;
 
 const RouterRoot = () => (
     <>
@@ -26,7 +24,9 @@ const buildRouter = () =>
                 element: <RouterRoot />,
                 children: [
                     { path: '/', element: <div data-testid="home">home</div> },
-                    { path: '/room/:roomId', element: <RoomScreen /> },
+                    // PR-10 retired the legacy `/room/:roomId` route; the
+                    // bridge now lands on the canonical canopy/den shape.
+                    { path: '/communities/:canopyId/dens/:denId', element: <RoomScreen /> },
                 ],
             },
         ],
@@ -38,7 +38,7 @@ describe('NativeBridgeListener', () => {
         document.body.innerHTML = '';
     });
 
-    it('navigates to /room/:roomId when a deep_link_opened event arrives', async () => {
+    it('navigates to the canonical canopy/den path when a deep_link_opened event arrives', async () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
@@ -60,7 +60,9 @@ describe('NativeBridgeListener', () => {
             await Promise.resolve();
         });
 
-        expect(router.state.location.pathname).toBe('/room/' + encodeURIComponent('!alpha:blackout.coop'));
+        expect(router.state.location.pathname).toBe(
+            '/communities/-/dens/' + encodeURIComponent('!alpha:blackout.coop')
+        );
     });
 
     it('ignores deep links that do not target a room', async () => {
@@ -108,7 +110,7 @@ describe('NativeBridgeListener', () => {
         expect(router.state.location.pathname).toBe('/');
     });
 
-    it('routes notification_interacted to /room/:roomId', async () => {
+    it('routes notification_interacted to the canonical canopy/den path', async () => {
         const container = document.createElement('div');
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
@@ -129,7 +131,7 @@ describe('NativeBridgeListener', () => {
         });
 
         expect(router.state.location.pathname).toBe(
-            '/room/' + encodeURIComponent('!incident:blackout.coop')
+            '/communities/-/dens/' + encodeURIComponent('!incident:blackout.coop')
         );
     });
 

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWelcomeContent } from '../welcome/useWelcome';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { ONBOARDING_CREATOR_PATH } from '../../pages/paths';
 import {
     ONBOARDING_STEP_SEQUENCE,
     type CommunityIntent,
+    type OnboardingRole,
     type OnboardingStepId,
     useOnboardingProgress,
 } from './onboardingState';
@@ -21,6 +25,7 @@ type OnboardingFlowProps = {
 };
 
 const stepLabel: Record<OnboardingStepId, string> = {
+    choose_role: 'Choose your role',
     welcome_context: 'Welcome + context',
     community_selection: 'Community selection',
     channel_subscription: 'Channel subscription',
@@ -30,9 +35,12 @@ const stepLabel: Record<OnboardingStepId, string> = {
 export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlowProps) => {
     const welcome = useWelcomeContent(spaceId);
     const progress = useOnboardingProgress(spaceId);
+    const navigate = useNavigate();
+    const creatorPathEnabled = runtimeFeatureFlags.onboardingCreatorPath;
 
     const [startedAt, setStartedAt] = useState(Date.now());
     const [stepIndex, setStepIndex] = useState(0);
+    const [role, setRole] = useState<OnboardingRole | undefined>(undefined);
     const [communityIntent, setCommunityIntent] = useState<CommunityIntent | undefined>(undefined);
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     const [firstContributionPrompt, setFirstContributionPrompt] = useState('');
@@ -41,15 +49,19 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
 
     const currentStep = ONBOARDING_STEP_SEQUENCE[stepIndex];
     const featuredChannels = welcome.data.featuredChannels.map((channel) => channel.roomId);
-    const suggestedChannels = featuredChannels.length > 0 ? featuredChannels : ['#announcements', '#general'];
+    const suggestedChannels =
+        featuredChannels.length > 0 ? featuredChannels : ['#announcements', '#general'];
 
     useEffect(() => {
         let mounted = true;
         void progress.read().then((snapshot) => {
             if (!mounted) return;
-            const initialStep = snapshot.completed ? ONBOARDING_STEP_SEQUENCE.length - 1 : snapshot.stepIndex;
+            const initialStep = snapshot.completed
+                ? ONBOARDING_STEP_SEQUENCE.length - 1
+                : snapshot.stepIndex;
             setStartedAt(snapshot.startedAt);
             setStepIndex(initialStep);
+            setRole(snapshot.role);
             setCommunityIntent(snapshot.communityIntent);
             setSelectedChannels(snapshot.selectedChannels);
             setFirstContributionPrompt(snapshot.firstContributionPrompt ?? '');
@@ -60,7 +72,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 spaceId,
                 ONBOARDING_STEP_SEQUENCE[initialStep],
                 initialStep,
-                Date.now() - snapshot.startedAt,
+                Date.now() - snapshot.startedAt
             );
         });
 
@@ -100,10 +112,44 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
     }
 
     const canContinue =
-        currentStep !== 'community_selection' ||
-        typeof communityIntent !== 'undefined';
+        (currentStep !== 'community_selection' || typeof communityIntent !== 'undefined') &&
+        (currentStep !== 'choose_role' || typeof role !== 'undefined');
+
+    const selectRoleAndAdvance = async (nextRole: OnboardingRole) => {
+        setRole(nextRole);
+        trackOnboardingStepCompleted(spaceId, currentStep, stepIndex, elapsedMs);
+        await progress.savePatch({ role: nextRole });
+
+        if (nextRole === 'creator') {
+            // Hand off to the dedicated creator-onboarding wizard. The
+            // member flow stays under this component; the creator path
+            // is owned by the `onboarding-creator` feature module
+            // (PR 7) and lives at `/onboarding/creator`.
+            await progress.markCompleted(false);
+            trackOnboardingCompleted(spaceId, Date.now(), Date.now() - startedAt, false);
+            setDone(true);
+            onCompleted?.(false);
+            navigate(ONBOARDING_CREATOR_PATH);
+            return;
+        }
+
+        const nextStepIndex = Math.min(stepIndex + 1, ONBOARDING_STEP_SEQUENCE.length - 1);
+        await progress.savePatch({ stepIndex: nextStepIndex });
+        setStepIndex(nextStepIndex);
+        trackOnboardingStepViewed(
+            spaceId,
+            ONBOARDING_STEP_SEQUENCE[nextStepIndex],
+            nextStepIndex,
+            Date.now() - startedAt
+        );
+    };
 
     const continueToNextStep = async () => {
+        if (currentStep === 'choose_role' && role) {
+            await selectRoleAndAdvance(role);
+            return;
+        }
+
         trackOnboardingStepCompleted(spaceId, currentStep, stepIndex, elapsedMs);
         const nextStepIndex = Math.min(stepIndex + 1, ONBOARDING_STEP_SEQUENCE.length - 1);
         await progress.savePatch({
@@ -127,7 +173,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             spaceId,
             ONBOARDING_STEP_SEQUENCE[nextStepIndex],
             nextStepIndex,
-            Date.now() - startedAt,
+            Date.now() - startedAt
         );
     };
 
@@ -156,10 +202,69 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 </span>
             </header>
 
+            {currentStep === 'choose_role' ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        How would you like to use Blackout?
+                    </p>
+                    <div
+                        data-testid="onboarding-role-options"
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
+                    >
+                        <button
+                            type="button"
+                            data-testid="onboarding-role-member"
+                            onClick={() => void selectRoleAndAdvance('member')}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 12,
+                                padding: '12px 16px',
+                                background:
+                                    role === 'member' ? 'var(--accent-muted)' : 'var(--bg-surface)',
+                                textAlign: 'left',
+                                display: 'grid',
+                                gap: 4,
+                            }}
+                        >
+                            <strong>Member</strong>
+                            <small style={{ color: 'var(--text-secondary)' }}>
+                                Join existing communities and chat with friends.
+                            </small>
+                        </button>
+                        {creatorPathEnabled ? (
+                            <button
+                                type="button"
+                                data-testid="onboarding-role-creator"
+                                onClick={() => void selectRoleAndAdvance('creator')}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    borderRadius: 12,
+                                    padding: '12px 16px',
+                                    background:
+                                        role === 'creator'
+                                            ? 'var(--accent-muted)'
+                                            : 'var(--bg-surface)',
+                                    textAlign: 'left',
+                                    display: 'grid',
+                                    gap: 4,
+                                }}
+                            >
+                                <strong>Creator</strong>
+                                <small style={{ color: 'var(--text-secondary)' }}>
+                                    Sell products, run streams, and earn from your audience.
+                                </small>
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
+
             {currentStep === 'welcome_context' ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                     <h2 style={{ margin: 0 }}>{welcome.data.title}</h2>
-                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{welcome.data.description}</p>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        {welcome.data.description}
+                    </p>
                 </div>
             ) : null}
 
@@ -186,7 +291,9 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                                         border: '1px solid var(--border-default)',
                                         borderRadius: 999,
                                         padding: '4px 10px',
-                                        background: selected ? 'var(--accent-muted)' : 'var(--bg-surface)',
+                                        background: selected
+                                            ? 'var(--accent-muted)'
+                                            : 'var(--bg-surface)',
                                     }}
                                 >
                                     {option.label}
@@ -214,7 +321,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                                             setSelectedChannels((prev) =>
                                                 event.target.checked
                                                     ? Array.from(new Set([...prev, channelId]))
-                                                    : prev.filter((item) => item !== channelId),
+                                                    : prev.filter((item) => item !== channelId)
                                             );
                                         }}
                                     />
@@ -257,7 +364,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                             spaceId,
                             ONBOARDING_STEP_SEQUENCE[previousStep],
                             previousStep,
-                            Date.now() - startedAt,
+                            Date.now() - startedAt
                         );
                     }}
                     disabled={stepIndex === 0}
@@ -268,7 +375,11 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                     <button type="button" onClick={() => void skipFlow()}>
                         Skip for now
                     </button>
-                    <button type="button" disabled={!canContinue} onClick={() => void continueToNextStep()}>
+                    <button
+                        type="button"
+                        disabled={!canContinue}
+                        onClick={() => void continueToNextStep()}
+                    >
                         {stepIndex === ONBOARDING_STEP_SEQUENCE.length - 1 ? 'Finish' : 'Continue'}
                     </button>
                 </div>

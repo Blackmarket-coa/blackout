@@ -39,6 +39,7 @@ export interface CreateTipInput {
     giftSku?: string | null;
     providerId?: MarketplaceProviderId;
     fbmOrderId?: string | null;
+    metadata?: Record<string, unknown>;
 }
 
 export interface TipView {
@@ -59,6 +60,7 @@ export interface TipView {
     createdAt: string;
     capturedAt: string | null;
     refundedAt: string | null;
+    metadata?: Record<string, unknown>;
 }
 
 function nowIso(): string {
@@ -84,6 +86,7 @@ function toView(record: TipRecord): TipView {
         createdAt: record.createdAt,
         capturedAt: record.capturedAt,
         refundedAt: record.refundedAt,
+        metadata: record.metadata,
     };
 }
 
@@ -153,6 +156,7 @@ export function createTip(input: CreateTipInput): TipView {
         createdAt: nowIso(),
         capturedAt: null,
         refundedAt: null,
+        metadata: input.metadata,
     };
     db.insertTip(record);
 

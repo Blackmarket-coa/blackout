@@ -29,6 +29,7 @@ export type QuickActionId =
     | 'compose-invite'
     | 'compose-steganography-layer'
     | 'compose-stego-policy-lifecycle'
+    | 'compose-attach-product'
     | 'open-widget-townhall-sfu'
     | 'open-widget-widget-shell-layouts'
     | 'open-widget-media-pipeline'
@@ -83,6 +84,7 @@ export const FEATURE_ROUTE_ANCHORS = [
     'route-invite',
     'route-steg-hide',
     'route-steg-policy',
+    'route-attach-product',
     'route-widget-townhall-sfu',
     'route-widget-widget-shell-layouts',
     'route-widget-media-pipeline',
@@ -120,7 +122,7 @@ const ALL_SURFACES: QuickActionSurface[] = ['desktop', 'mobile'];
 const widgetEntry = (
     id: Extract<QuickActionId, `open-widget-${string}`>,
     label: string,
-    description: string,
+    description: string
 ): FeatureEntry => {
     const suffix = id.replace(/^open-widget-/, '');
     return {
@@ -184,31 +186,35 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
     widgetEntry(
         'open-widget-widget-shell-layouts',
         'Shell Layouts',
-        'Open the widget shell layout chooser.',
+        'Open the widget shell layout chooser.'
     ),
     widgetEntry(
         'open-widget-media-pipeline',
         'Media Pipeline',
-        'Open the media pipeline configuration panel.',
+        'Open the media pipeline configuration panel.'
     ),
     widgetEntry('open-widget-media-spoilers', 'Spoilers', 'Configure spoiler tag behaviors.'),
     widgetEntry(
         'open-widget-media-codeblocks',
         'Code Blocks',
-        'Configure code block rendering preferences.',
+        'Configure code block rendering preferences.'
     ),
     widgetEntry(
         'open-widget-media-link-previews',
         'Link Previews',
-        'Configure URL preview policy.',
+        'Configure URL preview policy.'
     ),
     widgetEntry(
         'open-widget-matrix-widget-compat',
         'Matrix Widgets',
-        'Open Matrix widget compatibility shim.',
+        'Open Matrix widget compatibility shim.'
     ),
     widgetEntry('open-widget-soundboard', 'Soundboard', 'Open the soundboard widget.'),
-    widgetEntry('open-widget-numbers-station', 'Numbers Station', 'Open the numbers station widget.'),
+    widgetEntry(
+        'open-widget-numbers-station',
+        'Numbers Station',
+        'Open the numbers station widget.'
+    ),
     widgetEntry('open-widget-stage-channels', 'Stage Channels', 'Open the stage channels widget.'),
     {
         id: 'compose-join',
@@ -246,13 +252,22 @@ export const FEATURE_UI_ENTRIES: FeatureEntry[] = [
         anchor: { kind: 'route', target: 'route-steg-policy' },
         uiEntry: 'route:route-steg-policy',
     },
+    {
+        id: 'compose-attach-product',
+        label: 'Attach product',
+        description: 'Attach an FBM product listing to the active room.',
+        presetKey: 'features.bmc.productAttachments',
+        surfaces: ALL_SURFACES,
+        anchor: { kind: 'route', target: 'route-attach-product' },
+        uiEntry: 'route:route-attach-product',
+    },
 ];
 
 export const QUICK_ACTION_COLLAPSED_STORAGE_KEY = 'blackout.quick_actions.collapsed';
 export const QUICK_ACTION_FIRST_RUN_STORAGE_KEY = 'blackout.quick_actions.seen';
 
 export function buildFeatureEntrypointRegistry(
-    options: BuildRegistryOptions = {},
+    options: BuildRegistryOptions = {}
 ): FeatureEntrypointRegistry {
     const preset = options.deploymentPreset ?? options.preset ?? 'sovereignty';
     const base = FEATURE_PRESET_BUNDLES[preset];
@@ -268,14 +283,14 @@ export function buildFeatureEntrypointRegistry(
 
 export function isFeatureFlagEnabled(
     key: EntitlementKey,
-    registry: FeatureEntrypointRegistry,
+    registry: FeatureEntrypointRegistry
 ): boolean {
     return resolveCapabilityAccess(key, registry.entitlementLayers).enabled;
 }
 
 export function getQuickActionEntriesForSurface(
     registry: FeatureEntrypointRegistry,
-    surface: QuickActionSurface,
+    surface: QuickActionSurface
 ): FeatureEntry[] {
     return registry.entries.filter((entry) => entry.surfaces.includes(surface));
 }
@@ -291,7 +306,7 @@ export function writeQuickActionCollapsed(collapsed: boolean): void {
 export function getUnseenQuickActionIds(visibleEntries: FeatureEntry[]): QuickActionId[] {
     const raw = globalThis.localStorage?.getItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY);
     const seen = new Set<QuickActionId>(
-        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean),
+        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean)
     );
     return visibleEntries.map((entry) => entry.id).filter((id) => !seen.has(id));
 }
@@ -300,7 +315,7 @@ export function markQuickActionsSeen(entryIds: QuickActionId[]): void {
     if (entryIds.length === 0) return;
     const raw = globalThis.localStorage?.getItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY);
     const seen = new Set<QuickActionId>(
-        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean),
+        (raw ? (JSON.parse(raw) as QuickActionId[]) : []).filter(Boolean)
     );
     entryIds.forEach((id) => seen.add(id));
     globalThis.localStorage?.setItem(QUICK_ACTION_FIRST_RUN_STORAGE_KEY, JSON.stringify([...seen]));
@@ -338,13 +353,11 @@ export function assertFeatureEntryInApprovedRegion(entry: FeatureEntry, target: 
         if (region === expectedRegion) continue;
         if (target.closest(`[data-shell-region="${region}"]`)) {
             throw new Error(
-                `feature entry "${entry.id}" must render only in ${expectedRegion}, but was placed in ${region}`,
+                `feature entry "${entry.id}" must render only in ${expectedRegion}, but was placed in ${region}`
             );
         }
     }
-    throw new Error(
-        `feature entry "${entry.id}" placed in forbidden custom shell region`,
-    );
+    throw new Error(`feature entry "${entry.id}" placed in forbidden custom shell region`);
 }
 
 const WIDGET_PANEL_ID_BY_ACTION = {
@@ -360,7 +373,8 @@ const WIDGET_PANEL_ID_BY_ACTION = {
     'open-widget-stage-channels': 'stage_channels',
 } as const satisfies Record<Extract<QuickActionId, `open-widget-${string}`>, string>;
 
-export type WidgetPanelId = (typeof WIDGET_PANEL_ID_BY_ACTION)[keyof typeof WIDGET_PANEL_ID_BY_ACTION];
+export type WidgetPanelId =
+    typeof WIDGET_PANEL_ID_BY_ACTION[keyof typeof WIDGET_PANEL_ID_BY_ACTION];
 
 export interface QuickActionInvocationContext {
     openSettings: () => void;
@@ -370,11 +384,12 @@ export interface QuickActionInvocationContext {
     openSearch: () => void;
     openWidgetPanel: (widgetId: WidgetPanelId) => void;
     queueCommand: (command: ComposerCapabilityCommand) => void;
+    openAttachProductDialog: () => void;
 }
 
 export function invokeQuickAction(
     actionId: QuickActionId,
-    context: QuickActionInvocationContext,
+    context: QuickActionInvocationContext
 ): void {
     switch (actionId) {
         case 'open-settings':
@@ -403,6 +418,9 @@ export function invokeQuickAction(
             return;
         case 'compose-stego-policy-lifecycle':
             context.queueCommand('/steg-policy');
+            return;
+        case 'compose-attach-product':
+            context.openAttachProductDialog();
             return;
         default: {
             const widgetId = WIDGET_PANEL_ID_BY_ACTION[actionId];

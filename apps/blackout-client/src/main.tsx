@@ -30,7 +30,6 @@ import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
-import { LegacyRoomRedirect } from './app/pages/shell/LegacyRoomRedirect';
 import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -129,13 +128,6 @@ const buildAppRouter = (capabilityContext: {
         flags: capabilityContext.flags as never,
     });
 
-    // Under the AppShell flag, the legacy `/room/:roomId` path forwards
-    // onto the canonical `/communities/-/dens/:roomId` shape so deep
-    // links and notification clicks land on the new URL form. With the
-    // flag off the legacy path keeps mounting ClientLayout directly so
-    // the rollout is fully reversible without code revert.
-    const legacyRoomElement = shellEnabled ? <LegacyRoomRedirect /> : <ClientLayout />;
-
     // PR 2 routing matrix: when both `shellAppShell` and
     // `discoveryHomeFeed` are on, `/` mounts HomeFeed (a chronological
     // merge of joined dens). Either flag off keeps the legacy
@@ -149,14 +141,15 @@ const buildAppRouter = (capabilityContext: {
         <ClientLayout />
     );
 
+    // Note: the legacy `/room/:roomId` route was retired in PR-10
+    // alongside the `shellAppShell` default-on flip. The canonical
+    // room URL is `/communities/:canopyId/dens/:denId`. Deep links
+    // hitting the old form will 404 after the year-long grace
+    // window from PR 1.
     const destinationRoutes = [
         {
             path: '/',
             element: homeElement,
-        },
-        {
-            path: '/room/:roomId',
-            element: legacyRoomElement,
         },
         {
             path: '/moderation/draupnir',

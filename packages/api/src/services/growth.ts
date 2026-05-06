@@ -111,6 +111,31 @@ class ReferralService {
         return undefined;
     }
 
+    /**
+     * Settles a referral once the marketplace webhook reports the
+     * reward tip captured. Idempotent: a referral already in `settled`
+     * is returned unchanged so webhook retries are safe.
+     */
+    markSettled(
+        referralId: string,
+        params: { rewardTipId: string; rewardCents?: number | null; settledAt?: string },
+    ): ReferralRecord | undefined {
+        const record = this.records.get(referralId);
+        if (!record) return undefined;
+        if (record.status === 'settled') return record;
+        const ts = nowIso();
+        const updated: ReferralRecord = {
+            ...record,
+            status: 'settled',
+            rewardTipId: params.rewardTipId,
+            rewardCents: params.rewardCents ?? record.rewardCents,
+            settledAt: params.settledAt ?? ts,
+            updatedAt: ts,
+        };
+        this.records.set(record.id, updated);
+        return updated;
+    }
+
     /** Test-only reset; matches the hook every other in-memory service exposes. */
     resetForTest(): void {
         this.records.clear();
@@ -336,6 +361,28 @@ class QuestsService {
 
     listCompletionsForUser(userId: string): QuestCompletionRecord[] {
         return [...this.completions.values()].filter((c) => c.userId === userId);
+    }
+
+    /**
+     * Records the reward tip id on a completion once the marketplace
+     * webhook reports the reward settled. Idempotent: a completion that
+     * already has a `rewardTipId` is returned unchanged.
+     */
+    markCompletionSettled(
+        completionId: string,
+        params: { rewardTipId: string },
+    ): QuestCompletionRecord | undefined {
+        for (const [key, record] of this.completions.entries()) {
+            if (record.id !== completionId) continue;
+            if (record.rewardTipId) return record;
+            const updated: QuestCompletionRecord = {
+                ...record,
+                rewardTipId: params.rewardTipId,
+            };
+            this.completions.set(key, updated);
+            return updated;
+        }
+        return undefined;
     }
 
     resetForTest(): void {

@@ -384,7 +384,15 @@ export interface CommunityBoostPledgeRecord {
   updatedAt: string;
 }
 
-export type TipContextKind = 'profile' | 'stream' | 'post' | 'channel_message' | 'aid_pool';
+export type TipContextKind =
+  | 'profile'
+  | 'stream'
+  | 'post'
+  | 'channel_message'
+  | 'aid_pool'
+  | 'referral_bonus'
+  | 'ambassador_commission'
+  | 'quest_reward';
 
 export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
 
@@ -406,4 +414,5 @@ export interface TipRecord {
   createdAt: string;
   capturedAt: string | null;
   refundedAt: string | null;
+  metadata?: Record<string, unknown>;
 }

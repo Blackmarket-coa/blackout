@@ -42,11 +42,12 @@ export type FeatureFlags = {
     communities: boolean;
     plugins: boolean;
     /**
-     * AppShell mode-routing flag. When enabled, every destination renders
-     * inside the AppShell wrapper (bottom-tab bar + mode-aware top bar +
-     * dynamic right panel) and the canonical canopy/den path
-     * `/communities/:canopyId/dens/:denId` becomes the room target.
-     * Default off so the rollout is reversible without code revert.
+     * AppShell mode-routing flag. When enabled (default-on as of PR-10),
+     * every destination renders inside the AppShell wrapper (bottom-tab
+     * bar + mode-aware top bar + dynamic right panel) and the canonical
+     * canopy/den path `/communities/:canopyId/dens/:denId` is the room
+     * target. The legacy `LegacyClientLayout` + `/room/:roomId` redirect
+     * have been retired alongside this flag flip.
      */
     shellAppShell: boolean;
     /**
@@ -85,6 +86,15 @@ export type FeatureFlags = {
      */
     productsAttachments: boolean;
     /**
+     * Composer affordance flag. When on, surfaces a `compose-attach-product`
+     * quick action that opens the existing AttachProductDialog and emits
+     * a `co.bmc.product_attachments` event into the active room. Builds
+     * on `productsAttachments` (the renderer/dialog plumbing) — that flag
+     * is a prerequisite, but this one stays separate so the composer
+     * affordance can roll out independently of the surface flag.
+     */
+    productsAttachComposer: boolean;
+    /**
      * Creator listing-management flag. Owns the
      * `/creator/listings` page that lets a creator publish, list, and
      * archive FBM listings via the existing `routes/creator.ts` API.
@@ -121,6 +131,14 @@ export type FeatureFlags = {
     growthReferrals: boolean;
     growthAmbassadors: boolean;
     growthQuests: boolean;
+    /**
+     * Quests-UI live-data swap. When on, `QuestsSlice` reads the
+     * active-quests list and the per-quest claim mutation from the
+     * existing growth client (PR 5 backend). When off, the slice
+     * keeps its placeholder rows so the surface stays demo-able even
+     * before the backend is reachable.
+     */
+    growthQuestsUi: boolean;
     /**
      * Events flag. Owns the `/events` directory and `/events/:canopyId/:eventId`
      * detail page. Events are encoded as `co.bmc.event` Matrix state
@@ -199,17 +217,19 @@ export const defaultFeatureFlags: FeatureFlags = {
     home: true,
     communities: true,
     plugins: true,
-    shellAppShell: false,
+    shellAppShell: true,
     discoveryHomeFeed: false,
     topics: false,
     marketTab: false,
     productsAttachments: false,
+    productsAttachComposer: false,
     creatorsListings: false,
     streamsViewer: false,
     creatorsStorefront: false,
     growthReferrals: false,
     growthAmbassadors: false,
     growthQuests: false,
+    growthQuestsUi: false,
     eventsV1: false,
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
@@ -532,6 +552,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
             nextFlags.federationSelfHost = false;
         }
+        if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'true') {
+            nextFlags.productsAttachComposer = true;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
+            nextFlags.productsAttachComposer = false;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS_UI === 'true') {
+            nextFlags.growthQuestsUi = true;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
+            nextFlags.growthQuestsUi = false;
+        }
         return nextFlags;
     }
 
@@ -735,6 +767,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
         nextFlags.federationSelfHost = false;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'true') {
+        nextFlags.productsAttachComposer = true;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
+        nextFlags.productsAttachComposer = false;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS_UI === 'true') {
+        nextFlags.growthQuestsUi = true;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
+        nextFlags.growthQuestsUi = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
