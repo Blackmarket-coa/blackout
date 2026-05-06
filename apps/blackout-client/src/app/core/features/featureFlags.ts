@@ -69,6 +69,27 @@ export type FeatureFlags = {
      * can toggle independently.
      */
     topics: boolean;
+    /**
+     * Market destination tab flag. When on, the existing
+     * `MarketplaceSlice` is mounted as a top-level destination at
+     * `/market` (and the AppShell bottom-tab "Market" entry resolves
+     * to a real route instead of a placeholder). Independent of the
+     * legacy `monetizationMarketplace` flag, which still gates the
+     * underlying buyer surface from PR 1.
+     */
+    marketTab: boolean;
+    /**
+     * Product-attachment surface flag. Owns the `co.bmc.product_attachments`
+     * Matrix custom-event renderer + attach dialog used to bind FBM
+     * listings onto messages, canopy state, and stream descriptions.
+     */
+    productsAttachments: boolean;
+    /**
+     * Creator listing-management flag. Owns the
+     * `/creator/listings` page that lets a creator publish, list, and
+     * archive FBM listings via the existing `routes/creator.ts` API.
+     */
+    creatorsListings: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -117,6 +138,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     shellAppShell: false,
     discoveryHomeFeed: false,
     topics: false,
+    marketTab: false,
+    productsAttachments: false,
+    creatorsListings: false,
 };
 
 /**
@@ -356,6 +380,24 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_TOPICS === 'false') {
             nextFlags.topics = false;
         }
+        if (env.BLACKOUT_MARKET_TAB === 'true') {
+            nextFlags.marketTab = true;
+        }
+        if (env.BLACKOUT_MARKET_TAB === 'false') {
+            nextFlags.marketTab = false;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
+            nextFlags.productsAttachments = true;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'false') {
+            nextFlags.productsAttachments = false;
+        }
+        if (env.BLACKOUT_CREATORS_LISTINGS === 'true') {
+            nextFlags.creatorsListings = true;
+        }
+        if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
+            nextFlags.creatorsListings = false;
+        }
         return nextFlags;
     }
 
@@ -481,6 +523,24 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_TOPICS === 'false') {
         nextFlags.topics = false;
+    }
+    if (env.BLACKOUT_MARKET_TAB === 'true') {
+        nextFlags.marketTab = true;
+    }
+    if (env.BLACKOUT_MARKET_TAB === 'false') {
+        nextFlags.marketTab = false;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
+        nextFlags.productsAttachments = true;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'false') {
+        nextFlags.productsAttachments = false;
+    }
+    if (env.BLACKOUT_CREATORS_LISTINGS === 'true') {
+        nextFlags.creatorsListings = true;
+    }
+    if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
+        nextFlags.creatorsListings = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

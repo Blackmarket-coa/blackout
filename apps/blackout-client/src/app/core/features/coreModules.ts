@@ -1,8 +1,10 @@
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
 import { communitiesFeature } from '../../features/communities';
+import { creatorsFeature } from '../../features/creators';
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
+import { marketFeature } from '../../features/market';
 import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
 import { forumFeature } from '../../features/forum';
@@ -105,5 +107,13 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: topicsFeature,
         flag: 'topics',
+    },
+    {
+        feature: marketFeature,
+        flag: 'marketTab',
+    },
+    {
+        feature: creatorsFeature,
+        flag: 'creatorsListings',
     },
 ];

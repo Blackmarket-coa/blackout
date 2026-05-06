@@ -85,6 +85,7 @@ export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';
 export const LIVE_STREAM_PATH = '/live/:streamId';
 export const CREATOR_DASHBOARD_PATH = '/creator';
+export const CREATOR_LISTINGS_PATH = '/creator/listings';
 export const CREATOR_STOREFRONT_PATH = '/creators/:userId';
 export const EVENTS_PATH = '/events';
 export const EVENT_DETAIL_PATH = '/events/:eventId';

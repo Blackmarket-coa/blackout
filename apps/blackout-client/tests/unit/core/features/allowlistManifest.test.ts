@@ -33,6 +33,8 @@ describe('feature allowlist manifest', () => {
             'plugins',
             'shell-destinations',
             'topics',
+            'market',
+            'creators',
         ]);
     });
 
