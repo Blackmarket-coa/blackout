@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackout-api-cors
+  labels: {{- include "blackout.labels" . | nindent 4 }}
+data:
+  CORS_ALLOWED_ORIGINS: {{ .Values.api.cors.allowedOrigins | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackout-api
+  labels: {{- include "blackout.labels" . | nindent 4 }}
+    app: blackout-api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      app: blackout-api
+  template:
+    metadata:
+      labels:
+        app: blackout-api
+        {{- include "blackout.labels" . | nindent 8 }}
+      {{- if .Values.api.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.api.port | quote }}
+        prometheus.io/path: "/metrics"
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: blackout-api
+      containers:
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.port }}
+              name: http
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.global.environment }}
+            - name: PORT
+              value: {{ .Values.api.port | quote }}
+            - name: AUTH_RATE_LIMIT_MAX
+              value: {{ .Values.api.rateLimit.authMax | quote }}
+            - name: CORS_ALLOW_CREDENTIALS
+              value: {{ .Values.api.cors.allowCredentials | quote }}
+            - name: CORS_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: blackout-api-cors
+                  key: CORS_ALLOWED_ORIGINS
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: blackout-api, key: DATABASE_URL }
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: { name: blackout-api, key: REDIS_URL }
+            - name: JWT_SECRET_PRIMARY
+              valueFrom:
+                secretKeyRef: { name: blackout-api, key: JWT_SECRET_PRIMARY }
+            - name: JWT_SECRET_ROLLOVER
+              valueFrom:
+                secretKeyRef:
+                  name: blackout-api
+                  key: JWT_SECRET_ROLLOVER
+                  optional: true
+            {{- if .Values.api.metrics.enabled }}
+            - name: INTERNAL_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef: { name: blackout-api, key: {{ .Values.api.metrics.tokenSecretKey }} }
+            {{- end }}
+            {{- if .Values.api.observability.sentry.enabled }}
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef: { name: blackout-api, key: SENTRY_DSN }
+            - name: SENTRY_TRACES_SAMPLE_RATE
+              value: {{ .Values.api.observability.sentry.tracesSampleRate | quote }}
+            {{- end }}
+            {{- if .Values.api.observability.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.api.observability.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: blackout-api
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackout-api
+  labels: {{- include "blackout.labels" . | nindent 4 }}
+    app: blackout-api
+spec:
+  selector:
+    app: blackout-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- if .Values.api.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: blackout-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: blackout-api
+  minReplicas: {{ .Values.api.hpa.minReplicas }}
+  maxReplicas: {{ .Values.api.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.api.hpa.targetCpuUtilization }}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: blackout-api
+spec:
+  minAvailable: {{ .Values.api.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: blackout-api

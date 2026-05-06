@@ -1,0 +1,51 @@
+# Canary overlay: brings up a single side-by-side replica of the api on the
+# image tag set in APP_CANARY_TAG, joined to the same private network so the
+# Caddy reverse proxy can weight traffic 90/10 between `app` and `app_canary`.
+#
+# The Caddyfile must declare `app:3000` and `app_canary:3000` upstreams in a
+# weighted_round_robin block. See deploy/docker/production/Caddyfile.
+#
+# Compose with:
+#   docker compose -f docker-compose.yml -f docker-compose.canary.yml up -d app_canary
+
+name: blackout-prod
+
+services:
+  app_canary:
+    image: ghcr.io/blackout/app:${APP_CANARY_TAG:-stable}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+      - ./.env.production
+    environment:
+      APP_ENV: production
+      NODE_ENV: production
+      APP_PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      CACHE_HOST: cache
+      CACHE_PORT: 6379
+      CACHE_PASSWORD_FILE: /run/secrets/cache_password
+      REDIS_URL: ${REDIS_URL:-redis://cache:6379}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
+      CANARY: "1"
+    secrets:
+      - db_password
+      - cache_password
+    depends_on:
+      db: { condition: service_healthy }
+      cache: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    labels:
+      - "blackout.role=canary"
+    networks:
+      - private
+      - edge

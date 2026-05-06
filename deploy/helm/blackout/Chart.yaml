@@ -1,0 +1,15 @@
+apiVersion: v2
+name: blackout
+description: Blackout API + supporting infrastructure (Redis, observability scrape annotations)
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+home: https://github.com/Blackmarket-coa/blackout
+sources:
+  - https://github.com/Blackmarket-coa/blackout
+maintainers:
+  - name: Blackout SRE
+keywords:
+  - blackout
+  - matrix
+  - federation

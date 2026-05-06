@@ -1,0 +1,70 @@
+{{- if .Values.canary.enabled -}}
+# Argo Rollouts replaces the standard Deployment with a canary-aware
+# rollout. The chart still emits the Deployment above; cluster operators
+# either install Argo Rollouts and let it adopt this Rollout (preferred),
+# or leave canary disabled and ship via straight rolling updates.
+#
+# Analysis runs against the api's /metrics endpoint via a separately
+# configured AnalysisTemplate; success criteria are encoded in
+# values.canary.analysis.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: blackout-api-rollout
+  labels: {{- include "blackout.labels" . | nindent 4 }}
+    app: blackout-api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels: { app: blackout-api }
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: blackout-api
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      steps:
+        {{- toYaml .Values.canary.steps | nindent 8 }}
+      analysis:
+        templates:
+          - templateName: blackout-api-canary-success
+        startingStep: 1
+        args:
+          - name: success-rate-threshold
+            value: {{ .Values.canary.analysis.successRateThreshold | quote }}
+          - name: p95-threshold-seconds
+            value: {{ .Values.canary.analysis.p95LatencyThresholdSeconds | quote }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: blackout-api-canary-success
+spec:
+  args:
+    - name: success-rate-threshold
+    - name: p95-threshold-seconds
+  metrics:
+    - name: success-rate
+      interval: 1m
+      successCondition: result[0] >= {{ printf "%s" "{{args.success-rate-threshold}}" | quote }}
+      provider:
+        prometheus:
+          address: http://prometheus.observability:9090
+          query: |
+            sum(rate(http_requests_total{job="blackout-api",status!~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total{job="blackout-api"}[2m]))
+    - name: p95-latency
+      interval: 1m
+      successCondition: result[0] <= {{ printf "%s" "{{args.p95-threshold-seconds}}" | quote }}
+      provider:
+        prometheus:
+          address: http://prometheus.observability:9090
+          query: |
+            histogram_quantile(
+              0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="blackout-api"}[2m])) by (le)
+            )
+{{- end }}
