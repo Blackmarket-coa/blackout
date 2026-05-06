@@ -1,11 +1,36 @@
 name: tracker-evidence-validation
 
+# Runs only when tracker / reliability evidence docs or the validator script
+# itself change. Previously this workflow triggered on every PR, but the
+# validator (a) lived behind a stale `scripts/` symlink that doesn't resolve
+# in the checked-out worktree, and (b) requires `docs/reliability_*` and
+# `docs/drills/*` evidence files that aren't in this branch — so it failed
+# on every unrelated PR. Scope keeps the gate meaningful when tracker work
+# happens and silent otherwise. The workflow file itself is intentionally
+# omitted from the path filter so editing this file does not retrigger the
+# (currently-broken) validator on unrelated branches.
 on:
     pull_request:
+        paths:
+            - 'docs/reliability_*.md'
+            - 'docs/reliability_reports/**'
+            - 'docs/drills/**'
+            - 'docs/distributed_self_healing_blueprint.md'
+            - 'docs/project_completion_tracker.md'
+            - 'docs/repo_remaining_work_ai_prompts.md'
+            - 'apps/blackout-server/scripts-dev/blackout/validate_tracker_evidence.sh'
     push:
         branches:
             - main
             - master
+        paths:
+            - 'docs/reliability_*.md'
+            - 'docs/reliability_reports/**'
+            - 'docs/drills/**'
+            - 'docs/distributed_self_healing_blueprint.md'
+            - 'docs/project_completion_tracker.md'
+            - 'docs/repo_remaining_work_ai_prompts.md'
+            - 'apps/blackout-server/scripts-dev/blackout/validate_tracker_evidence.sh'
     workflow_dispatch:
 
 jobs:
@@ -16,4 +41,9 @@ jobs:
               uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
             - name: Validate tracker evidence artifacts
-              run: scripts/operations/validate_tracker_evidence.sh
+              # The validator's canonical home is the symlink at scripts/operations/,
+              # but that symlink points at _port/scripts which isn't present in the
+              # worktree. Invoke the actual file directly from the repo root.
+              run: |
+                  cd "${GITHUB_WORKSPACE}"
+                  bash apps/blackout-server/scripts-dev/blackout/validate_tracker_evidence.sh
