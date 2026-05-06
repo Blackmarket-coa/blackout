@@ -36,6 +36,7 @@ export const featureModuleManifest = [
     'events',
     'onboarding-creator',
     'creators-dashboard',
+    'federation-self-host',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];

@@ -40,6 +40,7 @@ describe('feature allowlist manifest', () => {
             'events',
             'onboarding-creator',
             'creators-dashboard',
+            'federation-self-host',
         ]);
     });
 

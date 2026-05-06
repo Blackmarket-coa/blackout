@@ -154,6 +154,12 @@ export const ONBOARDING_ANALYTICS_PATH = '/onboarding/:spaceIdOrAlias/analytics/
  * isn't anchored to a single canopy; the wizard owns its own state.
  */
 export const ONBOARDING_CREATOR_PATH = '/onboarding/creator';
+/**
+ * PR 8 — Self-host wizard. Pure client-side template generator;
+ * lives outside the canopy/den routing because the user generating
+ * the blueprint doesn't need to belong to the canopy yet.
+ */
+export const FEDERATION_SELF_HOST_PATH = '/federation/self-host';
 
 export const _MONETIZATION_SUBSCRIPTIONS_PLANS_PATH = 'subscriptions/plans/';
 export const _MONETIZATION_BOOSTS_PATH = 'boosts/';

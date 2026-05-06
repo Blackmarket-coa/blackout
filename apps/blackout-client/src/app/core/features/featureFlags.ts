@@ -147,6 +147,13 @@ export type FeatureFlags = {
      * ledger.
      */
     creatorsDashboard: boolean;
+    /**
+     * Federation / self-host wizard (PR 8). Owns the
+     * `/federation/self-host` route — a docker-compose template
+     * generator for canopy admins who want to host their own
+     * Synapse + media-repo + Owncast stack.
+     */
+    federationSelfHost: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -207,6 +214,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
     creatorsDashboard: false,
+    federationSelfHost: false,
 };
 
 /**
@@ -518,6 +526,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
             nextFlags.creatorsDashboard = false;
         }
+        if (env.BLACKOUT_FEDERATION_SELF_HOST === 'true') {
+            nextFlags.federationSelfHost = true;
+        }
+        if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
+            nextFlags.federationSelfHost = false;
+        }
         return nextFlags;
     }
 
@@ -715,6 +729,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
         nextFlags.creatorsDashboard = false;
+    }
+    if (env.BLACKOUT_FEDERATION_SELF_HOST === 'true') {
+        nextFlags.federationSelfHost = true;
+    }
+    if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
+        nextFlags.federationSelfHost = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
