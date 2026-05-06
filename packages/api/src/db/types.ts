@@ -228,7 +228,11 @@ export type MarketplaceEntitlementKind =
   | 'asset_bundle'
   | 'software_license'
   | 'plugin_flag'
-  | 'subscription_tier';
+  | 'subscription_tier'
+  | 'post_unlock'
+  | 'event_ticket'
+  | 'role_grant'
+  | 'channel_access';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;
@@ -269,4 +273,137 @@ export interface MarketplaceListingsCacheRecord {
   providerId: MarketplaceProviderIdString;
   listings: unknown[];
   refreshedAt: string;
+}
+
+export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
+
+export interface CreatorSubscriptionTierRecord {
+  id: UUID;
+  creatorUserId: UUID;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmListingId: string | null;
+  status: CreatorSubscriptionTierStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreatorSubscriptionStatus =
+  | 'pending'
+  | 'active'
+  | 'canceled'
+  | 'refunded'
+  | 'expired';
+
+export interface CreatorSubscriptionRecord {
+  id: UUID;
+  subscriberUserId: UUID;
+  creatorUserId: UUID;
+  tierId: UUID;
+  providerId: MarketplaceProviderIdString;
+  fbmSubscriptionId: string | null;
+  status: CreatorSubscriptionStatus;
+  startedAt: string | null;
+  currentPeriodEndsAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CommunityBoostPledgeStatus =
+  | 'pending'
+  | 'active'
+  | 'canceled'
+  | 'refunded'
+  | 'expired';
+
+export type AidPoolStatus = 'open' | 'fulfilled' | 'closed';
+
+export interface AidPoolRecord {
+  id: UUID;
+  organizerUserId: UUID;
+  title: string;
+  description: string | null;
+  goalCents: number;
+  currency: string;
+  status: AidPoolStatus;
+  createdAt: string;
+  fulfilledAt: string | null;
+  closedAt: string | null;
+}
+
+export type AdRevenuePeriodStatus = 'draft' | 'allocated' | 'paid' | 'closed';
+
+export interface AdRevenuePeriodRecord {
+  id: UUID;
+  periodStart: string;
+  periodEnd: string;
+  totalCents: number;
+  currency: string;
+  status: AdRevenuePeriodStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AdRevenueShareStatus = 'pending_payout' | 'paid' | 'voided';
+
+export interface AdRevenueShareRecord {
+  id: UUID;
+  periodId: UUID;
+  creatorUserId: UUID;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmPayoutId: string | null;
+  status: AdRevenueShareStatus;
+  computedAt: string;
+  paidAt: string | null;
+}
+
+export interface CommunityBoostPledgeRecord {
+  id: UUID;
+  communityId: UUID;
+  pledgerUserId: UUID;
+  monthlyCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmSubscriptionId: string | null;
+  status: CommunityBoostPledgeStatus;
+  startedAt: string | null;
+  currentPeriodEndsAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TipContextKind = 'profile' | 'stream' | 'post' | 'channel_message' | 'aid_pool';
+
+export type TipStatus = 'pending' | 'captured' | 'refunded' | 'failed';
+
+export interface TipRecord {
+  id: UUID;
+  senderUserId: UUID;
+  recipientUserId: UUID;
+  contextKind: TipContextKind;
+  contextRef: string | null;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmOrderId: string | null;
+  status: TipStatus;
+  note: string | null;
+  giftSku: string | null;
+  createdAt: string;
+  capturedAt: string | null;
+  refundedAt: string | null;
 }

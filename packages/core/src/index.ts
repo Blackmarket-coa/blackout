@@ -8,6 +8,7 @@ export * from './feature-presets';
 export * from './customization';
 export * from './themes';
 export * from './marketplace';
+export * from './monetization';
 
 export * from './apps';
 

@@ -7,8 +7,10 @@ import {
 import type { CapabilityGate, FeatureRoute } from '../../core/features/types';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import {
+    getMonetizationAidPoolsPath,
     getMonetizationAppMarketplacePath,
     getMonetizationBoostsPath,
+    getMonetizationEarningsPath,
     getMonetizationMarketplacePath,
     getMonetizationPath,
     getMonetizationPayoutsRevenueAnalyticsPath,
@@ -16,8 +18,10 @@ import {
     getMonetizationSubscriptionsPlansPath,
     getMonetizationThemePacksPath,
 } from '../../pages/pathUtils';
+import { AidPoolsSlice } from './aidPools/AidPoolsSlice';
 import { AppsSlice } from './apps/AppsSlice';
 import { BoostsSlice } from './boosts/BoostsSlice';
+import { CreatorEarningsDashboard } from './components/CreatorEarningsDashboard';
 import {
     monetizationBoostsGate,
     monetizationCapabilityCatalog,
@@ -236,6 +240,30 @@ const MonetizationThemePacksRoutePage = () =>
         )
     );
 
+const MonetizationAidPoolsRoutePage = () =>
+    createElement(
+        MonetizationModuleShell,
+        {
+            active: 'aid-pools',
+            title: 'Aid pools',
+            subtitle:
+                'Mutual-aid crowdfunding. Contributions ride the tips pipeline; FBM takes a flat 3%.',
+        },
+        createElement(AidPoolsSlice)
+    );
+
+const MonetizationEarningsRoutePage = () =>
+    createElement(
+        MonetizationModuleShell,
+        {
+            active: 'earnings',
+            title: 'Creator earnings',
+            subtitle:
+                'Tips received, active subscribers, ad-revenue shares, and platform-fee summary.',
+        },
+        createElement(CreatorEarningsDashboard)
+    );
+
 export const monetizationOverviewRoutes: FeatureRoute[] = [
     { path: getMonetizationPath(), component: MonetizationOverviewRoutePage },
 ];
@@ -274,6 +302,14 @@ export const monetizationThemePacksRoutes: FeatureRoute[] = [
     { path: getMonetizationThemePacksPath(), component: MonetizationThemePacksRoutePage },
 ];
 
+export const monetizationAidPoolsRoutes: FeatureRoute[] = [
+    { path: getMonetizationAidPoolsPath(), component: MonetizationAidPoolsRoutePage },
+];
+
+export const monetizationEarningsRoutes: FeatureRoute[] = [
+    { path: getMonetizationEarningsPath(), component: MonetizationEarningsRoutePage },
+];
+
 export const monetizationRoutes: FeatureRoute[] = [
     ...monetizationOverviewRoutes,
     ...monetizationSubscriptionsRoutes,
@@ -283,4 +319,6 @@ export const monetizationRoutes: FeatureRoute[] = [
     ...monetizationAppMarketplaceRoutes,
     ...monetizationPayoutsRevenueAnalyticsRoutes,
     ...monetizationThemePacksRoutes,
+    ...monetizationAidPoolsRoutes,
+    ...monetizationEarningsRoutes,
 ];

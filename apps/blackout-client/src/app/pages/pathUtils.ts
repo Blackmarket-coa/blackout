@@ -25,8 +25,10 @@ import {
     CREATE_PATH,
     ONBOARDING_ANALYTICS_PATH,
     ONBOARDING_PATH,
+    MONETIZATION_AID_POOLS_PATH,
     MONETIZATION_APP_MARKETPLACE_PATH,
     MONETIZATION_BOOSTS_PATH,
+    MONETIZATION_EARNINGS_PATH,
     MONETIZATION_MARKETPLACE_PATH,
     MONETIZATION_PATH,
     MONETIZATION_PAYOUTS_REVENUE_ANALYTICS_PATH,
@@ -193,3 +195,5 @@ export const getMonetizationAppMarketplacePath = (): string => MONETIZATION_APP_
 export const getMonetizationPayoutsRevenueAnalyticsPath = (): string =>
     MONETIZATION_PAYOUTS_REVENUE_ANALYTICS_PATH;
 export const getMonetizationThemePacksPath = (): string => MONETIZATION_THEME_PACKS_PATH;
+export const getMonetizationAidPoolsPath = (): string => MONETIZATION_AID_POOLS_PATH;
+export const getMonetizationEarningsPath = (): string => MONETIZATION_EARNINGS_PATH;

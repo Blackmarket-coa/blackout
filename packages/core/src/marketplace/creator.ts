@@ -114,6 +114,10 @@ const entitlementKinds: EntitlementKind[] = [
     'software_license',
     'plugin_flag',
     'subscription_tier',
+    'post_unlock',
+    'event_ticket',
+    'role_grant',
+    'channel_access',
 ];
 
 export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {

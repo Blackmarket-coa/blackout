@@ -5,6 +5,8 @@ import { readJsonBody } from '../middleware/validate';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
+import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
+import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
 import type { FeatureModule } from './types';
 
 const streamKeySchema = z
@@ -165,9 +167,15 @@ function createStreamingRouter() {
     const stream = db.getStream(streamId);
     if (!stream) return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
 
-    const canAccess =
-      stream.visibility === 'public' ||
-      (subscriberId ? stream.allowedSubscriberIds.includes(subscriberId) : false);
+    let canAccess = stream.visibility === 'public';
+    if (!canAccess && subscriberId) {
+      const manualOverride = stream.allowedSubscriberIds.includes(subscriberId);
+      if (manualOverride) {
+        canAccess = true;
+      } else if (stream.visibility === 'member_only') {
+        canAccess = hasActiveCreatorSubscription(subscriberId, stream.creatorId);
+      }
+    }
 
     return c.json({
       streamId,
@@ -262,6 +270,24 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     return c.json(listDomainEvents('streaming'));
+  });
+
+  streaming.get('/streams/:streamId/revenue', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+    return c.json(aggregateStreamRevenue(c.req.param('streamId')));
+  });
+
+  streaming.get('/streams/:streamId/goal', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+    const targetCentsRaw = c.req.query('targetCents');
+    const currency = c.req.query('currency') ?? 'USD';
+    const targetCents = targetCentsRaw ? Number(targetCentsRaw) : NaN;
+    if (!Number.isFinite(targetCents) || !Number.isInteger(targetCents) || targetCents < 0) {
+      return c.json({ code: 'invalid_target', message: 'targetCents must be a non-negative integer' }, 400);
+    }
+    return c.json(evaluateStreamGoal(c.req.param('streamId'), targetCents, currency));
   });
 
   return streaming;

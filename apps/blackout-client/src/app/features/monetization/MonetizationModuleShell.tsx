@@ -1,7 +1,9 @@
 import { createElement, type ReactNode } from 'react';
 import {
+    getMonetizationAidPoolsPath,
     getMonetizationAppMarketplacePath,
     getMonetizationBoostsPath,
+    getMonetizationEarningsPath,
     getMonetizationMarketplacePath,
     getMonetizationPath,
     getMonetizationQuestsPath,
@@ -16,7 +18,9 @@ type MonetizationModuleKey =
     | 'quests'
     | 'marketplace'
     | 'apps'
-    | 'themes';
+    | 'themes'
+    | 'aid-pools'
+    | 'earnings';
 
 type MonetizationModuleShellProps = {
     active: MonetizationModuleKey;
@@ -27,12 +31,14 @@ type MonetizationModuleShellProps = {
 
 const navItems: Array<{ key: MonetizationModuleKey; label: string; href: string }> = [
     { key: 'overview', label: 'Overview', href: getMonetizationPath() },
+    { key: 'earnings', label: 'Earnings', href: getMonetizationEarningsPath() },
     {
         key: 'subscriptions',
         label: 'Subscriptions',
         href: getMonetizationSubscriptionsPlansPath(),
     },
     { key: 'boosts', label: 'Boosts', href: getMonetizationBoostsPath() },
+    { key: 'aid-pools', label: 'Aid pools', href: getMonetizationAidPoolsPath() },
     { key: 'quests', label: 'Quests', href: getMonetizationQuestsPath() },
     { key: 'marketplace', label: 'Marketplace', href: getMonetizationMarketplacePath() },
     { key: 'apps', label: 'Apps', href: getMonetizationAppMarketplacePath() },
