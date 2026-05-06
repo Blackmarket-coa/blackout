@@ -1,0 +1,34 @@
+# Example Prometheus scrape config for the Blackout production Compose stack.
+#
+# Copy to deploy/docker/production/monitoring/prometheus/prometheus.yml and
+# adjust the bearer-token file to point at your local secret.
+#
+# The blackout-api scrape target requires INTERNAL_METRICS_TOKEN to be set on
+# the api service. Prometheus authenticates via Authorization: Bearer <token>.
+
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: blackout-prod
+
+rule_files:
+  - /etc/prometheus/bridge-alert-rules.yml
+
+scrape_configs:
+  - job_name: blackout-api
+    scheme: http
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/internal_metrics_token
+    static_configs:
+      - targets:
+          - app:3000
+        labels:
+          service: blackout-api
+          tier: api
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

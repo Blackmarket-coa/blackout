@@ -17,6 +17,7 @@ import { issueRefreshToken, revokeRefreshToken, revokeAllForUser, rotateRefreshT
 import { consumePasswordResetToken, issuePasswordResetToken } from '../services/passwordReset';
 import { getMailer } from '../services/mailer';
 import { log } from '../telemetry/logger';
+import { authFailuresTotal, refreshTokenReusesTotal } from '../telemetry/metrics';
 
 const auth = new Hono();
 
@@ -116,6 +117,7 @@ auth.post('/login', async (c) => {
   // Run scrypt even when the user is missing so the two 401 branches have
   // equivalent timing and cannot be used to enumerate registered emails.
   if (!verifyPasswordConstantTime(password, user?.passwordHash)) {
+    authFailuresTotal.inc({ reason: 'invalid_credentials' });
     return c.json({ code: 'invalid_credentials', message: 'Invalid credentials' }, 401);
   }
 
@@ -140,6 +142,7 @@ auth.post('/token/refresh', async (c) => {
       return c.json({ token: access.token, refreshToken: outcome.rotated.token, userId: user.id });
     }
     case 'reuse_detected': {
+      refreshTokenReusesTotal.inc();
       log.warn('refresh_token_reuse_detected', { userId: outcome.userId, familyId: outcome.familyId });
       return c.json(
         { code: 'refresh_token_reused', message: 'Refresh token reuse detected; all sessions revoked. Re-authenticate.' },

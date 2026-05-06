@@ -1,6 +1,7 @@
 import type { Context, Next } from 'hono';
 import { readRedisRuntimeConfig } from '../config/redis';
 import { log } from '../telemetry/logger';
+import { rateLimitHitsTotal } from '../telemetry/metrics';
 
 export interface RateLimitOptions {
   bucket: string;
@@ -122,6 +123,7 @@ export function createRateLimit(options: RateLimitOptions) {
     }
 
     if (count > maxRequests) {
+      rateLimitHitsTotal.inc({ bucket });
       const retryAfter = Math.ceil(windowMs / 1000);
       c.header('Retry-After', String(retryAfter));
       return c.json({ code: 'rate_limited', message: 'Rate limit exceeded' }, 429);
