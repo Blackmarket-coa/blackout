@@ -52,7 +52,10 @@ export type LifecycleEventType =
     | 'purchase.chargebacked'
     | 'creator.payout.completed'
     | 'listing.signed_bundle.published'
-    | 'creator.account.suspended';
+    | 'creator.account.suspended'
+    | 'referral.attributed'
+    | 'ambassador.commission_paid'
+    | 'quest.reward_settled';
 
 export interface CatalogQuery {
     category?: MarketplaceCategory;
