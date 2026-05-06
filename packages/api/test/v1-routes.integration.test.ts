@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
 process.env.JWT_SECRET_PRIMARY =
   process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
@@ -319,6 +320,153 @@ test('v1 voice join is gated by backend subscription entitlement', async () => {
     body: JSON.stringify({ canopyId: 'canopy-1', channelId: 'chan-1', role: 'member' }),
   });
   assert.equal(allowed.status, 200);
+});
+
+test('v1 subscriptions pay-it-forward gift chain works end-to-end', async () => {
+  process.env.BLACKOUT_ADMIN_API_KEY = process.env.BLACKOUT_ADMIN_API_KEY ?? 'integration-admin';
+  const donor = await registerUser();
+  const recipient = await registerUser();
+
+  await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: `evt_donor_${Date.now()}`,
+      type: 'invoice.paid',
+      userId: donor.userId,
+      planCode: 'canopy_sprout_monthly',
+    }),
+  });
+
+  const donate = await app.request('/v1/subscriptions/forward', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${donor.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(donate.status, 201);
+  const donateBody = await json(donate);
+  const gift = donateBody.gift as { id: string; rootGiftId: string; chainDepth: number; status: string };
+  assert.equal(gift.status, 'pending');
+  assert.equal(gift.chainDepth, 0);
+  assert.equal(gift.rootGiftId, gift.id);
+
+  const available = await app.request('/v1/subscriptions/forward/available', {
+    headers: { authorization: `Bearer ${recipient.token}` },
+  });
+  assert.equal(available.status, 200);
+  const availableBody = await json(available);
+  const gifts = availableBody.gifts as Array<{ id: string; donorUserId: string }>;
+  assert.ok(gifts.some((g) => g.id === gift.id));
+  assert.ok(gifts.every((g) => g.donorUserId !== recipient.userId));
+
+  const claim = await app.request(`/v1/subscriptions/forward/${gift.id}/claim`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${recipient.token}` },
+  });
+  assert.equal(claim.status, 200);
+  const claimBody = await json(claim);
+  const claimedSub = claimBody.subscription as { tier: string; comped: boolean; entitlementActive: boolean };
+  assert.equal(claimedSub.tier, 'sprout');
+  assert.equal(claimedSub.comped, true);
+  assert.equal(claimedSub.entitlementActive, true);
+
+  const reclaim = await app.request(`/v1/subscriptions/forward/${gift.id}/claim`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${recipient.token}` },
+  });
+  assert.equal(reclaim.status, 409);
+
+  const ownClaim = await app.request(`/v1/subscriptions/forward/${gift.id}/claim`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${donor.token}` },
+  });
+  assert.equal(ownClaim.status, 409);
+
+  const seedDonor = await registerUser();
+  const passer = await registerUser();
+  const finalRecipient = await registerUser();
+
+  await app.request('/v1/subscriptions/webhooks/lago', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventId: `evt_seed_${Date.now()}`,
+      type: 'invoice.paid',
+      userId: seedDonor.userId,
+      planCode: 'canopy_sprout_monthly',
+    }),
+  });
+
+  const seedDonate = await app.request('/v1/subscriptions/forward', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${seedDonor.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(seedDonate.status, 201);
+  const seedGift = (await json(seedDonate)).gift as { id: string; rootGiftId: string };
+
+  const pass = await app.request(`/v1/subscriptions/forward/${seedGift.id}/pass`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${passer.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(pass.status, 201);
+  const passBody = await json(pass);
+  const previous = passBody.previous as { status: string; forwardedToGiftId: string };
+  const next = passBody.next as {
+    id: string;
+    status: string;
+    rootGiftId: string;
+    chainDepth: number;
+    donorUserId: string;
+  };
+  assert.equal(previous.status, 'forwarded');
+  assert.equal(next.status, 'pending');
+  assert.equal(next.chainDepth, 1);
+  assert.equal(next.rootGiftId, seedGift.rootGiftId);
+  assert.equal(previous.forwardedToGiftId, next.id);
+  assert.equal(next.donorUserId, passer.userId);
+
+  const finalClaim = await app.request(`/v1/subscriptions/forward/${next.id}/claim`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${finalRecipient.token}` },
+  });
+  assert.equal(finalClaim.status, 200);
+
+  const myGifts = await app.request('/v1/subscriptions/forward/me', {
+    headers: { authorization: `Bearer ${seedDonor.token}` },
+  });
+  assert.equal(myGifts.status, 200);
+  const myGiftsBody = await json(myGifts);
+  const donated = myGiftsBody.donated as Array<{ id: string }>;
+  assert.ok(donated.some((g) => g.id === seedGift.id));
+
+  const audit = await app.request(`/v1/subscriptions/admin/audit/${donor.userId}`, {
+    headers: { 'x-admin-api-key': process.env.BLACKOUT_ADMIN_API_KEY ?? '' },
+  });
+  assert.equal(audit.status, 200);
+  const auditBody = await json(audit);
+  const timeline = auditBody.timeline as Array<{ type: string; detail: Record<string, unknown> }>;
+  assert.ok(timeline.some((e) => e.type === 'gift.donated' && e.detail.giftId === gift.id));
+});
+
+test('v1 subscriptions forward rejects free-tier donors and unknown gifts', async () => {
+  const free = await registerUser();
+
+  const reject = await app.request('/v1/subscriptions/forward', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${free.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(reject.status, 409);
+  const rejectBody = await json(reject);
+  assert.equal(rejectBody.code, 'no_active_subscription');
+
+  const missing = await app.request('/v1/subscriptions/forward/gift_does_not_exist/claim', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${free.token}` },
+  });
+  assert.equal(missing.status, 404);
 });
 
 test('v1 subscriptions admin tools support comp + refund + audit timeline', async () => {
