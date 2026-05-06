@@ -39,6 +39,7 @@ describe('feature allowlist manifest', () => {
             'streams',
             'events',
             'onboarding-creator',
+            'creators-dashboard',
         ]);
     });
 

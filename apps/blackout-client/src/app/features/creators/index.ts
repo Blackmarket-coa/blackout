@@ -1,7 +1,13 @@
-export { creatorsFeature, creatorsStorefrontFeature } from './manifest';
-export { creatorsRoutes, creatorsListingsRoutes, creatorsStorefrontRoutes } from './routes';
+export { creatorsFeature, creatorsStorefrontFeature, creatorsDashboardFeature } from './manifest';
+export {
+    creatorsRoutes,
+    creatorsListingsRoutes,
+    creatorsStorefrontRoutes,
+    creatorsDashboardRoutes,
+} from './routes';
 export { default as CreatorListings } from './CreatorListings';
 export { default as CreatorStorefront } from './CreatorStorefront';
+export { default as CreatorDashboard } from './CreatorDashboard';
 export {
     fetchCreatorProviders,
     fetchMyCreatorListings,

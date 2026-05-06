@@ -140,6 +140,13 @@ export type FeatureFlags = {
      * inside the creator-onboarding flow.
      */
     onboardingMigrationCredits: boolean;
+    /**
+     * Creator dashboard mode (PR 9). Owns the `/creator` route — a
+     * landing page combining the existing earnings dashboard with
+     * ambassador / quest / referral status cards from the growth
+     * ledger.
+     */
+    creatorsDashboard: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -199,6 +206,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     eventsV1: false,
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
+    creatorsDashboard: false,
 };
 
 /**
@@ -504,6 +512,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
             nextFlags.onboardingMigrationCredits = false;
         }
+        if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
+            nextFlags.creatorsDashboard = true;
+        }
+        if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
+            nextFlags.creatorsDashboard = false;
+        }
         return nextFlags;
     }
 
@@ -695,6 +709,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
         nextFlags.onboardingMigrationCredits = false;
+    }
+    if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
+        nextFlags.creatorsDashboard = true;
+    }
+    if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
+        nextFlags.creatorsDashboard = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

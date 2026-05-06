@@ -3,10 +3,12 @@ import { creatorsListingsRoutes } from './routes';
 
 /**
  * Creator-side surfaces — `/creator/listings` (PR 3 listing
- * management). The public storefront at `/creators/:userId` is split
- * into its own `creatorsStorefrontFeature` (see `storefrontManifest.ts`)
- * so the two flags can toggle independently without falling foul of
- * the registry composer's single-flag-per-module gate.
+ * management). The public storefront at `/creators/:userId` lives in
+ * its own `creatorsStorefrontFeature` (see `storefrontManifest.ts`)
+ * and the `/creator` dashboard lives in `creatorsDashboardFeature`
+ * (see `dashboardManifest.ts`) so the three flags can toggle
+ * independently without falling foul of the registry composer's
+ * single-flag-per-module gate.
  */
 export const creatorsFeature: BlackoutFeature = {
     id: 'creators',
@@ -26,3 +28,4 @@ export const creatorsFeature: BlackoutFeature = {
 };
 
 export { creatorsStorefrontFeature } from './storefrontManifest';
+export { creatorsDashboardFeature } from './dashboardManifest';

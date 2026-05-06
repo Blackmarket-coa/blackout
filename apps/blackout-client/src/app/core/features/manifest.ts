@@ -35,6 +35,7 @@ export const featureModuleManifest = [
     'streams',
     'events',
     'onboarding-creator',
+    'creators-dashboard',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
