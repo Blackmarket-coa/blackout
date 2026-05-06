@@ -27,6 +27,7 @@ export const featureModuleManifest = [
     'home',
     'communities',
     'plugins',
+    'shell-destinations',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
@@ -34,7 +35,11 @@ export type FeatureModuleId = typeof featureModuleManifest[number];
 /**
  * Feature-module plugin allowlist. Order in this manifest is canonical runtime order.
  */
-export const featureModulePluginManifest = ['plugin.alpha', 'plugin.beta', 'plugin.monetization'] as const;
+export const featureModulePluginManifest = [
+    'plugin.alpha',
+    'plugin.beta',
+    'plugin.monetization',
+] as const;
 
 export type FeatureModulePluginId = typeof featureModulePluginManifest[number];
 

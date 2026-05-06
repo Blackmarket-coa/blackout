@@ -31,6 +31,7 @@ describe('feature allowlist manifest', () => {
             'home',
             'communities',
             'plugins',
+            'shell-destinations',
         ]);
     });
 

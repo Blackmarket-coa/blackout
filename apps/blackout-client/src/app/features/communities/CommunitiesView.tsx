@@ -2,12 +2,10 @@ import React, { useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { joinedRoomsAtom } from '../../state/rooms';
-import {
-    selectedRoomIdAtom,
-    selectedSpaceIdAtom,
-} from '../../state/navigation';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
+import { buildCommunitiesPath } from '../../pages/paths';
 
 export const CommunitiesView = () => {
     const rooms = useAtomValue(joinedRoomsAtom);
@@ -17,19 +15,19 @@ export const CommunitiesView = () => {
 
     const joinedSpaces = useMemo(
         () => rooms.filter((room) => room.getType() === 'm.space'),
-        [rooms],
+        [rooms]
     );
 
     const openSpace = (spaceId: string) => {
         setSelectedSpaceId(spaceId);
         setSelectedRoomId(null);
-        navigate('/');
+        navigate(buildCommunitiesPath(spaceId, null));
     };
 
     const openRoom = (roomId: string) => {
         setSelectedRoomId(roomId);
         setSelectedSpaceId(null);
-        navigate('/');
+        navigate(buildCommunitiesPath(null, roomId));
     };
 
     return (

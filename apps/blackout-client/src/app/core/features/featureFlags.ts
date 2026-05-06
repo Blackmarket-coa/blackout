@@ -41,6 +41,14 @@ export type FeatureFlags = {
     home: boolean;
     communities: boolean;
     plugins: boolean;
+    /**
+     * AppShell mode-routing flag. When enabled, every destination renders
+     * inside the AppShell wrapper (bottom-tab bar + mode-aware top bar +
+     * dynamic right panel) and the canonical canopy/den path
+     * `/communities/:canopyId/dens/:denId` becomes the room target.
+     * Default off so the rollout is reversible without code revert.
+     */
+    shellAppShell: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -86,6 +94,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     home: true,
     communities: true,
     plugins: true,
+    shellAppShell: false,
 };
 
 /**
@@ -307,6 +316,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_PLUGINS === 'false') {
             nextFlags.plugins = false;
         }
+        if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
+            nextFlags.shellAppShell = true;
+        }
+        if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
+            nextFlags.shellAppShell = false;
+        }
         return nextFlags;
     }
 
@@ -414,6 +429,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLUGINS === 'false') {
         nextFlags.plugins = false;
+    }
+    if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
+        nextFlags.shellAppShell = true;
+    }
+    if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
+        nextFlags.shellAppShell = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

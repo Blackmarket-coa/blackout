@@ -16,6 +16,7 @@ import { authThreadsFeature } from '../../features/auth-threads';
 import { educationFeature } from '../../features/education';
 import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
+import { shellDestinationsFeature } from '../../features/shell-destinations';
 import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import type { FeatureModule } from './types';
 
@@ -95,5 +96,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: pluginsFeature,
         flag: 'plugins',
+    },
+    {
+        feature: shellDestinationsFeature,
+        flag: 'shellAppShell',
     },
 ];
