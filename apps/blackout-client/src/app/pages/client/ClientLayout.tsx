@@ -37,6 +37,10 @@ import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegac
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import {
+    buildCommunitiesPath,
+    COMMUNITIES_PATH,
+} from '../paths';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -125,8 +129,23 @@ export const ClientLayout = () => {
     const inRouterContext = useInRouterContext();
     const location = useLocation();
     const navigate = useNavigate();
-    const { roomId: routeRoomId } = useParams<{ roomId?: string }>();
+    const {
+        roomId: routeRoomId,
+        canopyId: routeCanopyId,
+        denId: routeDenId,
+    } = useParams<{ roomId?: string; canopyId?: string; denId?: string }>();
     const hasHydratedNavigationRef = useRef(false);
+    /**
+     * The router has two URL shapes for the chat surface — legacy
+     * (`/room/:roomId`) and the canonical AppShell form
+     * (`/communities/:canopyId/dens/:denId`). The writer below picks the
+     * form to emit by inspecting the active pathname so a session that
+     * lands on one form keeps producing that form on subsequent
+     * room/canopy changes. New deep links favor the canopy/den shape.
+     */
+    const isCommunitiesUrlForm =
+        location.pathname === COMMUNITIES_PATH ||
+        location.pathname.startsWith(`${COMMUNITIES_PATH}/`);
 
     const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -221,14 +240,36 @@ export const ClientLayout = () => {
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
-        const nextSpaceId = params.get('space');
         const nextPanelParam = params.get('panel');
         const nextJumpTargetEventId = params.get('event');
         const nextRightPanel = rightPanels.includes(nextPanelParam as Exclude<RightPanelType, null>)
             ? (nextPanelParam as RightPanelType)
             : null;
+        // Canopy comes from the route param under the AppShell form, and
+        // from the `?space=` query under the legacy form. Both decode the
+        // ids the same way (the route param is URL-encoded, the query is
+        // raw). Sentinel "-" denotes no parent canopy.
+        const decodedRouteCanopy = (() => {
+            if (!routeCanopyId) return null;
+            if (routeCanopyId === '-') return null;
+            try {
+                return decodeURIComponent(routeCanopyId);
+            } catch {
+                return routeCanopyId;
+            }
+        })();
+        const decodedRouteDen = (() => {
+            if (!routeDenId) return null;
+            try {
+                return decodeURIComponent(routeDenId);
+            } catch {
+                return routeDenId;
+            }
+        })();
+        const nextSpaceId = decodedRouteCanopy ?? params.get('space');
+        const effectiveRoomId = decodedRouteDen ?? routeRoomId ?? null;
         const hasUrlNavigationState = Boolean(
-            routeRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId,
+            effectiveRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId,
         );
 
         if (!hasUrlNavigationState && !hasHydratedNavigationRef.current) {
@@ -236,7 +277,7 @@ export const ClientLayout = () => {
             return;
         }
 
-        setSelectedRoomId(routeRoomId ?? null);
+        setSelectedRoomId(effectiveRoomId);
         setSelectedSpaceId(nextSpaceId);
         setRightPanel(nextRightPanel);
         setJumpTargetEventId(nextJumpTargetEventId);
@@ -245,6 +286,8 @@ export const ClientLayout = () => {
         location.search,
         rightPanels,
         routeRoomId,
+        routeCanopyId,
+        routeDenId,
         setJumpTargetEventId,
         setRightPanel,
         setSelectedRoomId,
@@ -254,12 +297,21 @@ export const ClientLayout = () => {
     useEffect(() => {
         if (!hasHydratedNavigationRef.current) return;
 
-        const pathname = selectedRoomId ? `/room/${encodeURIComponent(selectedRoomId)}` : '/';
         const params = new URLSearchParams();
-
-        if (selectedSpaceId) params.set('space', selectedSpaceId);
+        // Under the AppShell URL form the canopy is encoded in the path,
+        // not as a query param, so we omit `?space=` to avoid two
+        // sources of truth on the same URL.
+        if (!isCommunitiesUrlForm && selectedSpaceId) {
+            params.set('space', selectedSpaceId);
+        }
         if (rightPanel) params.set('panel', rightPanel);
         if (jumpTargetEventId) params.set('event', jumpTargetEventId);
+
+        const pathname = isCommunitiesUrlForm
+            ? buildCommunitiesPath(selectedSpaceId, selectedRoomId)
+            : selectedRoomId
+              ? `/room/${encodeURIComponent(selectedRoomId)}`
+              : '/';
 
         const search = params.toString();
         const nextUrl = `${pathname}${search ? `?${search}` : ''}`;
@@ -268,6 +320,7 @@ export const ClientLayout = () => {
 
         void navigate({ pathname, search: search ? `?${search}` : '' });
     }, [
+        isCommunitiesUrlForm,
         jumpTargetEventId,
         location.pathname,
         location.search,

@@ -1,0 +1,230 @@
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { LIVE_PATH, CREATOR_STOREFRONT_PATH } from '../../pages/paths';
+import {
+    buildOwncastPlaylistUrl,
+    fetchOwncastOrigin,
+    fetchStream,
+    type StreamSummary,
+} from './streamsClient';
+
+// TipButton lives in `features/monetization/components` and pulls in
+// the wider commerce client. Keep it lazy so the viewer page renders
+// before tip wiring is ready — and so the registry-load tests don't
+// pull crypto in transitively (PR 1's lesson, applied again).
+const TipButtonLazy = lazy(() =>
+    import('../monetization/components/TipButton').then((mod) => ({
+        default: mod.TipButton,
+    }))
+);
+
+const layoutStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100%',
+    width: '100%',
+    background: 'var(--bg-surface, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+};
+
+const headerStyle: CSSProperties = {
+    padding: '12px 16px 8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+};
+
+const titleRow: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+};
+
+const titleStyle: CSSProperties = { margin: 0, fontSize: 18, fontWeight: 700 };
+
+const playerStyle: CSSProperties = {
+    width: '100%',
+    aspectRatio: '16 / 9',
+    background: '#000',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+};
+
+const tipRowStyle: CSSProperties = {
+    padding: '8px 16px',
+    display: 'flex',
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    borderTop: '1px solid var(--border-default, #374151)',
+};
+
+const breadcrumbStyle: CSSProperties = {
+    fontSize: 12,
+    color: 'var(--text-muted, #9ca3af)',
+};
+
+const liveBadge: CSSProperties = {
+    display: 'inline-flex',
+    padding: '2px 8px',
+    borderRadius: 999,
+    background: 'var(--text-danger, #ef4444)',
+    color: 'var(--text-primary, #f8fafc)',
+    fontSize: 11,
+    fontWeight: 700,
+};
+
+const errorStyle: CSSProperties = {
+    margin: '24px 16px',
+    color: 'var(--text-muted, #9ca3af)',
+};
+
+const PlayerPane = ({
+    stream,
+    origin,
+}: {
+    stream: StreamSummary;
+    origin: string | null;
+}): JSX.Element => {
+    const playlistUrl = origin ? buildOwncastPlaylistUrl(origin) : '';
+    const isLive = stream.state === 'live';
+
+    if (!isLive && !stream.replayPointer) {
+        return (
+            <div style={playerStyle} data-testid="livestream-player-offline">
+                <span style={{ opacity: 0.7 }}>Stream is offline.</span>
+            </div>
+        );
+    }
+
+    if (!playlistUrl && !stream.replayPointer) {
+        return (
+            <div style={playerStyle} data-testid="livestream-player-no-origin">
+                <span style={{ opacity: 0.7 }}>Loading player…</span>
+            </div>
+        );
+    }
+
+    // The browser plays HLS natively on Safari/iOS; everywhere else we
+    // rely on Owncast's embed page which handles its own player. Until
+    // we wire hls.js (deferred), use an iframe to the Owncast player.
+    const src =
+        isLive && origin ? `${origin.replace(/\/+$/, '')}/embed/video` : stream.replayPointer ?? '';
+
+    return (
+        <iframe
+            title={`Stream ${stream.id}`}
+            src={src}
+            style={{ ...playerStyle, border: 0 }}
+            data-testid="livestream-player-iframe"
+            data-stream-id={stream.id}
+            allow="autoplay; fullscreen"
+        />
+    );
+};
+
+/**
+ * `/live/:streamId` viewer. Renders the stream metadata, an Owncast
+ * embed (live or replay), and a TipButton context-bound to the stream.
+ * The Matrix den chat overlay + product shelf are deferred to the next
+ * viewer iteration — both depend on a stream→den association on the
+ * `StreamRecord` that doesn't exist yet (server-side TODO).
+ */
+export const LivestreamViewer = (): JSX.Element => {
+    const { streamId } = useParams<{ streamId: string }>();
+    const [stream, setStream] = useState<StreamSummary | null>(null);
+    const [origin, setOrigin] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!streamId) return;
+        let cancelled = false;
+        Promise.all([fetchStream(streamId), fetchOwncastOrigin().catch(() => null)])
+            .then(([streamRecord, originConfig]) => {
+                if (cancelled) return;
+                setStream(streamRecord);
+                if (originConfig && typeof originConfig.origin === 'string') {
+                    setOrigin(originConfig.origin);
+                }
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setError(err instanceof Error ? err.message : 'failed to load stream');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [streamId]);
+
+    if (error) {
+        return (
+            <section style={layoutStyle} data-shell-region="livestream-viewer">
+                <p style={errorStyle} data-testid="livestream-viewer-error">
+                    {error}{' '}
+                    <Link to={LIVE_PATH} style={{ color: 'var(--accent-primary, #3b82f6)' }}>
+                        Back to Live
+                    </Link>
+                    .
+                </p>
+            </section>
+        );
+    }
+
+    if (!stream) {
+        return (
+            <section style={layoutStyle} data-shell-region="livestream-viewer">
+                <p style={errorStyle}>Loading stream…</p>
+            </section>
+        );
+    }
+
+    const creatorPath = CREATOR_STOREFRONT_PATH.replace(
+        ':userId',
+        encodeURIComponent(stream.creatorId)
+    );
+
+    return (
+        <section
+            style={layoutStyle}
+            data-shell-region="livestream-viewer"
+            data-stream-id={stream.id}
+        >
+            <header style={headerStyle}>
+                <span style={breadcrumbStyle}>
+                    <Link to={LIVE_PATH} style={{ color: 'inherit' }}>
+                        Live
+                    </Link>{' '}
+                    /{' '}
+                    <Link to={creatorPath} style={{ color: 'inherit' }}>
+                        {stream.creatorId}
+                    </Link>
+                </span>
+                <div style={titleRow}>
+                    <h1 style={titleStyle}>{stream.title}</h1>
+                    {stream.state === 'live' ? <span style={liveBadge}>● LIVE</span> : null}
+                </div>
+                {stream.tags.length > 0 ? (
+                    <span style={breadcrumbStyle}>
+                        {stream.tags.map((tag) => `#${tag}`).join(' · ')}
+                    </span>
+                ) : null}
+            </header>
+            <PlayerPane stream={stream} origin={origin} />
+            <div style={tipRowStyle} data-testid="livestream-tip-row">
+                <Suspense fallback={null}>
+                    <TipButtonLazy
+                        recipientUserId={stream.creatorId}
+                        recipientLabel={stream.creatorId}
+                        contextKind="stream"
+                        contextRef={stream.id}
+                    />
+                </Suspense>
+            </div>
+        </section>
+    );
+};
+
+export default LivestreamViewer;

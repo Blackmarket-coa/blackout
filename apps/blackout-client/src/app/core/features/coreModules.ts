@@ -1,8 +1,14 @@
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
 import { communitiesFeature } from '../../features/communities';
+import {
+    creatorsFeature,
+    creatorsStorefrontFeature,
+    creatorsDashboardFeature,
+} from '../../features/creators';
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
+import { marketFeature } from '../../features/market';
 import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
 import { forumFeature } from '../../features/forum';
@@ -14,9 +20,15 @@ import { notificationsPresenceFeature } from '../../features/notifications-prese
 import { platformOpsFeature } from '../../features/platform-ops';
 import { authThreadsFeature } from '../../features/auth-threads';
 import { educationFeature } from '../../features/education';
+import { eventsFeature } from '../../features/events';
+import { federationSelfHostFeature } from '../../features/federation-selfhost';
+import { onboardingCreatorFeature } from '../../features/onboarding-creator';
 import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
+import { shellDestinationsFeature } from '../../features/shell-destinations';
 import { stegoToolkitFeature } from '../../features/stego-toolkit';
+import { streamsFeature } from '../../features/streams';
+import { topicsFeature } from '../../features/topics';
 import type { FeatureModule } from './types';
 
 export const coreFeatureModules: FeatureModule[] = [
@@ -95,5 +107,45 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: pluginsFeature,
         flag: 'plugins',
+    },
+    {
+        feature: shellDestinationsFeature,
+        flag: 'shellAppShell',
+    },
+    {
+        feature: topicsFeature,
+        flag: 'topics',
+    },
+    {
+        feature: marketFeature,
+        flag: 'marketTab',
+    },
+    {
+        feature: creatorsFeature,
+        flag: 'creatorsListings',
+    },
+    {
+        feature: creatorsStorefrontFeature,
+        flag: 'creatorsStorefront',
+    },
+    {
+        feature: streamsFeature,
+        flag: 'streamsViewer',
+    },
+    {
+        feature: eventsFeature,
+        flag: 'eventsV1',
+    },
+    {
+        feature: onboardingCreatorFeature,
+        flag: 'onboardingCreatorPath',
+    },
+    {
+        feature: creatorsDashboardFeature,
+        flag: 'creatorsDashboard',
+    },
+    {
+        feature: federationSelfHostFeature,
+        flag: 'federationSelfHost',
     },
 ];

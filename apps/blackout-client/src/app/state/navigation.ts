@@ -50,3 +50,36 @@ export const roomJumpTargetEventIdAtom = atom<string | null>(null);
  * Optional unread marker event for the selected room timeline.
  */
 export const roomUnreadMarkerEventIdAtom = atom<string | null>(null);
+
+/**
+ * Five canonical AppShell modes. The active mode is derived from the route,
+ * not held in state — components that need to react to mode read this atom
+ * which is updated by the AppShell on route change.
+ */
+export type ShellMode =
+    | 'discovery'
+    | 'community'
+    | 'livestream'
+    | 'marketplace'
+    | 'creator'
+    | 'inbox'
+    | 'events'
+    | 'other';
+
+/**
+ * Discriminated descriptor for the AppShell's right-panel slot. Each mode
+ * owns its descriptor variant; AppShell switch-renders by `kind`.
+ */
+export type RightPanelDescriptor =
+    | { kind: 'none' }
+    | { kind: 'community-info'; canopyId: string | null; denId: string | null }
+    | { kind: 'product-detail'; listingId: string }
+    | { kind: 'livestream-chat'; streamId: string }
+    | { kind: 'creator-profile'; userId: string }
+    | { kind: 'dm-thread'; roomId: string }
+    | { kind: 'event-rsvp'; eventId: string }
+    | { kind: 'legacy-room'; rightPanel: RightPanelType };
+
+export const shellModeAtom = atom<ShellMode>('other');
+
+export const rightPanelDescriptorAtom = atom<RightPanelDescriptor>({ kind: 'none' });

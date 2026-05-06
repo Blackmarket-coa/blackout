@@ -9,7 +9,9 @@ export type FeatureModuleId =
   | 'streaming'
   | 'discovery'
   | 'profile'
-  | 'stego';
+  | 'stego'
+  | 'topics'
+  | 'growth';
 
 export interface FeatureModule {
   id: FeatureModuleId;

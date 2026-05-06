@@ -229,6 +229,51 @@ export class DiscoveryService {
 
     return discoverable.sort((a, b) => getRelevanceScore(b, input.query) - getRelevanceScore(a, input.query));
   }
+
+  /**
+   * Aggregates the indexed entities into a frequency-sorted list of
+   * unique tags. Driven by the existing tag arrays on each entity, so
+   * this method is purely derivative — no separate tag store. Caps
+   * output at 50 by default; callers can override via `limit`.
+   */
+  listTopics(options: { limit?: number; region?: string } = {}): { tag: string; count: number }[] {
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 200));
+    const counts = new Map<string, number>();
+    for (const entity of this.index.values()) {
+      if (!isPubliclyDiscoverable(entity)) continue;
+      if (!canShowInRegion(entity, options.region)) continue;
+      for (const tag of entity.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+      .slice(0, limit);
+  }
+
+  /**
+   * Thin wrapper over `browse` that filters to canopies tagged with
+   * `tag`, ordered by recency (`activityScore` descending). Lives on
+   * the service so the route handler stays a one-liner and the
+   * canonical limit/region defaults are enforced in one place.
+   */
+  listCanopiesByTag(
+    tag: string,
+    options: { limit?: number; region?: string } = {},
+  ): DiscoveryEntity[] {
+    const normalizedTag = tag.trim().toLowerCase();
+    if (!normalizedTag) return [];
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 200));
+    const items = this.browse({
+      surface: 'search',
+      tag: normalizedTag,
+      entityType: 'canopy',
+      sort: 'activity',
+      region: options.region,
+    });
+    return items.slice(0, limit);
+  }
 }
 
 export const discoveryService = new DiscoveryService();

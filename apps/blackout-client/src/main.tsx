@@ -29,8 +29,17 @@ import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
+import { AppShell } from './app/pages/shell/AppShell';
+import { LegacyRoomRedirect } from './app/pages/shell/LegacyRoomRedirect';
 import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { trimTrailingSlash } from './app/utils/common';
+
+// HomeFeed is gated behind two flags and a small Matrix-tied data path
+// (`joinedRoomsAtom`); keeping it lazy avoids dragging the
+// matrix-js-sdk crypto chain into registry-load tests when the flag is
+// off — the same pattern PR 1 adopted for ClientLayout in
+// CommunitiesRoute.
+const HomeFeedLazy = React.lazy(() => import('./app/features/home/HomeFeed'));
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { initDesktopBridge } from './platform/initDesktopBridge';
@@ -76,8 +85,8 @@ const queryClient = new QueryClient();
  */
 const apiBaseUrl =
     typeof import.meta !== 'undefined'
-        ? ((import.meta as { env?: Record<string, string | undefined> }).env
-              ?.VITE_BLACKOUT_API_BASE ?? undefined)
+        ? (import.meta as { env?: Record<string, string | undefined> }).env
+              ?.VITE_BLACKOUT_API_BASE ?? undefined
         : undefined;
 const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
 const registryFetchers = buildRegistryFetchers(apiClient);
@@ -112,30 +121,59 @@ const RouterRoot = () => (
 const buildAppRouter = (capabilityContext: {
     capabilities: string[];
     flags: Record<string, boolean>;
-}) =>
-    createBrowserRouter([
+}) => {
+    const shellEnabled = capabilityContext.flags.shellAppShell === true;
+    const homeFeedEnabled = shellEnabled && capabilityContext.flags.discoveryHomeFeed === true;
+    const registryRoutes = buildRegistryRouteObjects({
+        capabilities: capabilityContext.capabilities,
+        flags: capabilityContext.flags as never,
+    });
+
+    // Under the AppShell flag, the legacy `/room/:roomId` path forwards
+    // onto the canonical `/communities/-/dens/:roomId` shape so deep
+    // links and notification clicks land on the new URL form. With the
+    // flag off the legacy path keeps mounting ClientLayout directly so
+    // the rollout is fully reversible without code revert.
+    const legacyRoomElement = shellEnabled ? <LegacyRoomRedirect /> : <ClientLayout />;
+
+    // PR 2 routing matrix: when both `shellAppShell` and
+    // `discoveryHomeFeed` are on, `/` mounts HomeFeed (a chronological
+    // merge of joined dens). Either flag off keeps the legacy
+    // ClientLayout — HomeFeed depends on the AppShell chrome for
+    // navigation, so we never mount it without the shell wrapper.
+    const homeElement = homeFeedEnabled ? (
+        <React.Suspense fallback={null}>
+            <HomeFeedLazy />
+        </React.Suspense>
+    ) : (
+        <ClientLayout />
+    );
+
+    const destinationRoutes = [
+        {
+            path: '/',
+            element: homeElement,
+        },
+        {
+            path: '/room/:roomId',
+            element: legacyRoomElement,
+        },
+        {
+            path: '/moderation/draupnir',
+            element: <DraupnirRoutePage />,
+        },
+        ...registryRoutes,
+    ];
+
+    return createBrowserRouter([
         {
             element: <RouterRoot />,
-            children: [
-                {
-                    path: '/',
-                    element: <ClientLayout />,
-                },
-                {
-                    path: '/room/:roomId',
-                    element: <ClientLayout />,
-                },
-                {
-                    path: '/moderation/draupnir',
-                    element: <DraupnirRoutePage />,
-                },
-                ...buildRegistryRouteObjects({
-                    capabilities: capabilityContext.capabilities,
-                    flags: capabilityContext.flags as never,
-                }),
-            ],
+            children: shellEnabled
+                ? [{ element: <AppShell />, children: destinationRoutes }]
+                : destinationRoutes,
         },
     ]);
+};
 
 // eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
@@ -149,10 +187,7 @@ const BootstrapStatus = () => {
         // input; changes (auth → capability fetch, env-flag toggle) rebuild the
         // router so newly-granted feature surfaces become navigable.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [
-            capabilityContext.capabilities.join('|'),
-            JSON.stringify(capabilityContext.flags),
-        ]
+        [capabilityContext.capabilities.join('|'), JSON.stringify(capabilityContext.flags)]
     );
 
     if (authState === 'logged_in') {

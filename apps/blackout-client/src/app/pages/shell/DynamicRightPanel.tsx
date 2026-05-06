@@ -1,0 +1,118 @@
+import { type CSSProperties } from 'react';
+import { useAtomValue } from 'jotai';
+import { rightPanelDescriptorAtom } from '../../state/navigation';
+
+const PANEL_STYLE: CSSProperties = {
+    width: 320,
+    minWidth: 320,
+    maxWidth: 360,
+    flexShrink: 0,
+    height: '100%',
+    background: 'var(--bg-surface, #0f172a)',
+    borderLeft: '1px solid var(--border-default, #374151)',
+    color: 'var(--text-primary, #f8fafc)',
+    overflow: 'auto',
+};
+
+const EMPTY_STYLE: CSSProperties = {
+    ...PANEL_STYLE,
+    display: 'grid',
+    placeItems: 'center',
+    color: 'var(--text-muted, #9ca3af)',
+    padding: 16,
+    fontSize: 13,
+};
+
+/**
+ * AppShell right-panel slot. Switch-renders by the current
+ * `rightPanelDescriptorAtom` so each destination owns the descriptor
+ * variant it produces, and the shell stays decoupled from feature
+ * internals.
+ *
+ * In PR 1 the descriptor surfaces are placeholders — they render
+ * lightweight "coming in PR N" copy. Subsequent PRs swap each block for
+ * the real component (community-info / livestream-chat / product-detail
+ * / creator-profile / dm-thread / event-rsvp) without touching the
+ * AppShell wiring.
+ */
+export const DynamicRightPanel = () => {
+    const descriptor = useAtomValue(rightPanelDescriptorAtom);
+
+    if (descriptor.kind === 'none') {
+        return null;
+    }
+
+    let body: JSX.Element;
+    switch (descriptor.kind) {
+        case 'community-info':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Community info</h2>
+                    <p>Members, pinned messages, and canopy settings appear here.</p>
+                </div>
+            );
+            break;
+        case 'product-detail':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Product</h2>
+                    <p>Listing detail + embedded checkout (PR 3).</p>
+                </div>
+            );
+            break;
+        case 'livestream-chat':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Stream chat</h2>
+                    <p>Matrix den timeline overlay + tip CTA (PR 4).</p>
+                </div>
+            );
+            break;
+        case 'creator-profile':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Creator</h2>
+                    <p>Storefront, subscriptions, streams (PR 4).</p>
+                </div>
+            );
+            break;
+        case 'dm-thread':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Direct message</h2>
+                    <p>Thread detail (PR 1).</p>
+                </div>
+            );
+            break;
+        case 'event-rsvp':
+            body = (
+                <div>
+                    <h2 style={{ marginTop: 0 }}>Event</h2>
+                    <p>RSVP and agenda (PR 6).</p>
+                </div>
+            );
+            break;
+        case 'legacy-room':
+            // ClientLayout owns its own right panel today; we hide the
+            // shell-level slot when the descriptor advertises a legacy
+            // panel so we never paint two side-by-side.
+            return null;
+        default: {
+            const exhaustiveCheck: never = descriptor;
+            void exhaustiveCheck;
+            body = <div />;
+        }
+    }
+
+    return (
+        <aside
+            style={EMPTY_STYLE}
+            data-shell-region="right-panel"
+            data-right-panel-kind={descriptor.kind}
+        >
+            <div style={{ width: '100%', maxWidth: 280 }}>{body}</div>
+        </aside>
+    );
+};
+
+export default DynamicRightPanel;

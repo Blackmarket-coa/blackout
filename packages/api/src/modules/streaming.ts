@@ -158,6 +158,87 @@ function createStreamingRouter() {
     return c.json(updated);
   });
 
+  // GET /v1/streaming/streams — list streams. Lightweight directory
+  // surface used by the AppShell `/live` route. Filters supported:
+  //   - state=live|offline (default: any)
+  //   - creatorId (defaults to "any")
+  //   - limit (1..200, default 50)
+  // Visibility-gated: only streams marked `public` are returned to
+  // unauthenticated readers; non-public streams require the requester
+  // to be the creator or an explicitly allowed subscriber. Pre-existing
+  // gating logic lives in `/streams/:streamId/access`; we mirror its
+  // behavior in-memory so the listing endpoint stays a one-shot read.
+  streaming.get('/streams', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const stateParam = c.req.query('state');
+    const creatorIdFilter = c.req.query('creatorId');
+    const limitRaw = c.req.query('limit');
+    const limit = (() => {
+      if (!limitRaw) return 50;
+      const parsed = Number.parseInt(limitRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return 50;
+      return Math.min(parsed, 200);
+    })();
+
+    const filterState = stateParam === 'live' || stateParam === 'offline' ? stateParam : null;
+    const all = db.listAllStreams();
+
+    const items = all
+      .filter((stream) => stream.visibility === 'public')
+      .filter((stream) => (filterState ? stream.state === filterState : true))
+      .filter((stream) => (creatorIdFilter ? stream.creatorId === creatorIdFilter : true))
+      .sort((a, b) => {
+        if (a.state !== b.state) return a.state === 'live' ? -1 : 1;
+        return b.updatedAt.localeCompare(a.updatedAt);
+      })
+      .slice(0, limit);
+
+    return c.json({
+      items: items.map((stream) => ({
+        id: stream.id,
+        creatorId: stream.creatorId,
+        state: stream.state,
+        title: stream.title,
+        category: stream.category,
+        tags: stream.tags,
+        visibility: stream.visibility,
+        latencyProfile: stream.latencyProfile,
+        replayPointer: stream.replayPointer,
+        updatedAt: stream.updatedAt,
+      })),
+    });
+  });
+
+  // GET /v1/streaming/streams/:streamId — single stream metadata
+  // for the LivestreamViewer. Mirrors the visibility filter from
+  // `/access`; returns 404 when the stream is missing or private.
+  streaming.get('/streams/:streamId', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const streamId = c.req.param('streamId');
+    const stream = db.getStream(streamId);
+    if (!stream) return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
+    if (stream.visibility === 'private') {
+      return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
+    }
+
+    return c.json({
+      id: stream.id,
+      creatorId: stream.creatorId,
+      state: stream.state,
+      title: stream.title,
+      category: stream.category,
+      tags: stream.tags,
+      visibility: stream.visibility,
+      latencyProfile: stream.latencyProfile,
+      replayPointer: stream.replayPointer,
+      updatedAt: stream.updatedAt,
+    });
+  });
+
   streaming.get('/streams/:streamId/access', (c) => {
     const denied = requireDomainCapability(c, 'streaming', 'read');
     if (denied) return denied;

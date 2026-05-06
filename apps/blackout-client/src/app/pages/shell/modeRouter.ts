@@ -1,0 +1,57 @@
+import type { ShellMode } from '../../state/navigation';
+
+/**
+ * Derives the active AppShell mode from a pathname. Pure function, no
+ * router dependencies, so it round-trips cleanly through tests and through
+ * the bottom-tab "active state" computation.
+ *
+ * The mapping is intentionally permissive about trailing segments: any
+ * `/communities/...` path resolves to "community", any `/market/...` to
+ * "marketplace", etc. Exact tab matching uses `isShellPathActive` below.
+ */
+export const resolveShellMode = (pathname: string): ShellMode => {
+    if (pathname === '/' || pathname.startsWith('/home')) return 'discovery';
+    if (pathname.startsWith('/explore')) return 'discovery';
+    if (pathname.startsWith('/topics')) return 'discovery';
+    if (pathname.startsWith('/communities')) return 'community';
+    if (pathname.startsWith('/live')) return 'livestream';
+    if (pathname.startsWith('/market')) return 'marketplace';
+    if (pathname.startsWith('/creator')) return 'creator';
+    if (
+        pathname.startsWith('/messages') ||
+        pathname.startsWith('/inbox') ||
+        pathname.startsWith('/direct')
+    ) {
+        return 'inbox';
+    }
+    if (pathname.startsWith('/events')) return 'events';
+    if (pathname.startsWith('/room/')) return 'community';
+    return 'other';
+};
+
+/**
+ * Returns true when `pathname` belongs to the `to` destination's URL
+ * subtree. Exposed so the BottomTabBar can highlight the active tab
+ * without knowing about specific destinations.
+ */
+export const isShellPathActive = (pathname: string, to: string): boolean => {
+    if (to === '/') return pathname === '/' || pathname.startsWith('/home');
+    const normalized = to.endsWith('/') ? to.slice(0, -1) : to;
+    return pathname === normalized || pathname.startsWith(`${normalized}/`);
+};
+
+/**
+ * Title shown in the mode-aware top bar. Kept here so the mapping is the
+ * single source of truth across MobileTopBar, AppShell tests, and any
+ * future analytics surface that wants a stable mode label.
+ */
+export const SHELL_MODE_TITLES: Record<ShellMode, string> = {
+    discovery: 'Home',
+    community: 'Community',
+    livestream: 'Live',
+    marketplace: 'Market',
+    creator: 'Creator',
+    inbox: 'Inbox',
+    events: 'Events',
+    other: '',
+};

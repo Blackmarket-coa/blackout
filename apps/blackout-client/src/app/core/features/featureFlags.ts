@@ -41,6 +41,119 @@ export type FeatureFlags = {
     home: boolean;
     communities: boolean;
     plugins: boolean;
+    /**
+     * AppShell mode-routing flag. When enabled, every destination renders
+     * inside the AppShell wrapper (bottom-tab bar + mode-aware top bar +
+     * dynamic right panel) and the canonical canopy/den path
+     * `/communities/:canopyId/dens/:denId` becomes the room target.
+     * Default off so the rollout is reversible without code revert.
+     */
+    shellAppShell: boolean;
+    /**
+     * HomeFeed surface flag. When enabled together with `shellAppShell`,
+     * the `/` route mounts a chronological merge of the user's joined
+     * dens instead of the legacy `ClientLayout`. Topic chips and the
+     * `/topics/:tag` deep links are gated by this flag too. Default off.
+     *
+     * Routing matrix (PR 2):
+     *   shellAppShell=off, discoveryHomeFeed=*    → `/` mounts ClientLayout
+     *   shellAppShell=on,  discoveryHomeFeed=off  → `/` mounts ClientLayout
+     *   shellAppShell=on,  discoveryHomeFeed=on   → `/` mounts HomeFeed
+     */
+    discoveryHomeFeed: boolean;
+    /**
+     * Topics surface flag. Owns the `/topics` and `/topics/:tag` routes
+     * and the topic-chip widget that renders inside HomeFeed. Default
+     * off; ships behind `discoveryHomeFeed` in PR 2 but exposed as a
+     * separate flag so future reorganization (Phase 4 Meilisearch swap)
+     * can toggle independently.
+     */
+    topics: boolean;
+    /**
+     * Market destination tab flag. When on, the existing
+     * `MarketplaceSlice` is mounted as a top-level destination at
+     * `/market` (and the AppShell bottom-tab "Market" entry resolves
+     * to a real route instead of a placeholder). Independent of the
+     * legacy `monetizationMarketplace` flag, which still gates the
+     * underlying buyer surface from PR 1.
+     */
+    marketTab: boolean;
+    /**
+     * Product-attachment surface flag. Owns the `co.bmc.product_attachments`
+     * Matrix custom-event renderer + attach dialog used to bind FBM
+     * listings onto messages, canopy state, and stream descriptions.
+     */
+    productsAttachments: boolean;
+    /**
+     * Creator listing-management flag. Owns the
+     * `/creator/listings` page that lets a creator publish, list, and
+     * archive FBM listings via the existing `routes/creator.ts` API.
+     */
+    creatorsListings: boolean;
+    /**
+     * Livestream viewer flag. Owns the `/live` directory and
+     * `/live/:streamId` viewer surface (Owncast HLS player + tip CTA +
+     * product shelf). Subscriber-side LiveKit integration is deferred
+     * to a follow-up PR.
+     */
+    streamsViewer: boolean;
+    /**
+     * Public creator storefront flag. Owns the `/creators/:userId`
+     * page (subscription tiers + listings + replays). Reads existing
+     * `/v1/creator-subs/creators/:userId/tiers` and
+     * `/v1/profile/:userId` endpoints; no new server surface.
+     */
+    creatorsStorefront: boolean;
+    /**
+     * Growth-engine flags (PR 5 — backend ledger primitives).
+     *
+     *   - growthReferrals: `/v1/growth/referrals` ledger.
+     *   - growthAmbassadors: `/v1/growth/ambassadors` tier ledger.
+     *   - growthQuests: `/v1/growth/quests` definitions + completions.
+     *
+     * All three share the same `growth.read` / `growth.write`
+     * capability gates and the `growth` feature module mount path.
+     * Tip-attribution (referral_bonus / ambassador_commission /
+     * quest_reward) wiring is intentionally deferred to a follow-up;
+     * PR 5 ships only the read/write surfaces so client UI work can
+     * land against a stable ledger.
+     */
+    growthReferrals: boolean;
+    growthAmbassadors: boolean;
+    growthQuests: boolean;
+    /**
+     * Events flag. Owns the `/events` directory and `/events/:canopyId/:eventId`
+     * detail page. Events are encoded as `co.bmc.event` Matrix state
+     * events emitted into a canopy / den; RSVPs are `m.reaction`s on
+     * the event state. No new server storage.
+     */
+    eventsV1: boolean;
+    /**
+     * Creator-onboarding fork (PR 7). Owns the dedicated
+     * `/onboarding/creator` route that walks new creators through
+     * handle / bio / FBM seller onboarding / first listing.
+     */
+    onboardingCreatorPath: boolean;
+    /**
+     * Discord/Twitch migration-credit grant flag (PR 7). Owns the
+     * `/v1/growth/migration-credits/*` endpoints and the redeem form
+     * inside the creator-onboarding flow.
+     */
+    onboardingMigrationCredits: boolean;
+    /**
+     * Creator dashboard mode (PR 9). Owns the `/creator` route — a
+     * landing page combining the existing earnings dashboard with
+     * ambassador / quest / referral status cards from the growth
+     * ledger.
+     */
+    creatorsDashboard: boolean;
+    /**
+     * Federation / self-host wizard (PR 8). Owns the
+     * `/federation/self-host` route — a docker-compose template
+     * generator for canopy admins who want to host their own
+     * Synapse + media-repo + Owncast stack.
+     */
+    federationSelfHost: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -86,6 +199,22 @@ export const defaultFeatureFlags: FeatureFlags = {
     home: true,
     communities: true,
     plugins: true,
+    shellAppShell: false,
+    discoveryHomeFeed: false,
+    topics: false,
+    marketTab: false,
+    productsAttachments: false,
+    creatorsListings: false,
+    streamsViewer: false,
+    creatorsStorefront: false,
+    growthReferrals: false,
+    growthAmbassadors: false,
+    growthQuests: false,
+    eventsV1: false,
+    onboardingCreatorPath: false,
+    onboardingMigrationCredits: false,
+    creatorsDashboard: false,
+    federationSelfHost: false,
 };
 
 /**
@@ -307,6 +436,102 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_PLUGINS === 'false') {
             nextFlags.plugins = false;
         }
+        if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
+            nextFlags.shellAppShell = true;
+        }
+        if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
+            nextFlags.shellAppShell = false;
+        }
+        if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'true') {
+            nextFlags.discoveryHomeFeed = true;
+        }
+        if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
+            nextFlags.discoveryHomeFeed = false;
+        }
+        if (env.BLACKOUT_TOPICS === 'true') {
+            nextFlags.topics = true;
+        }
+        if (env.BLACKOUT_TOPICS === 'false') {
+            nextFlags.topics = false;
+        }
+        if (env.BLACKOUT_MARKET_TAB === 'true') {
+            nextFlags.marketTab = true;
+        }
+        if (env.BLACKOUT_MARKET_TAB === 'false') {
+            nextFlags.marketTab = false;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
+            nextFlags.productsAttachments = true;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'false') {
+            nextFlags.productsAttachments = false;
+        }
+        if (env.BLACKOUT_CREATORS_LISTINGS === 'true') {
+            nextFlags.creatorsListings = true;
+        }
+        if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
+            nextFlags.creatorsListings = false;
+        }
+        if (env.BLACKOUT_STREAMS_VIEWER === 'true') {
+            nextFlags.streamsViewer = true;
+        }
+        if (env.BLACKOUT_STREAMS_VIEWER === 'false') {
+            nextFlags.streamsViewer = false;
+        }
+        if (env.BLACKOUT_CREATORS_STOREFRONT === 'true') {
+            nextFlags.creatorsStorefront = true;
+        }
+        if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
+            nextFlags.creatorsStorefront = false;
+        }
+        if (env.BLACKOUT_GROWTH_REFERRALS === 'true') {
+            nextFlags.growthReferrals = true;
+        }
+        if (env.BLACKOUT_GROWTH_REFERRALS === 'false') {
+            nextFlags.growthReferrals = false;
+        }
+        if (env.BLACKOUT_GROWTH_AMBASSADORS === 'true') {
+            nextFlags.growthAmbassadors = true;
+        }
+        if (env.BLACKOUT_GROWTH_AMBASSADORS === 'false') {
+            nextFlags.growthAmbassadors = false;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS === 'true') {
+            nextFlags.growthQuests = true;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
+            nextFlags.growthQuests = false;
+        }
+        if (env.BLACKOUT_EVENTS_V1 === 'true') {
+            nextFlags.eventsV1 = true;
+        }
+        if (env.BLACKOUT_EVENTS_V1 === 'false') {
+            nextFlags.eventsV1 = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'true') {
+            nextFlags.onboardingCreatorPath = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'false') {
+            nextFlags.onboardingCreatorPath = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'true') {
+            nextFlags.onboardingMigrationCredits = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
+            nextFlags.onboardingMigrationCredits = false;
+        }
+        if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
+            nextFlags.creatorsDashboard = true;
+        }
+        if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
+            nextFlags.creatorsDashboard = false;
+        }
+        if (env.BLACKOUT_FEDERATION_SELF_HOST === 'true') {
+            nextFlags.federationSelfHost = true;
+        }
+        if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
+            nextFlags.federationSelfHost = false;
+        }
         return nextFlags;
     }
 
@@ -414,6 +639,102 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PLUGINS === 'false') {
         nextFlags.plugins = false;
+    }
+    if (env.BLACKOUT_SHELL_APP_SHELL === 'true') {
+        nextFlags.shellAppShell = true;
+    }
+    if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
+        nextFlags.shellAppShell = false;
+    }
+    if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'true') {
+        nextFlags.discoveryHomeFeed = true;
+    }
+    if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
+        nextFlags.discoveryHomeFeed = false;
+    }
+    if (env.BLACKOUT_TOPICS === 'true') {
+        nextFlags.topics = true;
+    }
+    if (env.BLACKOUT_TOPICS === 'false') {
+        nextFlags.topics = false;
+    }
+    if (env.BLACKOUT_MARKET_TAB === 'true') {
+        nextFlags.marketTab = true;
+    }
+    if (env.BLACKOUT_MARKET_TAB === 'false') {
+        nextFlags.marketTab = false;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'true') {
+        nextFlags.productsAttachments = true;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACHMENTS === 'false') {
+        nextFlags.productsAttachments = false;
+    }
+    if (env.BLACKOUT_CREATORS_LISTINGS === 'true') {
+        nextFlags.creatorsListings = true;
+    }
+    if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
+        nextFlags.creatorsListings = false;
+    }
+    if (env.BLACKOUT_STREAMS_VIEWER === 'true') {
+        nextFlags.streamsViewer = true;
+    }
+    if (env.BLACKOUT_STREAMS_VIEWER === 'false') {
+        nextFlags.streamsViewer = false;
+    }
+    if (env.BLACKOUT_CREATORS_STOREFRONT === 'true') {
+        nextFlags.creatorsStorefront = true;
+    }
+    if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
+        nextFlags.creatorsStorefront = false;
+    }
+    if (env.BLACKOUT_GROWTH_REFERRALS === 'true') {
+        nextFlags.growthReferrals = true;
+    }
+    if (env.BLACKOUT_GROWTH_REFERRALS === 'false') {
+        nextFlags.growthReferrals = false;
+    }
+    if (env.BLACKOUT_GROWTH_AMBASSADORS === 'true') {
+        nextFlags.growthAmbassadors = true;
+    }
+    if (env.BLACKOUT_GROWTH_AMBASSADORS === 'false') {
+        nextFlags.growthAmbassadors = false;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS === 'true') {
+        nextFlags.growthQuests = true;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
+        nextFlags.growthQuests = false;
+    }
+    if (env.BLACKOUT_EVENTS_V1 === 'true') {
+        nextFlags.eventsV1 = true;
+    }
+    if (env.BLACKOUT_EVENTS_V1 === 'false') {
+        nextFlags.eventsV1 = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'true') {
+        nextFlags.onboardingCreatorPath = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'false') {
+        nextFlags.onboardingCreatorPath = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'true') {
+        nextFlags.onboardingMigrationCredits = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
+        nextFlags.onboardingMigrationCredits = false;
+    }
+    if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
+        nextFlags.creatorsDashboard = true;
+    }
+    if (env.BLACKOUT_CREATORS_DASHBOARD === 'false') {
+        nextFlags.creatorsDashboard = false;
+    }
+    if (env.BLACKOUT_FEDERATION_SELF_HOST === 'true') {
+        nextFlags.federationSelfHost = true;
+    }
+    if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
+        nextFlags.federationSelfHost = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

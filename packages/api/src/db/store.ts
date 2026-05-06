@@ -321,6 +321,10 @@ class InMemoryDb {
     return [...this.streams.values()].filter((stream) => stream.creatorId === creatorId);
   }
 
+  listAllStreams(): StreamRecord[] {
+    return [...this.streams.values()];
+  }
+
   createStreamSession(input: Omit<StreamSessionRecord, 'createdAt'>): StreamSessionRecord {
     const record: StreamSessionRecord = { ...input, createdAt: nowIso() };
     this.streamSessions.set(record.id, record);

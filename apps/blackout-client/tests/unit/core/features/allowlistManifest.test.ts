@@ -31,6 +31,16 @@ describe('feature allowlist manifest', () => {
             'home',
             'communities',
             'plugins',
+            'shell-destinations',
+            'topics',
+            'market',
+            'creators',
+            'creators-storefront',
+            'streams',
+            'events',
+            'onboarding-creator',
+            'creators-dashboard',
+            'federation-self-host',
         ]);
     });
 
