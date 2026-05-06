@@ -71,6 +71,17 @@ describe('feature entrypoint registry adapter', () => {
         ]);
     });
 
+    it('exposes compose-attach-product only when productAttachments preset key is enabled', () => {
+        const off = buildFeatureEntrypointRegistry({ preset: 'sovereignty' });
+        expect(off.entries.map((entry) => entry.id)).not.toContain('compose-attach-product');
+
+        const on = buildFeatureEntrypointRegistry({
+            preset: 'sovereignty',
+            flags: { 'features.bmc.productAttachments': true },
+        });
+        expect(on.entries.map((entry) => entry.id)).toContain('compose-attach-product');
+    });
+
     it('resolves entitlement precedence for free/pro/team/enterprise tiers', () => {
         const free = buildFeatureEntrypointRegistry({
             deploymentPreset: 'starter',
@@ -121,6 +132,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: () => calls.push('search'),
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
+            openAttachProductDialog: () => calls.push('attach-product'),
         });
 
         invokeQuickAction('compose-join', {
@@ -131,6 +143,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: () => calls.push('search'),
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
+            openAttachProductDialog: () => calls.push('attach-product'),
         });
 
         invokeQuickAction('compose-steganography-layer', {
@@ -141,6 +154,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: () => calls.push('search'),
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
+            openAttachProductDialog: () => calls.push('attach-product'),
         });
         invokeQuickAction('compose-stego-policy-lifecycle', {
             openSettings: () => calls.push('settings'),
@@ -150,6 +164,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: () => calls.push('search'),
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
+            openAttachProductDialog: () => calls.push('attach-product'),
         });
 
         invokeQuickAction('open-widget-media-pipeline', {
@@ -160,6 +175,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: () => calls.push('search'),
             openWidgetPanel: (widgetId) => calls.push(widgetId),
             queueCommand,
+            openAttachProductDialog: () => calls.push('attach-product'),
         });
 
         expect(calls).toEqual([
@@ -172,6 +188,24 @@ describe('feature entrypoint registry adapter', () => {
         expect(queueCommand).toHaveBeenCalledWith('/join');
         expect(queueCommand).toHaveBeenCalledWith('/steg-hide');
         expect(queueCommand).toHaveBeenCalledWith('/steg-policy');
+    });
+
+    it('routes compose-attach-product to openAttachProductDialog without queueing a slash command', () => {
+        const queueCommand = vi.fn((_command: ComposerCapabilityCommand) => {});
+        const openAttachProductDialog = vi.fn();
+        invokeQuickAction('compose-attach-product', {
+            openSettings: vi.fn(),
+            openDevices: vi.fn(),
+            toggleInbox: vi.fn(),
+            openThreads: vi.fn(),
+            openSearch: vi.fn(),
+            openWidgetPanel: vi.fn(),
+            queueCommand,
+            openAttachProductDialog,
+        });
+
+        expect(openAttachProductDialog).toHaveBeenCalledTimes(1);
+        expect(queueCommand).not.toHaveBeenCalled();
     });
 
     it('queues stego quick-actions to slash commands supported by composer command registry', () => {
@@ -187,6 +221,7 @@ describe('feature entrypoint registry adapter', () => {
             openSearch: vi.fn(),
             openWidgetPanel: vi.fn(),
             queueCommand,
+            openAttachProductDialog: vi.fn(),
         };
 
         invokeQuickAction('compose-steganography-layer', context);

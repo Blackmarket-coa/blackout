@@ -85,6 +85,15 @@ export type FeatureFlags = {
      */
     productsAttachments: boolean;
     /**
+     * Composer affordance flag. When on, surfaces a `compose-attach-product`
+     * quick action that opens the existing AttachProductDialog and emits
+     * a `co.bmc.product_attachments` event into the active room. Builds
+     * on `productsAttachments` (the renderer/dialog plumbing) — that flag
+     * is a prerequisite, but this one stays separate so the composer
+     * affordance can roll out independently of the surface flag.
+     */
+    productsAttachComposer: boolean;
+    /**
      * Creator listing-management flag. Owns the
      * `/creator/listings` page that lets a creator publish, list, and
      * archive FBM listings via the existing `routes/creator.ts` API.
@@ -204,6 +213,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     topics: false,
     marketTab: false,
     productsAttachments: false,
+    productsAttachComposer: false,
     creatorsListings: false,
     streamsViewer: false,
     creatorsStorefront: false,
@@ -532,6 +542,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
             nextFlags.federationSelfHost = false;
         }
+        if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'true') {
+            nextFlags.productsAttachComposer = true;
+        }
+        if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
+            nextFlags.productsAttachComposer = false;
+        }
         return nextFlags;
     }
 
@@ -735,6 +751,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_FEDERATION_SELF_HOST === 'false') {
         nextFlags.federationSelfHost = false;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'true') {
+        nextFlags.productsAttachComposer = true;
+    }
+    if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
+        nextFlags.productsAttachComposer = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

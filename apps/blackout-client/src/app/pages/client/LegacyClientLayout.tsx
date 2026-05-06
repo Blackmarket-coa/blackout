@@ -405,6 +405,10 @@ export const ClientLayout = () => {
             queueCommand: (command) => {
                 void handleCommandPicked(command);
             },
+            // Composer attach-product affordance lives in the AppShell-driven
+            // ClientLayout; the legacy layout is being phased out in PR-10.
+            // No-op here so the entry, even if surfaced, fails closed.
+            openAttachProductDialog: () => {},
         });
     };
 
@@ -500,7 +504,9 @@ export const ClientLayout = () => {
                                     data-testid="feature-widget-element-call-unavailable"
                                     style={{ color: 'var(--text-secondary)' }}
                                 >
-                                    Call unavailable. {liveInteractionDiagnostics.failures[0]?.message ?? 'Capability is disabled.'}
+                                    Call unavailable.{' '}
+                                    {liveInteractionDiagnostics.failures[0]?.message ??
+                                        'Capability is disabled.'}
                                 </small>
                             )}
                             {callEnabled &&

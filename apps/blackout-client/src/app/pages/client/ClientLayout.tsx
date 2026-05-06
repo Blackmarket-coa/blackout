@@ -1,4 +1,4 @@
-import React, { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -37,10 +37,7 @@ import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegac
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
-import {
-    buildCommunitiesPath,
-    COMMUNITIES_PATH,
-} from '../paths';
+import { buildCommunitiesPath, COMMUNITIES_PATH } from '../paths';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -64,6 +61,13 @@ import { OnboardingFlow } from '../../features/onboarding/OnboardingFlow';
 import { MessageSearch } from '../../features/message-search/MessageSearch';
 import { Lobby } from '../../features/lobby/Lobby';
 import { SpaceProvider } from '../../hooks/useSpace';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+
+const AttachProductDialog = lazy(() =>
+    import('../../components/product-attachment/AttachProductDialog').then((module) => ({
+        default: module.AttachProductDialog,
+    }))
+);
 
 const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'members',
@@ -108,7 +112,7 @@ export const ClientLayout = () => {
     const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
     const [quickOpen, setQuickOpen] = useState(false);
     const [quickActionsCollapsed, setQuickActionsCollapsed] = useState(() =>
-        readQuickActionCollapsed(),
+        readQuickActionCollapsed()
     );
     const [inboxOpen, setInboxOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -116,6 +120,7 @@ export const ClientLayout = () => {
     const [messageSearchOpen, setMessageSearchOpen] = useState(false);
     const messageSearchScrollRef = useRef<HTMLDivElement>(null);
     const [lobbyOpen, setLobbyOpen] = useState(false);
+    const [attachProductOpen, setAttachProductOpen] = useState(false);
     const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
@@ -154,9 +159,19 @@ export const ClientLayout = () => {
         () =>
             buildFeatureEntrypointRegistry({
                 preset: customization.activePreset,
-                flags: customization.features,
+                flags: {
+                    ...customization.features,
+                    // Bridge the runtime flag onto the preset gate so the
+                    // env-driven `BLACKOUT_PRODUCTS_ATTACH_COMPOSER` rollout
+                    // toggles the composer entry without a deployment-tier
+                    // upgrade. Hidden by default in every preset; visible
+                    // only when the flag is on.
+                    'features.bmc.productAttachments':
+                        customization.features['features.bmc.productAttachments'] ??
+                        runtimeFeatureFlags.productsAttachComposer,
+                },
             }),
-        [customization.activePreset, customization.features],
+        [customization.activePreset, customization.features]
     );
     const featureFlags = featureEntrypointRegistry.flags;
     const rolesEnabled = featureFlags['features.bmc.roles'] ?? false;
@@ -166,7 +181,7 @@ export const ClientLayout = () => {
     const coalitionDenState = useCoalitionStateForRoom(selectedRoomId ?? null);
     const rightPanels = useMemo(
         () => [...BASE_RIGHT_PANELS, ...(rolesEnabled ? (['roles'] as const) : [])],
-        [rolesEnabled],
+        [rolesEnabled]
     );
 
     useEffect(() => {
@@ -269,7 +284,7 @@ export const ClientLayout = () => {
         const nextSpaceId = decodedRouteCanopy ?? params.get('space');
         const effectiveRoomId = decodedRouteDen ?? routeRoomId ?? null;
         const hasUrlNavigationState = Boolean(
-            effectiveRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId,
+            effectiveRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId
         );
 
         if (!hasUrlNavigationState && !hasHydratedNavigationRef.current) {
@@ -310,8 +325,8 @@ export const ClientLayout = () => {
         const pathname = isCommunitiesUrlForm
             ? buildCommunitiesPath(selectedSpaceId, selectedRoomId)
             : selectedRoomId
-              ? `/room/${encodeURIComponent(selectedRoomId)}`
-              : '/';
+            ? `/room/${encodeURIComponent(selectedRoomId)}`
+            : '/';
 
         const search = params.toString();
         const nextUrl = `${pathname}${search ? `?${search}` : ''}`;
@@ -333,7 +348,7 @@ export const ClientLayout = () => {
     const orderedSpaces = useMemo(
         () =>
             [...spaces].sort((a, b) => spaceOrder.indexOf(a.roomId) - spaceOrder.indexOf(b.roomId)),
-        [spaceOrder, spaces],
+        [spaceOrder, spaces]
     );
 
     const onboardingSpaceId = useMemo(() => {
@@ -358,35 +373,35 @@ export const ClientLayout = () => {
         return homeRooms.filter(
             (room) =>
                 room.roomId.includes(selectedSpaceId.slice(1, 5)) ||
-                room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase()),
+                room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase())
         );
     }, [homeRooms, selectedSpaceId, settings.mobileRoomListScope]);
 
     const deadDrop = useDeadDrop(selectedRoomId ?? '');
     const activeRoomState = useRoom(selectedRoomId ?? '');
     const timelineState = useRoomTimeline(selectedRoomId ?? '');
-    const myPresence = userId ? (client.getUser(userId)?.presence ?? 'offline') : 'offline';
+    const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
 
     const groups = useMemo(
         () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
-        [rooms, selectedSpaceId, selectedSpaceRooms],
+        [rooms, selectedSpaceId, selectedSpaceRooms]
     );
 
     const canOpenModerationDashboard = useMemo(
         () => hasModeratorAccess(rooms, userId),
-        [rooms, userId],
+        [rooms, userId]
     );
     const desktopQuickActions = useMemo(
         () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'desktop'),
-        [featureEntrypointRegistry],
+        [featureEntrypointRegistry]
     );
     const mobileQuickActions = useMemo(
         () => getQuickActionEntriesForSurface(featureEntrypointRegistry, 'mobile'),
-        [featureEntrypointRegistry],
+        [featureEntrypointRegistry]
     );
     const unseenQuickActionIds = useMemo(
         () => getUnseenQuickActionIds(featureEntrypointRegistry.entries),
-        [featureEntrypointRegistry.entries],
+        [featureEntrypointRegistry.entries]
     );
 
     useEffect(() => {
@@ -456,14 +471,40 @@ export const ClientLayout = () => {
             queueCommand: (command) => {
                 void handleCommandPicked(command);
             },
+            openAttachProductDialog: () => setAttachProductOpen(true),
         });
+    };
+
+    const handleProductAttach = (event: {
+        type: string;
+        content: { version: 1; listings: ReadonlyArray<unknown> };
+    }): void => {
+        if (!selectedRoomId) {
+            setComposerCommandStatus(
+                `Select a ${BLACKOUT_TERMS.den.singular} before attaching a product.`
+            );
+            return;
+        }
+        void (
+            client as unknown as {
+                sendEvent: (
+                    roomId: string,
+                    eventType: string,
+                    content: Record<string, unknown>
+                ) => Promise<unknown>;
+            }
+        ).sendEvent(selectedRoomId, event.type, {
+            version: event.content.version,
+            listings: [...event.content.listings],
+        });
+        setComposerCommandStatus('Product attachment queued.');
     };
 
     const handleCommandPicked = async (command: string) => {
         const roomScopedCommands = new Set(['/invite', '/topic', '/me', '/shrug', '/leave']);
         if (roomScopedCommands.has(command) && !selectedRoomId) {
             setComposerCommandStatus(
-                `Select a ${BLACKOUT_TERMS.den.singular} before using ${command}.`,
+                `Select a ${BLACKOUT_TERMS.den.singular} before using ${command}.`
             );
             return;
         }
@@ -478,7 +519,7 @@ export const ClientLayout = () => {
                 setComposerCommandStatus(
                     error instanceof Error
                         ? `Failed to leave ${BLACKOUT_TERMS.den.singular}: ${error.message}`
-                        : `Failed to leave ${BLACKOUT_TERMS.den.singular}.`,
+                        : `Failed to leave ${BLACKOUT_TERMS.den.singular}.`
                 );
             }
             return;
@@ -486,11 +527,11 @@ export const ClientLayout = () => {
 
         if (command === '/join') {
             const roomAlias = window.prompt(
-                `Enter a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID to join`,
+                `Enter a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID to join`
             );
             if (!roomAlias?.trim()) {
                 setComposerCommandStatus(
-                    `Join cancelled: a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID is required.`,
+                    `Join cancelled: a ${BLACKOUT_TERMS.den.singular} alias or Matrix room ID is required.`
                 );
                 return;
             }
@@ -503,7 +544,7 @@ export const ClientLayout = () => {
                 setComposerCommandStatus(
                     error instanceof Error
                         ? `Failed to join ${BLACKOUT_TERMS.den.singular}: ${error.message}`
-                        : `Failed to join ${BLACKOUT_TERMS.den.singular}.`,
+                        : `Failed to join ${BLACKOUT_TERMS.den.singular}.`
                 );
             }
             return;
@@ -574,7 +615,9 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
-                        {coalitionEnabled && coalitionDenState.enabled && roomSurface === 'coalition' ? (
+                        {coalitionEnabled &&
+                        coalitionDenState.enabled &&
+                        roomSurface === 'coalition' ? (
                             <CoalitionView
                                 denId={selectedRoomId}
                                 canopyId={coalitionDenState.canopyId ?? selectedSpaceId ?? null}
@@ -584,7 +627,8 @@ export const ClientLayout = () => {
                                         : undefined
                                 }
                                 scopeLabel={`Den · ${
-                                    rooms.find((room) => room.roomId === selectedRoomId)?.name ?? selectedRoomId
+                                    rooms.find((room) => room.roomId === selectedRoomId)?.name ??
+                                    selectedRoomId
                                 }`}
                             />
                         ) : forumEnabled && isForumRoom && roomSurface === 'forum' ? (
@@ -666,8 +710,8 @@ export const ClientLayout = () => {
                 gridTemplateColumns: desktop
                     ? `${layout.spaceColumnWidth}px ${layout.roomColumnWidth}px 1fr`
                     : mobile
-                      ? '1fr'
-                      : '1fr',
+                    ? '1fr'
+                    : '1fr',
                 background: 'var(--bg-surface)',
                 color: 'var(--text-primary)',
             }}
@@ -813,8 +857,8 @@ export const ClientLayout = () => {
                             }}
                         >
                             {selectedSpaceId
-                                ? (rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
-                                  BLACKOUT_TERMS.canopy.title)
+                                ? rooms.find((room) => room.roomId === selectedSpaceId)?.name ??
+                                  BLACKOUT_TERMS.canopy.title
                                 : 'Home'}
                         </strong>
                     </header>
@@ -1004,7 +1048,9 @@ export const ClientLayout = () => {
                                     >
                                         {myPresence}
                                         {callState?.joined
-                                            ? ` • In call (${Object.keys(callState.membership).length})`
+                                            ? ` • In call (${
+                                                  Object.keys(callState.membership).length
+                                              })`
                                             : ''}
                                     </div>
                                 </div>
@@ -1495,9 +1541,7 @@ export const ClientLayout = () => {
                                         <option value="space">
                                             Current {BLACKOUT_TERMS.canopy.singular}
                                         </option>
-                                        <option value="all">
-                                            All {BLACKOUT_TERMS.den.plural}
-                                        </option>
+                                        <option value="all">All {BLACKOUT_TERMS.den.plural}</option>
                                     </select>
                                 </div>
                             </section>
@@ -1631,7 +1675,7 @@ export const ClientLayout = () => {
                             data-testid="feature-room-bmc-coalition-toggle"
                             onClick={() =>
                                 setRoomSurface((prev) =>
-                                    prev === 'coalition' ? 'timeline' : 'coalition',
+                                    prev === 'coalition' ? 'timeline' : 'coalition'
                                 )
                             }
                             style={{
@@ -1692,7 +1736,7 @@ export const ClientLayout = () => {
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
                                     96,
-                                    Math.max(52, start + (moveEvent.clientX - origin)),
+                                    Math.max(52, start + (moveEvent.clientX - origin))
                                 );
                                 setSettings({
                                     ...settings,
@@ -1724,7 +1768,7 @@ export const ClientLayout = () => {
                             const onMove = (moveEvent: MouseEvent) => {
                                 const width = Math.min(
                                     360,
-                                    Math.max(220, start + (moveEvent.clientX - origin)),
+                                    Math.max(220, start + (moveEvent.clientX - origin))
                                 );
                                 setSettings({
                                     ...settings,
@@ -1791,9 +1835,7 @@ export const ClientLayout = () => {
                     </header>
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                         <SpaceProvider
-                            value={
-                                rooms.find((room) => room.roomId === selectedSpaceId) ?? null
-                            }
+                            value={rooms.find((room) => room.roomId === selectedSpaceId) ?? null}
                         >
                             <Lobby
                                 onOpenRoom={(roomId) => {
@@ -1855,7 +1897,8 @@ export const ClientLayout = () => {
                         <MessageSearch
                             defaultRoomsFilterName={
                                 selectedRoomId
-                                    ? (rooms.find((room) => room.roomId === selectedRoomId)?.name ?? 'Current den')
+                                    ? rooms.find((room) => room.roomId === selectedRoomId)?.name ??
+                                      'Current den'
                                     : `All ${BLACKOUT_TERMS.den.plural}`
                             }
                             allowGlobal
@@ -1927,6 +1970,15 @@ export const ClientLayout = () => {
 
             <CreateSpaceModalRenderer />
             <CreateRoomModalRenderer />
+            {attachProductOpen ? (
+                <Suspense fallback={null}>
+                    <AttachProductDialog
+                        open={attachProductOpen}
+                        onClose={() => setAttachProductOpen(false)}
+                        onAttach={handleProductAttach}
+                    />
+                </Suspense>
+            ) : null}
         </section>
     );
 };

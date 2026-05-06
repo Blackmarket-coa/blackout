@@ -10,7 +10,7 @@ const PRESET_MIGRATION_MAP: Record<LegacyFeaturePresetKey, FeaturePresetKey> = {
 };
 
 export function normalizeFeaturePresetKey(
-    value: string | null | undefined,
+    value: string | null | undefined
 ): FeaturePresetKey | undefined {
     if (!value) return undefined;
     if (value === 'starter' || value === 'governance' || value === 'sovereignty') return value;
@@ -82,6 +82,7 @@ const STARTER: FeatureFlagMap = {
     'features.bmc.raidProtection': false,
     'features.bmc.nsfwGate': false,
     'features.bmc.slowmode': false,
+    'features.bmc.productAttachments': false,
     'features.stego.enabled': false,
     'features.stego.ephemeral': false,
     'features.governance.entitlements': false,
