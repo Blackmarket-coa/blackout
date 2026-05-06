@@ -23,4 +23,9 @@ export {
     type QuestCompletionRecord,
     type QuestSourceKind,
     type QuestRewardKind,
+    issueMigrationCredit,
+    fetchMyMigrationCredits,
+    redeemMigrationCredit,
+    type MigrationCreditRecord,
+    type MigrationCreditSourceKind,
 } from './growthClient';

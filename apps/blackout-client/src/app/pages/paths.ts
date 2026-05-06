@@ -148,6 +148,12 @@ export const ROOM_SETTINGS_PATH = '/room-settings/';
 
 export const ONBOARDING_PATH = '/onboarding/:spaceIdOrAlias/';
 export const ONBOARDING_ANALYTICS_PATH = '/onboarding/:spaceIdOrAlias/analytics/';
+/**
+ * PR 7 — Creator-onboarding fork. Lives outside the space-driven
+ * `/onboarding/:spaceIdOrAlias/` machine because the creator path
+ * isn't anchored to a single canopy; the wizard owns its own state.
+ */
+export const ONBOARDING_CREATOR_PATH = '/onboarding/creator';
 
 export const _MONETIZATION_SUBSCRIPTIONS_PLANS_PATH = 'subscriptions/plans/';
 export const _MONETIZATION_BOOSTS_PATH = 'boosts/';

@@ -6,9 +6,11 @@ import { requireDomainCapability } from './authz';
 import {
     ReferralValidationError,
     ambassadorService,
+    migrationCreditService,
     questsService,
     referralService,
     type AmbassadorTier,
+    type MigrationCreditSourceKind,
     type QuestRewardKind,
     type QuestSourceKind,
     type ReferralSourceKind,
@@ -25,6 +27,13 @@ const referralCreateSchema = z.object({
 
 const ambassadorApplySchema = z.object({
     tier: z.enum(['seedling', 'sapling', 'canopy', 'elder']).optional(),
+});
+
+const migrationCreditIssueSchema = z.object({
+    sourceKind: z.enum(['discord_migration', 'twitch_migration', 'creator_invite', 'campaign']),
+    sourceHandle: z.string().optional(),
+    valueCents: z.number().int().nonnegative(),
+    currency: z.string().min(3).max(8).optional(),
 });
 
 const questCreateSchema = z.object({
@@ -160,6 +169,62 @@ function createGrowthRouter() {
         } catch (error) {
             if (error instanceof ReferralValidationError) {
                 const status = error.code === 'quest_not_found' ? 404 : 400;
+                return c.json({ code: error.code, message: error.message }, status);
+            }
+            throw error;
+        }
+    });
+
+    // ----- Migration credits ----------------------------------------
+    // PR 7. Issue is admin/campaign-driven (capability-gated on
+    // `growth.write`); listing + redemption are user-scoped via the
+    // existing requireUser middleware. FBM coupon issuance is deferred
+    // to a follow-up PR — `fbmCreditId` stays null until the webhook
+    // dispatcher lands.
+    growth.post('/migration-credits', async (c) => {
+        const user = requireUser(c, 'Sign in to issue a migration credit');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'write');
+        if (denied) return denied;
+        const parsed = await readJsonBody(c, migrationCreditIssueSchema);
+        if (parsed instanceof Response) return parsed;
+        try {
+            const record = migrationCreditService.issue({
+                userId: user.sub,
+                sourceKind: parsed.sourceKind as MigrationCreditSourceKind,
+                sourceHandle: parsed.sourceHandle,
+                valueCents: parsed.valueCents,
+                currency: parsed.currency,
+            });
+            return c.json({ credit: record }, 201);
+        } catch (error) {
+            if (error instanceof ReferralValidationError) {
+                return c.json({ code: error.code, message: error.message }, 400);
+            }
+            throw error;
+        }
+    });
+
+    growth.get('/migration-credits/me', (c) => {
+        const user = requireUser(c, 'Sign in to view your migration credits');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'read');
+        if (denied) return denied;
+        return c.json({ items: migrationCreditService.listForUser(user.sub) });
+    });
+
+    growth.post('/migration-credits/:id/redeem', (c) => {
+        const user = requireUser(c, 'Sign in to redeem a migration credit');
+        if (user instanceof Response) return user;
+        const denied = requireDomainCapability(c, 'growth', 'write');
+        if (denied) return denied;
+        const id = c.req.param('id');
+        try {
+            const record = migrationCreditService.redeem(id, user.sub);
+            return c.json({ credit: record });
+        } catch (error) {
+            if (error instanceof ReferralValidationError) {
+                const status = error.code === 'credit_not_found' ? 404 : 400;
                 return c.json({ code: error.code, message: error.message }, status);
             }
             throw error;

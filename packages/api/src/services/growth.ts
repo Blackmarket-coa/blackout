@@ -346,9 +346,118 @@ class QuestsService {
 
 export const questsService = new QuestsService();
 
+// ---------------------------------------------------------------- Migration credits
+
+export type MigrationCreditSourceKind =
+    | 'discord_migration'
+    | 'twitch_migration'
+    | 'creator_invite'
+    | 'campaign';
+
+export interface MigrationCreditRecord {
+    id: string;
+    userId: string;
+    /** FBM coupon id once issued (deferred — null until webhook lands). */
+    fbmCreditId: string | null;
+    sourceKind: MigrationCreditSourceKind;
+    /** Optional handle on the source platform. */
+    sourceHandle: string | null;
+    /** Credit value in cents. */
+    valueCents: number;
+    currency: string;
+    grantedAt: string;
+    redeemedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface IssueMigrationCreditInput {
+    userId: string;
+    sourceKind: MigrationCreditSourceKind;
+    sourceHandle?: string;
+    valueCents: number;
+    currency?: string;
+}
+
+class MigrationCreditService {
+    private records = new Map<string, MigrationCreditRecord>();
+
+    /**
+     * Issues a migration credit. Idempotent on (userId, sourceKind,
+     * sourceHandle): re-importing the same Discord/Twitch handle for
+     * the same user returns the existing credit.
+     */
+    issue(input: IssueMigrationCreditInput): MigrationCreditRecord {
+        if (!input.userId) {
+            throw new ReferralValidationError('invalid_user', 'userId is required');
+        }
+        if (!Number.isFinite(input.valueCents) || input.valueCents < 0) {
+            throw new ReferralValidationError(
+                'invalid_value',
+                'valueCents must be a non-negative integer',
+            );
+        }
+        const handle = input.sourceHandle?.trim() || null;
+        for (const existing of this.records.values()) {
+            if (
+                existing.userId === input.userId &&
+                existing.sourceKind === input.sourceKind &&
+                existing.sourceHandle === handle
+            ) {
+                return existing;
+            }
+        }
+        const ts = nowIso();
+        const record: MigrationCreditRecord = {
+            id: randomId('mig'),
+            userId: input.userId,
+            fbmCreditId: null,
+            sourceKind: input.sourceKind,
+            sourceHandle: handle,
+            valueCents: Math.floor(input.valueCents),
+            currency: (input.currency ?? 'USD').toUpperCase(),
+            grantedAt: ts,
+            redeemedAt: null,
+            createdAt: ts,
+            updatedAt: ts,
+        };
+        this.records.set(record.id, record);
+        return record;
+    }
+
+    redeem(id: string, userId: string): MigrationCreditRecord {
+        const record = this.records.get(id);
+        if (!record || record.userId !== userId) {
+            throw new ReferralValidationError(
+                'credit_not_found',
+                'migration credit not found',
+            );
+        }
+        if (record.redeemedAt) return record;
+        const updated: MigrationCreditRecord = {
+            ...record,
+            redeemedAt: nowIso(),
+            updatedAt: nowIso(),
+        };
+        this.records.set(record.id, updated);
+        return updated;
+    }
+
+    listForUser(userId: string): MigrationCreditRecord[] {
+        return [...this.records.values()].filter((record) => record.userId === userId);
+    }
+
+    resetForTest(): void {
+        this.records.clear();
+    }
+}
+
+export const migrationCreditService = new MigrationCreditService();
+
 /** Convenience aggregator used by `module-bootstrap.integration.test.ts`. */
 export const resetGrowthForTest = (): void => {
     referralService.resetForTest();
     ambassadorService.resetForTest();
     questsService.resetForTest();
+    migrationCreditService.resetForTest();
 };

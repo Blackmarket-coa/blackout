@@ -128,6 +128,18 @@ export type FeatureFlags = {
      * the event state. No new server storage.
      */
     eventsV1: boolean;
+    /**
+     * Creator-onboarding fork (PR 7). Owns the dedicated
+     * `/onboarding/creator` route that walks new creators through
+     * handle / bio / FBM seller onboarding / first listing.
+     */
+    onboardingCreatorPath: boolean;
+    /**
+     * Discord/Twitch migration-credit grant flag (PR 7). Owns the
+     * `/v1/growth/migration-credits/*` endpoints and the redeem form
+     * inside the creator-onboarding flow.
+     */
+    onboardingMigrationCredits: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -185,6 +197,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     growthAmbassadors: false,
     growthQuests: false,
     eventsV1: false,
+    onboardingCreatorPath: false,
+    onboardingMigrationCredits: false,
 };
 
 /**
@@ -478,6 +492,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_EVENTS_V1 === 'false') {
             nextFlags.eventsV1 = false;
         }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'true') {
+            nextFlags.onboardingCreatorPath = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'false') {
+            nextFlags.onboardingCreatorPath = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'true') {
+            nextFlags.onboardingMigrationCredits = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
+            nextFlags.onboardingMigrationCredits = false;
+        }
         return nextFlags;
     }
 
@@ -657,6 +683,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_EVENTS_V1 === 'false') {
         nextFlags.eventsV1 = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'true') {
+        nextFlags.onboardingCreatorPath = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PATH === 'false') {
+        nextFlags.onboardingCreatorPath = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'true') {
+        nextFlags.onboardingMigrationCredits = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
+        nextFlags.onboardingMigrationCredits = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

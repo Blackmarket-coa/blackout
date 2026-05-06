@@ -17,6 +17,7 @@ import { platformOpsFeature } from '../../features/platform-ops';
 import { authThreadsFeature } from '../../features/auth-threads';
 import { educationFeature } from '../../features/education';
 import { eventsFeature } from '../../features/events';
+import { onboardingCreatorFeature } from '../../features/onboarding-creator';
 import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
 import { shellDestinationsFeature } from '../../features/shell-destinations';
@@ -129,5 +130,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: eventsFeature,
         flag: 'eventsV1',
+    },
+    {
+        feature: onboardingCreatorFeature,
+        flag: 'onboardingCreatorPath',
     },
 ];

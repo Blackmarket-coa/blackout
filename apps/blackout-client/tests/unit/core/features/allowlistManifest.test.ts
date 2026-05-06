@@ -38,6 +38,7 @@ describe('feature allowlist manifest', () => {
             'creators-storefront',
             'streams',
             'events',
+            'onboarding-creator',
         ]);
     });
 

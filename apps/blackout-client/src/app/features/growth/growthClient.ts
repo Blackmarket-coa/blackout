@@ -127,3 +127,52 @@ export const fetchMyQuestCompletions = (
     token: string | null = readBlackoutApiToken()
 ): Promise<{ items: QuestCompletionRecord[] }> =>
     callJson('GET', `${GROWTH_BASE}/quests/me/completions`, undefined, token);
+
+// --- Migration credits (PR 7) ---------------------------------------
+
+export type MigrationCreditSourceKind =
+    | 'discord_migration'
+    | 'twitch_migration'
+    | 'creator_invite'
+    | 'campaign';
+
+export interface MigrationCreditRecord {
+    id: string;
+    userId: string;
+    fbmCreditId: string | null;
+    sourceKind: MigrationCreditSourceKind;
+    sourceHandle: string | null;
+    valueCents: number;
+    currency: string;
+    grantedAt: string;
+    redeemedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const issueMigrationCredit = (
+    input: {
+        sourceKind: MigrationCreditSourceKind;
+        valueCents: number;
+        sourceHandle?: string;
+        currency?: string;
+    },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ credit: MigrationCreditRecord }> =>
+    callJson('POST', `${GROWTH_BASE}/migration-credits`, input, token);
+
+export const fetchMyMigrationCredits = (
+    token: string | null = readBlackoutApiToken()
+): Promise<{ items: MigrationCreditRecord[] }> =>
+    callJson('GET', `${GROWTH_BASE}/migration-credits/me`, undefined, token);
+
+export const redeemMigrationCredit = (
+    id: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ credit: MigrationCreditRecord }> =>
+    callJson(
+        'POST',
+        `${GROWTH_BASE}/migration-credits/${encodeURIComponent(id)}/redeem`,
+        undefined,
+        token
+    );
