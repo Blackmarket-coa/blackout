@@ -1,0 +1,91 @@
+# Default values for the Blackout chart.
+#
+# Override via `helm install -f overrides.yaml` or
+# `helm install --set image.tag=...`.
+
+global:
+  environment: production
+  domain: blackout.example.com
+
+api:
+  image:
+    repository: ghcr.io/blackout/api
+    tag: stable
+    pullPolicy: IfNotPresent
+  replicaCount: 3
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+    targetCpuUtilization: 65
+  pdb:
+    minAvailable: 2
+  cors:
+    # Required. Comma-separated absolute origins.
+    allowedOrigins: "https://blackout.example.com"
+    allowCredentials: true
+  rateLimit:
+    authMax: 10
+  metrics:
+    # When true, the chart annotates pods for Prometheus scraping. The api
+    # gates /metrics with INTERNAL_METRICS_TOKEN so this is safe even if
+    # the cluster does not run a private Prometheus.
+    enabled: true
+    # The token is sourced from external-secrets. See externalSecrets below.
+    tokenSecretKey: INTERNAL_METRICS_TOKEN
+  observability:
+    sentry:
+      enabled: false
+      tracesSampleRate: 0.1
+    otel:
+      enabled: false
+      endpoint: http://otel-collector:4318
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+  storage: 5Gi
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 1Gi }
+
+# External Secrets Operator integration. Set enabled=true and provide a
+# ClusterSecretStore name + remote secret keys. The chart wires the
+# api Deployment's secret references to the synced secret.
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  clusterSecretStore: aws-secrets-manager
+  remoteRefs:
+    JWT_SECRET_PRIMARY: blackout/api/jwt_primary
+    JWT_SECRET_ROLLOVER: blackout/api/jwt_rollover
+    DATABASE_URL: blackout/api/database_url
+    REDIS_URL: blackout/api/redis_url
+    SENTRY_DSN: blackout/api/sentry_dsn
+    INTERNAL_METRICS_TOKEN: blackout/api/internal_metrics_token
+
+# Argo Rollouts: enables a canary deploy strategy that ships 10% → wait → 30% → wait → 100%
+# with metric-driven analysis against http_request_duration_seconds and
+# http_requests_total. Disabled by default; enable per-environment.
+canary:
+  enabled: false
+  steps:
+    - setWeight: 10
+    - pause: { duration: 5m }
+    - setWeight: 30
+    - pause: { duration: 5m }
+    - setWeight: 60
+    - pause: { duration: 5m }
+  analysis:
+    successRateThreshold: 0.99
+    p95LatencyThresholdSeconds: 0.5

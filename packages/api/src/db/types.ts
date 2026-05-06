@@ -11,6 +11,38 @@ export interface UserRecord {
   createdAt: string;
 }
 
+export interface PasswordResetTokenRecord {
+  id: UUID;
+  userId: UUID;
+  tokenHash: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+  ipHash?: string;
+  userAgentHash?: string;
+}
+
+export interface RefreshTokenRecord {
+  id: UUID;
+  userId: UUID;
+  familyId: UUID;
+  tokenHash: string;
+  expiresAt: string;
+  replacedBy?: UUID;
+  revokedAt?: string;
+  revokedReason?: string;
+  createdAt: string;
+  userAgentHash?: string;
+}
+
+export interface RevokedSessionRecord {
+  jti: string;
+  userId: UUID;
+  revokedAt: string;
+  expiresAt: string;
+  reason: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

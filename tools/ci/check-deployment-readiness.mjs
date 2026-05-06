@@ -30,6 +30,15 @@ const requiredPaths = [
   'turbo.json',
   '.gitignore',
   'README.md',
+  // Production-readiness audit (May 2026, BL-PR-09/10): IaC + canary + restore + JWT rotation.
+  'deploy/helm/blackout/Chart.yaml',
+  'deploy/helm/blackout/values.yaml',
+  'deploy/helm/blackout/templates/api.yaml',
+  'deploy/helm/blackout/templates/external-secrets.yaml',
+  'deploy/docker/production/docker-compose.canary.yml',
+  'docs/operations/runbooks/postgres_restore_drill.md',
+  'docs/operations/runbooks/jwt_rotation.md',
+  'docs/audits/production_readiness_2026_05.md',
 ];
 
 const missingPaths = requiredPaths.filter((file) => !existsSync(file));
@@ -78,6 +87,18 @@ if (scriptMismatches.length > 0) {
 
 if (missingGitignoreEntries.length > 0) {
   errors.push('.gitignore is missing baseline entries:\n' + missingGitignoreEntries.map((entry) => `- ${entry}`).join('\n'));
+}
+
+// Canary deploy gate: the production deploy workflow must offer a `canary`
+// rollout mode rather than a single dispatch path that flips the entire fleet.
+const deployComposeFile = readFileSync('.github/workflows/deploy-compose-prod.yml', 'utf8');
+if (!/mode:\s*\n[^\n]*description:[^\n]*[Rr]ollout mode/m.test(deployComposeFile)) {
+  errors.push(
+    'deploy-compose-prod.yml does not declare a `mode` input — production rollouts must support canary/promote/full.',
+  );
+}
+if (!deployComposeFile.includes('canary')) {
+  errors.push('deploy-compose-prod.yml is missing the canary rollout job.');
 }
 
 if (errors.length > 0) {

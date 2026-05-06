@@ -1,36 +1,133 @@
 import type { Context, Next } from 'hono';
+import { readRedisRuntimeConfig } from '../config/redis';
+import { log } from '../telemetry/logger';
+import { rateLimitHitsTotal } from '../telemetry/metrics';
 
 export interface RateLimitOptions {
   bucket: string;
   windowMs: number;
   maxRequests: number;
+  /** Override store for tests. If omitted, the default shared store is used. */
+  store?: RateLimitStore;
 }
 
-const buckets = new Map<string, Map<string, Array<number>>>();
+/**
+ * Increment the request counter for `key` and return the count of requests
+ * inside the current sliding window. Implementations must be safe for
+ * concurrent use across processes.
+ */
+export interface RateLimitStore {
+  hit(key: string, windowMs: number): Promise<number>;
+  /** Optional disposer for tests / graceful shutdown. */
+  close?(): Promise<void>;
+}
 
-function getBucket(name: string): Map<string, Array<number>> {
-  let bucket = buckets.get(name);
-  if (!bucket) {
-    bucket = new Map();
-    buckets.set(name, bucket);
+class InMemoryStore implements RateLimitStore {
+  private readonly buckets = new Map<string, number[]>();
+
+  async hit(key: string, windowMs: number): Promise<number> {
+    const now = Date.now();
+    const history = (this.buckets.get(key) ?? []).filter((ts) => now - ts < windowMs);
+    history.push(now);
+    this.buckets.set(key, history);
+    return history.length;
   }
-  return bucket;
 }
+
+interface RedisLike {
+  // Minimal subset of ioredis we depend on, so tests can stub freely.
+  zremrangebyscore(key: string, min: number, max: number): Promise<number>;
+  zadd(key: string, score: number, member: string): Promise<number>;
+  zcard(key: string): Promise<number>;
+  pexpire(key: string, ms: number): Promise<number>;
+  quit?(): Promise<unknown>;
+}
+
+class RedisStore implements RateLimitStore {
+  constructor(private readonly client: RedisLike, private readonly prefix: string) {}
+
+  async hit(key: string, windowMs: number): Promise<number> {
+    const fullKey = `${this.prefix}${key}`;
+    const now = Date.now();
+    const member = `${now}-${Math.random().toString(36).slice(2, 10)}`;
+    await this.client.zremrangebyscore(fullKey, 0, now - windowMs);
+    await this.client.zadd(fullKey, now, member);
+    const count = await this.client.zcard(fullKey);
+    await this.client.pexpire(fullKey, windowMs);
+    return count;
+  }
+
+  async close(): Promise<void> {
+    await this.client.quit?.();
+  }
+}
+
+let defaultStore: RateLimitStore | null = null;
+let defaultStoreInit: Promise<RateLimitStore> | null = null;
+
+const initDefaultStore = async (): Promise<RateLimitStore> => {
+  const cfg = readRedisRuntimeConfig();
+  if (!cfg.url) {
+    log.warn('rate-limit: no REDIS_URL configured — using in-memory store (single-process only)');
+    return new InMemoryStore();
+  }
+  // Lazy import so tests and dev environments without ioredis installed still work.
+  const { default: IORedis } = (await import('ioredis')) as { default: new (url: string) => RedisLike };
+  const client = new IORedis(cfg.url);
+  return new RedisStore(client, cfg.rateLimitPrefix);
+};
+
+export const getDefaultRateLimitStore = async (): Promise<RateLimitStore> => {
+  if (defaultStore) return defaultStore;
+  if (!defaultStoreInit) {
+    defaultStoreInit = initDefaultStore().then((s) => {
+      defaultStore = s;
+      return s;
+    });
+  }
+  return defaultStoreInit;
+};
+
+export const setDefaultRateLimitStore = (store: RateLimitStore | null): void => {
+  defaultStore = store;
+  defaultStoreInit = store ? Promise.resolve(store) : null;
+};
+
+const clientKey = (c: Context, bucket: string): string => {
+  // Trust the hop directly in front of us; production deployments terminate TLS at Caddy/Cloudflared
+  // which set X-Forwarded-For. Take the *first* address if a chain is present.
+  const fwd = c.req.header('x-forwarded-for');
+  const ip = (fwd?.split(',')[0] ?? c.req.header('x-real-ip') ?? 'local').trim() || 'local';
+  return `${bucket}:${ip}`;
+};
 
 export function createRateLimit(options: RateLimitOptions) {
-  const { bucket, windowMs, maxRequests } = options;
-  return async function rateLimitMiddleware(c: Context, next: Next) {
-    const key = c.req.header('x-forwarded-for') ?? 'local';
-    const store = getBucket(bucket);
-    const now = Date.now();
-    const history = (store.get(key) ?? []).filter((timestamp) => now - timestamp < windowMs);
+  const { bucket, windowMs, maxRequests, store: providedStore } = options;
+  let resolvedStore: RateLimitStore | null = providedStore ?? null;
 
-    if (history.length >= maxRequests) {
-      return c.json({ code: 'rate_limited', message: 'Rate limit exceeded' }, 429);
+  return async function rateLimitMiddleware(c: Context, next: Next) {
+    if (!resolvedStore) {
+      resolvedStore = providedStore ?? (await getDefaultRateLimitStore());
+    }
+    const store = resolvedStore;
+    const key = clientKey(c, bucket);
+
+    let count: number;
+    try {
+      count = await store.hit(key, windowMs);
+    } catch (err) {
+      // Fail-open with a warning rather than 500. The legacy behavior was effectively fail-open
+      // because the in-memory store could not error.
+      log.warn('rate-limit: store error, allowing request', { bucket, error: String(err) });
+      return next();
     }
 
-    history.push(now);
-    store.set(key, history);
+    if (count > maxRequests) {
+      rateLimitHitsTotal.inc({ bucket });
+      const retryAfter = Math.ceil(windowMs / 1000);
+      c.header('Retry-After', String(retryAfter));
+      return c.json({ code: 'rate_limited', message: 'Rate limit exceeded' }, 429);
+    }
 
     await next();
   };

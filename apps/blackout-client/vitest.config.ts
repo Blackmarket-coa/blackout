@@ -19,6 +19,27 @@ export default defineConfig({
     // `.css.ts` ("Styles were unable to be assigned to a file").
     plugins: [vanillaExtractPlugin()],
     test: {
+        // Production-readiness audit, May 2026: enforce per-PR coverage so
+        // new client code lands with tests. Thresholds intentionally start
+        // modest given the quarantine debt below; ratchet up as the
+        // deferred-bodies schedule lands fixes.
+        coverage: {
+            provider: 'v8',
+            include: ['src/**/*.{ts,tsx}'],
+            exclude: [
+                'src/**/*.{test,spec}.{ts,tsx}',
+                'src/**/__tests__/**',
+                'src/**/*.css.ts',
+                'src/**/types.ts',
+            ],
+            thresholds: {
+                lines: 60,
+                functions: 60,
+                branches: 55,
+                statements: 60,
+            },
+            reporter: ['text', 'lcov'],
+        },
         exclude: [
             // Default vitest excludes:
             '**/node_modules/**',

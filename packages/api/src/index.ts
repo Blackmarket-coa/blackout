@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
+import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
 import authRoutes from './routes/auth';
 import messageRoutes from './routes/messages';
 import federationRoutes from './routes/federation';
@@ -29,6 +30,10 @@ import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
 import { log } from './telemetry/logger';
+import { httpMetricsMiddleware } from './telemetry/http-metrics';
+import { registry as metricsRegistry } from './telemetry/metrics';
+import { initErrorReporter } from './telemetry/errors';
+import { initTracing } from './telemetry/tracing';
 import { runSecurityPreflight } from './config/security';
 import { registerFeatureModules } from './modules';
 
@@ -49,7 +54,23 @@ app.use(
     reportUri: process.env.CSP_REPORT_URI,
   }),
 );
-app.use('*', cors());
+
+const corsConfig = readCorsRuntimeConfig();
+app.use(
+  '*',
+  cors({
+    origin: (origin) => {
+      if (!origin) return null;
+      return isOriginAllowed(origin, corsConfig) ? origin : null;
+    },
+    credentials: corsConfig.credentials,
+    allowMethods: corsConfig.allowedMethods,
+    allowHeaders: corsConfig.allowedHeaders,
+    exposeHeaders: corsConfig.exposeHeaders,
+    maxAge: corsConfig.maxAge,
+  }),
+);
+app.use('*', httpMetricsMiddleware);
 app.use('*', rateLimit);
 app.use(`${API_ROOTS.v1}/*`, authMiddleware);
 
@@ -96,10 +117,37 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
+app.get('/metrics', (c) => {
+  // Token-gated to keep cardinality and PII surface internal. Either set
+  // INTERNAL_METRICS_TOKEN to a long random value and configure Prometheus to
+  // send it as Authorization: Bearer <token>, or run the scraper on the
+  // private network and leave the token unset (no auth, dev only).
+  const expected = process.env.INTERNAL_METRICS_TOKEN;
+  if (expected) {
+    const presented = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+    if (presented !== expected) {
+      return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+    }
+  } else if (process.env.NODE_ENV === 'production') {
+    return c.json(
+      { code: 'metrics_token_missing', message: 'INTERNAL_METRICS_TOKEN must be set in production.' },
+      503,
+    );
+  }
+  c.header('content-type', 'text/plain; version=0.0.4; charset=utf-8');
+  return c.body(metricsRegistry.expose());
+});
+
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const shouldListen = process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
 
 if (shouldListen) {
+  // Fire-and-forget: optional tracing + error reporting. Both fall back to a
+  // noop transport when their env knobs are unset, so this is safe even in
+  // bare-bones deployments.
+  initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
+  initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
+
   serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
   });

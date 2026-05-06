@@ -11,7 +11,10 @@
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
     "test": "node -e \"console.log('api test scaffold ok')\"",
     "test:integration": "tsx --test test/**/*.integration.test.ts",
-    "migrate": "node -e \"console.log('api migrate scaffold ok')\""
+    "migrate": "tsx src/db/migrate.ts up",
+    "migrate:up": "tsx src/db/migrate.ts up",
+    "migrate:down": "tsx src/db/migrate.ts down",
+    "migrate:status": "tsx src/db/migrate.ts status"
   },
   "dependencies": {
     "@blackout/contracts": "workspace:*",
@@ -20,6 +23,10 @@
     "@hono/node-server": "1.19.13",
     "@simplewebauthn/server": "13.3.0",
     "hono": "4.12.14",
+    "pg": "^8.13.1",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10"
   }
 }

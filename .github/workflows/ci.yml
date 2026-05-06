@@ -199,3 +199,60 @@ jobs:
         run: pnpm guard:frontend-consolidation
       - name: Keep canonical migration surfaces green
         run: pnpm --filter @blackout/blackout-gov test
+
+  edge-hardening-guards:
+    name: Edge hardening guards (CORS allowlist)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: CORS allowlist guard
+        run: node tools/ci/check-cors-allowlist.mjs
+
+  helm-chart-lint:
+    name: Helm chart lint + template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - name: Install helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4
+        with:
+          version: v3.15.4
+      - name: Lint chart
+        run: helm lint deploy/helm/blackout
+      - name: Render default values
+        run: helm template blackout deploy/helm/blackout > /tmp/blackout-default.yaml
+      - name: Render with canary + external-secrets enabled
+        run: |
+          helm template blackout deploy/helm/blackout \
+            --set canary.enabled=true \
+            --set externalSecrets.enabled=true \
+            --set api.observability.sentry.enabled=true \
+            --set api.observability.otel.enabled=true \
+            > /tmp/blackout-full.yaml
+
+  api-smoke-and-integration:
+    name: API smoke + integration (Hono app.fetch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migration + reversibility verification
+        run: |
+          node tools/ci/check-db-migrations.mjs
+          node tools/ci/verify-migrations-ephemeral.mjs
+      - name: API integration tests
+        env:
+          BLACKOUT_DB_MODE: memory
+          BLACKOUT_API_SKIP_LISTEN: "1"
+          NODE_ENV: test
+        run: pnpm --filter @blackout/api test:integration

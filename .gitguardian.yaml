@@ -1,0 +1,25 @@
+# GitGuardian / ggshield configuration.
+#
+# Test fixtures and runbook examples need credential-shaped strings that
+# are demonstrably fake but high-entropy enough to satisfy production
+# strength checks. Path-allowlisting them keeps GitGuardian from flagging
+# every audit run while preserving scanning of real source code.
+
+version: 2
+
+paths-ignore:
+  # Integration test fixtures — secrets here are scoped to the in-memory
+  # api process and the strength validator. None of them ever land in a
+  # secret store or CI environment variable.
+  - "packages/api/test/**/*.test.ts"
+  - "packages/api/test/**/*.integration.test.ts"
+  # k6 load scripts run against ephemeral CI services with synthetic
+  # credentials minted at startup. Ignored to avoid noise on bearer-style
+  # placeholders.
+  - "load/k6/**"
+  # Operational runbooks intentionally show rotation key examples.
+  - "docs/operations/runbooks/*.md"
+  - "docs/audits/*.md"
+  # Workflow file embeds a synthetic JWT_SECRET_PRIMARY for the load job's
+  # Postgres + Redis service container; the value is a literal placeholder.
+  - ".github/workflows/load.yml"

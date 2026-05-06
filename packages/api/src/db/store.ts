@@ -35,6 +35,9 @@ import type {
   AidPoolRecord,
   AdRevenuePeriodRecord,
   AdRevenueShareRecord,
+  PasswordResetTokenRecord,
+  RefreshTokenRecord,
+  RevokedSessionRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -70,6 +73,9 @@ type PersistedState = {
   aidPools: AidPoolRecord[];
   adRevenuePeriods: AdRevenuePeriodRecord[];
   adRevenueShares: AdRevenueShareRecord[];
+  passwordResetTokens: PasswordResetTokenRecord[];
+  refreshTokens: RefreshTokenRecord[];
+  revokedSessions: RevokedSessionRecord[];
 };
 
 class InMemoryDb {
@@ -101,6 +107,9 @@ class InMemoryDb {
   aidPools = new Map<string, AidPoolRecord>();
   adRevenuePeriods = new Map<string, AdRevenuePeriodRecord>();
   adRevenueShares = new Map<string, AdRevenueShareRecord>();
+  passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
+  refreshTokens = new Map<string, RefreshTokenRecord>();
+  revokedSessions = new Map<string, RevokedSessionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -139,6 +148,115 @@ class InMemoryDb {
 
   getUserById(id: string): UserRecord | undefined {
     return this.users.get(id);
+  }
+
+  updateUserPassword(id: string, passwordHash: string): UserRecord | undefined {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    const updated: UserRecord = { ...user, passwordHash };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  // --- password reset ---
+
+  createPasswordResetToken(input: Omit<PasswordResetTokenRecord, 'createdAt'>): PasswordResetTokenRecord {
+    const record: PasswordResetTokenRecord = { ...input, createdAt: nowIso() };
+    this.passwordResetTokens.set(record.id, record);
+    return record;
+  }
+
+  findPasswordResetTokenByHash(tokenHash: string): PasswordResetTokenRecord | undefined {
+    return [...this.passwordResetTokens.values()].find((t) => t.tokenHash === tokenHash);
+  }
+
+  consumePasswordResetToken(id: string): PasswordResetTokenRecord | undefined {
+    const existing = this.passwordResetTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.consumedAt) return existing;
+    const updated: PasswordResetTokenRecord = { ...existing, consumedAt: nowIso() };
+    this.passwordResetTokens.set(id, updated);
+    return updated;
+  }
+
+  deleteExpiredPasswordResetTokens(now: Date = new Date()): number {
+    let removed = 0;
+    for (const [id, record] of this.passwordResetTokens) {
+      if (new Date(record.expiresAt).getTime() < now.getTime()) {
+        this.passwordResetTokens.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  // --- refresh tokens ---
+
+  createRefreshToken(input: Omit<RefreshTokenRecord, 'createdAt'>): RefreshTokenRecord {
+    const record: RefreshTokenRecord = { ...input, createdAt: nowIso() };
+    this.refreshTokens.set(record.id, record);
+    return record;
+  }
+
+  findRefreshTokenByHash(tokenHash: string): RefreshTokenRecord | undefined {
+    return [...this.refreshTokens.values()].find((t) => t.tokenHash === tokenHash);
+  }
+
+  markRefreshTokenReplaced(id: string, replacedBy: string): RefreshTokenRecord | undefined {
+    const existing = this.refreshTokens.get(id);
+    if (!existing) return undefined;
+    const updated: RefreshTokenRecord = { ...existing, replacedBy, revokedAt: nowIso(), revokedReason: 'rotated' };
+    this.refreshTokens.set(id, updated);
+    return updated;
+  }
+
+  revokeRefreshTokenFamily(familyId: string, reason: string): number {
+    const ts = nowIso();
+    let revoked = 0;
+    for (const [id, record] of this.refreshTokens) {
+      if (record.familyId === familyId && !record.revokedAt) {
+        this.refreshTokens.set(id, { ...record, revokedAt: ts, revokedReason: reason });
+        revoked += 1;
+      }
+    }
+    return revoked;
+  }
+
+  revokeRefreshTokensForUser(userId: string, reason: string): number {
+    const ts = nowIso();
+    let revoked = 0;
+    for (const [id, record] of this.refreshTokens) {
+      if (record.userId === userId && !record.revokedAt) {
+        this.refreshTokens.set(id, { ...record, revokedAt: ts, revokedReason: reason });
+        revoked += 1;
+      }
+    }
+    return revoked;
+  }
+
+  // --- revoked sessions ---
+
+  revokeSession(input: Omit<RevokedSessionRecord, 'revokedAt'>): RevokedSessionRecord {
+    const record: RevokedSessionRecord = { ...input, revokedAt: nowIso() };
+    this.revokedSessions.set(record.jti, record);
+    return record;
+  }
+
+  isSessionRevoked(jti: string): boolean {
+    const record = this.revokedSessions.get(jti);
+    if (!record) return false;
+    return new Date(record.expiresAt).getTime() > Date.now();
+  }
+
+  pruneExpiredRevokedSessions(now: Date = new Date()): number {
+    let removed = 0;
+    for (const [jti, record] of this.revokedSessions) {
+      if (new Date(record.expiresAt).getTime() <= now.getTime()) {
+        this.revokedSessions.delete(jti);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -840,6 +958,13 @@ class FileBackedDb extends InMemoryDb {
     this.adRevenueShares = new Map(
       (parsed.adRevenueShares ?? []).map((row) => [row.id, row])
     );
+    this.passwordResetTokens = new Map(
+      (parsed.passwordResetTokens ?? []).map((row) => [row.id, row])
+    );
+    this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
+    this.revokedSessions = new Map(
+      (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
+    );
   }
 
   private snapshot(): PersistedState {
@@ -872,6 +997,9 @@ class FileBackedDb extends InMemoryDb {
       aidPools: [...this.aidPools.values()],
       adRevenuePeriods: [...this.adRevenuePeriods.values()],
       adRevenueShares: [...this.adRevenueShares.values()],
+      passwordResetTokens: [...this.passwordResetTokens.values()],
+      refreshTokens: [...this.refreshTokens.values()],
+      revokedSessions: [...this.revokedSessions.values()],
     };
   }
 
@@ -890,6 +1018,58 @@ class FileBackedDb extends InMemoryDb {
     const removed = super.deleteUser(id);
     if (removed) this.persist();
     return removed;
+  }
+
+  override updateUserPassword(id: string, passwordHash: string): UserRecord | undefined {
+    const updated = super.updateUserPassword(id, passwordHash);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createPasswordResetToken(
+    input: Omit<PasswordResetTokenRecord, 'createdAt'>,
+  ): PasswordResetTokenRecord {
+    const record = super.createPasswordResetToken(input);
+    this.persist();
+    return record;
+  }
+
+  override consumePasswordResetToken(id: string): PasswordResetTokenRecord | undefined {
+    const updated = super.consumePasswordResetToken(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createRefreshToken(
+    input: Omit<RefreshTokenRecord, 'createdAt'>,
+  ): RefreshTokenRecord {
+    const record = super.createRefreshToken(input);
+    this.persist();
+    return record;
+  }
+
+  override markRefreshTokenReplaced(id: string, replacedBy: string): RefreshTokenRecord | undefined {
+    const updated = super.markRefreshTokenReplaced(id, replacedBy);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override revokeRefreshTokenFamily(familyId: string, reason: string): number {
+    const count = super.revokeRefreshTokenFamily(familyId, reason);
+    if (count > 0) this.persist();
+    return count;
+  }
+
+  override revokeRefreshTokensForUser(userId: string, reason: string): number {
+    const count = super.revokeRefreshTokensForUser(userId, reason);
+    if (count > 0) this.persist();
+    return count;
+  }
+
+  override revokeSession(input: Omit<RevokedSessionRecord, 'revokedAt'>): RevokedSessionRecord {
+    const record = super.revokeSession(input);
+    this.persist();
+    return record;
   }
 
   override createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
