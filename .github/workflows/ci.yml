@@ -199,3 +199,14 @@ jobs:
         run: pnpm guard:frontend-consolidation
       - name: Keep canonical migration surfaces green
         run: pnpm --filter @blackout/blackout-gov test
+
+  edge-hardening-guards:
+    name: Edge hardening guards (CORS allowlist)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: CORS allowlist guard
+        run: node tools/ci/check-cors-allowlist.mjs

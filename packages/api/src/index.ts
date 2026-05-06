@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { API_ROOTS } from '@blackout/contracts';
+import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
 import authRoutes from './routes/auth';
 import messageRoutes from './routes/messages';
 import federationRoutes from './routes/federation';
@@ -49,7 +50,22 @@ app.use(
     reportUri: process.env.CSP_REPORT_URI,
   }),
 );
-app.use('*', cors());
+
+const corsConfig = readCorsRuntimeConfig();
+app.use(
+  '*',
+  cors({
+    origin: (origin) => {
+      if (!origin) return null;
+      return isOriginAllowed(origin, corsConfig) ? origin : null;
+    },
+    credentials: corsConfig.credentials,
+    allowMethods: corsConfig.allowedMethods,
+    allowHeaders: corsConfig.allowedHeaders,
+    exposeHeaders: corsConfig.exposeHeaders,
+    maxAge: corsConfig.maxAge,
+  }),
+);
 app.use('*', rateLimit);
 app.use(`${API_ROOTS.v1}/*`, authMiddleware);
 
