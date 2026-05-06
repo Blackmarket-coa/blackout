@@ -103,6 +103,8 @@ export const _MONETIZATION_MARKETPLACE_PATH = 'marketplace/';
 export const _MONETIZATION_APP_MARKETPLACE_PATH = 'app-marketplace/';
 export const _MONETIZATION_PAYOUTS_REVENUE_ANALYTICS_PATH = 'payouts/revenue-analytics/';
 export const _MONETIZATION_THEME_PACKS_PATH = 'theme-packs/';
+export const _MONETIZATION_AID_POOLS_PATH = 'aid-pools/';
+export const _MONETIZATION_EARNINGS_PATH = 'earnings/';
 
 export const MONETIZATION_PATH = '/monetization/';
 export const MONETIZATION_SUBSCRIPTIONS_PLANS_PATH = `/monetization/${_MONETIZATION_SUBSCRIPTIONS_PLANS_PATH}`;
@@ -112,3 +114,5 @@ export const MONETIZATION_MARKETPLACE_PATH = `/monetization/${_MONETIZATION_MARK
 export const MONETIZATION_APP_MARKETPLACE_PATH = `/monetization/${_MONETIZATION_APP_MARKETPLACE_PATH}`;
 export const MONETIZATION_PAYOUTS_REVENUE_ANALYTICS_PATH = `/monetization/${_MONETIZATION_PAYOUTS_REVENUE_ANALYTICS_PATH}`;
 export const MONETIZATION_THEME_PACKS_PATH = `/monetization/${_MONETIZATION_THEME_PACKS_PATH}`;
+export const MONETIZATION_AID_POOLS_PATH = `/monetization/${_MONETIZATION_AID_POOLS_PATH}`;
+export const MONETIZATION_EARNINGS_PATH = `/monetization/${_MONETIZATION_EARNINGS_PATH}`;
