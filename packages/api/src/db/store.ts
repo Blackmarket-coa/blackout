@@ -32,6 +32,9 @@ import type {
   CreatorSubscriptionTierRecord,
   CreatorSubscriptionRecord,
   CommunityBoostPledgeRecord,
+  AidPoolRecord,
+  AdRevenuePeriodRecord,
+  AdRevenueShareRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -64,6 +67,9 @@ type PersistedState = {
   creatorSubscriptionTiers: CreatorSubscriptionTierRecord[];
   creatorSubscriptions: CreatorSubscriptionRecord[];
   communityBoostPledges: CommunityBoostPledgeRecord[];
+  aidPools: AidPoolRecord[];
+  adRevenuePeriods: AdRevenuePeriodRecord[];
+  adRevenueShares: AdRevenueShareRecord[];
 };
 
 class InMemoryDb {
@@ -92,6 +98,9 @@ class InMemoryDb {
   creatorSubscriptionTiers = new Map<string, CreatorSubscriptionTierRecord>();
   creatorSubscriptions = new Map<string, CreatorSubscriptionRecord>();
   communityBoostPledges = new Map<string, CommunityBoostPledgeRecord>();
+  aidPools = new Map<string, AidPoolRecord>();
+  adRevenuePeriods = new Map<string, AdRevenuePeriodRecord>();
+  adRevenueShares = new Map<string, AdRevenueShareRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -679,6 +688,85 @@ class InMemoryDb {
     this.communityBoostPledges.clear();
   }
 
+  insertAidPool(record: AidPoolRecord): AidPoolRecord {
+    this.aidPools.set(record.id, record);
+    return record;
+  }
+
+  updateAidPool(record: AidPoolRecord): AidPoolRecord {
+    this.aidPools.set(record.id, record);
+    return record;
+  }
+
+  getAidPool(id: string): AidPoolRecord | undefined {
+    return this.aidPools.get(id);
+  }
+
+  listAidPools(): AidPoolRecord[] {
+    return [...this.aidPools.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  listAidPoolsByOrganizer(organizerUserId: string): AidPoolRecord[] {
+    return [...this.aidPools.values()]
+      .filter((row) => row.organizerUserId === organizerUserId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  resetAidPoolsForTest(): void {
+    this.aidPools.clear();
+  }
+
+  insertAdRevenuePeriod(record: AdRevenuePeriodRecord): AdRevenuePeriodRecord {
+    this.adRevenuePeriods.set(record.id, record);
+    return record;
+  }
+
+  updateAdRevenuePeriod(record: AdRevenuePeriodRecord): AdRevenuePeriodRecord {
+    this.adRevenuePeriods.set(record.id, record);
+    return record;
+  }
+
+  getAdRevenuePeriod(id: string): AdRevenuePeriodRecord | undefined {
+    return this.adRevenuePeriods.get(id);
+  }
+
+  listAdRevenuePeriods(): AdRevenuePeriodRecord[] {
+    return [...this.adRevenuePeriods.values()].sort((a, b) =>
+      b.periodStart.localeCompare(a.periodStart)
+    );
+  }
+
+  insertAdRevenueShare(record: AdRevenueShareRecord): AdRevenueShareRecord {
+    this.adRevenueShares.set(record.id, record);
+    return record;
+  }
+
+  updateAdRevenueShare(record: AdRevenueShareRecord): AdRevenueShareRecord {
+    this.adRevenueShares.set(record.id, record);
+    return record;
+  }
+
+  getAdRevenueShare(id: string): AdRevenueShareRecord | undefined {
+    return this.adRevenueShares.get(id);
+  }
+
+  listAdRevenueSharesForPeriod(periodId: string): AdRevenueShareRecord[] {
+    return [...this.adRevenueShares.values()]
+      .filter((row) => row.periodId === periodId)
+      .sort((a, b) => b.netCents - a.netCents);
+  }
+
+  listAdRevenueSharesForCreator(creatorUserId: string): AdRevenueShareRecord[] {
+    return [...this.adRevenueShares.values()]
+      .filter((row) => row.creatorUserId === creatorUserId)
+      .sort((a, b) => b.computedAt.localeCompare(a.computedAt));
+  }
+
+  resetAdRevenueForTest(): void {
+    this.adRevenuePeriods.clear();
+    this.adRevenueShares.clear();
+  }
+
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
@@ -741,6 +829,13 @@ class FileBackedDb extends InMemoryDb {
     this.communityBoostPledges = new Map(
       (parsed.communityBoostPledges ?? []).map((row) => [row.id, row])
     );
+    this.aidPools = new Map((parsed.aidPools ?? []).map((row) => [row.id, row]));
+    this.adRevenuePeriods = new Map(
+      (parsed.adRevenuePeriods ?? []).map((row) => [row.id, row])
+    );
+    this.adRevenueShares = new Map(
+      (parsed.adRevenueShares ?? []).map((row) => [row.id, row])
+    );
   }
 
   private snapshot(): PersistedState {
@@ -770,6 +865,9 @@ class FileBackedDb extends InMemoryDb {
       creatorSubscriptionTiers: [...this.creatorSubscriptionTiers.values()],
       creatorSubscriptions: [...this.creatorSubscriptions.values()],
       communityBoostPledges: [...this.communityBoostPledges.values()],
+      aidPools: [...this.aidPools.values()],
+      adRevenuePeriods: [...this.adRevenuePeriods.values()],
+      adRevenueShares: [...this.adRevenueShares.values()],
     };
   }
 
@@ -1049,6 +1147,52 @@ class FileBackedDb extends InMemoryDb {
 
   override resetCommunityBoostsForTest(): void {
     super.resetCommunityBoostsForTest();
+    this.persist();
+  }
+
+  override insertAidPool(record: AidPoolRecord): AidPoolRecord {
+    const created = super.insertAidPool(record);
+    this.persist();
+    return created;
+  }
+
+  override updateAidPool(record: AidPoolRecord): AidPoolRecord {
+    const updated = super.updateAidPool(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetAidPoolsForTest(): void {
+    super.resetAidPoolsForTest();
+    this.persist();
+  }
+
+  override insertAdRevenuePeriod(record: AdRevenuePeriodRecord): AdRevenuePeriodRecord {
+    const created = super.insertAdRevenuePeriod(record);
+    this.persist();
+    return created;
+  }
+
+  override updateAdRevenuePeriod(record: AdRevenuePeriodRecord): AdRevenuePeriodRecord {
+    const updated = super.updateAdRevenuePeriod(record);
+    this.persist();
+    return updated;
+  }
+
+  override insertAdRevenueShare(record: AdRevenueShareRecord): AdRevenueShareRecord {
+    const created = super.insertAdRevenueShare(record);
+    this.persist();
+    return created;
+  }
+
+  override updateAdRevenueShare(record: AdRevenueShareRecord): AdRevenueShareRecord {
+    const updated = super.updateAdRevenueShare(record);
+    this.persist();
+    return updated;
+  }
+
+  override resetAdRevenueForTest(): void {
+    super.resetAdRevenueForTest();
     this.persist();
   }
 }

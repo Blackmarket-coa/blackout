@@ -17,6 +17,8 @@ import giftRoutes from './routes/gifts';
 import communityBoostRoutes from './routes/communityBoosts';
 import roleRoutes from './routes/roles';
 import channelAccessRoutes from './routes/channelAccess';
+import aidPoolRoutes from './routes/aidPools';
+import adRevenueRoutes from './routes/adRevenue';
 import appRoutes from './routes/apps';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
@@ -82,6 +84,8 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/community-boosts`, communityBoostRoutes);
   app.route(`${root}/roles`, roleRoutes);
   app.route(`${root}/channel-access`, channelAccessRoutes);
+  app.route(`${root}/aid-pools`, aidPoolRoutes);
+  app.route(`${root}/ad-revenue`, adRevenueRoutes);
   app.route(`${root}/apps`, appRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);

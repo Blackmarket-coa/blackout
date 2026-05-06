@@ -320,6 +320,52 @@ export type CommunityBoostPledgeStatus =
   | 'refunded'
   | 'expired';
 
+export type AidPoolStatus = 'open' | 'fulfilled' | 'closed';
+
+export interface AidPoolRecord {
+  id: UUID;
+  organizerUserId: UUID;
+  title: string;
+  description: string | null;
+  goalCents: number;
+  currency: string;
+  status: AidPoolStatus;
+  createdAt: string;
+  fulfilledAt: string | null;
+  closedAt: string | null;
+}
+
+export type AdRevenuePeriodStatus = 'draft' | 'allocated' | 'paid' | 'closed';
+
+export interface AdRevenuePeriodRecord {
+  id: UUID;
+  periodStart: string;
+  periodEnd: string;
+  totalCents: number;
+  currency: string;
+  status: AdRevenuePeriodStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AdRevenueShareStatus = 'pending_payout' | 'paid' | 'voided';
+
+export interface AdRevenueShareRecord {
+  id: UUID;
+  periodId: UUID;
+  creatorUserId: UUID;
+  grossCents: number;
+  feeCents: number;
+  netCents: number;
+  currency: string;
+  providerId: MarketplaceProviderIdString;
+  fbmPayoutId: string | null;
+  status: AdRevenueShareStatus;
+  computedAt: string;
+  paidAt: string | null;
+}
+
 export interface CommunityBoostPledgeRecord {
   id: UUID;
   communityId: UUID;
