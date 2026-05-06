@@ -2,12 +2,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 
 export type OnboardingStepId =
+    | 'choose_role'
     | 'welcome_context'
     | 'community_selection'
     | 'channel_subscription'
     | 'first_contribution';
 
 export const ONBOARDING_STEP_SEQUENCE: OnboardingStepId[] = [
+    'choose_role',
     'welcome_context',
     'community_selection',
     'channel_subscription',
@@ -15,6 +17,7 @@ export const ONBOARDING_STEP_SEQUENCE: OnboardingStepId[] = [
 ];
 
 export type CommunityIntent = 'join' | 'create' | 'browse';
+export type OnboardingRole = 'member' | 'creator';
 
 export interface OnboardingProgress {
     stepIndex: number;
@@ -23,6 +26,7 @@ export interface OnboardingProgress {
     startedAt: number;
     updatedAt: number;
     completedAt?: number;
+    role?: OnboardingRole;
     communityIntent?: CommunityIntent;
     selectedChannels: string[];
     firstContributionPrompt?: string;
@@ -32,8 +36,11 @@ type PersistedProgressPayload = {
     spaces?: Record<string, OnboardingProgress>;
 };
 
-const ACCOUNT_DATA_KEY = 'co.bmc.onboarding.progress.v2';
-const LOCAL_STORAGE_KEY = 'co.bmc.onboarding.progress.local.v2';
+// Bumped to v3 alongside the new `choose_role` step. Pre-launch
+// surface, so we accept partial reset rather than carrying a v2 →
+// v3 migrator.
+const ACCOUNT_DATA_KEY = 'co.bmc.onboarding.progress.v3';
+const LOCAL_STORAGE_KEY = 'co.bmc.onboarding.progress.local.v3';
 
 const buildDefaultProgress = (): OnboardingProgress => {
     const now = Date.now();
@@ -62,6 +69,7 @@ const normalizeProgress = (value: unknown): OnboardingProgress => {
         startedAt: typeof entry.startedAt === 'number' ? entry.startedAt : fallback.startedAt,
         updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : fallback.updatedAt,
         completedAt: typeof entry.completedAt === 'number' ? entry.completedAt : undefined,
+        role: entry.role === 'member' || entry.role === 'creator' ? entry.role : undefined,
         communityIntent:
             entry.communityIntent === 'join' ||
             entry.communityIntent === 'create' ||
@@ -69,10 +77,14 @@ const normalizeProgress = (value: unknown): OnboardingProgress => {
                 ? entry.communityIntent
                 : undefined,
         selectedChannels: Array.isArray(entry.selectedChannels)
-            ? entry.selectedChannels.filter((channel): channel is string => typeof channel === 'string')
+            ? entry.selectedChannels.filter(
+                  (channel): channel is string => typeof channel === 'string'
+              )
             : [],
         firstContributionPrompt:
-            typeof entry.firstContributionPrompt === 'string' ? entry.firstContributionPrompt : undefined,
+            typeof entry.firstContributionPrompt === 'string'
+                ? entry.firstContributionPrompt
+                : undefined,
     };
 };
 
@@ -85,7 +97,7 @@ const readLocalProgressMap = (): Record<string, OnboardingProgress> => {
         const parsed = JSON.parse(raw) as PersistedProgressPayload;
         const spaces = parsed.spaces ?? {};
         return Object.fromEntries(
-            Object.entries(spaces).map(([spaceId, value]) => [spaceId, normalizeProgress(value)]),
+            Object.entries(spaces).map(([spaceId, value]) => [spaceId, normalizeProgress(value)])
         );
     } catch {
         return {};
@@ -97,13 +109,13 @@ const writeLocalProgressMap = (spaces: Record<string, OnboardingProgress>) => {
 
     window.localStorage.setItem(
         LOCAL_STORAGE_KEY,
-        JSON.stringify({ spaces } satisfies PersistedProgressPayload),
+        JSON.stringify({ spaces } satisfies PersistedProgressPayload)
     );
 };
 
 const mergeProgress = (
     current: OnboardingProgress,
-    patch: Partial<OnboardingProgress>,
+    patch: Partial<OnboardingProgress>
 ): OnboardingProgress => {
     const now = Date.now();
     const stepIndex =
@@ -124,7 +136,7 @@ export const useOnboardingProgress = (spaceId: string) => {
     };
 
     const [localMap, setLocalMap] = useState<Record<string, OnboardingProgress>>(() =>
-        readLocalProgressMap(),
+        readLocalProgressMap()
     );
 
     const getLocalProgress = useCallback((): OnboardingProgress => {
@@ -139,7 +151,7 @@ export const useOnboardingProgress = (spaceId: string) => {
                 return nextMap;
             });
         },
-        [spaceId],
+        [spaceId]
     );
 
     const read = useCallback(async (): Promise<OnboardingProgress> => {
@@ -167,7 +179,7 @@ export const useOnboardingProgress = (spaceId: string) => {
             writeLocal(nextProgress);
             await accountDataClient.setAccountData(ACCOUNT_DATA_KEY, { ...existing, spaces });
         },
-        [accountDataClient, spaceId, writeLocal],
+        [accountDataClient, spaceId, writeLocal]
     );
 
     const savePatch = useCallback(
@@ -177,7 +189,7 @@ export const useOnboardingProgress = (spaceId: string) => {
             await persist(next);
             return next;
         },
-        [persist, read],
+        [persist, read]
     );
 
     const markCompleted = useCallback(
@@ -190,7 +202,7 @@ export const useOnboardingProgress = (spaceId: string) => {
                 stepIndex: ONBOARDING_STEP_SEQUENCE.length - 1,
             });
         },
-        [savePatch],
+        [savePatch]
     );
 
     const reset = useCallback(async () => {
@@ -206,6 +218,6 @@ export const useOnboardingProgress = (spaceId: string) => {
             markCompleted,
             reset,
         }),
-        [markCompleted, read, reset, savePatch],
+        [markCompleted, read, reset, savePatch]
     );
 };

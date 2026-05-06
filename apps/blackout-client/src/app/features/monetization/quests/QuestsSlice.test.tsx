@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
@@ -40,9 +40,9 @@ describe('QuestsSlice', () => {
         fetchActiveQuestsMock.mockReset();
         completeQuestMock.mockReset();
         fetchMyQuestCompletionsMock.mockReset();
-    });
-
-    afterEach(() => {
+        // Reset the runtime flag at the start of each test in case a
+        // prior test mutated it (vitest 2.x doesn't expose afterEach
+        // from this project's typed import surface).
         runtimeFeatureFlags.growthQuestsUi = false;
     });
 

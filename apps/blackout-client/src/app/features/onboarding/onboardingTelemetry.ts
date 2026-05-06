@@ -100,7 +100,7 @@ export const trackOnboardingStepViewed = (
     spaceId: string,
     step: OnboardingStepId,
     index: number,
-    elapsedMs: number,
+    elapsedMs: number
 ) => {
     emit({
         name: 'onboarding_step_viewed',
@@ -115,7 +115,7 @@ export const trackOnboardingStepCompleted = (
     spaceId: string,
     step: OnboardingStepId,
     index: number,
-    elapsedMs: number,
+    elapsedMs: number
 ) => {
     emit({
         name: 'onboarding_step_completed',
@@ -130,7 +130,7 @@ export const trackOnboardingDroppedOff = (
     spaceId: string,
     step: OnboardingStepId,
     index: number,
-    elapsedMs: number,
+    elapsedMs: number
 ) => {
     emit({
         name: 'onboarding_dropped_off',
@@ -145,7 +145,7 @@ export const trackOnboardingCompleted = (
     spaceId: string,
     completedAt: number,
     elapsedMs: number,
-    skipped: boolean,
+    skipped: boolean
 ) => {
     emit({
         name: 'onboarding_completed',
@@ -157,16 +157,18 @@ export const trackOnboardingCompleted = (
 };
 
 export const getOnboardingAnalyticsSummary = (spaceId?: string): OnboardingAnalyticsSummary => {
-    const filtered = readStore().events.filter((event) => (spaceId ? event.spaceId === spaceId : true));
+    const filtered = readStore().events.filter((event) =>
+        spaceId ? event.spaceId === spaceId : true
+    );
 
     const started = filtered.filter((event) => event.name === 'onboarding_started').length;
     const completedEvents = filtered.filter(
         (event): event is Extract<OnboardingTelemetryEvent, { name: 'onboarding_completed' }> =>
-            event.name === 'onboarding_completed',
+            event.name === 'onboarding_completed'
     );
     const droppedOffEvents = filtered.filter(
         (event): event is Extract<OnboardingTelemetryEvent, { name: 'onboarding_dropped_off' }> =>
-            event.name === 'onboarding_dropped_off',
+            event.name === 'onboarding_dropped_off'
     );
 
     const completed = completedEvents.length;
@@ -176,7 +178,7 @@ export const getOnboardingAnalyticsSummary = (spaceId?: string): OnboardingAnaly
         completedEvents.length > 0
             ? Math.round(
                   completedEvents.reduce((sum, event) => sum + event.elapsedMs, 0) /
-                      completedEvents.length,
+                      completedEvents.length
               )
             : 0;
 
@@ -185,7 +187,7 @@ export const getOnboardingAnalyticsSummary = (spaceId?: string): OnboardingAnaly
             ...acc,
             [event.step]: (acc[event.step] ?? 0) + 1,
         }),
-        {},
+        {}
     );
 
     return {
