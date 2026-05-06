@@ -49,6 +49,26 @@ export type FeatureFlags = {
      * Default off so the rollout is reversible without code revert.
      */
     shellAppShell: boolean;
+    /**
+     * HomeFeed surface flag. When enabled together with `shellAppShell`,
+     * the `/` route mounts a chronological merge of the user's joined
+     * dens instead of the legacy `ClientLayout`. Topic chips and the
+     * `/topics/:tag` deep links are gated by this flag too. Default off.
+     *
+     * Routing matrix (PR 2):
+     *   shellAppShell=off, discoveryHomeFeed=*    → `/` mounts ClientLayout
+     *   shellAppShell=on,  discoveryHomeFeed=off  → `/` mounts ClientLayout
+     *   shellAppShell=on,  discoveryHomeFeed=on   → `/` mounts HomeFeed
+     */
+    discoveryHomeFeed: boolean;
+    /**
+     * Topics surface flag. Owns the `/topics` and `/topics/:tag` routes
+     * and the topic-chip widget that renders inside HomeFeed. Default
+     * off; ships behind `discoveryHomeFeed` in PR 2 but exposed as a
+     * separate flag so future reorganization (Phase 4 Meilisearch swap)
+     * can toggle independently.
+     */
+    topics: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -95,6 +115,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     communities: true,
     plugins: true,
     shellAppShell: false,
+    discoveryHomeFeed: false,
+    topics: false,
 };
 
 /**
@@ -322,6 +344,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
             nextFlags.shellAppShell = false;
         }
+        if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'true') {
+            nextFlags.discoveryHomeFeed = true;
+        }
+        if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
+            nextFlags.discoveryHomeFeed = false;
+        }
+        if (env.BLACKOUT_TOPICS === 'true') {
+            nextFlags.topics = true;
+        }
+        if (env.BLACKOUT_TOPICS === 'false') {
+            nextFlags.topics = false;
+        }
         return nextFlags;
     }
 
@@ -435,6 +469,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_SHELL_APP_SHELL === 'false') {
         nextFlags.shellAppShell = false;
+    }
+    if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'true') {
+        nextFlags.discoveryHomeFeed = true;
+    }
+    if (env.BLACKOUT_DISCOVERY_HOME_FEED === 'false') {
+        nextFlags.discoveryHomeFeed = false;
+    }
+    if (env.BLACKOUT_TOPICS === 'true') {
+        nextFlags.topics = true;
+    }
+    if (env.BLACKOUT_TOPICS === 'false') {
+        nextFlags.topics = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

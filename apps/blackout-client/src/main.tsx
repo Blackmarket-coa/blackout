@@ -33,6 +33,13 @@ import { AppShell } from './app/pages/shell/AppShell';
 import { LegacyRoomRedirect } from './app/pages/shell/LegacyRoomRedirect';
 import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { trimTrailingSlash } from './app/utils/common';
+
+// HomeFeed is gated behind two flags and a small Matrix-tied data path
+// (`joinedRoomsAtom`); keeping it lazy avoids dragging the
+// matrix-js-sdk crypto chain into registry-load tests when the flag is
+// off — the same pattern PR 1 adopted for ClientLayout in
+// CommunitiesRoute.
+const HomeFeedLazy = React.lazy(() => import('./app/features/home/HomeFeed'));
 import { pushSessionToSW } from './sw-session';
 import { getFallbackSession } from './app/state/sessions';
 import { initDesktopBridge } from './platform/initDesktopBridge';
@@ -116,6 +123,7 @@ const buildAppRouter = (capabilityContext: {
     flags: Record<string, boolean>;
 }) => {
     const shellEnabled = capabilityContext.flags.shellAppShell === true;
+    const homeFeedEnabled = shellEnabled && capabilityContext.flags.discoveryHomeFeed === true;
     const registryRoutes = buildRegistryRouteObjects({
         capabilities: capabilityContext.capabilities,
         flags: capabilityContext.flags as never,
@@ -128,10 +136,23 @@ const buildAppRouter = (capabilityContext: {
     // the rollout is fully reversible without code revert.
     const legacyRoomElement = shellEnabled ? <LegacyRoomRedirect /> : <ClientLayout />;
 
+    // PR 2 routing matrix: when both `shellAppShell` and
+    // `discoveryHomeFeed` are on, `/` mounts HomeFeed (a chronological
+    // merge of joined dens). Either flag off keeps the legacy
+    // ClientLayout — HomeFeed depends on the AppShell chrome for
+    // navigation, so we never mount it without the shell wrapper.
+    const homeElement = homeFeedEnabled ? (
+        <React.Suspense fallback={null}>
+            <HomeFeedLazy />
+        </React.Suspense>
+    ) : (
+        <ClientLayout />
+    );
+
     const destinationRoutes = [
         {
             path: '/',
-            element: <ClientLayout />,
+            element: homeElement,
         },
         {
             path: '/room/:roomId',

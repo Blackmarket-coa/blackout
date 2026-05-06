@@ -8,6 +8,7 @@ import { streamingModule } from './streaming';
 import { discoveryModule } from './discovery';
 import { profileModule } from './profile';
 import { stegoModule } from './stego';
+import { topicsModule } from './topics';
 import type { FeatureModule } from './types';
 
 export const featureModules: FeatureModule[] = [
@@ -20,6 +21,7 @@ export const featureModules: FeatureModule[] = [
   discoveryModule,
   profileModule,
   stegoModule,
+  topicsModule,
 ];
 
 export function registerFeatureModules(app: Hono, apiRoot: string): void {

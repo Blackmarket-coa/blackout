@@ -28,6 +28,7 @@ export const featureModuleManifest = [
     'communities',
     'plugins',
     'shell-destinations',
+    'topics',
 ] as const;
 
 export type FeatureModuleId = typeof featureModuleManifest[number];
