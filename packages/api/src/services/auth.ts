@@ -7,6 +7,7 @@ export interface AuthTokenPayload {
   exp: number;
   iss: string;
   aud: string;
+  jti: string;
 }
 
 const base64Url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
@@ -134,24 +135,41 @@ export function verifyPasswordConstantTime(password: string, stored: string | un
   return Boolean(stored) && ok;
 }
 
+export interface SignedJwt {
+  token: string;
+  jti: string;
+  exp: number;
+}
+
 export function signJwt(userId: string, username: string, ttlSeconds = 60 * 60 * 24): string {
+  return signJwtWithMeta(userId, username, ttlSeconds).token;
+}
+
+export function signJwtWithMeta(
+  userId: string,
+  username: string,
+  ttlSeconds = 60 * 60 * 24,
+): SignedJwt {
   const config = readAuthRuntimeConfig();
   const header = { alg: 'HS256', typ: 'JWT' };
   const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + ttlSeconds;
+  const jti = randomBytes(16).toString('base64url');
   const payload: AuthTokenPayload = {
     sub: userId,
     username,
     iat,
-    exp: iat + ttlSeconds,
+    exp,
     iss: config.issuer,
     aud: config.audience,
+    jti,
   };
 
   const encodedHeader = base64Url(JSON.stringify(header));
   const encodedPayload = base64Url(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   const signature = createHmac('sha256', config.signingSecret).update(signingInput).digest('base64url');
-  return `${signingInput}.${signature}`;
+  return { token: `${signingInput}.${signature}`, jti, exp };
 }
 
 export function verifyJwt(token: string): AuthTokenPayload | null {
