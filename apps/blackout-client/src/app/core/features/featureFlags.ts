@@ -131,6 +131,14 @@ export type FeatureFlags = {
     growthAmbassadors: boolean;
     growthQuests: boolean;
     /**
+     * Quests-UI live-data swap. When on, `QuestsSlice` reads the
+     * active-quests list and the per-quest claim mutation from the
+     * existing growth client (PR 5 backend). When off, the slice
+     * keeps its placeholder rows so the surface stays demo-able even
+     * before the backend is reachable.
+     */
+    growthQuestsUi: boolean;
+    /**
      * Events flag. Owns the `/events` directory and `/events/:canopyId/:eventId`
      * detail page. Events are encoded as `co.bmc.event` Matrix state
      * events emitted into a canopy / den; RSVPs are `m.reaction`s on
@@ -220,6 +228,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     growthReferrals: false,
     growthAmbassadors: false,
     growthQuests: false,
+    growthQuestsUi: false,
     eventsV1: false,
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
@@ -548,6 +557,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
             nextFlags.productsAttachComposer = false;
         }
+        if (env.BLACKOUT_GROWTH_QUESTS_UI === 'true') {
+            nextFlags.growthQuestsUi = true;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
+            nextFlags.growthQuestsUi = false;
+        }
         return nextFlags;
     }
 
@@ -757,6 +772,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_PRODUCTS_ATTACH_COMPOSER === 'false') {
         nextFlags.productsAttachComposer = false;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS_UI === 'true') {
+        nextFlags.growthQuestsUi = true;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
+        nextFlags.growthQuestsUi = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
