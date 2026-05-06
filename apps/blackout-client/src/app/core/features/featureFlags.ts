@@ -104,6 +104,23 @@ export type FeatureFlags = {
      * `/v1/profile/:userId` endpoints; no new server surface.
      */
     creatorsStorefront: boolean;
+    /**
+     * Growth-engine flags (PR 5 — backend ledger primitives).
+     *
+     *   - growthReferrals: `/v1/growth/referrals` ledger.
+     *   - growthAmbassadors: `/v1/growth/ambassadors` tier ledger.
+     *   - growthQuests: `/v1/growth/quests` definitions + completions.
+     *
+     * All three share the same `growth.read` / `growth.write`
+     * capability gates and the `growth` feature module mount path.
+     * Tip-attribution (referral_bonus / ambassador_commission /
+     * quest_reward) wiring is intentionally deferred to a follow-up;
+     * PR 5 ships only the read/write surfaces so client UI work can
+     * land against a stable ledger.
+     */
+    growthReferrals: boolean;
+    growthAmbassadors: boolean;
+    growthQuests: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -157,6 +174,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     creatorsListings: false,
     streamsViewer: false,
     creatorsStorefront: false,
+    growthReferrals: false,
+    growthAmbassadors: false,
+    growthQuests: false,
 };
 
 /**
@@ -426,6 +446,24 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
             nextFlags.creatorsStorefront = false;
         }
+        if (env.BLACKOUT_GROWTH_REFERRALS === 'true') {
+            nextFlags.growthReferrals = true;
+        }
+        if (env.BLACKOUT_GROWTH_REFERRALS === 'false') {
+            nextFlags.growthReferrals = false;
+        }
+        if (env.BLACKOUT_GROWTH_AMBASSADORS === 'true') {
+            nextFlags.growthAmbassadors = true;
+        }
+        if (env.BLACKOUT_GROWTH_AMBASSADORS === 'false') {
+            nextFlags.growthAmbassadors = false;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS === 'true') {
+            nextFlags.growthQuests = true;
+        }
+        if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
+            nextFlags.growthQuests = false;
+        }
         return nextFlags;
     }
 
@@ -581,6 +619,24 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
         nextFlags.creatorsStorefront = false;
+    }
+    if (env.BLACKOUT_GROWTH_REFERRALS === 'true') {
+        nextFlags.growthReferrals = true;
+    }
+    if (env.BLACKOUT_GROWTH_REFERRALS === 'false') {
+        nextFlags.growthReferrals = false;
+    }
+    if (env.BLACKOUT_GROWTH_AMBASSADORS === 'true') {
+        nextFlags.growthAmbassadors = true;
+    }
+    if (env.BLACKOUT_GROWTH_AMBASSADORS === 'false') {
+        nextFlags.growthAmbassadors = false;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS === 'true') {
+        nextFlags.growthQuests = true;
+    }
+    if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
+        nextFlags.growthQuests = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

@@ -9,6 +9,7 @@ import { discoveryModule } from './discovery';
 import { profileModule } from './profile';
 import { stegoModule } from './stego';
 import { topicsModule } from './topics';
+import { growthModule } from './growth';
 import type { FeatureModule } from './types';
 
 export const featureModules: FeatureModule[] = [
@@ -22,6 +23,7 @@ export const featureModules: FeatureModule[] = [
   profileModule,
   stegoModule,
   topicsModule,
+  growthModule,
 ];
 
 export function registerFeatureModules(app: Hono, apiRoot: string): void {

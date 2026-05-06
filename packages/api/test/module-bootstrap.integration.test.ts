@@ -44,6 +44,7 @@ test('feature module registry contains canonical frontend domains', () => {
       'profile',
       'stego',
       'topics',
+      'growth',
     ],
   );
 });
