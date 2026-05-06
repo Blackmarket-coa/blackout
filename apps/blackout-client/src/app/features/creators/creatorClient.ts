@@ -117,3 +117,48 @@ export const startCreatorPayoutOnboarding = (
     token: string | null = readBlackoutApiToken()
 ): Promise<CreatorOnboardingHandle> =>
     callJson('POST', `${CREATOR_BASE}/payouts/onboarding`, { providerId, returnUrl }, token);
+
+// --- Public storefront wrappers (PR 4) ----------------------------------
+//
+// CreatorStorefront pulls from three pre-existing read endpoints; the
+// client wrappers below keep their shapes loose so the page can render
+// partial data without crashing on an absent service slice.
+
+export interface PublicProfileResponse {
+    userId: string;
+    handle?: string;
+    displayName?: string;
+    bio?: string;
+    avatarUrl?: string;
+    [key: string]: unknown;
+}
+
+export interface PublicCreatorTier {
+    id: string;
+    name: string;
+    description?: string;
+    priceCents: number;
+    currency: string;
+    [key: string]: unknown;
+}
+
+export interface PublicCreatorTiersResponse {
+    tiers: PublicCreatorTier[];
+}
+
+export const fetchPublicProfile = (
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<PublicProfileResponse> =>
+    callJson('GET', `/v1/profile/${encodeURIComponent(userId)}`, undefined, token);
+
+export const fetchCreatorTiers = (
+    creatorUserId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<PublicCreatorTiersResponse> =>
+    callJson(
+        'GET',
+        `/v1/creator-subs/creators/${encodeURIComponent(creatorUserId)}/tiers`,
+        undefined,
+        token
+    );

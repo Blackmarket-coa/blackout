@@ -90,6 +90,20 @@ export type FeatureFlags = {
      * archive FBM listings via the existing `routes/creator.ts` API.
      */
     creatorsListings: boolean;
+    /**
+     * Livestream viewer flag. Owns the `/live` directory and
+     * `/live/:streamId` viewer surface (Owncast HLS player + tip CTA +
+     * product shelf). Subscriber-side LiveKit integration is deferred
+     * to a follow-up PR.
+     */
+    streamsViewer: boolean;
+    /**
+     * Public creator storefront flag. Owns the `/creators/:userId`
+     * page (subscription tiers + listings + replays). Reads existing
+     * `/v1/creator-subs/creators/:userId/tiers` and
+     * `/v1/profile/:userId` endpoints; no new server surface.
+     */
+    creatorsStorefront: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -141,6 +155,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     marketTab: false,
     productsAttachments: false,
     creatorsListings: false,
+    streamsViewer: false,
+    creatorsStorefront: false,
 };
 
 /**
@@ -398,6 +414,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
             nextFlags.creatorsListings = false;
         }
+        if (env.BLACKOUT_STREAMS_VIEWER === 'true') {
+            nextFlags.streamsViewer = true;
+        }
+        if (env.BLACKOUT_STREAMS_VIEWER === 'false') {
+            nextFlags.streamsViewer = false;
+        }
+        if (env.BLACKOUT_CREATORS_STOREFRONT === 'true') {
+            nextFlags.creatorsStorefront = true;
+        }
+        if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
+            nextFlags.creatorsStorefront = false;
+        }
         return nextFlags;
     }
 
@@ -541,6 +569,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_CREATORS_LISTINGS === 'false') {
         nextFlags.creatorsListings = false;
+    }
+    if (env.BLACKOUT_STREAMS_VIEWER === 'true') {
+        nextFlags.streamsViewer = true;
+    }
+    if (env.BLACKOUT_STREAMS_VIEWER === 'false') {
+        nextFlags.streamsViewer = false;
+    }
+    if (env.BLACKOUT_CREATORS_STOREFRONT === 'true') {
+        nextFlags.creatorsStorefront = true;
+    }
+    if (env.BLACKOUT_CREATORS_STOREFRONT === 'false') {
+        nextFlags.creatorsStorefront = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);

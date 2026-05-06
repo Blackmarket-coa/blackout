@@ -1,7 +1,7 @@
 import { coalitionFeature } from '../../features/coalition';
 import { coliseumFeature } from '../../features/coliseum';
 import { communitiesFeature } from '../../features/communities';
-import { creatorsFeature } from '../../features/creators';
+import { creatorsFeature, creatorsStorefrontFeature } from '../../features/creators';
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
 import { marketFeature } from '../../features/market';
@@ -20,6 +20,7 @@ import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
 import { shellDestinationsFeature } from '../../features/shell-destinations';
 import { stegoToolkitFeature } from '../../features/stego-toolkit';
+import { streamsFeature } from '../../features/streams';
 import { topicsFeature } from '../../features/topics';
 import type { FeatureModule } from './types';
 
@@ -115,5 +116,13 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: creatorsFeature,
         flag: 'creatorsListings',
+    },
+    {
+        feature: creatorsStorefrontFeature,
+        flag: 'creatorsStorefront',
+    },
+    {
+        feature: streamsFeature,
+        flag: 'streamsViewer',
     },
 ];

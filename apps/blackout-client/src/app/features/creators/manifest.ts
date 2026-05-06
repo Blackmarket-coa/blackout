@@ -1,13 +1,12 @@
 import type { BlackoutFeature } from '../../core/features/types';
-import { creatorsRoutes } from './routes';
+import { creatorsListingsRoutes } from './routes';
 
 /**
- * Creator surfaces — `/creator/listings` for now (PR 3). Subsequent
- * PRs add `/creators/:userId` (storefront, PR 4) and the
- * earnings/payouts dashboard (PR 9). The manifest deliberately omits
- * a `mobile-tab` panel; creators reach this surface from the legacy
- * monetization sidebar entry today and from the future Creator
- * dashboard mode in PR 9.
+ * Creator-side surfaces — `/creator/listings` (PR 3 listing
+ * management). The public storefront at `/creators/:userId` is split
+ * into its own `creatorsStorefrontFeature` (see `storefrontManifest.ts`)
+ * so the two flags can toggle independently without falling foul of
+ * the registry composer's single-flag-per-module gate.
  */
 export const creatorsFeature: BlackoutFeature = {
     id: 'creators',
@@ -20,8 +19,10 @@ export const creatorsFeature: BlackoutFeature = {
             capabilityGate: {
                 flags: ['creatorsListings'],
             },
-            routes: creatorsRoutes,
+            routes: creatorsListingsRoutes,
         },
     ],
     capabilities: ['monetization.write'],
 };
+
+export { creatorsStorefrontFeature } from './storefrontManifest';
