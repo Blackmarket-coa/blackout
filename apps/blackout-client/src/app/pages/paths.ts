@@ -88,7 +88,17 @@ export const CREATOR_DASHBOARD_PATH = '/creator';
 export const CREATOR_LISTINGS_PATH = '/creator/listings';
 export const CREATOR_STOREFRONT_PATH = '/creators/:userId';
 export const EVENTS_PATH = '/events';
-export const EVENT_DETAIL_PATH = '/events/:eventId';
+/**
+ * Event detail addresses both the host room (canopy or den) and the
+ * Matrix state event id, since `co.bmc.event` events live inside a
+ * room's state. The "-" sentinel from the canopy/den path applies
+ * here too — useful if a future surface emits events into a direct
+ * room without a parent canopy.
+ */
+export const EVENT_DETAIL_PATH = '/events/:roomId/:eventId';
+
+export const buildEventDetailPath = (roomId: string, eventId: string): string =>
+    `/events/${encodeURIComponent(roomId)}/${encodeURIComponent(eventId)}`;
 
 /**
  * Helper for building the canonical communities URL from canopy/den ids.

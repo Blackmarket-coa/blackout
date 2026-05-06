@@ -37,6 +37,7 @@ describe('feature allowlist manifest', () => {
             'creators',
             'creators-storefront',
             'streams',
+            'events',
         ]);
     });
 

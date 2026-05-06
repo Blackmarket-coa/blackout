@@ -16,6 +16,7 @@ import { notificationsPresenceFeature } from '../../features/notifications-prese
 import { platformOpsFeature } from '../../features/platform-ops';
 import { authThreadsFeature } from '../../features/auth-threads';
 import { educationFeature } from '../../features/education';
+import { eventsFeature } from '../../features/events';
 import { federatedOpsFeature } from '../../features/federated-ops';
 import { settingsParityFeature } from '../../features/settings-parity';
 import { shellDestinationsFeature } from '../../features/shell-destinations';
@@ -124,5 +125,9 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: streamsFeature,
         flag: 'streamsViewer',
+    },
+    {
+        feature: eventsFeature,
+        flag: 'eventsV1',
     },
 ];

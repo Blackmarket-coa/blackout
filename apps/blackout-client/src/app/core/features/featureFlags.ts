@@ -121,6 +121,13 @@ export type FeatureFlags = {
     growthReferrals: boolean;
     growthAmbassadors: boolean;
     growthQuests: boolean;
+    /**
+     * Events flag. Owns the `/events` directory and `/events/:canopyId/:eventId`
+     * detail page. Events are encoded as `co.bmc.event` Matrix state
+     * events emitted into a canopy / den; RSVPs are `m.reaction`s on
+     * the event state. No new server storage.
+     */
+    eventsV1: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -177,6 +184,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     growthReferrals: false,
     growthAmbassadors: false,
     growthQuests: false,
+    eventsV1: false,
 };
 
 /**
@@ -464,6 +472,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
             nextFlags.growthQuests = false;
         }
+        if (env.BLACKOUT_EVENTS_V1 === 'true') {
+            nextFlags.eventsV1 = true;
+        }
+        if (env.BLACKOUT_EVENTS_V1 === 'false') {
+            nextFlags.eventsV1 = false;
+        }
         return nextFlags;
     }
 
@@ -637,6 +651,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_GROWTH_QUESTS === 'false') {
         nextFlags.growthQuests = false;
+    }
+    if (env.BLACKOUT_EVENTS_V1 === 'true') {
+        nextFlags.eventsV1 = true;
+    }
+    if (env.BLACKOUT_EVENTS_V1 === 'false') {
+        nextFlags.eventsV1 = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
