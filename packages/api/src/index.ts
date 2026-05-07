@@ -23,6 +23,7 @@ import adRevenueRoutes from './routes/adRevenue';
 import appRoutes from './routes/apps';
 import linkedAccountRoutes from './routes/linkedAccounts';
 import twitchChatBridgeRoutes from './routes/twitchChatBridges';
+import twitchEventSubRoutes from './routes/twitchEventSub';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -112,6 +113,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/apps`, appRoutes);
   app.route(`${root}/linked-accounts`, linkedAccountRoutes);
   app.route(`${root}/integrations/twitch/chat-bridges`, twitchChatBridgeRoutes);
+  app.route(`${root}/integrations/twitch/eventsub`, twitchEventSubRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
@@ -151,6 +153,20 @@ if (shouldListen) {
   // bare-bones deployments.
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
+
+  // Resume any persisted Twitch chat bridges so they survive a redeploy.
+  // Gated on an opt-in env var so the auto-restart doesn't surprise local
+  // dev / staging environments that share a DB with prod-shaped data.
+  if (process.env.BLACKOUT_RESUME_TWITCH_BRIDGES === '1') {
+    void import('./services/twitchChatBridge').then(async ({ resumeAllBridges }) => {
+      try {
+        const result = await resumeAllBridges();
+        log.info('twitch_chat_bridges_resumed', result);
+      } catch (err) {
+        log.warn('twitch_chat_bridges_resume_failed', { error: String(err) });
+      }
+    });
+  }
 
   serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
