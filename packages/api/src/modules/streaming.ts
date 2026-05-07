@@ -7,6 +7,16 @@ import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
 import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
+import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
+import {
+  startAllForUser as startAllRtmpFanouts,
+  stopAllForUser as stopAllRtmpFanouts,
+} from '../services/rtmpFanoutWorker';
+import {
+  notifyStreamStarted as notifyObsWsStreamStarted,
+  notifyStreamEnded as notifyObsWsStreamEnded,
+} from '../integrations/obs-ws-compat/server';
+import { log } from '../telemetry/logger';
 import type { FeatureModule } from './types';
 
 const streamKeySchema = z
@@ -281,6 +291,48 @@ function createStreamingRouter() {
       db.upsertStream({ ...stream, replayPointer: parsed.replayPointer });
     }
 
+    void dispatchOutboundEvent({
+      type: 'livestream.started',
+      blackoutUserId: stream.creatorId,
+      data: {
+        streamId,
+        sessionId: session.id,
+        title: stream.title,
+        category: stream.category,
+        visibility: stream.visibility,
+      },
+      occurredAt: session.startedAt,
+    }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.started', error: String(err) }));
+
+    // Auto-start RTMP fan-out for every enabled simulcast destination
+    // the creator has configured. Best-effort — any per-destination
+    // spawn failure is captured by the worker and surfaced via
+    // GET /v1/integrations/simulcast/fanout/:id/status, not here.
+    try {
+      const fanoutResult = startAllRtmpFanouts(stream.creatorId);
+      log.info('streaming_rtmp_fanout_started', {
+        streamId,
+        attempted: fanoutResult.attempted,
+        started: fanoutResult.started,
+      });
+    } catch (err) {
+      log.warn('streaming_rtmp_fanout_start_threw', { streamId, error: String(err) });
+    }
+
+    // Push a StreamStateChanged event to every identified OBS-WS surface
+    // for this creator. Companion / Stream Deck plugins re-render their
+    // "Stream live" tile on receipt — so a stream that just went live
+    // via the Blackout UI lights up the surface without manual polling.
+    try {
+      notifyObsWsStreamStarted(stream.creatorId);
+    } catch (err) {
+      log.warn('streaming_obs_ws_notify_threw', {
+        streamId,
+        type: 'started',
+        error: String(err),
+      });
+    }
+
     return c.json(session, 201);
   });
 
@@ -297,6 +349,54 @@ function createStreamingRouter() {
     const stream = db.getStream(session.streamId);
     if (stream && replayPointer) {
       db.upsertStream({ ...stream, replayPointer });
+    }
+
+    if (stream) {
+      const startedAtMs = Date.parse(session.startedAt);
+      const endedAtMs = session.endedAt ? Date.parse(session.endedAt) : Date.now();
+      void dispatchOutboundEvent({
+        type: 'livestream.ended',
+        blackoutUserId: stream.creatorId,
+        data: {
+          streamId: session.streamId,
+          sessionId: session.id,
+          title: stream.title,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          durationSeconds: Number.isFinite(startedAtMs)
+            ? Math.max(0, Math.round((endedAtMs - startedAtMs) / 1000))
+            : undefined,
+        },
+        occurredAt: session.endedAt,
+      }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.ended', error: String(err) }));
+
+      // Stop every running fan-out for this creator. The worker
+      // gracefully SIGTERMs each ffmpeg; restart timers are cleared.
+      try {
+        const fanoutResult = stopAllRtmpFanouts(stream.creatorId);
+        log.info('streaming_rtmp_fanout_stopped', {
+          streamId: session.streamId,
+          stopped: fanoutResult.stopped,
+        });
+      } catch (err) {
+        log.warn('streaming_rtmp_fanout_stop_threw', {
+          streamId: session.streamId,
+          error: String(err),
+        });
+      }
+
+      // Push a StreamStateChanged: outputActive=false event to every
+      // identified OBS-WS surface so Companion's "Stream live" tile
+      // flips off in real time.
+      try {
+        notifyObsWsStreamEnded(stream.creatorId);
+      } catch (err) {
+        log.warn('streaming_obs_ws_notify_threw', {
+          streamId: session.streamId,
+          type: 'ended',
+          error: String(err),
+        });
+      }
     }
 
     return c.json(session);

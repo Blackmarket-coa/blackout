@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { encodeStego, encryptE2E, formatFederatedMessage, signMessage } from '@blackout/core';
 import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
+import { routeOutboundMatrixMessage } from '../services/outboundMessageRouter';
 import { readJsonBody } from '../middleware/validate';
+import { log } from '../telemetry/logger';
 
 const messages = new Hono();
 
@@ -61,7 +63,26 @@ messages.post('/:channelId', async (c) => {
   const federatedPreview = formatFederatedMessage(user.username, content);
   const matrix = matrixRoomId ? await matrixClient.sendMessage(matrixRoomId, federatedPreview) : null;
 
-  return c.json({ message, matrix }, 201);
+  // After landing the message in the Blackout-side Matrix room, fan it
+  // out to any source platforms bridged to that room (Twitch chat bridge
+  // → Twitch IRC; YouTube chat bridge → liveChatMessages.insert). Only
+  // the plain `m.text` body — encrypted / steganographic content stays
+  // Blackout-internal because it isn't meaningful to a Twitch viewer.
+  // Loop prevention: this dispatch path never carries `m.blackout.origin`,
+  // so the chat-bridge ingress side doesn't see its own echo.
+  let outboundFanout: Awaited<ReturnType<typeof routeOutboundMatrixMessage>> | null = null;
+  if (matrixRoomId && stegoTier === 1) {
+    try {
+      outboundFanout = await routeOutboundMatrixMessage(matrixRoomId, content);
+    } catch (err) {
+      log.warn('messages_outbound_router_threw', {
+        matrixRoomId,
+        error: String(err),
+      });
+    }
+  }
+
+  return c.json({ message, matrix, outboundFanout }, 201);
 });
 
 export default messages;

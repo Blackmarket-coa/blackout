@@ -31,6 +31,7 @@ import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
 import { DraupnirRoutePage } from './app/features/moderation/draupnir';
+import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -161,9 +162,15 @@ const buildAppRouter = (capabilityContext: {
     return createBrowserRouter([
         {
             element: <RouterRoot />,
-            children: shellEnabled
-                ? [{ element: <AppShell />, children: destinationRoutes }]
-                : destinationRoutes,
+            children: [
+                // OAuth popup landing page. Mounted OUTSIDE the AppShell so
+                // a popup window doesn't render the full app chrome before
+                // it auto-closes itself.
+                { path: '/oauth/:provider/callback', element: <OAuthCallback /> },
+                ...(shellEnabled
+                    ? [{ element: <AppShell />, children: destinationRoutes }]
+                    : destinationRoutes),
+            ],
         },
     ]);
 };

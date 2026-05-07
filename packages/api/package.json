@@ -24,6 +24,7 @@
     "@simplewebauthn/server": "13.3.0",
     "hono": "4.12.14",
     "pg": "^8.13.1",
+    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

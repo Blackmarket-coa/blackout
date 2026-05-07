@@ -5,6 +5,7 @@ import type { TipContextKind, TipRecord, TipStatus } from '../db/types';
 import type { MarketplaceProviderIdString } from '../db/types';
 import { emitDomainEvent } from '../modules/domain-events';
 import { incrementCounter, logEvent } from './marketplaceObservability';
+import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
 
 const DEFAULT_PROVIDER: MarketplaceProviderId = 'freeblackmarket';
 const MIN_TIP_CENTS = 100; // $1.00 floor — keeps the 3% fee >= 1¢ and deters dust spam.
@@ -217,6 +218,30 @@ export function captureTip(
         tipId: updated.id,
         recipientUserId: updated.recipientUserId,
         netCents: updated.netCents,
+    });
+    // Fan out to the recipient's Discord-shape outbound webhooks. Capture
+    // (not creation) is the right firing point because that's when the
+    // money is actually confirmed; pending tips can still fail. The
+    // service swallows per-subscription failures so a bad webhook never
+    // blocks tip capture.
+    void dispatchOutboundEvent({
+        type: 'tip.created',
+        blackoutUserId: updated.recipientUserId,
+        data: {
+            tipId: updated.id,
+            grossCents: updated.grossCents,
+            netCents: updated.netCents,
+            currency: updated.currency,
+            providerId: updated.providerId,
+            contextKind: updated.contextKind,
+            note: updated.note,
+        },
+        occurredAt: updated.capturedAt ?? undefined,
+    }).catch((err) => {
+        logEvent('tip.outbound_dispatch_threw', {
+            tipId: updated.id,
+            error: String(err),
+        });
     });
     return toView(updated);
 }

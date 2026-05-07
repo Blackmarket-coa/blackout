@@ -38,6 +38,19 @@ import type {
   PasswordResetTokenRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
+  LinkedAccountRecord,
+  LinkedAccountProvider,
+  PendingOAuthLinkRecord,
+  TwitchChatBridgeRecord,
+  TwitchEventSubscriptionRecord,
+  WidgetAlertTokenRecord,
+  YoutubeChatBridgeRecord,
+  KickChatBridgeRecord,
+  DiscordCompatWebhookRecord,
+  OutboundEventWebhookRecord,
+  TwitchIrcBotTokenRecord,
+  ObsWsPasswordRecord,
+  SimulcastDestinationRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -76,6 +89,18 @@ type PersistedState = {
   passwordResetTokens: PasswordResetTokenRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
+  linkedAccounts: LinkedAccountRecord[];
+  pendingOAuthLinks: PendingOAuthLinkRecord[];
+  twitchChatBridges: TwitchChatBridgeRecord[];
+  twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
+  widgetAlertTokens: WidgetAlertTokenRecord[];
+  youtubeChatBridges: YoutubeChatBridgeRecord[];
+  kickChatBridges: KickChatBridgeRecord[];
+  simulcastDestinations: SimulcastDestinationRecord[];
+  discordCompatWebhooks: DiscordCompatWebhookRecord[];
+  outboundEventWebhooks: OutboundEventWebhookRecord[];
+  twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
+  obsWsPasswords: ObsWsPasswordRecord[];
 };
 
 class InMemoryDb {
@@ -110,6 +135,30 @@ class InMemoryDb {
   passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
+  /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
+  linkedAccounts = new Map<string, LinkedAccountRecord>();
+  /** Keyed by stateHash. */
+  pendingOAuthLinks = new Map<string, PendingOAuthLinkRecord>();
+  /** Keyed by bridge id. */
+  twitchChatBridges = new Map<string, TwitchChatBridgeRecord>();
+  /** Keyed by helixSubscriptionId for O(1) inbound-notification lookup. */
+  twitchEventSubscriptions = new Map<string, TwitchEventSubscriptionRecord>();
+  /** Keyed by secretHash so the SSE handler can validate a presented bearer in O(1). */
+  widgetAlertTokens = new Map<string, WidgetAlertTokenRecord>();
+  /** Keyed by bridge id. */
+  youtubeChatBridges = new Map<string, YoutubeChatBridgeRecord>();
+  /** Keyed by bridge id. */
+  kickChatBridges = new Map<string, KickChatBridgeRecord>();
+  /** Keyed by destination id. */
+  simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
+  /** Keyed by webhook id (the public part of the URL). */
+  discordCompatWebhooks = new Map<string, DiscordCompatWebhookRecord>();
+  /** Keyed by subscription id. */
+  outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
+  /** Keyed by token id. */
+  twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
+  /** Keyed by password id (also the URL slug). */
+  obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -257,6 +306,598 @@ class InMemoryDb {
       }
     }
     return removed;
+  }
+
+  // --- linked accounts (third-party OAuth identity links) ---
+
+  private linkedAccountKey(userId: string, provider: LinkedAccountProvider): string {
+    return `${userId}:${provider}`;
+  }
+
+  upsertLinkedAccount(
+    input: Omit<LinkedAccountRecord, 'createdAt' | 'updatedAt'>,
+  ): LinkedAccountRecord {
+    const key = this.linkedAccountKey(input.blackoutUserId, input.provider);
+    const existing = this.linkedAccounts.get(key);
+    const now = nowIso();
+    const record: LinkedAccountRecord = existing
+      ? { ...existing, ...input, createdAt: existing.createdAt, updatedAt: now }
+      : { ...input, createdAt: now, updatedAt: now };
+    this.linkedAccounts.set(key, record);
+    return record;
+  }
+
+  getLinkedAccount(
+    userId: string,
+    provider: LinkedAccountProvider,
+  ): LinkedAccountRecord | undefined {
+    return this.linkedAccounts.get(this.linkedAccountKey(userId, provider));
+  }
+
+  listLinkedAccountsForUser(userId: string): LinkedAccountRecord[] {
+    return [...this.linkedAccounts.values()].filter((row) => row.blackoutUserId === userId);
+  }
+
+  /** Used by polling-style schedulers (Streamlabs sync, YouTube live chat) to walk every link. */
+  listAllLinkedAccountsForProvider(provider: LinkedAccountProvider): LinkedAccountRecord[] {
+    return [...this.linkedAccounts.values()].filter((row) => row.provider === provider);
+  }
+
+  deleteLinkedAccount(userId: string, provider: LinkedAccountProvider): boolean {
+    return this.linkedAccounts.delete(this.linkedAccountKey(userId, provider));
+  }
+
+  /**
+   * Persist a per-link sync cursor (e.g. Streamlabs donation_id, YouTube
+   * pageToken). No-op when there is no link for the (user, provider).
+   */
+  setLinkedAccountSyncCursor(
+    userId: string,
+    provider: LinkedAccountProvider,
+    cursor: string | undefined,
+  ): LinkedAccountRecord | undefined {
+    const key = this.linkedAccountKey(userId, provider);
+    const existing = this.linkedAccounts.get(key);
+    if (!existing) return undefined;
+    const updated: LinkedAccountRecord = {
+      ...existing,
+      syncCursor: cursor,
+      updatedAt: nowIso(),
+    };
+    this.linkedAccounts.set(key, updated);
+    return updated;
+  }
+
+  // --- pending OAuth link state (PKCE + CSRF) ---
+
+  createPendingOAuthLink(
+    input: Omit<PendingOAuthLinkRecord, 'createdAt'>,
+  ): PendingOAuthLinkRecord {
+    const record: PendingOAuthLinkRecord = { ...input, createdAt: nowIso() };
+    this.pendingOAuthLinks.set(record.stateHash, record);
+    return record;
+  }
+
+  consumePendingOAuthLink(stateHash: string): PendingOAuthLinkRecord | undefined {
+    const existing = this.pendingOAuthLinks.get(stateHash);
+    if (!existing) return undefined;
+    if (existing.consumedAt) return undefined;
+    if (new Date(existing.expiresAt).getTime() <= Date.now()) return undefined;
+    const updated: PendingOAuthLinkRecord = { ...existing, consumedAt: nowIso() };
+    this.pendingOAuthLinks.set(stateHash, updated);
+    return updated;
+  }
+
+  prunePendingOAuthLinks(now: Date = new Date()): number {
+    let removed = 0;
+    for (const [hash, record] of this.pendingOAuthLinks) {
+      if (new Date(record.expiresAt).getTime() <= now.getTime()) {
+        this.pendingOAuthLinks.delete(hash);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  // --- twitch chat bridges (Phase 1 / Track A) ---
+
+  createTwitchChatBridge(
+    input: Omit<TwitchChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchChatBridgeRecord {
+    const now = nowIso();
+    const record: TwitchChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getTwitchChatBridge(id: string): TwitchChatBridgeRecord | undefined {
+    return this.twitchChatBridges.get(id);
+  }
+
+  findTwitchChatBridge(
+    blackoutUserId: string,
+    twitchChannel: string,
+  ): TwitchChatBridgeRecord | undefined {
+    const ch = twitchChannel.toLowerCase();
+    return [...this.twitchChatBridges.values()].find(
+      (row) => row.blackoutUserId === blackoutUserId && row.twitchChannel === ch,
+    );
+  }
+
+  listTwitchChatBridgesForUser(blackoutUserId: string): TwitchChatBridgeRecord[] {
+    return [...this.twitchChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveTwitchChatBridges(): TwitchChatBridgeRecord[] {
+    return [...this.twitchChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateTwitchChatBridge(
+    id: string,
+    patch: Partial<Omit<TwitchChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): TwitchChatBridgeRecord | undefined {
+    const existing = this.twitchChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: TwitchChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.twitchChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteTwitchChatBridge(id: string): boolean {
+    return this.twitchChatBridges.delete(id);
+  }
+
+  // --- twitch eventsub subscriptions ---
+
+  createTwitchEventSubscription(
+    input: Omit<TwitchEventSubscriptionRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchEventSubscriptionRecord {
+    const now = nowIso();
+    const record: TwitchEventSubscriptionRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchEventSubscriptions.set(record.helixSubscriptionId, record);
+    return record;
+  }
+
+  getTwitchEventSubscriptionByHelixId(
+    helixId: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    return this.twitchEventSubscriptions.get(helixId);
+  }
+
+  listTwitchEventSubscriptionsForChannel(
+    blackoutUserId: string,
+    twitchUserId: string,
+  ): TwitchEventSubscriptionRecord[] {
+    return [...this.twitchEventSubscriptions.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId && row.twitchUserId === twitchUserId,
+    );
+  }
+
+  updateTwitchEventSubscriptionStatus(
+    helixId: string,
+    status: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    const existing = this.twitchEventSubscriptions.get(helixId);
+    if (!existing) return undefined;
+    const updated: TwitchEventSubscriptionRecord = {
+      ...existing,
+      status,
+      updatedAt: nowIso(),
+    };
+    this.twitchEventSubscriptions.set(helixId, updated);
+    return updated;
+  }
+
+  deleteTwitchEventSubscription(helixId: string): boolean {
+    return this.twitchEventSubscriptions.delete(helixId);
+  }
+
+  // --- widget alert tokens (Phase 1 / Track A) ---
+
+  createWidgetAlertToken(
+    input: Omit<WidgetAlertTokenRecord, 'createdAt'>,
+  ): WidgetAlertTokenRecord {
+    const record: WidgetAlertTokenRecord = { ...input, createdAt: nowIso() };
+    this.widgetAlertTokens.set(record.secretHash, record);
+    return record;
+  }
+
+  getWidgetAlertTokenById(id: string): WidgetAlertTokenRecord | undefined {
+    return [...this.widgetAlertTokens.values()].find((row) => row.id === id);
+  }
+
+  /** Returns the active (non-revoked) token matching the bearer hash, or undefined. */
+  findActiveWidgetAlertTokenByHash(
+    secretHash: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const row = this.widgetAlertTokens.get(secretHash);
+    if (!row || row.revokedAt) return undefined;
+    return row;
+  }
+
+  listWidgetAlertTokensForUser(
+    blackoutUserId: string,
+  ): WidgetAlertTokenRecord[] {
+    return [...this.widgetAlertTokens.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeWidgetAlertToken(
+    id: string,
+    reason: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const existing = this.getWidgetAlertTokenById(id);
+    if (!existing || existing.revokedAt) return undefined;
+    const updated: WidgetAlertTokenRecord = {
+      ...existing,
+      revokedAt: nowIso(),
+      revokedReason: reason,
+    };
+    this.widgetAlertTokens.set(updated.secretHash, updated);
+    return updated;
+  }
+
+  touchWidgetAlertTokenDelivered(
+    secretHash: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const existing = this.widgetAlertTokens.get(secretHash);
+    if (!existing) return undefined;
+    const updated: WidgetAlertTokenRecord = {
+      ...existing,
+      lastDeliveredAt: nowIso(),
+    };
+    this.widgetAlertTokens.set(secretHash, updated);
+    return updated;
+  }
+
+  // --- youtube chat bridges (Phase 1 / Track A) ---
+
+  createYoutubeChatBridge(
+    input: Omit<YoutubeChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): YoutubeChatBridgeRecord {
+    const now = nowIso();
+    const record: YoutubeChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.youtubeChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getYoutubeChatBridge(id: string): YoutubeChatBridgeRecord | undefined {
+    return this.youtubeChatBridges.get(id);
+  }
+
+  findYoutubeChatBridge(
+    blackoutUserId: string,
+    youtubeChannelId: string,
+  ): YoutubeChatBridgeRecord | undefined {
+    return [...this.youtubeChatBridges.values()].find(
+      (row) =>
+        row.blackoutUserId === blackoutUserId && row.youtubeChannelId === youtubeChannelId,
+    );
+  }
+
+  listYoutubeChatBridgesForUser(blackoutUserId: string): YoutubeChatBridgeRecord[] {
+    return [...this.youtubeChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveYoutubeChatBridges(): YoutubeChatBridgeRecord[] {
+    return [...this.youtubeChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateYoutubeChatBridge(
+    id: string,
+    patch: Partial<Omit<YoutubeChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): YoutubeChatBridgeRecord | undefined {
+    const existing = this.youtubeChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: YoutubeChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.youtubeChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteYoutubeChatBridge(id: string): boolean {
+    return this.youtubeChatBridges.delete(id);
+  }
+
+  // --- kick chat bridges (Phase 1 / Track A) ---
+
+  createKickChatBridge(
+    input: Omit<KickChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): KickChatBridgeRecord {
+    const now = nowIso();
+    const record: KickChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.kickChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getKickChatBridge(id: string): KickChatBridgeRecord | undefined {
+    return this.kickChatBridges.get(id);
+  }
+
+  findKickChatBridge(
+    blackoutUserId: string,
+    kickChatroomId: string,
+  ): KickChatBridgeRecord | undefined {
+    return [...this.kickChatBridges.values()].find(
+      (row) =>
+        row.blackoutUserId === blackoutUserId && row.kickChatroomId === kickChatroomId,
+    );
+  }
+
+  listKickChatBridgesForUser(blackoutUserId: string): KickChatBridgeRecord[] {
+    return [...this.kickChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveKickChatBridges(): KickChatBridgeRecord[] {
+    return [...this.kickChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateKickChatBridge(
+    id: string,
+    patch: Partial<Omit<KickChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): KickChatBridgeRecord | undefined {
+    const existing = this.kickChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: KickChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.kickChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteKickChatBridge(id: string): boolean {
+    return this.kickChatBridges.delete(id);
+  }
+
+  // --- discord-compatible incoming webhooks (Phase 2 / Track B) ---
+
+  createDiscordCompatWebhook(
+    input: Omit<DiscordCompatWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordCompatWebhookRecord {
+    const now = nowIso();
+    const record: DiscordCompatWebhookRecord = { ...input, createdAt: now, updatedAt: now };
+    this.discordCompatWebhooks.set(record.id, record);
+    return record;
+  }
+
+  getDiscordCompatWebhook(id: string): DiscordCompatWebhookRecord | undefined {
+    return this.discordCompatWebhooks.get(id);
+  }
+
+  listDiscordCompatWebhooksForUser(blackoutUserId: string): DiscordCompatWebhookRecord[] {
+    return [...this.discordCompatWebhooks.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  updateDiscordCompatWebhook(
+    id: string,
+    patch: Partial<Omit<DiscordCompatWebhookRecord, 'id' | 'createdAt'>>,
+  ): DiscordCompatWebhookRecord | undefined {
+    const existing = this.discordCompatWebhooks.get(id);
+    if (!existing) return undefined;
+    const updated: DiscordCompatWebhookRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.discordCompatWebhooks.set(id, updated);
+    return updated;
+  }
+
+  deleteDiscordCompatWebhook(id: string): boolean {
+    return this.discordCompatWebhooks.delete(id);
+  }
+
+  // --- outbound event webhooks (Phase 2 / Track B) ---
+
+  createOutboundEventWebhook(
+    input: Omit<OutboundEventWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): OutboundEventWebhookRecord {
+    const now = nowIso();
+    const record: OutboundEventWebhookRecord = { ...input, createdAt: now, updatedAt: now };
+    this.outboundEventWebhooks.set(record.id, record);
+    return record;
+  }
+
+  getOutboundEventWebhook(id: string): OutboundEventWebhookRecord | undefined {
+    return this.outboundEventWebhooks.get(id);
+  }
+
+  listOutboundEventWebhooksForUser(blackoutUserId: string): OutboundEventWebhookRecord[] {
+    return [...this.outboundEventWebhooks.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  /** All active subscriptions across all users — the delivery loop iterates this. */
+  listActiveOutboundEventWebhooks(): OutboundEventWebhookRecord[] {
+    return [...this.outboundEventWebhooks.values()].filter((row) => row.isActive);
+  }
+
+  updateOutboundEventWebhook(
+    id: string,
+    patch: Partial<Omit<OutboundEventWebhookRecord, 'id' | 'createdAt'>>,
+  ): OutboundEventWebhookRecord | undefined {
+    const existing = this.outboundEventWebhooks.get(id);
+    if (!existing) return undefined;
+    const updated: OutboundEventWebhookRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.outboundEventWebhooks.set(id, updated);
+    return updated;
+  }
+
+  deleteOutboundEventWebhook(id: string): boolean {
+    return this.outboundEventWebhooks.delete(id);
+  }
+
+  // --- twitch irc bot tokens (Phase 2 / Track B) ---
+
+  createTwitchIrcBotToken(
+    input: Omit<TwitchIrcBotTokenRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchIrcBotTokenRecord {
+    const now = nowIso();
+    const record: TwitchIrcBotTokenRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchIrcBotTokens.set(record.id, record);
+    return record;
+  }
+
+  getTwitchIrcBotToken(id: string): TwitchIrcBotTokenRecord | undefined {
+    return this.twitchIrcBotTokens.get(id);
+  }
+
+  /** Used by the connection authenticator to verify a presented PASS. */
+  findActiveTwitchIrcBotTokenByHash(secretHash: string): TwitchIrcBotTokenRecord | undefined {
+    return [...this.twitchIrcBotTokens.values()].find(
+      (row) => row.isActive && row.secretHash === secretHash,
+    );
+  }
+
+  listTwitchIrcBotTokensForUser(blackoutUserId: string): TwitchIrcBotTokenRecord[] {
+    return [...this.twitchIrcBotTokens.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeTwitchIrcBotToken(id: string, reason: string): TwitchIrcBotTokenRecord | undefined {
+    const existing = this.twitchIrcBotTokens.get(id);
+    if (!existing) return undefined;
+    const updated: TwitchIrcBotTokenRecord = {
+      ...existing,
+      isActive: false,
+      revokedAt: nowIso(),
+      revokeReason: reason,
+      updatedAt: nowIso(),
+    };
+    this.twitchIrcBotTokens.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Bump diagnostics on a successful authenticated bot connection. Bumps
+   * are in-memory-only on the file-backed db (touching the JSON store on
+   * every IRC auth would be a write amplification bomb).
+   */
+  touchTwitchIrcBotTokenUsed(id: string): void {
+    const existing = this.twitchIrcBotTokens.get(id);
+    if (!existing) return;
+    this.twitchIrcBotTokens.set(id, {
+      ...existing,
+      lastUsedAt: nowIso(),
+      useCount: existing.useCount + 1,
+    });
+  }
+
+  deleteTwitchIrcBotToken(id: string): boolean {
+    return this.twitchIrcBotTokens.delete(id);
+  }
+
+  // --- obs-ws passwords (Phase 3 / Track B) ---
+
+  createObsWsPassword(
+    input: Omit<ObsWsPasswordRecord, 'createdAt' | 'updatedAt'>,
+  ): ObsWsPasswordRecord {
+    const now = nowIso();
+    const record: ObsWsPasswordRecord = { ...input, createdAt: now, updatedAt: now };
+    this.obsWsPasswords.set(record.id, record);
+    return record;
+  }
+
+  getObsWsPassword(id: string): ObsWsPasswordRecord | undefined {
+    return this.obsWsPasswords.get(id);
+  }
+
+  /**
+   * Used by the OBS-WS shim's URL-based authenticator. Only returns the
+   * row if it's still active so revocation takes effect immediately.
+   */
+  getActiveObsWsPassword(id: string): ObsWsPasswordRecord | undefined {
+    const row = this.obsWsPasswords.get(id);
+    return row && row.isActive ? row : undefined;
+  }
+
+  listObsWsPasswordsForUser(blackoutUserId: string): ObsWsPasswordRecord[] {
+    return [...this.obsWsPasswords.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeObsWsPassword(id: string, reason: string): ObsWsPasswordRecord | undefined {
+    const existing = this.obsWsPasswords.get(id);
+    if (!existing) return undefined;
+    const updated: ObsWsPasswordRecord = {
+      ...existing,
+      isActive: false,
+      revokedAt: nowIso(),
+      revokeReason: reason,
+      updatedAt: nowIso(),
+    };
+    this.obsWsPasswords.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Bump diagnostics on a successful authenticated OBS-WS connection.
+   * In-memory only on the file-backed db (write amplification on every
+   * connection would thrash the JSON store).
+   */
+  touchObsWsPasswordUsed(id: string): void {
+    const existing = this.obsWsPasswords.get(id);
+    if (!existing) return;
+    this.obsWsPasswords.set(id, {
+      ...existing,
+      lastUsedAt: nowIso(),
+      useCount: existing.useCount + 1,
+    });
+  }
+
+  deleteObsWsPassword(id: string): boolean {
+    return this.obsWsPasswords.delete(id);
+  }
+
+  // --- simulcast destinations (Phase 1 / Track A) ---
+
+  createSimulcastDestination(
+    input: Omit<SimulcastDestinationRecord, 'createdAt' | 'updatedAt'>,
+  ): SimulcastDestinationRecord {
+    const now = nowIso();
+    const record: SimulcastDestinationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.simulcastDestinations.set(record.id, record);
+    return record;
+  }
+
+  getSimulcastDestination(id: string): SimulcastDestinationRecord | undefined {
+    return this.simulcastDestinations.get(id);
+  }
+
+  listSimulcastDestinationsForUser(
+    blackoutUserId: string,
+  ): SimulcastDestinationRecord[] {
+    return [...this.simulcastDestinations.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listEnabledSimulcastDestinations(): SimulcastDestinationRecord[] {
+    return [...this.simulcastDestinations.values()].filter((row) => row.isEnabled);
+  }
+
+  updateSimulcastDestination(
+    id: string,
+    patch: Partial<Omit<SimulcastDestinationRecord, 'id' | 'createdAt'>>,
+  ): SimulcastDestinationRecord | undefined {
+    const existing = this.simulcastDestinations.get(id);
+    if (!existing) return undefined;
+    const updated: SimulcastDestinationRecord = {
+      ...existing,
+      ...patch,
+      updatedAt: nowIso(),
+    };
+    this.simulcastDestinations.set(id, updated);
+    return updated;
+  }
+
+  deleteSimulcastDestination(id: string): boolean {
+    return this.simulcastDestinations.delete(id);
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -965,6 +1606,42 @@ class FileBackedDb extends InMemoryDb {
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
     );
+    this.linkedAccounts = new Map(
+      (parsed.linkedAccounts ?? []).map((row) => [`${row.blackoutUserId}:${row.provider}`, row]),
+    );
+    this.pendingOAuthLinks = new Map(
+      (parsed.pendingOAuthLinks ?? []).map((row) => [row.stateHash, row]),
+    );
+    this.twitchChatBridges = new Map(
+      (parsed.twitchChatBridges ?? []).map((row) => [row.id, row]),
+    );
+    this.twitchEventSubscriptions = new Map(
+      (parsed.twitchEventSubscriptions ?? []).map((row) => [row.helixSubscriptionId, row]),
+    );
+    this.widgetAlertTokens = new Map(
+      (parsed.widgetAlertTokens ?? []).map((row) => [row.secretHash, row]),
+    );
+    this.youtubeChatBridges = new Map(
+      (parsed.youtubeChatBridges ?? []).map((row) => [row.id, row]),
+    );
+    this.kickChatBridges = new Map(
+      (parsed.kickChatBridges ?? []).map((row) => [row.id, row]),
+    );
+    this.simulcastDestinations = new Map(
+      (parsed.simulcastDestinations ?? []).map((row) => [row.id, row]),
+    );
+    this.discordCompatWebhooks = new Map(
+      (parsed.discordCompatWebhooks ?? []).map((row) => [row.id, row]),
+    );
+    this.outboundEventWebhooks = new Map(
+      (parsed.outboundEventWebhooks ?? []).map((row) => [row.id, row]),
+    );
+    this.twitchIrcBotTokens = new Map(
+      (parsed.twitchIrcBotTokens ?? []).map((row) => [row.id, row]),
+    );
+    this.obsWsPasswords = new Map(
+      (parsed.obsWsPasswords ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1000,6 +1677,18 @@ class FileBackedDb extends InMemoryDb {
       passwordResetTokens: [...this.passwordResetTokens.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
+      linkedAccounts: [...this.linkedAccounts.values()],
+      pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
+      twitchChatBridges: [...this.twitchChatBridges.values()],
+      twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
+      widgetAlertTokens: [...this.widgetAlertTokens.values()],
+      youtubeChatBridges: [...this.youtubeChatBridges.values()],
+      kickChatBridges: [...this.kickChatBridges.values()],
+      simulcastDestinations: [...this.simulcastDestinations.values()],
+      discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
+      outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
+      twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
+      obsWsPasswords: [...this.obsWsPasswords.values()],
     };
   }
 
@@ -1378,6 +2067,279 @@ class FileBackedDb extends InMemoryDb {
   override resetAdRevenueForTest(): void {
     super.resetAdRevenueForTest();
     this.persist();
+  }
+
+  override upsertLinkedAccount(
+    input: Omit<LinkedAccountRecord, 'createdAt' | 'updatedAt'>,
+  ): LinkedAccountRecord {
+    const record = super.upsertLinkedAccount(input);
+    this.persist();
+    return record;
+  }
+
+  override deleteLinkedAccount(userId: string, provider: LinkedAccountProvider): boolean {
+    const removed = super.deleteLinkedAccount(userId, provider);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override setLinkedAccountSyncCursor(
+    userId: string,
+    provider: LinkedAccountProvider,
+    cursor: string | undefined,
+  ): LinkedAccountRecord | undefined {
+    const updated = super.setLinkedAccountSyncCursor(userId, provider, cursor);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createPendingOAuthLink(
+    input: Omit<PendingOAuthLinkRecord, 'createdAt'>,
+  ): PendingOAuthLinkRecord {
+    const record = super.createPendingOAuthLink(input);
+    this.persist();
+    return record;
+  }
+
+  override consumePendingOAuthLink(stateHash: string): PendingOAuthLinkRecord | undefined {
+    const consumed = super.consumePendingOAuthLink(stateHash);
+    if (consumed) this.persist();
+    return consumed;
+  }
+
+  override prunePendingOAuthLinks(now: Date = new Date()): number {
+    const removed = super.prunePendingOAuthLinks(now);
+    if (removed > 0) this.persist();
+    return removed;
+  }
+
+  override createTwitchChatBridge(
+    input: Omit<TwitchChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchChatBridgeRecord {
+    const record = super.createTwitchChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateTwitchChatBridge(
+    id: string,
+    patch: Partial<Omit<TwitchChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): TwitchChatBridgeRecord | undefined {
+    const updated = super.updateTwitchChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteTwitchChatBridge(id: string): boolean {
+    const removed = super.deleteTwitchChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createTwitchEventSubscription(
+    input: Omit<TwitchEventSubscriptionRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchEventSubscriptionRecord {
+    const record = super.createTwitchEventSubscription(input);
+    this.persist();
+    return record;
+  }
+
+  override updateTwitchEventSubscriptionStatus(
+    helixId: string,
+    status: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    const updated = super.updateTwitchEventSubscriptionStatus(helixId, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteTwitchEventSubscription(helixId: string): boolean {
+    const removed = super.deleteTwitchEventSubscription(helixId);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createWidgetAlertToken(
+    input: Omit<WidgetAlertTokenRecord, 'createdAt'>,
+  ): WidgetAlertTokenRecord {
+    const record = super.createWidgetAlertToken(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeWidgetAlertToken(
+    id: string,
+    reason: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const updated = super.revokeWidgetAlertToken(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchWidgetAlertTokenDelivered` override — touching last-delivered on
+  // every SSE flush would write the JSON store thousands of times per
+  // stream. The diagnostic field is in-memory only on the file-backed db.
+
+  override createYoutubeChatBridge(
+    input: Omit<YoutubeChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): YoutubeChatBridgeRecord {
+    const record = super.createYoutubeChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateYoutubeChatBridge(
+    id: string,
+    patch: Partial<Omit<YoutubeChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): YoutubeChatBridgeRecord | undefined {
+    const updated = super.updateYoutubeChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteYoutubeChatBridge(id: string): boolean {
+    const removed = super.deleteYoutubeChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createKickChatBridge(
+    input: Omit<KickChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): KickChatBridgeRecord {
+    const record = super.createKickChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateKickChatBridge(
+    id: string,
+    patch: Partial<Omit<KickChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): KickChatBridgeRecord | undefined {
+    const updated = super.updateKickChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteKickChatBridge(id: string): boolean {
+    const removed = super.deleteKickChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createSimulcastDestination(
+    input: Omit<SimulcastDestinationRecord, 'createdAt' | 'updatedAt'>,
+  ): SimulcastDestinationRecord {
+    const record = super.createSimulcastDestination(input);
+    this.persist();
+    return record;
+  }
+
+  override updateSimulcastDestination(
+    id: string,
+    patch: Partial<Omit<SimulcastDestinationRecord, 'id' | 'createdAt'>>,
+  ): SimulcastDestinationRecord | undefined {
+    const updated = super.updateSimulcastDestination(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteSimulcastDestination(id: string): boolean {
+    const removed = super.deleteSimulcastDestination(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createDiscordCompatWebhook(
+    input: Omit<DiscordCompatWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordCompatWebhookRecord {
+    const record = super.createDiscordCompatWebhook(input);
+    this.persist();
+    return record;
+  }
+
+  override updateDiscordCompatWebhook(
+    id: string,
+    patch: Partial<Omit<DiscordCompatWebhookRecord, 'id' | 'createdAt'>>,
+  ): DiscordCompatWebhookRecord | undefined {
+    const updated = super.updateDiscordCompatWebhook(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteDiscordCompatWebhook(id: string): boolean {
+    const removed = super.deleteDiscordCompatWebhook(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createOutboundEventWebhook(
+    input: Omit<OutboundEventWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): OutboundEventWebhookRecord {
+    const record = super.createOutboundEventWebhook(input);
+    this.persist();
+    return record;
+  }
+
+  override updateOutboundEventWebhook(
+    id: string,
+    patch: Partial<Omit<OutboundEventWebhookRecord, 'id' | 'createdAt'>>,
+  ): OutboundEventWebhookRecord | undefined {
+    const updated = super.updateOutboundEventWebhook(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteOutboundEventWebhook(id: string): boolean {
+    const removed = super.deleteOutboundEventWebhook(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createTwitchIrcBotToken(
+    input: Omit<TwitchIrcBotTokenRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchIrcBotTokenRecord {
+    const record = super.createTwitchIrcBotToken(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeTwitchIrcBotToken(id: string, reason: string): TwitchIrcBotTokenRecord | undefined {
+    const updated = super.revokeTwitchIrcBotToken(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchTwitchIrcBotTokenUsed` override — write amplification on
+  // every IRC auth would thrash the JSON store. Diagnostic field is
+  // in-memory only on the file-backed db.
+
+  override deleteTwitchIrcBotToken(id: string): boolean {
+    const removed = super.deleteTwitchIrcBotToken(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createObsWsPassword(
+    input: Omit<ObsWsPasswordRecord, 'createdAt' | 'updatedAt'>,
+  ): ObsWsPasswordRecord {
+    const record = super.createObsWsPassword(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeObsWsPassword(id: string, reason: string): ObsWsPasswordRecord | undefined {
+    const updated = super.revokeObsWsPassword(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchObsWsPasswordUsed` override — write amplification on every
+  // OBS-WS connection would thrash the JSON store. In-memory only.
+
+  override deleteObsWsPassword(id: string): boolean {
+    const removed = super.deleteObsWsPassword(id);
+    if (removed) this.persist();
+    return removed;
   }
 }
 

@@ -43,6 +43,242 @@ export interface RevokedSessionRecord {
   reason: string;
 }
 
+/** Providers we link external identities for. Mirrors the `provider` column. */
+export type LinkedAccountProvider =
+  | 'twitch'
+  | 'youtube'
+  | 'discord'
+  | 'patreon'
+  | 'tiktok'
+  | 'kick'
+  | 'streamlabs';
+
+export interface LinkedAccountRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  provider: LinkedAccountProvider;
+  providerUserId: string;
+  providerUsername?: string;
+  /** AES-256-GCM envelope; see services/secretBox.ts. */
+  accessTokenCiphertext: string;
+  /** AES-256-GCM envelope; null for providers that do not issue refresh tokens. */
+  refreshTokenCiphertext?: string;
+  scopes: string[];
+  /** ISO 8601 timestamp when the access token expires (omitted = unknown / non-expiring). */
+  expiresAt?: string;
+  encryptionKeyId: string;
+  /**
+   * Generic per-link "last seen" marker for polling-style integrations.
+   * Streamlabs donation sync stores the largest donation_id processed so
+   * far; a future YouTube live-chat poller would store its nextPageToken;
+   * Patreon backfill would store the JSON:API `next` cursor; etc.
+   *
+   * Persisted across restarts so a cold boot doesn't replay stale events.
+   */
+  syncCursor?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PendingOAuthLinkRecord {
+  /** SHA-256 hex of the random state token presented in the OAuth redirect. */
+  stateHash: string;
+  blackoutUserId: UUID;
+  provider: LinkedAccountProvider;
+  /** AES-256-GCM envelope of the PKCE code_verifier. */
+  codeVerifierCiphertext: string;
+  redirectUri: string;
+  scopes: string[];
+  encryptionKeyId: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+}
+
+export interface TwitchChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Lowercased Twitch channel login (without leading '#'). */
+  twitchChannel: string;
+  /** Matrix room id, e.g. `!roomid:server`. */
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SimulcastDestinationRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Short provider label: 'twitch' / 'youtube' / 'kick' / etc. */
+  provider: string;
+  label?: string;
+  /** Public RTMP/RTMPS URL the fan-out worker pushes to. */
+  ingestUrl: string;
+  /** AES-256-GCM envelope of the stream key (services/secretBox.ts format). */
+  streamKeyCiphertext: string;
+  encryptionKeyId: string;
+  isEnabled: boolean;
+  lastUsedAt?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface YoutubeChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** YouTube channel id (UCxxxx...) of the broadcaster being bridged. */
+  youtubeChannelId: string;
+  /** Matrix room id, e.g. `!roomid:server`. */
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KickChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Kick numeric chatroom id (stored as a string to dodge int overflow). */
+  kickChatroomId: string;
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscordCompatWebhookRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  matrixRoomId: string;
+  /** Display label only (e.g. "GitHub", "Sentry"). Discord-style senders pick their own per-call. */
+  name: string;
+  avatarUrl?: string;
+  /** sha256 of the URL token. Plaintext is only ever returned at create time. */
+  tokenHash: string;
+  isActive: boolean;
+  lastUsedAt?: string;
+  deliveryCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Outbound Discord-shape webhook subscription. Creator registers a URL
+ * (Discord's own webhook URL, Zapier, IFTTT, custom backend) and we POST
+ * Blackout events to it in Discord embed shape, signed with a shared HMAC
+ * secret.
+ */
+export type OutboundEventType =
+  | 'tip.created'
+  | 'follow.created'
+  | 'livestream.started'
+  | 'livestream.ended'
+  | 'chat.message.received'
+  | 'subscriber.created'
+  | 'subscriber.gifted'
+  | 'cheer.received'
+  | 'raid.received'
+  | 'streamgoal.reached';
+
+export interface ObsWsPasswordRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  label?: string;
+  /**
+   * AES-256-GCM envelope of the plaintext password. AAD =
+   * `obs_ws_password|${id}` so a leaked envelope can't be replayed
+   * against another row.
+   */
+  passwordCiphertext: string;
+  encryptionKeyId: string;
+  isActive: boolean;
+  revokedAt?: string;
+  revokeReason?: string;
+  lastUsedAt?: string;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TwitchIrcBotTokenRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  label?: string;
+  /** sha256 of the bearer secret. Plaintext is never persisted. */
+  secretHash: string;
+  /** Channel scope: empty array = "all channels owned by this creator". */
+  scopes: string[];
+  isActive: boolean;
+  revokedAt?: string;
+  revokeReason?: string;
+  lastUsedAt?: string;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OutboundEventWebhookRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  name: string;
+  targetUrl: string;
+  /**
+   * AES-256-GCM envelope of the HMAC signing secret (services/secretBox.ts
+   * format). The AAD binds it to (subscriptionId) so a leaked envelope
+   * can't be replayed against another row.
+   */
+  signingSecretCiphertext: string;
+  encryptionKeyId: string;
+  /** Subset of OutboundEventType. Empty array means "all". */
+  eventTypes: OutboundEventType[];
+  isActive: boolean;
+  consecutiveFailures: number;
+  lastDeliveryAt?: string;
+  lastStatus?: number;
+  lastError?: string;
+  deliveryCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TwitchEventSubscriptionRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Numeric Twitch user id of the broadcaster being watched. */
+  twitchUserId: string;
+  /** EventSub subscription type, e.g. `channel.follow`. */
+  subscriptionType: string;
+  /** The subscription id Twitch returned from POST /eventsub/subscriptions. */
+  helixSubscriptionId: string;
+  /** Mirrors Twitch's `status` field. */
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WidgetAlertTokenRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Optional human label, e.g. "Main OBS". */
+  label?: string;
+  /** SHA-256 hex of the bearer secret. Plaintext is never persisted. */
+  secretHash: string;
+  scopes: string[];
+  createdAt: string;
+  revokedAt?: string;
+  revokedReason?: string;
+  /** Diagnostics: most recent SSE delivery to this token. */
+  lastDeliveredAt?: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

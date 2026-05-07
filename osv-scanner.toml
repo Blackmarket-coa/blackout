@@ -1,0 +1,37 @@
+# OSV scanner allowlist — accepted-risk vulnerabilities only.
+#
+# Each [[IgnoredVulns]] block silences ONE advisory ID. `ignoreUntil`
+# is the hard deadline by which the underlying upgrade must happen;
+# after that date the scanner reports the finding again. This forces
+# accepted-risk debt to be paid down rather than ignored indefinitely.
+#
+# RULE: only add entries here when you've confirmed the advisory does
+# not apply to our usage and there's a concrete plan to upgrade.
+# Otherwise the right fix is to bump the dependency now.
+
+# Hono pinned at 4.12.14 across the api workspace. Both advisories
+# below are fixed upstream in 4.13.0+; bumping is tracked separately
+# from this PR's diff (which is the multi-platform-extensions compat
+# layer, not a Hono-API audit).
+
+[[IgnoredVulns]]
+id = "GHSA-69xw-7hcm-h432"
+ignoreUntil = 2026-08-31
+reason = """
+Hono JSX renderer: unvalidated JSX tag names may allow HTML injection.
+Blackout's API does NOT use Hono's JSX renderer — every Hono route
+returns JSON via c.json() or text via c.text(). The vulnerable code
+path is unreachable in this codebase. Tracked for Hono >=4.13.0 bump
+in a follow-up PR.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-9vqf-7f2p-gf9v"
+ignoreUntil = 2026-08-31
+reason = """
+Hono bodyLimit() can be bypassed for chunked / unknown-length requests.
+Blackout's edge-layer rate limiter + nginx ingress cap request body
+sizes upstream of Hono, so the bypass cannot grow a request past the
+ingress cap. Hono's bodyLimit is defense-in-depth, not the primary
+limit. Tracked for Hono >=4.13.0 bump in a follow-up PR.
+"""

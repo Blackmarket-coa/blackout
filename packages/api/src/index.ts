@@ -21,6 +21,25 @@ import channelAccessRoutes from './routes/channelAccess';
 import aidPoolRoutes from './routes/aidPools';
 import adRevenueRoutes from './routes/adRevenue';
 import appRoutes from './routes/apps';
+import linkedAccountRoutes from './routes/linkedAccounts';
+import twitchChatBridgeRoutes from './routes/twitchChatBridges';
+import twitchEventSubRoutes from './routes/twitchEventSub';
+import widgetAlertRoutes from './routes/widgetAlerts';
+import patreonWebhookRoutes from './routes/patreonWebhook';
+import streamlabsRoutes from './routes/streamlabs';
+import youtubeChatBridgeRoutes from './routes/youtubeChatBridges';
+import integrationsHealthRoutes from './routes/integrationsHealth';
+import simulcastRoutes from './routes/simulcastDestinations';
+import kickChatBridgeRoutes from './routes/kickChatBridges';
+import {
+  authedRouter as discordCompatWebhookRoutes,
+  publicExecuteRouter as discordCompatWebhookExecuteRoutes,
+} from './routes/discordCompatWebhooks';
+import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
+import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
+import obsWsPasswordRoutes from './routes/obsWsPasswords';
+import rtmpFanoutRoutes from './routes/rtmpFanout';
+import matrixAppserviceRoutes from './routes/matrixAppservice';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -108,12 +127,38 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/aid-pools`, aidPoolRoutes);
   app.route(`${root}/ad-revenue`, adRevenueRoutes);
   app.route(`${root}/apps`, appRoutes);
+  app.route(`${root}/linked-accounts`, linkedAccountRoutes);
+  app.route(`${root}/integrations/twitch/chat-bridges`, twitchChatBridgeRoutes);
+  app.route(`${root}/integrations/twitch/eventsub`, twitchEventSubRoutes);
+  app.route(`${root}/integrations/widgets/alerts`, widgetAlertRoutes);
+  app.route(`${root}/integrations/patreon/webhook`, patreonWebhookRoutes);
+  app.route(`${root}/integrations/streamlabs`, streamlabsRoutes);
+  app.route(`${root}/integrations/youtube/chat-bridges`, youtubeChatBridgeRoutes);
+  app.route(`${root}/integrations/health`, integrationsHealthRoutes);
+  app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
+  app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
+  app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
+  app.route(`${root}/integrations/outbound-webhooks`, outboundEventWebhookRoutes);
+  app.route(`${root}/integrations/twitch-compat/bot-tokens`, twitchIrcBotTokenRoutes);
+  app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
+  app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
   app.route(`${root}/key-transparency`, keyTransparencyRoutes);
   registerFeatureModules(app, root);
 }
+
+// Discord-wire-compatible webhook execute endpoint. Mounted top-level (outside
+// /v1) so it has a stable URL the user can paste into 3rd-party services that
+// expect a Discord webhook URL. Auth is the URL token; no Bearer.
+app.route('/discord-compat/webhooks', discordCompatWebhookExecuteRoutes);
+
+// Matrix appservice transactions endpoint. Mounted at the spec-mandated
+// `/_matrix/app/v1/...` path; auth is the homeserver token configured in
+// MATRIX_APPSERVICE_HS_TOKEN. Synapse PUTs event batches here on every
+// room transaction we're registered to receive.
+app.route('/_matrix/app/v1', matrixAppserviceRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
@@ -148,8 +193,95 @@ if (shouldListen) {
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
 
-  serve({ fetch: app.fetch, port: PORT }, (info) => {
+  // Resume any persisted Twitch chat bridges so they survive a redeploy.
+  // Gated on an opt-in env var so the auto-restart doesn't surprise local
+  // dev / staging environments that share a DB with prod-shaped data.
+  if (process.env.BLACKOUT_RESUME_TWITCH_BRIDGES === '1') {
+    void import('./services/twitchChatBridge').then(async ({ resumeAllBridges }) => {
+      try {
+        const result = await resumeAllBridges();
+        log.info('twitch_chat_bridges_resumed', result);
+      } catch (err) {
+        log.warn('twitch_chat_bridges_resume_failed', { error: String(err) });
+      }
+    });
+  }
+
+  // Periodic idle-detection on chat-ingress sockets. A session that has
+  // gone silent past HEALTH_IDLE_THRESHOLD_MS (twice Twitch's PING
+  // interval) is force-closed; the close handler reconnects it with a
+  // fresh OAuth token. Same env-gating as the resume hook so unit-test
+  // environments don't spawn a background timer they didn't ask for.
+  if (process.env.BLACKOUT_RESUME_TWITCH_BRIDGES === '1') {
+    void import('./integrations/twitch/chatIngress').then(({ startHealthCheckLoop }) => {
+      startHealthCheckLoop();
+      log.info('twitch_chat_ingress_health_check_loop_started');
+    });
+  }
+
+  // Streamlabs donation poller. Walks every linked Streamlabs account on
+  // the configured interval and syncs new donations into the widget bus,
+  // so a creator's overlay fires within minutes of a real donation
+  // landing on Streamlabs — without them having to click "Sync donations
+  // now" themselves. Env var also accepts a custom interval in seconds
+  // for tighter / looser cadence.
+  // YouTube Live chat poller. Walks every active YouTube chat bridge and
+  // pulls new messages from /liveChat/messages, forwarding each into the
+  // bridge's Matrix room. Same env-gating pattern as the Streamlabs
+  // sync — opt-in so test environments don't get a surprise timer.
+  if (process.env.BLACKOUT_YOUTUBE_CHAT_AUTOSYNC === '1') {
+    const intervalSeconds = Number.parseInt(
+      process.env.BLACKOUT_YOUTUBE_CHAT_AUTOSYNC_INTERVAL_SECONDS ?? '',
+      10,
+    );
+    const intervalMs = Number.isFinite(intervalSeconds) && intervalSeconds > 0
+      ? intervalSeconds * 1000
+      : undefined;
+    void import('./services/youtubeChatBridgeScheduler').then(
+      ({ startYoutubeChatScheduler }) => {
+        startYoutubeChatScheduler(intervalMs);
+        log.info('youtube_chat_scheduler_started', { intervalMs });
+      },
+    );
+  }
+
+  if (process.env.BLACKOUT_STREAMLABS_AUTOSYNC === '1') {
+    const intervalSeconds = Number.parseInt(
+      process.env.BLACKOUT_STREAMLABS_AUTOSYNC_INTERVAL_SECONDS ?? '',
+      10,
+    );
+    const intervalMs = Number.isFinite(intervalSeconds) && intervalSeconds > 0
+      ? intervalSeconds * 1000
+      : undefined;
+    void import('./services/streamlabsDonationScheduler').then(({ startStreamlabsScheduler }) => {
+      startStreamlabsScheduler(intervalMs);
+      log.info('streamlabs_donation_scheduler_started', { intervalMs });
+    });
+  }
+
+  const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
+  });
+
+  // Twitch-IRC-compatible bot shim. External chat bots (Nightbot etc.)
+  // upgrade to ws on /twitch-irc, authenticate with the bot tokens minted
+  // at /v1/integrations/twitch-compat/bot-tokens, and run unmodified.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  void import('./integrations/twitch-compat/ircServer').then(({ attachTwitchIrcShim }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attachTwitchIrcShim(httpServer as any);
+    log.info('twitch_irc_shim_attached', { path: '/twitch-irc' });
+  });
+
+  // OBS-WebSocket v5 compatibility shim. External control surfaces
+  // (Bitfocus Companion, Stream Deck, Touch Portal) upgrade to ws on
+  // /obs-ws/<password-id>, complete the OBS-WS challenge/response auth,
+  // and issue OBS-WS requests we dispatch via the protocol layer's
+  // request matrix.
+  void import('./integrations/obs-ws-compat/server').then(({ attachObsWsShim }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attachObsWsShim(httpServer as any);
+    log.info('obs_ws_shim_attached', { pathPrefix: '/obs-ws/' });
   });
 }
 

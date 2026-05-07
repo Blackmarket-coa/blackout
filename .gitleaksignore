@@ -1,0 +1,20 @@
+# gitleaks allowlist — false positives only.
+#
+# Each line is a single finding fingerprint
+# `<commit>:<file>:<rule>:<startline>` from gitleaks JSON output.
+# When the gitleaks-action scans the PR diff and sees a fingerprint
+# listed here it skips reporting it.
+#
+# RULE: only false positives go here. If the entry is a real secret
+# the right fix is to rotate + remove from history, NOT to allowlist.
+
+# 1) Kick's public Pusher app key. Documented in the Kick web client
+#    and in https://github.com/retconned/kick-js — Pusher app keys are
+#    public-by-design (paired with a shared signing secret on the
+#    server side that we never store). Required by the chat WS protocol.
+5b2eb5de9cf42bfcf7fcbcc0a50bb6c9a86be55f:packages/api/src/integrations/kick/chatIngress.ts:generic-api-key:27
+
+# 2) Test-only YouTube liveChatMessages.list pagination cursor literal
+#    used as a fake `nextPageToken` value in stub responses. Not a
+#    credential; just a fixture string the test asserts is propagated.
+f36678519cc7e063c4cbdacad9e2ff956dd9c6a8:packages/api/test/youtube-chat-bridge.integration.test.ts:generic-api-key:377
