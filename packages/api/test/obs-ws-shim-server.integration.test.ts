@@ -688,3 +688,71 @@ test('OBS-WS shim: revoking a password while connected does not crash, and preve
     await h.dispose();
   }
 });
+
+test('listSessionsForUser: scopes to caller; only includes identified sessions; matches the password row', async () => {
+  const { passwords, protocol, server: shim, db } = await loadModules();
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  const aPw = passwords.mint({ blackoutUserId: alice.id, label: 'Stream Deck' });
+  const bPw = passwords.mint({ blackoutUserId: bob.id, label: 'Companion' });
+  if (aPw.kind !== 'ok' || bPw.kind !== 'ok') return assert.fail();
+
+  const h = await buildHarness(shim);
+  try {
+    // alice's surface fully completes Hello/Identify.
+    const aliceObs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${aPw.record.id}`);
+    const aHello = await aliceObs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    aliceObs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          aPw.password,
+          aHello.d.authentication!.salt,
+          aHello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await aliceObs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // bob's surface ALSO identifies (separate user).
+    const bobObs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${bPw.record.id}`);
+    const bHello = await bobObs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    bobObs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          bPw.password,
+          bHello.d.authentication!.salt,
+          bHello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await bobObs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // pre-Identify session: connect to alice's URL but never send Identify.
+    await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${aPw.record.id}`);
+
+    // alice sees ONE session — her identified one — keyed by her password id.
+    const aliceSnaps = shim.listSessionsForUser(alice.id);
+    assert.equal(aliceSnaps.length, 1);
+    assert.equal(aliceSnaps[0].passwordId, aPw.record.id);
+    assert.ok(aliceSnaps[0].connectedAt > 0);
+    assert.ok(aliceSnaps[0].identifiedAt >= aliceSnaps[0].connectedAt);
+
+    // bob sees only his own.
+    const bobSnaps = shim.listSessionsForUser(bob.id);
+    assert.equal(bobSnaps.length, 1);
+    assert.equal(bobSnaps[0].passwordId, bPw.record.id);
+
+    aliceObs.close();
+    bobObs.close();
+  } finally {
+    await h.dispose();
+  }
+});

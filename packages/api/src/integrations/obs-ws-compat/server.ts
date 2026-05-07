@@ -50,11 +50,41 @@ interface ObsSession {
   /** Set after Identify validates against the expected response. */
   identified: boolean;
   commands: StreamCommands;
+  /** ms-since-epoch of the WebSocket upgrade. */
+  connectedAt: number;
+  /** Set when {@link identified} flips true. Useful for surfacing "live since". */
+  identifiedAt?: number;
+  /** ms-since-epoch of the most recent inbound frame from the surface. */
+  lastActivityAt: number;
 }
 
 const sessions = new Set<ObsSession>();
 
 const OBS_WS_PATH_PREFIX = '/obs-ws/';
+
+/** Public projection — never leaks the WebSocket internals or challenge/salt. */
+export interface ObsSessionSnapshot {
+  /** Match this to a row in obs_ws_passwords to get the human label. */
+  passwordId: string;
+  connectedAt: number;
+  identifiedAt: number;
+  lastActivityAt: number;
+}
+
+export const listSessionsForUser = (blackoutUserId: string): ObsSessionSnapshot[] => {
+  const out: ObsSessionSnapshot[] = [];
+  for (const s of sessions) {
+    if (!s.identified) continue;
+    if (s.blackoutUserId !== blackoutUserId) continue;
+    out.push({
+      passwordId: s.passwordId,
+      connectedAt: s.connectedAt,
+      identifiedAt: s.identifiedAt ?? s.connectedAt,
+      lastActivityAt: s.lastActivityAt,
+    });
+  }
+  return out;
+};
 
 const send = (ws: WsClient, frame: Frame): void => {
   if (ws.readyState !== 1 /* OPEN */) return;
@@ -206,6 +236,7 @@ const registerConnection = (
   blackoutUserId: string,
   commands: StreamCommands,
 ): ObsSession => {
+  const now = Date.now();
   const session: ObsSession = {
     ws,
     passwordId,
@@ -214,6 +245,8 @@ const registerConnection = (
     salt: randomBase64(32),
     identified: false,
     commands,
+    connectedAt: now,
+    lastActivityAt: now,
   };
   sessions.add(session);
 
@@ -234,6 +267,7 @@ const registerConnection = (
 
   ws.on('message', (data: Buffer | string) => {
     const text = typeof data === 'string' ? data : data.toString('utf8');
+    session.lastActivityAt = Date.now();
     handleInbound(session, text);
   });
   ws.on('close', () => {
@@ -314,6 +348,7 @@ const handleIdentify = (session: ObsSession, frame: Frame): void => {
     return;
   }
   session.identified = true;
+  session.identifiedAt = Date.now();
   noteUsed(session.passwordId);
   send(session.ws, buildIdentified());
 };

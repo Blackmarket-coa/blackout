@@ -8,9 +8,11 @@ import { useAlive } from '../../../hooks/useAlive';
 import {
     isValidLabel,
     listPasswords,
+    listSessions,
     mintPassword,
     revokePassword,
     type MintResponse,
+    type ObsSessionSnapshot,
     type ObsWsPassword,
 } from './obsWsPasswordsClient';
 
@@ -45,6 +47,7 @@ export function ObsWsPasswords({
 }: ObsWsPasswordsProps = {}) {
     const alive = useAlive();
     const [passwords, setPasswords] = useState<ObsWsPassword[]>([]);
+    const [sessions, setSessions] = useState<ObsSessionSnapshot[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loaded, setLoaded] = useState(false);
 
@@ -55,9 +58,16 @@ export function ObsWsPasswords({
     const refresh = useCallback(async () => {
         setLoadError(null);
         try {
-            const res = await listPasswords(testApiClient);
+            // Passwords (config) + sessions (runtime) in parallel; a 5xx
+            // on sessions doesn't break the panel — surfaces may simply
+            // not be connected yet.
+            const [pwRes, sessRes] = await Promise.all([
+                listPasswords(testApiClient),
+                listSessions(testApiClient).catch(() => ({ sessions: [] as ObsSessionSnapshot[] })),
+            ]);
             if (!alive()) return;
-            setPasswords(res.passwords);
+            setPasswords(pwRes.passwords);
+            setSessions(sessRes.sessions);
             setLoaded(true);
         } catch (err) {
             if (!alive()) return;
@@ -256,6 +266,38 @@ export function ObsWsPasswords({
                             />
                         </SequenceCard>
                     ))}
+                </Box>
+            )}
+
+            {loaded && sessions.length > 0 && (
+                <Box direction="Column" gap="100">
+                    <Text size="L400">Connected surfaces</Text>
+                    {sessions.map((session) => {
+                        const matchedPassword = passwords.find((p) => p.id === session.passwordId);
+                        const passwordLabel =
+                            matchedPassword?.label ?? `(password ${session.passwordId.slice(0, 8)})`;
+                        return (
+                            <SequenceCard
+                                key={`${session.passwordId}:${session.connectedAt}`}
+                                className={SequenceCardStyle}
+                                variant="SurfaceVariant"
+                                direction="Column"
+                                gap="200"
+                            >
+                                <SettingTile
+                                    title={
+                                        <Text as="span" size="T300">
+                                            {passwordLabel}
+                                        </Text>
+                                    }
+                                    description={
+                                        `Identified ${new Date(session.identifiedAt).toLocaleString()}` +
+                                        ` · last activity ${new Date(session.lastActivityAt).toLocaleString()}`
+                                    }
+                                />
+                            </SequenceCard>
+                        );
+                    })}
                 </Box>
             )}
 

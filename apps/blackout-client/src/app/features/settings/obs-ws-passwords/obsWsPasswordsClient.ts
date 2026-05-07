@@ -78,3 +78,21 @@ export const isValidLabel = (raw: string): boolean => {
     const t = raw.trim();
     return t.length === 0 || t.length <= 80;
 };
+
+// ----------------------------- live session observability ------------------
+
+/** Snapshot of one identified OBS-WS surface session, scoped to the caller. */
+export interface ObsSessionSnapshot {
+    /** Match this to a row in listPasswords() for the human label. */
+    passwordId: string;
+    connectedAt: number;
+    identifiedAt: number;
+    lastActivityAt: number;
+}
+
+export interface ListSessionsResponse {
+    sessions: ObsSessionSnapshot[];
+}
+
+export const listSessions = (options?: ApiCallOptions): Promise<ListSessionsResponse> =>
+    client(options)({ method: 'GET', path: `${BASE}/sessions` }) as Promise<ListSessionsResponse>;

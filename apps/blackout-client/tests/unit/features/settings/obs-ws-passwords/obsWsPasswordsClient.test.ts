@@ -3,6 +3,7 @@ import { createFetchApiClient } from '@blackout/sdk';
 import {
     isValidLabel,
     listPasswords,
+    listSessions,
     mintPassword,
     revokePassword,
 } from '../../../../../src/app/features/settings/obs-ws-passwords/obsWsPasswordsClient';
@@ -75,5 +76,19 @@ describe('obsWsPasswordsClient.isValidLabel', () => {
     });
     it('rejects overlong labels', () => {
         expect(isValidLabel('A'.repeat(81))).toBe(false);
+    });
+});
+
+describe('obsWsPasswordsClient.listSessions', () => {
+    it('GET /v1/integrations/obs-ws/passwords/sessions', async () => {
+        const { apiClient, calls } = collectClient();
+        await listSessions({ apiClient });
+        expect(calls).toEqual([
+            {
+                method: 'GET',
+                path: '/v1/integrations/obs-ws/passwords/sessions',
+                body: undefined,
+            },
+        ]);
     });
 });

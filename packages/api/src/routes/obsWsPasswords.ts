@@ -9,10 +9,18 @@ import {
   projectRecord,
   revoke,
 } from '../services/obsWsPasswords';
+import { listSessionsForUser } from '../integrations/obs-ws-compat/server';
 
 const router = new Hono();
 router.use('/', authRateLimit);
+router.use('/sessions', authRateLimit);
 router.use('/:id', authRateLimit);
+
+router.get('/sessions', (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to list OBS-WS sessions');
+  if (userOrResp instanceof Response) return userOrResp;
+  return c.json({ sessions: listSessionsForUser(userOrResp.sub) });
+});
 
 const mintSchema = z.object({
   label: z.string().min(1).max(80).optional(),
