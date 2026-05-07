@@ -248,8 +248,18 @@ if (shouldListen) {
     });
   }
 
-  serve({ fetch: app.fetch, port: PORT }, (info) => {
+  const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
+  });
+
+  // Twitch-IRC-compatible bot shim. External chat bots (Nightbot etc.)
+  // upgrade to ws on /twitch-irc, authenticate with the bot tokens minted
+  // at /v1/integrations/twitch-compat/bot-tokens, and run unmodified.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  void import('./integrations/twitch-compat/ircServer').then(({ attachTwitchIrcShim }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attachTwitchIrcShim(httpServer as any);
+    log.info('twitch_irc_shim_attached', { path: '/twitch-irc' });
   });
 }
 

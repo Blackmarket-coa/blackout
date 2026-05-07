@@ -15,6 +15,7 @@ import {
   unsubscribeBridgeEvents,
 } from './twitchEventSubManager';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
+import { publishChatMessage } from './chatMessageHub';
 import type { HelixDeps } from '../integrations/twitch/helix';
 import { log } from '../telemetry/logger';
 
@@ -102,6 +103,28 @@ const buildOnMessage =
     // same Twitch message never double-delivers if Twitch retransmits or
     // we reconnect mid-PRIVMSG flush.
     const txnId = msg.platformMessageId ? `twitch-${msg.platformMessageId}` : undefined;
+    // Fan out to the in-process chatMessageHub so the Twitch IRC bot
+    // shim (and future OBS-WS / Discord-compat gateway) can deliver the
+    // same firehose to bots that JOIN'd this channel. Channel key uses
+    // the `#login` shape so a bot's `JOIN #foo` literally subscribes to
+    // the same key the bridge publishes against.
+    publishChatMessage(
+      { blackoutUserId: record.blackoutUserId, channelKey: `#${record.twitchChannel.toLowerCase()}` },
+      {
+        source: 'twitch',
+        authorLogin: msg.authorLogin,
+        authorDisplayName: msg.authorDisplayName,
+        body: msg.body,
+        platformMessageId: msg.platformMessageId,
+        tags: {
+          ...(msg.authorDisplayName ? { 'display-name': msg.authorDisplayName } : {}),
+          ...(msg.authorColor ? { color: msg.authorColor } : {}),
+          ...(msg.platformMessageId ? { id: msg.platformMessageId } : {}),
+          ...(msg.bits ? { bits: String(msg.bits) } : {}),
+          'tmi-sent-ts': String(msg.sentAtMs),
+        },
+      },
+    );
     // Chat is high-volume; dispatch only fires on outbound subscriptions
     // that explicitly opted into chat.message.received. The eventType
     // filter in services/outboundEventWebhooks.matchesEventType protects
