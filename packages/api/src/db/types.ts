@@ -170,6 +170,38 @@ export interface DiscordCompatWebhookRecord {
   updatedAt: string;
 }
 
+/**
+ * Outbound Discord-shape webhook subscription. Creator registers a URL
+ * (Discord's own webhook URL, Zapier, IFTTT, custom backend) and we POST
+ * Blackout events to it in Discord embed shape, signed with a shared HMAC
+ * secret.
+ */
+export type OutboundEventType =
+  | 'tip.created'
+  | 'follow.created'
+  | 'livestream.started'
+  | 'livestream.ended'
+  | 'chat.message.received';
+
+export interface OutboundEventWebhookRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  name: string;
+  targetUrl: string;
+  /** sha256 of the HMAC signing secret. Plaintext is only ever returned at create time. */
+  signingSecretHash: string;
+  /** Subset of OutboundEventType. Empty array means "all". */
+  eventTypes: OutboundEventType[];
+  isActive: boolean;
+  consecutiveFailures: number;
+  lastDeliveryAt?: string;
+  lastStatus?: number;
+  lastError?: string;
+  deliveryCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TwitchEventSubscriptionRecord {
   id: UUID;
   blackoutUserId: UUID;

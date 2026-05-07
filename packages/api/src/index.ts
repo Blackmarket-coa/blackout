@@ -35,6 +35,7 @@ import {
   authedRouter as discordCompatWebhookRoutes,
   publicExecuteRouter as discordCompatWebhookExecuteRoutes,
 } from './routes/discordCompatWebhooks';
+import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -133,6 +134,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
   app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
   app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
+  app.route(`${root}/integrations/outbound-webhooks`, outboundEventWebhookRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);

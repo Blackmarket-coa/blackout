@@ -47,6 +47,7 @@ import type {
   YoutubeChatBridgeRecord,
   KickChatBridgeRecord,
   DiscordCompatWebhookRecord,
+  OutboundEventWebhookRecord,
   SimulcastDestinationRecord,
 } from './types';
 
@@ -95,6 +96,7 @@ type PersistedState = {
   kickChatBridges: KickChatBridgeRecord[];
   simulcastDestinations: SimulcastDestinationRecord[];
   discordCompatWebhooks: DiscordCompatWebhookRecord[];
+  outboundEventWebhooks: OutboundEventWebhookRecord[];
 };
 
 class InMemoryDb {
@@ -147,6 +149,8 @@ class InMemoryDb {
   simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
   /** Keyed by webhook id (the public part of the URL). */
   discordCompatWebhooks = new Map<string, DiscordCompatWebhookRecord>();
+  /** Keyed by subscription id. */
+  outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -675,6 +679,47 @@ class InMemoryDb {
 
   deleteDiscordCompatWebhook(id: string): boolean {
     return this.discordCompatWebhooks.delete(id);
+  }
+
+  // --- outbound event webhooks (Phase 2 / Track B) ---
+
+  createOutboundEventWebhook(
+    input: Omit<OutboundEventWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): OutboundEventWebhookRecord {
+    const now = nowIso();
+    const record: OutboundEventWebhookRecord = { ...input, createdAt: now, updatedAt: now };
+    this.outboundEventWebhooks.set(record.id, record);
+    return record;
+  }
+
+  getOutboundEventWebhook(id: string): OutboundEventWebhookRecord | undefined {
+    return this.outboundEventWebhooks.get(id);
+  }
+
+  listOutboundEventWebhooksForUser(blackoutUserId: string): OutboundEventWebhookRecord[] {
+    return [...this.outboundEventWebhooks.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  /** All active subscriptions across all users — the delivery loop iterates this. */
+  listActiveOutboundEventWebhooks(): OutboundEventWebhookRecord[] {
+    return [...this.outboundEventWebhooks.values()].filter((row) => row.isActive);
+  }
+
+  updateOutboundEventWebhook(
+    id: string,
+    patch: Partial<Omit<OutboundEventWebhookRecord, 'id' | 'createdAt'>>,
+  ): OutboundEventWebhookRecord | undefined {
+    const existing = this.outboundEventWebhooks.get(id);
+    if (!existing) return undefined;
+    const updated: OutboundEventWebhookRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.outboundEventWebhooks.set(id, updated);
+    return updated;
+  }
+
+  deleteOutboundEventWebhook(id: string): boolean {
+    return this.outboundEventWebhooks.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -1456,6 +1501,9 @@ class FileBackedDb extends InMemoryDb {
     this.discordCompatWebhooks = new Map(
       (parsed.discordCompatWebhooks ?? []).map((row) => [row.id, row]),
     );
+    this.outboundEventWebhooks = new Map(
+      (parsed.outboundEventWebhooks ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1500,6 +1548,7 @@ class FileBackedDb extends InMemoryDb {
       kickChatBridges: [...this.kickChatBridges.values()],
       simulcastDestinations: [...this.simulcastDestinations.values()],
       discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
+      outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
     };
   }
 
@@ -2079,6 +2128,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteDiscordCompatWebhook(id: string): boolean {
     const removed = super.deleteDiscordCompatWebhook(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createOutboundEventWebhook(
+    input: Omit<OutboundEventWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): OutboundEventWebhookRecord {
+    const record = super.createOutboundEventWebhook(input);
+    this.persist();
+    return record;
+  }
+
+  override updateOutboundEventWebhook(
+    id: string,
+    patch: Partial<Omit<OutboundEventWebhookRecord, 'id' | 'createdAt'>>,
+  ): OutboundEventWebhookRecord | undefined {
+    const updated = super.updateOutboundEventWebhook(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteOutboundEventWebhook(id: string): boolean {
+    const removed = super.deleteOutboundEventWebhook(id);
     if (removed) this.persist();
     return removed;
   }
