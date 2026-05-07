@@ -9,6 +9,7 @@ import { LinkedAccounts } from '../linked-accounts';
 import { TwitchChatBridges } from '../twitch-chat-bridges';
 import { YoutubeChatBridges } from '../youtube-chat-bridges';
 import { WidgetAlertTokens } from '../widget-alerts';
+import { IntegrationsHealth } from '../integrations-health';
 
 type AccountProps = {
   requestClose: () => void;
@@ -41,6 +42,7 @@ export function Account({ requestClose }: AccountProps) {
               <TwitchChatBridges />
               <YoutubeChatBridges />
               <WidgetAlertTokens />
+              <IntegrationsHealth />
               <IgnoredUserList />
             </Box>
           </PageContent>

@@ -423,6 +423,35 @@ export const stopHealthCheckLoop = (): void => {
   }
 };
 
+// ----------------------------- runtime introspection -----------------------------
+
+export interface IngressSessionStatus {
+  state: 'connecting' | 'connected' | 'closing' | 'closed';
+  messagesForwarded: number;
+  reconnectAttempts: number;
+  lastEventAtMs?: number;
+}
+
+/**
+ * Public read of one session's in-process state. Returns undefined when
+ * no session exists for the (user, channel) pair — the bridge row may
+ * still be persisted but the WSS hasn't been started (e.g. the API
+ * restarted and resumeAllBridges hasn't run yet).
+ */
+export const getSessionStatus = (
+  blackoutUserId: string,
+  twitchChannel: string,
+): IngressSessionStatus | undefined => {
+  const session = sessions.get(sessionKey(blackoutUserId, twitchChannel));
+  if (!session) return undefined;
+  return {
+    state: session.state,
+    messagesForwarded: session.messagesForwarded,
+    reconnectAttempts: session.reconnectAttempts,
+    lastEventAtMs: session.lastEventAt,
+  };
+};
+
 /** Re-exposed for downstream wiring (e.g., the Matrix forwarding handler). */
 export { toMatrixForwardedMessage };
 
