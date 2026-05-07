@@ -194,6 +194,7 @@ export const stopFanout = (
   }
   state.status = 'stopped';
   state.restartCount = 0;
+  broadcastStatus(state);
   return { kind: 'ok' };
 };
 
@@ -237,6 +238,52 @@ export const listForUser = (blackoutUserId: string): FanoutSnapshot[] =>
     .filter((s) => s.blackoutUserId === blackoutUserId)
     .map(projectSnapshot);
 
+// --------------------------- pub/sub ----------------------------------------
+
+/**
+ * Per-user status-change bus. Each callback fires every time a
+ * supervisor state transition affects ONE of that user's destinations.
+ * Sinks (the SSE route, future webhook firehose) subscribe; the worker
+ * pushes immediately after writing the new state.
+ *
+ * In-process only. Multiple sinks per user are fine; failures in one
+ * subscriber don't block the others.
+ */
+export type StatusListener = (snapshot: FanoutSnapshot) => void;
+
+const statusSubscribers = new Map<string, Set<StatusListener>>();
+
+export const subscribeStatusForUser = (
+  blackoutUserId: string,
+  listener: StatusListener,
+): (() => void) => {
+  let set = statusSubscribers.get(blackoutUserId);
+  if (!set) {
+    set = new Set();
+    statusSubscribers.set(blackoutUserId, set);
+  }
+  set.add(listener);
+  return () => {
+    const current = statusSubscribers.get(blackoutUserId);
+    if (!current) return;
+    current.delete(listener);
+    if (current.size === 0) statusSubscribers.delete(blackoutUserId);
+  };
+};
+
+const broadcastStatus = (state: FanoutState): void => {
+  const subs = statusSubscribers.get(state.blackoutUserId);
+  if (!subs || subs.size === 0) return;
+  const snap = projectSnapshot(state);
+  for (const listener of [...subs]) {
+    try {
+      listener(snap);
+    } catch {
+      // ignore — a misbehaving sink must not block the worker
+    }
+  }
+};
+
 const projectSnapshot = (s: FanoutState): FanoutSnapshot => ({
   destinationId: s.destinationId,
   blackoutUserId: s.blackoutUserId,
@@ -277,6 +324,7 @@ const spawnAndAttach = (
     state.status = 'failed';
     state.lastError = reason;
     states.set(state.destinationId, state);
+    broadcastStatus(state);
     log.warn('rtmp_fanout_spawn_threw', { destinationId: decrypted.record.id, reason });
     return { kind: 'spawn_failed', reason };
   }
@@ -301,6 +349,7 @@ const spawnAndAttach = (
   attachStderr(state);
   attachExit(state, decrypted);
   attachError(state);
+  broadcastStatus(state);
 
   return { kind: 'ok', status: state.status };
 };
@@ -309,10 +358,12 @@ const attachStderr = (state: FanoutState): void => {
   if (!state.proc) return;
   const proc = state.proc;
   proc.handle.stderr?.on('data', (chunk) => {
-    if (state.status === 'starting') state.status = 'running';
+    const wasStarting = state.status === 'starting';
+    if (wasStarting) state.status = 'running';
     const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     proc.stderrBuf = (proc.stderrBuf + text).slice(-STDERR_TAIL_BYTES);
     state.lastError = proc.stderrBuf.trim().split('\n').slice(-1)[0] || state.lastError;
+    if (wasStarting) broadcastStatus(state);
   });
 };
 
@@ -339,11 +390,13 @@ const attachExit = (
     state.proc = undefined;
     if (wasExpected) {
       state.status = 'stopped';
+      broadcastStatus(state);
       return;
     }
     // Unclean exit. Auto-restart with capped exponential backoff.
     if (state.restartCount >= maxRestarts) {
       state.status = 'failed';
+      broadcastStatus(state);
       log.warn('rtmp_fanout_exhausted_restarts', {
         destinationId: state.destinationId,
         lastExitCode: code,
@@ -352,6 +405,7 @@ const attachExit = (
     }
     state.status = 'restarting';
     state.restartCount += 1;
+    broadcastStatus(state);
     const backoff = Math.min(restartBaseMs * 2 ** (state.restartCount - 1), 60_000);
     state.restartTimer = setTimeout(() => {
       state.restartTimer = undefined;
@@ -360,6 +414,7 @@ const attachExit = (
       const fresh = decryptDestination(decrypted.record.id);
       if (!fresh || !fresh.record.isEnabled) {
         state.status = 'stopped';
+        broadcastStatus(state);
         return;
       }
       spawnAndAttach(fresh, /* isRestart */ true);
@@ -380,6 +435,7 @@ export const __test__ = {
       }
     }
     states.clear();
+    statusSubscribers.clear();
     factory = defaultFactory;
     inputUrl = `${getOwncastOriginConfig().origin}/hls/stream.m3u8`;
     maxRestarts = DEFAULT_MAX_RESTARTS;

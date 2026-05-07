@@ -23,9 +23,11 @@ import {
     startFanout,
     statusLabel,
     stopFanout,
+    subscribeFanoutStream,
     type FanoutSnapshot,
     type FanoutStatus,
 } from './rtmpFanoutClient';
+import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 
 /**
  * Settings panel for RTMP simulcast destinations. The creator pastes a
@@ -80,6 +82,29 @@ export function SimulcastDestinations({
     useEffect(() => {
         void refresh();
     }, [refresh]);
+
+    // Live status pipe. The /fanout/stream SSE pushes a snapshot on
+    // every supervisor state transition so the badges flip without a
+    // manual refresh. The `connected` event also primes the local
+    // fanouts map on mount, redundant-but-harmless with refresh().
+    useEffect(() => {
+        const token = readBlackoutApiToken();
+        if (!token) return;
+        const dispose = subscribeFanoutStream({
+            token,
+            onFrame: (frame) => {
+                if (!alive()) return;
+                if (frame.event === 'connected') {
+                    const map: Record<string, FanoutSnapshot> = {};
+                    for (const f of frame.data.snapshots) map[f.destinationId] = f;
+                    setFanouts(map);
+                } else if (frame.event === 'status') {
+                    setFanouts((prev) => ({ ...prev, [frame.data.destinationId]: frame.data }));
+                }
+            },
+        });
+        return () => dispose();
+    }, [alive]);
 
     const providerInvalid = provider.length > 0 && !isValidProvider(provider);
     const ingestInvalid = ingestUrl.length > 0 && !isValidRtmpUrl(ingestUrl);

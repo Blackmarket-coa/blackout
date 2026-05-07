@@ -122,3 +122,122 @@ export const canStart = (status: FanoutStatus | undefined): boolean =>
 /** True when a "Stop" button should be visible. */
 export const canStop = (status: FanoutStatus | undefined): boolean =>
     status === 'starting' || status === 'running' || status === 'restarting';
+
+// --------------------------- live status (SSE) ------------------------------
+
+/**
+ * Frame shapes the /fanout/stream endpoint emits. `connected` is sent
+ * once on subscribe with the current snapshots so the consumer doesn't
+ * need a separate listFanouts() call on mount. `status` fires per
+ * supervisor state transition. `keepalive` is a no-op heartbeat used
+ * to keep reverse proxies from idle-disconnecting.
+ */
+export type FanoutStreamFrame =
+    | { event: 'connected'; data: { ok: boolean; snapshots: FanoutSnapshot[] } }
+    | { event: 'status'; data: FanoutSnapshot }
+    | { event: 'keepalive'; data: string };
+
+export interface SubscribeStreamOptions {
+    /** Bearer token. Required because EventSource can't send Authorization. */
+    token: string;
+    /** Override fetch (tests use this). */
+    fetchFn?: typeof fetch;
+    /** Override the API base. Defaults to the same origin. */
+    baseUrl?: string;
+    /** Per-frame callback. Failures are swallowed. */
+    onFrame: (frame: FanoutStreamFrame) => void;
+    /** Optional terminal-error callback (network blew up). */
+    onError?: (err: Error) => void;
+}
+
+/**
+ * Open a Server-Sent Events connection to /fanout/stream and dispatch
+ * frames into `onFrame` until the returned disposer is called.
+ *
+ * Browser EventSource doesn't support custom Authorization headers, so
+ * we use `fetch` with a streaming body and a tiny line-based SSE
+ * parser instead. The parser yields one `{event, data}` per double-
+ * newline-delimited block, matching the wire format.
+ */
+export const subscribeFanoutStream = (options: SubscribeStreamOptions): (() => void) => {
+    const fetchFn = options.fetchFn ?? fetch;
+    const base =
+        options.baseUrl ??
+        (typeof window !== 'undefined' && window.location?.origin
+            ? window.location.origin
+            : '');
+    const url = `${base}${BASE}/stream`;
+    const ctrl = new AbortController();
+
+    const run = async (): Promise<void> => {
+        let response: Response;
+        try {
+            response = await fetchFn(url, {
+                method: 'GET',
+                headers: { authorization: `Bearer ${options.token}`, accept: 'text/event-stream' },
+                signal: ctrl.signal,
+            });
+        } catch (err) {
+            if (!ctrl.signal.aborted) options.onError?.(err as Error);
+            return;
+        }
+        if (!response.ok || !response.body) {
+            options.onError?.(new Error(`fanout stream HTTP ${response.status}`));
+            return;
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                let cut: number;
+                // SSE separates events by a blank line (\n\n).
+                while ((cut = buf.indexOf('\n\n')) >= 0) {
+                    const block = buf.slice(0, cut);
+                    buf = buf.slice(cut + 2);
+                    const frame = parseSseBlock(block);
+                    if (frame) {
+                        try {
+                            options.onFrame(frame);
+                        } catch {
+                            // ignore consumer errors
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            if (!ctrl.signal.aborted) options.onError?.(err as Error);
+        }
+    };
+
+    void run();
+    return () => ctrl.abort();
+};
+
+const parseSseBlock = (block: string): FanoutStreamFrame | null => {
+    let event: string | undefined;
+    let data = '';
+    for (const line of block.split('\n')) {
+        if (line.startsWith(':')) continue; // SSE comment
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trimStart();
+    }
+    if (!event) return null;
+    if (event === 'keepalive') return { event: 'keepalive', data };
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(data || 'null');
+    } catch {
+        return null;
+    }
+    if (event === 'connected' && parsed && typeof parsed === 'object') {
+        return { event: 'connected', data: parsed as FanoutStreamFrame extends { event: 'connected'; data: infer D } ? D : never };
+    }
+    if (event === 'status' && parsed && typeof parsed === 'object') {
+        return { event: 'status', data: parsed as FanoutSnapshot };
+    }
+    return null;
+};

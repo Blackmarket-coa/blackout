@@ -296,6 +296,78 @@ test('startAllForUser / stopAllForUser: only fanouts for enabled destinations th
 
 // --------------------------- target URL --------------------------------
 
+test('subscribeStatusForUser: receives a snapshot per state transition; scoped per user', async () => {
+  const { destinations, worker, db } = await loadModules();
+  const { factory, spawned } = buildFakeFactory();
+  worker.attachRtmpFanoutWorker({ factory, restartBaseMs: 5, maxRestarts: 2 });
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  const aDest = await seedDestination(destinations, alice.id);
+  await seedDestination(destinations, bob.id);
+
+  const aliceSnaps: Array<{ status: string; restartCount: number }> = [];
+  const bobSnaps: Array<{ status: string; restartCount: number }> = [];
+  const offA = worker.subscribeStatusForUser(alice.id, (s) =>
+    aliceSnaps.push({ status: s.status, restartCount: s.restartCount }),
+  );
+  const offB = worker.subscribeStatusForUser(bob.id, (s) =>
+    bobSnaps.push({ status: s.status, restartCount: s.restartCount }),
+  );
+
+  // Start alice's destination → 'starting' event fires.
+  worker.startFanout(alice.id, aDest.id);
+  // First stderr byte → 'running' event.
+  spawned[0].emitStderr('frame=1');
+  // Unclean exit → 'restarting' event (auto-restart kicks off after backoff).
+  spawned[0].emitExit(1);
+  await new Promise((r) => setTimeout(r, 25));
+  // The auto-restart spawned a fresh child: status flips back to
+  // 'starting' → 'running' on its first stderr.
+  spawned[1].emitStderr('frame=1');
+  // Clean stop → 'stopped' event.
+  worker.stopFanout(alice.id, aDest.id);
+  spawned[1].emitExit(0);
+
+  // Alice saw: starting → running → restarting → starting → running → stopped → stopped
+  // (the second 'stopped' is the exit handler firing on the expected exit
+  // after the explicit stopFanout already wrote 'stopped'.)
+  const aliceStatuses = aliceSnaps.map((s) => s.status);
+  assert.ok(aliceStatuses.includes('starting'));
+  assert.ok(aliceStatuses.includes('running'));
+  assert.ok(aliceStatuses.includes('restarting'));
+  assert.ok(aliceStatuses.includes('stopped'));
+
+  // Bob received nothing — the bus is per-user.
+  assert.equal(bobSnaps.length, 0);
+
+  offA();
+  offB();
+});
+
+test('subscribeStatusForUser: disposer stops further deliveries; multiple subscribers are independent', async () => {
+  const { destinations, worker, db } = await loadModules();
+  const { factory, spawned } = buildFakeFactory();
+  worker.attachRtmpFanoutWorker({ factory });
+  const user = await seedUser(db);
+  const dest = await seedDestination(destinations, user.id);
+
+  const a: string[] = [];
+  const b: string[] = [];
+  const offA = worker.subscribeStatusForUser(user.id, (s) => a.push(s.status));
+  const offB = worker.subscribeStatusForUser(user.id, (s) => b.push(s.status));
+
+  worker.startFanout(user.id, dest.id);
+  assert.equal(a.length, 1);
+  assert.equal(b.length, 1);
+
+  // Disposing A leaves B subscribed.
+  offA();
+  spawned[0].emitStderr('frame=1');
+  assert.equal(a.length, 1, 'no further delivery after A disposed');
+  assert.ok(b.includes('running'));
+  offB();
+});
+
 test('buildTarget: appends streamKey onto ingestUrl with exactly one slash', async () => {
   const { worker } = await loadModules();
   // No trailing slash on ingest.
