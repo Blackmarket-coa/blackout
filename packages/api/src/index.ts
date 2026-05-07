@@ -27,6 +27,7 @@ import twitchEventSubRoutes from './routes/twitchEventSub';
 import widgetAlertRoutes from './routes/widgetAlerts';
 import patreonWebhookRoutes from './routes/patreonWebhook';
 import streamlabsRoutes from './routes/streamlabs';
+import youtubeChatBridgeRoutes from './routes/youtubeChatBridges';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -120,6 +121,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/widgets/alerts`, widgetAlertRoutes);
   app.route(`${root}/integrations/patreon/webhook`, patreonWebhookRoutes);
   app.route(`${root}/integrations/streamlabs`, streamlabsRoutes);
+  app.route(`${root}/integrations/youtube/chat-bridges`, youtubeChatBridgeRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
@@ -192,6 +194,26 @@ if (shouldListen) {
   // landing on Streamlabs — without them having to click "Sync donations
   // now" themselves. Env var also accepts a custom interval in seconds
   // for tighter / looser cadence.
+  // YouTube Live chat poller. Walks every active YouTube chat bridge and
+  // pulls new messages from /liveChat/messages, forwarding each into the
+  // bridge's Matrix room. Same env-gating pattern as the Streamlabs
+  // sync — opt-in so test environments don't get a surprise timer.
+  if (process.env.BLACKOUT_YOUTUBE_CHAT_AUTOSYNC === '1') {
+    const intervalSeconds = Number.parseInt(
+      process.env.BLACKOUT_YOUTUBE_CHAT_AUTOSYNC_INTERVAL_SECONDS ?? '',
+      10,
+    );
+    const intervalMs = Number.isFinite(intervalSeconds) && intervalSeconds > 0
+      ? intervalSeconds * 1000
+      : undefined;
+    void import('./services/youtubeChatBridgeScheduler').then(
+      ({ startYoutubeChatScheduler }) => {
+        startYoutubeChatScheduler(intervalMs);
+        log.info('youtube_chat_scheduler_started', { intervalMs });
+      },
+    );
+  }
+
   if (process.env.BLACKOUT_STREAMLABS_AUTOSYNC === '1') {
     const intervalSeconds = Number.parseInt(
       process.env.BLACKOUT_STREAMLABS_AUTOSYNC_INTERVAL_SECONDS ?? '',

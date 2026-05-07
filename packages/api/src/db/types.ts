@@ -109,6 +109,20 @@ export interface TwitchChatBridgeRecord {
   updatedAt: string;
 }
 
+export interface YoutubeChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** YouTube channel id (UCxxxx...) of the broadcaster being bridged. */
+  youtubeChannelId: string;
+  /** Matrix room id, e.g. `!roomid:server`. */
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TwitchEventSubscriptionRecord {
   id: UUID;
   blackoutUserId: UUID;

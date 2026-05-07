@@ -44,6 +44,7 @@ import type {
   TwitchChatBridgeRecord,
   TwitchEventSubscriptionRecord,
   WidgetAlertTokenRecord,
+  YoutubeChatBridgeRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -87,6 +88,7 @@ type PersistedState = {
   twitchChatBridges: TwitchChatBridgeRecord[];
   twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
   widgetAlertTokens: WidgetAlertTokenRecord[];
+  youtubeChatBridges: YoutubeChatBridgeRecord[];
 };
 
 class InMemoryDb {
@@ -131,6 +133,8 @@ class InMemoryDb {
   twitchEventSubscriptions = new Map<string, TwitchEventSubscriptionRecord>();
   /** Keyed by secretHash so the SSE handler can validate a presented bearer in O(1). */
   widgetAlertTokens = new Map<string, WidgetAlertTokenRecord>();
+  /** Keyed by bridge id. */
+  youtubeChatBridges = new Map<string, YoutubeChatBridgeRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -523,6 +527,56 @@ class InMemoryDb {
     };
     this.widgetAlertTokens.set(secretHash, updated);
     return updated;
+  }
+
+  // --- youtube chat bridges (Phase 1 / Track A) ---
+
+  createYoutubeChatBridge(
+    input: Omit<YoutubeChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): YoutubeChatBridgeRecord {
+    const now = nowIso();
+    const record: YoutubeChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.youtubeChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getYoutubeChatBridge(id: string): YoutubeChatBridgeRecord | undefined {
+    return this.youtubeChatBridges.get(id);
+  }
+
+  findYoutubeChatBridge(
+    blackoutUserId: string,
+    youtubeChannelId: string,
+  ): YoutubeChatBridgeRecord | undefined {
+    return [...this.youtubeChatBridges.values()].find(
+      (row) =>
+        row.blackoutUserId === blackoutUserId && row.youtubeChannelId === youtubeChannelId,
+    );
+  }
+
+  listYoutubeChatBridgesForUser(blackoutUserId: string): YoutubeChatBridgeRecord[] {
+    return [...this.youtubeChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveYoutubeChatBridges(): YoutubeChatBridgeRecord[] {
+    return [...this.youtubeChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateYoutubeChatBridge(
+    id: string,
+    patch: Partial<Omit<YoutubeChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): YoutubeChatBridgeRecord | undefined {
+    const existing = this.youtubeChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: YoutubeChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.youtubeChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteYoutubeChatBridge(id: string): boolean {
+    return this.youtubeChatBridges.delete(id);
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -1246,6 +1300,9 @@ class FileBackedDb extends InMemoryDb {
     this.widgetAlertTokens = new Map(
       (parsed.widgetAlertTokens ?? []).map((row) => [row.secretHash, row]),
     );
+    this.youtubeChatBridges = new Map(
+      (parsed.youtubeChatBridges ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1286,6 +1343,7 @@ class FileBackedDb extends InMemoryDb {
       twitchChatBridges: [...this.twitchChatBridges.values()],
       twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
       widgetAlertTokens: [...this.widgetAlertTokens.values()],
+      youtubeChatBridges: [...this.youtubeChatBridges.values()],
     };
   }
 
@@ -1776,6 +1834,29 @@ class FileBackedDb extends InMemoryDb {
   // No `touchWidgetAlertTokenDelivered` override — touching last-delivered on
   // every SSE flush would write the JSON store thousands of times per
   // stream. The diagnostic field is in-memory only on the file-backed db.
+
+  override createYoutubeChatBridge(
+    input: Omit<YoutubeChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): YoutubeChatBridgeRecord {
+    const record = super.createYoutubeChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateYoutubeChatBridge(
+    id: string,
+    patch: Partial<Omit<YoutubeChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): YoutubeChatBridgeRecord | undefined {
+    const updated = super.updateYoutubeChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteYoutubeChatBridge(id: string): boolean {
+    const removed = super.deleteYoutubeChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
 }
 
 export const db = DB_MODE === 'memory' ? new InMemoryDb() : new FileBackedDb();
