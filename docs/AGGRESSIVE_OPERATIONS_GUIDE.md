@@ -1124,6 +1124,16 @@ integration tests.
 | StreamElements OverlayWS compat | Bounded | Mirror `routes/widgetAlerts.ts` pattern with the SE socket.io shape. |
 | Stream Deck Companion module YAML | Bounded | Upstream PR to `bitfocus/companion`. Pure config / docs. |
 | Synapse appservice registration YAML stub | Bounded | Ops-facing config file pairing with `routes/matrixAppservice.ts`. |
+| Hono >= 4.13.0 bump (clear `osv-scanner.toml` allowlist for GHSA-69xw-7hcm-h432 + GHSA-9vqf-7f2p-gf9v) | Blocked on registry | The internal npm mirror used by the dev sandbox currently exposes Hono up to `4.12.18` only (`latest` dist-tag = `4.12.18`). The 4.13.x fixes are upstream on github.com/honojs/hono but have not landed in the mirror. Re-attempt this bump once the mirror catches up; until then the allowlist stays in place. |
+
+> **FBM doc sync** — replacing `docs/AGGRESSIVE_OPERATIONS_GUIDE.md` on
+> `blackmarket-coa/free-black-market` (`claude/expand-fbm-strategy-7Hpco`)
+> with this file is tracked separately. It requires a PR on the FBM repo,
+> which is outside the `multi-platform-extensions-2` branch's scope (the
+> session executing this work has GitHub MCP access only to
+> `blackmarket-coa/blackout`). Ops applies via:
+> `cd <fbm-checkout> && git fetch && git switch claude/expand-fbm-strategy-7Hpco`
+> then copy this file from blackout `develop` and commit.
 
 ### C.3 — Test inventory
 
