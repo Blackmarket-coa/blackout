@@ -24,7 +24,7 @@ import { log } from '../../telemetry/logger';
  * every active bridge.
  */
 
-const KICK_PUSHER_KEY = 'eb1d5f283081a78b932c';
+const KICK_PUSHER_KEY = 'eb1d5f283081a78b932c'; // gitleaks:allow — public Pusher app key, see Kick web client + @retconned/kick-js
 const KICK_PUSHER_CLUSTER = 'us2';
 const KICK_PUSHER_URL =
   `wss://ws-${KICK_PUSHER_CLUSTER}.pusher.com/app/${KICK_PUSHER_KEY}` +

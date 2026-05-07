@@ -9,6 +9,8 @@ on:
             - "package.json"
             - "scripts/**"
             - ".github/workflows/security.yml"
+            - ".gitleaksignore"
+            - "osv-scanner.toml"
     push:
         branches: [develop, master, main]
     merge_group:

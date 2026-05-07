@@ -374,7 +374,7 @@ test('service.syncBridge: pulls broadcast → messages → forwards into Matrix;
               authorDetails: { channelId: 'UC-author', displayName: 'Alice' },
             },
           ],
-          nextPageToken: 'cursor-after-msg-1',
+          nextPageToken: 'cursor-after-msg-1', // gitleaks:allow — test fixture, not a credential
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
