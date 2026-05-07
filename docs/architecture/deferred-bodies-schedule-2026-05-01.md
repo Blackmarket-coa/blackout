@@ -309,7 +309,7 @@ Per `discord_parity_blueprint.md` §8 weeks 13–16. Closing pass.
 
 ### Scope
 
-- Quick switcher: cmd-K palette across rooms, members, recent messages, settings. (Note: existing `QuickSwitcher.test.tsx` has 18 pre-existing failing tests. **Triage before starting.**)
+- Quick switcher: cmd-K palette across rooms, members, recent messages, settings. **Index + ranking slice landed 2026-05-07** on `claude/code-debt-cleanup-QW0bb`: `buildQuickSwitcherIndex` and `rankQuickSwitcherResults` are exported with deterministic exact > recent > unread > fuzzy ordering, the unit test file is un-quarantined, and the smoke `it.skip` is re-enabled. Remaining: recent-messages search source.
 - Advanced notification controls: per-room overrides UI on top of BKL-004 rules editor.
 - Profiles: rich profile pages with custom status, banners, member-since metadata.
 - Themes: light / AMOLED token rollout against design tokens; per-component parity via the new UI primitives.
@@ -319,11 +319,10 @@ Per `discord_parity_blueprint.md` §8 weeks 13–16. Closing pass.
 ### Prereqs
 
 - All previous workstreams.
-- Pre-existing QuickSwitcher test failures resolved (currently 18 failing in `apps/blackout-client/tests/unit/features/navigation/QuickSwitcher.test.tsx`).
 
 ### Exit criteria
 
-- Quick switcher returns ranked results across all four entry kinds (room/member/message/setting) with deterministic tests.
+- Quick switcher returns ranked results across all four entry kinds (room/member/message/setting) with deterministic tests. *(rooms/spaces/DMs/members/pages/commands/actions/settings landed 2026-05-07; recent-messages source still pending.)*
 - Theme switcher in canonical settings flips light/AMOLED tokens with no flash; theme parity tests cover all UI primitives.
 - Stage channel: stage host can promote/demote speakers; viewers see speaker rail; works in a federated test room.
 
@@ -341,9 +340,11 @@ XL (~4 weeks).
 - **Status updates:** add a `## Status update — <date>` section at the top
   of each workstream (mirroring the migration backlog convention) when
   Workstream A starts.
-- **Pre-existing test debt:** Workstream F is gated on resolving the 18
-  failing tests in `apps/blackout-client/tests/unit/features/navigation/QuickSwitcher.test.tsx`
-  observed during Slice A verification (2026-05-01).
+- **Pre-existing test debt:** Resolved 2026-05-07 — the
+  `apps/blackout-client/tests/unit/features/navigation/QuickSwitcher.test.tsx`
+  quarantine has been lifted after the missing `buildQuickSwitcherIndex` /
+  `rankQuickSwitcherResults` helpers were implemented and assertion drift was
+  reconciled.
 
 ## Test debt — quarantined unit tests (2026-05-01)
 
@@ -357,14 +358,15 @@ paths were corrected from a stale `../../../../../src` (5 levels up) to
 the canonical `../../../../src` (4 levels up — project root); the
 composer / notifications manifest-order assertions were updated to
 include the `live-interaction.bundle` plugin added after the tests were
-quarantined. The remaining 8 are quarantined in
-`apps/blackout-client/vitest.config.ts`'s `exclude` list pending
-feature-level fixes:
+quarantined. `tests/unit/features/navigation/QuickSwitcher.test.tsx` was
+un-quarantined 2026-05-07 once `buildQuickSwitcherIndex` /
+`rankQuickSwitcherResults` were implemented. The remaining 7 are
+quarantined in `apps/blackout-client/vitest.config.ts`'s `exclude` list
+pending feature-level fixes:
 
 | File | Failure mode | Likely fix |
 | --- | --- | --- |
 | `tests/unit/utils/room.test.ts` | Imports util fns from `src/app/utils/room` that aren't exported | Restore exports or rewrite the test |
-| `tests/unit/features/navigation/QuickSwitcher.test.tsx` | `buildQuickSwitcherIndex` not implemented; assertion-level test drift | Implement helper + refresh DOM assertions; tracked under Workstream F |
 | `tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx` | Asserts a "Moderation" nav link the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
 | `tests/unit/pages/client/ClientLayout.test.tsx` | Asserts elements the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
 | `tests/unit/features/settings/SettingsPage.test.tsx` | vanilla-extract test setup: "Styles were unable to be assigned to a file" | Vanilla-extract vitest config; tracked under Workstream B |

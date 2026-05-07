@@ -2,9 +2,9 @@ export * from './types';
 export * from './crypto';
 export * from './governance';
 export * from './federation';
-export * from './quick-actions';
+export * from '../../app/plugins/composer/quickActionCatalog';
 
 export * from './feature-presets';
 export * from './customization';
-export * from './themes';
-export * from './tokens';
+export * from '../../app/plugins/theme/themeCatalog';
+export * from '../../app/plugins/theme/themeTokens';

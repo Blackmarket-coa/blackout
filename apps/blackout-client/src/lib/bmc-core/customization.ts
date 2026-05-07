@@ -1,4 +1,4 @@
-import { normalizeThemeId, type BlackoutThemeId } from './themes';
+import { normalizeThemeId, type BlackoutThemeId } from '../../app/plugins/theme/themeCatalog';
 import {
     FEATURE_PRESET_BUNDLES,
     normalizeFeaturePresetKey,
@@ -20,7 +20,7 @@ export interface BlackoutCustomizationBundle {
 function sanitizeFeatureMap(flags: FeatureFlagMap | null | undefined): FeatureFlagMap | undefined {
     if (!flags) return undefined;
     return Object.fromEntries(
-        Object.entries(flags).filter(([, value]) => typeof value === 'boolean'),
+        Object.entries(flags).filter(([, value]) => typeof value === 'boolean')
     );
 }
 
@@ -62,7 +62,9 @@ export function parseCustomizationBundle(raw: string): BlackoutCustomizationBund
             features: parsed.features,
             theme: parsed.theme,
             exportedAt:
-                typeof parsed.exportedAt === 'string' ? parsed.exportedAt : new Date().toISOString(),
+                typeof parsed.exportedAt === 'string'
+                    ? parsed.exportedAt
+                    : new Date().toISOString(),
         });
     } catch {
         return null;

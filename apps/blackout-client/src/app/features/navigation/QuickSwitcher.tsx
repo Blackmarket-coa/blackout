@@ -1,28 +1,54 @@
 import React, { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import type { Room, RoomMember } from 'matrix-js-sdk';
-import { useNavigate } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
+import { settingsPageAtom, type SettingsSectionId } from '../settings/settingsAtoms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { buildFeatureRegistry } from '../../core/features/buildRegistry';
 import { composeShellPanels, selectPanelsByKind } from '../../core/features/composition';
 import { defaultFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
 import { useCapabilityContext } from '../../core/features/capabilityContext';
 
-interface BaseResult {
+export type QuickSwitcherActionId = 'mark-read' | 'jump-mentions' | 'open-inbox';
+
+export type QuickSwitcherCategory =
+    | 'Rooms'
+    | 'Spaces'
+    | 'DMs'
+    | 'Pages'
+    | 'Users'
+    | 'Commands'
+    | 'Actions'
+    | 'Settings';
+
+export interface QuickSwitcherEntry {
     id: string;
-    category: 'Pages' | 'Rooms' | 'Spaces' | 'Users' | 'Commands' | 'Actions';
+    category: QuickSwitcherCategory;
     title: string;
     subtitle?: string;
     avatarUrl?: string;
     badge?: string;
     keywords: string;
-    /** Navigation target for `Pages` results. */
-    to?: string;
+    /** Navigation target for `Pages` and `Settings` results. */
+    route?: string;
+    /** Settings section id to open when activated. */
+    settingId?: SettingsSectionId;
+    /** Action callback id when activated (Actions entries strip the `action-` prefix from `id`). */
+    actionId?: QuickSwitcherActionId;
+    /** Tie-break ranking signal sourced from `room.getLastActiveTimestamp()`. */
+    lastActive?: number;
+    /** Tie-break ranking signal sourced from `room.getUnreadNotificationCount()`. */
+    unread?: number;
 }
 
-export type QuickSwitcherActionId = 'mark-read' | 'jump-mentions' | 'open-inbox';
+export type QuickSwitcherPageEntry = { id: string; label: string; to: string };
+
+export type QuickSwitcherSettingEntry = {
+    id: SettingsSectionId;
+    title: string;
+    subtitle: string;
+};
 
 interface QuickSwitcherProps {
     open: boolean;
@@ -42,9 +68,25 @@ const COMMANDS = [
 ];
 
 const ACTIONS: { id: QuickSwitcherActionId; title: string; desc: string }[] = [
-    { id: 'mark-read', title: 'Mark all mentions read', desc: 'Clear unread mentions across rooms' },
+    {
+        id: 'mark-read',
+        title: 'Mark all mentions read',
+        desc: 'Clear unread mentions across rooms',
+    },
     { id: 'open-inbox', title: 'Open inbox', desc: 'Show the mention inbox panel' },
     { id: 'jump-mentions', title: 'Jump to mentions', desc: 'Open inbox at mention list' },
+];
+
+const DEFAULT_SETTINGS: QuickSwitcherSettingEntry[] = [
+    { id: 'account', title: 'Account settings', subtitle: 'Profile and account' },
+    { id: 'appearance', title: 'Appearance', subtitle: 'Theme, density, font scale' },
+    { id: 'notifications', title: 'Notifications', subtitle: 'Sounds, alerts, quiet hours' },
+    { id: 'privacy', title: 'Privacy', subtitle: 'Read receipts, blocked users' },
+    { id: 'voice-video', title: 'Voice & video', subtitle: 'Devices and call quality' },
+    { id: 'accessibility', title: 'Accessibility', subtitle: 'Reduced motion, contrast' },
+    { id: 'keybinds', title: 'Keyboard shortcuts', subtitle: 'Customize shortcuts' },
+    { id: 'developer', title: 'Developer tools', subtitle: 'Diagnostics and debug' },
+    { id: 'about', title: 'About', subtitle: 'Version and credits' },
 ];
 
 const fuzzyIncludes = (text: string, query: string): boolean => {
@@ -59,38 +101,57 @@ const fuzzyIncludes = (text: string, query: string): boolean => {
     return hay.includes(needle);
 };
 
-type PageEntry = { id: string; label: string; to: string };
+const safeCall = <T,>(fn: (() => T) | undefined, fallback: T): T => {
+    if (typeof fn !== 'function') return fallback;
+    try {
+        return fn();
+    } catch {
+        return fallback;
+    }
+};
 
-const buildIndex = (rooms: Room[], pages: PageEntry[]): BaseResult[] => {
-    const list: BaseResult[] = [];
+export const buildQuickSwitcherIndex = (
+    rooms: readonly Room[],
+    pages: readonly QuickSwitcherPageEntry[] = [],
+    settings: readonly QuickSwitcherSettingEntry[] = DEFAULT_SETTINGS
+): QuickSwitcherEntry[] => {
+    const list: QuickSwitcherEntry[] = [];
     const seenUsers = new Set<string>();
 
-    pages.forEach((page) => {
-        list.push({
-            id: page.id,
-            category: 'Pages',
-            title: page.label,
-            subtitle: page.to,
-            keywords: `${page.label} ${page.to}`,
-            to: page.to,
-        });
-    });
-
     rooms.forEach((room) => {
-        const alias = room.getCanonicalAlias() ?? '';
-        const unread = room.getUnreadNotificationCount();
-        const isSpace = room.getType() === 'm.space';
+        const alias =
+            safeCall<string | null | undefined>(room.getCanonicalAlias?.bind(room), '') ?? '';
+        const unread = safeCall<number>(room.getUnreadNotificationCount?.bind(room), 0);
+        const lastActive = safeCall<number>(
+            (
+                room as unknown as { getLastActiveTimestamp?: () => number }
+            ).getLastActiveTimestamp?.bind(room),
+            0
+        );
+        const isSpace =
+            safeCall<string | undefined>(room.getType?.bind(room), undefined) === 'm.space';
+        const dmInviter = safeCall<string | null | undefined>(
+            (
+                room as unknown as { getDMInviter?: () => string | null | undefined }
+            ).getDMInviter?.bind(room),
+            undefined
+        );
+        const isDm = !isSpace && Boolean(dmInviter);
+        const category: QuickSwitcherCategory = isSpace ? 'Spaces' : isDm ? 'DMs' : 'Rooms';
 
         list.push({
             id: room.roomId,
-            category: isSpace ? 'Spaces' : 'Rooms',
+            category,
             title: room.name,
             subtitle: alias || room.roomId,
             badge: unread > 0 ? String(unread) : undefined,
             keywords: `${room.name} ${alias} ${room.roomId}`,
+            lastActive,
+            unread,
         });
 
-        room.getJoinedMembers().forEach((member: RoomMember) => {
+        const members = safeCall<RoomMember[]>(room.getJoinedMembers?.bind(room), []);
+        members.forEach((member) => {
             if (seenUsers.has(member.userId)) return;
             seenUsers.add(member.userId);
             list.push({
@@ -100,6 +161,17 @@ const buildIndex = (rooms: Room[], pages: PageEntry[]): BaseResult[] => {
                 subtitle: member.userId,
                 keywords: `${member.name ?? ''} ${member.userId}`,
             });
+        });
+    });
+
+    pages.forEach((page) => {
+        list.push({
+            id: page.id,
+            category: 'Pages',
+            title: page.label,
+            subtitle: page.to,
+            keywords: `${page.label} ${page.to}`,
+            route: page.to,
         });
     });
 
@@ -115,7 +187,8 @@ const buildIndex = (rooms: Room[], pages: PageEntry[]): BaseResult[] => {
 
     ACTIONS.forEach((action) => {
         list.push({
-            id: action.id,
+            id: `action-${action.id}`,
+            actionId: action.id,
             category: 'Actions',
             title: action.title,
             subtitle: action.desc,
@@ -123,28 +196,91 @@ const buildIndex = (rooms: Room[], pages: PageEntry[]): BaseResult[] => {
         });
     });
 
+    settings.forEach((entry) => {
+        list.push({
+            id: `settings-${entry.id}`,
+            settingId: entry.id,
+            category: 'Settings',
+            title: entry.title,
+            subtitle: entry.subtitle,
+            route: `/settings/${entry.id}`,
+            keywords: `${entry.title} ${entry.subtitle} settings`,
+        });
+    });
+
     return list;
 };
 
-const categoryLabel = (category: BaseResult['category']): string => {
+const matchScore = (entry: QuickSwitcherEntry, query: string): number => {
+    const title = entry.title.toLowerCase();
+    if (!query) return 4;
+    if (title === query) return 0;
+    if (title.startsWith(query)) return 1;
+    if (title.includes(query)) return 2;
+    return 3;
+};
+
+export const rankQuickSwitcherResults = (
+    index: readonly QuickSwitcherEntry[],
+    query: string
+): QuickSwitcherEntry[] => {
+    const trimmed = query.toLowerCase().trim();
+    const filtered = trimmed
+        ? index.filter((entry) => fuzzyIncludes(entry.keywords, trimmed))
+        : [...index];
+
+    return filtered.sort((a, b) => {
+        const sa = matchScore(a, trimmed);
+        const sb = matchScore(b, trimmed);
+        if (sa !== sb) return sa - sb;
+        const ar = a.lastActive ?? 0;
+        const br = b.lastActive ?? 0;
+        if (ar !== br) return br - ar;
+        const au = a.unread ?? 0;
+        const bu = b.unread ?? 0;
+        if (au !== bu) return bu - au;
+        return 0;
+    });
+};
+
+const CATEGORY_ORDER: QuickSwitcherCategory[] = [
+    'Rooms',
+    'Spaces',
+    'DMs',
+    'Pages',
+    'Users',
+    'Commands',
+    'Actions',
+    'Settings',
+];
+
+const PER_CATEGORY_CAP = 20;
+
+const categoryLabel = (category: QuickSwitcherCategory): string => {
     if (category === 'Rooms') return BLACKOUT_TERMS.den.titlePlural;
     if (category === 'Spaces') return BLACKOUT_TERMS.canopy.titlePlural;
     return category;
 };
 
-const usePageEntries = (): PageEntry[] => {
+const usePageEntries = (): QuickSwitcherPageEntry[] => {
     const ctx = useCapabilityContext();
+    const capabilities = ctx.capabilities;
+    const flags = ctx.flags;
     return useMemo(() => {
-        const registry = buildFeatureRegistry(
-            { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags,
+        const registry = buildFeatureRegistry({
+            ...defaultFeatureFlags,
+            ...(flags ?? {}),
+        } as FeatureFlags);
+        const panels = selectPanelsByKind(
+            composeShellPanels(registry, { capabilities, flags }),
+            'sidebar'
         );
-        const panels = selectPanelsByKind(composeShellPanels(registry, ctx), 'sidebar');
         return panels.map((panel) => ({
             id: panel.id,
             label: panel.label,
             to: panel.to,
         }));
-    }, [ctx]);
+    }, [capabilities, flags]);
 };
 
 export const QuickSwitcher = ({
@@ -154,14 +290,14 @@ export const QuickSwitcher = ({
     onActionPicked,
 }: QuickSwitcherProps) => {
     const client = useMatrixClient();
-    const navigate = useNavigate();
     const pageEntries = usePageEntries();
     const [, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
+    const setSettingsPage = useSetAtom(settingsPageAtom);
 
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [index, setIndex] = useState<BaseResult[]>([]);
+    const [index, setIndex] = useState<QuickSwitcherEntry[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     useEffect(() => {
@@ -170,7 +306,7 @@ export const QuickSwitcher = ({
     }, [search]);
 
     useEffect(() => {
-        const rebuild = () => setIndex(buildIndex(client.getRooms(), pageEntries));
+        const rebuild = () => setIndex(buildQuickSwitcherIndex(client.getRooms(), pageEntries));
         rebuild();
 
         const emitter = client as unknown as {
@@ -196,32 +332,35 @@ export const QuickSwitcher = ({
         };
     }, [client, pageEntries]);
 
+    const ranked = useMemo(
+        () => rankQuickSwitcherResults(index, debouncedSearch),
+        [debouncedSearch, index]
+    );
+
     const grouped = useMemo(() => {
-        const filtered = index.filter((entry) => fuzzyIncludes(entry.keywords, debouncedSearch));
-        const groups: Record<BaseResult['category'], BaseResult[]> = {
-            Pages: [],
+        const groups: Record<QuickSwitcherCategory, QuickSwitcherEntry[]> = {
             Rooms: [],
             Spaces: [],
+            DMs: [],
+            Pages: [],
             Users: [],
             Commands: [],
             Actions: [],
+            Settings: [],
         };
 
-        filtered.forEach((entry) => {
-            if (groups[entry.category].length < 20) {
+        ranked.forEach((entry) => {
+            if (groups[entry.category].length < PER_CATEGORY_CAP) {
                 groups[entry.category].push(entry);
             }
         });
 
         return groups;
-    }, [debouncedSearch, index]);
+    }, [ranked]);
 
     const flattened = useMemo(
-        () =>
-            (Object.keys(grouped) as Array<keyof typeof grouped>).flatMap(
-                (category) => grouped[category],
-            ),
-        [grouped],
+        () => CATEGORY_ORDER.flatMap((category) => grouped[category]),
+        [grouped]
     );
 
     useEffect(() => {
@@ -229,14 +368,17 @@ export const QuickSwitcher = ({
     }, [debouncedSearch, open]);
 
     const activate = useCallback(
-        async (result: BaseResult) => {
+        async (result: QuickSwitcherEntry) => {
             if (result.category === 'Pages') {
-                if (result.to) navigate(result.to);
+                if (result.route && typeof window !== 'undefined') {
+                    window.history.pushState({}, '', result.route);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                }
                 onClose();
                 return;
             }
 
-            if (result.category === 'Rooms') {
+            if (result.category === 'Rooms' || result.category === 'DMs') {
                 setSelectedRoomId(result.id);
                 setSelectedSpaceId(null);
                 onClose();
@@ -268,19 +410,25 @@ export const QuickSwitcher = ({
             }
 
             if (result.category === 'Actions') {
-                onActionPicked?.(result.id as QuickSwitcherActionId);
+                if (result.actionId) onActionPicked?.(result.actionId);
+                onClose();
+                return;
+            }
+
+            if (result.category === 'Settings') {
+                if (result.settingId) setSettingsPage(result.settingId);
                 onClose();
             }
         },
         [
             client,
-            navigate,
             onActionPicked,
             onClose,
             onCommandPicked,
             setSelectedRoomId,
             setSelectedSpaceId,
-        ],
+            setSettingsPage,
+        ]
     );
 
     const handleSelectionKey = useCallback(
@@ -308,7 +456,7 @@ export const QuickSwitcher = ({
                 if (item) void activate(item);
             }
         },
-        [activate, flattened, onClose, selectedIndex],
+        [activate, flattened, onClose, selectedIndex]
     );
 
     const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -352,7 +500,7 @@ export const QuickSwitcher = ({
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={`Search ${BLACKOUT_TERMS.den.plural}, ${BLACKOUT_TERMS.canopy.plural}, users, commands`}
+                    placeholder="Search rooms, spaces, DMs, members, settings, actions"
                     style={{
                         width: '100%',
                         border: 'none',
@@ -365,7 +513,7 @@ export const QuickSwitcher = ({
                 />
 
                 <div style={{ maxHeight: 'calc(80vh - 56px)', overflowY: 'auto', padding: 8 }}>
-                    {(Object.keys(grouped) as Array<keyof typeof grouped>).map((category) => {
+                    {CATEGORY_ORDER.map((category) => {
                         const items = grouped[category];
                         if (!items.length) return null;
                         return (
@@ -383,8 +531,7 @@ export const QuickSwitcher = ({
                                 {items.map((item) => {
                                     const absoluteIndex = flattened.findIndex(
                                         (entry) =>
-                                            entry.id === item.id &&
-                                            entry.category === item.category,
+                                            entry.id === item.id && entry.category === item.category
                                     );
                                     const active = absoluteIndex === selectedIndex;
 
@@ -432,8 +579,14 @@ export const QuickSwitcher = ({
                                                     '👤'
                                                 ) : item.category === 'Spaces' ? (
                                                     '🗂️'
+                                                ) : item.category === 'DMs' ? (
+                                                    '💬'
                                                 ) : item.category === 'Pages' ? (
                                                     '📄'
+                                                ) : item.category === 'Settings' ? (
+                                                    '⚙️'
+                                                ) : item.category === 'Actions' ? (
+                                                    '⚡'
                                                 ) : (
                                                     '💬'
                                                 )}

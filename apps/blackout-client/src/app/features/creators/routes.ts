@@ -19,6 +19,3 @@ export const creatorsStorefrontRoutes: FeatureRoute[] = [
 export const creatorsDashboardRoutes: FeatureRoute[] = [
     { path: CREATOR_DASHBOARD_PATH, component: CreatorDashboard },
 ];
-
-/** @deprecated kept for backward compat with PR 3 imports. */
-export const creatorsRoutes: FeatureRoute[] = creatorsListingsRoutes;

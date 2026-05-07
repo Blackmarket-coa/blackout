@@ -48,9 +48,6 @@ export default defineConfig({
             // Quarantined pre-existing broken files (see deferred-bodies-schedule):
             // missing util exports in src/app/utils/room.ts
             'tests/unit/utils/room.test.ts',
-            // missing src/app/features/navigation/QuickSwitcher index helper (buildQuickSwitcherIndex)
-            // and assertion-level test debt against current QuickSwitcher API
-            'tests/unit/features/navigation/QuickSwitcher.test.tsx',
             // assertion-level drift (DraupnirNavigation expects 'Moderation' link textContent that the current shell does not render)
             'tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx',
             // assertion-level drift (ClientLayout test expects elements the modern shell does not render yet)
