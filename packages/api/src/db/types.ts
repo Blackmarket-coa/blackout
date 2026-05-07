@@ -85,6 +85,20 @@ export interface PendingOAuthLinkRecord {
   createdAt: string;
 }
 
+export interface TwitchChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Lowercased Twitch channel login (without leading '#'). */
+  twitchChannel: string;
+  /** Matrix room id, e.g. `!roomid:server`. */
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

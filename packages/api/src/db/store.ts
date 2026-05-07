@@ -41,6 +41,7 @@ import type {
   LinkedAccountRecord,
   LinkedAccountProvider,
   PendingOAuthLinkRecord,
+  TwitchChatBridgeRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -81,6 +82,7 @@ type PersistedState = {
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
   pendingOAuthLinks: PendingOAuthLinkRecord[];
+  twitchChatBridges: TwitchChatBridgeRecord[];
 };
 
 class InMemoryDb {
@@ -119,6 +121,8 @@ class InMemoryDb {
   linkedAccounts = new Map<string, LinkedAccountRecord>();
   /** Keyed by stateHash. */
   pendingOAuthLinks = new Map<string, PendingOAuthLinkRecord>();
+  /** Keyed by bridge id. */
+  twitchChatBridges = new Map<string, TwitchChatBridgeRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -331,6 +335,56 @@ class InMemoryDb {
       }
     }
     return removed;
+  }
+
+  // --- twitch chat bridges (Phase 1 / Track A) ---
+
+  createTwitchChatBridge(
+    input: Omit<TwitchChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchChatBridgeRecord {
+    const now = nowIso();
+    const record: TwitchChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getTwitchChatBridge(id: string): TwitchChatBridgeRecord | undefined {
+    return this.twitchChatBridges.get(id);
+  }
+
+  findTwitchChatBridge(
+    blackoutUserId: string,
+    twitchChannel: string,
+  ): TwitchChatBridgeRecord | undefined {
+    const ch = twitchChannel.toLowerCase();
+    return [...this.twitchChatBridges.values()].find(
+      (row) => row.blackoutUserId === blackoutUserId && row.twitchChannel === ch,
+    );
+  }
+
+  listTwitchChatBridgesForUser(blackoutUserId: string): TwitchChatBridgeRecord[] {
+    return [...this.twitchChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveTwitchChatBridges(): TwitchChatBridgeRecord[] {
+    return [...this.twitchChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateTwitchChatBridge(
+    id: string,
+    patch: Partial<Omit<TwitchChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): TwitchChatBridgeRecord | undefined {
+    const existing = this.twitchChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: TwitchChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.twitchChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteTwitchChatBridge(id: string): boolean {
+    return this.twitchChatBridges.delete(id);
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -1045,6 +1099,9 @@ class FileBackedDb extends InMemoryDb {
     this.pendingOAuthLinks = new Map(
       (parsed.pendingOAuthLinks ?? []).map((row) => [row.stateHash, row]),
     );
+    this.twitchChatBridges = new Map(
+      (parsed.twitchChatBridges ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1082,6 +1139,7 @@ class FileBackedDb extends InMemoryDb {
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],
       pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
+      twitchChatBridges: [...this.twitchChatBridges.values()],
     };
   }
 
@@ -1493,6 +1551,29 @@ class FileBackedDb extends InMemoryDb {
   override prunePendingOAuthLinks(now: Date = new Date()): number {
     const removed = super.prunePendingOAuthLinks(now);
     if (removed > 0) this.persist();
+    return removed;
+  }
+
+  override createTwitchChatBridge(
+    input: Omit<TwitchChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchChatBridgeRecord {
+    const record = super.createTwitchChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateTwitchChatBridge(
+    id: string,
+    patch: Partial<Omit<TwitchChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): TwitchChatBridgeRecord | undefined {
+    const updated = super.updateTwitchChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteTwitchChatBridge(id: string): boolean {
+    const removed = super.deleteTwitchChatBridge(id);
+    if (removed) this.persist();
     return removed;
   }
 }

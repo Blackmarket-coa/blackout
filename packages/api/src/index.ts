@@ -22,6 +22,7 @@ import aidPoolRoutes from './routes/aidPools';
 import adRevenueRoutes from './routes/adRevenue';
 import appRoutes from './routes/apps';
 import linkedAccountRoutes from './routes/linkedAccounts';
+import twitchChatBridgeRoutes from './routes/twitchChatBridges';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -110,6 +111,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/ad-revenue`, adRevenueRoutes);
   app.route(`${root}/apps`, appRoutes);
   app.route(`${root}/linked-accounts`, linkedAccountRoutes);
+  app.route(`${root}/integrations/twitch/chat-bridges`, twitchChatBridgeRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
