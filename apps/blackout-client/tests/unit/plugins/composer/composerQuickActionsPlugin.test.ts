@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getMessageActions } from '../../../../src/lib/bmc-core/quick-actions';
+import { getMessageActions } from '../../../../src/app/plugins/composer/quickActionCatalog';
 import {
     composerQuickActionsPlugin,
     resolveComposerMessageSpacingItems,

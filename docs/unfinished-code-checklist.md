@@ -4,13 +4,14 @@ Auto-generated from TODO/FIXME/TBD/not-implemented markers across `src/`, `scrip
 
 - Excludes generated/vendor-heavy paths (`src/i18n/**`, `docs/lib/**`, `*.snap`), changelog, and this checklist file itself.
 - Open items: **0**
-- Resolved items tracked in this checklist: **78**
+- Resolved items tracked in this checklist: **79**
 - Total files with tracked markers: **0**
 
 ## Checklist
 
 ## Recently resolved high-priority markers
 
+- [x] Code-debt cleanup pass (2026-05-07): retired the four `@deprecated` PR-6 bridges (`apps/blackout-client/src/lib/bmc-core/{quick-actions,themes,tokens}.ts` and the `creatorsRoutes` alias in `apps/blackout-client/src/app/features/creators/routes.ts`), repointed the only remaining bridge consumers (`composerQuickActionsPlugin.test.ts`, `bmc-core/customization.ts`, `bmc-core/index.ts`) at the canonical plugin modules, deleted the now-vacuous `migration-bridge-parity.test.ts`, removed the dead `printLex`/`perf` debug-comment block in `apps/blackout-client/src/app/utils/ASCIILexicalTable.ts`, and implemented the long-deferred `buildQuickSwitcherIndex` / `rankQuickSwitcherResults` helpers in `apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx` so the previously skipped `pluginModeSmoke` quick-switcher test and the quarantined `tests/unit/features/navigation/QuickSwitcher.test.tsx` both pass.
 - [x] Utility test-stub closure (2026-04-05): implemented 38 unit tests across `event.test.ts` (14 tests), `room.test.ts` (9 tests), `media.test.ts` (8 tests), and `markdown.test.ts` (7 tests) to close all 27 `it.todo()` stubs in `apps/blackout-client/tests/unit/utils/`. Also reconciled 5 partial-status tracking items (uc-001/002/003/007/009) to Complete in `docs/unfinished-code-priority-plan.md`.
 - [x] Batch-4 next-25 execution (2026-03-18): closed the targeted MatrixChat/Notifier/Notifications/MessageContextMenu/TimelinePanel/BaseDialog/DeactivateAccountDialog marker set with helper refactors, guardrails, and test updates (evidence: `docs/operations/evidence/2026-03-18-p2-batch-4-next-25-execution.md`).
 - [x] Batch-3 next-25 maintainability sweep (2026-03-18): closed 25 selected XXX/hack debt markers across runtime, accessibility, settings, and bootstrap slices without behavior changes (evidence: `docs/operations/evidence/2026-03-18-p2-batch-3-next-25-xxx-closure.md`).

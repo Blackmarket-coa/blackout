@@ -1,6 +1,5 @@
 export { creatorsFeature, creatorsStorefrontFeature, creatorsDashboardFeature } from './manifest';
 export {
-    creatorsRoutes,
     creatorsListingsRoutes,
     creatorsStorefrontRoutes,
     creatorsDashboardRoutes,
