@@ -1004,6 +1004,7 @@ integration tests.
 | `9bd8ca3` | feat(compat): persistent sync_cursor on linked_accounts; Streamlabs survives restart |
 | `2f9dea5` | feat(client): "Sync donations" button on the linked Streamlabs row |
 | `cf11b4e` | feat(compat): Streamlabs donation auto-poll scheduler |
+| (multi-platform-extensions-2) | feat(compat): StreamElements-shape OverlayWS shim — SE overlays connect unmodified |
 
 #### Phase 1 — Outbound chat back to source platforms
 
@@ -1090,6 +1091,7 @@ integration tests.
 | Patreon webhook receiver | `packages/api/src/routes/patreonWebhook.ts` + `packages/api/src/integrations/patreon/webhookEvents.ts` |
 | Streamlabs donation sync | `packages/api/src/services/streamlabsDonationSync.ts` + `packages/api/src/services/streamlabsDonationScheduler.ts` |
 | Widget alerts SSE pipe (Streamlabs/StreamElements-shaped) | `packages/api/src/routes/widgetAlerts.ts` + `packages/api/src/services/widgetBus.ts` + `packages/api/src/services/widgetAlertTokens.ts` |
+| StreamElements OverlayWS compat (faithful socket.io shim) | `packages/api/src/integrations/se-overlay-compat/server.ts` + `packages/api/src/integrations/widgets/seOverlayShape.ts` |
 | Linked accounts (5 OAuth providers: Twitch, YouTube, Discord, Patreon, Streamlabs) | `packages/api/src/services/linkedAccounts.ts` + `packages/api/src/services/oauthProviders.ts` + `packages/api/src/integrations/_oauth/*` |
 | Outbound chat router (Twitch IRC + YouTube liveChat) | `packages/api/src/services/outboundMessageRouter.ts` |
 | Simulcast destinations CRUD (AES-GCM at rest) | `packages/api/src/services/simulcastDestinations.ts` + `packages/api/src/db/migrations/014_*.sql` |
@@ -1123,7 +1125,6 @@ integration tests.
 | Twitch Extensions iframe shim | Roadblocked | Needs proprietary `twitch-ext.min.js` + EBS JWT signing infra + extension-bundle install lifecycle. Requires legal review per AOG's risks section. |
 | Discord Activities Embedded App SDK | Roadblocked | Closed Discord SDK; no public path. |
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | Bounded but limited | Needs LiveKit Server SDK admin-token path. Not all creators use LiveKit voice rooms during streams; ship when there's clear demand. |
-| StreamElements OverlayWS compat | Bounded | Mirror `routes/widgetAlerts.ts` pattern with the SE socket.io shape. |
 | Stream Deck Companion module YAML | Bounded | Upstream PR to `bitfocus/companion`. Pure config / docs. |
 | Hono >= 4.13.0 bump (clear `osv-scanner.toml` allowlist for GHSA-69xw-7hcm-h432 + GHSA-9vqf-7f2p-gf9v) | Blocked on registry | The internal npm mirror used by the dev sandbox currently exposes Hono up to `4.12.18` only (`latest` dist-tag = `4.12.18`). The 4.13.x fixes are upstream on github.com/honojs/hono but have not landed in the mirror. Re-attempt this bump once the mirror catches up; until then the allowlist stays in place. |
 
@@ -1144,6 +1145,7 @@ Backend integration test files covering the compat surface (all green at `ef6ecc
 |---|---|
 | `packages/api/test/matrix-appservice.integration.test.ts` | 7 |
 | `packages/api/test/matrix-appservice-registration.integration.test.ts` | 7 |
+| `packages/api/test/se-overlay-shim-server.integration.test.ts` | 7 |
 | `packages/api/test/outbound-message-router.integration.test.ts` | 8 |
 | `packages/api/test/rtmp-fanout-worker.integration.test.ts` | 11 |
 | `packages/api/test/youtube-chat-bridge.integration.test.ts` | 23 |
@@ -1199,6 +1201,7 @@ cd packages/api && pnpm exec tsx --test \
 | Patreon webhook receiver | 0–100% | `routes/patreonWebhook.ts` + `integrations/patreon/webhookEvents.ts` |
 | Streamlabs donation sync | 0–100% | `services/streamlabsDonationSync.ts` + `services/streamlabsDonationScheduler.ts` |
 | Widget alerts SSE pipe (Streamlabs-shaped) | 0–100% | `routes/widgetAlerts.ts` + `services/widgetBus.ts` |
+| StreamElements OverlayWS compat (faithful socket.io shim) | 0–100% | `integrations/se-overlay-compat/server.ts` + `integrations/widgets/seOverlayShape.ts` |
 | Linked accounts (5 OAuth providers) | 0–100% | `services/linkedAccounts.ts` + `services/oauthProviders.ts` |
 | Outbound chat router (Twitch IRC + YouTube liveChat) | 0–100% | `services/outboundMessageRouter.ts` |
 | Simulcast destinations CRUD (AES-GCM at rest) | 0–100% | `services/simulcastDestinations.ts` + migration `014` |
@@ -1232,7 +1235,6 @@ cd packages/api && pnpm exec tsx --test \
 | Twitch Extensions iframe shim | 0% | Roadblocked: proprietary `twitch-ext.min.js` + EBS JWT infra + legal review |
 | Discord Activities Embedded App SDK | 0% | Roadblocked: closed Discord SDK |
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | 0% | Bounded but limited applicability; needs LiveKit Server SDK admin-token path |
-| StreamElements OverlayWS compat | 0% | Bounded; mirror `widgetAlerts.ts` pattern |
 | Stream Deck Companion module YAML | 0% | Bounded; upstream PR to `bitfocus/companion` |
 
 ---
