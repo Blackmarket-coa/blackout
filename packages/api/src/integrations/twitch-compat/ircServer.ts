@@ -26,6 +26,7 @@ import {
 } from '../../services/chatMessageHub';
 import { matrixClient as defaultMatrixClient } from '../matrix-client';
 import type { MatrixSendEventClient } from '../../services/twitchChatBridge';
+import { sendChatMessage as sendTwitchIrcChatMessage } from '../twitch/chatIngress';
 import { log } from '../../telemetry/logger';
 
 /**
@@ -330,6 +331,39 @@ const handleEvent = (
             error: String(err),
           }),
         );
+
+      // For Twitch-shape channels (#login), ALSO mirror the bot's
+      // message back out to real Twitch IRC via the creator's authed
+      // chat-ingress connection. Loop prevention: Twitch IRC doesn't
+      // echo our own outbound PRIVMSGs unless `echo-message` cap is
+      // requested (the chat-bridge does NOT request it), so this
+      // doesn't round-trip through twitchChatBridge → hub → bot.
+      // YouTube and Kick #yt:/#kick: channels stay Matrix-only because
+      // their outbound semantics are different (YT needs OAuth quota;
+      // Kick has no public outbound API).
+      if (bridge.source === 'twitch' && evt.channel.startsWith('#')) {
+        const twitchChannel = evt.channel.slice(1);
+        try {
+          const out = sendTwitchIrcChatMessage(
+            session.blackoutUserId,
+            twitchChannel,
+            evt.body,
+          );
+          if (out.kind !== 'ok') {
+            log.info('twitch_irc_shim_outbound_skipped', {
+              tokenId: session.tokenId,
+              twitchChannel,
+              kind: out.kind,
+            });
+          }
+        } catch (err) {
+          log.warn('twitch_irc_shim_outbound_threw', {
+            tokenId: session.tokenId,
+            twitchChannel,
+            error: String(err),
+          });
+        }
+      }
       return;
     }
     case 'ping':

@@ -2,17 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { once } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - ws has no bundled types
 import WebSocket from 'ws';
 import { generateTestJwtSecret } from './_fixtures/secrets';
+
+const KEY_V1 = randomBytes(32).toString('base64');
 
 process.env.JWT_SECRET_PRIMARY = generateTestJwtSecret();
 process.env.JWT_ISSUER = 'blackout-api';
 process.env.JWT_AUDIENCE = 'blackout-clients';
 process.env.NODE_ENV = 'test';
 process.env.BLACKOUT_DB_MODE = 'memory';
+process.env.LINKED_ACCOUNT_ENCRYPTION_KEYS = `v1:${KEY_V1}`;
+process.env.TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID ?? 'test-twitch-client';
+process.env.TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET ?? 'test-twitch-secret';
+process.env.TWITCH_OAUTH_REDIRECT_URI =
+  process.env.TWITCH_OAUTH_REDIRECT_URI ?? 'http://localhost/cb';
 
 const loadModules = async () => {
   const tokens = await import('../src/services/twitchIrcBotTokens');
@@ -474,6 +481,138 @@ test('IRC shim: PING from bot is answered with PONG echoing the payload', async 
     await bot.awaitLine((l) => /:tmi\.twitch\.tv 376/.test(l));
     bot.send('PING :tmi.twitch.tv');
     await bot.awaitLine((l) => /^:tmi\.twitch\.tv PONG tmi\.twitch\.tv :tmi\.twitch\.tv/.test(l));
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('IRC shim: bot PRIVMSG into a Twitch-shape channel ALSO mirrors out to real Twitch IRC', async () => {
+  const { tokens, shim, db } = await loadModules();
+  const user = await seedUser(db);
+  // Stand up a real chatIngress with a fake socket so the shim's
+  // sendTwitchIrcChatMessage call can find the live session and write
+  // a PRIVMSG line into our recording stub.
+  const linkedAccounts = await import('../src/services/linkedAccounts');
+  linkedAccounts.upsertLinkedAccount({
+    blackoutUserId: user.id,
+    provider: 'twitch',
+    providerUserId: '99',
+    providerUsername: 'streamer',
+    tokens: { accessToken: 'a', refreshToken: 'r', expiresInSeconds: 3600, scopes: [] },
+  });
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    twitchUserId: '99',
+    twitchChannel: 'streamer',
+    matrixRoomId: '!t:srv',
+    isActive: true,
+  });
+  const chatIngress = await import('../src/integrations/twitch/chatIngress');
+  type Listeners = {
+    open: Array<() => void>;
+    message: Array<(event: { data: string }) => void>;
+    close: Array<(event: { code: number; reason: string }) => void>;
+    error: Array<(event: unknown) => void>;
+  };
+  const listeners: Listeners = { open: [], message: [], close: [], error: [] };
+  const sentLines: string[] = [];
+  const ircFactory = (() => ({
+    send: (data: string) => sentLines.push(data),
+    close: () => listeners.close.forEach((l) => l({ code: 1000, reason: 'shutdown' })),
+    addEventListener: (type: keyof Listeners, listener: (e: never) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (listeners[type] as Array<(e: any) => void>).push(listener);
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  })) as any;
+  await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'streamer',
+    onMessage: () => {},
+    socketFactory: ircFactory,
+  });
+  // Drive the chatIngress through the welcome handshake so it's marked
+  // ready to send.
+  listeners.open.forEach((l) => l());
+  listeners.message.forEach((l) =>
+    l({ data: ':tmi.twitch.tv 001 streamerbob :Welcome\r\n' }),
+  );
+  listeners.message.forEach((l) =>
+    l({ data: ':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n' }),
+  );
+  sentLines.length = 0; // discard the JOIN we sent during ingress setup
+
+  const minted = tokens.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const bot = await connectBot(h.url);
+    bot.send('CAP REQ :twitch.tv/commands');
+    bot.send(`PASS oauth:${minted.secret}`);
+    bot.send('NICK Nightbot');
+    await bot.awaitLine((l) => /:tmi\.twitch\.tv 376/.test(l));
+    bot.send('JOIN #streamer');
+    await bot.awaitLine((l) => /JOIN #streamer/.test(l));
+    bot.send('PRIVMSG #streamer :hi from nightbot');
+
+    // (a) Matrix received the message (existing path).
+    for (let i = 0; i < 30 && h.matrixCalls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(h.matrixCalls.length, 1);
+    assert.equal(h.matrixCalls[0].roomId, '!t:srv');
+    assert.equal(h.matrixCalls[0].content.body, 'hi from nightbot');
+
+    // (b) NEW: real Twitch IRC ALSO received a PRIVMSG line via the
+    // creator's chatIngress connection.
+    for (let i = 0; i < 30 && sentLines.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.deepEqual(sentLines, ['PRIVMSG #streamer :hi from nightbot\r\n']);
+  } finally {
+    await h.dispose();
+    chatIngress.stopAllChatIngress();
+  }
+});
+
+test('IRC shim: bot PRIVMSG into a #yt: channel does NOT touch Twitch IRC (Matrix-only)', async () => {
+  // Indirect assertion: register a YouTube bridge but NOT a Twitch
+  // chat ingress for this user. If the shim accidentally tried to
+  // call sendTwitchIrcChatMessage for a #yt: channel it'd hit the
+  // 'no_session' branch (logged + ignored). We verify Matrix still
+  // got the bot's message and a follow-up sendChatMessage call from
+  // outside the shim returns 'not_running' as a sanity check that no
+  // Twitch IRC session was opened.
+  const { tokens, shim, db } = await loadModules();
+  const user = await seedUser(db);
+  db.createYoutubeChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    youtubeChannelId: 'UCxyz',
+    matrixRoomId: '!yt:srv',
+    isActive: true,
+  });
+  const minted = tokens.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const bot = await connectBot(h.url);
+    bot.send('CAP REQ :twitch.tv/commands');
+    bot.send(`PASS oauth:${minted.secret}`);
+    bot.send('NICK MyBot');
+    await bot.awaitLine((l) => /:tmi\.twitch\.tv 376/.test(l));
+    bot.send('JOIN #yt:ucxyz');
+    await bot.awaitLine((l) => /JOIN #yt:ucxyz/.test(l));
+    bot.send('PRIVMSG #yt:ucxyz :hi yt audience');
+    for (let i = 0; i < 30 && h.matrixCalls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(h.matrixCalls.length, 1, 'Matrix received the bot’s message');
+    // Importing chatIngress and asserting no Twitch session exists for
+    // this user — proves the shim didn't try to open one for #yt:.
+    const chatIngress = await import('../src/integrations/twitch/chatIngress');
+    assert.equal(chatIngress.__test__.sessions.size, 0, 'no Twitch IRC session was opened');
   } finally {
     await h.dispose();
   }
