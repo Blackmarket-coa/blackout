@@ -39,6 +39,7 @@ import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
 import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
 import obsWsPasswordRoutes from './routes/obsWsPasswords';
 import rtmpFanoutRoutes from './routes/rtmpFanout';
+import matrixAppserviceRoutes from './routes/matrixAppservice';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -152,6 +153,12 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
 // /v1) so it has a stable URL the user can paste into 3rd-party services that
 // expect a Discord webhook URL. Auth is the URL token; no Bearer.
 app.route('/discord-compat/webhooks', discordCompatWebhookExecuteRoutes);
+
+// Matrix appservice transactions endpoint. Mounted at the spec-mandated
+// `/_matrix/app/v1/...` path; auth is the homeserver token configured in
+// MATRIX_APPSERVICE_HS_TOKEN. Synapse PUTs event batches here on every
+// room transaction we're registered to receive.
+app.route('/_matrix/app/v1', matrixAppserviceRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
