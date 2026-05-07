@@ -18,8 +18,11 @@ CREATE TABLE outbound_event_webhooks (
   name VARCHAR(80) NOT NULL,
   -- Target URL. We allow http(s) only and validate at the service layer.
   target_url VARCHAR(2048) NOT NULL,
-  -- HMAC signing secret (sha256 hex of plaintext; plaintext shown only at create).
-  signing_secret_hash VARCHAR(64) NOT NULL,
+  -- AES-256-GCM envelope of the HMAC signing secret (services/secretBox.ts
+  -- format: `${keyId}:${nonce}:${ciphertext}:${tag}`). AAD binds the row
+  -- so a leaked envelope can't be replayed against another subscription.
+  signing_secret_ciphertext TEXT NOT NULL,
+  encryption_key_id VARCHAR(32) NOT NULL,
   -- JSON array of event types this subscription wants
   -- (tip.created, follow.created, livestream.started, livestream.ended, chat.message.received).
   event_types JSONB NOT NULL DEFAULT '[]'::jsonb,

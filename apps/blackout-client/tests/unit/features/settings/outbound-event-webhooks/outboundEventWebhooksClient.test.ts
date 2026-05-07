@@ -72,18 +72,18 @@ describe('outboundEventWebhooksClient: wire contracts', () => {
         ]);
     });
 
-    it('testDeliver → POST /:id/test with secret + event in body', async () => {
+    it('testDeliver → POST /:id/test with event + data in body (server holds the secret)', async () => {
         const { apiClient, calls } = collectClient();
         await testDeliver(
             'sub-1',
-            { signingSecret: 'sec', eventType: 'tip.created', data: { amount: 100 } },
+            { eventType: 'tip.created', data: { amount: 100 } },
             { apiClient },
         );
         expect(calls).toEqual([
             {
                 method: 'POST',
                 path: '/v1/integrations/outbound-webhooks/sub-1/test',
-                body: { signingSecret: 'sec', eventType: 'tip.created', data: { amount: 100 } },
+                body: { eventType: 'tip.created', data: { amount: 100 } },
             },
         ]);
     });

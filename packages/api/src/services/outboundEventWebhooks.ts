@@ -1,6 +1,7 @@
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { db } from '../db/store';
 import type { OutboundEventType, OutboundEventWebhookRecord } from '../db/types';
+import { decryptSecret, encryptSecret, envelopeKeyId } from './secretBox';
 import { log } from '../telemetry/logger';
 
 /**
@@ -32,17 +33,16 @@ const VALID_EVENT_TYPES: ReadonlySet<OutboundEventType> = new Set<OutboundEventT
   'chat.message.received',
 ]);
 
-const sha256Hex = (s: string): string =>
-  createHash('sha256').update(s).digest('hex');
+/**
+ * AAD that binds a row's ciphertext to the row identity. Identical idea to
+ * services/linkedAccounts.ts: a leaked envelope can't be replayed against
+ * a different subscription because the GCM tag won't validate.
+ */
+const aadFor = (subscriptionId: string): string =>
+  `outbound_event_webhook|${subscriptionId}`;
 
-const constantTimeEqualsHex = (a: string, b: string): boolean => {
-  if (a.length !== b.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
-  } catch {
-    return false;
-  }
-};
+const decryptSigningSecret = (record: OutboundEventWebhookRecord): string =>
+  decryptSecret(record.signingSecretCiphertext, { aad: aadFor(record.id) });
 
 export interface RegisterInput {
   blackoutUserId: string;
@@ -109,12 +109,15 @@ export const register = (input: RegisterInput): RegisterOutcome => {
   const valid = validateRegister(input);
   if (!valid.ok) return { kind: 'invalid_input', reason: valid.reason };
   const signingSecret = randomBytes(SECRET_BYTES).toString('base64url');
+  const id = randomUUID();
+  const ciphertext = encryptSecret(signingSecret, { aad: aadFor(id) });
   const record = db.createOutboundEventWebhook({
-    id: randomUUID(),
+    id,
     blackoutUserId: input.blackoutUserId,
     name: input.name.trim(),
     targetUrl: input.targetUrl.trim(),
-    signingSecretHash: sha256Hex(signingSecret),
+    signingSecretCiphertext: ciphertext,
+    encryptionKeyId: envelopeKeyId(ciphertext),
     eventTypes: [...new Set(input.eventTypes)],
     isActive: true,
     consecutiveFailures: 0,
@@ -259,8 +262,13 @@ export interface DeliverOptions {
   fetchFn?: typeof fetch;
   /** Override the abort timeout. */
   timeoutMs?: number;
-  /** Plaintext signing secret. The caller already knows it (one-time-revealed at create time and held in memory only for a manual test-deliver). */
-  signingSecret?: string;
+  /**
+   * Override the signing secret. Production callers should NOT pass this —
+   * the service unwraps the encrypted-at-rest secret internally. Tests use
+   * it to dodge needing LINKED_ACCOUNT_ENCRYPTION_KEYS configuration in
+   * micro-suites.
+   */
+  signingSecretOverride?: string;
 }
 
 export interface DeliveryReport {
@@ -338,11 +346,15 @@ export const deliverToSubscription = async (
   if (!record.isActive) {
     return { subscriptionId: record.id, ok: false, reason: 'inactive' };
   }
-  if (!options.signingSecret) {
-    return { subscriptionId: record.id, ok: false, reason: 'no_signing_secret_supplied' };
-  }
-  if (!constantTimeEqualsHex(sha256Hex(options.signingSecret), record.signingSecretHash)) {
-    return { subscriptionId: record.id, ok: false, reason: 'signing_secret_mismatch' };
+  let signingSecret: string;
+  try {
+    signingSecret = options.signingSecretOverride ?? decryptSigningSecret(record);
+  } catch (err) {
+    log.warn('outbound_event_webhook_decrypt_failed', {
+      subscriptionId: record.id,
+      error: String(err),
+    });
+    return { subscriptionId: record.id, ok: false, reason: 'decrypt_failed' };
   }
 
   const fetchFn = options.fetchFn ?? fetch;
@@ -353,7 +365,7 @@ export const deliverToSubscription = async (
   for (let attempt = 1; attempt <= 3; attempt++) {
     last = await dispatchOnce({
       record,
-      signingSecret: options.signingSecret,
+      signingSecret,
       payload,
       event,
       fetchFn,
@@ -394,19 +406,16 @@ export const deliverToSubscription = async (
 
 /**
  * Fan an event out to every active subscription owned by `event.blackoutUserId`
- * that's filtering for this event type. Public delivery path.
+ * that's filtering for this event type. Production event sources call this
+ * directly; the service unwraps the encrypted-at-rest signing secret per
+ * subscription, signs the body, and delivers.
  *
- * Note this requires plaintext signing secrets, which we only store hashed.
- * In production the typical wiring is: events arrive via an in-process
- * pipeline that holds the secret in memory after a "send-to-this-sub" UI
- * action, OR a separate signing-secret cache (Redis, encrypted) is
- * provisioned. For the MVP we pass the secret through {@link DeliverOptions}
- * for a single subscription (the `test-deliver` endpoint case); a future
- * pass adds the cache and removes this restriction.
+ * Errors are reported per-subscription and never thrown — a failing
+ * webhook must not block the originating event.
  */
 export const dispatchEvent = async (
   event: BlackoutEvent,
-  options: { signingSecretFor?: (record: OutboundEventWebhookRecord) => string | undefined } & DeliverOptions = {},
+  options: DeliverOptions = {},
 ): Promise<DeliveryReport[]> => {
   const candidates = db
     .listActiveOutboundEventWebhooks()
@@ -414,27 +423,28 @@ export const dispatchEvent = async (
 
   const reports: DeliveryReport[] = [];
   for (const record of candidates) {
-    const signingSecret = options.signingSecretFor?.(record);
-    if (!signingSecret) {
+    try {
+      const report = await deliverToSubscription(record, event, options);
+      reports.push(report);
+    } catch (err) {
+      log.warn('outbound_event_webhook_dispatch_threw', {
+        subscriptionId: record.id,
+        eventType: event.type,
+        error: String(err),
+      });
       reports.push({
         subscriptionId: record.id,
         ok: false,
-        reason: 'no_signing_secret_in_cache',
+        reason: `threw: ${(err as Error)?.message ?? String(err)}`,
       });
-      continue;
     }
-    const report = await deliverToSubscription(record, event, {
-      ...options,
-      signingSecret,
-    });
-    reports.push(report);
   }
   return reports;
 };
 
 export const __test__ = {
-  sha256Hex,
   matchesEventType,
   VALID_EVENT_TYPES,
   FAILURE_PAUSE_THRESHOLD,
+  aadFor,
 };

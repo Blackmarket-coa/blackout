@@ -58,7 +58,6 @@ export interface RegisterResponse {
 }
 
 export interface TestDeliverBody {
-    signingSecret: string;
     eventType: OutboundEventType;
     data?: Record<string, unknown>;
 }

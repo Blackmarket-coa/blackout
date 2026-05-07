@@ -188,8 +188,13 @@ export interface OutboundEventWebhookRecord {
   blackoutUserId: UUID;
   name: string;
   targetUrl: string;
-  /** sha256 of the HMAC signing secret. Plaintext is only ever returned at create time. */
-  signingSecretHash: string;
+  /**
+   * AES-256-GCM envelope of the HMAC signing secret (services/secretBox.ts
+   * format). The AAD binds it to (subscriptionId) so a leaked envelope
+   * can't be replayed against another row.
+   */
+  signingSecretCiphertext: string;
+  encryptionKeyId: string;
   /** Subset of OutboundEventType. Empty array means "all". */
   eventTypes: OutboundEventType[];
   isActive: boolean;

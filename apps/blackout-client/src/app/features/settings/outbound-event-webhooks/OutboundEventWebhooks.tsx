@@ -125,16 +125,9 @@ export function OutboundEventWebhooks({
         useCallback(
             async (sub: OutboundEventWebhook) => {
                 setNotice(null);
-                if (!revealedSecret || revealedSecret.id !== sub.id) {
-                    setNotice(
-                        'Test delivery only works right after creating the webhook (we never store the plaintext signing secret).',
-                    );
-                    return;
-                }
                 const res = await testDeliver(
                     sub.id,
                     {
-                        signingSecret: revealedSecret.secret,
                         eventType: 'tip.created',
                         data: { amount: 0, note: 'test_delivery' },
                     },
@@ -149,7 +142,7 @@ export function OutboundEventWebhooks({
                     await refresh();
                 }
             },
-            [alive, refresh, revealedSecret, testApiClient],
+            [alive, refresh, testApiClient],
         ),
     );
 
@@ -324,11 +317,7 @@ export function OutboundEventWebhooks({
                                             variant="Secondary"
                                             fill="Soft"
                                             radii="Pill"
-                                            disabled={
-                                                busy ||
-                                                !revealedSecret ||
-                                                revealedSecret.id !== sub.id
-                                            }
+                                            disabled={busy || !sub.isActive}
                                             onClick={() => void submitTest(sub)}
                                             data-testid={`outbound-webhook-test-${sub.id}`}
                                         >

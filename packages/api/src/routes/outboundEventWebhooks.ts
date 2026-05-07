@@ -33,8 +33,6 @@ const registerSchema = z.object({
 });
 
 const testDeliverSchema = z.object({
-  /** Plaintext signing secret echoed back from the create-time response. */
-  signingSecret: z.string().min(1).max(255),
   /** Synthetic event type to fire. */
   eventType: eventTypeSchema,
   /** Free-form data to render into embed fields. */
@@ -114,11 +112,9 @@ router.delete('/:id', (c) => {
 });
 
 /**
- * Manual fire-once endpoint. The caller (the Settings UI) holds the
- * plaintext signing secret in memory after the create-time reveal and
- * passes it back here so we can sign the test delivery. This is the
- * MVP wiring for "verify your webhook works" before any real event
- * source has been hooked up.
+ * Manual fire-once endpoint. With encrypted-at-rest signing secrets
+ * (services/outboundEventWebhooks.ts) the user no longer needs to echo
+ * back the plaintext — the server just decrypts, signs, and delivers.
  */
 router.post('/:id/test', async (c) => {
   const userOrResp = requireUser(c, 'Sign in required to test an outbound event webhook');
@@ -140,9 +136,7 @@ router.post('/:id/test', async (c) => {
     data: parsed.data,
     occurredAt: new Date().toISOString(),
   };
-  const report = await deliverToSubscription(record, event, {
-    signingSecret: parsed.signingSecret,
-  });
+  const report = await deliverToSubscription(record, event);
   return c.json({ report });
 });
 
