@@ -5,6 +5,7 @@ import {
     createToken,
     listTokens,
     revokeToken,
+    sendTestAlert,
 } from '../../../../../src/app/features/settings/widget-alerts/widgetAlertsClient';
 
 const collectClient = () => {
@@ -50,6 +51,29 @@ describe('widgetAlertsClient: wire contracts', () => {
         await createToken({}, { apiClient });
         expect(calls).toEqual([
             { method: 'POST', path: '/v1/integrations/widgets/alerts/tokens', body: {} },
+        ]);
+    });
+
+    it('sendTestAlert → POST /test with the typed body', async () => {
+        const { apiClient, calls } = collectClient();
+        await sendTestAlert(
+            { type: 'cheer', name: 'TestUser', amount: 500, message: 'Cheer500' },
+            { apiClient },
+        );
+        expect(calls).toEqual([
+            {
+                method: 'POST',
+                path: '/v1/integrations/widgets/alerts/test',
+                body: { type: 'cheer', name: 'TestUser', amount: 500, message: 'Cheer500' },
+            },
+        ]);
+    });
+
+    it('sendTestAlert allows the minimal body shape (just type)', async () => {
+        const { apiClient, calls } = collectClient();
+        await sendTestAlert({ type: 'follow' }, { apiClient });
+        expect(calls).toEqual([
+            { method: 'POST', path: '/v1/integrations/widgets/alerts/test', body: { type: 'follow' } },
         ]);
     });
 

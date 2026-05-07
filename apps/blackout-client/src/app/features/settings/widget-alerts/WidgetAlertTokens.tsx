@@ -10,6 +10,8 @@ import {
     createToken,
     listTokens,
     revokeToken,
+    sendTestAlert,
+    type TestAlertType,
     type WidgetAlertTokenSummary,
 } from './widgetAlertsClient';
 
@@ -94,9 +96,28 @@ export function WidgetAlertTokens({ apiClient: testApiClient }: WidgetAlertToken
         ),
     );
 
+    const [testState, submitTest] = useAsyncCallback(
+        useCallback(
+            async (type: TestAlertType) => {
+                setNotice(null);
+                const res = await sendTestAlert({ type, name: 'TestUser' }, testApiClient);
+                if (alive()) {
+                    setNotice(
+                        res.delivered > 0
+                            ? `Test ${type} alert delivered to ${res.delivered} connected widget${res.delivered === 1 ? '' : 's'}.`
+                            : `Test ${type} alert published, but no widgets are connected. Open your OBS browser source to see it.`,
+                    );
+                }
+                return res;
+            },
+            [alive, testApiClient],
+        ),
+    );
+
     const busy =
         createState.status === AsyncStatus.Loading ||
-        revokeState.status === AsyncStatus.Loading;
+        revokeState.status === AsyncStatus.Loading ||
+        testState.status === AsyncStatus.Loading;
 
     const copy = (text: string, what: string) => {
         // navigator.clipboard is gated on secure contexts in some browsers;
@@ -236,6 +257,38 @@ export function WidgetAlertTokens({ apiClient: testApiClient }: WidgetAlertToken
                 </SequenceCard>
             )}
 
+            {loaded && (
+                <SequenceCard
+                    className={SequenceCardStyle}
+                    variant="SurfaceVariant"
+                    direction="Column"
+                    gap="200"
+                >
+                    <SettingTile
+                        title={<Text as="span" size="T300">Send a test alert</Text>}
+                        description="Fires a synthetic alert to every widget currently connected to your tokens. Useful for verifying your overlay renders correctly without waiting for a real follow / sub / cheer / raid."
+                    />
+                    <Box gap="200" wrap="Wrap">
+                        {(['follow', 'subscribe', 'subscription_gift', 'cheer', 'raid'] as TestAlertType[]).map(
+                            (type) => (
+                                <Button
+                                    key={type}
+                                    size="300"
+                                    variant="Secondary"
+                                    fill="Solid"
+                                    radii="Pill"
+                                    disabled={busy}
+                                    onClick={() => void submitTest(type)}
+                                    data-testid={`widget-test-alert-${type}`}
+                                >
+                                    <Text size="B300">Test {type}</Text>
+                                </Button>
+                            ),
+                        )}
+                    </Box>
+                </SequenceCard>
+            )}
+
             {loaded && tokens.length > 0 && (
                 <Box direction="Column" gap="100">
                     <Text size="L400">Your tokens</Text>
@@ -302,6 +355,11 @@ export function WidgetAlertTokens({ apiClient: testApiClient }: WidgetAlertToken
             {revokeState.status === AsyncStatus.Error && (
                 <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
                     {(revokeState.error as Error).message}
+                </Text>
+            )}
+            {testState.status === AsyncStatus.Error && (
+                <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
+                    {(testState.error as Error).message}
                 </Text>
             )}
         </Box>

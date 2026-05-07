@@ -67,6 +67,39 @@ export const revokeToken = (
         path: `${BASE}/${encodeURIComponent(tokenId)}`,
     }) as Promise<RevokeTokenResponse>;
 
+// ----------------------------- synthetic test alert -----------------------------
+
+export type TestAlertType =
+    | 'follow'
+    | 'subscribe'
+    | 'subscription_gift'
+    | 'cheer'
+    | 'raid';
+
+export interface TestAlertBody {
+    type: TestAlertType;
+    name?: string;
+    /** For `cheer`: bits. For `subscription_gift`: count. For `raid`: viewers. */
+    amount?: number;
+    /** For `cheer` / `subscribe`: optional message. */
+    message?: string;
+    tier?: '1000' | '2000' | '3000';
+}
+
+export interface TestAlertResponse {
+    ok: true;
+    /** How many widget subscribers received the synthetic alert. */
+    delivered: number;
+}
+
+const TEST_PATH = '/v1/integrations/widgets/alerts/test';
+
+export const sendTestAlert = (
+    body: TestAlertBody,
+    options?: ApiCallOptions,
+): Promise<TestAlertResponse> =>
+    client(options)({ method: 'POST', path: TEST_PATH, body }) as Promise<TestAlertResponse>;
+
 // ----------------------------- SSE URL builder -----------------------------
 
 const STREAM_PATH = '/v1/integrations/widgets/alerts/stream';
