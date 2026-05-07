@@ -31,6 +31,10 @@ import youtubeChatBridgeRoutes from './routes/youtubeChatBridges';
 import integrationsHealthRoutes from './routes/integrationsHealth';
 import simulcastRoutes from './routes/simulcastDestinations';
 import kickChatBridgeRoutes from './routes/kickChatBridges';
+import {
+  authedRouter as discordCompatWebhookRoutes,
+  publicExecuteRouter as discordCompatWebhookExecuteRoutes,
+} from './routes/discordCompatWebhooks';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -128,12 +132,18 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/health`, integrationsHealthRoutes);
   app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
   app.route(`${root}/integrations/kick/chat-bridges`, kickChatBridgeRoutes);
+  app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
   app.route(`${root}/key-transparency`, keyTransparencyRoutes);
   registerFeatureModules(app, root);
 }
+
+// Discord-wire-compatible webhook execute endpoint. Mounted top-level (outside
+// /v1) so it has a stable URL the user can paste into 3rd-party services that
+// expect a Discord webhook URL. Auth is the URL token; no Bearer.
+app.route('/discord-compat/webhooks', discordCompatWebhookExecuteRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 

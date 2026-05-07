@@ -154,6 +154,22 @@ export interface KickChatBridgeRecord {
   updatedAt: string;
 }
 
+export interface DiscordCompatWebhookRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  matrixRoomId: string;
+  /** Display label only (e.g. "GitHub", "Sentry"). Discord-style senders pick their own per-call. */
+  name: string;
+  avatarUrl?: string;
+  /** sha256 of the URL token. Plaintext is only ever returned at create time. */
+  tokenHash: string;
+  isActive: boolean;
+  lastUsedAt?: string;
+  deliveryCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TwitchEventSubscriptionRecord {
   id: UUID;
   blackoutUserId: UUID;

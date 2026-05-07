@@ -46,6 +46,7 @@ import type {
   WidgetAlertTokenRecord,
   YoutubeChatBridgeRecord,
   KickChatBridgeRecord,
+  DiscordCompatWebhookRecord,
   SimulcastDestinationRecord,
 } from './types';
 
@@ -93,6 +94,7 @@ type PersistedState = {
   youtubeChatBridges: YoutubeChatBridgeRecord[];
   kickChatBridges: KickChatBridgeRecord[];
   simulcastDestinations: SimulcastDestinationRecord[];
+  discordCompatWebhooks: DiscordCompatWebhookRecord[];
 };
 
 class InMemoryDb {
@@ -143,6 +145,8 @@ class InMemoryDb {
   kickChatBridges = new Map<string, KickChatBridgeRecord>();
   /** Keyed by destination id. */
   simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
+  /** Keyed by webhook id (the public part of the URL). */
+  discordCompatWebhooks = new Map<string, DiscordCompatWebhookRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -635,6 +639,42 @@ class InMemoryDb {
 
   deleteKickChatBridge(id: string): boolean {
     return this.kickChatBridges.delete(id);
+  }
+
+  // --- discord-compatible incoming webhooks (Phase 2 / Track B) ---
+
+  createDiscordCompatWebhook(
+    input: Omit<DiscordCompatWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordCompatWebhookRecord {
+    const now = nowIso();
+    const record: DiscordCompatWebhookRecord = { ...input, createdAt: now, updatedAt: now };
+    this.discordCompatWebhooks.set(record.id, record);
+    return record;
+  }
+
+  getDiscordCompatWebhook(id: string): DiscordCompatWebhookRecord | undefined {
+    return this.discordCompatWebhooks.get(id);
+  }
+
+  listDiscordCompatWebhooksForUser(blackoutUserId: string): DiscordCompatWebhookRecord[] {
+    return [...this.discordCompatWebhooks.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  updateDiscordCompatWebhook(
+    id: string,
+    patch: Partial<Omit<DiscordCompatWebhookRecord, 'id' | 'createdAt'>>,
+  ): DiscordCompatWebhookRecord | undefined {
+    const existing = this.discordCompatWebhooks.get(id);
+    if (!existing) return undefined;
+    const updated: DiscordCompatWebhookRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.discordCompatWebhooks.set(id, updated);
+    return updated;
+  }
+
+  deleteDiscordCompatWebhook(id: string): boolean {
+    return this.discordCompatWebhooks.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -1413,6 +1453,9 @@ class FileBackedDb extends InMemoryDb {
     this.simulcastDestinations = new Map(
       (parsed.simulcastDestinations ?? []).map((row) => [row.id, row]),
     );
+    this.discordCompatWebhooks = new Map(
+      (parsed.discordCompatWebhooks ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1456,6 +1499,7 @@ class FileBackedDb extends InMemoryDb {
       youtubeChatBridges: [...this.youtubeChatBridges.values()],
       kickChatBridges: [...this.kickChatBridges.values()],
       simulcastDestinations: [...this.simulcastDestinations.values()],
+      discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
     };
   }
 
@@ -2012,6 +2056,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteSimulcastDestination(id: string): boolean {
     const removed = super.deleteSimulcastDestination(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createDiscordCompatWebhook(
+    input: Omit<DiscordCompatWebhookRecord, 'createdAt' | 'updatedAt'>,
+  ): DiscordCompatWebhookRecord {
+    const record = super.createDiscordCompatWebhook(input);
+    this.persist();
+    return record;
+  }
+
+  override updateDiscordCompatWebhook(
+    id: string,
+    patch: Partial<Omit<DiscordCompatWebhookRecord, 'id' | 'createdAt'>>,
+  ): DiscordCompatWebhookRecord | undefined {
+    const updated = super.updateDiscordCompatWebhook(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteDiscordCompatWebhook(id: string): boolean {
+    const removed = super.deleteDiscordCompatWebhook(id);
     if (removed) this.persist();
     return removed;
   }
