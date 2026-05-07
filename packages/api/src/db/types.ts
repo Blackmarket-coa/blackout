@@ -43,6 +43,48 @@ export interface RevokedSessionRecord {
   reason: string;
 }
 
+/** Providers we link external identities for. Mirrors the `provider` column. */
+export type LinkedAccountProvider =
+  | 'twitch'
+  | 'youtube'
+  | 'discord'
+  | 'patreon'
+  | 'tiktok'
+  | 'kick';
+
+export interface LinkedAccountRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  provider: LinkedAccountProvider;
+  providerUserId: string;
+  providerUsername?: string;
+  /** AES-256-GCM envelope; see services/secretBox.ts. */
+  accessTokenCiphertext: string;
+  /** AES-256-GCM envelope; null for providers that do not issue refresh tokens. */
+  refreshTokenCiphertext?: string;
+  scopes: string[];
+  /** ISO 8601 timestamp when the access token expires (omitted = unknown / non-expiring). */
+  expiresAt?: string;
+  encryptionKeyId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PendingOAuthLinkRecord {
+  /** SHA-256 hex of the random state token presented in the OAuth redirect. */
+  stateHash: string;
+  blackoutUserId: UUID;
+  provider: LinkedAccountProvider;
+  /** AES-256-GCM envelope of the PKCE code_verifier. */
+  codeVerifierCiphertext: string;
+  redirectUri: string;
+  scopes: string[];
+  encryptionKeyId: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

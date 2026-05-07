@@ -38,6 +38,9 @@ import type {
   PasswordResetTokenRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
+  LinkedAccountRecord,
+  LinkedAccountProvider,
+  PendingOAuthLinkRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -76,6 +79,8 @@ type PersistedState = {
   passwordResetTokens: PasswordResetTokenRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
+  linkedAccounts: LinkedAccountRecord[];
+  pendingOAuthLinks: PendingOAuthLinkRecord[];
 };
 
 class InMemoryDb {
@@ -110,6 +115,10 @@ class InMemoryDb {
   passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
+  /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
+  linkedAccounts = new Map<string, LinkedAccountRecord>();
+  /** Keyed by stateHash. */
+  pendingOAuthLinks = new Map<string, PendingOAuthLinkRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -253,6 +262,71 @@ class InMemoryDb {
     for (const [jti, record] of this.revokedSessions) {
       if (new Date(record.expiresAt).getTime() <= now.getTime()) {
         this.revokedSessions.delete(jti);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  // --- linked accounts (third-party OAuth identity links) ---
+
+  private linkedAccountKey(userId: string, provider: LinkedAccountProvider): string {
+    return `${userId}:${provider}`;
+  }
+
+  upsertLinkedAccount(
+    input: Omit<LinkedAccountRecord, 'createdAt' | 'updatedAt'>,
+  ): LinkedAccountRecord {
+    const key = this.linkedAccountKey(input.blackoutUserId, input.provider);
+    const existing = this.linkedAccounts.get(key);
+    const now = nowIso();
+    const record: LinkedAccountRecord = existing
+      ? { ...existing, ...input, createdAt: existing.createdAt, updatedAt: now }
+      : { ...input, createdAt: now, updatedAt: now };
+    this.linkedAccounts.set(key, record);
+    return record;
+  }
+
+  getLinkedAccount(
+    userId: string,
+    provider: LinkedAccountProvider,
+  ): LinkedAccountRecord | undefined {
+    return this.linkedAccounts.get(this.linkedAccountKey(userId, provider));
+  }
+
+  listLinkedAccountsForUser(userId: string): LinkedAccountRecord[] {
+    return [...this.linkedAccounts.values()].filter((row) => row.blackoutUserId === userId);
+  }
+
+  deleteLinkedAccount(userId: string, provider: LinkedAccountProvider): boolean {
+    return this.linkedAccounts.delete(this.linkedAccountKey(userId, provider));
+  }
+
+  // --- pending OAuth link state (PKCE + CSRF) ---
+
+  createPendingOAuthLink(
+    input: Omit<PendingOAuthLinkRecord, 'createdAt'>,
+  ): PendingOAuthLinkRecord {
+    const record: PendingOAuthLinkRecord = { ...input, createdAt: nowIso() };
+    this.pendingOAuthLinks.set(record.stateHash, record);
+    return record;
+  }
+
+  consumePendingOAuthLink(stateHash: string): PendingOAuthLinkRecord | undefined {
+    const existing = this.pendingOAuthLinks.get(stateHash);
+    if (!existing) return undefined;
+    if (existing.consumedAt) return undefined;
+    if (new Date(existing.expiresAt).getTime() <= Date.now()) return undefined;
+    const updated: PendingOAuthLinkRecord = { ...existing, consumedAt: nowIso() };
+    this.pendingOAuthLinks.set(stateHash, updated);
+    return updated;
+  }
+
+  prunePendingOAuthLinks(now: Date = new Date()): number {
+    let removed = 0;
+    for (const [hash, record] of this.pendingOAuthLinks) {
+      if (new Date(record.expiresAt).getTime() <= now.getTime()) {
+        this.pendingOAuthLinks.delete(hash);
         removed += 1;
       }
     }
@@ -965,6 +1039,12 @@ class FileBackedDb extends InMemoryDb {
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
     );
+    this.linkedAccounts = new Map(
+      (parsed.linkedAccounts ?? []).map((row) => [`${row.blackoutUserId}:${row.provider}`, row]),
+    );
+    this.pendingOAuthLinks = new Map(
+      (parsed.pendingOAuthLinks ?? []).map((row) => [row.stateHash, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1000,6 +1080,8 @@ class FileBackedDb extends InMemoryDb {
       passwordResetTokens: [...this.passwordResetTokens.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
+      linkedAccounts: [...this.linkedAccounts.values()],
+      pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
     };
   }
 
@@ -1378,6 +1460,40 @@ class FileBackedDb extends InMemoryDb {
   override resetAdRevenueForTest(): void {
     super.resetAdRevenueForTest();
     this.persist();
+  }
+
+  override upsertLinkedAccount(
+    input: Omit<LinkedAccountRecord, 'createdAt' | 'updatedAt'>,
+  ): LinkedAccountRecord {
+    const record = super.upsertLinkedAccount(input);
+    this.persist();
+    return record;
+  }
+
+  override deleteLinkedAccount(userId: string, provider: LinkedAccountProvider): boolean {
+    const removed = super.deleteLinkedAccount(userId, provider);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createPendingOAuthLink(
+    input: Omit<PendingOAuthLinkRecord, 'createdAt'>,
+  ): PendingOAuthLinkRecord {
+    const record = super.createPendingOAuthLink(input);
+    this.persist();
+    return record;
+  }
+
+  override consumePendingOAuthLink(stateHash: string): PendingOAuthLinkRecord | undefined {
+    const consumed = super.consumePendingOAuthLink(stateHash);
+    if (consumed) this.persist();
+    return consumed;
+  }
+
+  override prunePendingOAuthLinks(now: Date = new Date()): number {
+    const removed = super.prunePendingOAuthLinks(now);
+    if (removed > 0) this.persist();
+    return removed;
   }
 }
 
