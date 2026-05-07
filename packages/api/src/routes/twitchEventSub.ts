@@ -122,36 +122,85 @@ export const buildDefaultEventForwarder = (
     publishWidgetAlert(bridge.blackoutUserId, alert);
   }
 
-  // Project to the outbound webhook event type. We currently surface
-  // follow events; subscribe / sub.gift / cheer / raid are intentionally
-  // skipped here because they map onto richer Blackout-native concepts
-  // (creator-sub, gifts, raids) that get their own dispatch points.
-  const outboundType = ((): OutboundEventType | undefined => {
-    if (event.kind === 'follow') return 'follow.created';
-    return undefined;
-  })();
-  if (outboundType) {
+  // Project to the outbound webhook event type. We dispatch when the
+  // event maps to a known OutboundEventType; the 'raid' kind splits on
+  // direction (the EventSub event carries the *destination* channel id,
+  // so a creator's bridge match means they're being raided INTO, not
+  // raiding out — which is what `raid.received` semantically means).
+  const dispatchOutbound = (
+    type: OutboundEventType,
+    data: Record<string, unknown>,
+    occurredAt?: string,
+  ) => {
     void dispatchOutboundEvent({
-      type: outboundType,
+      type,
       blackoutUserId: bridge.blackoutUserId,
-      data: {
-        source: 'twitch',
-        twitchChannelId: event.twitchChannelId,
-        ...(event.kind === 'follow'
-          ? {
-              followerLogin: event.followerLogin,
-              followerDisplayName: event.followerDisplayName,
-              followedAt: event.followedAt,
-            }
-          : {}),
-      },
-      occurredAt: event.kind === 'follow' ? event.followedAt : undefined,
+      data: { source: 'twitch', ...data },
+      occurredAt,
     }).catch((err) =>
       log.warn('twitch_eventsub_outbound_dispatch_threw', {
         kind: event.kind,
         error: String(err),
       }),
     );
+  };
+
+  switch (event.kind) {
+    case 'follow':
+      dispatchOutbound(
+        'follow.created',
+        {
+          twitchChannelId: event.twitchChannelId,
+          followerLogin: event.followerLogin,
+          followerDisplayName: event.followerDisplayName,
+          followedAt: event.followedAt,
+        },
+        event.followedAt,
+      );
+      break;
+    case 'subscribe':
+      // The standalone subscribe event fires for non-gifted subs;
+      // gifted subs come through the 'subscription_gift' kind below
+      // (where each gifted sub also produces a separate subscribe
+      // event with isGift=true). We forward both, which means a
+      // 5-sub gift bomb fires 1 × subscriber.gifted + 5 × subscriber.created.
+      dispatchOutbound('subscriber.created', {
+        twitchChannelId: event.twitchChannelId,
+        subscriberLogin: event.subscriberLogin,
+        subscriberDisplayName: event.subscriberDisplayName,
+        tier: event.tier,
+        isGift: event.isGift,
+      });
+      break;
+    case 'subscription_gift':
+      dispatchOutbound('subscriber.gifted', {
+        twitchChannelId: event.twitchChannelId,
+        gifterLogin: event.isAnonymous ? null : event.gifterLogin,
+        gifterDisplayName: event.isAnonymous ? null : event.gifterDisplayName,
+        total: event.total,
+        tier: event.tier,
+        cumulativeTotal: event.cumulativeTotal,
+        isAnonymous: event.isAnonymous,
+      });
+      break;
+    case 'cheer':
+      dispatchOutbound('cheer.received', {
+        twitchChannelId: event.twitchChannelId,
+        cheererLogin: event.isAnonymous ? null : event.cheererLogin,
+        cheererDisplayName: event.isAnonymous ? null : event.cheererDisplayName,
+        bits: event.bits,
+        message: event.message,
+        isAnonymous: event.isAnonymous,
+      });
+      break;
+    case 'raid':
+      dispatchOutbound('raid.received', {
+        fromChannelId: event.fromChannelId,
+        fromChannelLogin: event.fromChannelLogin,
+        fromChannelDisplayName: event.fromChannelDisplayName,
+        viewers: event.viewers,
+      });
+      break;
   }
 
   const content = buildAlertContent(event);

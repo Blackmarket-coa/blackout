@@ -563,6 +563,311 @@ test('Twitch EventSub forwarder dispatches follow.created to outbound subscriber
   }
 });
 
+test('Twitch EventSub forwarder maps subscribe → subscriber.created with tier + login', async () => {
+  const { service, db } = await loadModules();
+  const auth = await import('../src/services/auth');
+  const userId = randomUUID();
+  db.createUser({
+    id: userId,
+    username: `s-${userId.slice(0, 4)}`,
+    email: `s-${userId.slice(0, 4)}@example.com`,
+    passwordHash: auth.hashPassword('Original-Pass-1234!'),
+    reputationScore: 0,
+    reputationTier: 'member',
+    pubkeyEd25519: 'pk',
+  });
+  const bridge = db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    twitchChannel: 'sub-creator',
+    matrixRoomId: '!den:srv',
+    isActive: true,
+  });
+  db.createTwitchEventSubscription({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    subscriptionType: 'channel.subscribe',
+    helixSubscriptionId: 'helix-sub',
+    status: 'enabled',
+  });
+  const subA = service.register({
+    blackoutUserId: userId,
+    name: 'sub alerts',
+    targetUrl: 'https://example.com/hook-sub',
+    eventTypes: ['subscriber.created'],
+  });
+  if (subA.kind !== 'ok') return assert.fail();
+
+  const calls: Array<{ url: string; body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const { buildDefaultEventForwarder } = await import('../src/routes/twitchEventSub');
+    const matrix = { sendEvent: async () => ({ ok: true as const, status: 200 }) };
+    const forwarder = buildDefaultEventForwarder(matrix);
+    await forwarder(
+      {
+        kind: 'subscribe',
+        subscriptionType: 'channel.subscribe',
+        twitchChannelId: '1001',
+        subscriberLogin: 'newfan',
+        subscriberDisplayName: 'NewFan',
+        subscriberTwitchId: '5005',
+        tier: '2000',
+        isGift: false,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 'sub-id', type: 'channel.subscribe' } } as any,
+    );
+    for (let i = 0; i < 30 && calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://example.com/hook-sub');
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.embeds[0].title, 'New subscriber');
+    const fields = JSON.stringify(body.embeds[0].fields);
+    assert.match(fields, /newfan/);
+    assert.match(fields, /2000/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.deleteTwitchChatBridge(bridge.id);
+  }
+});
+
+test('Twitch EventSub forwarder: cheer + sub.gift + raid project to their outbound types', async () => {
+  const { service, db } = await loadModules();
+  const auth = await import('../src/services/auth');
+  const userId = randomUUID();
+  db.createUser({
+    id: userId,
+    username: `m-${userId.slice(0, 4)}`,
+    email: `m-${userId.slice(0, 4)}@example.com`,
+    passwordHash: auth.hashPassword('Original-Pass-1234!'),
+    reputationScore: 0,
+    reputationTier: 'member',
+    pubkeyEd25519: 'pk',
+  });
+  const bridge = db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    twitchChannel: 'multi-event-creator',
+    matrixRoomId: '!den:srv',
+    isActive: true,
+  });
+  db.createTwitchEventSubscription({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    subscriptionType: 'channel.cheer',
+    helixSubscriptionId: 'helix-multi',
+    status: 'enabled',
+  });
+  // Subscribe to all three new event types via one outbound webhook so
+  // we can assert we hit each path with the right payload shape.
+  const subAll = service.register({
+    blackoutUserId: userId,
+    name: 'all alerts',
+    targetUrl: 'https://example.com/hook-all',
+    eventTypes: ['cheer.received', 'subscriber.gifted', 'raid.received'],
+  });
+  if (subAll.kind !== 'ok') return assert.fail();
+
+  const calls: Array<{ body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (_: any, init: any) => {
+    calls.push({ body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const { buildDefaultEventForwarder } = await import('../src/routes/twitchEventSub');
+    const matrix = { sendEvent: async () => ({ ok: true as const, status: 200 }) };
+    const forwarder = buildDefaultEventForwarder(matrix);
+
+    // cheer → cheer.received with bits + message; isAnonymous nulls out cheererLogin.
+    await forwarder(
+      {
+        kind: 'cheer',
+        subscriptionType: 'channel.cheer',
+        twitchChannelId: '1001',
+        cheererLogin: 'big-fan',
+        cheererDisplayName: 'Big Fan',
+        cheererTwitchId: '12',
+        bits: 500,
+        message: 'cheer500 great stream',
+        isAnonymous: false,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 's-1', type: 'channel.cheer' } } as any,
+    );
+
+    // sub.gift (anonymous) → subscriber.gifted with gifterLogin nulled out.
+    await forwarder(
+      {
+        kind: 'subscription_gift',
+        subscriptionType: 'channel.subscription.gift',
+        twitchChannelId: '1001',
+        gifterLogin: 'will-be-nulled',
+        gifterDisplayName: 'WillBeNulled',
+        gifterTwitchId: '88',
+        total: 5,
+        tier: '1000',
+        cumulativeTotal: 12,
+        isAnonymous: true,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 's-2', type: 'channel.subscription.gift' } } as any,
+    );
+
+    // raid → raid.received with viewers + fromChannel*.
+    await forwarder(
+      {
+        kind: 'raid',
+        subscriptionType: 'channel.raid',
+        fromChannelId: '999',
+        fromChannelLogin: 'raider',
+        fromChannelDisplayName: 'Raider',
+        toChannelId: '1001',
+        viewers: 142,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 's-3', type: 'channel.raid' } } as any,
+    );
+
+    for (let i = 0; i < 30 && calls.length < 3; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 3);
+    const titles = calls.map((c) => JSON.parse(c.body).embeds[0].title).sort();
+    assert.deepEqual(titles, ['Cheer / Bits', 'Raid incoming', 'Subs gifted']);
+
+    // Anonymous gift had its gifterLogin nulled out before render.
+    const giftedBody = calls
+      .map((c) => JSON.parse(c.body))
+      .find((b) => b.embeds[0].title === 'Subs gifted');
+    // fieldsFromObject collapses each field to {name, value:string}.
+    const giftedField = (n: string) =>
+      giftedBody.embeds[0].fields.find((f: { name: string }) => f.name === n)?.value;
+    assert.equal(giftedField('isAnonymous'), 'true');
+    assert.equal(giftedField('total'), '5');
+    // gifterLogin/displayName were nulled before render → field is omitted.
+    assert.equal(giftedField('gifterLogin'), undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.deleteTwitchChatBridge(bridge.id);
+  }
+});
+
+test('streamGoals: evaluateStreamGoal fires streamgoal.reached exactly once per (stream,target,currency)', async () => {
+  const { service, db } = await loadModules();
+  const sg = await import('../src/services/streamGoals');
+  sg.__test__.resetDispatchedGoals();
+  const auth = await import('../src/services/auth');
+
+  const creator = randomUUID();
+  const tipper = randomUUID();
+  for (const [id, suffix] of [
+    [creator, 'c'],
+    [tipper, 't'],
+  ] as const) {
+    db.createUser({
+      id,
+      username: `g-${suffix}-${id.slice(0, 4)}`,
+      email: `g-${suffix}-${id.slice(0, 4)}@example.com`,
+      passwordHash: auth.hashPassword('Original-Pass-1234!'),
+      reputationScore: 0,
+      reputationTier: 'member',
+      pubkeyEd25519: 'pk',
+    });
+  }
+  const streamId = randomUUID();
+  db.upsertStream({
+    id: streamId,
+    creatorId: creator,
+    state: 'live',
+    title: 'Goal stream',
+    tags: [],
+    visibility: 'public',
+    allowedSubscriberIds: [],
+    latencyProfile: 'normal',
+  });
+
+  const sub = service.register({
+    blackoutUserId: creator,
+    name: 'goal alerts',
+    targetUrl: 'https://example.com/hook-goal',
+    eventTypes: ['streamgoal.reached'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+
+  // Capture a $10 tip into the stream context so aggregateStreamRevenue
+  // sees it as on-goal cents.
+  const tips = await import('../src/services/tips');
+  tips.resetTipsForTest();
+  const created = tips.createTip({
+    senderUserId: tipper,
+    recipientUserId: creator,
+    contextKind: 'stream',
+    contextRef: streamId,
+    grossCents: 1000,
+    currency: 'usd',
+  });
+  tips.captureTip(created.id);
+
+  const calls: Array<{ body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (_: any, init: any) => {
+    calls.push({ body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  try {
+    // Goal target $10 → already met by the captured tip.
+    const first = sg.evaluateStreamGoal(streamId, 1000, 'USD');
+    assert.ok(first.metAt);
+    assert.equal(first.percent, 100);
+    for (let i = 0; i < 30 && calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 1, 'first reach fires the milestone');
+
+    // Subsequent calls don't re-fire for the same goal key.
+    sg.evaluateStreamGoal(streamId, 1000, 'USD');
+    sg.evaluateStreamGoal(streamId, 1000, 'USD');
+    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(calls.length, 1, 'idempotent on subsequent polls');
+
+    // A different goal key (different target) is independent.
+    sg.evaluateStreamGoal(streamId, 500, 'USD');
+    for (let i = 0; i < 10 && calls.length < 2; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 2, 'a different (target) fires its own event');
+
+    // Body shape: title + per-field values keyed by name.
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.embeds[0].title, 'Stream goal reached');
+    const field = (n: string) =>
+      body.embeds[0].fields.find((f: { name: string }) => f.name === n)?.value;
+    assert.equal(field('achievedCents'), '1000');
+    assert.equal(field('targetCents'), '1000');
+    assert.equal(field('currency'), 'USD');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('dispatchEvent: filters by eventType subset and ownership; signs with at-rest secret', async () => {
   const { service, db } = await loadModules();
   const alice = await seedUser(db);

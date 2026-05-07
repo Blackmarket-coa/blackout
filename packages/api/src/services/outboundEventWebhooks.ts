@@ -31,6 +31,11 @@ const VALID_EVENT_TYPES: ReadonlySet<OutboundEventType> = new Set<OutboundEventT
   'livestream.started',
   'livestream.ended',
   'chat.message.received',
+  'subscriber.created',
+  'subscriber.gifted',
+  'cheer.received',
+  'raid.received',
+  'streamgoal.reached',
 ]);
 
 /**
@@ -200,6 +205,11 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'livestream.started': 'Livestream started',
     'livestream.ended': 'Livestream ended',
     'chat.message.received': 'Chat message',
+    'subscriber.created': 'New subscriber',
+    'subscriber.gifted': 'Subs gifted',
+    'cheer.received': 'Cheer / Bits',
+    'raid.received': 'Raid incoming',
+    'streamgoal.reached': 'Stream goal reached',
   };
   const colorByType: Record<OutboundEventType, number> = {
     'tip.created': 0xf2c94c,
@@ -207,6 +217,11 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'livestream.started': 0xeb5757,
     'livestream.ended': 0x828282,
     'chat.message.received': 0x56ccf2,
+    'subscriber.created': 0x9b51e0,
+    'subscriber.gifted': 0xbb6bd9,
+    'cheer.received': 0x2d9cdb,
+    'raid.received': 0xf2994a,
+    'streamgoal.reached': 0x27ae60,
   };
   return {
     username: 'Blackout',

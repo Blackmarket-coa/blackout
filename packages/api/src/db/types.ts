@@ -181,7 +181,12 @@ export type OutboundEventType =
   | 'follow.created'
   | 'livestream.started'
   | 'livestream.ended'
-  | 'chat.message.received';
+  | 'chat.message.received'
+  | 'subscriber.created'
+  | 'subscriber.gifted'
+  | 'cheer.received'
+  | 'raid.received'
+  | 'streamgoal.reached';
 
 export interface ObsWsPasswordRecord {
   id: UUID;

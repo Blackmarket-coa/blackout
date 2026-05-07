@@ -1,5 +1,7 @@
 import { db } from '../db/store';
 import type { TipRecord } from '../db/types';
+import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
+import { log } from '../telemetry/logger';
 
 export interface StreamRevenueBreakdown {
     streamId: string;
@@ -78,6 +80,17 @@ export interface StreamGoalProgress {
     metAt: string | null;
 }
 
+/**
+ * In-process latch: each (streamId, targetCents, currency) tuple fires
+ * exactly one streamgoal.reached event the first time evaluateStreamGoal
+ * sees it cross the target, no matter how many times the dashboard polls
+ * after that. Resets on process restart (acceptable — a creator who hits
+ * 100% twice across a restart gets two events; pollers tolerate that).
+ */
+const dispatchedGoalKeys = new Set<string>();
+const goalKey = (streamId: string, targetCents: number, currency: string): string =>
+    `${streamId}|${currency.toUpperCase()}|${targetCents}`;
+
 export function evaluateStreamGoal(
     streamId: string,
     targetCents: number,
@@ -90,12 +103,42 @@ export function evaluateStreamGoal(
         targetCents <= 0
             ? 100
             : Math.min(100, Math.round((achievedCents / targetCents) * 100));
-    return {
+    const metAt = achievedCents >= targetCents ? new Date().toISOString() : null;
+    const progress: StreamGoalProgress = {
         streamId,
         targetCents,
         currency: currency.toUpperCase(),
         achievedCents,
         percent,
-        metAt: achievedCents >= targetCents ? new Date().toISOString() : null,
+        metAt,
     };
+    if (metAt && breakdown.creatorUserId) {
+        const key = goalKey(streamId, targetCents, currency);
+        if (!dispatchedGoalKeys.has(key)) {
+            dispatchedGoalKeys.add(key);
+            void dispatchOutboundEvent({
+                type: 'streamgoal.reached',
+                blackoutUserId: breakdown.creatorUserId,
+                data: {
+                    streamId,
+                    targetCents,
+                    currency: currency.toUpperCase(),
+                    achievedCents,
+                    metAt,
+                },
+                occurredAt: metAt,
+            }).catch((err) =>
+                log.warn('streamgoal_outbound_dispatch_threw', {
+                    streamId,
+                    error: String(err),
+                }),
+            );
+        }
+    }
+    return progress;
 }
+
+export const __test__ = {
+    /** Tests reset the in-process latch between assertions. */
+    resetDispatchedGoals: () => dispatchedGoalKeys.clear(),
+};

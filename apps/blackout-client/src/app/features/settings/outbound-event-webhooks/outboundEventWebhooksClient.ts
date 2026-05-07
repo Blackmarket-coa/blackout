@@ -16,7 +16,12 @@ export type OutboundEventType =
     | 'follow.created'
     | 'livestream.started'
     | 'livestream.ended'
-    | 'chat.message.received';
+    | 'chat.message.received'
+    | 'subscriber.created'
+    | 'subscriber.gifted'
+    | 'cheer.received'
+    | 'raid.received'
+    | 'streamgoal.reached';
 
 export const ALL_OUTBOUND_EVENT_TYPES: OutboundEventType[] = [
     'tip.created',
@@ -24,6 +29,11 @@ export const ALL_OUTBOUND_EVENT_TYPES: OutboundEventType[] = [
     'livestream.started',
     'livestream.ended',
     'chat.message.received',
+    'subscriber.created',
+    'subscriber.gifted',
+    'cheer.received',
+    'raid.received',
+    'streamgoal.reached',
 ];
 
 export interface OutboundEventWebhook {

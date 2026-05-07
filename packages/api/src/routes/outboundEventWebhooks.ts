@@ -24,6 +24,11 @@ const eventTypeSchema = z.enum([
   'livestream.started',
   'livestream.ended',
   'chat.message.received',
+  'subscriber.created',
+  'subscriber.gifted',
+  'cheer.received',
+  'raid.received',
+  'streamgoal.reached',
 ] as const);
 
 const registerSchema = z.object({
