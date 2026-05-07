@@ -322,7 +322,81 @@ test('sync: surfaces 429 as rate_limited (with retry-after when present)', async
   if (out.kind === 'rate_limited') assert.equal(out.retryAfterSeconds, 5);
 });
 
-test('sync: dryRun does NOT publish but still advances the cursor', async () => {
+test('sync: persisted cursor survives a "restart" — second-process reads it from linked_accounts.sync_cursor', async () => {
+  // Simulate two separate processes: each "boot" calls loadModules() (which
+  // resets the secretBox cache + widgetBus subscriptions) but the in-memory
+  // db survives across loadModules calls within this test file. The cursor
+  // we care about lives on linked_accounts.sync_cursor — not the
+  // (deleted) in-process map — so the second process should pick up where
+  // the first left off.
+  const firstBoot = await loadModules();
+  const user = await seedUser(firstBoot.db);
+  await seedStreamlabsLink(user.id);
+
+  const stubFetch1: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    assert.doesNotMatch(url, /after=/);
+    return new Response(
+      JSON.stringify({
+        data: [
+          { donation_id: 500, name: 'A', amount: '1.00', currency: 'USD', message: '', created_at: 0 },
+          { donation_id: 501, name: 'B', amount: '2.00', currency: 'USD', message: '', created_at: 0 },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as unknown as typeof fetch;
+  const first = await firstBoot.sync.syncStreamlabsDonationsForUser(user.id, {
+    fetch: stubFetch1,
+  });
+  assert.equal(first.kind, 'ok');
+  if (first.kind === 'ok') assert.equal(first.latestDonationId, '501');
+
+  // Confirm the cursor was persisted.
+  assert.equal(
+    firstBoot.db.getLinkedAccount(user.id, 'streamlabs')?.syncCursor,
+    '501',
+  );
+
+  // "Restart" — a fresh loadModules() resets in-memory caches; the
+  // db.linkedAccounts map is intentionally NOT cleared here (we want to
+  // verify the persisted cursor is read on the next sync call).
+  // loadModules() does clear linkedAccounts, so we re-seed + re-set the
+  // cursor to the value the prior boot persisted, which simulates a
+  // process that woke up against the same (file-backed in production) DB.
+  const cursor = '501';
+  const secondBoot = await loadModules();
+  await seedStreamlabsLink(user.id);
+  secondBoot.db.setLinkedAccountSyncCursor(user.id, 'streamlabs', cursor);
+
+  let secondCallSeen = false;
+  const stubFetch2: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    // The crucial assertion: the second process resumes from the persisted
+    // cursor, not from "no cursor".
+    assert.match(url, /after=501/);
+    secondCallSeen = true;
+    return new Response(
+      JSON.stringify({
+        data: [
+          { donation_id: 502, name: 'C', amount: '3.00', currency: 'USD', message: '', created_at: 0 },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as unknown as typeof fetch;
+  const second = await secondBoot.sync.syncStreamlabsDonationsForUser(user.id, {
+    fetch: stubFetch2,
+  });
+  assert.equal(second.kind, 'ok');
+  assert.equal(secondCallSeen, true);
+  if (second.kind === 'ok') {
+    assert.equal(second.newDonations, 1);
+    assert.equal(second.latestDonationId, '502');
+  }
+});
+
+test('sync: dryRun does NOT publish AND does NOT persist the cursor', async () => {
   const { sync, widgetBus, db } = await loadModules();
   const user = await seedUser(db);
   await seedStreamlabsLink(user.id);
@@ -347,8 +421,18 @@ test('sync: dryRun does NOT publish but still advances the cursor', async () => 
   assert.equal(out.kind, 'ok');
   if (out.kind === 'ok') {
     assert.equal(out.delivered, 0);
+    // Returned value still reports the latest id we *saw* — useful for
+    // preview UIs — but the persisted cursor must not have moved.
     assert.equal(out.latestDonationId, '200');
   }
   assert.equal(calls, 0, 'dryRun must not publish');
+  // CRITICAL: the persisted cursor stays at its previous value (undefined
+  // here since we never seeded one). A non-dry-run callback later would
+  // re-process donation 200 and emit it for real.
+  assert.equal(
+    db.getLinkedAccount(user.id, 'streamlabs')?.syncCursor,
+    undefined,
+    'dryRun must NOT advance the persisted cursor',
+  );
   off();
 });

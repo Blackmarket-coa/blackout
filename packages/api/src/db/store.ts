@@ -314,6 +314,27 @@ class InMemoryDb {
     return this.linkedAccounts.delete(this.linkedAccountKey(userId, provider));
   }
 
+  /**
+   * Persist a per-link sync cursor (e.g. Streamlabs donation_id, YouTube
+   * pageToken). No-op when there is no link for the (user, provider).
+   */
+  setLinkedAccountSyncCursor(
+    userId: string,
+    provider: LinkedAccountProvider,
+    cursor: string | undefined,
+  ): LinkedAccountRecord | undefined {
+    const key = this.linkedAccountKey(userId, provider);
+    const existing = this.linkedAccounts.get(key);
+    if (!existing) return undefined;
+    const updated: LinkedAccountRecord = {
+      ...existing,
+      syncCursor: cursor,
+      updatedAt: nowIso(),
+    };
+    this.linkedAccounts.set(key, updated);
+    return updated;
+  }
+
   // --- pending OAuth link state (PKCE + CSRF) ---
 
   createPendingOAuthLink(
@@ -1652,6 +1673,16 @@ class FileBackedDb extends InMemoryDb {
     const removed = super.deleteLinkedAccount(userId, provider);
     if (removed) this.persist();
     return removed;
+  }
+
+  override setLinkedAccountSyncCursor(
+    userId: string,
+    provider: LinkedAccountProvider,
+    cursor: string | undefined,
+  ): LinkedAccountRecord | undefined {
+    const updated = super.setLinkedAccountSyncCursor(userId, provider, cursor);
+    if (updated) this.persist();
+    return updated;
   }
 
   override createPendingOAuthLink(

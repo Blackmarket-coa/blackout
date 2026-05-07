@@ -67,6 +67,15 @@ export interface LinkedAccountRecord {
   /** ISO 8601 timestamp when the access token expires (omitted = unknown / non-expiring). */
   expiresAt?: string;
   encryptionKeyId: string;
+  /**
+   * Generic per-link "last seen" marker for polling-style integrations.
+   * Streamlabs donation sync stores the largest donation_id processed so
+   * far; a future YouTube live-chat poller would store its nextPageToken;
+   * Patreon backfill would store the JSON:API `next` cursor; etc.
+   *
+   * Persisted across restarts so a cold boot doesn't replay stale events.
+   */
+  syncCursor?: string;
   createdAt: string;
   updatedAt: string;
 }

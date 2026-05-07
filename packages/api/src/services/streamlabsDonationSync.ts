@@ -1,3 +1,4 @@
+import { db } from '../db/store';
 import { ensureFreshAccessToken } from './oauthProviders';
 import {
   listDonations,
@@ -15,19 +16,13 @@ import { log } from '../telemetry/logger';
  * For now this is a manual / on-demand sync: the creator (or a future
  * cron) calls `syncStreamlabsDonationsForUser(userId)`, the service
  * pulls recent donations from `/v1.0/donations`, dedups against the
- * in-process cursor, and publishes each new one through the same
- * widgetBus that EventSub + Patreon write to. Connected OBS overlays
- * fire unchanged.
+ * persisted cursor (linked_accounts.sync_cursor), and publishes each
+ * new one through the same widgetBus that EventSub + Patreon write to.
+ * Connected OBS overlays fire unchanged.
  *
- * The cursor is in-process only for v1 (a Map keyed by Blackout user
- * id). On API restart we'll re-publish the most-recent donations once
- * — Streamlabs alert widgets dedup on `_id` so the visual effect is
- * "no double alerts" in practice. A persistent cursor lives in a
- * follow-up, probably as a column on `linked_accounts`.
+ * The cursor lives on the linked_accounts row so it survives restarts —
+ * a cold boot picks up where the previous one left off.
  */
-
-/** In-process cursor: max-seen donation id per Blackout user. */
-const userCursors = new Map<string, string>();
 
 export interface SyncOptions extends Pick<ListDonationsOptions, 'fetch' | 'limit'> {
   /** Override the cursor for tests / first-run replays. */
@@ -78,7 +73,8 @@ export const syncStreamlabsDonationsForUser = async (
     return { kind: 'token_unavailable', reason: 'empty_token' };
   }
 
-  const cursor = options.forceCursor ?? userCursors.get(blackoutUserId);
+  const persistedCursor = db.getLinkedAccount(blackoutUserId, 'streamlabs')?.syncCursor;
+  const cursor = options.forceCursor ?? persistedCursor;
   const apiOutcome: ListDonationsOutcome = await listDonations(accessToken, {
     after: cursor,
     limit: options.limit,
@@ -114,7 +110,17 @@ export const syncStreamlabsDonationsForUser = async (
       latestDonationId = normalized.donationId;
     }
   }
-  if (latestDonationId !== undefined) userCursors.set(blackoutUserId, latestDonationId);
+  // Persist the cursor only when it actually advanced — saves a write on
+  // empty-result polls and keeps `updated_at` meaningful. dryRun skips
+  // the write so a backfill / preview doesn't leave the cursor in a
+  // forward state without the corresponding alerts having been emitted.
+  if (
+    !options.dryRun &&
+    latestDonationId !== undefined &&
+    latestDonationId !== persistedCursor
+  ) {
+    db.setLinkedAccountSyncCursor(blackoutUserId, 'streamlabs', latestDonationId);
+  }
 
   return {
     kind: 'ok',
@@ -124,9 +130,15 @@ export const syncStreamlabsDonationsForUser = async (
   };
 };
 
-export const __test__ = { userCursors, compareIds };
+export const __test__ = { compareIds };
 
-/** Used by tests to reset the in-process cursor map between cases. */
+/**
+ * Test reset hook. The cursor now lives on `linked_accounts.sync_cursor`
+ * so the in-process map this used to clear is gone — the equivalent
+ * cleanup is `db.linkedAccounts.clear()` (already done by per-test
+ * loadModules). Kept as a no-op so existing test bootstraps don't
+ * break.
+ */
 export const clearStreamlabsCursorsForTest = (): void => {
-  userCursors.clear();
+  /* no-op: cursor is now persisted on linked_accounts */
 };
