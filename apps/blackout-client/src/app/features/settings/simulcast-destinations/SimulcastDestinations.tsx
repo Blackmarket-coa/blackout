@@ -15,6 +15,17 @@ import {
     setDestinationEnabled,
     type SimulcastDestinationSummary,
 } from './simulcastDestinationsClient';
+import {
+    canStart,
+    canStop,
+    isStatusActive,
+    listFanouts,
+    startFanout,
+    statusLabel,
+    stopFanout,
+    type FanoutSnapshot,
+    type FanoutStatus,
+} from './rtmpFanoutClient';
 
 /**
  * Settings panel for RTMP simulcast destinations. The creator pastes a
@@ -33,6 +44,7 @@ export function SimulcastDestinations({
 }: SimulcastDestinationsProps = {}) {
     const alive = useAlive();
     const [destinations, setDestinations] = useState<SimulcastDestinationSummary[]>([]);
+    const [fanouts, setFanouts] = useState<Record<string, FanoutSnapshot>>({});
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loaded, setLoaded] = useState(false);
 
@@ -45,9 +57,18 @@ export function SimulcastDestinations({
     const refresh = useCallback(async () => {
         setLoadError(null);
         try {
-            const res = await listDestinations(testApiClient);
+            // Destinations is the config source-of-truth; fanouts is the
+            // best-effort runtime snapshot. Fetched in parallel so the
+            // UI stays responsive when the supervisor takes a moment.
+            const [destRes, fanoutRes] = await Promise.all([
+                listDestinations(testApiClient),
+                listFanouts(testApiClient).catch(() => ({ fanouts: [] as FanoutSnapshot[] })),
+            ]);
             if (!alive()) return;
-            setDestinations(res.destinations);
+            setDestinations(destRes.destinations);
+            const map: Record<string, FanoutSnapshot> = {};
+            for (const f of fanoutRes.fanouts) map[f.destinationId] = f;
+            setFanouts(map);
             setLoaded(true);
         } catch (err) {
             if (!alive()) return;
@@ -120,6 +141,30 @@ export function SimulcastDestinations({
         ),
     );
 
+    const [startState, submitStart] = useAsyncCallback(
+        useCallback(
+            async (dest: SimulcastDestinationSummary) => {
+                setNotice(null);
+                await startFanout(dest.id, testApiClient);
+                await refresh();
+                if (alive()) setNotice(`Started fan-out to ${dest.provider}.`);
+            },
+            [alive, refresh, testApiClient],
+        ),
+    );
+
+    const [stopState, submitStop] = useAsyncCallback(
+        useCallback(
+            async (dest: SimulcastDestinationSummary) => {
+                setNotice(null);
+                await stopFanout(dest.id, testApiClient);
+                await refresh();
+                if (alive()) setNotice(`Stopped fan-out to ${dest.provider}.`);
+            },
+            [alive, refresh, testApiClient],
+        ),
+    );
+
     const [deleteState, submitDelete] = useAsyncCallback(
         useCallback(
             async (dest: SimulcastDestinationSummary) => {
@@ -135,6 +180,8 @@ export function SimulcastDestinations({
     const busy =
         createState.status === AsyncStatus.Loading ||
         toggleState.status === AsyncStatus.Loading ||
+        startState.status === AsyncStatus.Loading ||
+        stopState.status === AsyncStatus.Loading ||
         deleteState.status === AsyncStatus.Loading;
 
     return (
@@ -244,7 +291,10 @@ export function SimulcastDestinations({
             {loaded && destinations.length > 0 && (
                 <Box direction="Column" gap="100">
                     <Text size="L400">Your destinations</Text>
-                    {destinations.map((dest) => (
+                    {destinations.map((dest) => {
+                        const fanout = fanouts[dest.id];
+                        const status: FanoutStatus | undefined = fanout?.status;
+                        return (
                         <SequenceCard
                             key={dest.id}
                             className={SequenceCardStyle}
@@ -268,6 +318,27 @@ export function SimulcastDestinations({
                                                 disabled
                                             </Text>
                                         )}
+                                        {status && (
+                                            <Text
+                                                as="span"
+                                                size="T200"
+                                                priority="300"
+                                                style={{
+                                                    color:
+                                                        status === 'failed'
+                                                            ? 'var(--mx-color-critical, #c00)'
+                                                            : isStatusActive(status)
+                                                              ? 'var(--mx-color-success, #2a9d8f)'
+                                                              : undefined,
+                                                }}
+                                                data-testid={`simulcast-status-${dest.id}`}
+                                            >
+                                                · {statusLabel(status)}
+                                                {fanout && fanout.restartCount > 0
+                                                    ? ` (${fanout.restartCount} restart${fanout.restartCount === 1 ? '' : 's'})`
+                                                    : ''}
+                                            </Text>
+                                        )}
                                     </Box>
                                 }
                                 description={
@@ -285,10 +356,48 @@ export function SimulcastDestinations({
                                                 </span>
                                             </>
                                         )}
+                                        {fanout?.lastError && (
+                                            <>
+                                                {' · supervisor: '}
+                                                <span
+                                                    style={{
+                                                        color: 'var(--mx-color-critical, #c00)',
+                                                    }}
+                                                >
+                                                    {fanout.lastError}
+                                                </span>
+                                            </>
+                                        )}
                                     </>
                                 }
                                 after={
                                     <Box gap="200" alignItems="Center">
+                                        {dest.isEnabled && canStart(status) && (
+                                            <Button
+                                                size="300"
+                                                variant="Success"
+                                                fill="Solid"
+                                                radii="Pill"
+                                                disabled={busy}
+                                                onClick={() => void submitStart(dest)}
+                                                data-testid={`simulcast-start-${dest.id}`}
+                                            >
+                                                <Text size="B300">Start</Text>
+                                            </Button>
+                                        )}
+                                        {canStop(status) && (
+                                            <Button
+                                                size="300"
+                                                variant="Critical"
+                                                fill="Soft"
+                                                radii="Pill"
+                                                disabled={busy}
+                                                onClick={() => void submitStop(dest)}
+                                                data-testid={`simulcast-stop-${dest.id}`}
+                                            >
+                                                <Text size="B300">Stop</Text>
+                                            </Button>
+                                        )}
                                         <Button
                                             size="300"
                                             variant="Primary"
@@ -317,7 +426,8 @@ export function SimulcastDestinations({
                                 }
                             />
                         </SequenceCard>
-                    ))}
+                        );
+                    })}
                 </Box>
             )}
 
