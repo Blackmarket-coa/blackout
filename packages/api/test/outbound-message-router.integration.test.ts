@@ -196,3 +196,104 @@ test('routeOutboundMatrixMessage: skips inactive bridges', async () => {
   assert.equal(out.targets.length, 0);
   assert.equal(out.delivered, 0);
 });
+
+test('messages POST: sends to Matrix AND fans out to bridged Twitch via the outbound router', async () => {
+  const { db, chatIngress } = await loadModules();
+  const user = await seedUser(db);
+  const linkedAccounts = await import('../src/services/linkedAccounts');
+  linkedAccounts.upsertLinkedAccount({
+    blackoutUserId: user.id,
+    provider: 'twitch',
+    providerUserId: '99',
+    providerUsername: 'streamer',
+    tokens: { accessToken: 'a', refreshToken: 'r', expiresInSeconds: 3600, scopes: [] },
+  });
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    twitchChannel: 'streamer',
+    matrixRoomId: '!den:srv',
+    isActive: true,
+  });
+  const fake = buildFakeSocket();
+  await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'streamer',
+    onMessage: () => {},
+    socketFactory: fake.factory,
+  });
+  fake.emitOpen();
+  fake.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  fake.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n');
+  fake.sentLines.length = 0;
+
+  // Post a Blackout-side message scoped to the bridged Matrix room.
+  // We expect: the message persists, Matrix gets sendMessage'd (which
+  // fails harmlessly with matrix_not_configured in tests — that's OK),
+  // and the outbound router writes a PRIVMSG into the Twitch IRC stub.
+  const { default: app } = await import('../src/index');
+  const res = await app.request('/v1/messages/general', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      content: 'mirror me to twitch',
+      userId: user.id,
+      matrixRoomId: '!den:srv',
+    }),
+  });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as {
+    outboundFanout: { delivered: number; targets: Array<{ target: string; kind: string }> } | null;
+  };
+  assert.ok(body.outboundFanout, 'response surfaces the routing result');
+  assert.equal(body.outboundFanout!.delivered, 1);
+  assert.equal(body.outboundFanout!.targets[0].target, 'twitch:streamer');
+  assert.deepEqual(fake.sentLines, ['PRIVMSG #streamer :mirror me to twitch\r\n']);
+});
+
+test('messages POST: encrypted-tier (stegoTier > 1) skips the outbound fanout (Twitch viewer wouldn’t decode it)', async () => {
+  const { db, chatIngress } = await loadModules();
+  const user = await seedUser(db);
+  const linkedAccounts = await import('../src/services/linkedAccounts');
+  linkedAccounts.upsertLinkedAccount({
+    blackoutUserId: user.id,
+    provider: 'twitch',
+    providerUserId: '99',
+    providerUsername: 'streamer',
+    tokens: { accessToken: 'a', refreshToken: 'r', expiresInSeconds: 3600, scopes: [] },
+  });
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    twitchChannel: 'streamer',
+    matrixRoomId: '!den:srv',
+    isActive: true,
+  });
+  const fake = buildFakeSocket();
+  await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'streamer',
+    onMessage: () => {},
+    socketFactory: fake.factory,
+  });
+  fake.emitOpen();
+  fake.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  fake.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #streamer\r\n');
+  fake.sentLines.length = 0;
+
+  const { default: app } = await import('../src/index');
+  const res = await app.request('/v1/messages/general', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      content: 'secret',
+      userId: user.id,
+      matrixRoomId: '!den:srv',
+      stegoTier: 3,
+    }),
+  });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as { outboundFanout: unknown };
+  assert.equal(body.outboundFanout, null, 'encrypted messages stay Blackout-internal');
+  assert.deepEqual(fake.sentLines, [], 'no Twitch IRC traffic from an encrypted post');
+});
