@@ -10,6 +10,8 @@ import { matrixClient as defaultMatrixClient } from '../integrations/matrix-clie
 import type { MatrixSendEventClient } from '../services/twitchChatBridge';
 import { publish as publishWidgetAlert } from '../services/widgetBus';
 import { toWidgetAlert } from '../integrations/widgets/streamlabsShape';
+import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
+import type { OutboundEventType } from '../db/types';
 import { log } from '../telemetry/logger';
 
 /**
@@ -118,6 +120,38 @@ export const buildDefaultEventForwarder = (
   const alert = toWidgetAlert(event);
   if (alert) {
     publishWidgetAlert(bridge.blackoutUserId, alert);
+  }
+
+  // Project to the outbound webhook event type. We currently surface
+  // follow events; subscribe / sub.gift / cheer / raid are intentionally
+  // skipped here because they map onto richer Blackout-native concepts
+  // (creator-sub, gifts, raids) that get their own dispatch points.
+  const outboundType = ((): OutboundEventType | undefined => {
+    if (event.kind === 'follow') return 'follow.created';
+    return undefined;
+  })();
+  if (outboundType) {
+    void dispatchOutboundEvent({
+      type: outboundType,
+      blackoutUserId: bridge.blackoutUserId,
+      data: {
+        source: 'twitch',
+        twitchChannelId: event.twitchChannelId,
+        ...(event.kind === 'follow'
+          ? {
+              followerLogin: event.followerLogin,
+              followerDisplayName: event.followerDisplayName,
+              followedAt: event.followedAt,
+            }
+          : {}),
+      },
+      occurredAt: event.kind === 'follow' ? event.followedAt : undefined,
+    }).catch((err) =>
+      log.warn('twitch_eventsub_outbound_dispatch_threw', {
+        kind: event.kind,
+        error: String(err),
+      }),
+    );
   }
 
   const content = buildAlertContent(event);

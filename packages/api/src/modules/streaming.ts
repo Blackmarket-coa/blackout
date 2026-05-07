@@ -7,6 +7,8 @@ import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability } from './authz';
 import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
 import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
+import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
+import { log } from '../telemetry/logger';
 import type { FeatureModule } from './types';
 
 const streamKeySchema = z
@@ -281,6 +283,19 @@ function createStreamingRouter() {
       db.upsertStream({ ...stream, replayPointer: parsed.replayPointer });
     }
 
+    void dispatchOutboundEvent({
+      type: 'livestream.started',
+      blackoutUserId: stream.creatorId,
+      data: {
+        streamId,
+        sessionId: session.id,
+        title: stream.title,
+        category: stream.category,
+        visibility: stream.visibility,
+      },
+      occurredAt: session.startedAt,
+    }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.started', error: String(err) }));
+
     return c.json(session, 201);
   });
 
@@ -297,6 +312,26 @@ function createStreamingRouter() {
     const stream = db.getStream(session.streamId);
     if (stream && replayPointer) {
       db.upsertStream({ ...stream, replayPointer });
+    }
+
+    if (stream) {
+      const startedAtMs = Date.parse(session.startedAt);
+      const endedAtMs = session.endedAt ? Date.parse(session.endedAt) : Date.now();
+      void dispatchOutboundEvent({
+        type: 'livestream.ended',
+        blackoutUserId: stream.creatorId,
+        data: {
+          streamId: session.streamId,
+          sessionId: session.id,
+          title: stream.title,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          durationSeconds: Number.isFinite(startedAtMs)
+            ? Math.max(0, Math.round((endedAtMs - startedAtMs) / 1000))
+            : undefined,
+        },
+        occurredAt: session.endedAt,
+      }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.ended', error: String(err) }));
     }
 
     return c.json(session);

@@ -14,6 +14,7 @@ import {
 } from '../integrations/youtube/chatBridge';
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from './twitchChatBridge';
+import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
 import { log } from '../telemetry/logger';
 
 /**
@@ -205,6 +206,22 @@ export const syncBridge = async (
     const normalized = toNormalizedYoutubeChatMessage(raw, bridge.youtubeChannelId);
     const content = toMatrixForwardedMessage(normalized);
     const txnId = `youtube-${normalized.platformMessageId}`;
+    // Chat is high-volume; the outbound dispatcher's eventType filter
+    // is what gates whether subscribers receive these — same posture as
+    // twitchChatBridge / kickChatBridge.
+    void dispatchOutboundEvent({
+      type: 'chat.message.received',
+      blackoutUserId: bridge.blackoutUserId,
+      data: {
+        source: 'youtube',
+        youtubeChannelId: bridge.youtubeChannelId,
+        authorDisplayName: normalized.authorDisplayName,
+        body: normalized.body,
+        platformMessageId: normalized.platformMessageId,
+        snippetType: normalized.snippetType,
+        superChatAmountDisplay: normalized.superChatAmountDisplay,
+      },
+    }).catch(() => {});
     try {
       const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
       if (result.ok) delivered += 1;

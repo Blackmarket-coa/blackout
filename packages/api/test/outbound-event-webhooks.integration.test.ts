@@ -361,6 +361,208 @@ test('captureTip dispatches tip.created via the outbound webhook pipeline', asyn
   }
 });
 
+test('Kick chat ingress dispatches chat.message.received to outbound subscribers', async () => {
+  const { service, db } = await loadModules();
+  const kick = await import('../src/services/kickChatBridge');
+  kick.__test__.liveSessions.clear();
+  const auth = await import('../src/services/auth');
+  const userId = randomUUID();
+  db.createUser({
+    id: userId,
+    username: `k-${userId.slice(0, 4)}`,
+    email: `k-${userId.slice(0, 4)}@example.com`,
+    passwordHash: auth.hashPassword('Original-Pass-1234!'),
+    reputationScore: 0,
+    reputationTier: 'member',
+    pubkeyEd25519: 'pk',
+  });
+
+  const sub = service.register({
+    blackoutUserId: userId,
+    name: 'My Discord channel',
+    targetUrl: 'https://hooks.discord.com/api/webhooks/T/T',
+    eventTypes: ['chat.message.received'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+
+  // Stub global fetch since the chat bridge calls dispatchOutboundEvent
+  // without a fetchFn injection seam.
+  const calls: Array<{ url: string; body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  // Build the same fake-socket harness the kick bridge integration test
+  // uses, but inline so this file stays self-contained.
+  type Listeners = {
+    open: Array<() => void>;
+    message: Array<(event: { data: string }) => void>;
+    close: Array<(event: { code: number; reason: string }) => void>;
+    error: Array<(event: unknown) => void>;
+  };
+  const listeners: Listeners = { open: [], message: [], close: [], error: [] };
+  const sentLines: string[] = [];
+  const factory = (() => ({
+    send: (data: string) => sentLines.push(data),
+    close: () => listeners.close.forEach((l) => l({ code: 1000, reason: 'shutdown' })),
+    addEventListener: (type: keyof Listeners, listener: (e: never) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (listeners[type] as Array<(e: any) => void>).push(listener);
+    },
+  })) as unknown as import('../src/integrations/kick/chatIngress').KickSocketFactory;
+  const matrixClient = {
+    sendEvent: async () => ({ ok: true as const, status: 200 }),
+  };
+
+  try {
+    const created = kick.createBridge(
+      { blackoutUserId: userId, kickChatroomId: '42', matrixRoomId: '!den:srv' },
+      { matrixClient, socketFactory: factory },
+    );
+    if (created.kind !== 'ok') return assert.fail();
+    listeners.message.forEach((l) =>
+      l({
+        data: JSON.stringify({
+          event: 'pusher:connection_established',
+          data: JSON.stringify({ socket_id: '1.1', activity_timeout: 120 }),
+        }),
+      }),
+    );
+    listeners.message.forEach((l) =>
+      l({
+        data: JSON.stringify({
+          event: 'App\\Events\\ChatMessageEvent',
+          channel: 'chatrooms.42.v2',
+          data: JSON.stringify({
+            id: 'msg-99',
+            chatroom_id: 42,
+            content: 'first chat for the outbound pipeline',
+            type: 'message',
+            created_at: '2026-05-07T00:00:00Z',
+            sender: { id: 7, username: 'fan' },
+          }),
+        }),
+      }),
+    );
+
+    for (let i = 0; i < 30 && calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 1, 'chat.message.received fired exactly once');
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.embeds?.[0]?.title, 'Chat message');
+    assert.ok(JSON.stringify(body.embeds[0]).includes('msg-99'));
+    assert.ok(JSON.stringify(body.embeds[0]).includes('fan'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Twitch EventSub forwarder dispatches follow.created to outbound subscribers', async () => {
+  const { service, db } = await loadModules();
+  const auth = await import('../src/services/auth');
+  const userId = randomUUID();
+  db.createUser({
+    id: userId,
+    username: `e-${userId.slice(0, 4)}`,
+    email: `e-${userId.slice(0, 4)}@example.com`,
+    passwordHash: auth.hashPassword('Original-Pass-1234!'),
+    reputationScore: 0,
+    reputationTier: 'member',
+    pubkeyEd25519: 'pk',
+  });
+
+  // Seed a Twitch chat bridge + a Twitch EventSub subscription row so
+  // findBridgeForEvent can locate the bridge from the inbound event's
+  // twitchChannelId. The mapping is event.twitchChannelId →
+  // twitch_event_subscriptions.twitchUserId → bridge owner.
+  const bridge = db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    twitchChannel: 'someone',
+    matrixRoomId: '!den:srv',
+    isActive: true,
+  });
+  db.createTwitchEventSubscription({
+    id: randomUUID(),
+    blackoutUserId: userId,
+    twitchUserId: '1001',
+    subscriptionType: 'channel.follow',
+    helixSubscriptionId: 'helix-sub-1',
+    status: 'enabled',
+  });
+
+  const sub = service.register({
+    blackoutUserId: userId,
+    name: 'Follow alerts',
+    targetUrl: 'https://example.com/hook',
+    eventTypes: ['follow.created'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+
+  const calls: Array<{ url: string; body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const { buildDefaultEventForwarder } = await import('../src/routes/twitchEventSub');
+    const matrix = { sendEvent: async () => ({ ok: true as const, status: 200 }) };
+    const forwarder = buildDefaultEventForwarder(matrix);
+    await forwarder(
+      {
+        kind: 'follow',
+        subscriptionType: 'channel.follow',
+        twitchChannelId: '1001',
+        followerLogin: 'newcomer',
+        followerDisplayName: 'Newcomer',
+        followerTwitchId: '5005',
+        followedAt: '2026-05-07T01:23:45Z',
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 'sub-id', type: 'channel.follow' } } as any,
+    );
+
+    for (let i = 0; i < 30 && calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 1);
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.embeds?.[0]?.title, 'New follow');
+    assert.ok(JSON.stringify(body.embeds[0]).includes('newcomer'));
+    assert.ok(JSON.stringify(body.embeds[0]).includes('twitch'));
+
+    // Subscribe events that don't map to an outbound type are silently
+    // ignored — verify we don't accidentally fan out everything.
+    calls.length = 0;
+    await forwarder(
+      {
+        kind: 'subscribe',
+        subscriptionType: 'channel.subscribe',
+        twitchChannelId: '1001',
+        subscriberLogin: 'fan',
+        subscriberTwitchId: '6006',
+        tier: '1000',
+        isGift: false,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { subscription: { id: 'sub-id-2', type: 'channel.subscribe' } } as any,
+    );
+    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(calls.length, 0, 'subscribe events do not (yet) project to an outbound type');
+  } finally {
+    globalThis.fetch = originalFetch;
+    db.deleteTwitchChatBridge(bridge.id);
+  }
+});
+
 test('dispatchEvent: filters by eventType subset and ownership; signs with at-rest secret', async () => {
   const { service, db } = await loadModules();
   const alice = await seedUser(db);

@@ -10,6 +10,7 @@ import {
 import type { NormalizedKickChatMessage } from '../integrations/kick/chatBridge';
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from './twitchChatBridge';
+import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
 import { log } from '../telemetry/logger';
 
 /**
@@ -68,6 +69,19 @@ const buildOnMessage =
     // Use the Pusher message id as the Matrix txn id so the same Kick
     // message never double-delivers across reconnects.
     const txnId = `kick-${msg.platformMessageId}`;
+    // Chat is high-volume; the outbound dispatcher's eventType filter
+    // is what gates this — see twitchChatBridge for the same comment.
+    void dispatchOutboundEvent({
+      type: 'chat.message.received',
+      blackoutUserId: record.blackoutUserId,
+      data: {
+        source: 'kick',
+        kickChatroomId: record.kickChatroomId,
+        authorUsername: msg.authorUsername,
+        body: msg.body,
+        platformMessageId: msg.platformMessageId,
+      },
+    }).catch(() => {});
     void matrix
       .sendEvent(record.matrixRoomId, content, { txnId })
       .then((result) => {

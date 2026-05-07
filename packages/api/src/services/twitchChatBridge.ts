@@ -14,6 +14,7 @@ import {
   subscribeToBridgeEvents,
   unsubscribeBridgeEvents,
 } from './twitchEventSubManager';
+import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
 import type { HelixDeps } from '../integrations/twitch/helix';
 import { log } from '../telemetry/logger';
 
@@ -101,6 +102,23 @@ const buildOnMessage =
     // same Twitch message never double-delivers if Twitch retransmits or
     // we reconnect mid-PRIVMSG flush.
     const txnId = msg.platformMessageId ? `twitch-${msg.platformMessageId}` : undefined;
+    // Chat is high-volume; dispatch only fires on outbound subscriptions
+    // that explicitly opted into chat.message.received. The eventType
+    // filter in services/outboundEventWebhooks.matchesEventType protects
+    // creators who only want tips/follows from being firehosed.
+    void dispatchOutboundEvent({
+      type: 'chat.message.received',
+      blackoutUserId: record.blackoutUserId,
+      data: {
+        source: 'twitch',
+        twitchChannel: record.twitchChannel,
+        authorLogin: msg.authorLogin,
+        authorDisplayName: msg.authorDisplayName,
+        body: msg.body,
+        platformMessageId: msg.platformMessageId,
+        bits: msg.bits,
+      },
+    }).catch(() => {});
     void matrix
       .sendEvent(record.matrixRoomId, content, { txnId })
       .then((result) => {
