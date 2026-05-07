@@ -1,4 +1,5 @@
 import type { NormalizedTwitchEvent } from '../integrations/twitch/eventSub';
+import type { NormalizedPatreonEvent } from '../integrations/patreon/webhookEvents';
 
 /**
  * In-process pub/sub of Streamlabs-shaped alert payloads, keyed by the
@@ -30,6 +31,9 @@ export type WidgetAlertType =
   | 'bits'
   | 'raid';
 
+/** Origin platform that produced an alert. Drives widget styling. */
+export type WidgetAlertOrigin = 'twitch' | 'patreon';
+
 /**
  * The wire shape for a single alert push. Streamlabs delivers messages as
  * `{type, message: [...]}` over socket.io; we publish the same envelope
@@ -39,17 +43,17 @@ export type WidgetAlertType =
 export interface WidgetAlertEvent {
   type: WidgetAlertType;
   /** Origin platform — useful for clients that style by source. */
-  origin: 'twitch';
+  origin: WidgetAlertOrigin;
   /** Server timestamp of when the bus saw the event, ms-since-epoch. */
   publishedAtMs: number;
   /** Streamlabs documents this as an array; we always emit length 1. */
   message: Array<Record<string, unknown>>;
   /**
-   * The full {@link NormalizedTwitchEvent} that produced this payload —
-   * lets richer Blackout-native widgets show stuff Streamlabs's shape
-   * elides (raid viewer counts, sub tier numbers, etc.).
+   * The full normalized event that produced this payload — lets richer
+   * Blackout-native widgets show stuff Streamlabs's shape elides (raid
+   * viewer counts, sub tier numbers, Patreon tier titles, etc.).
    */
-  source: NormalizedTwitchEvent;
+  source: NormalizedTwitchEvent | NormalizedPatreonEvent;
 }
 
 type Subscriber = (event: WidgetAlertEvent) => void;

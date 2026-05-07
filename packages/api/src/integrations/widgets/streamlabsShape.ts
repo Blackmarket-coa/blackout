@@ -1,4 +1,5 @@
 import type { NormalizedTwitchEvent } from '../twitch/eventSub';
+import type { NormalizedPatreonEvent } from '../patreon/webhookEvents';
 import type { WidgetAlertEvent, WidgetAlertType } from '../../services/widgetBus';
 
 /**
@@ -152,6 +153,53 @@ export const toWidgetAlert = (
   }
 
   return { type, message, ...baseEnvelope };
+};
+
+// ----------------------------- Patreon → donation -----------------------------
+
+interface StreamlabsDonation {
+  name: string;
+  /** Streamlabs uses a string with 2-decimal-place currency formatting. */
+  amount: string;
+  formatted_amount: string;
+  currency: string;
+  message: string;
+  _id: string;
+}
+
+const formatDollarString = (cents: number): string =>
+  (cents / 100).toFixed(2);
+
+/**
+ * Convert a normalized Patreon event into the Blackout widget envelope.
+ * Pledge create / update become Streamlabs `donation` payloads (so any
+ * existing donation overlay fires unchanged); cancellations don't have a
+ * Streamlabs counterpart and return null — Blackout-native widgets can
+ * subscribe to the underlying source if they want to render those.
+ */
+export const toWidgetAlertFromPatreon = (
+  event: NormalizedPatreonEvent,
+  options: { now?: () => number } = {},
+): WidgetAlertEvent | null => {
+  const now = options.now ? options.now() : Date.now();
+  if (event.kind !== 'patreon_pledge') return null;
+  const id = `pat_pledge_${event.campaignUserId}_${event.patronUserId}_${event.amountCents}_${now}`;
+  const amount = formatDollarString(event.amountCents);
+  const message: StreamlabsDonation = {
+    name: event.patronDisplayName,
+    amount,
+    formatted_amount: `$${amount}`,
+    currency: event.currency,
+    message: event.tierTitle ? `Pledged at tier "${event.tierTitle}"` : 'New patron pledge',
+    _id: id,
+  };
+  return {
+    type: 'donation',
+    origin: 'patreon',
+    publishedAtMs: now,
+    message: [message satisfies Record<string, unknown>],
+    source: event,
+  };
 };
 
 /**
