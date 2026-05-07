@@ -110,6 +110,23 @@ export const notifyStreamEnded = (blackoutUserId: string): void => {
   });
 };
 
+/**
+ * Push a custom Blackout-namespaced Event to every identified session
+ * for a creator. We use the `blackout.<event-type>` namespace so OBS-WS
+ * surfaces can opt into Blackout-specific tiles (Companion presets:
+ * "blink the deck on a new tip") without colliding with OBS's own
+ * event vocabulary. Called from services/outboundEventWebhooks.dispatchEvent
+ * so every event source that already fires through the outbound webhook
+ * pipeline ALSO reaches surfaces.
+ */
+export const notifyBlackoutEvent = (
+  blackoutUserId: string,
+  blackoutEventType: string,
+  eventData: Record<string, unknown>,
+): void => {
+  broadcastEvent(blackoutUserId, `blackout.${blackoutEventType}`, eventData);
+};
+
 const broadcastEvent = (
   blackoutUserId: string,
   eventType: string,

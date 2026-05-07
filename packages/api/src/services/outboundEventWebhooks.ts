@@ -432,6 +432,22 @@ export const dispatchEvent = async (
   event: BlackoutEvent,
   options: DeliverOptions = {},
 ): Promise<DeliveryReport[]> => {
+  // Push the same event to every identified OBS-WS surface for this
+  // creator BEFORE the webhook fan-out. Companion / Stream Deck tiles
+  // re-render on receipt; doing this first keeps the deck-side latency
+  // low even when the outbound webhook receivers are slow.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  void import('../integrations/obs-ws-compat/server').then((m: any) => {
+    try {
+      m.notifyBlackoutEvent(event.blackoutUserId, event.type, event.data);
+    } catch (err) {
+      log.warn('outbound_event_obs_ws_notify_threw', {
+        type: event.type,
+        error: String(err),
+      });
+    }
+  });
+
   const candidates = db
     .listActiveOutboundEventWebhooks()
     .filter((r) => r.blackoutUserId === event.blackoutUserId && matchesEventType(r, event.type));

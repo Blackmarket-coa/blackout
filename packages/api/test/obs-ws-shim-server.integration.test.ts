@@ -786,6 +786,56 @@ test('notifyStreamStarted/Ended: pushes StreamStateChanged Event (op 5) to ident
   }
 });
 
+test('outboundEventWebhooks.dispatchEvent ALSO pushes a blackout.<type> Event to identified OBS-WS surfaces', async () => {
+  const { passwords, protocol, server: shim, db } = await loadModules();
+  const user = await seedUser(db);
+  const pw = passwords.mint({ blackoutUserId: user.id });
+  if (pw.kind !== 'ok') return assert.fail();
+
+  const h = await buildHarness(shim);
+  try {
+    const obs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${pw.record.id}`);
+    const hello = await obs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    obs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          pw.password,
+          hello.d.authentication!.salt,
+          hello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await obs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // Fire dispatchEvent — same path tip.created / follow.created /
+    // streamgoal.reached etc. all use. Webhook subscription registry
+    // is empty (we don't care about delivery here) so the call
+    // collapses to a pure OBS-WS notify.
+    const oew = await import('../src/services/outboundEventWebhooks');
+    void oew.dispatchEvent({
+      type: 'tip.created',
+      blackoutUserId: user.id,
+      data: { tipId: 'tip-1', grossCents: 500, currency: 'USD' },
+    });
+
+    const evt = await obs.awaitFrame<{
+      eventType: string;
+      eventData: { tipId: string; grossCents: number; currency: string };
+    }>((f) => f.op === protocol.Op.Event);
+    assert.equal(evt.d.eventType, 'blackout.tip.created');
+    assert.equal(evt.d.eventData.tipId, 'tip-1');
+    assert.equal(evt.d.eventData.grossCents, 500);
+    assert.equal(evt.d.eventData.currency, 'USD');
+    obs.close();
+  } finally {
+    await h.dispose();
+  }
+});
+
 test('listSessionsForUser: scopes to caller; only includes identified sessions; matches the password row', async () => {
   const { passwords, protocol, server: shim, db } = await loadModules();
   const alice = await seedUser(db);
