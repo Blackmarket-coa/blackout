@@ -8,6 +8,10 @@ import { requireDomainCapability } from './authz';
 import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
 import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
 import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
+import {
+  startAllForUser as startAllRtmpFanouts,
+  stopAllForUser as stopAllRtmpFanouts,
+} from '../services/rtmpFanoutWorker';
 import { log } from '../telemetry/logger';
 import type { FeatureModule } from './types';
 
@@ -296,6 +300,21 @@ function createStreamingRouter() {
       occurredAt: session.startedAt,
     }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.started', error: String(err) }));
 
+    // Auto-start RTMP fan-out for every enabled simulcast destination
+    // the creator has configured. Best-effort — any per-destination
+    // spawn failure is captured by the worker and surfaced via
+    // GET /v1/integrations/simulcast/fanout/:id/status, not here.
+    try {
+      const fanoutResult = startAllRtmpFanouts(stream.creatorId);
+      log.info('streaming_rtmp_fanout_started', {
+        streamId,
+        attempted: fanoutResult.attempted,
+        started: fanoutResult.started,
+      });
+    } catch (err) {
+      log.warn('streaming_rtmp_fanout_start_threw', { streamId, error: String(err) });
+    }
+
     return c.json(session, 201);
   });
 
@@ -332,6 +351,21 @@ function createStreamingRouter() {
         },
         occurredAt: session.endedAt,
       }).catch((err) => log.warn('streaming_outbound_dispatch_threw', { type: 'livestream.ended', error: String(err) }));
+
+      // Stop every running fan-out for this creator. The worker
+      // gracefully SIGTERMs each ffmpeg; restart timers are cleared.
+      try {
+        const fanoutResult = stopAllRtmpFanouts(stream.creatorId);
+        log.info('streaming_rtmp_fanout_stopped', {
+          streamId: session.streamId,
+          stopped: fanoutResult.stopped,
+        });
+      } catch (err) {
+        log.warn('streaming_rtmp_fanout_stop_threw', {
+          streamId: session.streamId,
+          error: String(err),
+        });
+      }
     }
 
     return c.json(session);
