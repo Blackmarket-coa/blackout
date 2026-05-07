@@ -12,6 +12,10 @@ import {
   startAllForUser as startAllRtmpFanouts,
   stopAllForUser as stopAllRtmpFanouts,
 } from '../services/rtmpFanoutWorker';
+import {
+  notifyStreamStarted as notifyObsWsStreamStarted,
+  notifyStreamEnded as notifyObsWsStreamEnded,
+} from '../integrations/obs-ws-compat/server';
 import { log } from '../telemetry/logger';
 import type { FeatureModule } from './types';
 
@@ -315,6 +319,20 @@ function createStreamingRouter() {
       log.warn('streaming_rtmp_fanout_start_threw', { streamId, error: String(err) });
     }
 
+    // Push a StreamStateChanged event to every identified OBS-WS surface
+    // for this creator. Companion / Stream Deck plugins re-render their
+    // "Stream live" tile on receipt — so a stream that just went live
+    // via the Blackout UI lights up the surface without manual polling.
+    try {
+      notifyObsWsStreamStarted(stream.creatorId);
+    } catch (err) {
+      log.warn('streaming_obs_ws_notify_threw', {
+        streamId,
+        type: 'started',
+        error: String(err),
+      });
+    }
+
     return c.json(session, 201);
   });
 
@@ -363,6 +381,19 @@ function createStreamingRouter() {
       } catch (err) {
         log.warn('streaming_rtmp_fanout_stop_threw', {
           streamId: session.streamId,
+          error: String(err),
+        });
+      }
+
+      // Push a StreamStateChanged: outputActive=false event to every
+      // identified OBS-WS surface so Companion's "Stream live" tile
+      // flips off in real time.
+      try {
+        notifyObsWsStreamEnded(stream.creatorId);
+      } catch (err) {
+        log.warn('streaming_obs_ws_notify_threw', {
+          streamId: session.streamId,
+          type: 'ended',
           error: String(err),
         });
       }

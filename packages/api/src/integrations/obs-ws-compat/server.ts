@@ -86,6 +86,57 @@ export const listSessionsForUser = (blackoutUserId: string): ObsSessionSnapshot[
   return out;
 };
 
+/**
+ * Push an OBS-WS Event (op 5) to every identified session belonging to
+ * a creator. Wire shape mirrors OBS-WS:
+ *   { op: 5, d: { eventType, eventIntent, eventData } }
+ *
+ * Reference Companion / Stream Deck plugins re-render their button
+ * tiles on receipt — so a stream that just went live via the Blackout
+ * UI lights up the Companion "Stream live" indicator without the user
+ * pressing anything.
+ */
+export const notifyStreamStarted = (blackoutUserId: string): void => {
+  broadcastEvent(blackoutUserId, 'StreamStateChanged', {
+    outputActive: true,
+    outputState: 'OBS_WEBSOCKET_OUTPUT_STARTED',
+  });
+};
+
+export const notifyStreamEnded = (blackoutUserId: string): void => {
+  broadcastEvent(blackoutUserId, 'StreamStateChanged', {
+    outputActive: false,
+    outputState: 'OBS_WEBSOCKET_OUTPUT_STOPPED',
+  });
+};
+
+const broadcastEvent = (
+  blackoutUserId: string,
+  eventType: string,
+  eventData: Record<string, unknown>,
+): void => {
+  // High-bit-mask intent field per OBS-WS spec; we don't filter by
+  // bitmask yet (every identified session gets every event we emit) so
+  // we send `0` to mean "general".
+  const frame = {
+    op: Op.Event,
+    d: { eventType, eventIntent: 0, eventData },
+  };
+  for (const s of sessions) {
+    if (!s.identified) continue;
+    if (s.blackoutUserId !== blackoutUserId) continue;
+    try {
+      send(s.ws, frame);
+    } catch (err) {
+      log.warn('obs_ws_event_broadcast_failed', {
+        passwordId: s.passwordId,
+        eventType,
+        error: String(err),
+      });
+    }
+  }
+};
+
 const send = (ws: WsClient, frame: Frame): void => {
   if (ws.readyState !== 1 /* OPEN */) return;
   try {

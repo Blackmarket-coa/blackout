@@ -689,6 +689,103 @@ test('OBS-WS shim: revoking a password while connected does not crash, and preve
   }
 });
 
+test('notifyStreamStarted/Ended: pushes StreamStateChanged Event (op 5) to identified sessions for the user', async () => {
+  const { passwords, protocol, server: shim, db } = await loadModules();
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  const aPw = passwords.mint({ blackoutUserId: alice.id, label: 'Stream Deck' });
+  const bPw = passwords.mint({ blackoutUserId: bob.id, label: 'Companion' });
+  if (aPw.kind !== 'ok' || bPw.kind !== 'ok') return assert.fail();
+
+  const h = await buildHarness(shim);
+  try {
+    // alice fully identifies.
+    const aliceObs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${aPw.record.id}`);
+    const aHello = await aliceObs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    aliceObs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          aPw.password,
+          aHello.d.authentication!.salt,
+          aHello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await aliceObs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // bob fully identifies on a separate user.
+    const bobObs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${bPw.record.id}`);
+    const bHello = await bobObs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    bobObs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          bPw.password,
+          bHello.d.authentication!.salt,
+          bHello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await bobObs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // Pre-Identify session: connects to alice's URL but never sends Identify.
+    // It must NOT receive the Event because OBS-WS clients ignore mid-handshake
+    // pushes and we shouldn't leak state to unauthenticated peers.
+    const preIdentObs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${aPw.record.id}`);
+    await preIdentObs.awaitFrame((f) => f.op === protocol.Op.Hello);
+
+    // Fire the StreamStateChanged push for alice.
+    shim.notifyStreamStarted(alice.id);
+
+    const aliceEvent = await aliceObs.awaitFrame<{
+      eventType: string;
+      eventIntent: number;
+      eventData: { outputActive: boolean; outputState: string };
+    }>((f) => f.op === protocol.Op.Event);
+    assert.equal(aliceEvent.d.eventType, 'StreamStateChanged');
+    assert.equal(aliceEvent.d.eventData.outputActive, true);
+    assert.equal(aliceEvent.d.eventData.outputState, 'OBS_WEBSOCKET_OUTPUT_STARTED');
+
+    // Now the Ended event.
+    shim.notifyStreamEnded(alice.id);
+    const aliceEnded = await aliceObs.awaitFrame<{
+      eventType: string;
+      eventData: { outputActive: boolean; outputState: string };
+    }>(
+      (f) =>
+        f.op === protocol.Op.Event &&
+        (f.d as { eventData: { outputState: string } }).eventData.outputState ===
+          'OBS_WEBSOCKET_OUTPUT_STOPPED',
+    );
+    assert.equal(aliceEnded.d.eventData.outputActive, false);
+
+    // bob (different user) must NOT have received either event. Wait
+    // briefly and assert no Event op shows up on bob's stream.
+    await new Promise((r) => setTimeout(r, 50));
+    let bobReceivedAnyEvent = false;
+    try {
+      await bobObs.awaitFrame((f) => f.op === protocol.Op.Event, 100);
+      bobReceivedAnyEvent = true;
+    } catch {
+      // expected — timeout means no Event arrived
+    }
+    assert.equal(bobReceivedAnyEvent, false, 'cross-user push isolation');
+
+    aliceObs.close();
+    bobObs.close();
+    preIdentObs.close();
+  } finally {
+    await h.dispose();
+  }
+});
+
 test('listSessionsForUser: scopes to caller; only includes identified sessions; matches the password row', async () => {
   const { passwords, protocol, server: shim, db } = await loadModules();
   const alice = await seedUser(db);
