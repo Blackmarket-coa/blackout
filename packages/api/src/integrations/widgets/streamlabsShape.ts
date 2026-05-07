@@ -1,5 +1,6 @@
 import type { NormalizedTwitchEvent } from '../twitch/eventSub';
 import type { NormalizedPatreonEvent } from '../patreon/webhookEvents';
+import type { NormalizedStreamlabsDonation } from '../streamlabs/donationEvents';
 import type { WidgetAlertEvent, WidgetAlertType } from '../../services/widgetBus';
 
 /**
@@ -200,6 +201,59 @@ export const toWidgetAlertFromPatreon = (
     message: [message satisfies Record<string, unknown>],
     source: event,
   };
+};
+
+// ----------------------------- Streamlabs → donation -----------------------------
+
+/**
+ * Map a normalized Streamlabs donation directly into our donation
+ * envelope. The Streamlabs Socket API delivers the SAME shape we emit on
+ * the Blackout SSE feed — so this is mostly a 1:1 projection. The point
+ * of routing it through here at all (vs publishing the raw Streamlabs
+ * payload) is to keep `WidgetAlertEvent.source` typed: native Blackout
+ * overlays read `source.kind === 'streamlabs_donation'` and get the
+ * full normalized shape, while existing Streamlabs widgets see only the
+ * `message[0]` envelope and don't notice we're middlemanned.
+ */
+export const toWidgetAlertFromStreamlabs = (
+  event: NormalizedStreamlabsDonation,
+  options: { now?: () => number } = {},
+): WidgetAlertEvent => {
+  const now = options.now ? options.now() : Date.now();
+  const formattedAmount = `${currencySymbol(event.currency)}${event.amount}`;
+  return {
+    type: 'donation',
+    origin: 'streamlabs',
+    publishedAtMs: now,
+    message: [
+      {
+        name: event.donorName,
+        amount: event.amount,
+        formatted_amount: formattedAmount,
+        currency: event.currency,
+        message: event.message,
+        // Streamlabs widgets dedupe on `_id`; the Streamlabs donation id
+        // is the natural unique key.
+        _id: event.donationId,
+      },
+    ],
+    source: event,
+  };
+};
+
+const currencySymbol = (currency: string): string => {
+  switch (currency.toUpperCase()) {
+    case 'USD':
+      return '$';
+    case 'EUR':
+      return '€';
+    case 'GBP':
+      return '£';
+    case 'JPY':
+      return '¥';
+    default:
+      return `${currency.toUpperCase()} `;
+  }
 };
 
 /**

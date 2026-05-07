@@ -11,6 +11,7 @@ export const LINKED_ACCOUNT_PROVIDERS: readonly LinkedAccountProvider[] = [
   'patreon',
   'tiktok',
   'kick',
+  'streamlabs',
 ] as const;
 
 export const isLinkedAccountProvider = (value: unknown): value is LinkedAccountProvider =>

@@ -50,7 +50,8 @@ export type LinkedAccountProvider =
   | 'discord'
   | 'patreon'
   | 'tiktok'
-  | 'kick';
+  | 'kick'
+  | 'streamlabs';
 
 export interface LinkedAccountRecord {
   id: UUID;

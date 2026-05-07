@@ -24,6 +24,7 @@ const PROVIDER_DISPLAY: Record<LinkedAccountProvider, { label: string; descripti
     youtube: { label: 'YouTube Live', description: 'Mirror live chat + SuperChat / channel-membership events.' },
     tiktok: { label: 'TikTok Live', description: 'Coming soon — gift / sub events via Webcast.' },
     kick: { label: 'Kick', description: 'Coming soon — Pusher chat WS + tip webhooks.' },
+    streamlabs: { label: 'Streamlabs', description: 'Sync your Streamlabs donations into the same widget alert stream.' },
 };
 
 const ALL_PROVIDERS: readonly LinkedAccountProvider[] = [
@@ -31,6 +32,7 @@ const ALL_PROVIDERS: readonly LinkedAccountProvider[] = [
     'discord',
     'patreon',
     'youtube',
+    'streamlabs',
     'tiktok',
     'kick',
 ];

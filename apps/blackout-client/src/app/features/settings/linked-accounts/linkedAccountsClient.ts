@@ -13,7 +13,8 @@ export type LinkedAccountProvider =
     | 'discord'
     | 'patreon'
     | 'tiktok'
-    | 'kick';
+    | 'kick'
+    | 'streamlabs';
 
 /**
  * Providers the server currently has an OAuth dispatch entry for. Mirrors
@@ -25,6 +26,7 @@ export const IMPLEMENTED_PROVIDERS: readonly LinkedAccountProvider[] = [
     'discord',
     'patreon',
     'youtube',
+    'streamlabs',
 ] as const;
 
 const ALL_PROVIDERS: readonly LinkedAccountProvider[] = [
@@ -34,6 +36,7 @@ const ALL_PROVIDERS: readonly LinkedAccountProvider[] = [
     'patreon',
     'tiktok',
     'kick',
+    'streamlabs',
 ];
 
 export const isLinkedAccountProvider = (

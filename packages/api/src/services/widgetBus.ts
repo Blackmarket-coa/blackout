@@ -1,5 +1,6 @@
 import type { NormalizedTwitchEvent } from '../integrations/twitch/eventSub';
 import type { NormalizedPatreonEvent } from '../integrations/patreon/webhookEvents';
+import type { NormalizedStreamlabsDonation } from '../integrations/streamlabs/donationEvents';
 
 /**
  * In-process pub/sub of Streamlabs-shaped alert payloads, keyed by the
@@ -32,7 +33,7 @@ export type WidgetAlertType =
   | 'raid';
 
 /** Origin platform that produced an alert. Drives widget styling. */
-export type WidgetAlertOrigin = 'twitch' | 'patreon';
+export type WidgetAlertOrigin = 'twitch' | 'patreon' | 'streamlabs';
 
 /**
  * The wire shape for a single alert push. Streamlabs delivers messages as
@@ -53,7 +54,7 @@ export interface WidgetAlertEvent {
    * Blackout-native widgets show stuff Streamlabs's shape elides (raid
    * viewer counts, sub tier numbers, Patreon tier titles, etc.).
    */
-  source: NormalizedTwitchEvent | NormalizedPatreonEvent;
+  source: NormalizedTwitchEvent | NormalizedPatreonEvent | NormalizedStreamlabsDonation;
 }
 
 type Subscriber = (event: WidgetAlertEvent) => void;

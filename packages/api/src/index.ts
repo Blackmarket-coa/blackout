@@ -26,6 +26,7 @@ import twitchChatBridgeRoutes from './routes/twitchChatBridges';
 import twitchEventSubRoutes from './routes/twitchEventSub';
 import widgetAlertRoutes from './routes/widgetAlerts';
 import patreonWebhookRoutes from './routes/patreonWebhook';
+import streamlabsRoutes from './routes/streamlabs';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -118,6 +119,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/twitch/eventsub`, twitchEventSubRoutes);
   app.route(`${root}/integrations/widgets/alerts`, widgetAlertRoutes);
   app.route(`${root}/integrations/patreon/webhook`, patreonWebhookRoutes);
+  app.route(`${root}/integrations/streamlabs`, streamlabsRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);

@@ -62,7 +62,13 @@ describe('linkedAccountsClient: wire contracts', () => {
         // If the server adds tiktok/kick, this test should be updated to match —
         // keeping it strict prevents UI from claiming "Coming soon" on a
         // provider that already works.
-        expect([...IMPLEMENTED_PROVIDERS].sort()).toEqual(['discord', 'patreon', 'twitch', 'youtube']);
+        expect([...IMPLEMENTED_PROVIDERS].sort()).toEqual([
+            'discord',
+            'patreon',
+            'streamlabs',
+            'twitch',
+            'youtube',
+        ]);
     });
 });
 

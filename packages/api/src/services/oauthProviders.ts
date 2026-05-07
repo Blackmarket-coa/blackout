@@ -2,6 +2,7 @@ import * as twitchOAuth from '../integrations/twitch/oauth';
 import * as discordOAuth from '../integrations/discord/oauth';
 import * as patreonOAuth from '../integrations/patreon/oauth';
 import * as youtubeOAuth from '../integrations/youtube/oauth';
+import * as streamlabsOAuth from '../integrations/streamlabs/oauth';
 import type {
   AuthorizeUrlResult,
   CallbackOutcome,
@@ -39,6 +40,7 @@ export const OAUTH_PROVIDERS: Partial<Record<LinkedAccountProvider, ProviderOAut
   discord: discordOAuth,
   patreon: patreonOAuth,
   youtube: youtubeOAuth,
+  streamlabs: streamlabsOAuth,
 };
 
 export const isOAuthImplemented = (provider: LinkedAccountProvider): boolean =>
