@@ -330,6 +330,99 @@ export const stopAllChatIngress = (): void => {
   sessions.clear();
 };
 
+// ----------------------------- idle-session health check -----------------------------
+
+/**
+ * Twitch sends a PING every ~5 minutes; an active connection should see at
+ * minimum that frequency of inbound traffic. If we haven't heard ANY frame
+ * for this many ms we treat the socket as half-open and force a close,
+ * which the close handler observes and turns into a reconnect (with a
+ * fresh OAuth token via ensureFreshAccessToken).
+ *
+ * The threshold is generous — twice Twitch's PING interval, plus headroom
+ * — to avoid kicking healthy connections during legitimate quiet periods.
+ */
+export const HEALTH_IDLE_THRESHOLD_MS = 11 * 60 * 1000;
+export const HEALTH_CHECK_INTERVAL_MS = 60 * 1000;
+
+export interface RunHealthCheckOptions {
+  /** Override clock for tests. */
+  now?: () => number;
+  /** Override the idle threshold (ms) for tests. */
+  idleThresholdMs?: number;
+}
+
+export interface HealthCheckResult {
+  inspected: number;
+  reconnectsForced: number;
+}
+
+/**
+ * Walk every active session and force-close any that have gone silent
+ * past {@link HEALTH_IDLE_THRESHOLD_MS}. The close handler installed in
+ * `connect` schedules a reconnect, which on its way through resolves a
+ * fresh OAuth token — so this is also the path that recovers a session
+ * whose access token has aged past the refresh window.
+ */
+export const runHealthCheck = (
+  options: RunHealthCheckOptions = {},
+): HealthCheckResult => {
+  const now = options.now ? options.now() : Date.now();
+  const threshold = options.idleThresholdMs ?? HEALTH_IDLE_THRESHOLD_MS;
+  let inspected = 0;
+  let reconnectsForced = 0;
+  for (const session of sessions.values()) {
+    if (session.state === 'closing' || session.state === 'closed') continue;
+    inspected += 1;
+    // No `lastEventAt` yet means the session was just opened and hasn't
+    // received its first frame; don't kick it.
+    const last = session.lastEventAt;
+    if (typeof last !== 'number') continue;
+    if (now - last < threshold) continue;
+    // Force the socket closed; the close handler reconnects.
+    if (session.socket) {
+      try {
+        session.socket.close(1006, 'idle_timeout');
+      } catch {
+        /* ignore */
+      }
+    }
+    reconnectsForced += 1;
+  }
+  return { inspected, reconnectsForced };
+};
+
+let healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Run {@link runHealthCheck} on a recurring interval. Call once at API
+ * startup; idempotent (subsequent calls are no-ops). The returned
+ * `stop()` function clears the interval — used by tests + graceful
+ * shutdown.
+ */
+export const startHealthCheckLoop = (
+  intervalMs: number = HEALTH_CHECK_INTERVAL_MS,
+): { stop: () => void } => {
+  if (healthCheckTimer) return { stop: stopHealthCheckLoop };
+  healthCheckTimer = setInterval(() => {
+    try {
+      runHealthCheck();
+    } catch (err) {
+      log.warn('twitch_chat_ingress_health_check_threw', { error: String(err) });
+    }
+  }, intervalMs);
+  // Don't keep the Node process alive purely for the health check.
+  if (typeof healthCheckTimer.unref === 'function') healthCheckTimer.unref();
+  return { stop: stopHealthCheckLoop };
+};
+
+export const stopHealthCheckLoop = (): void => {
+  if (healthCheckTimer) {
+    clearInterval(healthCheckTimer);
+    healthCheckTimer = null;
+  }
+};
+
 /** Re-exposed for downstream wiring (e.g., the Matrix forwarding handler). */
 export { toMatrixForwardedMessage };
 

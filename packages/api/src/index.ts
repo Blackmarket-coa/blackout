@@ -170,6 +170,18 @@ if (shouldListen) {
     });
   }
 
+  // Periodic idle-detection on chat-ingress sockets. A session that has
+  // gone silent past HEALTH_IDLE_THRESHOLD_MS (twice Twitch's PING
+  // interval) is force-closed; the close handler reconnects it with a
+  // fresh OAuth token. Same env-gating as the resume hook so unit-test
+  // environments don't spawn a background timer they didn't ask for.
+  if (process.env.BLACKOUT_RESUME_TWITCH_BRIDGES === '1') {
+    void import('./integrations/twitch/chatIngress').then(({ startHealthCheckLoop }) => {
+      startHealthCheckLoop();
+      log.info('twitch_chat_ingress_health_check_loop_started');
+    });
+  }
+
   serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
   });

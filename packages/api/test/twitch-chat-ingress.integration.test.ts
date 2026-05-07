@@ -453,3 +453,104 @@ test('chatIngress: missing linked account aborts the connect attempt', async () 
   assert.equal(factoryCalls, 0);
   assert.equal(handle.state(), 'closed');
 });
+
+// =============================================================================
+// runHealthCheck — idle-detection + force-reconnect
+// =============================================================================
+
+test('runHealthCheck: force-closes a session that has been idle past the threshold', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+
+  const FAKE_NOW = 1_700_000_000_000;
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'gamer',
+    onMessage: () => {},
+    socketFactory: factory,
+    // Pin the clock the session uses for `lastEventAt`.
+    now: () => FAKE_NOW,
+  });
+  api.emitOpen();
+  api.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  api.emitMessage(
+    ':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #gamer\r\n',
+  );
+  // Now the session has lastEventAt = FAKE_NOW.
+
+  const result = chatIngress.runHealthCheck({
+    now: () => FAKE_NOW + 12 * 60 * 1000, // 12 min later — past 11-min threshold.
+  });
+  assert.equal(result.inspected, 1);
+  assert.equal(result.reconnectsForced, 1);
+  // The fake socket records the close call.
+  assert.equal(api.closed, true);
+  handle.stop();
+});
+
+test('runHealthCheck: leaves a healthy (recently-active) session alone', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+
+  const FAKE_NOW = 1_700_000_000_000;
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'gamer',
+    onMessage: () => {},
+    socketFactory: factory,
+    now: () => FAKE_NOW,
+  });
+  api.emitOpen();
+  api.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+
+  const result = chatIngress.runHealthCheck({
+    now: () => FAKE_NOW + 60 * 1000, // 1 min later — well within threshold.
+  });
+  assert.equal(result.inspected, 1);
+  assert.equal(result.reconnectsForced, 0);
+  assert.equal(api.closed, false);
+  handle.stop();
+});
+
+test('runHealthCheck: skips a session that has not received its first frame yet', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'gamer',
+    onMessage: () => {},
+    socketFactory: factory,
+  });
+  api.emitOpen();
+  // No emitMessage — session has lastEventAt undefined. We must NOT kick it.
+
+  const result = chatIngress.runHealthCheck({
+    now: () => Date.now() + 60 * 60 * 1000, // 1h later
+    idleThresholdMs: 1, // even with a tiny threshold
+  });
+  assert.equal(result.inspected, 1);
+  assert.equal(result.reconnectsForced, 0);
+  assert.equal(api.closed, false);
+  handle.stop();
+});
+
+test('startHealthCheckLoop is idempotent and stoppable', async () => {
+  const { chatIngress } = await loadModules();
+  const a = chatIngress.startHealthCheckLoop(50);
+  const b = chatIngress.startHealthCheckLoop(50);
+  // Both calls return a handle with the same .stop reference.
+  assert.equal(a.stop, b.stop);
+  // Calling either stop clears the timer; second stop is a no-op.
+  a.stop();
+  b.stop();
+  // Re-starting should still work.
+  const c = chatIngress.startHealthCheckLoop(50);
+  c.stop();
+});
