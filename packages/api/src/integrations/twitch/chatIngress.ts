@@ -452,6 +452,61 @@ export const getSessionStatus = (
   };
 };
 
+// ----------------------------- outbound mirror -----------------------------
+
+/**
+ * IRC PRIVMSG max length is implementation-defined; Twitch's chat caps
+ * at 500 chars per message. Truncate defensively so a bad caller can't
+ * blow up the connection.
+ */
+const TWITCH_PRIVMSG_MAX_BYTES = 500;
+
+export type SendChatMessageOutcome =
+  | { kind: 'ok' }
+  | { kind: 'no_session' }
+  | { kind: 'not_connected'; state: 'connecting' | 'closing' | 'closed' }
+  | { kind: 'invalid_body'; reason: string };
+
+/**
+ * Send a chat message into a bridged Twitch channel through the same
+ * WSS we already hold open for ingress. Matrix-side messages can be
+ * mirrored to Twitch via this entry point (manually for now via the
+ * POST /:id/say endpoint, automatically by a future Matrix listener).
+ *
+ * Loop prevention is the CALLER's responsibility — if you call this
+ * from a Matrix room handler, filter out messages already tagged with
+ * `m.blackout.origin = 'twitch'` so a message we forwarded INTO Matrix
+ * doesn't immediately get sent BACK to Twitch.
+ */
+export const sendChatMessage = (
+  blackoutUserId: string,
+  twitchChannel: string,
+  body: string,
+): SendChatMessageOutcome => {
+  if (typeof body !== 'string' || body.length === 0) {
+    return { kind: 'invalid_body', reason: 'body is empty' };
+  }
+  // Strip CR/LF so an attacker can't inject additional IRC commands by
+  // smuggling a `\r\n` in the body.
+  const sanitized = body.replace(/[\r\n]+/g, ' ').trim();
+  if (sanitized.length === 0) {
+    return { kind: 'invalid_body', reason: 'body is whitespace-only' };
+  }
+  const truncated =
+    Buffer.byteLength(sanitized, 'utf8') <= TWITCH_PRIVMSG_MAX_BYTES
+      ? sanitized
+      : Buffer.from(sanitized, 'utf8').subarray(0, TWITCH_PRIVMSG_MAX_BYTES).toString('utf8');
+
+  const session = sessions.get(sessionKey(blackoutUserId, twitchChannel));
+  if (!session) return { kind: 'no_session' };
+  if (session.state !== 'connected' || !session.socket) {
+    return { kind: 'not_connected', state: session.state };
+  }
+  const channel = `#${twitchChannel.toLowerCase()}`;
+  sendIrc(session.socket, `PRIVMSG ${channel} :${truncated}`);
+  return { kind: 'ok' };
+};
+
 /** Re-exposed for downstream wiring (e.g., the Matrix forwarding handler). */
 export { toMatrixForwardedMessage };
 

@@ -554,3 +554,128 @@ test('startHealthCheckLoop is idempotent and stoppable', async () => {
   const c = chatIngress.startHealthCheckLoop(50);
   c.stop();
 });
+
+// =============================================================================
+// sendChatMessage — outbound mirror through the existing WSS
+// =============================================================================
+
+test('sendChatMessage: connected session frames the right PRIVMSG into the socket', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'gamer',
+    onMessage: () => {},
+    socketFactory: factory,
+  });
+  api.emitOpen();
+  // Welcome + JOIN echoes drive the session into "connected".
+  api.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  api.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #gamer\r\n');
+
+  api.sentLines.length = 0; // ignore handshake noise
+  const out = chatIngress.sendChatMessage(user.id, 'GAMER', 'Hello, chat!');
+  assert.equal(out.kind, 'ok');
+  // Channel is lowercased per IRC convention.
+  assert.deepEqual(api.sentLines, ['PRIVMSG #gamer :Hello, chat!\r\n']);
+  handle.stop();
+});
+
+test('sendChatMessage: strips CR/LF (defensive — no command injection)', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'c',
+    onMessage: () => {},
+    socketFactory: factory,
+  });
+  api.emitOpen();
+  api.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  api.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #c\r\n');
+  api.sentLines.length = 0;
+
+  const out = chatIngress.sendChatMessage(
+    user.id,
+    'c',
+    'hi\r\nPRIVMSG #other-channel :smuggled',
+  );
+  assert.equal(out.kind, 'ok');
+  // Newlines must be replaced by spaces; the smuggled command is now
+  // part of the body, not a separate IRC command.
+  assert.equal(api.sentLines.length, 1);
+  assert.match(api.sentLines[0], /^PRIVMSG #c :hi PRIVMSG #other-channel :smuggled\r\n$/);
+  handle.stop();
+});
+
+test('sendChatMessage: empty / whitespace-only body is rejected', async () => {
+  const { chatIngress } = await loadModules();
+  assert.equal(
+    (chatIngress.sendChatMessage('any', 'any', '')).kind,
+    'invalid_body',
+  );
+  assert.equal(
+    (chatIngress.sendChatMessage('any', 'any', '   ')).kind,
+    'invalid_body',
+  );
+});
+
+test('sendChatMessage: no_session when there is no live ingress for the (user, channel)', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  // No seedTwitchLink + no startChatIngress — there's no session at all.
+  const out = chatIngress.sendChatMessage(user.id, 'gamer', 'hi');
+  assert.equal(out.kind, 'no_session');
+});
+
+test('sendChatMessage: not_connected when the session is still in handshake', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory } = buildFakeSocketFactory();
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'gamer',
+    onMessage: () => {},
+    socketFactory: factory,
+  });
+  // Socket factory has been called → session is in `connecting` until we
+  // emit the JOIN echo. Don't emit anything; sendChatMessage should
+  // refuse to PRIVMSG because the channel hasn't been joined yet.
+  const out = chatIngress.sendChatMessage(user.id, 'gamer', 'hi');
+  assert.equal(out.kind, 'not_connected');
+  if (out.kind === 'not_connected') {
+    assert.equal(out.state, 'connecting');
+  }
+  handle.stop();
+});
+
+test('sendChatMessage: truncates bodies past Twitch\'s 500-byte chat cap', async () => {
+  const { chatIngress, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedTwitchLink(user.id);
+  const { factory, api } = buildFakeSocketFactory();
+  const handle = await chatIngress.startChatIngress({
+    blackoutUserId: user.id,
+    twitchChannel: 'c',
+    onMessage: () => {},
+    socketFactory: factory,
+  });
+  api.emitOpen();
+  api.emitMessage(':tmi.twitch.tv 001 streamerbob :Welcome\r\n');
+  api.emitMessage(':streamerbob!streamerbob@streamerbob.tmi.twitch.tv JOIN #c\r\n');
+  api.sentLines.length = 0;
+  const long = 'x'.repeat(800);
+  const out = chatIngress.sendChatMessage(user.id, 'c', long);
+  assert.equal(out.kind, 'ok');
+  // 500-byte body cap, plus the "PRIVMSG #c :" prefix and trailing \r\n.
+  const sent = api.sentLines[0];
+  const body = sent.slice('PRIVMSG #c :'.length, -2); // strip prefix + \r\n
+  assert.equal(Buffer.byteLength(body, 'utf8'), 500);
+  handle.stop();
+});

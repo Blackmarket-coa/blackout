@@ -62,6 +62,21 @@ export const deleteBridge = (
         path: `${BASE}/${encodeURIComponent(bridgeId)}`,
     }) as Promise<{ ok: true }>;
 
+export interface SayBody {
+    body: string;
+}
+
+export const sayInBridge = (
+    bridgeId: string,
+    body: SayBody,
+    options?: ApiCallOptions,
+): Promise<{ ok: true }> =>
+    client(options)({
+        method: 'POST',
+        path: `${BASE}/${encodeURIComponent(bridgeId)}/say`,
+        body,
+    }) as Promise<{ ok: true }>;
+
 // ----------------------------- input validators -----------------------------
 
 /**

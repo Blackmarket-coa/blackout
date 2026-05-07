@@ -15,6 +15,7 @@ import {
     isValidMatrixRoomId,
     isValidTwitchChannelLogin,
     listBridges,
+    sayInBridge,
     type TwitchChatBridgeRecord,
 } from './twitchChatBridgesClient';
 
@@ -47,6 +48,9 @@ export function TwitchChatBridges({ apiClient: testApiClient }: TwitchChatBridge
     const [roomId, setRoomId] = useState('');
     const [notice, setNotice] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    /** id of the bridge whose "Send a message" composer is currently open. */
+    const [sayBridgeId, setSayBridgeId] = useState<string | null>(null);
+    const [sayBody, setSayBody] = useState('');
 
     const refresh = useCallback(async () => {
         setLoadError(null);
@@ -122,8 +126,26 @@ export function TwitchChatBridges({ apiClient: testApiClient }: TwitchChatBridge
         ),
     );
 
+    const [sayState, submitSay] = useAsyncCallback(
+        useCallback(
+            async (bridge: TwitchChatBridgeRecord, body: string) => {
+                setError(null);
+                setNotice(null);
+                await sayInBridge(bridge.id, { body }, testApiClient);
+                if (alive()) {
+                    setSayBody('');
+                    setSayBridgeId(null);
+                    setNotice(`Sent to #${bridge.twitchChannel}.`);
+                }
+            },
+            [alive, testApiClient],
+        ),
+    );
+
     const busy =
-        createState.status === AsyncStatus.Loading || deleteState.status === AsyncStatus.Loading;
+        createState.status === AsyncStatus.Loading ||
+        deleteState.status === AsyncStatus.Loading ||
+        sayState.status === AsyncStatus.Loading;
 
     return (
         <Box direction="Column" gap="200">
@@ -246,19 +268,68 @@ export function TwitchChatBridges({ apiClient: testApiClient }: TwitchChatBridge
                                 }
                                 description={`Created ${new Date(bridge.createdAt).toLocaleString()}`}
                                 after={
-                                    <Button
-                                        size="300"
-                                        variant="Critical"
-                                        fill="None"
-                                        radii="Pill"
-                                        disabled={busy}
-                                        onClick={() => void submitDelete(bridge)}
-                                        data-testid={`twitch-bridge-delete-${bridge.id}`}
-                                    >
-                                        <Text size="B300">Remove</Text>
-                                    </Button>
+                                    <Box gap="200" alignItems="Center">
+                                        <Button
+                                            size="300"
+                                            variant="Primary"
+                                            fill="None"
+                                            radii="Pill"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                setSayBridgeId(
+                                                    sayBridgeId === bridge.id ? null : bridge.id,
+                                                )
+                                            }
+                                            data-testid={`twitch-bridge-say-toggle-${bridge.id}`}
+                                        >
+                                            <Text size="B300">
+                                                {sayBridgeId === bridge.id ? 'Cancel' : 'Send'}
+                                            </Text>
+                                        </Button>
+                                        <Button
+                                            size="300"
+                                            variant="Critical"
+                                            fill="None"
+                                            radii="Pill"
+                                            disabled={busy}
+                                            onClick={() => void submitDelete(bridge)}
+                                            data-testid={`twitch-bridge-delete-${bridge.id}`}
+                                        >
+                                            <Text size="B300">Remove</Text>
+                                        </Button>
+                                    </Box>
                                 }
                             />
+                            {sayBridgeId === bridge.id && (
+                                <Box direction="Column" gap="100">
+                                    <Text size="T200" priority="300">
+                                        Send a message into <code>#{bridge.twitchChannel}</code> via
+                                        the same connection that mirrors chat into your den. 500
+                                        chars max; CR/LF stripped server-side.
+                                    </Text>
+                                    <Input
+                                        value={sayBody}
+                                        placeholder="Hey chat!"
+                                        variant="Surface"
+                                        radii="300"
+                                        onChange={(evt) => setSayBody(evt.currentTarget.value)}
+                                        data-testid={`twitch-bridge-say-input-${bridge.id}`}
+                                    />
+                                    <Box gap="200">
+                                        <Button
+                                            size="300"
+                                            variant="Primary"
+                                            fill="Solid"
+                                            radii="Pill"
+                                            disabled={busy || sayBody.trim().length === 0}
+                                            onClick={() => void submitSay(bridge, sayBody)}
+                                            data-testid={`twitch-bridge-say-submit-${bridge.id}`}
+                                        >
+                                            <Text size="B300">Send to Twitch</Text>
+                                        </Button>
+                                    </Box>
+                                </Box>
+                            )}
                         </SequenceCard>
                     ))}
                 </Box>
@@ -282,6 +353,11 @@ export function TwitchChatBridges({ apiClient: testApiClient }: TwitchChatBridge
             {deleteState.status === AsyncStatus.Error && (
                 <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
                     {(deleteState.error as Error).message}
+                </Text>
+            )}
+            {sayState.status === AsyncStatus.Error && (
+                <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
+                    Could not send: {(sayState.error as Error).message}
                 </Text>
             )}
         </Box>
