@@ -478,3 +478,73 @@ test('IRC shim: PING from bot is answered with PONG echoing the payload', async 
     await h.dispose();
   }
 });
+
+test('listSessionsForUser: scopes to caller; reports nick + joined channels + token id; pre-auth sessions hidden', async () => {
+  const { tokens, shim, db } = await loadModules();
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  // Both alice and bob have a Twitch bridge so each can JOIN.
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: alice.id,
+    twitchUserId: '1',
+    twitchChannel: 'alice-stream',
+    matrixRoomId: '!a:srv',
+    isActive: true,
+  });
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: bob.id,
+    twitchUserId: '2',
+    twitchChannel: 'bob-stream',
+    matrixRoomId: '!b:srv',
+    isActive: true,
+  });
+  const aliceTok = tokens.mint({ blackoutUserId: alice.id, label: 'Nightbot' });
+  const bobTok = tokens.mint({ blackoutUserId: bob.id, label: 'Moobot' });
+  if (aliceTok.kind !== 'ok' || bobTok.kind !== 'ok') return assert.fail();
+
+  const h = await buildHarness(shim);
+  try {
+    // alice's bot connects + JOINs
+    const aliceBot = await connectBot(h.url);
+    aliceBot.send('CAP REQ :twitch.tv/tags');
+    aliceBot.send(`PASS oauth:${aliceTok.secret}`);
+    aliceBot.send('NICK Nightbot');
+    await aliceBot.awaitLine((l) => /:tmi\.twitch\.tv 376/.test(l));
+    aliceBot.send('JOIN #alice-stream');
+    await aliceBot.awaitLine((l) => /JOIN #alice-stream/.test(l));
+
+    // bob's bot connects + JOINs
+    const bobBot = await connectBot(h.url);
+    bobBot.send('CAP REQ :twitch.tv/tags');
+    bobBot.send(`PASS oauth:${bobTok.secret}`);
+    bobBot.send('NICK Moobot');
+    await bobBot.awaitLine((l) => /:tmi\.twitch\.tv 376/.test(l));
+    bobBot.send('JOIN #bob-stream');
+    await bobBot.awaitLine((l) => /JOIN #bob-stream/.test(l));
+
+    // Pre-auth session — connects but never sends NICK; should NOT appear.
+    await connectBot(h.url);
+
+    // alice sees only her bot.
+    const aliceSessions = shim.listSessionsForUser(alice.id);
+    assert.equal(aliceSessions.length, 1);
+    assert.equal(aliceSessions[0].nick, 'nightbot');
+    assert.deepEqual(aliceSessions[0].joinedChannels, ['#alice-stream']);
+    assert.equal(aliceSessions[0].tokenId, aliceTok.record.id);
+    assert.ok(aliceSessions[0].connectedAt > 0);
+    assert.ok(aliceSessions[0].lastActivityAt > 0);
+
+    // bob sees only his bot.
+    const bobSessions = shim.listSessionsForUser(bob.id);
+    assert.equal(bobSessions.length, 1);
+    assert.equal(bobSessions[0].nick, 'moobot');
+    assert.deepEqual(bobSessions[0].joinedChannels, ['#bob-stream']);
+
+    aliceBot.close();
+    bobBot.close();
+  } finally {
+    await h.dispose();
+  }
+});

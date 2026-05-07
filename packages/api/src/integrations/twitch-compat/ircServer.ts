@@ -57,7 +57,40 @@ interface BotSession {
   tokenId?: string;
   /** Active per-channel hub disposers, keyed by channel slug (lowercased, with `#`). */
   subscriptions: Map<string, () => void>;
+  /** ms-since-epoch of the WebSocket upgrade. */
+  connectedAt: number;
+  /** ms-since-epoch of the most recent inbound IRC line — useful for last-seen surfacing. */
+  lastActivityAt: number;
 }
+
+/** Public projection — never exposes the WebSocket internals or tokenId. */
+export interface BotSessionSnapshot {
+  /** The bot's NICK (lowercased on accept). */
+  nick: string;
+  /** Channels currently joined (with leading `#`). */
+  joinedChannels: string[];
+  /** Token id used to authenticate, so the creator can match this session to a labelled token. */
+  tokenId: string;
+  connectedAt: number;
+  lastActivityAt: number;
+}
+
+export const listSessionsForUser = (blackoutUserId: string): BotSessionSnapshot[] => {
+  const out: BotSessionSnapshot[] = [];
+  for (const s of sessions) {
+    if (!s.state.authenticated) continue;
+    if (s.blackoutUserId !== blackoutUserId) continue;
+    if (!s.tokenId || !s.state.nick) continue;
+    out.push({
+      nick: s.state.nick,
+      joinedChannels: [...s.state.joinedChannels].sort(),
+      tokenId: s.tokenId,
+      connectedAt: s.connectedAt,
+      lastActivityAt: s.lastActivityAt,
+    });
+  }
+  return out;
+};
 
 const sessions = new Set<BotSession>();
 
@@ -174,15 +207,19 @@ export const attachTwitchIrcShim = (
 };
 
 const registerConnection = (ws: WsClient, matrix: MatrixSendEventClient): BotSession => {
+  const now = Date.now();
   const session: BotSession = {
     ws,
     state: initConnectionState(),
     subscriptions: new Map(),
+    connectedAt: now,
+    lastActivityAt: now,
   };
   sessions.add(session);
 
   ws.on('message', (data: Buffer | string) => {
     const buf = typeof data === 'string' ? data : data.toString('utf8');
+    session.lastActivityAt = Date.now();
     // IRC is line-delimited; multiple lines may arrive in one frame.
     for (const raw of buf.split(/\r?\n/)) {
       if (!raw) continue;

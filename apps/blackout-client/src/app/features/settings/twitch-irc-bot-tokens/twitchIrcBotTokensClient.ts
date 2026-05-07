@@ -85,3 +85,26 @@ export const isValidScopeEntry = (raw: string): boolean => {
     const t = raw.trim();
     return t.length > 0 && t.length <= 255;
 };
+
+// ----------------------------- live session observability ------------------
+
+/** Snapshot of one connected IRC bot session, scoped to the calling creator. */
+export interface IrcBotSessionSnapshot {
+    /** The bot's NICK (lowercased on accept). */
+    nick: string;
+    /** Channels currently joined (with leading `#`). */
+    joinedChannels: string[];
+    /** Token id used to authenticate — match this to a row in listTokens(). */
+    tokenId: string;
+    /** ms-since-epoch of the WebSocket upgrade. */
+    connectedAt: number;
+    /** ms-since-epoch of the most recent inbound IRC line. */
+    lastActivityAt: number;
+}
+
+export interface ListSessionsResponse {
+    sessions: IrcBotSessionSnapshot[];
+}
+
+export const listSessions = (options?: ApiCallOptions): Promise<ListSessionsResponse> =>
+    client(options)({ method: 'GET', path: `${BASE}/sessions` }) as Promise<ListSessionsResponse>;

@@ -7,9 +7,11 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAlive } from '../../../hooks/useAlive';
 import {
     isValidLabel,
+    listSessions,
     listTokens,
     mintToken,
     revokeToken,
+    type IrcBotSessionSnapshot,
     type MintResponse,
     type TwitchIrcBotToken,
 } from './twitchIrcBotTokensClient';
@@ -28,6 +30,7 @@ interface TwitchIrcBotTokensProps {
 export function TwitchIrcBotTokens({ apiClient: testApiClient }: TwitchIrcBotTokensProps = {}) {
     const alive = useAlive();
     const [tokens, setTokens] = useState<TwitchIrcBotToken[]>([]);
+    const [sessions, setSessions] = useState<IrcBotSessionSnapshot[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loaded, setLoaded] = useState(false);
 
@@ -38,9 +41,16 @@ export function TwitchIrcBotTokens({ apiClient: testApiClient }: TwitchIrcBotTok
     const refresh = useCallback(async () => {
         setLoadError(null);
         try {
-            const res = await listTokens(testApiClient);
+            // Tokens (config) and sessions (runtime) fetched in parallel.
+            // A 5xx on sessions doesn't break the panel — bots may simply
+            // not be connected yet.
+            const [tokensRes, sessionsRes] = await Promise.all([
+                listTokens(testApiClient),
+                listSessions(testApiClient).catch(() => ({ sessions: [] as IrcBotSessionSnapshot[] })),
+            ]);
             if (!alive()) return;
-            setTokens(res.tokens);
+            setTokens(tokensRes.tokens);
+            setSessions(sessionsRes.sessions);
             setLoaded(true);
         } catch (err) {
             if (!alive()) return;
@@ -229,6 +239,47 @@ export function TwitchIrcBotTokens({ apiClient: testApiClient }: TwitchIrcBotTok
                             />
                         </SequenceCard>
                     ))}
+                </Box>
+            )}
+
+            {loaded && sessions.length > 0 && (
+                <Box direction="Column" gap="100">
+                    <Text size="L400">Connected bots</Text>
+                    {sessions.map((session) => {
+                        const matchedToken = tokens.find((t) => t.id === session.tokenId);
+                        const tokenLabel =
+                            matchedToken?.label ?? `(token ${session.tokenId.slice(0, 8)})`;
+                        const channelsLabel =
+                            session.joinedChannels.length === 0
+                                ? 'no channels joined'
+                                : session.joinedChannels.join(', ');
+                        return (
+                            <SequenceCard
+                                key={`${session.tokenId}:${session.nick}:${session.connectedAt}`}
+                                className={SequenceCardStyle}
+                                variant="SurfaceVariant"
+                                direction="Column"
+                                gap="200"
+                            >
+                                <SettingTile
+                                    title={
+                                        <Box gap="200" alignItems="Center">
+                                            <Text as="span" size="T300">
+                                                {session.nick}
+                                            </Text>
+                                            <Text as="span" size="T200" priority="300">
+                                                via {tokenLabel}
+                                            </Text>
+                                        </Box>
+                                    }
+                                    description={
+                                        `${channelsLabel} · connected ${new Date(session.connectedAt).toLocaleString()}` +
+                                        ` · last activity ${new Date(session.lastActivityAt).toLocaleString()}`
+                                    }
+                                />
+                            </SequenceCard>
+                        );
+                    })}
                 </Box>
             )}
 

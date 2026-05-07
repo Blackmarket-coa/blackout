@@ -3,6 +3,7 @@ import { createFetchApiClient } from '@blackout/sdk';
 import {
     isValidLabel,
     isValidScopeEntry,
+    listSessions,
     listTokens,
     mintToken,
     revokeToken,
@@ -88,5 +89,19 @@ describe('twitchIrcBotTokensClient.isValidScopeEntry', () => {
         expect(isValidScopeEntry('')).toBe(false);
         expect(isValidScopeEntry('   ')).toBe(false);
         expect(isValidScopeEntry('A'.repeat(256))).toBe(false);
+    });
+});
+
+describe('twitchIrcBotTokensClient.listSessions', () => {
+    it('GET /v1/integrations/twitch-compat/bot-tokens/sessions', async () => {
+        const { apiClient, calls } = collectClient();
+        await listSessions({ apiClient });
+        expect(calls).toEqual([
+            {
+                method: 'GET',
+                path: '/v1/integrations/twitch-compat/bot-tokens/sessions',
+                body: undefined,
+            },
+        ]);
     });
 });

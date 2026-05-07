@@ -9,10 +9,18 @@ import {
   projectRecord,
   revoke,
 } from '../services/twitchIrcBotTokens';
+import { listSessionsForUser } from '../integrations/twitch-compat/ircServer';
 
 const router = new Hono();
 router.use('/', authRateLimit);
 router.use('/:id', authRateLimit);
+router.use('/sessions', authRateLimit);
+
+router.get('/sessions', (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to list connected IRC bots');
+  if (userOrResp instanceof Response) return userOrResp;
+  return c.json({ sessions: listSessionsForUser(userOrResp.sub) });
+});
 
 const mintSchema = z.object({
   label: z.string().min(1).max(80).optional(),
