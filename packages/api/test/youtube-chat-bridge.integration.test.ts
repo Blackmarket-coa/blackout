@@ -493,3 +493,163 @@ test('scheduler.start/stop: idempotent + restartable', async () => {
   const c = scheduler.startYoutubeChatScheduler(60_000);
   c.stop();
 });
+
+// =============================================================================
+// outbound: sendBridgeMessage / liveChatMessages.insert
+// =============================================================================
+
+test('api.insertLiveChatMessage: POSTs textMessageEvent with the right body shape', async () => {
+  const { api } = await loadModules();
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    assert.match(url, /\/youtube\/v3\/liveChat\/messages\?part=snippet$/);
+    assert.equal(init?.method, 'POST');
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    assert.equal(body.snippet.type, 'textMessageEvent');
+    assert.equal(body.snippet.liveChatId, 'lc-abc');
+    assert.equal(body.snippet.textMessageDetails.messageText, 'hello');
+    return new Response(JSON.stringify({ id: 'inserted-1' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as unknown as typeof fetch;
+  const out = await api.insertLiveChatMessage('tok', {
+    liveChatId: 'lc-abc',
+    body: 'hello',
+    fetch: stubFetch,
+  });
+  assert.equal(out.kind, 'ok');
+  if (out.kind === 'ok') assert.equal(out.messageId, 'inserted-1');
+});
+
+test('service.sendBridgeMessage: resolves liveChatId then inserts; returns ok', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!den:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+
+  let insertCalled = false;
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/liveBroadcasts')) {
+      return new Response(
+        JSON.stringify({ items: [{ id: 'b1', snippet: { liveChatId: 'lc-out' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (url.includes('/liveChat/messages')) {
+      assert.equal(init?.method, 'POST');
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      assert.equal(body.snippet.liveChatId, 'lc-out');
+      assert.equal(body.snippet.textMessageDetails.messageText, 'hello chat');
+      insertCalled = true;
+      return new Response(JSON.stringify({ id: 'msg-out' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    assert.fail(`unexpected URL: ${url}`);
+  }) as unknown as typeof fetch;
+
+  const out = await service.sendBridgeMessage(created.record, 'hello chat', { fetch: stubFetch });
+  assert.equal(out.kind, 'ok');
+  assert.equal(insertCalled, true);
+});
+
+test('service.sendBridgeMessage: empty body / whitespace-only → invalid_body', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!d:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+  for (const body of ['', '   ', '\n\n']) {
+    const out = await service.sendBridgeMessage(created.record, body);
+    assert.equal(out.kind, 'invalid_body', `body=${JSON.stringify(body)}`);
+  }
+});
+
+test('service.sendBridgeMessage: truncates bodies past YouTube\'s 200-char cap', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!d:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+  let sentBody = '';
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/liveBroadcasts')) {
+      return new Response(
+        JSON.stringify({ items: [{ id: 'b1', snippet: { liveChatId: 'lc' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    sentBody = JSON.parse(String(init?.body)).snippet.textMessageDetails.messageText;
+    return new Response(JSON.stringify({ id: 'm' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as unknown as typeof fetch;
+  await service.sendBridgeMessage(created.record, 'x'.repeat(500), { fetch: stubFetch });
+  assert.equal(sentBody.length, 200, 'body truncated to 200 chars');
+});
+
+test('service.sendBridgeMessage: no_active_broadcast when YT returns no items', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!d:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+  const stubFetch: typeof fetch = (async () =>
+    new Response(JSON.stringify({ items: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as unknown as typeof fetch;
+  const out = await service.sendBridgeMessage(created.record, 'hi', { fetch: stubFetch });
+  assert.equal(out.kind, 'no_active_broadcast');
+});
+
+test('service.sendBridgeMessage: strips CR/LF defensively', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!d:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+  let sentBody = '';
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/liveBroadcasts')) {
+      return new Response(
+        JSON.stringify({ items: [{ id: 'b1', snippet: { liveChatId: 'lc' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    sentBody = JSON.parse(String(init?.body)).snippet.textMessageDetails.messageText;
+    return new Response(JSON.stringify({ id: 'm' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as unknown as typeof fetch;
+  await service.sendBridgeMessage(created.record, 'hi\r\nthere', { fetch: stubFetch });
+  assert.equal(sentBody, 'hi there');
+});

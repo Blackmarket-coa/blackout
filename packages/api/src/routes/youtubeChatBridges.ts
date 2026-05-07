@@ -7,6 +7,7 @@ import {
   createBridge,
   deleteBridge,
   listBridgesForUser,
+  sendBridgeMessage,
   syncBridge,
 } from '../services/youtubeChatBridge';
 import { db } from '../db/store';
@@ -17,10 +18,15 @@ const bridges = new Hono();
 bridges.use('/', authRateLimit);
 bridges.use('/:id', authRateLimit);
 bridges.use('/:id/sync', authRateLimit);
+bridges.use('/:id/say', authRateLimit);
 
 const createSchema = z.object({
   youtubeChannelId: z.string().min(1).max(64),
   matrixRoomId: z.string().min(1).max(255),
+});
+
+const saySchema = z.object({
+  body: z.string().min(1).max(200),
 });
 
 bridges.get('/', (c) => {
@@ -149,6 +155,72 @@ bridges.post('/:id/sync', async (c) => {
     }
   } catch (err) {
     log.error('youtube_chat_bridge_sync_route_threw', {
+      userId: userOrResp.sub,
+      bridgeId: id,
+      error: String(err),
+    });
+    return c.json({ code: 'internal_error', message: (err as Error).message }, 500);
+  }
+});
+
+/**
+ * POST /:id/say — outbound: send a message into the bridge's YouTube
+ * live chat via liveChatMessages.insert. Mirror of the Twitch /say
+ * endpoint. Auth + ownership checks identical.
+ */
+bridges.post('/:id/say', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to send a YouTube chat message');
+  if (userOrResp instanceof Response) return userOrResp;
+  const id = c.req.param('id');
+  const bridge = db.getYoutubeChatBridge(id);
+  if (!bridge) return c.json({ code: 'not_found', message: 'No bridge with that id.' }, 404);
+  if (bridge.blackoutUserId !== userOrResp.sub) {
+    return c.json({ code: 'forbidden', message: 'You do not own that bridge.' }, 403);
+  }
+  const parsed = await readJsonBody(c, saySchema);
+  if (parsed instanceof Response) return parsed;
+  try {
+    const outcome = await sendBridgeMessage(bridge, parsed.body);
+    switch (outcome.kind) {
+      case 'ok':
+        return c.json({ ok: true, messageId: outcome.messageId });
+      case 'invalid_body':
+        return c.json({ code: 'invalid_body', message: outcome.reason }, 400);
+      case 'no_active_broadcast':
+        return c.json(
+          {
+            code: 'no_active_broadcast',
+            message: 'YouTube reports no active broadcast for this channel.',
+          },
+          409,
+        );
+      case 'no_link':
+      case 'token_unavailable':
+        return c.json(
+          {
+            code: 'youtube_token_unavailable',
+            message: 'YouTube token expired or revoked. Re-link from Settings.',
+          },
+          401,
+        );
+      case 'rate_limited':
+        return c.json(
+          {
+            code: 'youtube_rate_limited',
+            message: 'YouTube quota exhausted; retry shortly.',
+            retryAfterSeconds: outcome.retryAfterSeconds,
+          },
+          429,
+        );
+      case 'failed':
+        return c.json({ code: 'youtube_upstream_failed', status: outcome.status }, 502);
+      default: {
+        const exhaustive: never = outcome;
+        return c.json({ code: 'unexpected_outcome', message: String(exhaustive) }, 500);
+      }
+    }
+  } catch (err) {
+    log.error('youtube_chat_bridge_say_route_threw', {
       userId: userOrResp.sub,
       bridgeId: id,
       error: String(err),

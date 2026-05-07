@@ -76,6 +76,26 @@ export const syncBridge = (
         path: `${BASE}/${encodeURIComponent(bridgeId)}/sync`,
     }) as Promise<SyncBridgeResponse>;
 
+export interface SayBody {
+    body: string;
+}
+
+export interface SayResponse {
+    ok: true;
+    messageId: string;
+}
+
+export const sayInBridge = (
+    bridgeId: string,
+    body: SayBody,
+    options?: ApiCallOptions,
+): Promise<SayResponse> =>
+    client(options)({
+        method: 'POST',
+        path: `${BASE}/${encodeURIComponent(bridgeId)}/say`,
+        body,
+    }) as Promise<SayResponse>;
+
 // ----------------------------- input validators -----------------------------
 
 /**

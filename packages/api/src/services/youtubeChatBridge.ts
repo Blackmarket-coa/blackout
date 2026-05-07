@@ -5,6 +5,7 @@ import { ensureFreshAccessToken } from './oauthProviders';
 import { getLinkedAccount } from './linkedAccounts';
 import {
   findActiveLiveBroadcast,
+  insertLiveChatMessage,
   listLiveChatMessages,
 } from '../integrations/youtube/api';
 import {
@@ -235,4 +236,82 @@ export const syncBridge = async (
     pollingIntervalMillis: pageOutcome.page.pollingIntervalMillis,
     nextPageToken,
   };
+};
+
+// ----------------------------- outbound: send a chat message -----------------------------
+
+const YT_PRIVMSG_MAX_CHARS = 200;
+
+export type SendBridgeMessageOutcome =
+  | { kind: 'ok'; messageId: string }
+  | { kind: 'invalid_body'; reason: string }
+  | { kind: 'no_link' }
+  | { kind: 'token_unavailable'; reason: string }
+  | { kind: 'no_active_broadcast' }
+  | { kind: 'rate_limited'; retryAfterSeconds?: number }
+  | { kind: 'failed'; status: number; detail: string };
+
+/**
+ * Send a chat message into the bridge's YouTube live chat. Resolves the
+ * active broadcast's liveChatId on every call (broadcasts come and go;
+ * caching the chat id would surface a stale one on a re-stream). The
+ * caller is responsible for loop prevention if this is wired to a
+ * Matrix listener — filter out messages already tagged
+ * `m.blackout.origin = 'youtube'` so we don't echo our own ingress.
+ */
+export const sendBridgeMessage = async (
+  bridge: YoutubeChatBridgeRecord,
+  body: string,
+  options: BridgeServiceOptions = {},
+): Promise<SendBridgeMessageOutcome> => {
+  if (typeof body !== 'string') return { kind: 'invalid_body', reason: 'body is not a string' };
+  const sanitized = body.replace(/[\r\n]+/g, ' ').trim();
+  if (sanitized.length === 0) return { kind: 'invalid_body', reason: 'body is empty' };
+  // YouTube caps live-chat messages at 200 chars; truncate defensively.
+  const truncated =
+    sanitized.length <= YT_PRIVMSG_MAX_CHARS
+      ? sanitized
+      : sanitized.slice(0, YT_PRIVMSG_MAX_CHARS);
+
+  const fresh = await ensureFreshAccessToken(bridge.blackoutUserId, 'youtube', {
+    fetch: options.fetch,
+  });
+  if (fresh.kind === 'no_link' || fresh.kind === 'provider_not_implemented') {
+    return { kind: 'no_link' };
+  }
+  if (fresh.kind === 'refresh_failed') {
+    return { kind: 'token_unavailable', reason: `refresh_failed:${fresh.status}` };
+  }
+  const accessToken = fresh.accessToken;
+  if (!accessToken) return { kind: 'token_unavailable', reason: 'empty_token' };
+
+  const broadcastOutcome = await findActiveLiveBroadcast(accessToken, { fetch: options.fetch });
+  if (broadcastOutcome.kind === 'unauthorized') {
+    return { kind: 'token_unavailable', reason: 'unauthorized' };
+  }
+  if (broadcastOutcome.kind === 'rate_limited') {
+    return { kind: 'rate_limited', retryAfterSeconds: broadcastOutcome.retryAfterSeconds };
+  }
+  if (broadcastOutcome.kind === 'failed') {
+    return { kind: 'failed', status: broadcastOutcome.status, detail: broadcastOutcome.detail };
+  }
+  const liveChatId = broadcastOutcome.broadcast?.snippet?.liveChatId;
+  if (!liveChatId) return { kind: 'no_active_broadcast' };
+
+  const insertOutcome = await insertLiveChatMessage(accessToken, {
+    liveChatId,
+    body: truncated,
+    fetch: options.fetch,
+  });
+  if (insertOutcome.kind === 'unauthorized') {
+    return { kind: 'token_unavailable', reason: 'unauthorized' };
+  }
+  if (insertOutcome.kind === 'rate_limited') {
+    return { kind: 'rate_limited', retryAfterSeconds: insertOutcome.retryAfterSeconds };
+  }
+  if (insertOutcome.kind === 'failed') {
+    return { kind: 'failed', status: insertOutcome.status, detail: insertOutcome.detail };
+  }
+  log.info('youtube_chat_bridge_sent', { bridgeId: bridge.id, messageId: insertOutcome.messageId });
+  return { kind: 'ok', messageId: insertOutcome.messageId };
 };

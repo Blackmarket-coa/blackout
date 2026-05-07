@@ -152,3 +152,51 @@ export const listLiveChatMessages = async (
     },
   };
 };
+
+// ----------------------------- outbound: liveChatMessages.insert -----------------------------
+
+export interface InsertChatMessageOptions {
+  liveChatId: string;
+  /** Plain-text message body (≤200 chars per YouTube). */
+  body: string;
+  fetch?: typeof fetch;
+}
+
+export type InsertChatMessageOutcome =
+  | { kind: 'ok'; messageId: string }
+  | { kind: 'unauthorized' }
+  | { kind: 'rate_limited'; retryAfterSeconds?: number }
+  | { kind: 'failed'; status: number; detail: string };
+
+/**
+ * Post a textMessageEvent into the active live chat.
+ * Spec: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/insert
+ */
+export const insertLiveChatMessage = async (
+  accessToken: string,
+  options: InsertChatMessageOptions,
+): Promise<InsertChatMessageOutcome> => {
+  const fetchFn = options.fetch ?? fetch;
+  const url = `${BASE_URL}/liveChat/messages?part=snippet`;
+  const res = await fetchFn(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      snippet: {
+        type: 'textMessageEvent',
+        liveChatId: options.liveChatId,
+        textMessageDetails: { messageText: options.body },
+      },
+    }),
+  });
+  const err = await handleErrors(res);
+  if (err) return err;
+  const json = (await res.json()) as { id?: string };
+  if (!json.id) {
+    return { kind: 'failed', status: res.status, detail: 'missing id in response' };
+  }
+  return { kind: 'ok', messageId: json.id };
+};

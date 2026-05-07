@@ -15,6 +15,7 @@ import {
     isValidMatrixRoomId,
     isValidYoutubeChannelId,
     listBridges,
+    sayInBridge,
     syncBridge,
     type YoutubeChatBridgeRecord,
 } from './youtubeChatBridgesClient';
@@ -42,6 +43,9 @@ export function YoutubeChatBridges({ apiClient: testApiClient }: YoutubeChatBrid
     const [channelId, setChannelId] = useState('');
     const [roomId, setRoomId] = useState('');
     const [notice, setNotice] = useState<string | null>(null);
+    /** id of the bridge whose Send composer is open. */
+    const [sayBridgeId, setSayBridgeId] = useState<string | null>(null);
+    const [sayBody, setSayBody] = useState('');
 
     const refresh = useCallback(async () => {
         setLoadError(null);
@@ -121,10 +125,26 @@ export function YoutubeChatBridges({ apiClient: testApiClient }: YoutubeChatBrid
         ),
     );
 
+    const [sayState, submitSay] = useAsyncCallback(
+        useCallback(
+            async (bridge: YoutubeChatBridgeRecord, body: string) => {
+                setNotice(null);
+                await sayInBridge(bridge.id, { body }, testApiClient);
+                if (alive()) {
+                    setSayBody('');
+                    setSayBridgeId(null);
+                    setNotice(`Sent to ${bridge.youtubeChannelId}.`);
+                }
+            },
+            [alive, testApiClient],
+        ),
+    );
+
     const busy =
         createState.status === AsyncStatus.Loading ||
         deleteState.status === AsyncStatus.Loading ||
-        syncState.status === AsyncStatus.Loading;
+        syncState.status === AsyncStatus.Loading ||
+        sayState.status === AsyncStatus.Loading;
 
     return (
         <Box direction="Column" gap="200">
@@ -262,6 +282,23 @@ export function YoutubeChatBridges({ apiClient: testApiClient }: YoutubeChatBrid
                                         </Button>
                                         <Button
                                             size="300"
+                                            variant="Primary"
+                                            fill="None"
+                                            radii="Pill"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                setSayBridgeId(
+                                                    sayBridgeId === bridge.id ? null : bridge.id,
+                                                )
+                                            }
+                                            data-testid={`youtube-bridge-say-toggle-${bridge.id}`}
+                                        >
+                                            <Text size="B300">
+                                                {sayBridgeId === bridge.id ? 'Cancel' : 'Send'}
+                                            </Text>
+                                        </Button>
+                                        <Button
+                                            size="300"
                                             variant="Critical"
                                             fill="None"
                                             radii="Pill"
@@ -274,6 +311,35 @@ export function YoutubeChatBridges({ apiClient: testApiClient }: YoutubeChatBrid
                                     </Box>
                                 }
                             />
+                            {sayBridgeId === bridge.id && (
+                                <Box direction="Column" gap="100">
+                                    <Text size="T200" priority="300">
+                                        Send a message into your active YouTube live chat. 200 chars
+                                        max.
+                                    </Text>
+                                    <Input
+                                        value={sayBody}
+                                        placeholder="Hey chat!"
+                                        variant="Surface"
+                                        radii="300"
+                                        onChange={(evt) => setSayBody(evt.currentTarget.value)}
+                                        data-testid={`youtube-bridge-say-input-${bridge.id}`}
+                                    />
+                                    <Box gap="200">
+                                        <Button
+                                            size="300"
+                                            variant="Primary"
+                                            fill="Solid"
+                                            radii="Pill"
+                                            disabled={busy || sayBody.trim().length === 0}
+                                            onClick={() => void submitSay(bridge, sayBody)}
+                                            data-testid={`youtube-bridge-say-submit-${bridge.id}`}
+                                        >
+                                            <Text size="B300">Send to YouTube</Text>
+                                        </Button>
+                                    </Box>
+                                </Box>
+                            )}
                         </SequenceCard>
                     ))}
                 </Box>
@@ -297,6 +363,11 @@ export function YoutubeChatBridges({ apiClient: testApiClient }: YoutubeChatBrid
             {syncState.status === AsyncStatus.Error && (
                 <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
                     {(syncState.error as Error).message}
+                </Text>
+            )}
+            {sayState.status === AsyncStatus.Error && (
+                <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
+                    Could not send: {(sayState.error as Error).message}
                 </Text>
             )}
         </Box>
