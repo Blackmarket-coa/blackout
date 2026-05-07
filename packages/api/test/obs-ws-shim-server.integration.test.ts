@@ -171,16 +171,174 @@ test('computeClientAuth: round-trips between server expected and client computed
   );
 });
 
-test('dispatchRequest: GetVersion + GetStats return Success; unknown → NotImplemented', async () => {
+/** Build a minimal in-memory StreamCommands for protocol-layer unit tests. */
+const buildFakeCommands = (initial: { active?: boolean; hasStream?: boolean } = {}) => {
+  let active = !!initial.active;
+  const hasStream = initial.hasStream ?? true;
+  let startedAtMs = active ? Date.now() : 0;
+  const calls: Array<{ kind: string; userId: string }> = [];
+  const commands = {
+    getStreamStatus: (userId: string) => {
+      calls.push({ kind: 'getStreamStatus', userId });
+      return {
+        outputActive: active,
+        outputDuration: active ? Date.now() - startedAtMs : 0,
+        sessionId: active ? 'fake-session' : undefined,
+        streamId: hasStream ? 'fake-stream' : undefined,
+      };
+    },
+    startStream: (userId: string) => {
+      calls.push({ kind: 'startStream', userId });
+      if (!hasStream) return { ok: false as const, reason: 'No stream record yet' };
+      if (!active) {
+        active = true;
+        startedAtMs = Date.now();
+      }
+      return { ok: true as const, sessionId: 'fake-session' };
+    },
+    stopStream: (userId: string) => {
+      calls.push({ kind: 'stopStream', userId });
+      const ended = active;
+      active = false;
+      return { ok: true as const, ended };
+    },
+  };
+  return { commands, calls, isActive: () => active };
+};
+
+test('dispatchRequest: protocol-layer matrix covers GetVersion/GetStats and unknown', async () => {
   const { protocol } = await loadModules();
-  const v = protocol.dispatchRequest('GetVersion', {});
+  const { commands } = buildFakeCommands();
+  const ctx = { blackoutUserId: 'u', commands };
+  const v = protocol.dispatchRequest('GetVersion', {}, ctx);
   assert.equal(v.status.code, protocol.REQ_STATUS.Success);
   assert.equal((v.responseData as { rpcVersion: number }).rpcVersion, 1);
-  const s = protocol.dispatchRequest('GetStats', {});
+  const s = protocol.dispatchRequest('GetStats', {}, ctx);
   assert.equal(s.status.code, protocol.REQ_STATUS.Success);
-  const u = protocol.dispatchRequest('SetCurrentProgramScene', {});
+  const u = protocol.dispatchRequest('SetInputMute', {}, ctx);
   assert.equal(u.status.code, protocol.REQ_STATUS.NotImplemented);
   assert.equal(u.status.result, false);
+});
+
+test('dispatchRequest: stream control idempotency + status round-trip', async () => {
+  const { protocol } = await loadModules();
+  const fake = buildFakeCommands({ active: false });
+  const ctx = { blackoutUserId: 'u', commands: fake.commands };
+
+  // GetStreamStatus on fresh creator: outputActive=false.
+  const before = protocol.dispatchRequest('GetStreamStatus', {}, ctx);
+  assert.equal(before.status.code, protocol.REQ_STATUS.Success);
+  assert.equal((before.responseData as { outputActive: boolean }).outputActive, false);
+
+  // StartStream → ok; idempotent on second call.
+  const first = protocol.dispatchRequest('StartStream', {}, ctx);
+  assert.equal(first.status.code, protocol.REQ_STATUS.Success);
+  assert.equal(fake.isActive(), true);
+  const second = protocol.dispatchRequest('StartStream', {}, ctx);
+  assert.equal(second.status.code, protocol.REQ_STATUS.Success);
+
+  // GetStreamStatus reflects the active session.
+  const mid = protocol.dispatchRequest('GetStreamStatus', {}, ctx);
+  assert.equal((mid.responseData as { outputActive: boolean }).outputActive, true);
+
+  // ToggleStream while live → stops.
+  const toggled = protocol.dispatchRequest('ToggleStream', {}, ctx);
+  assert.equal((toggled.responseData as { outputActive: boolean }).outputActive, false);
+
+  // ToggleStream while offline → starts.
+  const toggled2 = protocol.dispatchRequest('ToggleStream', {}, ctx);
+  assert.equal((toggled2.responseData as { outputActive: boolean }).outputActive, true);
+
+  // StopStream → offline.
+  protocol.dispatchRequest('StopStream', {}, ctx);
+  assert.equal(fake.isActive(), false);
+});
+
+test('dispatchRequest: StartStream returns NotReady when the creator has no stream record', async () => {
+  const { protocol } = await loadModules();
+  const fake = buildFakeCommands({ hasStream: false });
+  const ctx = { blackoutUserId: 'u', commands: fake.commands };
+  const out = protocol.dispatchRequest('StartStream', {}, ctx);
+  assert.equal(out.status.result, false);
+  assert.equal(out.status.code, protocol.REQ_STATUS.NotReady);
+  assert.match(out.status.comment ?? '', /no stream record/i);
+});
+
+test('dispatchRequest: SetCurrentProgramScene Live↔Offline maps to Start/Stop; bad name → 400', async () => {
+  const { protocol } = await loadModules();
+  const fake = buildFakeCommands({ active: false });
+  const ctx = { blackoutUserId: 'u', commands: fake.commands };
+
+  const goLive = protocol.dispatchRequest(
+    'SetCurrentProgramScene',
+    { sceneName: 'Live' },
+    ctx,
+  );
+  assert.equal(goLive.status.code, protocol.REQ_STATUS.Success);
+  assert.equal(fake.isActive(), true);
+
+  const goOffline = protocol.dispatchRequest(
+    'SetCurrentProgramScene',
+    { sceneName: 'Offline' },
+    ctx,
+  );
+  assert.equal(goOffline.status.code, protocol.REQ_STATUS.Success);
+  assert.equal(fake.isActive(), false);
+
+  const bad = protocol.dispatchRequest(
+    'SetCurrentProgramScene',
+    { sceneName: 'GreenRoom' },
+    ctx,
+  );
+  assert.equal(bad.status.result, false);
+  assert.equal(bad.status.code, protocol.REQ_STATUS.InvalidRequestField);
+});
+
+test('dispatchRequest: GetSceneList + GetCurrentProgramScene reflect Live/Offline state', async () => {
+  const { protocol } = await loadModules();
+  const fake = buildFakeCommands({ active: false });
+  const ctx = { blackoutUserId: 'u', commands: fake.commands };
+
+  const list = protocol.dispatchRequest('GetSceneList', {}, ctx);
+  assert.equal(list.status.code, protocol.REQ_STATUS.Success);
+  const listData = list.responseData as {
+    currentProgramSceneName: string;
+    scenes: Array<{ sceneName: string }>;
+  };
+  assert.equal(listData.currentProgramSceneName, 'Offline');
+  assert.deepEqual(
+    listData.scenes.map((s) => s.sceneName).sort(),
+    ['Live', 'Offline'],
+  );
+
+  fake.commands.startStream('u');
+  const cur = protocol.dispatchRequest('GetCurrentProgramScene', {}, ctx);
+  assert.equal(
+    (cur.responseData as { currentProgramSceneName: string }).currentProgramSceneName,
+    'Live',
+  );
+});
+
+test('dispatchRequest: BroadcastCustomEvent accepts an object payload, rejects non-object', async () => {
+  const { protocol } = await loadModules();
+  const ctx = { blackoutUserId: 'u', commands: buildFakeCommands().commands };
+  const ok = protocol.dispatchRequest(
+    'BroadcastCustomEvent',
+    { eventData: { theme: 'dark' } },
+    ctx,
+  );
+  assert.equal(ok.status.code, protocol.REQ_STATUS.Success);
+  // Omitted eventData is also fine.
+  const ok2 = protocol.dispatchRequest('BroadcastCustomEvent', {}, ctx);
+  assert.equal(ok2.status.code, protocol.REQ_STATUS.Success);
+  // eventData must be an object when present.
+  const bad = protocol.dispatchRequest(
+    'BroadcastCustomEvent',
+    { eventData: 'a string' },
+    ctx,
+  );
+  assert.equal(bad.status.result, false);
+  assert.equal(bad.status.code, protocol.REQ_STATUS.InvalidRequestField);
 });
 
 // --------------------------- service tests ---------------------------------
@@ -329,10 +487,11 @@ test('OBS-WS shim: identified client gets RequestResponse for GetVersion; NotImp
     assert.equal(v.d.requestStatus.code, protocol.REQ_STATUS.Success);
     assert.equal(v.d.responseData.rpcVersion, 1);
 
-    // Unknown request → NotImplemented (204).
+    // Unimplemented request → NotImplemented (204). SetInputMute isn't
+    // wired yet — surfaces seeing this gracefully grey out the button.
     obs.send({
       op: protocol.Op.Request,
-      d: { requestType: 'SetCurrentProgramScene', requestId: 'rq-2', requestData: {} },
+      d: { requestType: 'SetInputMute', requestId: 'rq-2', requestData: {} },
     });
     const u = await obs.awaitFrame<{
       requestType: string;
@@ -341,6 +500,147 @@ test('OBS-WS shim: identified client gets RequestResponse for GetVersion; NotImp
     }>((f) => f.op === protocol.Op.RequestResponse && (f.d as { requestId: string }).requestId === 'rq-2');
     assert.equal(u.d.requestStatus.result, false);
     assert.equal(u.d.requestStatus.code, protocol.REQ_STATUS.NotImplemented);
+    obs.close();
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('OBS-WS shim end-to-end: StartStream creates a session, GetStreamStatus reflects it, StopStream ends it', async () => {
+  const { passwords, protocol, server: shim, db } = await loadModules();
+  const user = await seedUser(db);
+  // Seed a stream record for the creator so StartStream isn't NotReady.
+  const streamId = randomUUID();
+  db.upsertStream({
+    id: streamId,
+    creatorId: user.id,
+    state: 'offline',
+    title: 'Test stream',
+    tags: [],
+    visibility: 'public',
+    allowedSubscriberIds: [],
+    latencyProfile: 'normal',
+  });
+  const minted = passwords.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+
+  const sendRequest = async (
+    obs: Awaited<ReturnType<typeof connectObs>>,
+    requestType: string,
+    requestData: Record<string, unknown> = {},
+  ) => {
+    const requestId = randomUUID();
+    obs.send({ op: protocol.Op.Request, d: { requestType, requestId, requestData } });
+    const resp = await obs.awaitFrame<{
+      requestType: string;
+      requestId: string;
+      requestStatus: { result: boolean; code: number; comment?: string };
+      responseData?: unknown;
+    }>(
+      (f) =>
+        f.op === protocol.Op.RequestResponse &&
+        (f.d as { requestId: string }).requestId === requestId,
+    );
+    return resp.d;
+  };
+
+  try {
+    const obs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${minted.record.id}`);
+    const hello = await obs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    obs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          minted.password,
+          hello.d.authentication!.salt,
+          hello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await obs.awaitFrame((f) => f.op === protocol.Op.Identified);
+
+    // GetStreamStatus on a fresh creator with a stream record but no
+    // sessions: outputActive=false.
+    let status = await sendRequest(obs, 'GetStreamStatus');
+    assert.equal(status.requestStatus.result, true);
+    assert.equal((status.responseData as { outputActive: boolean }).outputActive, false);
+    assert.equal(db.listStreamSessions(streamId).length, 0);
+
+    // StartStream → creates a session.
+    const start = await sendRequest(obs, 'StartStream');
+    assert.equal(start.requestStatus.result, true);
+    assert.equal(db.listStreamSessions(streamId).length, 1);
+    assert.equal(db.listStreamSessions(streamId)[0].endedAt, undefined);
+
+    // Idempotent: a second StartStream does NOT create a duplicate session.
+    const start2 = await sendRequest(obs, 'StartStream');
+    assert.equal(start2.requestStatus.result, true);
+    assert.equal(db.listStreamSessions(streamId).length, 1);
+
+    // GetStreamStatus reflects the live session.
+    status = await sendRequest(obs, 'GetStreamStatus');
+    assert.equal((status.responseData as { outputActive: boolean }).outputActive, true);
+
+    // SetCurrentProgramScene: 'Offline' → ends the session.
+    const goOffline = await sendRequest(obs, 'SetCurrentProgramScene', {
+      sceneName: 'Offline',
+    });
+    assert.equal(goOffline.requestStatus.result, true);
+    assert.ok(db.listStreamSessions(streamId)[0].endedAt);
+
+    // GetSceneList reflects the new state (Offline).
+    const list = await sendRequest(obs, 'GetSceneList');
+    assert.equal(
+      (list.responseData as { currentProgramSceneName: string }).currentProgramSceneName,
+      'Offline',
+    );
+    obs.close();
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('OBS-WS shim end-to-end: StartStream returns NotReady when creator has no stream record', async () => {
+  const { passwords, protocol, server: shim, db } = await loadModules();
+  const user = await seedUser(db);
+  const minted = passwords.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const obs = await connectObs(`ws://127.0.0.1:${h.port}/obs-ws/${minted.record.id}`);
+    const hello = await obs.awaitFrame<{
+      authentication?: { challenge: string; salt: string };
+    }>((f) => f.op === protocol.Op.Hello);
+    obs.send({
+      op: protocol.Op.Identify,
+      d: {
+        rpcVersion: 1,
+        authentication: protocol.computeClientAuth(
+          minted.password,
+          hello.d.authentication!.salt,
+          hello.d.authentication!.challenge,
+        ),
+      },
+    });
+    await obs.awaitFrame((f) => f.op === protocol.Op.Identified);
+    obs.send({
+      op: protocol.Op.Request,
+      d: { requestType: 'StartStream', requestId: 's1', requestData: {} },
+    });
+    const resp = await obs.awaitFrame<{
+      requestStatus: { result: boolean; code: number; comment?: string };
+    }>(
+      (f) =>
+        f.op === protocol.Op.RequestResponse &&
+        (f.d as { requestId: string }).requestId === 's1',
+    );
+    assert.equal(resp.d.requestStatus.result, false);
+    assert.equal(resp.d.requestStatus.code, protocol.REQ_STATUS.NotReady);
+    assert.match(resp.d.requestStatus.comment ?? '', /no stream record/i);
     obs.close();
   } finally {
     await h.dispose();

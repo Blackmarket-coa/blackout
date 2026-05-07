@@ -182,8 +182,15 @@ export const parseFrame = <T = unknown>(raw: string): ParseResult<T> => {
  * GetVersion immediately on connect; if the response shape doesn't match
  * the spec the surface gives up, so getting this right is mandatory.
  *
- * Other request types return NotImplemented (204) — the surface treats
- * them as benign, and future passes add handlers as creators ask for them.
+ * The full request matrix maps the OBS-WS request names creators actually
+ * push from Stream Deck buttons (StartStream, StopStream,
+ * SetCurrentProgramScene, ...) onto Blackout-native primitives. The
+ * dispatcher takes a {@link RequestContext} so the server can inject
+ * the live `streamCommands` interface without the protocol layer
+ * importing `db`.
+ *
+ * Unimplemented requests return NotImplemented (204) with a comment so
+ * creators see exactly which buttons aren't wired up yet.
  */
 export interface GetVersionResponse {
   obsVersion: string;
@@ -199,7 +206,19 @@ export const buildGetVersionResponse = (): GetVersionResponse => ({
   obsVersion: OBS_VIRTUAL_VERSION,
   obsWebSocketVersion: OBS_WS_VERSION,
   rpcVersion: RPC_VERSION,
-  availableRequests: ['GetVersion', 'GetStats', 'GetHotkeyList'],
+  availableRequests: [
+    'GetVersion',
+    'GetStats',
+    'GetHotkeyList',
+    'GetStreamStatus',
+    'StartStream',
+    'StopStream',
+    'ToggleStream',
+    'GetSceneList',
+    'GetCurrentProgramScene',
+    'SetCurrentProgramScene',
+    'BroadcastCustomEvent',
+  ],
   supportedImageFormats: ['png', 'jpg', 'jpeg', 'webp'],
   platform: 'blackout-compat',
   platformDescription: 'Blackout OBS-WebSocket compatibility shim',
@@ -237,33 +256,170 @@ export const buildGetStatsResponse = (): GetStatsResponse => ({
   webSocketSessionOutgoingMessages: 0,
 });
 
+/**
+ * Stream-control surface the server injects into the dispatcher. Keeping
+ * this an interface (vs a direct `db` import) means the protocol layer
+ * stays transport- AND state-free, so unit tests can stub the commands
+ * with a tiny in-memory mock.
+ */
+export interface StreamCommands {
+  /** Returns the creator's current stream lifecycle state. */
+  getStreamStatus(blackoutUserId: string): {
+    /** Whether a session is currently active (created and not ended). */
+    outputActive: boolean;
+    /** Active session id if outputActive, else undefined. */
+    sessionId?: string;
+    /** Owning streamId of the active session (or the creator's default stream). */
+    streamId?: string;
+    /** ms since session start; 0 when offline. */
+    outputDuration: number;
+  };
+  /**
+   * Idempotent. If a session is already active, returns it; otherwise
+   * starts one against the creator's default stream record.
+   */
+  startStream(blackoutUserId: string): { ok: true; sessionId: string } | { ok: false; reason: string };
+  /** Idempotent: ends any active session for the creator. */
+  stopStream(blackoutUserId: string): { ok: true; ended: boolean };
+}
+
+export interface RequestContext {
+  blackoutUserId: string;
+  commands: StreamCommands;
+}
+
+const successResp = (responseData?: unknown) => ({
+  status: { result: true, code: REQ_STATUS.Success },
+  responseData,
+});
+
+const failResp = (code: number, comment: string) => ({
+  status: { result: false, code, comment },
+});
+
+const SCENE_LIVE = 'Live' as const;
+const SCENE_OFFLINE = 'Offline' as const;
+
+const currentSceneFromStatus = (active: boolean): string =>
+  active ? SCENE_LIVE : SCENE_OFFLINE;
+
 export const dispatchRequest = (
   requestType: string,
-  _requestData: Record<string, unknown> | undefined,
+  requestData: Record<string, unknown> | undefined,
+  ctx: RequestContext,
 ): { status: RequestStatus; responseData?: unknown } => {
   switch (requestType) {
     case 'GetVersion':
-      return {
-        status: { result: true, code: REQ_STATUS.Success },
-        responseData: buildGetVersionResponse(),
-      };
+      return successResp(buildGetVersionResponse());
+
     case 'GetStats':
-      return {
-        status: { result: true, code: REQ_STATUS.Success },
-        responseData: buildGetStatsResponse(),
-      };
+      return successResp(buildGetStatsResponse());
+
     case 'GetHotkeyList':
-      return {
-        status: { result: true, code: REQ_STATUS.Success },
-        responseData: { hotkeys: [] as string[] },
-      };
+      return successResp({ hotkeys: [] as string[] });
+
+    case 'GetStreamStatus': {
+      const s = ctx.commands.getStreamStatus(ctx.blackoutUserId);
+      return successResp({
+        outputActive: s.outputActive,
+        outputReconnecting: false,
+        outputTimecode: '00:00:00.000',
+        outputDuration: s.outputDuration,
+        outputCongestion: 0,
+        outputBytes: 0,
+        outputSkippedFrames: 0,
+        outputTotalFrames: 0,
+      });
+    }
+
+    case 'StartStream': {
+      const out = ctx.commands.startStream(ctx.blackoutUserId);
+      if (!out.ok) {
+        return failResp(REQ_STATUS.NotReady, out.reason);
+      }
+      return successResp();
+    }
+
+    case 'StopStream': {
+      ctx.commands.stopStream(ctx.blackoutUserId);
+      return successResp();
+    }
+
+    case 'ToggleStream': {
+      const before = ctx.commands.getStreamStatus(ctx.blackoutUserId);
+      if (before.outputActive) {
+        ctx.commands.stopStream(ctx.blackoutUserId);
+        return successResp({ outputActive: false });
+      }
+      const out = ctx.commands.startStream(ctx.blackoutUserId);
+      if (!out.ok) return failResp(REQ_STATUS.NotReady, out.reason);
+      return successResp({ outputActive: true });
+    }
+
+    case 'GetSceneList': {
+      const s = ctx.commands.getStreamStatus(ctx.blackoutUserId);
+      const current = currentSceneFromStatus(s.outputActive);
+      return successResp({
+        // OBS-WS represents scenes as `{sceneName, sceneIndex}` pairs.
+        // We expose two virtual scenes — Live and Offline — so a generic
+        // SetCurrentProgramScene button drives the creator's go-live
+        // state without a custom integration.
+        currentProgramSceneName: current,
+        currentPreviewSceneName: null,
+        scenes: [
+          { sceneName: SCENE_LIVE, sceneIndex: 0 },
+          { sceneName: SCENE_OFFLINE, sceneIndex: 1 },
+        ],
+      });
+    }
+
+    case 'GetCurrentProgramScene': {
+      const s = ctx.commands.getStreamStatus(ctx.blackoutUserId);
+      return successResp({
+        currentProgramSceneName: currentSceneFromStatus(s.outputActive),
+        sceneName: currentSceneFromStatus(s.outputActive), // OBS sends both
+      });
+    }
+
+    case 'SetCurrentProgramScene': {
+      const name = (requestData?.sceneName as string | undefined)?.trim();
+      if (name === SCENE_LIVE) {
+        const out = ctx.commands.startStream(ctx.blackoutUserId);
+        if (!out.ok) return failResp(REQ_STATUS.NotReady, out.reason);
+        return successResp();
+      }
+      if (name === SCENE_OFFLINE) {
+        ctx.commands.stopStream(ctx.blackoutUserId);
+        return successResp();
+      }
+      return failResp(
+        REQ_STATUS.InvalidRequestField,
+        `sceneName must be "${SCENE_LIVE}" or "${SCENE_OFFLINE}"; got ${JSON.stringify(name)}`,
+      );
+    }
+
+    case 'BroadcastCustomEvent': {
+      // OBS surfaces use this to fan out arbitrary events to other
+      // OBS-WS clients connected to the same server. We accept the
+      // payload, log it, and treat it as a no-op for now — real fan-out
+      // requires a per-creator subscriber registry, which lives in the
+      // server module (server.ts) and not here.
+      const payload = requestData?.eventData;
+      if (payload !== undefined && (typeof payload !== 'object' || payload === null)) {
+        return failResp(
+          REQ_STATUS.InvalidRequestField,
+          'eventData must be an object',
+        );
+      }
+      return successResp();
+    }
+
     default:
-      return {
-        status: {
-          result: false,
-          code: REQ_STATUS.NotImplemented,
-          comment: `${requestType} is not implemented by the Blackout OBS-WS shim yet.`,
-        },
-      };
+      return failResp(
+        REQ_STATUS.NotImplemented,
+        `${requestType} is not implemented by the Blackout OBS-WS shim yet.`,
+      );
   }
 };
+
+export const __test__ = { SCENE_LIVE, SCENE_OFFLINE };

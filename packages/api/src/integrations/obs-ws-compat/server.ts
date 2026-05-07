@@ -4,6 +4,7 @@ import type { Duplex } from 'node:stream';
 // @ts-ignore - ws has no bundled types
 import { WebSocketServer } from 'ws';
 
+import { randomUUID } from 'node:crypto';
 import {
   Op,
   buildHello,
@@ -15,6 +16,7 @@ import {
   randomBase64,
   REQ_STATUS,
   type Frame,
+  type StreamCommands,
 } from './protocol';
 import { db } from '../../db/store';
 import {
@@ -42,10 +44,12 @@ type WsClient = any;
 interface ObsSession {
   ws: WsClient;
   passwordId: string;
+  blackoutUserId: string;
   challenge: string;
   salt: string;
   /** Set after Identify validates against the expected response. */
   identified: boolean;
+  commands: StreamCommands;
 }
 
 const sessions = new Set<ObsSession>();
@@ -73,7 +77,85 @@ const closeSession = (session: ObsSession, reason?: string, code = 1000): void =
 interface AttachOptions {
   /** Override the path prefix. Default: '/obs-ws/'. The id is appended. */
   pathPrefix?: string;
+  /** Inject stream commands. Tests override; production uses the db-backed default. */
+  streamCommands?: StreamCommands;
 }
+
+/**
+ * Default {@link StreamCommands} implementation backed by the db store.
+ * "Active session" = the most recent session row whose `endedAt` is null.
+ * "Default stream" = the creator's most-recently-updated StreamRecord;
+ *   if they don't have one yet, StartStream returns NotReady.
+ */
+const defaultStreamCommands = (): StreamCommands => ({
+  getStreamStatus: (blackoutUserId) => {
+    const streams = db.listStreamsByCreator(blackoutUserId);
+    if (streams.length === 0) {
+      return { outputActive: false, outputDuration: 0 };
+    }
+    // Across all of the creator's streams, find the most recently
+    // started session that hasn't ended yet.
+    let active: { streamId: string; sessionId: string; startedAtMs: number } | undefined;
+    for (const stream of streams) {
+      const sessions = db.listStreamSessions(stream.id);
+      for (const sess of sessions) {
+        if (sess.endedAt) continue;
+        const startedAtMs = Date.parse(sess.startedAt);
+        if (!active || startedAtMs > active.startedAtMs) {
+          active = { streamId: stream.id, sessionId: sess.id, startedAtMs };
+        }
+      }
+    }
+    if (active) {
+      return {
+        outputActive: true,
+        outputDuration: Math.max(0, Date.now() - active.startedAtMs),
+        sessionId: active.sessionId,
+        streamId: active.streamId,
+      };
+    }
+    return {
+      outputActive: false,
+      outputDuration: 0,
+      streamId: streams[0]?.id,
+    };
+  },
+  startStream: (blackoutUserId) => {
+    const streams = db.listStreamsByCreator(blackoutUserId);
+    if (streams.length === 0) {
+      return {
+        ok: false,
+        reason:
+          'No stream record yet — create a stream in the Blackout UI before starting from a control surface.',
+      };
+    }
+    // Idempotent: return the existing active session if one is open.
+    const stream = streams[0];
+    const open = db
+      .listStreamSessions(stream.id)
+      .find((s) => !s.endedAt);
+    if (open) return { ok: true, sessionId: open.id };
+    const session = db.createStreamSession({
+      id: randomUUID(),
+      streamId: stream.id,
+      startedAt: new Date().toISOString(),
+    });
+    return { ok: true, sessionId: session.id };
+  },
+  stopStream: (blackoutUserId) => {
+    const streams = db.listStreamsByCreator(blackoutUserId);
+    let ended = false;
+    for (const stream of streams) {
+      for (const sess of db.listStreamSessions(stream.id)) {
+        if (!sess.endedAt) {
+          db.endStreamSession(sess.id);
+          ended = true;
+        }
+      }
+    }
+    return { ok: true, ended };
+  },
+});
 
 /**
  * Attach an OBS-WS-compatible WS server to an http.Server. Returns a
@@ -85,6 +167,7 @@ export const attachObsWsShim = (
   options: AttachOptions = {},
 ): (() => void) => {
   const prefix = options.pathPrefix ?? OBS_WS_PATH_PREFIX;
+  const commands = options.streamCommands ?? defaultStreamCommands();
   const wss = new WebSocketServer({ noServer: true });
 
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -105,7 +188,7 @@ export const attachObsWsShim = (
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws: WsClient) => {
-      registerConnection(ws, passwordRow.id);
+      registerConnection(ws, passwordRow.id, passwordRow.blackoutUserId, commands);
     });
   };
   server.on('upgrade', onUpgrade);
@@ -117,13 +200,20 @@ export const attachObsWsShim = (
   };
 };
 
-const registerConnection = (ws: WsClient, passwordId: string): ObsSession => {
+const registerConnection = (
+  ws: WsClient,
+  passwordId: string,
+  blackoutUserId: string,
+  commands: StreamCommands,
+): ObsSession => {
   const session: ObsSession = {
     ws,
     passwordId,
+    blackoutUserId,
     challenge: randomBase64(32),
     salt: randomBase64(32),
     identified: false,
+    commands,
   };
   sessions.add(session);
 
@@ -244,7 +334,10 @@ const handleRequest = (session: ObsSession, frame: Frame): void => {
     );
     return;
   }
-  const out = dispatchRequest(requestType, d.requestData);
+  const out = dispatchRequest(requestType, d.requestData, {
+    blackoutUserId: session.blackoutUserId,
+    commands: session.commands,
+  });
   send(
     session.ws,
     buildRequestResponse(requestType, requestId, out.status, out.responseData),
@@ -262,10 +355,14 @@ const handleRequestBatch = (session: ObsSession, frame: Frame): void => {
   const d = (frame.d ?? {}) as any;
   const requestId: string = typeof d.requestId === 'string' ? d.requestId : '';
   const requests: BatchedRequestEntry[] = Array.isArray(d.requests) ? d.requests : [];
+  const ctx = {
+    blackoutUserId: session.blackoutUserId,
+    commands: session.commands,
+  };
   const results = requests.map((entry) => {
     const rt = entry?.requestType ?? '?';
     const rid = entry?.requestId ?? '?';
-    const out = dispatchRequest(rt, entry?.requestData);
+    const out = dispatchRequest(rt, entry?.requestData, ctx);
     return {
       requestType: rt,
       requestId: rid,
