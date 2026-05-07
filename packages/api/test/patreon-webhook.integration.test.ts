@@ -328,3 +328,119 @@ test('route: missing PATREON_WEBHOOK_SECRET → 503 (recoverable misconfig, Patr
   );
   assert.equal(res.status, 503);
 });
+
+test('route: pledge:create also dispatches subscriber.created via the outbound webhook pipeline', async () => {
+  const { route, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedPatreonLink(user.id, 'cam-77');
+  const outbound = await import('../src/services/outboundEventWebhooks');
+  const sub = outbound.register({
+    blackoutUserId: user.id,
+    name: 'patron alerts',
+    targetUrl: 'https://example.com/hook-patreon',
+    eventTypes: ['subscriber.created'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+  const router = route.buildPatreonWebhookRoute({ secretResolver: () => SECRET });
+
+  const calls: Array<{ url: string; body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const body = JSON.stringify({
+      data: {
+        type: 'member',
+        id: 'mem-7',
+        attributes: { currently_entitled_amount_cents: 1500 },
+        relationships: {
+          user: { data: { type: 'user', id: 'u-7' } },
+          campaign: { data: { type: 'campaign', id: 'cam-77' } },
+          currently_entitled_tiers: { data: [{ type: 'tier', id: 't-7' }] },
+        },
+      },
+      included: [
+        { type: 'user', id: 'u-7', attributes: { full_name: 'Patron Seven' } },
+        { type: 'tier', id: 't-7', attributes: { title: 'Gold tier' } },
+      ],
+    });
+    const res = await router.fetch(
+      buildRequest(body, {
+        'x-patreon-signature': sign(body),
+        'x-patreon-event': 'members:pledge:create',
+        'content-type': 'application/json',
+      }),
+    );
+    assert.equal(res.status, 200);
+
+    // Outbound dispatch is fire-and-forget; flush microtasks.
+    for (let i = 0; i < 30 && calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://example.com/hook-patreon');
+    const parsed = JSON.parse(calls[0].body);
+    assert.equal(parsed.embeds[0].title, 'New subscriber');
+    const field = (n: string) =>
+      parsed.embeds[0].fields.find((f: { name: string }) => f.name === n)?.value;
+    assert.equal(field('source'), 'patreon');
+    assert.equal(field('patronDisplayName'), 'Patron Seven');
+    assert.equal(field('amountCents'), '1500');
+    assert.equal(field('tierTitle'), 'Gold tier');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('route: pledge:update does NOT fire outbound (only :create maps to subscriber.created)', async () => {
+  const { route, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedPatreonLink(user.id, 'cam-88');
+  const outbound = await import('../src/services/outboundEventWebhooks');
+  const sub = outbound.register({
+    blackoutUserId: user.id,
+    name: 'patron alerts',
+    targetUrl: 'https://example.com/hook-no-fire',
+    eventTypes: ['subscriber.created'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+  const router = route.buildPatreonWebhookRoute({ secretResolver: () => SECRET });
+
+  const calls: Array<{ body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (_: any, init: any) => {
+    calls.push({ body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+  try {
+    const body = JSON.stringify({
+      data: {
+        type: 'member',
+        id: 'mem-8',
+        attributes: { currently_entitled_amount_cents: 500 },
+        relationships: {
+          user: { data: { type: 'user', id: 'u-8' } },
+          campaign: { data: { type: 'campaign', id: 'cam-88' } },
+        },
+      },
+      included: [{ type: 'user', id: 'u-8', attributes: { full_name: 'Mid Patron' } }],
+    });
+    const res = await router.fetch(
+      buildRequest(body, {
+        'x-patreon-signature': sign(body),
+        'x-patreon-event': 'members:pledge:update',
+        'content-type': 'application/json',
+      }),
+    );
+    assert.equal(res.status, 200);
+    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+    assert.equal(calls.length, 0, 'pledge:update is not (yet) projected to an outbound type');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

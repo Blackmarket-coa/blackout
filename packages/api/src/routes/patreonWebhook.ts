@@ -9,6 +9,7 @@ import {
 } from '../integrations/patreon/webhookEvents';
 import { toWidgetAlertFromPatreon } from '../integrations/widgets/streamlabsShape';
 import { publish as publishWidgetAlert } from '../services/widgetBus';
+import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
 import { log } from '../telemetry/logger';
 
 /**
@@ -79,6 +80,26 @@ export const defaultPatreonForwarder = (
     campaignUserId: event.campaignUserId,
     delivered: result.delivered,
   });
+
+  // Outbound webhook dispatch: a new pledge is the Patreon-side analogue
+  // of a Twitch sub. Pledge updates / cancels intentionally aren't fired
+  // here yet — neither maps cleanly onto an existing OutboundEventType.
+  if (event.kind === 'patreon_pledge' && event.eventType === 'members:pledge:create') {
+    void dispatchOutboundEvent({
+      type: 'subscriber.created',
+      blackoutUserId: linkedAccountsForCampaign.blackoutUserId,
+      data: {
+        source: 'patreon',
+        patronUserId: event.patronUserId,
+        patronDisplayName: event.patronDisplayName,
+        amountCents: event.amountCents,
+        currency: event.currency,
+        tierTitle: event.tierTitle,
+      },
+    }).catch((err) =>
+      log.warn('patreon_webhook_outbound_dispatch_threw', { error: String(err) }),
+    );
+  }
 };
 
 export const buildPatreonWebhookRoute = (

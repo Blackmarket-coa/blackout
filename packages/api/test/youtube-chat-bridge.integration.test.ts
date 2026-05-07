@@ -653,3 +653,98 @@ test('service.sendBridgeMessage: strips CR/LF defensively', async () => {
   await service.sendBridgeMessage(created.record, 'hi\r\nthere', { fetch: stubFetch });
   assert.equal(sentBody, 'hi there');
 });
+
+test('service.syncBridge: a YouTube SuperChat message dispatches cheer.received in addition to chat.message.received', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  await seedYoutubeLink(user.id);
+  const created = service.createBridge({
+    blackoutUserId: user.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!den:srv',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+
+  // Register an outbound webhook subscribing to BOTH event types so we
+  // can assert exactly two deliveries fire from this one SuperChat.
+  const outbound = await import('../src/services/outboundEventWebhooks');
+  const sub = outbound.register({
+    blackoutUserId: user.id,
+    name: 'cheers',
+    targetUrl: 'https://example.com/hook',
+    eventTypes: ['cheer.received', 'chat.message.received'],
+  });
+  if (sub.kind !== 'ok') return assert.fail();
+
+  const outboundCalls: Array<{ url: string; body: string }> = [];
+  const originalFetch = globalThis.fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  globalThis.fetch = (async (url: any, init: any) => {
+    outboundCalls.push({ url: String(url), body: String(init?.body ?? '') });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+
+  const { matrixClient } = buildFakeMatrix();
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/liveBroadcasts')) {
+      return new Response(
+        JSON.stringify({ items: [{ id: 'b1', snippet: { liveChatId: 'lc-sc' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    if (url.includes('/liveChat/messages')) {
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: 'sc-msg-1',
+              snippet: {
+                type: 'superChatEvent',
+                publishedAt: '2026-05-07T00:00:00Z',
+                superChatDetails: {
+                  amountDisplayString: '$5.00',
+                  userComment: 'great stream',
+                },
+              },
+              authorDetails: { channelId: 'UC-author', displayName: 'Big Fan' },
+            },
+          ],
+          nextPageToken: 'cursor-after-sc-1',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    assert.fail(`unexpected URL: ${url}`);
+  }) as unknown as typeof fetch;
+
+  try {
+    const outcome = await service.syncBridge(created.record, { matrixClient, fetch: stubFetch });
+    assert.equal(outcome.kind, 'ok');
+    // Outbound delivery is fire-and-forget — give microtasks a chance.
+    for (let i = 0; i < 30 && outboundCalls.length < 2; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(
+      outboundCalls.length,
+      2,
+      'SuperChat fires both chat.message.received and cheer.received',
+    );
+    const titles = outboundCalls
+      .map((c) => JSON.parse(c.body).embeds[0].title)
+      .sort();
+    assert.deepEqual(titles, ['Chat message', 'Cheer / Bits']);
+
+    // The cheer.received delivery carries the SuperChat amount.
+    const cheerBody = outboundCalls
+      .map((c) => JSON.parse(c.body))
+      .find((b) => b.embeds[0].title === 'Cheer / Bits');
+    const cheerField = (n: string) =>
+      cheerBody.embeds[0].fields.find((f: { name: string }) => f.name === n)?.value;
+    assert.equal(cheerField('superChatAmountDisplay'), '$5.00');
+    assert.equal(cheerField('source'), 'youtube');
+    assert.equal(cheerField('snippetType'), 'superChatEvent');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -223,6 +223,31 @@ export const syncBridge = async (
         superChatAmountDisplay: normalized.superChatAmountDisplay,
       },
     }).catch(() => {});
+    // SuperChat / Super Sticker events are the YouTube analogue of Twitch
+    // bits — fire cheer.received in addition to the chat.message.received
+    // dispatch above so a creator subscribing to "cheers" sees both
+    // platforms' high-value chat events without setting up a Twitch-only
+    // pipe AND a YouTube-only pipe.
+    if (
+      normalized.superChatAmountDisplay ||
+      normalized.snippetType === 'superChatEvent' ||
+      normalized.snippetType === 'superStickerEvent'
+    ) {
+      void dispatchOutboundEvent({
+        type: 'cheer.received',
+        blackoutUserId: bridge.blackoutUserId,
+        data: {
+          source: 'youtube',
+          youtubeChannelId: bridge.youtubeChannelId,
+          authorDisplayName: normalized.authorDisplayName,
+          authorChannelId: normalized.authorChannelId,
+          superChatAmountDisplay: normalized.superChatAmountDisplay,
+          message: normalized.body,
+          platformMessageId: normalized.platformMessageId,
+          snippetType: normalized.snippetType,
+        },
+      }).catch(() => {});
+    }
     // Fan out to the chatMessageHub so the Twitch IRC bot shim can
     // deliver this YouTube chat message as a Twitch-shape PRIVMSG to any
     // bot that JOIN'd `#yt:<channelId>`. The author's *channel id* on
