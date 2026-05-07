@@ -289,6 +289,169 @@ test('IRC shim: bot PRIVMSG forwards into the bridge’s Matrix room with origin
   }
 });
 
+test('IRC shim: bot can JOIN #yt:<channelId> for a YouTube bridge and receive YT chat', async () => {
+  const { tokens, shim, hub, db } = await loadModules();
+  const user = await seedUser(db);
+  db.createYoutubeChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    youtubeChannelId: 'UCabc123',
+    matrixRoomId: '!yt-den:srv',
+    isActive: true,
+  });
+  const minted = tokens.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const bot = await connectBot(h.url);
+    bot.send('CAP REQ :twitch.tv/tags');
+    bot.send(`PASS oauth:${minted.secret}`);
+    bot.send('NICK MyBot');
+    // Channel keys are case-insensitive on IRC; we lowercase on publish.
+    bot.send('JOIN #yt:ucabc123');
+    await bot.awaitLine((l) => /JOIN #yt:ucabc123/.test(l));
+    // Publish a YT chat message into the hub like youtubeChatBridge does.
+    hub.publishChatMessage(
+      { blackoutUserId: user.id, channelKey: '#yt:ucabc123' },
+      {
+        source: 'youtube',
+        authorLogin: 'fan_yt',
+        authorDisplayName: 'Fan YT',
+        body: 'a SuperChat from yt',
+        platformMessageId: 'yt-msg-1',
+        tags: { 'display-name': 'Fan YT', 'blackout-superchat': '$5.00' },
+      },
+    );
+    const line = await bot.awaitLine((l) =>
+      /PRIVMSG #yt:ucabc123 :a SuperChat from yt/.test(l),
+    );
+    assert.match(line, /^@/);
+    assert.match(line, /blackout-superchat=\$5\.00/);
+    assert.match(line, /:fan_yt!fan_yt@fan_yt\.tmi\.twitch\.tv PRIVMSG #yt:ucabc123/);
+
+    // Bot's PRIVMSG into the YT-shaped channel still lands in Matrix.
+    bot.send('PRIVMSG #yt:ucabc123 :hi yt audience');
+    for (let i = 0; i < 30 && h.matrixCalls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(h.matrixCalls.length, 1);
+    assert.equal(h.matrixCalls[0].roomId, '!yt-den:srv');
+    assert.equal(h.matrixCalls[0].content.body, 'hi yt audience');
+    assert.equal(h.matrixCalls[0].content['m.blackout.origin'], 'twitch_irc_compat_bot');
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('IRC shim: bot can JOIN #kick:<chatroomId> for a Kick bridge and round-trip', async () => {
+  const { tokens, shim, hub, db } = await loadModules();
+  const user = await seedUser(db);
+  db.createKickChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    kickChatroomId: '99',
+    matrixRoomId: '!kick-den:srv',
+    isActive: true,
+  });
+  const minted = tokens.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const bot = await connectBot(h.url);
+    bot.send('CAP REQ :twitch.tv/tags');
+    bot.send(`PASS oauth:${minted.secret}`);
+    bot.send('NICK MyBot');
+    bot.send('JOIN #kick:99');
+    await bot.awaitLine((l) => /JOIN #kick:99/.test(l));
+    hub.publishChatMessage(
+      { blackoutUserId: user.id, channelKey: '#kick:99' },
+      {
+        source: 'kick',
+        authorLogin: 'kickfan',
+        authorDisplayName: 'KickFan',
+        body: 'hello from kick',
+        platformMessageId: 'kick-1',
+        tags: { 'display-name': 'KickFan' },
+      },
+    );
+    const line = await bot.awaitLine((l) =>
+      /PRIVMSG #kick:99 :hello from kick/.test(l),
+    );
+    assert.match(line, /:kickfan!kickfan@kickfan\.tmi\.twitch\.tv PRIVMSG #kick:99/);
+
+    bot.send('PRIVMSG #kick:99 :hey kick audience');
+    for (let i = 0; i < 30 && h.matrixCalls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    assert.equal(h.matrixCalls.length, 1);
+    assert.equal(h.matrixCalls[0].roomId, '!kick-den:srv');
+    assert.equal(h.matrixCalls[0].content.body, 'hey kick audience');
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('IRC shim: a single connection can JOIN three platforms and receive each platform’s chat', async () => {
+  const { tokens, shim, hub, db } = await loadModules();
+  const user = await seedUser(db);
+  db.createTwitchChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    twitchUserId: '1',
+    twitchChannel: 'multi',
+    matrixRoomId: '!t:srv',
+    isActive: true,
+  });
+  db.createYoutubeChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    youtubeChannelId: 'UCmulti',
+    matrixRoomId: '!y:srv',
+    isActive: true,
+  });
+  db.createKickChatBridge({
+    id: randomUUID(),
+    blackoutUserId: user.id,
+    kickChatroomId: '7',
+    matrixRoomId: '!k:srv',
+    isActive: true,
+  });
+  const minted = tokens.mint({ blackoutUserId: user.id });
+  if (minted.kind !== 'ok') return assert.fail();
+  const h = await buildHarness(shim);
+  try {
+    const bot = await connectBot(h.url);
+    bot.send('CAP REQ :twitch.tv/tags');
+    bot.send(`PASS oauth:${minted.secret}`);
+    bot.send('NICK MyBot');
+    bot.send('JOIN #multi');
+    bot.send('JOIN #yt:ucmulti');
+    bot.send('JOIN #kick:7');
+    await bot.awaitLine((l) => /JOIN #multi/.test(l));
+    await bot.awaitLine((l) => /JOIN #yt:ucmulti/.test(l));
+    await bot.awaitLine((l) => /JOIN #kick:7/.test(l));
+
+    // Three publishes; each should arrive on the right channel.
+    hub.publishChatMessage(
+      { blackoutUserId: user.id, channelKey: '#multi' },
+      { source: 'twitch', authorLogin: 't_user', body: 'tw chat' },
+    );
+    hub.publishChatMessage(
+      { blackoutUserId: user.id, channelKey: '#yt:ucmulti' },
+      { source: 'youtube', authorLogin: 'y_user', body: 'yt chat' },
+    );
+    hub.publishChatMessage(
+      { blackoutUserId: user.id, channelKey: '#kick:7' },
+      { source: 'kick', authorLogin: 'k_user', body: 'kick chat' },
+    );
+    await bot.awaitLine((l) => /PRIVMSG #multi :tw chat/.test(l));
+    await bot.awaitLine((l) => /PRIVMSG #yt:ucmulti :yt chat/.test(l));
+    await bot.awaitLine((l) => /PRIVMSG #kick:7 :kick chat/.test(l));
+  } finally {
+    await h.dispose();
+  }
+});
+
 test('IRC shim: PING from bot is answered with PONG echoing the payload', async () => {
   const { tokens, shim, db } = await loadModules();
   const user = await seedUser(db);

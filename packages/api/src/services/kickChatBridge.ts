@@ -11,6 +11,7 @@ import type { NormalizedKickChatMessage } from '../integrations/kick/chatBridge'
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from './twitchChatBridge';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
+import { publishChatMessage } from './chatMessageHub';
 import { log } from '../telemetry/logger';
 
 /**
@@ -82,6 +83,30 @@ const buildOnMessage =
         platformMessageId: msg.platformMessageId,
       },
     }).catch(() => {});
+    // Fan out to the chatMessageHub so the Twitch IRC bot shim delivers
+    // Kick chat as a Twitch-shape PRIVMSG to any bot that JOIN'd
+    // `#kick:<chatroomId>`. Kick usernames are already IRC-safe-ish; we
+    // lowercase + sanitize defensively.
+    const safeAuthor = (msg.authorUsername || 'kick-user')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '_')
+      .slice(0, 24) || 'kick-user';
+    publishChatMessage(
+      { blackoutUserId: record.blackoutUserId, channelKey: `#kick:${record.kickChatroomId}` },
+      {
+        source: 'kick',
+        authorLogin: safeAuthor,
+        authorDisplayName: msg.authorUsername,
+        body: msg.body,
+        platformMessageId: msg.platformMessageId,
+        tags: {
+          ...(msg.authorUsername ? { 'display-name': msg.authorUsername } : {}),
+          ...(msg.authorColor ? { color: msg.authorColor } : {}),
+          ...(msg.platformMessageId ? { id: msg.platformMessageId } : {}),
+          'tmi-sent-ts': String(msg.sentAtMs),
+        },
+      },
+    );
     void matrix
       .sendEvent(record.matrixRoomId, content, { txnId })
       .then((result) => {

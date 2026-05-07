@@ -15,6 +15,7 @@ import {
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from './twitchChatBridge';
 import { dispatchEvent as dispatchOutboundEvent } from './outboundEventWebhooks';
+import { publishChatMessage } from './chatMessageHub';
 import { log } from '../telemetry/logger';
 
 /**
@@ -222,6 +223,34 @@ export const syncBridge = async (
         superChatAmountDisplay: normalized.superChatAmountDisplay,
       },
     }).catch(() => {});
+    // Fan out to the chatMessageHub so the Twitch IRC bot shim can
+    // deliver this YouTube chat message as a Twitch-shape PRIVMSG to any
+    // bot that JOIN'd `#yt:<channelId>`. The author's *channel id* on
+    // YouTube isn't IRC-safe (URL-safe base64 with hyphens) — we
+    // lowercase + sanitize for the IRC userhost while keeping the
+    // display-name in the IRCv3 tag.
+    const safeAuthor = (normalized.authorChannelId || normalized.authorDisplayName || 'yt-user')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '_')
+      .slice(0, 24) || 'yt-user';
+    publishChatMessage(
+      { blackoutUserId: bridge.blackoutUserId, channelKey: `#yt:${bridge.youtubeChannelId.toLowerCase()}` },
+      {
+        source: 'youtube',
+        authorLogin: safeAuthor,
+        authorDisplayName: normalized.authorDisplayName,
+        body: normalized.body,
+        platformMessageId: normalized.platformMessageId,
+        tags: {
+          ...(normalized.authorDisplayName ? { 'display-name': normalized.authorDisplayName } : {}),
+          ...(normalized.platformMessageId ? { id: normalized.platformMessageId } : {}),
+          ...(normalized.superChatAmountDisplay
+            ? { 'blackout-superchat': normalized.superChatAmountDisplay }
+            : {}),
+          'tmi-sent-ts': String(normalized.sentAtMs),
+        },
+      },
+    );
     try {
       const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
       if (result.ok) delivered += 1;

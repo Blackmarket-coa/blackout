@@ -91,23 +91,49 @@ const closeSession = (session: BotSession, reason?: string): void => {
 };
 
 /**
- * Find the creator's Twitch chat bridge whose Twitch channel slug matches
- * the IRC channel the bot wants to JOIN. The channel arg is `#login`
- * (lowercased); bridge.twitchChannel is stored without the `#`.
+ * Resolve a bot's `JOIN #channel` to one of the creator's chat bridges.
+ *
+ * Channel-name conventions (lowercased — IRC channel names are
+ * case-insensitive):
+ *   `#<login>`             — Twitch chat bridge (twitch_chat_bridges.twitchChannel)
+ *   `#yt:<channelId>`      — YouTube chat bridge (youtube_chat_bridges.youtubeChannelId)
+ *   `#kick:<chatroomId>`   — Kick chat bridge (kick_chat_bridges.kickChatroomId)
+ *
+ * Bots author one connection across every platform the creator's
+ * bridged. PRIVMSG into any of these always lands in the bridge's
+ * Matrix room (we don't try to relay back out to YouTube / Kick).
  */
 const findBridgeForJoin = (
   blackoutUserId: string,
   channel: string,
-): { matrixRoomId: string; twitchChannel: string } | null => {
+): { matrixRoomId: string; source: 'twitch' | 'youtube' | 'kick' } | null => {
   if (!channel.startsWith('#')) return null;
   const slug = channel.slice(1);
+
+  if (slug.startsWith('yt:')) {
+    const channelId = slug.slice(3);
+    if (!channelId) return null;
+    const bridges = db.listYoutubeChatBridgesForUser(blackoutUserId);
+    const match = bridges.find(
+      (b) => b.isActive && b.youtubeChannelId.toLowerCase() === channelId,
+    );
+    return match ? { matrixRoomId: match.matrixRoomId, source: 'youtube' } : null;
+  }
+
+  if (slug.startsWith('kick:')) {
+    const chatroomId = slug.slice(5);
+    if (!chatroomId) return null;
+    const bridges = db.listKickChatBridgesForUser(blackoutUserId);
+    const match = bridges.find((b) => b.isActive && b.kickChatroomId === chatroomId);
+    return match ? { matrixRoomId: match.matrixRoomId, source: 'kick' } : null;
+  }
+
+  // Default: Twitch chat bridge keyed by login slug.
   const bridges = db.listTwitchChatBridgesForUser(blackoutUserId);
   const match = bridges.find(
     (b) => b.isActive && b.twitchChannel.toLowerCase() === slug,
   );
-  return match
-    ? { matrixRoomId: match.matrixRoomId, twitchChannel: match.twitchChannel }
-    : null;
+  return match ? { matrixRoomId: match.matrixRoomId, source: 'twitch' } : null;
 };
 
 interface AttachOptions {
@@ -207,9 +233,9 @@ const handleEvent = (
         return;
       }
       session.state.joinedChannels.add(evt.channel);
-      // Subscribe to the in-process hub so chat from this Twitch channel
-      // (already flowing through twitchChatBridge into Matrix) reaches
-      // the bot as a Twitch-shape PRIVMSG.
+      // Subscribe to the in-process hub so chat from whatever platform
+      // the channel resolves to (Twitch / YouTube / Kick — see
+      // findBridgeForJoin) reaches the bot as a Twitch-shape PRIVMSG.
       const dispose = subscribeChatMessages({
         key: { blackoutUserId: session.blackoutUserId, channelKey: evt.channel },
         listener: (msg: HubChatMessage) =>
