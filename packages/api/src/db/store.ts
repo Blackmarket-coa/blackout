@@ -43,6 +43,7 @@ import type {
   PendingOAuthLinkRecord,
   TwitchChatBridgeRecord,
   TwitchEventSubscriptionRecord,
+  WidgetAlertTokenRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -85,6 +86,7 @@ type PersistedState = {
   pendingOAuthLinks: PendingOAuthLinkRecord[];
   twitchChatBridges: TwitchChatBridgeRecord[];
   twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
+  widgetAlertTokens: WidgetAlertTokenRecord[];
 };
 
 class InMemoryDb {
@@ -127,6 +129,8 @@ class InMemoryDb {
   twitchChatBridges = new Map<string, TwitchChatBridgeRecord>();
   /** Keyed by helixSubscriptionId for O(1) inbound-notification lookup. */
   twitchEventSubscriptions = new Map<string, TwitchEventSubscriptionRecord>();
+  /** Keyed by secretHash so the SSE handler can validate a presented bearer in O(1). */
+  widgetAlertTokens = new Map<string, WidgetAlertTokenRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -434,6 +438,65 @@ class InMemoryDb {
 
   deleteTwitchEventSubscription(helixId: string): boolean {
     return this.twitchEventSubscriptions.delete(helixId);
+  }
+
+  // --- widget alert tokens (Phase 1 / Track A) ---
+
+  createWidgetAlertToken(
+    input: Omit<WidgetAlertTokenRecord, 'createdAt'>,
+  ): WidgetAlertTokenRecord {
+    const record: WidgetAlertTokenRecord = { ...input, createdAt: nowIso() };
+    this.widgetAlertTokens.set(record.secretHash, record);
+    return record;
+  }
+
+  getWidgetAlertTokenById(id: string): WidgetAlertTokenRecord | undefined {
+    return [...this.widgetAlertTokens.values()].find((row) => row.id === id);
+  }
+
+  /** Returns the active (non-revoked) token matching the bearer hash, or undefined. */
+  findActiveWidgetAlertTokenByHash(
+    secretHash: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const row = this.widgetAlertTokens.get(secretHash);
+    if (!row || row.revokedAt) return undefined;
+    return row;
+  }
+
+  listWidgetAlertTokensForUser(
+    blackoutUserId: string,
+  ): WidgetAlertTokenRecord[] {
+    return [...this.widgetAlertTokens.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeWidgetAlertToken(
+    id: string,
+    reason: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const existing = this.getWidgetAlertTokenById(id);
+    if (!existing || existing.revokedAt) return undefined;
+    const updated: WidgetAlertTokenRecord = {
+      ...existing,
+      revokedAt: nowIso(),
+      revokedReason: reason,
+    };
+    this.widgetAlertTokens.set(updated.secretHash, updated);
+    return updated;
+  }
+
+  touchWidgetAlertTokenDelivered(
+    secretHash: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const existing = this.widgetAlertTokens.get(secretHash);
+    if (!existing) return undefined;
+    const updated: WidgetAlertTokenRecord = {
+      ...existing,
+      lastDeliveredAt: nowIso(),
+    };
+    this.widgetAlertTokens.set(secretHash, updated);
+    return updated;
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -1154,6 +1217,9 @@ class FileBackedDb extends InMemoryDb {
     this.twitchEventSubscriptions = new Map(
       (parsed.twitchEventSubscriptions ?? []).map((row) => [row.helixSubscriptionId, row]),
     );
+    this.widgetAlertTokens = new Map(
+      (parsed.widgetAlertTokens ?? []).map((row) => [row.secretHash, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1193,6 +1259,7 @@ class FileBackedDb extends InMemoryDb {
       pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
       twitchChatBridges: [...this.twitchChatBridges.values()],
       twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
+      widgetAlertTokens: [...this.widgetAlertTokens.values()],
     };
   }
 
@@ -1652,6 +1719,27 @@ class FileBackedDb extends InMemoryDb {
     if (removed) this.persist();
     return removed;
   }
+
+  override createWidgetAlertToken(
+    input: Omit<WidgetAlertTokenRecord, 'createdAt'>,
+  ): WidgetAlertTokenRecord {
+    const record = super.createWidgetAlertToken(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeWidgetAlertToken(
+    id: string,
+    reason: string,
+  ): WidgetAlertTokenRecord | undefined {
+    const updated = super.revokeWidgetAlertToken(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchWidgetAlertTokenDelivered` override — touching last-delivered on
+  // every SSE flush would write the JSON store thousands of times per
+  // stream. The diagnostic field is in-memory only on the file-backed db.
 }
 
 export const db = DB_MODE === 'memory' ? new InMemoryDb() : new FileBackedDb();

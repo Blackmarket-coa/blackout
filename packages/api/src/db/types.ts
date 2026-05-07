@@ -114,6 +114,21 @@ export interface TwitchEventSubscriptionRecord {
   updatedAt: string;
 }
 
+export interface WidgetAlertTokenRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Optional human label, e.g. "Main OBS". */
+  label?: string;
+  /** SHA-256 hex of the bearer secret. Plaintext is never persisted. */
+  secretHash: string;
+  scopes: string[];
+  createdAt: string;
+  revokedAt?: string;
+  revokedReason?: string;
+  /** Diagnostics: most recent SSE delivery to this token. */
+  lastDeliveredAt?: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

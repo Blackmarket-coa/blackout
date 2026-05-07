@@ -8,6 +8,8 @@ import {
 import { findBridgeForEvent } from '../services/twitchEventSubManager';
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
 import type { MatrixSendEventClient } from '../services/twitchChatBridge';
+import { publish as publishWidgetAlert } from '../services/widgetBus';
+import { toWidgetAlert } from '../integrations/widgets/streamlabsShape';
 import { log } from '../telemetry/logger';
 
 /**
@@ -108,12 +110,17 @@ export const buildDefaultEventForwarder = (
     });
     return;
   }
+
+  // Fan out to the widget SSE bus FIRST so browser-source overlays render
+  // the alert before the Matrix room renders the chat-attribution version
+  // — overlays are timing-sensitive, Matrix isn't. The bus call is
+  // synchronous + in-process so this adds no perceptible delay.
+  const alert = toWidgetAlert(event);
+  if (alert) {
+    publishWidgetAlert(bridge.blackoutUserId, alert);
+  }
+
   const content = buildAlertContent(event);
-  // Use the EventSub subscription id + Twitch's message-id-equivalent
-  // (subscription created_at + event timestamp) as the Matrix txn id when
-  // possible, so retransmits don't double-deliver. We don't have a stable
-  // per-event id from Twitch in every payload, so fall back to a derived
-  // hash-shaped string — Matrix will accept any string.
   const txnId = `twitch-eventsub-${raw.subscription.id}-${Date.now()}`;
   const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
   if (!result.ok) {
