@@ -22,6 +22,7 @@ const loadModules = async () => {
   const donationEvents = await import('../src/integrations/streamlabs/donationEvents');
   const shape = await import('../src/integrations/widgets/streamlabsShape');
   const sync = await import('../src/services/streamlabsDonationSync');
+  const scheduler = await import('../src/services/streamlabsDonationScheduler');
   const oauthProviders = await import('../src/services/oauthProviders');
   const widgetBus = await import('../src/services/widgetBus');
   const linkedAccounts = await import('../src/services/linkedAccounts');
@@ -31,6 +32,7 @@ const loadModules = async () => {
   secretBox.clearSecretBoxConfigCache();
   widgetBus.clearAllSubscribersForTest();
   sync.clearStreamlabsCursorsForTest();
+  scheduler.stopStreamlabsScheduler();
   store.db.linkedAccounts.clear();
   return {
     oauth,
@@ -38,6 +40,7 @@ const loadModules = async () => {
     donationEvents,
     shape,
     sync,
+    scheduler,
     oauthProviders,
     widgetBus,
     linkedAccounts,
@@ -435,4 +438,109 @@ test('sync: dryRun does NOT publish AND does NOT persist the cursor', async () =
     'dryRun must NOT advance the persisted cursor',
   );
   off();
+});
+
+// =============================================================================
+// scheduler
+// =============================================================================
+
+test('scheduler.runStreamlabsPoll: walks every linked Streamlabs account; aggregates results', async () => {
+  const { scheduler, db } = await loadModules();
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  await seedStreamlabsLink(alice.id, 'sl-alice');
+  await seedStreamlabsLink(bob.id, 'sl-bob');
+  // A Patreon link must NOT be visited by the Streamlabs scheduler.
+  const linkedAccounts = await import('../src/services/linkedAccounts');
+  linkedAccounts.upsertLinkedAccount({
+    blackoutUserId: alice.id,
+    provider: 'patreon',
+    providerUserId: 'pat-alice',
+    providerUsername: 'AlicePatreon',
+    tokens: { accessToken: 'p', refreshToken: 'r', expiresInSeconds: 3600, scopes: [] },
+  });
+
+  let donationsServed = 0;
+  const stubFetch: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    // The scheduler must only call Streamlabs URLs — never Patreon's.
+    assert.ok(url.startsWith('https://streamlabs.com/'), `unexpected URL: ${url}`);
+    donationsServed += 1;
+    return new Response(
+      JSON.stringify({
+        data: [
+          {
+            donation_id: 1000 + donationsServed,
+            name: `Donor${donationsServed}`,
+            amount: '1.00',
+            currency: 'USD',
+            message: '',
+            created_at: 0,
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as unknown as typeof fetch;
+
+  const result = await scheduler.runStreamlabsPoll({ fetch: stubFetch });
+  assert.equal(result.inspected, 2, 'two linked Streamlabs accounts');
+  assert.equal(result.newDonations, 2);
+  assert.equal(result.errors, 0);
+  assert.equal(result.rateLimited, 0);
+});
+
+test('scheduler.runStreamlabsPoll: one user erroring does not block the others', async () => {
+  const { scheduler, db } = await loadModules();
+  const alice = await seedUser(db);
+  const bob = await seedUser(db);
+  await seedStreamlabsLink(alice.id, 'sl-alice');
+  await seedStreamlabsLink(bob.id, 'sl-bob');
+
+  let calls = 0;
+  const stubFetch: typeof fetch = (async () => {
+    calls += 1;
+    // First user gets a 500; second user succeeds.
+    if (calls === 1) return new Response('{}', { status: 500 });
+    return new Response(
+      JSON.stringify({
+        data: [
+          { donation_id: 9000, name: 'B', amount: '2.00', currency: 'USD', message: '', created_at: 0 },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as unknown as typeof fetch;
+
+  const result = await scheduler.runStreamlabsPoll({ fetch: stubFetch });
+  assert.equal(result.inspected, 2);
+  assert.equal(result.errors, 1);
+  assert.equal(result.newDonations, 1, 'second user still synced');
+});
+
+test('scheduler.runStreamlabsPoll: rate-limit on a user shows up in the rateLimited counter', async () => {
+  const { scheduler, db } = await loadModules();
+  const alice = await seedUser(db);
+  await seedStreamlabsLink(alice.id, 'sl-alice');
+  const stubFetch: typeof fetch = (async () =>
+    new Response('{}', { status: 429, headers: { 'retry-after': '5' } })) as unknown as typeof fetch;
+  const result = await scheduler.runStreamlabsPoll({ fetch: stubFetch });
+  assert.equal(result.rateLimited, 1);
+  assert.equal(result.errors, 0);
+});
+
+test('scheduler.start/stop: idempotent start; stop clears the timer', async () => {
+  const { scheduler } = await loadModules();
+  assert.equal(scheduler.isStreamlabsSchedulerRunning(), false);
+  const a = scheduler.startStreamlabsScheduler(60_000);
+  assert.equal(scheduler.isStreamlabsSchedulerRunning(), true);
+  // Idempotent — second call returns the same stop reference.
+  const b = scheduler.startStreamlabsScheduler(60_000);
+  assert.equal(a.stop, b.stop);
+  a.stop();
+  assert.equal(scheduler.isStreamlabsSchedulerRunning(), false);
+  // Re-startable after stop.
+  const c = scheduler.startStreamlabsScheduler(60_000);
+  assert.equal(scheduler.isStreamlabsSchedulerRunning(), true);
+  c.stop();
 });

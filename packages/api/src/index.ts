@@ -186,6 +186,26 @@ if (shouldListen) {
     });
   }
 
+  // Streamlabs donation poller. Walks every linked Streamlabs account on
+  // the configured interval and syncs new donations into the widget bus,
+  // so a creator's overlay fires within minutes of a real donation
+  // landing on Streamlabs — without them having to click "Sync donations
+  // now" themselves. Env var also accepts a custom interval in seconds
+  // for tighter / looser cadence.
+  if (process.env.BLACKOUT_STREAMLABS_AUTOSYNC === '1') {
+    const intervalSeconds = Number.parseInt(
+      process.env.BLACKOUT_STREAMLABS_AUTOSYNC_INTERVAL_SECONDS ?? '',
+      10,
+    );
+    const intervalMs = Number.isFinite(intervalSeconds) && intervalSeconds > 0
+      ? intervalSeconds * 1000
+      : undefined;
+    void import('./services/streamlabsDonationScheduler').then(({ startStreamlabsScheduler }) => {
+      startStreamlabsScheduler(intervalMs);
+      log.info('streamlabs_donation_scheduler_started', { intervalMs });
+    });
+  }
+
   serve({ fetch: app.fetch, port: PORT }, (info) => {
     log.info('blackout-server listening', { port: info.port });
   });

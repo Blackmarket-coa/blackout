@@ -310,6 +310,11 @@ class InMemoryDb {
     return [...this.linkedAccounts.values()].filter((row) => row.blackoutUserId === userId);
   }
 
+  /** Used by polling-style schedulers (Streamlabs sync, YouTube live chat) to walk every link. */
+  listAllLinkedAccountsForProvider(provider: LinkedAccountProvider): LinkedAccountRecord[] {
+    return [...this.linkedAccounts.values()].filter((row) => row.provider === provider);
+  }
+
   deleteLinkedAccount(userId: string, provider: LinkedAccountProvider): boolean {
     return this.linkedAccounts.delete(this.linkedAccountKey(userId, provider));
   }
