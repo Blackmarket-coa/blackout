@@ -16,6 +16,7 @@ import {
     unlinkAccount,
 } from './linkedAccountsClient';
 import { POSTMESSAGE_TYPE, type CallbackResultMessage } from './OAuthCallback';
+import { syncStreamlabsDonations } from '../streamlabs/streamlabsClient';
 
 const PROVIDER_DISPLAY: Record<LinkedAccountProvider, { label: string; description: string }> = {
     twitch: { label: 'Twitch', description: 'Mirror chat, EventSub follows/subs, host Twitch extensions.' },
@@ -167,10 +168,30 @@ export function LinkedAccounts({ openWindow }: LinkedAccountsProps = {}) {
         ),
     );
 
+    // Streamlabs is the only provider with a "pull recent events on
+    // demand" surface today. Patreon pushes via webhook and Twitch
+    // pushes via EventSub, so neither needs a manual sync button.
+    const [streamlabsSyncState, syncStreamlabs] = useAsyncCallback(
+        useCallback(async () => {
+            setProviderError(null);
+            setProviderNotice(null);
+            const res = await syncStreamlabsDonations();
+            if (alive()) {
+                setProviderNotice(
+                    res.newDonations === 0
+                        ? 'No new Streamlabs donations since the last sync.'
+                        : `Synced ${res.newDonations} new Streamlabs donation${res.newDonations === 1 ? '' : 's'}; delivered to ${res.delivered} connected widget${res.delivered === 1 ? '' : 's'}.`,
+                );
+            }
+            return res;
+        }, [alive]),
+    );
+
     const busy =
         connectState.status === AsyncStatus.Loading ||
         completeState.status === AsyncStatus.Loading ||
-        unlinkState.status === AsyncStatus.Loading;
+        unlinkState.status === AsyncStatus.Loading ||
+        streamlabsSyncState.status === AsyncStatus.Loading;
 
     return (
         <Box direction="Column" gap="200">
@@ -226,16 +247,31 @@ export function LinkedAccounts({ openWindow }: LinkedAccountsProps = {}) {
                                     description={meta.description}
                                     after={
                                         linked ? (
-                                            <Button
-                                                size="300"
-                                                variant="Critical"
-                                                fill="None"
-                                                radii="Pill"
-                                                disabled={busy}
-                                                onClick={() => void unlink(provider)}
-                                            >
-                                                <Text size="B300">Unlink</Text>
-                                            </Button>
+                                            <Box gap="200" alignItems="Center">
+                                                {provider === 'streamlabs' && (
+                                                    <Button
+                                                        size="300"
+                                                        variant="Primary"
+                                                        fill="None"
+                                                        radii="Pill"
+                                                        disabled={busy}
+                                                        onClick={() => void syncStreamlabs()}
+                                                        data-testid="streamlabs-sync-button"
+                                                    >
+                                                        <Text size="B300">Sync donations</Text>
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    size="300"
+                                                    variant="Critical"
+                                                    fill="None"
+                                                    radii="Pill"
+                                                    disabled={busy}
+                                                    onClick={() => void unlink(provider)}
+                                                >
+                                                    <Text size="B300">Unlink</Text>
+                                                </Button>
+                                            </Box>
                                         ) : (
                                             <Button
                                                 size="300"
@@ -317,6 +353,11 @@ export function LinkedAccounts({ openWindow }: LinkedAccountsProps = {}) {
             {unlinkState.status === AsyncStatus.Error && (
                 <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
                     {(unlinkState.error as Error).message}
+                </Text>
+            )}
+            {streamlabsSyncState.status === AsyncStatus.Error && (
+                <Text size="T200" style={{ color: 'var(--mx-color-critical, #c00)' }}>
+                    Streamlabs sync failed: {(streamlabsSyncState.error as Error).message}
                 </Text>
             )}
         </Box>
