@@ -29,6 +29,7 @@ import patreonWebhookRoutes from './routes/patreonWebhook';
 import streamlabsRoutes from './routes/streamlabs';
 import youtubeChatBridgeRoutes from './routes/youtubeChatBridges';
 import integrationsHealthRoutes from './routes/integrationsHealth';
+import simulcastRoutes from './routes/simulcastDestinations';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -124,6 +125,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/streamlabs`, streamlabsRoutes);
   app.route(`${root}/integrations/youtube/chat-bridges`, youtubeChatBridgeRoutes);
   app.route(`${root}/integrations/health`, integrationsHealthRoutes);
+  app.route(`${root}/integrations/simulcast/destinations`, simulcastRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);

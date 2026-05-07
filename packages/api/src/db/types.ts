@@ -109,6 +109,24 @@ export interface TwitchChatBridgeRecord {
   updatedAt: string;
 }
 
+export interface SimulcastDestinationRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Short provider label: 'twitch' / 'youtube' / 'kick' / etc. */
+  provider: string;
+  label?: string;
+  /** Public RTMP/RTMPS URL the fan-out worker pushes to. */
+  ingestUrl: string;
+  /** AES-256-GCM envelope of the stream key (services/secretBox.ts format). */
+  streamKeyCiphertext: string;
+  encryptionKeyId: string;
+  isEnabled: boolean;
+  lastUsedAt?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface YoutubeChatBridgeRecord {
   id: UUID;
   blackoutUserId: UUID;

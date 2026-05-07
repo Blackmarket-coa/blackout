@@ -45,6 +45,7 @@ import type {
   TwitchEventSubscriptionRecord,
   WidgetAlertTokenRecord,
   YoutubeChatBridgeRecord,
+  SimulcastDestinationRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -89,6 +90,7 @@ type PersistedState = {
   twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
   widgetAlertTokens: WidgetAlertTokenRecord[];
   youtubeChatBridges: YoutubeChatBridgeRecord[];
+  simulcastDestinations: SimulcastDestinationRecord[];
 };
 
 class InMemoryDb {
@@ -135,6 +137,8 @@ class InMemoryDb {
   widgetAlertTokens = new Map<string, WidgetAlertTokenRecord>();
   /** Keyed by bridge id. */
   youtubeChatBridges = new Map<string, YoutubeChatBridgeRecord>();
+  /** Keyed by destination id. */
+  simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -577,6 +581,52 @@ class InMemoryDb {
 
   deleteYoutubeChatBridge(id: string): boolean {
     return this.youtubeChatBridges.delete(id);
+  }
+
+  // --- simulcast destinations (Phase 1 / Track A) ---
+
+  createSimulcastDestination(
+    input: Omit<SimulcastDestinationRecord, 'createdAt' | 'updatedAt'>,
+  ): SimulcastDestinationRecord {
+    const now = nowIso();
+    const record: SimulcastDestinationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.simulcastDestinations.set(record.id, record);
+    return record;
+  }
+
+  getSimulcastDestination(id: string): SimulcastDestinationRecord | undefined {
+    return this.simulcastDestinations.get(id);
+  }
+
+  listSimulcastDestinationsForUser(
+    blackoutUserId: string,
+  ): SimulcastDestinationRecord[] {
+    return [...this.simulcastDestinations.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listEnabledSimulcastDestinations(): SimulcastDestinationRecord[] {
+    return [...this.simulcastDestinations.values()].filter((row) => row.isEnabled);
+  }
+
+  updateSimulcastDestination(
+    id: string,
+    patch: Partial<Omit<SimulcastDestinationRecord, 'id' | 'createdAt'>>,
+  ): SimulcastDestinationRecord | undefined {
+    const existing = this.simulcastDestinations.get(id);
+    if (!existing) return undefined;
+    const updated: SimulcastDestinationRecord = {
+      ...existing,
+      ...patch,
+      updatedAt: nowIso(),
+    };
+    this.simulcastDestinations.set(id, updated);
+    return updated;
+  }
+
+  deleteSimulcastDestination(id: string): boolean {
+    return this.simulcastDestinations.delete(id);
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -1303,6 +1353,9 @@ class FileBackedDb extends InMemoryDb {
     this.youtubeChatBridges = new Map(
       (parsed.youtubeChatBridges ?? []).map((row) => [row.id, row]),
     );
+    this.simulcastDestinations = new Map(
+      (parsed.simulcastDestinations ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1344,6 +1397,7 @@ class FileBackedDb extends InMemoryDb {
       twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
       widgetAlertTokens: [...this.widgetAlertTokens.values()],
       youtubeChatBridges: [...this.youtubeChatBridges.values()],
+      simulcastDestinations: [...this.simulcastDestinations.values()],
     };
   }
 
@@ -1854,6 +1908,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteYoutubeChatBridge(id: string): boolean {
     const removed = super.deleteYoutubeChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createSimulcastDestination(
+    input: Omit<SimulcastDestinationRecord, 'createdAt' | 'updatedAt'>,
+  ): SimulcastDestinationRecord {
+    const record = super.createSimulcastDestination(input);
+    this.persist();
+    return record;
+  }
+
+  override updateSimulcastDestination(
+    id: string,
+    patch: Partial<Omit<SimulcastDestinationRecord, 'id' | 'createdAt'>>,
+  ): SimulcastDestinationRecord | undefined {
+    const updated = super.updateSimulcastDestination(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteSimulcastDestination(id: string): boolean {
+    const removed = super.deleteSimulcastDestination(id);
     if (removed) this.persist();
     return removed;
   }
