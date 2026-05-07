@@ -1,6 +1,13 @@
 import { createClientQueries, createFetchApiClient, createMediaClient } from '@blackout/sdk';
 
-const API_BASE_URL =
+/**
+ * Base URL the API client makes requests against. Exported so callers
+ * that need to build a URL the *browser* (or an external client like an
+ * OBS browser source) will hit directly — e.g. the SSE alert stream URL
+ * pasted into OBS — can construct an absolute URL without re-reading the
+ * import.meta.env shape themselves.
+ */
+export const API_BASE_URL =
     (typeof import.meta !== 'undefined' &&
         (import.meta as { env?: { VITE_BLACKOUT_API_BASE_URL?: string } }).env
             ?.VITE_BLACKOUT_API_BASE_URL) ||
