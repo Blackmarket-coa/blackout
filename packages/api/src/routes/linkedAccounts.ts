@@ -10,12 +10,37 @@ import {
   LINKED_ACCOUNT_PROVIDERS,
 } from '../services/linkedAccounts';
 import * as twitchOAuth from '../integrations/twitch/oauth';
+import * as discordOAuth from '../integrations/discord/oauth';
+import * as patreonOAuth from '../integrations/patreon/oauth';
 import type { LinkedAccountProvider } from '../db/types';
+import type {
+  AuthorizeUrlResult,
+  CallbackOutcome,
+  CompleteFlowDeps,
+} from '../integrations/_oauth/providerFlow';
 import { log } from '../telemetry/logger';
 
 const linkedAccounts = new Hono();
 
-// Connect/callback get the same per-IP throttle as other auth-adjacent flows.
+interface ProviderOAuthModule {
+  beginLinkFlow: (userId: string) => AuthorizeUrlResult;
+  completeLinkFlow: (
+    params: { userId: string; code: string; state: string },
+    deps?: CompleteFlowDeps,
+  ) => Promise<CallbackOutcome>;
+}
+
+/**
+ * Per-provider dispatch table. Adding a new provider is a one-line entry
+ * once its `integrations/<provider>/oauth.ts` exists. Providers absent from
+ * this table return 501 from the connect / callback endpoints.
+ */
+const PROVIDER_OAUTH: Partial<Record<LinkedAccountProvider, ProviderOAuthModule>> = {
+  twitch: twitchOAuth,
+  discord: discordOAuth,
+  patreon: patreonOAuth,
+};
+
 linkedAccounts.use('/:provider/connect', authRateLimit);
 linkedAccounts.use('/:provider/callback', authRateLimit);
 
@@ -51,21 +76,26 @@ linkedAccounts.post('/:provider/connect', (c) => {
     );
   }
 
-  if (provider !== 'twitch') {
+  const oauth = PROVIDER_OAUTH[provider];
+  if (!oauth) {
     return c.json(
       {
         code: 'provider_not_implemented',
-        message: `OAuth flow for "${provider}" is not yet implemented; only twitch is wired up in Phase 0.`,
+        message: `OAuth flow for "${provider}" is not yet implemented.`,
       },
       501,
     );
   }
 
   try {
-    const result = twitchOAuth.beginLinkFlow(userOrResp.sub);
+    const result = oauth.beginLinkFlow(userOrResp.sub);
     return c.json(result);
   } catch (err) {
-    log.error('twitch_oauth_begin_failed', { error: String(err), userId: userOrResp.sub });
+    log.error('linked_account_oauth_begin_failed', {
+      error: String(err),
+      userId: userOrResp.sub,
+      provider,
+    });
     return c.json({ code: 'oauth_misconfigured', message: (err as Error).message }, 503);
   }
 });
@@ -86,7 +116,8 @@ linkedAccounts.post('/:provider/callback', async (c) => {
       400,
     );
   }
-  if (provider !== 'twitch') {
+  const oauth = PROVIDER_OAUTH[provider];
+  if (!oauth) {
     return c.json(
       { code: 'provider_not_implemented', message: `Callback for "${provider}" is not yet implemented.` },
       501,
@@ -97,7 +128,7 @@ linkedAccounts.post('/:provider/callback', async (c) => {
   if (parsed instanceof Response) return parsed;
 
   try {
-    const outcome = await twitchOAuth.completeLinkFlow({
+    const outcome = await oauth.completeLinkFlow({
       userId: userOrResp.sub,
       code: parsed.code,
       state: parsed.state,
@@ -123,23 +154,29 @@ linkedAccounts.post('/:provider/callback', async (c) => {
           400,
         );
       case 'token_exchange_failed':
-        log.warn('twitch_token_exchange_failed', {
+        log.warn('oauth_token_exchange_failed', {
+          provider,
           userId: userOrResp.sub,
           status: outcome.status,
           detail: outcome.detail,
         });
         return c.json(
-          { code: 'token_exchange_failed', message: 'Twitch rejected the authorization code.', status: outcome.status },
+          {
+            code: 'token_exchange_failed',
+            message: `${provider} rejected the authorization code.`,
+            status: outcome.status,
+          },
           502,
         );
       case 'identity_lookup_failed':
-        log.warn('twitch_identity_lookup_failed', {
+        log.warn('oauth_identity_lookup_failed', {
+          provider,
           userId: userOrResp.sub,
           status: outcome.status,
           detail: outcome.detail,
         });
         return c.json(
-          { code: 'identity_lookup_failed', message: 'Could not load Twitch identity.', status: outcome.status },
+          { code: 'identity_lookup_failed', message: `Could not load ${provider} identity.`, status: outcome.status },
           502,
         );
       default: {
@@ -148,7 +185,11 @@ linkedAccounts.post('/:provider/callback', async (c) => {
       }
     }
   } catch (err) {
-    log.error('twitch_oauth_complete_failed', { error: String(err), userId: userOrResp.sub });
+    log.error('linked_account_oauth_complete_failed', {
+      error: String(err),
+      userId: userOrResp.sub,
+      provider,
+    });
     return c.json({ code: 'oauth_misconfigured', message: (err as Error).message }, 503);
   }
 });
