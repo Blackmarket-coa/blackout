@@ -42,6 +42,7 @@ import type {
   LinkedAccountProvider,
   PendingOAuthLinkRecord,
   TwitchChatBridgeRecord,
+  TwitchEventSubscriptionRecord,
 } from './types';
 
 const nowIso = () => new Date().toISOString();
@@ -83,6 +84,7 @@ type PersistedState = {
   linkedAccounts: LinkedAccountRecord[];
   pendingOAuthLinks: PendingOAuthLinkRecord[];
   twitchChatBridges: TwitchChatBridgeRecord[];
+  twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
 };
 
 class InMemoryDb {
@@ -123,6 +125,8 @@ class InMemoryDb {
   pendingOAuthLinks = new Map<string, PendingOAuthLinkRecord>();
   /** Keyed by bridge id. */
   twitchChatBridges = new Map<string, TwitchChatBridgeRecord>();
+  /** Keyed by helixSubscriptionId for O(1) inbound-notification lookup. */
+  twitchEventSubscriptions = new Map<string, TwitchEventSubscriptionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -385,6 +389,51 @@ class InMemoryDb {
 
   deleteTwitchChatBridge(id: string): boolean {
     return this.twitchChatBridges.delete(id);
+  }
+
+  // --- twitch eventsub subscriptions ---
+
+  createTwitchEventSubscription(
+    input: Omit<TwitchEventSubscriptionRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchEventSubscriptionRecord {
+    const now = nowIso();
+    const record: TwitchEventSubscriptionRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchEventSubscriptions.set(record.helixSubscriptionId, record);
+    return record;
+  }
+
+  getTwitchEventSubscriptionByHelixId(
+    helixId: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    return this.twitchEventSubscriptions.get(helixId);
+  }
+
+  listTwitchEventSubscriptionsForChannel(
+    blackoutUserId: string,
+    twitchUserId: string,
+  ): TwitchEventSubscriptionRecord[] {
+    return [...this.twitchEventSubscriptions.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId && row.twitchUserId === twitchUserId,
+    );
+  }
+
+  updateTwitchEventSubscriptionStatus(
+    helixId: string,
+    status: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    const existing = this.twitchEventSubscriptions.get(helixId);
+    if (!existing) return undefined;
+    const updated: TwitchEventSubscriptionRecord = {
+      ...existing,
+      status,
+      updatedAt: nowIso(),
+    };
+    this.twitchEventSubscriptions.set(helixId, updated);
+    return updated;
+  }
+
+  deleteTwitchEventSubscription(helixId: string): boolean {
+    return this.twitchEventSubscriptions.delete(helixId);
   }
 
   createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
@@ -1102,6 +1151,9 @@ class FileBackedDb extends InMemoryDb {
     this.twitchChatBridges = new Map(
       (parsed.twitchChatBridges ?? []).map((row) => [row.id, row]),
     );
+    this.twitchEventSubscriptions = new Map(
+      (parsed.twitchEventSubscriptions ?? []).map((row) => [row.helixSubscriptionId, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1140,6 +1192,7 @@ class FileBackedDb extends InMemoryDb {
       linkedAccounts: [...this.linkedAccounts.values()],
       pendingOAuthLinks: [...this.pendingOAuthLinks.values()],
       twitchChatBridges: [...this.twitchChatBridges.values()],
+      twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
     };
   }
 
@@ -1573,6 +1626,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteTwitchChatBridge(id: string): boolean {
     const removed = super.deleteTwitchChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createTwitchEventSubscription(
+    input: Omit<TwitchEventSubscriptionRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchEventSubscriptionRecord {
+    const record = super.createTwitchEventSubscription(input);
+    this.persist();
+    return record;
+  }
+
+  override updateTwitchEventSubscriptionStatus(
+    helixId: string,
+    status: string,
+  ): TwitchEventSubscriptionRecord | undefined {
+    const updated = super.updateTwitchEventSubscriptionStatus(helixId, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteTwitchEventSubscription(helixId: string): boolean {
+    const removed = super.deleteTwitchEventSubscription(helixId);
     if (removed) this.persist();
     return removed;
   }

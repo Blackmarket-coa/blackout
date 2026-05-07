@@ -25,7 +25,18 @@ import {
  *   TWITCH_OAUTH_SCOPES      — optional, comma-separated, defaults below
  */
 
-const DEFAULT_SCOPES = ['user:read:email', 'channel:read:subscriptions'];
+// Phase 1 scope set: identity (`user:read:email`) + the read scopes Twitch
+// requires before our app can subscribe to the corresponding EventSub
+// event types via Helix. Existing creators who linked Twitch before this
+// scope set was widened need to re-link to grant the new scopes — the
+// Settings UI shows a warning when the linked scopes are missing required
+// entries.
+const DEFAULT_SCOPES = [
+  'user:read:email',
+  'moderator:read:followers', // channel.follow v2
+  'channel:read:subscriptions', // channel.subscribe + .subscription.gift
+  'bits:read', // channel.cheer
+];
 
 const TWITCH_SPEC: ProviderSpec = {
   provider: 'twitch',

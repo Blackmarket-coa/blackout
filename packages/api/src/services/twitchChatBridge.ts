@@ -10,6 +10,11 @@ import {
 } from '../integrations/twitch/chatIngress';
 import type { NormalizedChatMessage } from '../integrations/twitch/chatBridge';
 import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
+import {
+  subscribeToBridgeEvents,
+  unsubscribeBridgeEvents,
+} from './twitchEventSubManager';
+import type { HelixDeps } from '../integrations/twitch/helix';
 import { log } from '../telemetry/logger';
 
 /**
@@ -43,6 +48,18 @@ export interface MatrixSendEventClient {
 export interface BridgeServiceOptions {
   matrixClient?: MatrixSendEventClient;
   socketFactory?: IrcSocketFactory;
+  /**
+   * Pluggable helix deps (fetch + clock). Used to inject stubs in tests so
+   * createBridge / deleteBridge can drive the EventSub subscription
+   * lifecycle without hitting real Twitch.
+   */
+  helix?: HelixDeps;
+  /**
+   * If true, skip the Helix EventSub subscribe/unsubscribe round-trip.
+   * Used by `resumeAllBridges` (subscriptions persist on Twitch's side
+   * across restarts) and by tests that want to focus on chat ingress.
+   */
+  skipEventSub?: boolean;
 }
 
 export interface CreateBridgeInput {
@@ -172,6 +189,28 @@ export const createBridge = async (
     isActive: true,
   });
   await startBridge(record, options);
+
+  // Active EventSub subscriptions (follow/sub/cheer/raid) are best-effort
+  // alongside chat ingress. A failure here does NOT roll the bridge back
+  // — the creator can still see chat; alerts simply won't fire. The
+  // failure surfaces in logs and the returned record so the UI can
+  // surface "alerts not subscribed; please re-link Twitch" if it cares.
+  if (!options.skipEventSub) {
+    try {
+      const sub = await subscribeToBridgeEvents(record, options.helix);
+      if (sub.failures.length > 0) {
+        log.warn('twitch_chat_bridge_eventsub_partial_failure', {
+          bridgeId: record.id,
+          failures: sub.failures.map((f) => ({ type: f.type, kind: f.outcome.kind })),
+        });
+      }
+    } catch (err) {
+      log.warn('twitch_chat_bridge_eventsub_threw', {
+        bridgeId: record.id,
+        error: String(err),
+      });
+    }
+  }
   return { kind: 'ok', record };
 };
 
@@ -183,11 +222,12 @@ export type DeleteBridgeOutcome =
   | { kind: 'not_found' }
   | { kind: 'forbidden' };
 
-export const deleteBridge = (
+export const deleteBridge = async (
   blackoutUserId: string,
   bridgeId: string,
   reason = 'user_deleted',
-): DeleteBridgeOutcome => {
+  options: BridgeServiceOptions = {},
+): Promise<DeleteBridgeOutcome> => {
   const existing = db.getTwitchChatBridge(bridgeId);
   if (!existing) return { kind: 'not_found' };
   if (existing.blackoutUserId !== blackoutUserId) return { kind: 'forbidden' };
@@ -200,6 +240,25 @@ export const deleteBridge = (
       log.warn('twitch_chat_bridge_stop_threw', { bridgeId, error: String(err) });
     }
     liveSessions.delete(bridgeId);
+  }
+
+  // Tear down the EventSub subscriptions before marking the row inactive
+  // so the manager can still resolve the linked Twitch user id.
+  if (!options.skipEventSub) {
+    try {
+      const out = await unsubscribeBridgeEvents(existing, options.helix);
+      if (out.failed.length > 0) {
+        log.warn('twitch_chat_bridge_eventsub_unsubscribe_partial', {
+          bridgeId,
+          failed: out.failed,
+        });
+      }
+    } catch (err) {
+      log.warn('twitch_chat_bridge_eventsub_unsubscribe_threw', {
+        bridgeId,
+        error: String(err),
+      });
+    }
   }
 
   db.updateTwitchChatBridge(bridgeId, {

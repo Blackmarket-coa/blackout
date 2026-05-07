@@ -166,7 +166,7 @@ test('createBridge: persists the row and starts an ingress that forwards into Ma
 
   const created = await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'BlackoutDev', matrixRoomId: '!den:bmc' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   assert.equal(created.kind, 'ok');
   if (created.kind !== 'ok') return;
@@ -215,11 +215,11 @@ test('createBridge: re-posting the same (channel, room) is idempotent', async ()
 
   const a = await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gamer', matrixRoomId: '!room:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   const b = await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gamer', matrixRoomId: '!room:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   assert.equal(a.kind, 'ok');
   assert.equal(b.kind, 'ok');
@@ -238,11 +238,11 @@ test('createBridge: re-posting the same channel into a different room returns al
 
   await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gamer', matrixRoomId: '!a:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   const conflict = await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gamer', matrixRoomId: '!b:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   assert.equal(conflict.kind, 'already_bridged');
   if (conflict.kind === 'already_bridged') {
@@ -265,14 +265,14 @@ test('deleteBridge: stops the ingress, removes the row, returns ok', async () =>
 
   const created = await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gamer', matrixRoomId: '!a:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   assert.equal(created.kind, 'ok');
   if (created.kind !== 'ok') return;
 
   assert.equal(chatIngress.__test__.sessions.size, 1);
 
-  const out = twitchChatBridge.deleteBridge(user.id, created.record.id);
+  const out = await twitchChatBridge.deleteBridge(user.id, created.record.id);
   assert.equal(out.kind, 'ok');
   assert.equal(db.findTwitchChatBridge(user.id, 'gamer'), undefined);
   assert.equal(chatIngress.__test__.sessions.size, 0);
@@ -289,12 +289,12 @@ test('deleteBridge: returns forbidden when one user tries to delete another user
 
   const created = await twitchChatBridge.createBridge(
     { blackoutUserId: alice.id, twitchChannel: 'gamer', matrixRoomId: '!a:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
   assert.equal(created.kind, 'ok');
   if (created.kind !== 'ok') return;
 
-  const out = twitchChatBridge.deleteBridge(bob.id, created.record.id);
+  const out = await twitchChatBridge.deleteBridge(bob.id, created.record.id);
   assert.equal(out.kind, 'forbidden');
   // Row is still there.
   assert.ok(db.findTwitchChatBridge(alice.id, 'gamer'));
@@ -303,7 +303,7 @@ test('deleteBridge: returns forbidden when one user tries to delete another user
 test('deleteBridge: returns not_found for unknown bridge id', async () => {
   const { twitchChatBridge, db } = await loadModules();
   const user = await seedUser(db);
-  const out = twitchChatBridge.deleteBridge(user.id, randomUUID());
+  const out = await twitchChatBridge.deleteBridge(user.id, randomUUID());
   assert.equal(out.kind, 'not_found');
 });
 
@@ -323,11 +323,11 @@ test('resumeAllBridges: starts ingress for each active bridge whose creator stil
 
   const aBridge = await twitchChatBridge.createBridge(
     { blackoutUserId: a.id, twitchChannel: 'astream', matrixRoomId: '!a:srv' },
-    { matrixClient, socketFactory: factoryA },
+    { matrixClient, socketFactory: factoryA, skipEventSub: true },
   );
   const bBridge = await twitchChatBridge.createBridge(
     { blackoutUserId: b.id, twitchChannel: 'bstream', matrixRoomId: '!b:srv' },
-    { matrixClient, socketFactory: factoryB },
+    { matrixClient, socketFactory: factoryB, skipEventSub: true },
   );
   assert.equal(aBridge.kind, 'ok');
   assert.equal(bBridge.kind, 'ok');
@@ -355,7 +355,7 @@ test('resumeAllBridges: skips bridges whose creator has unlinked Twitch since th
 
   await twitchChatBridge.createBridge(
     { blackoutUserId: user.id, twitchChannel: 'gone', matrixRoomId: '!r:srv' },
-    { matrixClient, socketFactory: factory },
+    { matrixClient, socketFactory: factory, skipEventSub: true },
   );
 
   // User unlinks Twitch.

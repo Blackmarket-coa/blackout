@@ -5,6 +5,9 @@ import {
   type EventSubNotification,
   type NormalizedTwitchEvent,
 } from '../integrations/twitch/eventSub';
+import { findBridgeForEvent } from '../services/twitchEventSubManager';
+import { matrixClient as defaultMatrixClient } from '../integrations/matrix-client';
+import type { MatrixSendEventClient } from '../services/twitchChatBridge';
 import { log } from '../telemetry/logger';
 
 /**
@@ -37,8 +40,14 @@ export type EventSubSecretResolver = (subscriptionType: string) => string | unde
 export interface EventSubRouteOptions {
   /** Resolves the per-subscription HMAC secret. Defaults to the env var. */
   secretResolver?: EventSubSecretResolver;
-  /** Called after successful verification + normalization; ack runs regardless. */
+  /**
+   * Called after successful verification + normalization; ack runs regardless.
+   * If omitted, falls back to {@link defaultEventForwarder} which finds the
+   * bridge for the event and ships a Matrix alert event into its room.
+   */
   onEvent?: (event: NormalizedTwitchEvent, raw: EventSubNotification) => void | Promise<void>;
+  /** Pluggable Matrix client (used by the default forwarder). Tests override. */
+  matrixClient?: MatrixSendEventClient;
   /** Override clock for tests. */
   now?: () => number;
 }
@@ -46,9 +55,82 @@ export interface EventSubRouteOptions {
 const defaultSecretResolver: EventSubSecretResolver = () =>
   process.env.TWITCH_EVENTSUB_SECRET?.trim() || undefined;
 
+// ----------------------------- Matrix alert event content -----------------------------
+
+/**
+ * Build the Matrix `m.room.message` content for a normalized Twitch alert.
+ * Mirrors the chat-bridge's `m.blackout.*` envelope so client renderers
+ * can show a single unified attribution badge for Twitch-origin events.
+ */
+const buildAlertContent = (event: NormalizedTwitchEvent): Record<string, unknown> => {
+  const base: Record<string, unknown> = {
+    msgtype: 'm.notice',
+    'm.blackout.origin': 'twitch',
+    'm.blackout.alert_kind': event.kind,
+    'm.blackout.event': event,
+  };
+  // Plain-text fallback that surfaces in clients without alert UI.
+  switch (event.kind) {
+    case 'follow':
+      base.body = `[twitch] ${event.followerDisplayName ?? event.followerLogin} just followed.`;
+      break;
+    case 'subscribe':
+      base.body = `[twitch] ${event.subscriberDisplayName ?? event.subscriberLogin} subscribed (tier ${event.tier})${event.isGift ? ' — gift' : ''}.`;
+      break;
+    case 'subscription_gift':
+      base.body = `[twitch] ${event.gifterDisplayName ?? event.gifterLogin} gifted ${event.total} sub${event.total === 1 ? '' : 's'} (tier ${event.tier}).`;
+      break;
+    case 'cheer':
+      base.body = `[twitch] ${event.cheererDisplayName ?? event.cheererLogin ?? 'Anonymous'} cheered ${event.bits} bits: ${event.message}`;
+      break;
+    case 'raid':
+      base.body = `[twitch] ${event.fromChannelDisplayName ?? event.fromChannelLogin} raided with ${event.viewers} viewer${event.viewers === 1 ? '' : 's'}.`;
+      break;
+  }
+  return base;
+};
+
+/**
+ * Default `onEvent` handler used when the route is built with no override.
+ * Looks up the chat bridge for the event's broadcaster and ships a Matrix
+ * alert event into the bridged room. No-ops (with a log line) when no
+ * bridge exists for the event — that's the case if a bridge was deleted
+ * between Helix subscription create and the next inbound notification.
+ */
+export const buildDefaultEventForwarder = (
+  matrix: MatrixSendEventClient = defaultMatrixClient,
+) => async (event: NormalizedTwitchEvent, raw: EventSubNotification): Promise<void> => {
+  const bridge = findBridgeForEvent(event);
+  if (!bridge) {
+    log.info('twitch_eventsub_no_bridge_for_event', {
+      kind: event.kind,
+      subscriptionId: raw.subscription.id,
+    });
+    return;
+  }
+  const content = buildAlertContent(event);
+  // Use the EventSub subscription id + Twitch's message-id-equivalent
+  // (subscription created_at + event timestamp) as the Matrix txn id when
+  // possible, so retransmits don't double-deliver. We don't have a stable
+  // per-event id from Twitch in every payload, so fall back to a derived
+  // hash-shaped string — Matrix will accept any string.
+  const txnId = `twitch-eventsub-${raw.subscription.id}-${Date.now()}`;
+  const result = await matrix.sendEvent(bridge.matrixRoomId, content, { txnId });
+  if (!result.ok) {
+    log.warn('twitch_eventsub_matrix_send_failed', {
+      bridgeId: bridge.id,
+      kind: event.kind,
+      status: result.status,
+      reason: result.reason,
+    });
+  }
+};
+
 export const buildTwitchEventSubRoute = (options: EventSubRouteOptions = {}) => {
   const router = new Hono();
   const secretResolver = options.secretResolver ?? defaultSecretResolver;
+  const onEvent =
+    options.onEvent ?? buildDefaultEventForwarder(options.matrixClient ?? defaultMatrixClient);
 
   router.post('/', async (c) => {
     // Read the body as the raw text BEFORE parsing. The HMAC is computed
@@ -123,15 +205,13 @@ export const buildTwitchEventSubRoute = (options: EventSubRouteOptions = {}) => 
       log.info('twitch_eventsub_unhandled_type', { subscriptionType: notification.subscription.type });
       return c.json({ ok: true });
     }
-    if (options.onEvent) {
-      try {
-        await options.onEvent(normalized, notification);
-      } catch (err) {
-        log.warn('twitch_eventsub_handler_threw', {
-          subscriptionType: notification.subscription.type,
-          error: String(err),
-        });
-      }
+    try {
+      await onEvent(normalized, notification);
+    } catch (err) {
+      log.warn('twitch_eventsub_handler_threw', {
+        subscriptionType: notification.subscription.type,
+        error: String(err),
+      });
     }
     return c.json({ ok: true });
   });

@@ -99,6 +99,21 @@ export interface TwitchChatBridgeRecord {
   updatedAt: string;
 }
 
+export interface TwitchEventSubscriptionRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Numeric Twitch user id of the broadcaster being watched. */
+  twitchUserId: string;
+  /** EventSub subscription type, e.g. `channel.follow`. */
+  subscriptionType: string;
+  /** The subscription id Twitch returned from POST /eventsub/subscriptions. */
+  helixSubscriptionId: string;
+  /** Mirrors Twitch's `status` field. */
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CommunityRecord {
   id: UUID;
   name: string;

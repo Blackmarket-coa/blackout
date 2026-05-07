@@ -82,11 +82,11 @@ bridges.post('/', async (c) => {
 });
 
 /** DELETE /v1/integrations/twitch/chat-bridges/:id — stop + remove. */
-bridges.delete('/:id', (c) => {
+bridges.delete('/:id', async (c) => {
   const userOrResp = requireUser(c, 'Sign in required to delete a chat bridge');
   if (userOrResp instanceof Response) return userOrResp;
   const id = c.req.param('id');
-  const outcome = deleteBridge(userOrResp.sub, id);
+  const outcome = await deleteBridge(userOrResp.sub, id);
   switch (outcome.kind) {
     case 'ok':
       return c.json({ ok: true });
