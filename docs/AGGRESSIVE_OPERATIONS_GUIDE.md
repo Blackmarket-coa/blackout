@@ -1065,6 +1065,7 @@ integration tests.
 |---|---|
 | `bbda88a` | feat(compat): wire Blackout-side messages route to the outbound chat router |
 | `8c0a5a4` | feat(compat): Matrix appservice transactions endpoint — fans federation/bridge messages outbound |
+| (multi-platform-extensions-2) | feat(compat): Synapse appservice registration YAML stub for ops drop-in |
 
 #### Phase 2 — Connected-session observability + cross-cutting event push
 
@@ -1107,6 +1108,7 @@ integration tests.
 | Discord-shape outbound webhooks (10 event types, HMAC-SHA256, AES-GCM-encrypted signing secret) | `packages/api/src/services/outboundEventWebhooks.ts` + `packages/api/src/routes/outboundEventWebhooks.ts` + `packages/api/src/db/migrations/017_*.sql` |
 | Outbound event sources wired (tip / follow / livestream / chat / sub / cheer / raid / streamgoal / SuperChat / Patreon-pledge) | `packages/api/src/services/{tips,outboundEventWebhooks,streamGoals,youtubeChatBridge,kickChatBridge,twitchChatBridge}.ts` + `packages/api/src/routes/{twitchEventSub,patreonWebhook}.ts` + `packages/api/src/modules/streaming.ts` |
 | Matrix appservice transactions endpoint (`PUT /_matrix/app/v1/transactions/:txnId`) | `packages/api/src/routes/matrixAppservice.ts` |
+| Synapse appservice registration YAML stub | `deploy/matrix-appservice/registration.yaml` + `deploy/matrix-appservice/README.md` |
 | In-process chat message hub (pub/sub) | `packages/api/src/services/chatMessageHub.ts` |
 | IRC + OBS-WS connected-session observability | `listSessionsForUser` in `packages/api/src/integrations/{twitch-compat/ircServer,obs-ws-compat/server}.ts` + corresponding `/sessions` GET routes |
 | Settings UIs (10 panels) | `apps/blackout-client/src/app/features/settings/{simulcast-destinations,kick-chat-bridges,twitch-chat-bridges,youtube-chat-bridges,obs-ws-passwords,twitch-irc-bot-tokens,discord-compat-webhooks,outbound-event-webhooks,widget-alerts,linked-accounts}/*` |
@@ -1123,7 +1125,6 @@ integration tests.
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | Bounded but limited | Needs LiveKit Server SDK admin-token path. Not all creators use LiveKit voice rooms during streams; ship when there's clear demand. |
 | StreamElements OverlayWS compat | Bounded | Mirror `routes/widgetAlerts.ts` pattern with the SE socket.io shape. |
 | Stream Deck Companion module YAML | Bounded | Upstream PR to `bitfocus/companion`. Pure config / docs. |
-| Synapse appservice registration YAML stub | Bounded | Ops-facing config file pairing with `routes/matrixAppservice.ts`. |
 | Hono >= 4.13.0 bump (clear `osv-scanner.toml` allowlist for GHSA-69xw-7hcm-h432 + GHSA-9vqf-7f2p-gf9v) | Blocked on registry | The internal npm mirror used by the dev sandbox currently exposes Hono up to `4.12.18` only (`latest` dist-tag = `4.12.18`). The 4.13.x fixes are upstream on github.com/honojs/hono but have not landed in the mirror. Re-attempt this bump once the mirror catches up; until then the allowlist stays in place. |
 
 > **FBM doc sync** — replacing `docs/AGGRESSIVE_OPERATIONS_GUIDE.md` on
@@ -1142,6 +1143,7 @@ Backend integration test files covering the compat surface (all green at `ef6ecc
 | File | Tests |
 |---|---|
 | `packages/api/test/matrix-appservice.integration.test.ts` | 7 |
+| `packages/api/test/matrix-appservice-registration.integration.test.ts` | 7 |
 | `packages/api/test/outbound-message-router.integration.test.ts` | 8 |
 | `packages/api/test/rtmp-fanout-worker.integration.test.ts` | 11 |
 | `packages/api/test/youtube-chat-bridge.integration.test.ts` | 23 |
@@ -1215,6 +1217,7 @@ cd packages/api && pnpm exec tsx --test \
 | Discord-shape outbound webhooks (10 event types, HMAC, AES-GCM) | 0–100% | `services/outboundEventWebhooks.ts` + `routes/outboundEventWebhooks.ts` + migration `017` |
 | Outbound event sources wired (10 types: tip/follow/livestream/chat/sub/cheer/raid/streamgoal/SuperChat/patreon-pledge) | 0–100% | `services/{tips,streamGoals,outboundEventWebhooks}.ts` + chat bridges + `routes/{twitchEventSub,patreonWebhook}.ts` + `modules/streaming.ts` |
 | Matrix appservice transactions endpoint | 0–100% | `routes/matrixAppservice.ts` |
+| Synapse appservice registration YAML stub | 0–100% | `deploy/matrix-appservice/registration.yaml` |
 | Chat message hub (in-process pub/sub) | 0–100% | `services/chatMessageHub.ts` |
 | IRC + OBS-WS connected-session observability | 0–100% | `integrations/{twitch-compat/ircServer,obs-ws-compat/server}.ts` `listSessionsForUser` |
 | Settings UIs (10 panels) | 0–100% | `apps/blackout-client/src/app/features/settings/{simulcast-destinations,kick-chat-bridges,twitch-chat-bridges,youtube-chat-bridges,obs-ws-passwords,twitch-irc-bot-tokens,discord-compat-webhooks,outbound-event-webhooks,widget-alerts,linked-accounts}/*` |
@@ -1231,6 +1234,5 @@ cd packages/api && pnpm exec tsx --test \
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | 0% | Bounded but limited applicability; needs LiveKit Server SDK admin-token path |
 | StreamElements OverlayWS compat | 0% | Bounded; mirror `widgetAlerts.ts` pattern |
 | Stream Deck Companion module YAML | 0% | Bounded; upstream PR to `bitfocus/companion` |
-| Synapse appservice registration YAML stub | 0% | Bounded; ops-facing config file |
 
 ---

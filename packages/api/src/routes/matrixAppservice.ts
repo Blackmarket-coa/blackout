@@ -56,9 +56,22 @@ const rememberTxn = (txnId: string): boolean => {
 const defaultHsTokenResolver = (): string | undefined =>
   process.env.MATRIX_APPSERVICE_HS_TOKEN?.trim() || undefined;
 
+/**
+ * Appservice → homeserver token. Reserved for the day this route grows
+ * an outbound counterpart that pushes events INTO Synapse. The
+ * receive-only transactions endpoint below does not need it.
+ *
+ * Both tokens are wired into Synapse via
+ * `deploy/matrix-appservice/registration.yaml`.
+ */
+const defaultAsTokenResolver = (): string | undefined =>
+  process.env.MATRIX_APPSERVICE_AS_TOKEN?.trim() || undefined;
+
 export interface AppserviceRouteOptions {
   /** Returns the per-deployment homeserver token. Default: env. */
   hsTokenResolver?: () => string | undefined;
+  /** Returns the per-deployment appservice token. Default: env. */
+  asTokenResolver?: () => string | undefined;
   /** Route handler hook; default: outboundMessageRouter.routeOutboundMatrixMessage. */
   onMessage?: (roomId: string, body: string) => Promise<unknown> | unknown;
   /** Reset the seen-txn cache. Tests use this. */
