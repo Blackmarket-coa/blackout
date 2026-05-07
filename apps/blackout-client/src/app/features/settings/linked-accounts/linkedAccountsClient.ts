@@ -27,6 +27,20 @@ export const IMPLEMENTED_PROVIDERS: readonly LinkedAccountProvider[] = [
     'youtube',
 ] as const;
 
+const ALL_PROVIDERS: readonly LinkedAccountProvider[] = [
+    'twitch',
+    'youtube',
+    'discord',
+    'patreon',
+    'tiktok',
+    'kick',
+];
+
+export const isLinkedAccountProvider = (
+    value: unknown,
+): value is LinkedAccountProvider =>
+    typeof value === 'string' && (ALL_PROVIDERS as readonly string[]).includes(value);
+
 export interface LinkedAccountSummary {
     id: string;
     provider: LinkedAccountProvider;

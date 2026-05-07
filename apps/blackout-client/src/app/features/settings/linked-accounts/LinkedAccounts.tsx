@@ -15,6 +15,7 @@ import {
     parseCallbackUrl,
     unlinkAccount,
 } from './linkedAccountsClient';
+import { POSTMESSAGE_TYPE, type CallbackResultMessage } from './OAuthCallback';
 
 const PROVIDER_DISPLAY: Record<LinkedAccountProvider, { label: string; description: string }> = {
     twitch: { label: 'Twitch', description: 'Mirror chat, EventSub follows/subs, host Twitch extensions.' },
@@ -74,6 +75,36 @@ export function LinkedAccounts({ openWindow }: LinkedAccountsProps = {}) {
     useEffect(() => {
         void refresh();
     }, [refresh]);
+
+    // Listen for the OAuth-callback popup's postMessage so this page can
+    // auto-refresh + show success / error inline. Same-origin filter on
+    // event.origin so a malicious cross-origin tab can't fake outcomes.
+    useEffect(() => {
+        const onMessage = (evt: MessageEvent) => {
+            if (evt.origin !== window.location.origin) return;
+            const data = evt.data as Partial<CallbackResultMessage> | null;
+            if (!data || data.type !== POSTMESSAGE_TYPE) return;
+            if (data.ok) {
+                void refresh();
+                if (alive()) {
+                    setPendingProvider(null);
+                    setCallbackUrl('');
+                    setProviderError(null);
+                    setProviderNotice(
+                        `Linked ${data.provider}${data.providerUsername ? ` as ${data.providerUsername}` : ''}.`,
+                    );
+                }
+            } else {
+                if (alive()) {
+                    setProviderError(
+                        `Linking ${data.provider ?? 'account'} failed: ${data.error ?? 'unknown error'}`,
+                    );
+                }
+            }
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [alive, refresh]);
 
     const [connectState, connect] = useAsyncCallback(
         useCallback(
