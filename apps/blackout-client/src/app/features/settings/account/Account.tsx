@@ -12,6 +12,7 @@ import { KickChatBridges } from '../kick-chat-bridges';
 import { DiscordCompatWebhooks } from '../discord-compat-webhooks';
 import { OutboundEventWebhooks } from '../outbound-event-webhooks';
 import { TwitchIrcBotTokens } from '../twitch-irc-bot-tokens';
+import { ObsWsPasswords } from '../obs-ws-passwords';
 import { WidgetAlertTokens } from '../widget-alerts';
 import { SimulcastDestinations } from '../simulcast-destinations';
 import { IntegrationsHealth } from '../integrations-health';
@@ -50,6 +51,7 @@ export function Account({ requestClose }: AccountProps) {
               <DiscordCompatWebhooks />
               <OutboundEventWebhooks />
               <TwitchIrcBotTokens />
+              <ObsWsPasswords />
               <WidgetAlertTokens />
               <SimulcastDestinations />
               <IntegrationsHealth />

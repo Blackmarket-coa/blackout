@@ -49,6 +49,7 @@ import type {
   DiscordCompatWebhookRecord,
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
+  ObsWsPasswordRecord,
   SimulcastDestinationRecord,
 } from './types';
 
@@ -99,6 +100,7 @@ type PersistedState = {
   discordCompatWebhooks: DiscordCompatWebhookRecord[];
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
+  obsWsPasswords: ObsWsPasswordRecord[];
 };
 
 class InMemoryDb {
@@ -155,6 +157,8 @@ class InMemoryDb {
   outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
   /** Keyed by token id. */
   twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
+  /** Keyed by password id (also the URL slug). */
+  obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -785,6 +789,69 @@ class InMemoryDb {
 
   deleteTwitchIrcBotToken(id: string): boolean {
     return this.twitchIrcBotTokens.delete(id);
+  }
+
+  // --- obs-ws passwords (Phase 3 / Track B) ---
+
+  createObsWsPassword(
+    input: Omit<ObsWsPasswordRecord, 'createdAt' | 'updatedAt'>,
+  ): ObsWsPasswordRecord {
+    const now = nowIso();
+    const record: ObsWsPasswordRecord = { ...input, createdAt: now, updatedAt: now };
+    this.obsWsPasswords.set(record.id, record);
+    return record;
+  }
+
+  getObsWsPassword(id: string): ObsWsPasswordRecord | undefined {
+    return this.obsWsPasswords.get(id);
+  }
+
+  /**
+   * Used by the OBS-WS shim's URL-based authenticator. Only returns the
+   * row if it's still active so revocation takes effect immediately.
+   */
+  getActiveObsWsPassword(id: string): ObsWsPasswordRecord | undefined {
+    const row = this.obsWsPasswords.get(id);
+    return row && row.isActive ? row : undefined;
+  }
+
+  listObsWsPasswordsForUser(blackoutUserId: string): ObsWsPasswordRecord[] {
+    return [...this.obsWsPasswords.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeObsWsPassword(id: string, reason: string): ObsWsPasswordRecord | undefined {
+    const existing = this.obsWsPasswords.get(id);
+    if (!existing) return undefined;
+    const updated: ObsWsPasswordRecord = {
+      ...existing,
+      isActive: false,
+      revokedAt: nowIso(),
+      revokeReason: reason,
+      updatedAt: nowIso(),
+    };
+    this.obsWsPasswords.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Bump diagnostics on a successful authenticated OBS-WS connection.
+   * In-memory only on the file-backed db (write amplification on every
+   * connection would thrash the JSON store).
+   */
+  touchObsWsPasswordUsed(id: string): void {
+    const existing = this.obsWsPasswords.get(id);
+    if (!existing) return;
+    this.obsWsPasswords.set(id, {
+      ...existing,
+      lastUsedAt: nowIso(),
+      useCount: existing.useCount + 1,
+    });
+  }
+
+  deleteObsWsPassword(id: string): boolean {
+    return this.obsWsPasswords.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -1572,6 +1639,9 @@ class FileBackedDb extends InMemoryDb {
     this.twitchIrcBotTokens = new Map(
       (parsed.twitchIrcBotTokens ?? []).map((row) => [row.id, row]),
     );
+    this.obsWsPasswords = new Map(
+      (parsed.obsWsPasswords ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1618,6 +1688,7 @@ class FileBackedDb extends InMemoryDb {
       discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
+      obsWsPasswords: [...this.obsWsPasswords.values()],
     };
   }
 
@@ -2244,6 +2315,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteTwitchIrcBotToken(id: string): boolean {
     const removed = super.deleteTwitchIrcBotToken(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createObsWsPassword(
+    input: Omit<ObsWsPasswordRecord, 'createdAt' | 'updatedAt'>,
+  ): ObsWsPasswordRecord {
+    const record = super.createObsWsPassword(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeObsWsPassword(id: string, reason: string): ObsWsPasswordRecord | undefined {
+    const updated = super.revokeObsWsPassword(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchObsWsPasswordUsed` override — write amplification on every
+  // OBS-WS connection would thrash the JSON store. In-memory only.
+
+  override deleteObsWsPassword(id: string): boolean {
+    const removed = super.deleteObsWsPassword(id);
     if (removed) this.persist();
     return removed;
   }

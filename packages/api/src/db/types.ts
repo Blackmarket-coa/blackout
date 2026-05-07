@@ -183,6 +183,26 @@ export type OutboundEventType =
   | 'livestream.ended'
   | 'chat.message.received';
 
+export interface ObsWsPasswordRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  label?: string;
+  /**
+   * AES-256-GCM envelope of the plaintext password. AAD =
+   * `obs_ws_password|${id}` so a leaked envelope can't be replayed
+   * against another row.
+   */
+  passwordCiphertext: string;
+  encryptionKeyId: string;
+  isActive: boolean;
+  revokedAt?: string;
+  revokeReason?: string;
+  lastUsedAt?: string;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TwitchIrcBotTokenRecord {
   id: UUID;
   blackoutUserId: UUID;
