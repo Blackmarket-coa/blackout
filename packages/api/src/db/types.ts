@@ -183,6 +183,23 @@ export type OutboundEventType =
   | 'livestream.ended'
   | 'chat.message.received';
 
+export interface TwitchIrcBotTokenRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  label?: string;
+  /** sha256 of the bearer secret. Plaintext is never persisted. */
+  secretHash: string;
+  /** Channel scope: empty array = "all channels owned by this creator". */
+  scopes: string[];
+  isActive: boolean;
+  revokedAt?: string;
+  revokeReason?: string;
+  lastUsedAt?: string;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OutboundEventWebhookRecord {
   id: UUID;
   blackoutUserId: UUID;

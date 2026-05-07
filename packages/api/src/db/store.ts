@@ -48,6 +48,7 @@ import type {
   KickChatBridgeRecord,
   DiscordCompatWebhookRecord,
   OutboundEventWebhookRecord,
+  TwitchIrcBotTokenRecord,
   SimulcastDestinationRecord,
 } from './types';
 
@@ -97,6 +98,7 @@ type PersistedState = {
   simulcastDestinations: SimulcastDestinationRecord[];
   discordCompatWebhooks: DiscordCompatWebhookRecord[];
   outboundEventWebhooks: OutboundEventWebhookRecord[];
+  twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
 };
 
 class InMemoryDb {
@@ -151,6 +153,8 @@ class InMemoryDb {
   discordCompatWebhooks = new Map<string, DiscordCompatWebhookRecord>();
   /** Keyed by subscription id. */
   outboundEventWebhooks = new Map<string, OutboundEventWebhookRecord>();
+  /** Keyed by token id. */
+  twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -720,6 +724,67 @@ class InMemoryDb {
 
   deleteOutboundEventWebhook(id: string): boolean {
     return this.outboundEventWebhooks.delete(id);
+  }
+
+  // --- twitch irc bot tokens (Phase 2 / Track B) ---
+
+  createTwitchIrcBotToken(
+    input: Omit<TwitchIrcBotTokenRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchIrcBotTokenRecord {
+    const now = nowIso();
+    const record: TwitchIrcBotTokenRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchIrcBotTokens.set(record.id, record);
+    return record;
+  }
+
+  getTwitchIrcBotToken(id: string): TwitchIrcBotTokenRecord | undefined {
+    return this.twitchIrcBotTokens.get(id);
+  }
+
+  /** Used by the connection authenticator to verify a presented PASS. */
+  findActiveTwitchIrcBotTokenByHash(secretHash: string): TwitchIrcBotTokenRecord | undefined {
+    return [...this.twitchIrcBotTokens.values()].find(
+      (row) => row.isActive && row.secretHash === secretHash,
+    );
+  }
+
+  listTwitchIrcBotTokensForUser(blackoutUserId: string): TwitchIrcBotTokenRecord[] {
+    return [...this.twitchIrcBotTokens.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  revokeTwitchIrcBotToken(id: string, reason: string): TwitchIrcBotTokenRecord | undefined {
+    const existing = this.twitchIrcBotTokens.get(id);
+    if (!existing) return undefined;
+    const updated: TwitchIrcBotTokenRecord = {
+      ...existing,
+      isActive: false,
+      revokedAt: nowIso(),
+      revokeReason: reason,
+      updatedAt: nowIso(),
+    };
+    this.twitchIrcBotTokens.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Bump diagnostics on a successful authenticated bot connection. Bumps
+   * are in-memory-only on the file-backed db (touching the JSON store on
+   * every IRC auth would be a write amplification bomb).
+   */
+  touchTwitchIrcBotTokenUsed(id: string): void {
+    const existing = this.twitchIrcBotTokens.get(id);
+    if (!existing) return;
+    this.twitchIrcBotTokens.set(id, {
+      ...existing,
+      lastUsedAt: nowIso(),
+      useCount: existing.useCount + 1,
+    });
+  }
+
+  deleteTwitchIrcBotToken(id: string): boolean {
+    return this.twitchIrcBotTokens.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -1504,6 +1569,9 @@ class FileBackedDb extends InMemoryDb {
     this.outboundEventWebhooks = new Map(
       (parsed.outboundEventWebhooks ?? []).map((row) => [row.id, row]),
     );
+    this.twitchIrcBotTokens = new Map(
+      (parsed.twitchIrcBotTokens ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -1549,6 +1617,7 @@ class FileBackedDb extends InMemoryDb {
       simulcastDestinations: [...this.simulcastDestinations.values()],
       discordCompatWebhooks: [...this.discordCompatWebhooks.values()],
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
+      twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
     };
   }
 
@@ -2151,6 +2220,30 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteOutboundEventWebhook(id: string): boolean {
     const removed = super.deleteOutboundEventWebhook(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createTwitchIrcBotToken(
+    input: Omit<TwitchIrcBotTokenRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchIrcBotTokenRecord {
+    const record = super.createTwitchIrcBotToken(input);
+    this.persist();
+    return record;
+  }
+
+  override revokeTwitchIrcBotToken(id: string, reason: string): TwitchIrcBotTokenRecord | undefined {
+    const updated = super.revokeTwitchIrcBotToken(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  // No `touchTwitchIrcBotTokenUsed` override — write amplification on
+  // every IRC auth would thrash the JSON store. Diagnostic field is
+  // in-memory only on the file-backed db.
+
+  override deleteTwitchIrcBotToken(id: string): boolean {
+    const removed = super.deleteTwitchIrcBotToken(id);
     if (removed) this.persist();
     return removed;
   }
