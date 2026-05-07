@@ -6,6 +6,7 @@ import { Profile } from './Profile';
 import { ContactInformation } from './ContactInfo';
 import { IgnoredUserList } from './IgnoredUserList';
 import { LinkedAccounts } from '../linked-accounts';
+import { TwitchChatBridges } from '../twitch-chat-bridges';
 
 type AccountProps = {
   requestClose: () => void;
@@ -35,6 +36,7 @@ export function Account({ requestClose }: AccountProps) {
               <MatrixId />
               <ContactInformation />
               <LinkedAccounts />
+              <TwitchChatBridges />
               <IgnoredUserList />
             </Box>
           </PageContent>
