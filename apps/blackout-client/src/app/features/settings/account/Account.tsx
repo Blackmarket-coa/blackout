@@ -10,6 +10,7 @@ import { TwitchChatBridges } from '../twitch-chat-bridges';
 import { YoutubeChatBridges } from '../youtube-chat-bridges';
 import { KickChatBridges } from '../kick-chat-bridges';
 import { DiscordCompatWebhooks } from '../discord-compat-webhooks';
+import { OutboundEventWebhooks } from '../outbound-event-webhooks';
 import { WidgetAlertTokens } from '../widget-alerts';
 import { SimulcastDestinations } from '../simulcast-destinations';
 import { IntegrationsHealth } from '../integrations-health';
@@ -46,6 +47,7 @@ export function Account({ requestClose }: AccountProps) {
               <YoutubeChatBridges />
               <KickChatBridges />
               <DiscordCompatWebhooks />
+              <OutboundEventWebhooks />
               <WidgetAlertTokens />
               <SimulcastDestinations />
               <IntegrationsHealth />
