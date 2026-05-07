@@ -1,0 +1,38 @@
+{
+  "name": "companion-module-blackout",
+  "version": "0.1.0",
+  "main": "dist/main.js",
+  "type": "module",
+  "private": true,
+  "description": "Bitfocus Companion module for the Blackmarket Coalition Blackout API (OBS-WebSocket v5 shim).",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@companion-module/base": "^1.8.0"
+  },
+  "devDependencies": {
+    "@companion-module/base": "^1.14.0",
+    "@types/node": "^20.0.0",
+    "obs-websocket-js": "^5.0.8",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.8"
+  },
+  "keywords": [
+    "companion-module",
+    "blackout",
+    "obs",
+    "twitch",
+    "streaming"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Blackmarket-coa/blackout.git",
+    "directory": "packages/companion-blackout"
+  }
+}

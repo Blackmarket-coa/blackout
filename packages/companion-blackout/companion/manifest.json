@@ -1,0 +1,32 @@
+{
+  "id": "blackout",
+  "name": "blackout",
+  "shortname": "Blackout",
+  "description": "Bitfocus Companion module for the Blackmarket Coalition Blackout API. Talks to Blackout's OBS-WebSocket v5 shim so a Stream Deck or Companion controller can start/stop streams, switch scenes, and toggle the creator's mic without OBS being on the same machine.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": "https://github.com/Blackmarket-coa/blackout",
+  "bugs": "https://github.com/Blackmarket-coa/blackout/issues",
+  "maintainers": [
+    {
+      "name": "Blackmarket Coalition",
+      "email": "ops@blackmarket.coalition"
+    }
+  ],
+  "manufacturer": "Blackmarket Coalition",
+  "products": [
+    "Blackout"
+  ],
+  "keywords": [
+    "obs",
+    "twitch",
+    "streaming",
+    "blackout"
+  ],
+  "runtime": {
+    "type": "node18",
+    "api": "nodejs-ipc",
+    "apiVersion": "1.0.0",
+    "entrypoint": "dist/main.js"
+  }
+}

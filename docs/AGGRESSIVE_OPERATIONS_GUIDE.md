@@ -1059,6 +1059,7 @@ integration tests.
 | `bd65c80` | feat(compat): live OBS-WebSocket v5 server shim — Stream Deck/Companion/Touch Portal connect unmodified |
 | `ccf347e` | feat(compat): wire OBS-WS request matrix to creator stream lifecycle |
 | `3318bb3` | feat(compat): OBS-WS push events — Stream Deck tiles flip live on stream-state changes |
+| (multi-platform-extensions-2) | feat(compat): Stream Deck Companion module package — upstream-PR-ready for bitfocus/companion |
 
 #### Phase 2 — Matrix appservice listener
 
@@ -1105,6 +1106,7 @@ integration tests.
 | OBS-WebSocket v5 server — WS server + Hello/Identify auth | `packages/api/src/integrations/obs-ws-compat/server.ts` |
 | OBS-WS request matrix (GetVersion / Stats / StreamStatus / StartStream / StopStream / ToggleStream / GetSceneList / SetCurrentProgramScene / BroadcastCustomEvent) | `dispatchRequest` in `packages/api/src/integrations/obs-ws-compat/protocol.ts` + `defaultStreamCommands` in the server |
 | OBS-WS push events (StreamStateChanged + `blackout.*`) | `notifyStreamStarted/Ended/notifyBlackoutEvent` in `packages/api/src/integrations/obs-ws-compat/server.ts` |
+| Stream Deck Companion module package (upstream-PR-ready) | `packages/companion-blackout/*` (target: bitfocus/companion) |
 | OBS-WS passwords (AES-GCM at rest, per-row URL slug, multi-device) | `packages/api/src/services/obsWsPasswords.ts` + `packages/api/src/routes/obsWsPasswords.ts` + `packages/api/src/db/migrations/019_*.sql` |
 | Discord-shape inbound webhooks | `packages/api/src/services/discordCompatWebhooks.ts` + `packages/api/src/routes/discordCompatWebhooks.ts` + `packages/api/src/db/migrations/016_*.sql` |
 | Discord-shape outbound webhooks (10 event types, HMAC-SHA256, AES-GCM-encrypted signing secret) | `packages/api/src/services/outboundEventWebhooks.ts` + `packages/api/src/routes/outboundEventWebhooks.ts` + `packages/api/src/db/migrations/017_*.sql` |
@@ -1125,7 +1127,6 @@ integration tests.
 | Twitch Extensions iframe shim | Roadblocked | Needs proprietary `twitch-ext.min.js` + EBS JWT signing infra + extension-bundle install lifecycle. Requires legal review per AOG's risks section. |
 | Discord Activities Embedded App SDK | Roadblocked | Closed Discord SDK; no public path. |
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | Bounded but limited | Needs LiveKit Server SDK admin-token path. Not all creators use LiveKit voice rooms during streams; ship when there's clear demand. |
-| Stream Deck Companion module YAML | Bounded | Upstream PR to `bitfocus/companion`. Pure config / docs. |
 | Hono >= 4.13.0 bump (clear `osv-scanner.toml` allowlist for GHSA-69xw-7hcm-h432 + GHSA-9vqf-7f2p-gf9v) | Blocked on registry | The internal npm mirror used by the dev sandbox currently exposes Hono up to `4.12.18` only (`latest` dist-tag = `4.12.18`). The 4.13.x fixes are upstream on github.com/honojs/hono but have not landed in the mirror. Re-attempt this bump once the mirror catches up; until then the allowlist stays in place. |
 
 > **FBM doc sync** — replacing `docs/AGGRESSIVE_OPERATIONS_GUIDE.md` on
@@ -1146,6 +1147,7 @@ Backend integration test files covering the compat surface (all green at `ef6ecc
 | `packages/api/test/matrix-appservice.integration.test.ts` | 7 |
 | `packages/api/test/matrix-appservice-registration.integration.test.ts` | 7 |
 | `packages/api/test/se-overlay-shim-server.integration.test.ts` | 7 |
+| `packages/api/test/companion-module-manifest.integration.test.ts` | 7 |
 | `packages/api/test/outbound-message-router.integration.test.ts` | 8 |
 | `packages/api/test/rtmp-fanout-worker.integration.test.ts` | 11 |
 | `packages/api/test/youtube-chat-bridge.integration.test.ts` | 23 |
@@ -1215,6 +1217,7 @@ cd packages/api && pnpm exec tsx --test \
 | OBS-WebSocket v5 server — WS server + auth | 0–100% | `integrations/obs-ws-compat/server.ts` |
 | OBS-WS request matrix (Get/Set Stream + Scenes + Stats + BroadcastCustomEvent) | 0–100% | `dispatchRequest` in `obs-ws-compat/protocol.ts` + `defaultStreamCommands` in server |
 | OBS-WS push events (StreamStateChanged + `blackout.*`) | 0–100% | `notifyStreamStarted/Ended/notifyBlackoutEvent` in `obs-ws-compat/server.ts` |
+| Stream Deck Companion module package (upstream-PR-ready) | 0–100% | `packages/companion-blackout/*` |
 | OBS-WS passwords (AES-GCM at rest, multi-device) | 0–100% | `services/obsWsPasswords.ts` + `routes/obsWsPasswords.ts` + migration `019` |
 | Discord-shape inbound webhooks | 0–100% | `services/discordCompatWebhooks.ts` + `routes/discordCompatWebhooks.ts` + migration `016` |
 | Discord-shape outbound webhooks (10 event types, HMAC, AES-GCM) | 0–100% | `services/outboundEventWebhooks.ts` + `routes/outboundEventWebhooks.ts` + migration `017` |
@@ -1235,6 +1238,5 @@ cd packages/api && pnpm exec tsx --test \
 | Twitch Extensions iframe shim | 0% | Roadblocked: proprietary `twitch-ext.min.js` + EBS JWT infra + legal review |
 | Discord Activities Embedded App SDK | 0% | Roadblocked: closed Discord SDK |
 | OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | 0% | Bounded but limited applicability; needs LiveKit Server SDK admin-token path |
-| Stream Deck Companion module YAML | 0% | Bounded; upstream PR to `bitfocus/companion` |
 
 ---
