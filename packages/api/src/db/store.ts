@@ -45,6 +45,7 @@ import type {
   TwitchEventSubscriptionRecord,
   WidgetAlertTokenRecord,
   YoutubeChatBridgeRecord,
+  KickChatBridgeRecord,
   SimulcastDestinationRecord,
 } from './types';
 
@@ -90,6 +91,7 @@ type PersistedState = {
   twitchEventSubscriptions: TwitchEventSubscriptionRecord[];
   widgetAlertTokens: WidgetAlertTokenRecord[];
   youtubeChatBridges: YoutubeChatBridgeRecord[];
+  kickChatBridges: KickChatBridgeRecord[];
   simulcastDestinations: SimulcastDestinationRecord[];
 };
 
@@ -137,6 +139,8 @@ class InMemoryDb {
   widgetAlertTokens = new Map<string, WidgetAlertTokenRecord>();
   /** Keyed by bridge id. */
   youtubeChatBridges = new Map<string, YoutubeChatBridgeRecord>();
+  /** Keyed by bridge id. */
+  kickChatBridges = new Map<string, KickChatBridgeRecord>();
   /** Keyed by destination id. */
   simulcastDestinations = new Map<string, SimulcastDestinationRecord>();
 
@@ -581,6 +585,56 @@ class InMemoryDb {
 
   deleteYoutubeChatBridge(id: string): boolean {
     return this.youtubeChatBridges.delete(id);
+  }
+
+  // --- kick chat bridges (Phase 1 / Track A) ---
+
+  createKickChatBridge(
+    input: Omit<KickChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): KickChatBridgeRecord {
+    const now = nowIso();
+    const record: KickChatBridgeRecord = { ...input, createdAt: now, updatedAt: now };
+    this.kickChatBridges.set(record.id, record);
+    return record;
+  }
+
+  getKickChatBridge(id: string): KickChatBridgeRecord | undefined {
+    return this.kickChatBridges.get(id);
+  }
+
+  findKickChatBridge(
+    blackoutUserId: string,
+    kickChatroomId: string,
+  ): KickChatBridgeRecord | undefined {
+    return [...this.kickChatBridges.values()].find(
+      (row) =>
+        row.blackoutUserId === blackoutUserId && row.kickChatroomId === kickChatroomId,
+    );
+  }
+
+  listKickChatBridgesForUser(blackoutUserId: string): KickChatBridgeRecord[] {
+    return [...this.kickChatBridges.values()].filter(
+      (row) => row.blackoutUserId === blackoutUserId,
+    );
+  }
+
+  listActiveKickChatBridges(): KickChatBridgeRecord[] {
+    return [...this.kickChatBridges.values()].filter((row) => row.isActive);
+  }
+
+  updateKickChatBridge(
+    id: string,
+    patch: Partial<Omit<KickChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): KickChatBridgeRecord | undefined {
+    const existing = this.kickChatBridges.get(id);
+    if (!existing) return undefined;
+    const updated: KickChatBridgeRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.kickChatBridges.set(id, updated);
+    return updated;
+  }
+
+  deleteKickChatBridge(id: string): boolean {
+    return this.kickChatBridges.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -1353,6 +1407,9 @@ class FileBackedDb extends InMemoryDb {
     this.youtubeChatBridges = new Map(
       (parsed.youtubeChatBridges ?? []).map((row) => [row.id, row]),
     );
+    this.kickChatBridges = new Map(
+      (parsed.kickChatBridges ?? []).map((row) => [row.id, row]),
+    );
     this.simulcastDestinations = new Map(
       (parsed.simulcastDestinations ?? []).map((row) => [row.id, row]),
     );
@@ -1397,6 +1454,7 @@ class FileBackedDb extends InMemoryDb {
       twitchEventSubscriptions: [...this.twitchEventSubscriptions.values()],
       widgetAlertTokens: [...this.widgetAlertTokens.values()],
       youtubeChatBridges: [...this.youtubeChatBridges.values()],
+      kickChatBridges: [...this.kickChatBridges.values()],
       simulcastDestinations: [...this.simulcastDestinations.values()],
     };
   }
@@ -1908,6 +1966,29 @@ class FileBackedDb extends InMemoryDb {
 
   override deleteYoutubeChatBridge(id: string): boolean {
     const removed = super.deleteYoutubeChatBridge(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override createKickChatBridge(
+    input: Omit<KickChatBridgeRecord, 'createdAt' | 'updatedAt'>,
+  ): KickChatBridgeRecord {
+    const record = super.createKickChatBridge(input);
+    this.persist();
+    return record;
+  }
+
+  override updateKickChatBridge(
+    id: string,
+    patch: Partial<Omit<KickChatBridgeRecord, 'id' | 'createdAt'>>,
+  ): KickChatBridgeRecord | undefined {
+    const updated = super.updateKickChatBridge(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteKickChatBridge(id: string): boolean {
+    const removed = super.deleteKickChatBridge(id);
     if (removed) this.persist();
     return removed;
   }

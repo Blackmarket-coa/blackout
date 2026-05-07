@@ -141,6 +141,19 @@ export interface YoutubeChatBridgeRecord {
   updatedAt: string;
 }
 
+export interface KickChatBridgeRecord {
+  id: UUID;
+  blackoutUserId: UUID;
+  /** Kick numeric chatroom id (stored as a string to dodge int overflow). */
+  kickChatroomId: string;
+  matrixRoomId: string;
+  isActive: boolean;
+  lastStoppedAt?: string;
+  lastStoppedReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TwitchEventSubscriptionRecord {
   id: UUID;
   blackoutUserId: UUID;
