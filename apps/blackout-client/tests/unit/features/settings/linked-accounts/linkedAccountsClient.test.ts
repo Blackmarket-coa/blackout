@@ -59,10 +59,10 @@ describe('linkedAccountsClient: wire contracts', () => {
     });
 
     it('IMPLEMENTED_PROVIDERS matches the server dispatch table', () => {
-        // If the server adds youtube/tiktok/kick, this test should be updated to
-        // match — keeping it strict prevents UI from claiming "Coming soon" on
-        // a provider that already works.
-        expect([...IMPLEMENTED_PROVIDERS].sort()).toEqual(['discord', 'patreon', 'twitch']);
+        // If the server adds tiktok/kick, this test should be updated to match —
+        // keeping it strict prevents UI from claiming "Coming soon" on a
+        // provider that already works.
+        expect([...IMPLEMENTED_PROVIDERS].sort()).toEqual(['discord', 'patreon', 'twitch', 'youtube']);
     });
 });
 

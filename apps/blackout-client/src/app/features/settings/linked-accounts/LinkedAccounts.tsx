@@ -20,7 +20,7 @@ const PROVIDER_DISPLAY: Record<LinkedAccountProvider, { label: string; descripti
     twitch: { label: 'Twitch', description: 'Mirror chat, EventSub follows/subs, host Twitch extensions.' },
     discord: { label: 'Discord', description: 'Sync roles + import patrons. Discord-shaped bots will run here.' },
     patreon: { label: 'Patreon', description: 'Sync membership tiers to Blackout roles + creator-sub equivalents.' },
-    youtube: { label: 'YouTube Live', description: 'Coming soon — SuperChat + membership webhooks.' },
+    youtube: { label: 'YouTube Live', description: 'Mirror live chat + SuperChat / channel-membership events.' },
     tiktok: { label: 'TikTok Live', description: 'Coming soon — gift / sub events via Webcast.' },
     kick: { label: 'Kick', description: 'Coming soon — Pusher chat WS + tip webhooks.' },
 };

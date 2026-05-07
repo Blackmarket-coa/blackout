@@ -24,6 +24,7 @@ export const IMPLEMENTED_PROVIDERS: readonly LinkedAccountProvider[] = [
     'twitch',
     'discord',
     'patreon',
+    'youtube',
 ] as const;
 
 export interface LinkedAccountSummary {

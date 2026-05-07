@@ -1,11 +1,14 @@
 import {
   beginFlow,
   completeFlow,
+  refreshFlow,
   type AuthorizeUrlResult,
   type CallbackOutcome,
   type CompleteFlowDeps,
   type ProviderOAuthConfig,
   type ProviderSpec,
+  type RefreshFlowDeps,
+  type RefreshOutcome,
 } from '../_oauth/providerFlow';
 
 /**
@@ -80,3 +83,9 @@ export const completeLinkFlow = (
   deps: CompleteFlowDeps = {},
 ): Promise<CallbackOutcome> =>
   completeFlow(PATREON_SPEC, readPatreonOAuthConfig(), params, deps);
+
+export const refreshLinkedAccount = (
+  userId: string,
+  deps: RefreshFlowDeps = {},
+): Promise<RefreshOutcome> =>
+  refreshFlow(PATREON_SPEC, readPatreonOAuthConfig(), userId, deps);

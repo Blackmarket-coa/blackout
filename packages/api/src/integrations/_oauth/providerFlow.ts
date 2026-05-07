@@ -234,4 +234,80 @@ export const completeFlow = async (
   return { kind: 'ok', record };
 };
 
+// ----------------------------- refresh flow -----------------------------
+
+export type RefreshOutcome =
+  | { kind: 'ok'; accessToken: string; expiresAt?: string }
+  | { kind: 'no_link' }
+  | { kind: 'no_refresh_token' }
+  | { kind: 'refresh_failed'; status: number; detail: string };
+
+export interface RefreshFlowDeps {
+  fetch?: typeof fetch;
+}
+
+/**
+ * Exchange the stored refresh_token for a new access_token at the provider's
+ * token endpoint. Updates the linked_accounts row in place: the new access
+ * token (and the new refresh token if the provider rotated it) replace the
+ * old envelope. Providers that don't rotate refresh tokens (notably Google)
+ * keep the previous refresh_token unchanged.
+ */
+export const refreshFlow = async (
+  spec: ProviderSpec,
+  config: ProviderOAuthConfig,
+  userId: string,
+  deps: RefreshFlowDeps = {},
+): Promise<RefreshOutcome> => {
+  // Lazily required to keep the providerFlow module decoupled from the
+  // service layer at definition time.
+  const { decryptLinkedAccount, upsertLinkedAccount } = await import('../../services/linkedAccounts');
+  const fetchFn = deps.fetch ?? fetch;
+
+  const decrypted = decryptLinkedAccount(userId, spec.provider);
+  if (!decrypted) return { kind: 'no_link' };
+  if (!decrypted.refreshToken) return { kind: 'no_refresh_token' };
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: decrypted.refreshToken,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+  });
+  const res = await fetchFn(spec.tokenUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    return { kind: 'refresh_failed', status: res.status, detail };
+  }
+  const json = (await res.json()) as ProviderTokenResponse;
+  if (!json.access_token) {
+    return { kind: 'refresh_failed', status: res.status, detail: 'missing access_token' };
+  }
+
+  // Patreon + Twitch + Discord rotate refresh tokens on every refresh; Google
+  // omits refresh_token from the response and expects us to keep the old one.
+  const newRefreshToken = json.refresh_token ?? decrypted.refreshToken;
+
+  const record = upsertLinkedAccount({
+    blackoutUserId: userId,
+    provider: spec.provider,
+    providerUserId: decrypted.record.providerUserId,
+    providerUsername: decrypted.record.providerUsername,
+    tokens: {
+      accessToken: json.access_token,
+      refreshToken: newRefreshToken,
+      expiresInSeconds: json.expires_in,
+      // Providers sometimes omit `scope` from the refresh response; keep the
+      // previously-granted scopes in that case.
+      scopes: json.scope ? parseScopes(json.scope, spec.scopeSeparator) : decrypted.record.scopes,
+    },
+  });
+
+  return { kind: 'ok', accessToken: json.access_token, expiresAt: record.expiresAt };
+};
+
 export const __test__ = { sha256Hex, codeChallengeS256, aadForPending };

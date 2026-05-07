@@ -9,37 +9,11 @@ import {
   unlinkAccount,
   LINKED_ACCOUNT_PROVIDERS,
 } from '../services/linkedAccounts';
-import * as twitchOAuth from '../integrations/twitch/oauth';
-import * as discordOAuth from '../integrations/discord/oauth';
-import * as patreonOAuth from '../integrations/patreon/oauth';
+import { getProviderOAuth } from '../services/oauthProviders';
 import type { LinkedAccountProvider } from '../db/types';
-import type {
-  AuthorizeUrlResult,
-  CallbackOutcome,
-  CompleteFlowDeps,
-} from '../integrations/_oauth/providerFlow';
 import { log } from '../telemetry/logger';
 
 const linkedAccounts = new Hono();
-
-interface ProviderOAuthModule {
-  beginLinkFlow: (userId: string) => AuthorizeUrlResult;
-  completeLinkFlow: (
-    params: { userId: string; code: string; state: string },
-    deps?: CompleteFlowDeps,
-  ) => Promise<CallbackOutcome>;
-}
-
-/**
- * Per-provider dispatch table. Adding a new provider is a one-line entry
- * once its `integrations/<provider>/oauth.ts` exists. Providers absent from
- * this table return 501 from the connect / callback endpoints.
- */
-const PROVIDER_OAUTH: Partial<Record<LinkedAccountProvider, ProviderOAuthModule>> = {
-  twitch: twitchOAuth,
-  discord: discordOAuth,
-  patreon: patreonOAuth,
-};
 
 linkedAccounts.use('/:provider/connect', authRateLimit);
 linkedAccounts.use('/:provider/callback', authRateLimit);
@@ -76,7 +50,7 @@ linkedAccounts.post('/:provider/connect', (c) => {
     );
   }
 
-  const oauth = PROVIDER_OAUTH[provider];
+  const oauth = getProviderOAuth(provider);
   if (!oauth) {
     return c.json(
       {
@@ -116,7 +90,7 @@ linkedAccounts.post('/:provider/callback', async (c) => {
       400,
     );
   }
-  const oauth = PROVIDER_OAUTH[provider];
+  const oauth = getProviderOAuth(provider);
   if (!oauth) {
     return c.json(
       { code: 'provider_not_implemented', message: `Callback for "${provider}" is not yet implemented.` },
