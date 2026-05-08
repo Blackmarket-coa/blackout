@@ -1,0 +1,55 @@
+# Synapse appservice registration for the Blackmarket Coalition
+# Blackout API (PUT /_matrix/app/v1/transactions/:txnId).
+#
+# Spec: https://spec.matrix.org/v1.10/application-service-api/
+# Backing route: packages/api/src/routes/matrixAppservice.ts
+#
+# Drop this file into Synapse's app_service_config_files directory
+# (typically /etc/synapse/appservices/) and reference it from
+# homeserver.yaml:
+#
+#     app_service_config_files:
+#       - /etc/synapse/appservices/blackout.yaml
+#
+# The two ${...} placeholders below are interpolated at deploy time by
+# whatever secret-management tooling the operator runs (envsubst,
+# Helm, sops, Ansible template, ...). Tokens are 32-byte random hex:
+#
+#     export MATRIX_APPSERVICE_AS_TOKEN=$(openssl rand -hex 32)
+#     export MATRIX_APPSERVICE_HS_TOKEN=$(openssl rand -hex 32)
+#     envsubst < registration.yaml > /etc/synapse/appservices/blackout.yaml
+#
+# After installation, restart Synapse and verify the appservice picks
+# up traffic by sending a test transaction:
+#
+#     curl -X PUT \
+#       -H "Authorization: Bearer ${MATRIX_APPSERVICE_HS_TOKEN}" \
+#       -H "Content-Type: application/json" \
+#       -d '{"events":[]}' \
+#       http://blackout-api:3000/_matrix/app/v1/transactions/test1
+#
+# Expected response: 200 with body `{}`.
+
+id: blackout
+url: http://blackout-api:3000
+as_token: ${MATRIX_APPSERVICE_AS_TOKEN}
+hs_token: ${MATRIX_APPSERVICE_HS_TOKEN}
+sender_localpart: blackout
+rate_limited: false
+protocols:
+  - blackout
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@blackout_.*'
+  aliases:
+    - exclusive: true
+      regex: '#blackout_.*'
+  # Blackout claims no specific room IDs. Inbound events arrive via
+  # federation or other bridges (the appservice transactions endpoint
+  # only consumes them; it doesn't claim ownership).
+  rooms: []
+# Ephemeral events (typing, presence, receipts) are not consumed.
+# Set to true if a future feature needs them, but expect ~10x the
+# traffic volume.
+de.sorunome.msc2409.push_ephemeral: false

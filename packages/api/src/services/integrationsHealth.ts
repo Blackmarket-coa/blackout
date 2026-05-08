@@ -1,6 +1,7 @@
 import { db } from '../db/store';
 import type { LinkedAccountProvider } from '../db/types';
 import { getSessionStatus } from '../integrations/twitch/chatIngress';
+import { listSessionsForUser as listSeOverlaySessionsForUser } from '../integrations/se-overlay-compat/server';
 import { isStreamlabsSchedulerRunning } from './streamlabsDonationScheduler';
 import { isYoutubeChatSchedulerRunning } from './youtubeChatBridgeScheduler';
 
@@ -67,6 +68,12 @@ export interface WidgetAlertTokenHealth {
   lastDeliveredAt?: string;
 }
 
+export interface SeOverlaySessionHealth {
+  id: string;
+  connectedAt: number;
+  authenticatedAt: number;
+}
+
 export interface IntegrationsHealthSnapshot {
   generatedAtMs: number;
   linkedAccounts: LinkedAccountHealth[];
@@ -74,6 +81,8 @@ export interface IntegrationsHealthSnapshot {
   youtubeChatBridges: YoutubeChatBridgeHealth[];
   twitchEventSubscriptions: TwitchEventSubscriptionHealth[];
   widgetAlertTokens: WidgetAlertTokenHealth[];
+  /** Live SE OverlayWS sessions (socket.io shim at `/se-overlay/`). */
+  seOverlaySessions: SeOverlaySessionHealth[];
   patreon: {
     /** Whether the operator has set PATREON_WEBHOOK_SECRET. Reveals nothing about the secret itself. */
     webhookSecretConfigured: boolean;
@@ -188,6 +197,14 @@ export const buildIntegrationsHealthSnapshot = (
   const patreonLink = db.getLinkedAccount(blackoutUserId, 'patreon');
   const streamlabsLink = db.getLinkedAccount(blackoutUserId, 'streamlabs');
 
+  const seOverlaySessions: SeOverlaySessionHealth[] = listSeOverlaySessionsForUser(
+    blackoutUserId,
+  ).map((s) => ({
+    id: s.id,
+    connectedAt: s.connectedAt,
+    authenticatedAt: s.authenticatedAt,
+  }));
+
   return {
     generatedAtMs: now,
     linkedAccounts,
@@ -195,6 +212,7 @@ export const buildIntegrationsHealthSnapshot = (
     youtubeChatBridges,
     twitchEventSubscriptions,
     widgetAlertTokens,
+    seOverlaySessions,
     patreon: {
       webhookSecretConfigured: Boolean(process.env.PATREON_WEBHOOK_SECRET?.trim()),
       linked: Boolean(patreonLink),

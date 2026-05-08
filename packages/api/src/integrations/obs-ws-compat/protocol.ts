@@ -218,6 +218,9 @@ export const buildGetVersionResponse = (): GetVersionResponse => ({
     'GetCurrentProgramScene',
     'SetCurrentProgramScene',
     'BroadcastCustomEvent',
+    'SetInputMute',
+    'GetInputMute',
+    'ToggleInputMute',
   ],
   supportedImageFormats: ['png', 'jpg', 'jpeg', 'webp'],
   platform: 'blackout-compat',
@@ -283,9 +286,35 @@ export interface StreamCommands {
   stopStream(blackoutUserId: string): { ok: true; ended: boolean };
 }
 
+/**
+ * Async command surface for the SetInputMute / GetInputMute /
+ * ToggleInputMute request types. Production wires this through to
+ * `services/livekitAdmin.ts`; tests inject a stub.
+ *
+ * The dispatcher returns a Promise when it routes through here so the
+ * server module awaits before serializing the request response.
+ */
+export type MuteOutcome =
+  | { kind: 'ok'; muted: boolean }
+  | { kind: 'unknown_input' }
+  | { kind: 'no_active_voice_room' }
+  | { kind: 'no_publish_track' };
+
+export interface MuteCommands {
+  setInputMute(blackoutUserId: string, inputName: string, muted: boolean): Promise<MuteOutcome>;
+  getInputMute(blackoutUserId: string, inputName: string): Promise<MuteOutcome>;
+  toggleInputMute(blackoutUserId: string, inputName: string): Promise<MuteOutcome>;
+}
+
 export interface RequestContext {
   blackoutUserId: string;
   commands: StreamCommands;
+  /**
+   * Optional — populated when the server module wired the LiveKit
+   * admin path. When absent (older shim build / test that didn't
+   * inject it) the mute requests fall back to NotImplemented 204.
+   */
+  muteCommands?: MuteCommands;
 }
 
 const successResp = (responseData?: unknown) => ({
@@ -303,11 +332,44 @@ const SCENE_OFFLINE = 'Offline' as const;
 const currentSceneFromStatus = (active: boolean): string =>
   active ? SCENE_LIVE : SCENE_OFFLINE;
 
+/**
+ * REQ_STATUS code we use to surface "valid request, but the creator's
+ * environment isn't ready" — currently only returned when the mute
+ * path can't find an active LiveKit voice room. OBS-WS doesn't define
+ * a dedicated code for this so we reuse 409 (the spec's
+ * `ResourceNotConfigured` slot).
+ */
+const NO_ACTIVE_VOICE_ROOM = 409;
+
+export type DispatchResult = { status: RequestStatus; responseData?: unknown };
+
+const muteOutcomeToResult = (outcome: MuteOutcome, requestType: string): DispatchResult => {
+  switch (outcome.kind) {
+    case 'ok':
+      return successResp({ inputMuted: outcome.muted });
+    case 'unknown_input':
+      return failResp(
+        REQ_STATUS.NotImplemented,
+        `${requestType} only supports inputs Mic / Microphone / Desktop Audio in the Blackout shim.`,
+      );
+    case 'no_active_voice_room':
+      return failResp(
+        NO_ACTIVE_VOICE_ROOM,
+        'No active LiveKit voice room for this creator — join a voice channel first.',
+      );
+    case 'no_publish_track':
+      return failResp(
+        NO_ACTIVE_VOICE_ROOM,
+        'Creator is not currently publishing a microphone track in their voice room.',
+      );
+  }
+};
+
 export const dispatchRequest = (
   requestType: string,
   requestData: Record<string, unknown> | undefined,
   ctx: RequestContext,
-): { status: RequestStatus; responseData?: unknown } => {
+): DispatchResult | Promise<DispatchResult> => {
   switch (requestType) {
     case 'GetVersion':
       return successResp(buildGetVersionResponse());
@@ -396,6 +458,52 @@ export const dispatchRequest = (
         REQ_STATUS.InvalidRequestField,
         `sceneName must be "${SCENE_LIVE}" or "${SCENE_OFFLINE}"; got ${JSON.stringify(name)}`,
       );
+    }
+
+    case 'SetInputMute': {
+      if (!ctx.muteCommands) {
+        return failResp(REQ_STATUS.NotImplemented, 'Mute commands are not wired in this build.');
+      }
+      const inputName = (requestData?.inputName as string | undefined)?.trim();
+      const inputMuted = requestData?.inputMuted;
+      if (!inputName || typeof inputMuted !== 'boolean') {
+        return failResp(
+          REQ_STATUS.MissingRequestField,
+          'SetInputMute requires { inputName: string, inputMuted: boolean }',
+        );
+      }
+      return ctx.muteCommands
+        .setInputMute(ctx.blackoutUserId, inputName, inputMuted)
+        .then((outcome) => muteOutcomeToResult(outcome, 'SetInputMute'));
+    }
+
+    case 'GetInputMute': {
+      if (!ctx.muteCommands) {
+        return failResp(REQ_STATUS.NotImplemented, 'Mute commands are not wired in this build.');
+      }
+      const inputName = (requestData?.inputName as string | undefined)?.trim();
+      if (!inputName) {
+        return failResp(REQ_STATUS.MissingRequestField, 'GetInputMute requires { inputName: string }');
+      }
+      return ctx.muteCommands
+        .getInputMute(ctx.blackoutUserId, inputName)
+        .then((outcome) => muteOutcomeToResult(outcome, 'GetInputMute'));
+    }
+
+    case 'ToggleInputMute': {
+      if (!ctx.muteCommands) {
+        return failResp(REQ_STATUS.NotImplemented, 'Mute commands are not wired in this build.');
+      }
+      const inputName = (requestData?.inputName as string | undefined)?.trim();
+      if (!inputName) {
+        return failResp(
+          REQ_STATUS.MissingRequestField,
+          'ToggleInputMute requires { inputName: string }',
+        );
+      }
+      return ctx.muteCommands
+        .toggleInputMute(ctx.blackoutUserId, inputName)
+        .then((outcome) => muteOutcomeToResult(outcome, 'ToggleInputMute'));
     }
 
     case 'BroadcastCustomEvent': {

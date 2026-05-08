@@ -487,11 +487,12 @@ test('OBS-WS shim: identified client gets RequestResponse for GetVersion; NotImp
     assert.equal(v.d.requestStatus.code, protocol.REQ_STATUS.Success);
     assert.equal(v.d.responseData.rpcVersion, 1);
 
-    // Unimplemented request → NotImplemented (204). SetInputMute isn't
-    // wired yet — surfaces seeing this gracefully grey out the button.
+    // Unimplemented request → NotImplemented (204). GetVideoSettings
+    // isn't wired — surfaces seeing this gracefully grey out the
+    // button.
     obs.send({
       op: protocol.Op.Request,
-      d: { requestType: 'SetInputMute', requestId: 'rq-2', requestData: {} },
+      d: { requestType: 'GetVideoSettings', requestId: 'rq-2', requestData: {} },
     });
     const u = await obs.awaitFrame<{
       requestType: string;

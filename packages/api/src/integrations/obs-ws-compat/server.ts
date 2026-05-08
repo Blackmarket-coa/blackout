@@ -15,7 +15,9 @@ import {
   parseFrame,
   randomBase64,
   REQ_STATUS,
+  type DispatchResult,
   type Frame,
+  type MuteCommands,
   type StreamCommands,
 } from './protocol';
 import { db } from '../../db/store';
@@ -50,6 +52,7 @@ interface ObsSession {
   /** Set after Identify validates against the expected response. */
   identified: boolean;
   commands: StreamCommands;
+  muteCommands?: MuteCommands;
   /** ms-since-epoch of the WebSocket upgrade. */
   connectedAt: number;
   /** Set when {@link identified} flips true. Useful for surfacing "live since". */
@@ -177,6 +180,14 @@ interface AttachOptions {
   pathPrefix?: string;
   /** Inject stream commands. Tests override; production uses the db-backed default. */
   streamCommands?: StreamCommands;
+  /**
+   * Inject mute commands. Production wires through to
+   * `services/livekitAdmin.ts`; tests inject a stub so the
+   * livekit-server-sdk never makes a real network call. When
+   * undefined, SetInputMute / GetInputMute / ToggleInputMute return
+   * NotImplemented (204).
+   */
+  muteCommands?: MuteCommands;
 }
 
 /**
@@ -260,12 +271,33 @@ const defaultStreamCommands = (): StreamCommands => ({
  * disposer that closes all active sessions and removes the upgrade
  * listener. Mirrors the IRC shim pattern.
  */
+/**
+ * Default mute commands wired through to LiveKit. Lazily imported to
+ * keep the livekit-server-sdk out of test bundles that don't exercise
+ * the mute path.
+ */
+const defaultMuteCommands = (): MuteCommands => ({
+  async setInputMute(userId, inputName, muted) {
+    const m = await import('../../services/livekitAdmin');
+    return m.setInputMute(userId, inputName, muted);
+  },
+  async getInputMute(userId, inputName) {
+    const m = await import('../../services/livekitAdmin');
+    return m.getInputMute(userId, inputName);
+  },
+  async toggleInputMute(userId, inputName) {
+    const m = await import('../../services/livekitAdmin');
+    return m.toggleInputMute(userId, inputName);
+  },
+});
+
 export const attachObsWsShim = (
   server: HttpServer,
   options: AttachOptions = {},
 ): (() => void) => {
   const prefix = options.pathPrefix ?? OBS_WS_PATH_PREFIX;
   const commands = options.streamCommands ?? defaultStreamCommands();
+  const muteCommands = options.muteCommands ?? defaultMuteCommands();
   const wss = new WebSocketServer({ noServer: true });
 
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -286,7 +318,7 @@ export const attachObsWsShim = (
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws: WsClient) => {
-      registerConnection(ws, passwordRow.id, passwordRow.blackoutUserId, commands);
+      registerConnection(ws, passwordRow.id, passwordRow.blackoutUserId, commands, muteCommands);
     });
   };
   server.on('upgrade', onUpgrade);
@@ -303,6 +335,7 @@ const registerConnection = (
   passwordId: string,
   blackoutUserId: string,
   commands: StreamCommands,
+  muteCommands?: MuteCommands,
 ): ObsSession => {
   const now = Date.now();
   const session: ObsSession = {
@@ -313,6 +346,7 @@ const registerConnection = (
     salt: randomBase64(32),
     identified: false,
     commands,
+    muteCommands,
     connectedAt: now,
     lastActivityAt: now,
   };
@@ -437,14 +471,30 @@ const handleRequest = (session: ObsSession, frame: Frame): void => {
     );
     return;
   }
-  const out = dispatchRequest(requestType, d.requestData, {
+  const dispatched = dispatchRequest(requestType, d.requestData, {
     blackoutUserId: session.blackoutUserId,
     commands: session.commands,
+    muteCommands: session.muteCommands,
   });
-  send(
-    session.ws,
-    buildRequestResponse(requestType, requestId, out.status, out.responseData),
-  );
+  void Promise.resolve(dispatched)
+    .then((out: DispatchResult) => {
+      send(
+        session.ws,
+        buildRequestResponse(requestType, requestId, out.status, out.responseData),
+      );
+    })
+    .catch((err) => {
+      log.warn('obs_ws_dispatch_failed', { requestType, error: String(err) });
+      send(
+        session.ws,
+        buildRequestResponse(requestType, requestId, {
+          result: false,
+          // OBS-WS spec: 700 = RequestProcessingFailed.
+          code: 700,
+          comment: 'dispatch threw',
+        }),
+      );
+    });
 };
 
 interface BatchedRequestEntry {
@@ -461,21 +511,25 @@ const handleRequestBatch = (session: ObsSession, frame: Frame): void => {
   const ctx = {
     blackoutUserId: session.blackoutUserId,
     commands: session.commands,
+    muteCommands: session.muteCommands,
   };
-  const results = requests.map((entry) => {
-    const rt = entry?.requestType ?? '?';
-    const rid = entry?.requestId ?? '?';
-    const out = dispatchRequest(rt, entry?.requestData, ctx);
-    return {
-      requestType: rt,
-      requestId: rid,
-      requestStatus: out.status,
-      ...(out.responseData !== undefined ? { responseData: out.responseData } : {}),
-    };
-  });
-  send(session.ws, {
-    op: Op.RequestBatchResponse,
-    d: { requestId, results },
+  void Promise.all(
+    requests.map(async (entry) => {
+      const rt = entry?.requestType ?? '?';
+      const rid = entry?.requestId ?? '?';
+      const out = await Promise.resolve(dispatchRequest(rt, entry?.requestData, ctx));
+      return {
+        requestType: rt,
+        requestId: rid,
+        requestStatus: out.status,
+        ...(out.responseData !== undefined ? { responseData: out.responseData } : {}),
+      };
+    }),
+  ).then((results) => {
+    send(session.ws, {
+      op: Op.RequestBatchResponse,
+      d: { requestId, results },
+    });
   });
 };
 

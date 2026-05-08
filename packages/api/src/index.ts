@@ -283,6 +283,18 @@ if (shouldListen) {
     attachObsWsShim(httpServer as any);
     log.info('obs_ws_shim_attached', { pathPrefix: '/obs-ws/' });
   });
+
+  // StreamElements OverlayWS-compatible socket.io shim. Off-the-shelf
+  // SE browser-source overlay HTML connects to /se-overlay/, emits
+  // `authenticate` with a widgetAlertToken, and receives the same
+  // alerts as the SSE feed at /v1/widget-alerts/stream — but in the
+  // SE-shaped `event` frame so existing SE overlay HTML works
+  // unmodified.
+  void import('./integrations/se-overlay-compat/server').then(({ attachSeOverlayShim }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attachSeOverlayShim(httpServer as any);
+    log.info('se_overlay_shim_attached', { path: '/se-overlay/' });
+  });
 }
 
 export default app;

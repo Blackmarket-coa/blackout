@@ -1004,6 +1004,7 @@ integration tests.
 | `9bd8ca3` | feat(compat): persistent sync_cursor on linked_accounts; Streamlabs survives restart |
 | `2f9dea5` | feat(client): "Sync donations" button on the linked Streamlabs row |
 | `cf11b4e` | feat(compat): Streamlabs donation auto-poll scheduler |
+| (multi-platform-extensions-2) | feat(compat): StreamElements-shape OverlayWS shim — SE overlays connect unmodified |
 
 #### Phase 1 — Outbound chat back to source platforms
 
@@ -1058,6 +1059,8 @@ integration tests.
 | `bd65c80` | feat(compat): live OBS-WebSocket v5 server shim — Stream Deck/Companion/Touch Portal connect unmodified |
 | `ccf347e` | feat(compat): wire OBS-WS request matrix to creator stream lifecycle |
 | `3318bb3` | feat(compat): OBS-WS push events — Stream Deck tiles flip live on stream-state changes |
+| (multi-platform-extensions-2) | feat(compat): Stream Deck Companion module package — upstream-PR-ready for bitfocus/companion |
+| (multi-platform-extensions-2) | feat(compat): OBS-WS SetInputMute / GetInputMute / ToggleInputMute → LiveKit admin mute (hardcoded Mic/Microphone/Desktop Audio) |
 
 #### Phase 2 — Matrix appservice listener
 
@@ -1065,6 +1068,7 @@ integration tests.
 |---|---|
 | `bbda88a` | feat(compat): wire Blackout-side messages route to the outbound chat router |
 | `8c0a5a4` | feat(compat): Matrix appservice transactions endpoint — fans federation/bridge messages outbound |
+| (multi-platform-extensions-2) | feat(compat): Synapse appservice registration YAML stub for ops drop-in |
 
 #### Phase 2 — Connected-session observability + cross-cutting event push
 
@@ -1089,6 +1093,7 @@ integration tests.
 | Patreon webhook receiver | `packages/api/src/routes/patreonWebhook.ts` + `packages/api/src/integrations/patreon/webhookEvents.ts` |
 | Streamlabs donation sync | `packages/api/src/services/streamlabsDonationSync.ts` + `packages/api/src/services/streamlabsDonationScheduler.ts` |
 | Widget alerts SSE pipe (Streamlabs/StreamElements-shaped) | `packages/api/src/routes/widgetAlerts.ts` + `packages/api/src/services/widgetBus.ts` + `packages/api/src/services/widgetAlertTokens.ts` |
+| StreamElements OverlayWS compat (faithful socket.io shim) | `packages/api/src/integrations/se-overlay-compat/server.ts` + `packages/api/src/integrations/widgets/seOverlayShape.ts` |
 | Linked accounts (5 OAuth providers: Twitch, YouTube, Discord, Patreon, Streamlabs) | `packages/api/src/services/linkedAccounts.ts` + `packages/api/src/services/oauthProviders.ts` + `packages/api/src/integrations/_oauth/*` |
 | Outbound chat router (Twitch IRC + YouTube liveChat) | `packages/api/src/services/outboundMessageRouter.ts` |
 | Simulcast destinations CRUD (AES-GCM at rest) | `packages/api/src/services/simulcastDestinations.ts` + `packages/api/src/db/migrations/014_*.sql` |
@@ -1101,12 +1106,15 @@ integration tests.
 | OBS-WebSocket v5 server — protocol layer | `packages/api/src/integrations/obs-ws-compat/protocol.ts` |
 | OBS-WebSocket v5 server — WS server + Hello/Identify auth | `packages/api/src/integrations/obs-ws-compat/server.ts` |
 | OBS-WS request matrix (GetVersion / Stats / StreamStatus / StartStream / StopStream / ToggleStream / GetSceneList / SetCurrentProgramScene / BroadcastCustomEvent) | `dispatchRequest` in `packages/api/src/integrations/obs-ws-compat/protocol.ts` + `defaultStreamCommands` in the server |
+| OBS-WS SetInputMute / GetInputMute / ToggleInputMute → LiveKit admin mute (hardcoded Mic / Microphone / Desktop Audio) | `dispatchRequest` cases in `obs-ws-compat/protocol.ts` + `services/livekitAdmin.ts` + `services/voiceRooms.ts` |
 | OBS-WS push events (StreamStateChanged + `blackout.*`) | `notifyStreamStarted/Ended/notifyBlackoutEvent` in `packages/api/src/integrations/obs-ws-compat/server.ts` |
+| Stream Deck Companion module package (upstream-PR-ready) | `packages/companion-blackout/*` (target: bitfocus/companion) |
 | OBS-WS passwords (AES-GCM at rest, per-row URL slug, multi-device) | `packages/api/src/services/obsWsPasswords.ts` + `packages/api/src/routes/obsWsPasswords.ts` + `packages/api/src/db/migrations/019_*.sql` |
 | Discord-shape inbound webhooks | `packages/api/src/services/discordCompatWebhooks.ts` + `packages/api/src/routes/discordCompatWebhooks.ts` + `packages/api/src/db/migrations/016_*.sql` |
 | Discord-shape outbound webhooks (10 event types, HMAC-SHA256, AES-GCM-encrypted signing secret) | `packages/api/src/services/outboundEventWebhooks.ts` + `packages/api/src/routes/outboundEventWebhooks.ts` + `packages/api/src/db/migrations/017_*.sql` |
 | Outbound event sources wired (tip / follow / livestream / chat / sub / cheer / raid / streamgoal / SuperChat / Patreon-pledge) | `packages/api/src/services/{tips,outboundEventWebhooks,streamGoals,youtubeChatBridge,kickChatBridge,twitchChatBridge}.ts` + `packages/api/src/routes/{twitchEventSub,patreonWebhook}.ts` + `packages/api/src/modules/streaming.ts` |
 | Matrix appservice transactions endpoint (`PUT /_matrix/app/v1/transactions/:txnId`) | `packages/api/src/routes/matrixAppservice.ts` |
+| Synapse appservice registration YAML stub | `deploy/matrix-appservice/registration.yaml` + `deploy/matrix-appservice/README.md` |
 | In-process chat message hub (pub/sub) | `packages/api/src/services/chatMessageHub.ts` |
 | IRC + OBS-WS connected-session observability | `listSessionsForUser` in `packages/api/src/integrations/{twitch-compat/ircServer,obs-ws-compat/server}.ts` + corresponding `/sessions` GET routes |
 | Settings UIs (10 panels) | `apps/blackout-client/src/app/features/settings/{simulcast-destinations,kick-chat-bridges,twitch-chat-bridges,youtube-chat-bridges,obs-ws-passwords,twitch-irc-bot-tokens,discord-compat-webhooks,outbound-event-webhooks,widget-alerts,linked-accounts}/*` |
@@ -1120,10 +1128,16 @@ integration tests.
 | Discord bot gateway shim (Spacebar fork) | Roadblocked | Requires forking `spacebarchat/spacebarchat` and swapping its persistence to a Matrix adapter. Multi-week-engineer batch. |
 | Twitch Extensions iframe shim | Roadblocked | Needs proprietary `twitch-ext.min.js` + EBS JWT signing infra + extension-bundle install lifecycle. Requires legal review per AOG's risks section. |
 | Discord Activities Embedded App SDK | Roadblocked | Closed Discord SDK; no public path. |
-| OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | Bounded but limited | Needs LiveKit Server SDK admin-token path. Not all creators use LiveKit voice rooms during streams; ship when there's clear demand. |
-| StreamElements OverlayWS compat | Bounded | Mirror `routes/widgetAlerts.ts` pattern with the SE socket.io shape. |
-| Stream Deck Companion module YAML | Bounded | Upstream PR to `bitfocus/companion`. Pure config / docs. |
-| Synapse appservice registration YAML stub | Bounded | Ops-facing config file pairing with `routes/matrixAppservice.ts`. |
+| Hono >= 4.13.0 bump (clear `osv-scanner.toml` allowlist for GHSA-69xw-7hcm-h432 + GHSA-9vqf-7f2p-gf9v) | Blocked on registry | The internal npm mirror used by the dev sandbox currently exposes Hono up to `4.12.18` only (`latest` dist-tag = `4.12.18`). The 4.13.x fixes are upstream on github.com/honojs/hono but have not landed in the mirror. Re-attempt this bump once the mirror catches up; until then the allowlist stays in place. |
+
+> **FBM doc sync** — replacing `docs/AGGRESSIVE_OPERATIONS_GUIDE.md` on
+> `blackmarket-coa/free-black-market` (`claude/expand-fbm-strategy-7Hpco`)
+> with this file is tracked separately. It requires a PR on the FBM repo,
+> which is outside the `multi-platform-extensions-2` branch's scope (the
+> session executing this work has GitHub MCP access only to
+> `blackmarket-coa/blackout`). Ops applies via:
+> `cd <fbm-checkout> && git fetch && git switch claude/expand-fbm-strategy-7Hpco`
+> then copy this file from blackout `develop` and commit.
 
 ### C.3 — Test inventory
 
@@ -1132,6 +1146,10 @@ Backend integration test files covering the compat surface (all green at `ef6ecc
 | File | Tests |
 |---|---|
 | `packages/api/test/matrix-appservice.integration.test.ts` | 7 |
+| `packages/api/test/matrix-appservice-registration.integration.test.ts` | 7 |
+| `packages/api/test/se-overlay-shim-server.integration.test.ts` | 7 |
+| `packages/api/test/companion-module-manifest.integration.test.ts` | 7 |
+| `packages/api/test/obs-ws-input-mute.integration.test.ts` | 8 |
 | `packages/api/test/outbound-message-router.integration.test.ts` | 8 |
 | `packages/api/test/rtmp-fanout-worker.integration.test.ts` | 11 |
 | `packages/api/test/youtube-chat-bridge.integration.test.ts` | 23 |
@@ -1187,6 +1205,7 @@ cd packages/api && pnpm exec tsx --test \
 | Patreon webhook receiver | 0–100% | `routes/patreonWebhook.ts` + `integrations/patreon/webhookEvents.ts` |
 | Streamlabs donation sync | 0–100% | `services/streamlabsDonationSync.ts` + `services/streamlabsDonationScheduler.ts` |
 | Widget alerts SSE pipe (Streamlabs-shaped) | 0–100% | `routes/widgetAlerts.ts` + `services/widgetBus.ts` |
+| StreamElements OverlayWS compat (faithful socket.io shim) | 0–100% | `integrations/se-overlay-compat/server.ts` + `integrations/widgets/seOverlayShape.ts` |
 | Linked accounts (5 OAuth providers) | 0–100% | `services/linkedAccounts.ts` + `services/oauthProviders.ts` |
 | Outbound chat router (Twitch IRC + YouTube liveChat) | 0–100% | `services/outboundMessageRouter.ts` |
 | Simulcast destinations CRUD (AES-GCM at rest) | 0–100% | `services/simulcastDestinations.ts` + migration `014` |
@@ -1199,12 +1218,15 @@ cd packages/api && pnpm exec tsx --test \
 | OBS-WebSocket v5 server — protocol layer | 0–100% | `integrations/obs-ws-compat/protocol.ts` |
 | OBS-WebSocket v5 server — WS server + auth | 0–100% | `integrations/obs-ws-compat/server.ts` |
 | OBS-WS request matrix (Get/Set Stream + Scenes + Stats + BroadcastCustomEvent) | 0–100% | `dispatchRequest` in `obs-ws-compat/protocol.ts` + `defaultStreamCommands` in server |
+| OBS-WS SetInputMute / GetInputMute / ToggleInputMute → LiveKit admin mute (hardcoded Mic/Microphone/Desktop Audio) | 0–100% | `dispatchRequest` cases in `obs-ws-compat/protocol.ts` + `services/livekitAdmin.ts` + `services/voiceRooms.ts` |
 | OBS-WS push events (StreamStateChanged + `blackout.*`) | 0–100% | `notifyStreamStarted/Ended/notifyBlackoutEvent` in `obs-ws-compat/server.ts` |
+| Stream Deck Companion module package (upstream-PR-ready) | 0–100% | `packages/companion-blackout/*` |
 | OBS-WS passwords (AES-GCM at rest, multi-device) | 0–100% | `services/obsWsPasswords.ts` + `routes/obsWsPasswords.ts` + migration `019` |
 | Discord-shape inbound webhooks | 0–100% | `services/discordCompatWebhooks.ts` + `routes/discordCompatWebhooks.ts` + migration `016` |
 | Discord-shape outbound webhooks (10 event types, HMAC, AES-GCM) | 0–100% | `services/outboundEventWebhooks.ts` + `routes/outboundEventWebhooks.ts` + migration `017` |
 | Outbound event sources wired (10 types: tip/follow/livestream/chat/sub/cheer/raid/streamgoal/SuperChat/patreon-pledge) | 0–100% | `services/{tips,streamGoals,outboundEventWebhooks}.ts` + chat bridges + `routes/{twitchEventSub,patreonWebhook}.ts` + `modules/streaming.ts` |
 | Matrix appservice transactions endpoint | 0–100% | `routes/matrixAppservice.ts` |
+| Synapse appservice registration YAML stub | 0–100% | `deploy/matrix-appservice/registration.yaml` |
 | Chat message hub (in-process pub/sub) | 0–100% | `services/chatMessageHub.ts` |
 | IRC + OBS-WS connected-session observability | 0–100% | `integrations/{twitch-compat/ircServer,obs-ws-compat/server}.ts` `listSessionsForUser` |
 | Settings UIs (10 panels) | 0–100% | `apps/blackout-client/src/app/features/settings/{simulcast-destinations,kick-chat-bridges,twitch-chat-bridges,youtube-chat-bridges,obs-ws-passwords,twitch-irc-bot-tokens,discord-compat-webhooks,outbound-event-webhooks,widget-alerts,linked-accounts}/*` |
@@ -1218,9 +1240,5 @@ cd packages/api && pnpm exec tsx --test \
 | Discord bot gateway shim (Spacebar fork) | 0% | Roadblocked: requires forking `spacebarchat/spacebarchat` |
 | Twitch Extensions iframe shim | 0% | Roadblocked: proprietary `twitch-ext.min.js` + EBS JWT infra + legal review |
 | Discord Activities Embedded App SDK | 0% | Roadblocked: closed Discord SDK |
-| OBS-WS `SetInputMute` ↔ LiveKit mute enforcement | 0% | Bounded but limited applicability; needs LiveKit Server SDK admin-token path |
-| StreamElements OverlayWS compat | 0% | Bounded; mirror `widgetAlerts.ts` pattern |
-| Stream Deck Companion module YAML | 0% | Bounded; upstream PR to `bitfocus/companion` |
-| Synapse appservice registration YAML stub | 0% | Bounded; ops-facing config file |
 
 ---
