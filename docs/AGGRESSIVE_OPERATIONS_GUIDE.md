@@ -127,6 +127,237 @@ Service providers	10,000+
 
 ⸻
 
+## §0 — Reframe (Blackout-side, this revision)
+
+Why this revision exists. The original 24-month calendar (now §6) framed
+Blackout as a generic creator-economy platform whose Phase-1 moat was
+"Monetize Attention" via plugins, themes, and emoji marketplaces. After
+shipping the Phase-1 / Phase-2 multi-platform compatibility layer
+(Appendix C: 127 backend integration tests + 114 frontend tests green
+at commit `ef6ecce`), the actual Blackout wedge is clearer.
+
+**Blackout's wedge is a Matrix-first cooperative communication
+substrate plus a transparent compatibility layer that lets existing
+communities adopt without abandoning their tooling.** Twitch IRC,
+YouTube Live, Kick, Patreon, Streamlabs, OBS-WebSocket, Stream Deck,
+Streamlabs/StreamElements widgets, Discord-shape webhooks, and federated
+Matrix appservice transactions all keep working unmodified.
+
+Plugin SDKs, theme marketplaces, and emoji stores are commodity surface
+area — every competing platform has them. They are demoted from headline
+to Year 2 polish.
+
+This revision restructures the **Blackout-side framing only**. FBM-side
+framing (Appendix A modules, monthly FBM expansions, the
+cooperative-economics moat for the broader Coalition) is unchanged here
+and is tracked separately on `claude/expand-fbm-strategy-7Hpco` in
+`blackmarket-coa/free-black-market` (see Appendix C.2.2).
+
+⸻
+
+## §1 — The Blackout Wedge
+
+Five surfaces that ship today and constitute the actual wedge. All
+paths and commits cross-reference Appendix C; no new claims are made
+in this section.
+
+1. **Multi-platform chat ingress.** Twitch IRC, YouTube Live, and Kick
+   (Pusher v7 WS) all flow into Matrix den rooms via
+   `packages/api/src/services/{twitchChatBridge,youtubeChatBridge,kickChatBridge}.ts`.
+   Existing chat communities federate without migration.
+2. **Outbound chat router.** Single Matrix-room → platforms entry point
+   at `packages/api/src/services/outboundMessageRouter.ts`. Twitch IRC
+   and YouTube liveChat round-trip end-to-end.
+3. **Alert + donation pipeline.** Twitch EventSub, Patreon webhooks,
+   Streamlabs OAuth + auto-poll donation sync — all on a single SSE
+   feed (`packages/api/src/routes/widgetAlerts.ts`). The
+   StreamElements OverlayWS shim (`integrations/se-overlay-compat/server.ts`)
+   lets SE overlays connect unmodified.
+4. **RTMP simulcast fan-out.** Encrypted-at-rest destinations, ffmpeg
+   supervisor with auto-restart, live SSE status pipe
+   (`packages/api/src/services/rtmpFanoutWorker.ts` + routes). Streamers
+   target multiple platforms from a single ingest.
+5. **OBS / Stream Deck control surface.** Full OBS-WebSocket v5
+   protocol shim (`integrations/obs-ws-compat/`), upstream-PR-ready
+   Stream Deck Companion module package (`packages/companion-blackout`),
+   Twitch IRC bot shim that lets Nightbot / StreamElements / Moobot
+   connect unmodified (`integrations/twitch-compat/ircServer.ts`). Mute
+   commands route through LiveKit admin (`services/livekitAdmin.ts`).
+
+Plus the Matrix appservice transactions endpoint
+(`packages/api/src/routes/matrixAppservice.ts`) and Synapse registration
+stub (`deploy/matrix-appservice/`), and Discord-shape inbound + outbound
+webhooks (10 event types, HMAC-SHA256 signed) so Discord-tooled
+communities can migrate without rewriting downstream consumers.
+
+**What this wedge is not:** a creator marketplace. The pitch is "your
+existing tooling keeps working, and federation gives you exit rights
+from any single platform." The plugin / theme / emoji marketplace
+remains in scope long-term but is not the moat.
+
+⸻
+
+## §2 — Solo-Dev Capacity Reality
+
+This is a solo project with AI assistance and finite hours. Plans that
+assume a 15-engineer team will not survive contact with reality. Two
+implications for prioritization:
+
+1. **Active prioritization sources, not aspirational ones.** The repo's
+   two prioritization artifacts are
+   `docs/backlog_prioritization_top20_2026-04-03.md` (top-20 ranked)
+   and `docs/shippable_p0_backlog_2026-04-03.md` (P0 shippable items).
+   These supersede the original calendar's monthly task lists for
+   Blackout-side work.
+2. **Filter:** every Blackout-side feature must pass at least one of
+   the constraints in §9. If it fails all of them, deprioritize
+   aggressively even if it appears in the original calendar.
+
+Hours and task counts are deliberately not specified here. They will
+be added when grounded in tracker data, not speculated.
+
+⸻
+
+## §3 — Synapse Federation Risk (qualitative)
+
+The single-server production baseline (`infra/single-server-baseline/RUNBOOK.md`)
+co-locates Synapse, Postgres, Redis, coturn, and the API on one host.
+Synapse is the largest single point of failure in this topology:
+
+- Synapse data + media volumes are marked `Critical` for backup (see
+  `infra/single-server-baseline/RUNBOOK.md` §1, persistent volumes table).
+- Federation queue, TURN allocation errors, and API/Synapse latency are
+  the explicit baseline SLOs (see
+  `infra/single-server-production-launch-plan.md`, line 39).
+- Federation readiness checklist — smoke checks against reference public
+  homeservers — is documented in §Week 2 of the same plan (lines 44–60).
+
+**Watch-items**, in qualitative order:
+
+- Synapse media-store growth (state size, retention policy, GC cadence)
+- Federation outbound queue depth (sender-localpart staging, EDU backpressure)
+- TURN allocation errors during simulcast or townhall bursts
+- Postgres autovacuum on Synapse state tables under federation load
+
+Concrete capacity numbers (DAU thresholds, hardware sizing, scale-out
+triggers) require real telemetry. They are deliberately not in this
+document.
+
+⸻
+
+## §4 — Bus-Factor Mitigation
+
+Solo-project bus-factor is the single largest non-technical operational
+risk. Existing runbook coverage is real and substantial:
+
+- `docs/runbooks/bot_abuse_spike_playbook.md`
+- `docs/runbooks/distributed_self_healing_operations.md`
+- `docs/operations/runbooks/townhall-observability-runbook.md`
+- `docs/operations/oncall_escalation_tree.md`
+- `docs/operations/secrets_rotation_break_glass.md`
+- `docs/operations/operator_onboarding_pack.md`
+- `infra/single-server-baseline/RUNBOOK.md`
+- `apps/blackout-server/docs/blackout-ops-runbook.md`
+- `deploy/docker/production/BRIDGE_OPS_RUNBOOK.md`
+- `deploy/docker/production/CLOUDFLARE_TUNNEL_MIGRATION_RUNBOOK.md`
+
+**Gaps** (no time estimates; tracked as rows in §8):
+
+- **SPOF map** — one-page inventory of single points of failure across
+  the live system (Synapse, Postgres, Redis, coturn, reverse proxy,
+  cert renewal, RTMP fan-out worker, appservice transactions endpoint).
+- **Co-maintainer onboarding doc** — clone → boot → ship a change →
+  operate the runbooks. The
+  `docs/operations/operator_onboarding_pack.md` covers operator scope;
+  a developer-onboarding companion does not yet exist.
+- **`apps/deaddrop-appservice/` runbook** — this app exists but has no
+  operational runbook.
+- **Compat-layer credential-recovery procedure** — linked-account OAuth
+  tokens, widget secrets, and OBS-WS passwords are AES-GCM-at-rest;
+  recovery on data-loss scenarios is undocumented.
+- **Key-rotation drill cadence** — the break-glass runbook
+  (`docs/operations/secrets_rotation_break_glass.md`) exists; a
+  documented practice cadence does not.
+
+⸻
+
+## §5 — Execution Calendar (4 phases)
+
+Active prioritization frame for Blackout-side work. The original
+24-month month-by-month calendar (now §6) is preserved as historical
+reference but is no longer the active execution rhythm for
+Blackout-the-repo.
+
+### Phase 1 — Cooperative Substrate
+
+**Goal:** the Matrix-first substrate is operable, observable, and
+recoverable by a second engineer.
+
+Active workstreams:
+- §4 bus-factor gaps closed (SPOF map, co-maintainer doc,
+  deaddrop-appservice runbook, compat-layer credential recovery,
+  key-rotation drill cadence).
+- Synapse SLOs on the dashboards in `docs/operations/dashboards/`
+  (`federation_resilience_dashboard.json`,
+  `blackout_module_adoption_dashboard.json`,
+  `townhall-sfu-observability-dashboard.json`) wired to alerts in
+  `docs/operations/alerts/`.
+- Compat-surface health snapshot
+  (`packages/api/src/services/integrationsHealth.ts`) covers all 5
+  wedge surfaces from §1.
+
+### Phase 2 — Wedge Differentiation
+
+**Goal:** each of the 5 wedge surfaces from §1 has a public-facing
+onramp that demonstrates "your tooling keeps working."
+
+Active workstreams:
+- Linked-accounts UX polish for the 5 OAuth providers (Twitch, YouTube,
+  Discord, Patreon, Streamlabs).
+- Stream Deck Companion module shipped upstream to bitfocus/companion
+  (`packages/companion-blackout` is upstream-PR-ready per Appendix C).
+- StreamElements + Streamlabs widget shims documented for overlay
+  creators.
+- Synapse appservice deployment doc
+  (`deploy/matrix-appservice/README.md`) covers the ops drop-in path
+  end-to-end.
+
+### Phase 3 — Density
+
+**Goal:** a community that is not a streamer can adopt Blackout
+substrate and federate with streamer-side communities.
+
+Active workstreams: paid communities, community discovery, creator
+dashboards, prestige systems, federation scaling — all from the
+original Blackout master tracker, but sequenced after Phases 1–2.
+
+### Phase 4 — Year 2
+
+**Goal:** plugin SDK, theme marketplace, emoji marketplace, AI plugin
+system productized as polish on top of the substrate, not as the
+headline. Cross-coalition federation with FBM-side cooperatives once
+the FBM-side restructure (`claude/expand-fbm-strategy-7Hpco`) lands.
+
+**Phase advancement:** each phase advances when its goal is observably
+met, not on a calendar date.
+
+**KPIs.** The revenue / GMV / creator-count targets in
+"PRIMARY SUCCESS METRICS" above remain intact; they are
+FBM/Coalition-wide, not Blackout-the-repo-specific. **Blackout-the-repo
+Phase 1 KPIs are operational** (runbook coverage %, SLO attainment %,
+compat-surface uptime), not commercial.
+
+⸻
+
+## §6 — Original 24-Month Operations Calendar (preserved as historical reference)
+
+> The original month-by-month calendar follows verbatim. As of this
+> revision, the active execution frame for Blackout-side work is §5's
+> 4-phase model. The monthly tables below (including Blackout
+> sub-blocks) are preserved for context and for FBM-side priorities,
+> which continue to flow on the original calendar until the FBM-side
+> restructure lands on `claude/expand-fbm-strategy-7Hpco`.
+
 MONTH-BY-MONTH OPERATIONS CALENDAR
 
 MONTH 1
@@ -647,6 +878,28 @@ Node operators	5,000+
 
 ⸻
 
+## §7 — Daily Operations (Blackout-side cadence)
+
+> The full DAILY OPERATIONS SYSTEM block below was written for the
+> multi-track Coalition team. The active **Blackout-side cadence for a
+> solo dev with AI assistance** is narrower:
+>
+> - **Ship**: small, reversible PRs into `develop`. CI green before merge.
+> - **Watch**: 3 dashboards in `docs/operations/dashboards/`
+>   (`federation_resilience_dashboard.json`,
+>   `blackout_module_adoption_dashboard.json`,
+>   `townhall-sfu-observability-dashboard.json`). One alert pager.
+> - **Compat-surface health**: review the
+>   `services/integrationsHealth.ts` snapshot before each release;
+>   re-run the Appendix C.3 regression command when the compat layer
+>   is touched.
+> - **Runbook drift**: when a runbook is touched by a code change,
+>   edit it in the same PR.
+>
+> The marketing / sales / community / analytics blocks below remain
+> aspirational for the broader Coalition and stay verbatim for
+> reference.
+
 DAILY OPERATIONS SYSTEM
 
 EVERY DAY
@@ -784,6 +1037,19 @@ Cross-platform bridges	0–100%
 Prestige systems	0–100%
 Federation scaling	0–100%
 
+#### Blackout — Operational rows (added in this revision; tracking §1 wedge + §4 bus-factor)
+
+| System | Progress | Notes |
+|---|---|---|
+| SPOF map | 0–100% | new doc; gap from §4 |
+| Co-maintainer onboarding doc | 0–100% | new doc; gap from §4 |
+| `apps/deaddrop-appservice/` runbook | 0–100% | new doc; gap from §4 |
+| Compat-layer credential-recovery procedure | 0–100% | new doc; gap from §4 |
+| Key-rotation drill cadence | 0–100% | new practice cadence; gap from §4 |
+| Compat-surface health dashboard | 0–100% | extends `packages/api/src/services/integrationsHealth.ts` |
+| Synapse SLO attainment | 0–100% | track via `docs/operations/dashboards/federation_resilience_dashboard.json` |
+| Compat-surface coverage (5 wedge surfaces from §1) | 0–100% | cross-referenced to Appendix C.1 / C.2.1 |
+
 ⸻
 
 Blackstar
@@ -808,6 +1074,14 @@ Every feature must:
 * increase creator earnings,
 * increase ecosystem lock-in,
 * or increase infrastructure ownership.
+
+**Blackout-side rider** (added in this revision; applies to code in
+this repo specifically). A feature also passes the filter if it:
+
+* increases compat-surface coverage (adds or strengthens an
+  Appendix C row), or
+* increases federation resilience (Synapse SLO attainment, an
+  operational runbook, or a §4 SPOF mitigation).
 
 If not:
 
@@ -1242,3 +1516,73 @@ cd packages/api && pnpm exec tsx --test \
 | Discord Activities Embedded App SDK | 0% | Roadblocked: closed Discord SDK |
 
 ---
+
+## Appendix D — Changelog vs Previous Revision
+
+This revision restructures the **Blackout-side framing** of the
+Aggressive Operations Guide. **FBM-side framing** (Appendix A,
+monthly FBM expansions, FBM master progress tracker, FBM strategic
+moat) is unchanged here and is tracked separately on
+`claude/expand-fbm-strategy-7Hpco` in `blackmarket-coa/free-black-market`.
+
+### Added
+
+- §0 Reframe — Blackout wedge = compat layer + federation, not
+  creator marketplace.
+- §1 The Blackout Wedge — 5 wedge surfaces, all cross-referenced to
+  Appendix C; no new claims.
+- §2 Solo-Dev Capacity Reality — qualitative; references the repo's
+  prioritization sources (`docs/backlog_prioritization_top20_2026-04-03.md`,
+  `docs/shippable_p0_backlog_2026-04-03.md`).
+- §3 Synapse Federation Risk — qualitative SPOF / SLO discussion
+  anchored to `infra/single-server-baseline/RUNBOOK.md` and
+  `infra/single-server-production-launch-plan.md`. No hardware specs
+  or DAU thresholds.
+- §4 Bus-Factor Mitigation — existing runbook inventory + named gaps
+  (SPOF map, co-maintainer doc, deaddrop-appservice runbook,
+  compat-layer credential recovery, key-rotation drill cadence).
+- §5 Execution Calendar (4 phases) — Cooperative Substrate / Wedge
+  Differentiation / Density / Year 2. Phase advancement is
+  goal-observable, not date-based.
+- §6 — original month-by-month calendar wrapped as historical
+  reference (no content edits).
+- §7 Daily Operations — Blackout-side cadence preface added; original
+  Coalition-wide blocks preserved.
+- §8 Master Progress Tracker — Blackout block extended with operational
+  rows (SPOF map, co-maintainer doc, deaddrop runbook, compat-layer
+  credential recovery, key-rotation drill cadence, compat-surface
+  health dashboard, Synapse SLO attainment, compat-surface coverage).
+  Existing 10-row Blackout table and the FBM tracker are unchanged.
+- §9 Strategic Rule — Blackout-side rider added (compat-surface
+  coverage or federation resilience as additional pass conditions).
+  Original 5 constraints preserved.
+- Appendix D — this changelog.
+
+### Preserved verbatim
+
+- Appendix A — FBM Module Inventory & Mapping
+- Appendix B — Open-Source Adoption Map for Unbuilt FBM Workstreams
+- Appendix C — Blackout Compat-Layer Inventory (C.0–C.3)
+- Master Progress Tracker — Blackout Extended Rows (the
+  shipped-compat-surface tracker further down this document)
+- All FBM monthly expansion subsections inside MONTH 1 / MONTH 2–3 /
+  MONTH 4–6 / MONTH 7–12 / YEAR 2
+
+### Explicitly out of scope for this revision (tracked elsewhere)
+
+- "Coalition Credits" feature framing — no such module exists in the
+  Blackout or FBM codebases; deferred to FBM-side restructure if the
+  user wants to introduce it as a spec.
+- Physical-asset rent-to-own — same.
+- Cooperative-economics moat as the headline frame — applies at the
+  Coalition / FBM level, not Blackout-the-repo; deferred to FBM PR.
+- FBM monthly task re-stack-rank.
+- "~258h MVP envelope" and "38-task MVP plan" numbers — not grounded
+  in this codebase; dropped rather than copied forward.
+- DL360 / hardware-specific Synapse capacity bands and DAU
+  thresholds — deferred until real telemetry exists.
+
+### Branch / PR metadata
+
+- Branch: `claude/aog-cooperative-wedge-restructure-aliJG`.
+- PR: not opened by this revision; the maintainer will open separately.
