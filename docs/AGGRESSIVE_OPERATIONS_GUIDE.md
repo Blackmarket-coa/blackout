@@ -411,7 +411,7 @@ Foundation milestone unbuilt rows:
 | Storefront polish + Capacitor render compatibility                             | 0–100%   | Foundation milestone; extends `STOREFRONT_AUDIT.md`                       |
 | Vendor activation Sprint A (TTFLL ≤ 5 min)                                     | 0–100%   | Foundation milestone; partially specced; `FEATURE_BUILD_PLAN.md` Sprint A |
 | Cooperative governance proposal flow with Matrix ACL sync                      | 0–100%   | Foundation milestone; extends `cooperative` + `governance`                |
-| Railway → primary-server migration (FBM)                                       | 0–100%   | Foundation milestone critical                                             |
+| Railway → primary-server migration (FBM)                                       | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/FBM_MIGRATION_TO_PRIMARY_SERVER.md` |
 
 Differentiation milestone unbuilt rows:
 
@@ -505,11 +505,11 @@ Foundation milestone unbuilt rows:
 | Settings: Appearance + Steganography pages                    | 0–100%   | Foundation milestone; in flight           |
 | Spatial layer integration (PostGIS + Martin + PMTiles) — base | 0–100%   | Foundation milestone (formerly Coalition) |
 | FBM commerce flows embedded as Blackout views (mobile-first)  | 0–100%   | Foundation milestone                      |
-| SPOF map                                                      | 0–100%   | Foundation milestone                      |
-| Co-maintainer onboarding doc                                  | 0–100%   | Foundation milestone                      |
-| Compat-layer credential recovery runbook                      | 0–100%   | Foundation milestone                      |
-| `apps/deaddrop-appservice/` runbook                           | 0–100%   | Foundation milestone                      |
-| Bus-factor drill cadence doc                                  | 0–100%   | Foundation milestone                      |
+| SPOF map                                                      | Doc shipped | Foundation milestone; at `docs/operations/SPOF_MAP.md` |
+| Co-maintainer onboarding doc                                  | Doc shipped | Foundation milestone; at `docs/operations/CO_MAINTAINER_ONBOARDING.md` |
+| Compat-layer credential recovery runbook                      | Doc shipped | Foundation milestone; at `docs/runbooks/COMPAT_LAYER_CREDENTIAL_RECOVERY.md` |
+| `apps/deaddrop-appservice/` runbook                           | Doc shipped | Foundation milestone; at `docs/runbooks/DEADDROP_APPSERVICE.md` |
+| Bus-factor drill cadence doc                                  | Doc shipped | Foundation milestone; at `docs/operations/BUS_FACTOR_DRILL_CADENCE.md` |
 
 Differentiation milestone and beyond unbuilt rows:
 
@@ -529,12 +529,12 @@ Differentiation milestone and beyond unbuilt rows:
 
 | System                                                   | Progress | Status                                       |
 |----------------------------------------------------------|----------|----------------------------------------------|
-| Secrets manager consolidation (Vault / Infisical / SOPS) | 0–100%   | Foundation milestone critical                |
-| AI-driven security and dependency update workflow        | 0–100%   | Foundation milestone                         |
-| Upstream advisories aggregation feed                     | 0–100%   | Foundation milestone                         |
+| Secrets manager consolidation (Vault / Infisical / SOPS) | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/SECRETS_MANAGER_MIGRATION.md` |
+| AI-driven security and dependency update workflow        | Doc shipped | Foundation milestone; at `docs/operations/AI_SECURITY_WORKFLOW.md`; aggregation workflow at `.github/workflows/upstream-advisories.yml` |
+| Upstream advisories aggregation feed                     | Doc shipped | Foundation milestone; at `docs/operations/UPSTREAM_ADVISORIES.md`; fed by `.github/workflows/upstream-advisories.yml` |
 | ClickHouse + Cube + Metabase analytics consolidation     | 0–100%   | Foundation milestone                         |
 | Marketing site (Astro + Tailwind, Foxi fork)             | 0–100%   | Differentiation milestone                    |
-| Cloudflare Tunnel fallback nginx documented              | 0–100%   | Foundation milestone                         |
+| Cloudflare Tunnel fallback nginx documented              | Doc shipped | Foundation milestone; runbook at `docs/runbooks/CLOUDFLARE_TUNNEL_FALLBACK_NGINX.md` |
 | Cloudflare Tunnel fallback nginx enabled                 | 0–100%   | Differentiation milestone                    |
 | Postgres streaming replication to secondary server       | 0–100%   | Density milestone                            |
 | Multi-host Blackout deployment                           | 0–100%   | Infrastructure milestone (if scale warrants) |

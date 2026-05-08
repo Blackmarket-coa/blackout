@@ -1,0 +1,98 @@
+name: Upstream advisories aggregation
+
+# Pulls security advisories from upstream projects that BMC maintains forks
+# of, per AGGRESSIVE_OPERATIONS_GUIDE.md §2.9 and §8.3, and opens a PR
+# adding any new rows to docs/operations/UPSTREAM_ADVISORIES.md. The
+# AI_SECURITY_WORKFLOW.md classification step re-classifies the appended
+# rows from `needs-review` to `applicable` / `not-applicable`.
+
+on:
+    schedule:
+        - cron: "30 3 * * *" # 03:30 UTC daily
+    workflow_dispatch:
+        inputs:
+            dry-run:
+                description: "Print proposed rows without committing"
+                required: false
+                default: "false"
+
+permissions:
+    contents: write
+    pull-requests: write
+
+concurrency:
+    group: upstream-advisories
+    cancel-in-progress: false
+
+jobs:
+    aggregate:
+        name: Fetch and append advisories
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        steps:
+            - name: Checkout
+              uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+              with:
+                  persist-credentials: true
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - name: Fetch upstream advisories
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  if [ "${{ github.event.inputs.dry-run }}" = "true" ]; then
+                      node tools/ci/fetch-upstream-advisories.mjs --dry-run
+                  else
+                      node tools/ci/fetch-upstream-advisories.mjs
+                  fi
+
+            - name: Detect changes
+              id: diff
+              run: |
+                  if git diff --quiet docs/operations/UPSTREAM_ADVISORIES.md; then
+                      echo "changed=false" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "changed=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Open PR with new advisories
+              if: steps.diff.outputs.changed == 'true' && github.event.inputs.dry-run != 'true'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  STAMP=$(date -u +%Y%m%d)
+                  BRANCH="security/upstream-advisories-${STAMP}"
+
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  # If the branch already exists from an earlier run today,
+                  # append to it rather than failing.
+                  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+                      git fetch origin "$BRANCH"
+                      git switch "$BRANCH"
+                      # Re-apply the script's changes onto the existing branch.
+                      git checkout -- docs/operations/UPSTREAM_ADVISORIES.md || true
+                      node tools/ci/fetch-upstream-advisories.mjs
+                  else
+                      git switch -c "$BRANCH"
+                  fi
+
+                  git add docs/operations/UPSTREAM_ADVISORIES.md
+                  git commit -m "chore(security): update upstream advisories ${STAMP}"
+                  git push -u origin "$BRANCH"
+
+                  # Open a PR if one isn't already open for this branch.
+                  if ! gh pr view "$BRANCH" >/dev/null 2>&1; then
+                      gh pr create \
+                          --base "${GITHUB_REF_NAME:-develop}" \
+                          --head "$BRANCH" \
+                          --title "chore(security): upstream advisories ${STAMP}" \
+                          --body "Automated aggregation of upstream security advisories per [AGGRESSIVE_OPERATIONS_GUIDE.md §8.3](../blob/develop/docs/AGGRESSIVE_OPERATIONS_GUIDE.md). New rows are added with \`Classification = needs-review\`; the AI_SECURITY_WORKFLOW.md classification step (or the maintainer) reclassifies them.
+
+See [docs/operations/AI_SECURITY_WORKFLOW.md](../blob/develop/docs/operations/AI_SECURITY_WORKFLOW.md)."
+                  fi
