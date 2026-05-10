@@ -108,6 +108,8 @@ The contract answers four questions for any pair consisting of a user identified
 
 The contract is documented as an OpenAPI specification under `docs/contracts/entitlements.yaml` in the FBM repository. Both FBM-side modules and Blackout-side consumers code against this contract. Changes to the contract require revising this document. The contract is the single most important architectural commitment in this section because it is what makes the two-layer split coherent.
 
+The Blackout-side consumer mirror — narrowed to the read-side slice that Blackout actually consumes — lives at `docs/contracts/fbm-entitlements-consumer.md`, with the TypeScript surface at `packages/api/src/integrations/fbm/entitlementsContract.ts`. When the FBM-side OpenAPI specification ships, the consumer mirror is reconciled against it.
+
 ### §2.6 Listings as presentation variants
 
 Listings are stored once in the FBM `marketplace-listing` module. The retail shop and the vendor marketplace are presentation variants of the same record, with the choice of presentation determined by the buyer's relationship to the vendor and the context in which the listing appears. This is implemented in the storefront layer and the routing layer rather than in the data layer.
@@ -500,8 +502,8 @@ Foundation milestone unbuilt rows:
 | Synapse media retention policy                                | Doc shipped | Foundation milestone critical; `media_retention:` block in `infra/single-server-baseline/synapse/homeserver.yaml.template`; rationale in `infra/single-server-baseline/RUNBOOK.md` §14 |
 | Postgres tuning baseline                                      | Doc shipped | Foundation milestone critical; `infra/single-server-baseline/postgres/postgresql.conf`; rationale in `infra/single-server-baseline/RUNBOOK.md` §15 |
 | Synapse worker-mode config (documented, not enabled)          | Doc shipped | Foundation milestone critical; configs at `infra/single-server-baseline/synapse/workers/`; enablement at `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md` |
-| Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical             |
-| Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical             |
+| Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical; consumer surface scaffolded at `packages/api/src/integrations/fbm/entitlementsContract.ts` and documented in `docs/contracts/fbm-entitlements-consumer.md`; awaits FBM-side `docs/contracts/entitlements.yaml` |
+| Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical; ACL sync targets `GovernanceRole.matrixAcls` from the entitlements consumer surface (see `docs/contracts/fbm-entitlements-consumer.md`) |
 | Settings: Appearance + Steganography pages                    | 0–100%   | Foundation milestone; in flight           |
 | Spatial layer integration (PostGIS + Martin + PMTiles) — base | 0–100%   | Foundation milestone (formerly Coalition) |
 | FBM commerce flows embedded as Blackout views (mobile-first)  | 0–100%   | Foundation milestone                      |
