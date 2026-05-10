@@ -443,3 +443,39 @@ Hardening backlog:
   dedicated hostname for cache-header divergence and observability
   separation. Path-based routing is fine until then.
 
+## 18) Analytics warehouse (ClickHouse + Cube + Metabase)
+
+The Foundation milestone analytics consolidation (AOG §9.3) ships
+three OSS services on the same host:
+
+- **ClickHouse** (`clickhouse/clickhouse-server:24.3-alpine`) — OLAP
+  store. Memory cap 8 GB via `clickhouse/config.d/blackout.xml`.
+  Schemas `analytics` and `analytics_raw` created by initdb.
+- **Cube** (`cubejs/cube:v0.36.0`) — semantic layer reading from
+  ClickHouse. One seed model in `cube/schema/Events.yml`.
+- **Metabase** (`metabase/metabase:v0.50.0`) — BI / dashboarding,
+  AGPL-3.0 Community Edition. App data in the `metabase` Postgres
+  database created by `postgres/initdb/02-metabase-database.sql`.
+  Listens on 3001 (3000 is taken by Martin per §17).
+
+All three are internal-only at this milestone. Maintainer access to
+Metabase is via SSH tunnel (`ssh -L 3001:localhost:3001`). Public
+exposure is deferred to the Differentiation milestone — see
+`docs/runbooks/ANALYTICS_WAREHOUSE.md` §0 for the rationale (SSO
+wiring + AGPL-3.0 modification posture both want resolving first).
+
+Bootstrap, smoke test, schema patterns, and the existing-volume
+migration path live in `docs/runbooks/ANALYTICS_WAREHOUSE.md`.
+
+Hardening backlog:
+
+- **Dedicated read-only ClickHouse users** for Cube and Metabase
+  (currently both connect as `default`). Parallels the `pg_monitor`
+  upgrade for postgres-exporter (§13) and the read-only `martin`
+  role (§17).
+- **clickhouse-backup cron** integrated into
+  `infra/single-server-baseline/backup/`. Skip until the analytics
+  workload becomes load-bearing.
+- **Metabase SSO** against the Matrix/Keycloak surface so admin
+  access stops depending on a separate password store.
+

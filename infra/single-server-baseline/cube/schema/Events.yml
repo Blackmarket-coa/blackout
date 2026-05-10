@@ -1,0 +1,58 @@
+# Example Cube semantic model on top of the analytics_raw.events
+# landing table created by clickhouse/initdb/01-analytics-database.sql.
+#
+# This is a seed model — replace with the real FBM event schema once
+# AOG §2.2 (FBM as canonical event bus) ships and the event taxonomy
+# is stable. The shape here is just enough to validate the
+# Cube ↔ ClickHouse ↔ Metabase wiring end-to-end.
+#
+# Cross-references:
+#   - infra/single-server-baseline/cube/cube.js (Cube config)
+#   - infra/single-server-baseline/clickhouse/initdb/01-analytics-database.sql
+#   - docs/runbooks/ANALYTICS_WAREHOUSE.md
+
+cubes:
+  - name: Events
+    sql_table: analytics_raw.events
+    description: |
+      Raw event landing table. 30-day TTL on occurred_at; Cube models
+      that need longer history must aggregate into analytics.* tables
+      and join from there.
+
+    measures:
+      - name: count
+        type: count
+
+      - name: distinctActors
+        type: count_distinct
+        sql: actor_mxid
+
+      - name: distinctCoalitions
+        type: count_distinct
+        sql: coalition_id
+
+    dimensions:
+      - name: eventId
+        sql: event_id
+        type: string
+        primary_key: true
+
+      - name: eventType
+        sql: event_type
+        type: string
+
+      - name: occurredAt
+        sql: occurred_at
+        type: time
+
+      - name: actorMxid
+        sql: actor_mxid
+        type: string
+
+      - name: coalitionId
+        sql: coalition_id
+        type: string
+
+    segments:
+      - name: lastSevenDays
+        sql: "{CUBE.occurredAt} >= now() - INTERVAL '7 day'"
