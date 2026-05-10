@@ -17,6 +17,13 @@ export const BLACKOUT_TERMS = {
         title: 'Playbook',
         titlePlural: 'Playbooks',
     },
+    plant: {
+        action: 'Plant',
+        modalTitle: 'Plant a new den',
+        cta: 'Plant this den',
+        custom: 'Custom / Advanced',
+        revealLead: 'This looks like a',
+    },
     round: {
         singular: 'round',
         plural: 'rounds',

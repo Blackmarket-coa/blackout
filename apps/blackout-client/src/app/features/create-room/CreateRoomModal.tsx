@@ -16,7 +16,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
 import { SpaceProvider } from '../../hooks/useSpace';
-import { CreateRoomForm } from './CreateRoom';
+import { PlaybookPicker } from '../playbook/picker/PlaybookPicker';
 import {
   useCloseCreateRoomModal,
   useCreateRoomModalState,
@@ -58,7 +58,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
                   }}
                 >
                   <Box grow="Yes">
-                    <Text size="H4">New {BLACKOUT_TERMS.den.title}</Text>
+                    <Text size="H4">{BLACKOUT_TERMS.plant.modalTitle}</Text>
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>
@@ -75,7 +75,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
                     direction="Column"
                     gap="500"
                   >
-                    <CreateRoomForm space={space} onCreate={closeDialog} />
+                    <PlaybookPicker space={space} onCreate={closeDialog} />
                   </Box>
                 </Scroll>
               </Box>
