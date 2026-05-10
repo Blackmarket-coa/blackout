@@ -150,7 +150,15 @@ services:
     <<: *common-logging
 
   postgres:
-    image: postgres:16-alpine
+    # postgis/postgis is the upstream Postgres image with the PostGIS
+    # extension pre-installed. Binary-compatible with vanilla Postgres
+    # for non-spatial consumers (Synapse, @blackout/api), so the swap
+    # is safe; the only difference is that `CREATE EXTENSION postgis`
+    # is now possible inside the spatial database created by
+    # postgres/initdb/01-spatial-database.sql. See
+    # docs/runbooks/SPATIAL_LAYER_BASE.md for the existing-volume
+    # bootstrap path (initdb scripts only run on a fresh data dir).
+    image: postgis/postgis:16-3.4-alpine
     container_name: blackout-postgres
     restart: unless-stopped
     environment:
@@ -165,6 +173,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./backup:/backup:rw
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -194,6 +203,46 @@ services:
       - data
     security_opt:
       - no-new-privileges:true
+    <<: *common-logging
+
+  martin:
+    # MapLibre Martin — OSS PostGIS + PMTiles tile server.
+    # Upstream: https://github.com/maplibre/martin (Apache-2.0 / MIT).
+    # Serves vector tiles from:
+    #   - The PostGIS `spatial` database (Coalition working tables).
+    #   - PMTiles archives mounted at ./martin/pmtiles (basemap).
+    # Modifications: none — adoption is config-only via martin.yaml.
+    # See docs/runbooks/SPATIAL_LAYER_BASE.md for bootstrap, basemap
+    # download, and smoke test.
+    image: ghcr.io/maplibre/martin:v0.14.2
+    container_name: blackout-martin
+    restart: unless-stopped
+    expose:
+      - "3000"
+    command: ["--config", "/etc/martin/martin.yaml"]
+    environment:
+      # Martin reads the connection from the env var when the config
+      # references {{DATABASE_URL}}; keeps the password out of the
+      # checked-in martin.yaml.
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/spatial
+    volumes:
+      - ./martin/martin.yaml:/etc/martin/martin.yaml:ro
+      - ./martin/pmtiles:/var/lib/martin/pmtiles:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data
+      - app
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
     <<: *common-logging
 
   postgres-exporter:

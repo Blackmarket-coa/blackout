@@ -412,3 +412,34 @@ disabled. The §9.2 tracker row in the operations guide is satisfied
 by the artifacts existing in a clearly enable-able state, not by them
 being live.
 
+## 17) Spatial layer base (PostGIS + Martin + PMTiles)
+
+The single Postgres instance carries the spatial layer in addition to
+Synapse and the application schema. The image is the upstream
+`postgis/postgis:16-3.4-alpine` — binary-compatible with vanilla
+Postgres for non-spatial consumers, with the PostGIS extension
+available for the dedicated `spatial` database created by
+`postgres/initdb/01-spatial-database.sql`.
+
+Tile serving is via MapLibre Martin
+(`ghcr.io/maplibre/martin:v0.14.2`), config-only-adopted via
+`martin/martin.yaml`. Martin reads the `coalition` schema from the
+spatial database and any `.pmtiles` archives dropped under
+`martin/pmtiles/`. Public access is via the nginx `/tiles/` location
+on `api.theblackout.app`.
+
+Bootstrap, basemap download, and the existing-volume migration path
+live in `docs/runbooks/SPATIAL_LAYER_BASE.md`.
+
+Hardening backlog:
+
+- **Read-only `martin` Postgres role.** Currently Martin connects as
+  `POSTGRES_USER` (the app superuser) for first-deploy simplicity. The
+  upgrade path to a dedicated read-only role is in
+  `docs/runbooks/SPATIAL_LAYER_BASE.md` §3 and parallels the
+  `pg_monitor` upgrade for the postgres-exporter (§13 above).
+- **Cert SAN for `tiles.theblackout.app`.** The Differentiation
+  milestone (17 heatmap layers + flash mob layer) may want tiles on a
+  dedicated hostname for cache-header divergence and observability
+  separation. Path-based routing is fine until then.
+

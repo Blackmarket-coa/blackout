@@ -1,0 +1,58 @@
+# Martin tile server configuration.
+#
+# Upstream documentation: https://maplibre.org/martin/
+#
+# Modifications from the upstream defaults:
+#   - listen on 0.0.0.0:3000 (default 0.0.0.0:3000 — kept).
+#   - postgres connection sourced from DATABASE_URL env var so the
+#     password stays out of this checked-in file.
+#   - pmtiles directory pinned to /var/lib/martin/pmtiles so deploys
+#     can drop in regional Protomaps extracts via the bind mount in
+#     docker-compose.yml.
+#   - auto-publish is enabled for the postgis schema `coalition` so
+#     Blackout-side migrations can introduce new sources without
+#     requiring a Martin restart for each.
+#
+# Cross-references:
+#   - infra/single-server-baseline/docker-compose.yml (martin service)
+#   - infra/single-server-baseline/postgres/initdb/01-spatial-database.sql
+#   - docs/runbooks/SPATIAL_LAYER_BASE.md
+#   - infra/single-server-baseline/RUNBOOK.md §17
+
+listen_addresses: '0.0.0.0:3000'
+
+# CORS is handled at the nginx layer; let Martin emit permissive CORS
+# only for the health probe and let nginx own the policy on the public
+# /tiles/ route.
+cors:
+  - '*'
+
+# Cache tile responses for 5 minutes by default. The Coalition layer
+# write path is event-driven (governance proposals, fulfillment-node
+# registrations) and a 5-minute lag is acceptable; the basemap layer
+# from PMTiles is effectively static and Cache-Control: immutable is
+# applied at the nginx layer.
+cache_size_mb: 256
+
+postgres:
+  - connection_string: '${DATABASE_URL}'
+    # Auto-publish tables in the `coalition` schema as their own tile
+    # sources. New tables added by Blackout-side migrations show up at
+    # /coalition.<table_name>/{z}/{x}/{y} without restarting Martin.
+    auto_publish:
+      tables:
+        from_schemas: ['coalition']
+      functions:
+        from_schemas: ['coalition']
+    # Disable bounds discovery for write-heavy tables to keep
+    # connection pressure off the working set on first request.
+    pool_size: 8
+    connect_timeout: 5s
+
+# PMTiles basemap. Drop .pmtiles files into ./martin/pmtiles on the
+# host (bind-mounted to /var/lib/martin/pmtiles in the container).
+# Recommended source: Protomaps daily planet build, see
+# docs/runbooks/SPATIAL_LAYER_BASE.md.
+pmtiles:
+  paths:
+    - /var/lib/martin/pmtiles

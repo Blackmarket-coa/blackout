@@ -505,7 +505,7 @@ Foundation milestone unbuilt rows:
 | Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical; consumer surface scaffolded at `packages/api/src/integrations/fbm/entitlementsContract.ts` and documented in `docs/contracts/fbm-entitlements-consumer.md`; awaits FBM-side `docs/contracts/entitlements.yaml` |
 | Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical; ACL sync targets `GovernanceRole.matrixAcls` from the entitlements consumer surface (see `docs/contracts/fbm-entitlements-consumer.md`) |
 | Settings: Appearance + Steganography pages                    | 0–100%   | Foundation milestone; in flight           |
-| Spatial layer integration (PostGIS + Martin + PMTiles) — base | 0–100%   | Foundation milestone (formerly Coalition) |
+| Spatial layer integration (PostGIS + Martin + PMTiles) — base | Doc shipped | Foundation milestone (formerly Coalition); image swap to `postgis/postgis:16-3.4-alpine` + Martin v0.14.2 service in `infra/single-server-baseline/docker-compose.yml`; init at `infra/single-server-baseline/postgres/initdb/01-spatial-database.sql`; nginx route at `/tiles/`; bootstrap runbook at `docs/runbooks/SPATIAL_LAYER_BASE.md` |
 | FBM commerce flows embedded as Blackout views (mobile-first)  | 0–100%   | Foundation milestone                      |
 | SPOF map                                                      | Doc shipped | Foundation milestone; at `docs/operations/SPOF_MAP.md` |
 | Co-maintainer onboarding doc                                  | Doc shipped | Foundation milestone; at `docs/operations/CO_MAINTAINER_ONBOARDING.md` |
