@@ -122,6 +122,7 @@ services:
     user: "991:991"
     expose:
       - "8008"
+      - "9101"  # /_synapse/metrics — internal-only Prometheus scrape
     environment:
       - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
       - SYNAPSE_SERVER_NAME=theblackout.app
@@ -149,24 +150,30 @@ services:
     <<: *common-logging
 
   postgres:
-    image: postgres:16-alpine
+    # postgis/postgis is the upstream Postgres image with the PostGIS
+    # extension pre-installed. Binary-compatible with vanilla Postgres
+    # for non-spatial consumers (Synapse, @blackout/api), so the swap
+    # is safe; the only difference is that `CREATE EXTENSION postgis`
+    # is now possible inside the spatial database created by
+    # postgres/initdb/01-spatial-database.sql. See
+    # docs/runbooks/SPATIAL_LAYER_BASE.md for the existing-volume
+    # bootstrap path (initdb scripts only run on a fresh data dir).
+    image: postgis/postgis:16-3.4-alpine
     container_name: blackout-postgres
     restart: unless-stopped
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    command:
-      - postgres
-      - -c
-      - max_connections=300
-      - -c
-      - shared_buffers=512MB
-      - -c
-      - wal_level=replica
+    # Tuning lives in postgres/postgresql.conf; keeping it as a config file
+    # rather than -c flags so re-tuning is a one-file edit (and so the
+    # rationale comments stay attached to the values).
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./backup:/backup:rw
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -194,6 +201,209 @@ services:
       start_period: 10s
     networks:
       - data
+    security_opt:
+      - no-new-privileges:true
+    <<: *common-logging
+
+  martin:
+    # MapLibre Martin — OSS PostGIS + PMTiles tile server.
+    # Upstream: https://github.com/maplibre/martin (Apache-2.0 / MIT).
+    # Serves vector tiles from:
+    #   - The PostGIS `spatial` database (Coalition working tables).
+    #   - PMTiles archives mounted at ./martin/pmtiles (basemap).
+    # Modifications: none — adoption is config-only via martin.yaml.
+    # See docs/runbooks/SPATIAL_LAYER_BASE.md for bootstrap, basemap
+    # download, and smoke test.
+    image: ghcr.io/maplibre/martin:v0.14.2
+    container_name: blackout-martin
+    restart: unless-stopped
+    expose:
+      - "3000"
+    command: ["--config", "/etc/martin/martin.yaml"]
+    environment:
+      # Martin reads the connection from the env var when the config
+      # references {{DATABASE_URL}}; keeps the password out of the
+      # checked-in martin.yaml.
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/spatial
+    volumes:
+      - ./martin/martin.yaml:/etc/martin/martin.yaml:ro
+      - ./martin/pmtiles:/var/lib/martin/pmtiles:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data
+      - app
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    <<: *common-logging
+
+  postgres-exporter:
+    # Exposes Postgres health metrics (autovacuum lag, connection pool,
+    # buffer cache hit ratio, locks, replication state) on port 9187.
+    # Consumed by the `postgres` scrape job in
+    # deploy/docker/production/monitoring/prometheus/prometheus.yml.example
+    # and the Postgres panels in
+    # docs/operations/dashboards/synapse_capacity_dashboard.json.
+    #
+    # Connects as POSTGRES_USER (the application superuser). The
+    # upgrade path is a dedicated read-only user with the pg_monitor
+    # role:
+    #   CREATE USER postgres_exporter WITH PASSWORD '...';
+    #   GRANT pg_monitor TO postgres_exporter;
+    # then point DATA_SOURCE_NAME at that user. Tracked in
+    # infra/single-server-baseline/RUNBOOK.md §13.
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: blackout-postgres-exporter
+    restart: unless-stopped
+    expose:
+      - "9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      # Enable optional collectors that surface autovacuum lag and
+      # statement-level activity. pg_stat_statements collector requires
+      # the extension to be preloaded — see postgres/postgresql.conf.
+      - PG_EXPORTER_AUTO_DISCOVER_DATABASES=true
+      - PG_EXPORTER_INCLUDE_DATABASES=${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9187/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - data
+      - app
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    <<: *common-logging
+
+  clickhouse:
+    # ClickHouse — OSS columnar OLAP store, Apache-2.0.
+    # Upstream: https://github.com/ClickHouse/ClickHouse.
+    # Foundation milestone analytics warehouse per AOG §9.3.
+    # See docs/runbooks/ANALYTICS_WAREHOUSE.md for bootstrap +
+    # existing-volume migration; RUNBOOK.md §18 for operator notes.
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: blackout-clickhouse
+    restart: unless-stopped
+    expose:
+      - "8123"
+      - "9000"
+    environment:
+      - CLICKHOUSE_DB=analytics
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      - ./clickhouse/initdb:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data
+    security_opt:
+      - no-new-privileges:true
+    <<: *common-logging
+
+  cube:
+    # Cube — OSS semantic / metrics layer, Apache-2.0.
+    # Upstream: https://github.com/cube-js/cube.
+    # Sits between ClickHouse (storage) and Metabase (BI). Schema
+    # files live in ./cube/schema/ and are bind-mounted; new models
+    # require a cube restart unless dev mode is enabled.
+    image: cubejs/cube:v0.36.0
+    container_name: blackout-cube
+    restart: unless-stopped
+    expose:
+      - "4000"
+    environment:
+      - CUBEJS_DB_TYPE=clickhouse
+      - CUBEJS_DB_HOST=clickhouse
+      - CUBEJS_DB_PORT=8123
+      - CUBEJS_DB_USER=${CLICKHOUSE_USER:-default}
+      - CUBEJS_DB_PASS=${CLICKHOUSE_PASSWORD}
+      - CUBEJS_DB_NAME=analytics_raw
+      - CUBEJS_API_SECRET=${CUBE_API_SECRET}
+      - CUBEJS_DEV_MODE=false
+      - CUBEJS_TELEMETRY=false
+    volumes:
+      - ./cube/cube.js:/cube/conf/cube.js:ro
+      - ./cube/schema:/cube/conf/schema:ro
+      - cube-data:/cube/data
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/readyz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - data
+      - app
+    security_opt:
+      - no-new-privileges:true
+    <<: *common-logging
+
+  metabase:
+    # Metabase — OSS BI / dashboarding, AGPL-3.0 (Community Edition).
+    # Upstream: https://github.com/metabase/metabase.
+    # App data persists in the `metabase` Postgres database created
+    # by postgres/initdb/02-metabase-database.sql. Internal-only at
+    # the Foundation milestone — accessed via SSH tunnel by the
+    # maintainer; the public nginx route is deferred until coalition
+    # stewards actually start using it (Differentiation milestone).
+    image: metabase/metabase:v0.50.0
+    container_name: blackout-metabase
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      - MB_JETTY_PORT=3001
+      - MB_DB_TYPE=postgres
+      - MB_DB_HOST=postgres
+      - MB_DB_PORT=5432
+      - MB_DB_DBNAME=metabase
+      - MB_DB_USER=${POSTGRES_USER}
+      - MB_DB_PASS=${POSTGRES_PASSWORD}
+      # Telemetry off by default; revisit for usage analytics if needed.
+      - MB_ANON_TRACKING_ENABLED=false
+      - MB_CHECK_FOR_UPDATES=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - data
+      - app
     security_opt:
       - no-new-privileges:true
     <<: *common-logging
@@ -249,3 +459,9 @@ volumes:
     name: blackout-synapse-media
   coturn-data:
     name: blackout-coturn-data
+  clickhouse-data:
+    name: blackout-clickhouse-data
+  clickhouse-logs:
+    name: blackout-clickhouse-logs
+  cube-data:
+    name: blackout-cube-data

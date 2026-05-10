@@ -108,6 +108,8 @@ The contract answers four questions for any pair consisting of a user identified
 
 The contract is documented as an OpenAPI specification under `docs/contracts/entitlements.yaml` in the FBM repository. Both FBM-side modules and Blackout-side consumers code against this contract. Changes to the contract require revising this document. The contract is the single most important architectural commitment in this section because it is what makes the two-layer split coherent.
 
+The Blackout-side consumer mirror — narrowed to the read-side slice that Blackout actually consumes — lives at `docs/contracts/fbm-entitlements-consumer.md`, with the TypeScript surface at `packages/api/src/integrations/fbm/entitlementsContract.ts`. When the FBM-side OpenAPI specification ships, the consumer mirror is reconciled against it.
+
 ### §2.6 Listings as presentation variants
 
 Listings are stored once in the FBM `marketplace-listing` module. The retail shop and the vendor marketplace are presentation variants of the same record, with the choice of presentation determined by the buyer's relationship to the vendor and the context in which the listing appears. This is implemented in the storefront layer and the routing layer rather than in the data layer.
@@ -411,7 +413,7 @@ Foundation milestone unbuilt rows:
 | Storefront polish + Capacitor render compatibility                             | 0–100%   | Foundation milestone; extends `STOREFRONT_AUDIT.md`                       |
 | Vendor activation Sprint A (TTFLL ≤ 5 min)                                     | 0–100%   | Foundation milestone; partially specced; `FEATURE_BUILD_PLAN.md` Sprint A |
 | Cooperative governance proposal flow with Matrix ACL sync                      | 0–100%   | Foundation milestone; extends `cooperative` + `governance`                |
-| Railway → primary-server migration (FBM)                                       | 0–100%   | Foundation milestone critical                                             |
+| Railway → primary-server migration (FBM)                                       | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/FBM_MIGRATION_TO_PRIMARY_SERVER.md` |
 
 Differentiation milestone unbuilt rows:
 
@@ -496,20 +498,20 @@ Foundation milestone unbuilt rows:
 
 | System                                                        | Progress | Status                                    |
 |---------------------------------------------------------------|----------|-------------------------------------------|
-| Synapse capacity telemetry (Prometheus + Grafana)             | 0–100%   | Foundation milestone critical             |
-| Synapse media retention policy                                | 0–100%   | Foundation milestone critical             |
-| Postgres tuning baseline                                      | 0–100%   | Foundation milestone critical             |
-| Synapse worker-mode config (documented, not enabled)          | 0–100%   | Foundation milestone critical             |
-| Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical             |
-| Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical             |
+| Synapse capacity telemetry (Prometheus + Grafana)             | Doc shipped | Foundation milestone critical; listener at `infra/single-server-baseline/synapse/homeserver.yaml.template`, scrape at `deploy/docker/production/monitoring/prometheus/prometheus.yml.example`, dashboard at `docs/operations/dashboards/synapse_capacity_dashboard.json` |
+| Synapse media retention policy                                | Doc shipped | Foundation milestone critical; `media_retention:` block in `infra/single-server-baseline/synapse/homeserver.yaml.template`; rationale in `infra/single-server-baseline/RUNBOOK.md` §14 |
+| Postgres tuning baseline                                      | Doc shipped | Foundation milestone critical; `infra/single-server-baseline/postgres/postgresql.conf`; rationale in `infra/single-server-baseline/RUNBOOK.md` §15 |
+| Synapse worker-mode config (documented, not enabled)          | Doc shipped | Foundation milestone critical; configs at `infra/single-server-baseline/synapse/workers/`; enablement at `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md` |
+| Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical; consumer surface at `packages/api/src/integrations/fbm/entitlementsContract.ts`, consumer doc at `docs/contracts/fbm-entitlements-consumer.md`, draft OpenAPI placeholder at `docs/contracts/fbm-entitlements.openapi.yaml`; reconciles against FBM-side canonical when published |
+| Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical; ACL sync targets `GovernanceRole.matrixAcls` from the entitlements consumer surface (see `docs/contracts/fbm-entitlements-consumer.md`) |
 | Settings: Appearance + Steganography pages                    | 0–100%   | Foundation milestone; in flight           |
-| Spatial layer integration (PostGIS + Martin + PMTiles) — base | 0–100%   | Foundation milestone (formerly Coalition) |
+| Spatial layer integration (PostGIS + Martin + PMTiles) — base | Doc shipped | Foundation milestone (formerly Coalition); image swap to `postgis/postgis:16-3.4-alpine` + Martin v0.14.2 service in `infra/single-server-baseline/docker-compose.yml`; init at `infra/single-server-baseline/postgres/initdb/01-spatial-database.sql`; nginx route at `/tiles/`; bootstrap runbook at `docs/runbooks/SPATIAL_LAYER_BASE.md` |
 | FBM commerce flows embedded as Blackout views (mobile-first)  | 0–100%   | Foundation milestone                      |
-| SPOF map                                                      | 0–100%   | Foundation milestone                      |
-| Co-maintainer onboarding doc                                  | 0–100%   | Foundation milestone                      |
-| Compat-layer credential recovery runbook                      | 0–100%   | Foundation milestone                      |
-| `apps/deaddrop-appservice/` runbook                           | 0–100%   | Foundation milestone                      |
-| Bus-factor drill cadence doc                                  | 0–100%   | Foundation milestone                      |
+| SPOF map                                                      | Doc shipped | Foundation milestone; at `docs/operations/SPOF_MAP.md` |
+| Co-maintainer onboarding doc                                  | Doc shipped | Foundation milestone; at `docs/operations/CO_MAINTAINER_ONBOARDING.md` |
+| Compat-layer credential recovery runbook                      | Doc shipped | Foundation milestone; at `docs/runbooks/COMPAT_LAYER_CREDENTIAL_RECOVERY.md` |
+| `apps/deaddrop-appservice/` runbook                           | Doc shipped | Foundation milestone; at `docs/runbooks/DEADDROP_APPSERVICE.md` |
+| Bus-factor drill cadence doc                                  | Doc shipped | Foundation milestone; at `docs/operations/BUS_FACTOR_DRILL_CADENCE.md` |
 
 Differentiation milestone and beyond unbuilt rows:
 
@@ -529,12 +531,12 @@ Differentiation milestone and beyond unbuilt rows:
 
 | System                                                   | Progress | Status                                       |
 |----------------------------------------------------------|----------|----------------------------------------------|
-| Secrets manager consolidation (Vault / Infisical / SOPS) | 0–100%   | Foundation milestone critical                |
-| AI-driven security and dependency update workflow        | 0–100%   | Foundation milestone                         |
-| Upstream advisories aggregation feed                     | 0–100%   | Foundation milestone                         |
-| ClickHouse + Cube + Metabase analytics consolidation     | 0–100%   | Foundation milestone                         |
+| Secrets manager consolidation (SOPS + age — chosen 2026-05-10) | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/SECRETS_MANAGER_MIGRATION.md` §2.C; preflight inventory at `docs/operations/evidence/2026-05-10-secrets-manager-inventory.md`; `.sops.yaml` + `deploy/secrets/README.md` landed; key-generation ceremony pending |
+| AI-driven security and dependency update workflow        | Doc shipped | Foundation milestone; at `docs/operations/AI_SECURITY_WORKFLOW.md`; aggregation workflow at `.github/workflows/upstream-advisories.yml` |
+| Upstream advisories aggregation feed                     | Doc shipped | Foundation milestone; at `docs/operations/UPSTREAM_ADVISORIES.md`; fed by `.github/workflows/upstream-advisories.yml` |
+| ClickHouse + Cube + Metabase analytics consolidation     | Doc shipped | Foundation milestone; clickhouse/cube/metabase services in `infra/single-server-baseline/docker-compose.yml`; ClickHouse init at `infra/single-server-baseline/clickhouse/initdb/`; Cube seed at `infra/single-server-baseline/cube/schema/Events.yml`; Metabase app DB on Postgres; bootstrap runbook at `docs/runbooks/ANALYTICS_WAREHOUSE.md`; internal-only at this milestone (SSH tunnel for Metabase) |
 | Marketing site (Astro + Tailwind, Foxi fork)             | 0–100%   | Differentiation milestone                    |
-| Cloudflare Tunnel fallback nginx documented              | 0–100%   | Foundation milestone                         |
+| Cloudflare Tunnel fallback nginx documented              | Doc shipped | Foundation milestone; runbook at `docs/runbooks/CLOUDFLARE_TUNNEL_FALLBACK_NGINX.md` |
 | Cloudflare Tunnel fallback nginx enabled                 | 0–100%   | Differentiation milestone                    |
 | Postgres streaming replication to secondary server       | 0–100%   | Density milestone                            |
 | Multi-host Blackout deployment                           | 0–100%   | Infrastructure milestone (if scale warrants) |

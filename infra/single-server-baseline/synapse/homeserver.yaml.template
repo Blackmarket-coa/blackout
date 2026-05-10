@@ -10,6 +10,18 @@ listeners:
       - names: [client, federation, media, keys, consent]
         compress: false
 
+  # Internal-only Prometheus scrape endpoint, exposes /_synapse/metrics.
+  # See deploy/docker/production/monitoring/prometheus/prometheus.yml.example
+  # for the matching scrape job, and docs/operations/dashboards/synapse_capacity_dashboard.json
+  # for the Grafana panels.
+  - port: 9101
+    type: metrics
+    bind_addresses: ['0.0.0.0']
+
+# Required by the metrics listener above. Top-level toggle, gates whether
+# Synapse exposes Prometheus-format metrics at all.
+enable_metrics: true
+
 database:
   name: psycopg2
   args:
@@ -30,6 +42,15 @@ media_store_path: /media
 max_upload_size: 100M
 max_image_pixels: "50M"
 dynamic_thumbnails: true
+
+# Media retention policy. Local media (uploaded by our users) is retained
+# longer because it cannot be re-fetched from federation; remote media is
+# tighter because remote homeservers can re-serve it on demand.
+# See infra/single-server-baseline/RUNBOOK.md "Media store lifecycle" for
+# the rationale, the GC cadence, and how to widen or tighten these.
+media_retention:
+  local_media_lifetime: 365d
+  remote_media_lifetime: 30d
 
 # Launch posture: open self-signup by default (can be overridden via env).
 # Synapse rejects registration with M_FORBIDDEN ("Registration has been
@@ -108,3 +129,50 @@ rc_joins:
 
 # Keep this mounted at /data for simple backups.
 log_config: "/data/theblackout.app.log.config"
+
+# ---------------------------------------------------------------------------
+# Worker-mode wiring (documented, not enabled).
+#
+# Uncomment the blocks below — and bring up the corresponding services from
+# infra/single-server-baseline/synapse/workers/ — once the trigger thresholds
+# in docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md are met. Until then, the
+# main Synapse process handles all roles. Leaving these stanzas commented
+# in-place (rather than in a separate file) means enabling is a sed-and-
+# restart, not an architecture rewrite.
+#
+# Inputs the worker stack needs in addition to what's above:
+#   - Redis (already enabled above) for replication transport.
+#   - A replication listener on the main process (the listener block below).
+#   - A reverse-proxy route from /_matrix/* that splits client/federation
+#     traffic between main and generic workers per the upstream worker
+#     routing tables: https://element-hq.github.io/synapse/latest/workers.html
+# ---------------------------------------------------------------------------
+
+# listeners:
+#   - port: 9093
+#     type: http
+#     bind_addresses: ['0.0.0.0']
+#     resources:
+#       - names: [replication]
+#
+# instance_map:
+#   main:
+#     host: synapse
+#     port: 9093
+#
+# stream_writers:
+#   events: synapse-generic-worker
+#   typing: synapse-generic-worker
+#   to_device: synapse-generic-worker
+#   account_data: synapse-generic-worker
+#   receipts: synapse-generic-worker
+#   presence: synapse-generic-worker
+#
+# federation_sender_instances:
+#   - synapse-federation-sender
+#
+# pusher_instances:
+#   - synapse-background-worker
+#
+# notify_appservices_from_worker: synapse-background-worker
+# update_user_directory_from_worker: synapse-background-worker

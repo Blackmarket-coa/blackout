@@ -1,0 +1,33 @@
+# Synapse background worker — single-server baseline.
+#
+# Owns periodic background tasks: pushers, appservice notification
+# delivery, user-directory updates, and other timer-driven work.
+# Documented but not enabled. See
+# docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md.
+#
+# Trigger to enable: same time as the generic worker (this is the
+# cheapest worker to run alongside it; it offloads work the generic
+# worker would otherwise share with client traffic).
+#
+# To enable:
+#   1. Uncomment notify_appservices_from_worker, pusher_instances, and
+#      update_user_directory_from_worker stanzas in
+#      homeserver.yaml.template.
+#   2. Add a `synapse-background-worker` service to docker-compose.yml.
+#   3. Add a Prometheus scrape target for synapse-background-worker:9104.
+
+worker_app: synapse.app.generic_worker
+worker_name: synapse-background-worker
+
+# This worker exists to take background-task ownership; it does not
+# need to serve HTTP traffic for clients or federation. Replication is
+# the only inbound path it needs.
+worker_replication_host: synapse
+worker_replication_http_port: 9093
+
+worker_listeners:
+  - port: 9104
+    type: metrics
+    bind_addresses: ['0.0.0.0']
+
+worker_log_config: /data/theblackout.app.log.config

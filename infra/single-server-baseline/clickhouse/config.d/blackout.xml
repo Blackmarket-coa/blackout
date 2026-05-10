@@ -1,0 +1,36 @@
+<!--
+  ClickHouse overrides for the single-server-baseline stack. Layered
+  on top of the stock /etc/clickhouse-server/config.xml shipped with
+  the upstream image (config.d/* is auto-merged).
+
+  Modifications from upstream defaults:
+    - Disable the listen_host wildcard for IPv6; we run inside a
+      Docker network and only need IPv4 listening.
+    - Cap memory and concurrent queries for the consolidated host
+      (DL360, ~32 GB headroom; analytics gets 8 GB to start).
+    - Tighten log retention (the default keeps 1000 rotated files;
+      we keep 10).
+
+  Cross-references:
+    - infra/single-server-baseline/docker-compose.yml (clickhouse service)
+    - docs/runbooks/ANALYTICS_WAREHOUSE.md
+    - infra/single-server-baseline/RUNBOOK.md §18
+-->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+
+    <max_server_memory_usage>8589934592</max_server_memory_usage>
+    <max_concurrent_queries>64</max_concurrent_queries>
+
+    <logger>
+        <level>information</level>
+        <size>100M</size>
+        <count>10</count>
+    </logger>
+
+    <!--
+      Default user is the upstream `default` with no password. We
+      override via the users.d directory mounted in the compose at
+      runtime (sources CLICKHOUSE_PASSWORD from env).
+    -->
+</clickhouse>

@@ -1,0 +1,40 @@
+# Synapse federation_sender worker — single-server baseline.
+#
+# Documented but not enabled. Uncomment in homeserver.yaml.template
+# (see the bottom of that file) and bring up this worker per
+# docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md when the trigger thresholds
+# are met (federation backlog sustained > 30s on the synapse_capacity
+# dashboard).
+#
+# Spec: https://element-hq.github.io/synapse/latest/workers.html
+# Container target: matrixdotorg/synapse:v1.130.0 (must match the main
+# Synapse image to keep replication-protocol versions aligned).
+#
+# To enable:
+#   1. Uncomment the federation_sender_instances stanza in homeserver.yaml.
+#   2. Add a `synapse-federation-sender` service to docker-compose.yml that
+#      mounts this file at /data/worker.yaml and shares synapse-data and
+#      synapse-media volumes with the main process.
+#   3. Add a Prometheus scrape target for the worker's metrics listener.
+#   4. Restart the main Synapse process so it picks up the
+#      federation_sender_instances stanza and stops sending federation
+#      traffic itself.
+
+worker_app: synapse.app.federation_sender
+worker_name: synapse-federation-sender
+
+# Replication transport. Connects to the main process's replication
+# listener defined in homeserver.yaml.template (port 9093).
+worker_replication_host: synapse
+worker_replication_http_port: 9093
+
+# Listener for this worker's own /_synapse/metrics endpoint. The
+# Prometheus scrape job in
+# deploy/docker/production/monitoring/prometheus/prometheus.yml.example
+# must add a target at synapse-federation-sender:9102.
+worker_listeners:
+  - port: 9102
+    type: metrics
+    bind_addresses: ['0.0.0.0']
+
+worker_log_config: /data/theblackout.app.log.config

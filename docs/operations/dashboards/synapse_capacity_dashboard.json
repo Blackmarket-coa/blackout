@@ -1,0 +1,167 @@
+{
+    "title": "Synapse Capacity",
+    "timezone": "utc",
+    "schemaVersion": 39,
+    "version": 1,
+    "tags": ["synapse", "capacity", "foundation"],
+    "panels": [
+        {
+            "title": "Federation outbound transaction queue (PDUs)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum(synapse_federation_transaction_queue_pending_pdus) by (instance)",
+                    "legendFormat": "{{instance}} pending PDUs"
+                }
+            ]
+        },
+        {
+            "title": "Federation outbound transaction queue (EDUs)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum(synapse_federation_transaction_queue_pending_edus) by (instance)",
+                    "legendFormat": "{{instance}} pending EDUs"
+                }
+            ]
+        },
+        {
+            "title": "Federation send rate (transactions/s)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum(rate(synapse_federation_client_sent_transactions_total[5m]))",
+                    "legendFormat": "tx/s"
+                }
+            ]
+        },
+        {
+            "title": "Local media items (cumulative)",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "synapse_media_repository_local_media_total",
+                    "legendFormat": "local media"
+                }
+            ]
+        },
+        {
+            "title": "Remote media items (cumulative)",
+            "type": "stat",
+            "targets": [
+                {
+                    "expr": "synapse_media_repository_remote_media_total",
+                    "legendFormat": "remote media"
+                }
+            ]
+        },
+        {
+            "title": "State group count (size proxy)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "synapse_state_number_state_groups",
+                    "legendFormat": "state groups"
+                }
+            ]
+        },
+        {
+            "title": "Events persisted/s",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum(rate(synapse_storage_events_persisted_events[5m]))",
+                    "legendFormat": "events/s"
+                }
+            ]
+        },
+        {
+            "title": "HTTP server p95 response time by endpoint",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(synapse_http_server_response_time_seconds_bucket[5m])) by (le, servlet))",
+                    "legendFormat": "{{servlet}}"
+                }
+            ]
+        },
+        {
+            "title": "Background DB txn p95 duration",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(synapse_background_process_db_txn_duration_seconds_bucket[5m])) by (le, name))",
+                    "legendFormat": "{{name}}"
+                }
+            ]
+        },
+        {
+            "title": "Synapse process resident memory (MB)",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "process_resident_memory_bytes{job=\"synapse\"} / 1024 / 1024",
+                    "legendFormat": "RSS MB"
+                }
+            ]
+        },
+        {
+            "title": "Synapse CPU seconds/s",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "rate(process_cpu_seconds_total{job=\"synapse\"}[5m])",
+                    "legendFormat": "cpu/s"
+                }
+            ]
+        },
+        {
+            "title": "Inbound federation PDU rate",
+            "type": "timeseries",
+            "targets": [
+                {
+                    "expr": "sum(rate(synapse_federation_server_received_pdus_total[5m]))",
+                    "legendFormat": "pdu/s"
+                }
+            ]
+        },
+        {
+            "title": "Synapse state-table autovacuum lag (n_dead_tup)",
+            "type": "timeseries",
+            "description": "Watch-item from §4.1: Postgres autovacuum on Synapse state tables under federation load. Sustained growth without corresponding drops means autovacuum is falling behind. Drops indicate vacuum runs landing.",
+            "targets": [
+                {
+                    "expr": "pg_stat_user_tables_n_dead_tup{relname=~\"state_groups_state|events|event_to_state_groups|state_groups|current_state_events|state_events\"}",
+                    "legendFormat": "{{relname}}"
+                }
+            ]
+        },
+        {
+            "title": "Postgres connection pool utilisation",
+            "type": "timeseries",
+            "description": "Backends in use vs. max_connections. If this approaches the ceiling Synapse and FBM will begin queuing for connections, surfacing as request latency on the panels above.",
+            "targets": [
+                {
+                    "expr": "sum(pg_stat_database_numbackends) by (datname)",
+                    "legendFormat": "backends · {{datname}}"
+                },
+                {
+                    "expr": "pg_settings_max_connections",
+                    "legendFormat": "max_connections"
+                }
+            ]
+        },
+        {
+            "title": "Postgres buffer cache hit ratio",
+            "type": "timeseries",
+            "description": "Healthy is >=99%. Sustained drops indicate working set has outgrown shared_buffers; revisit the memory section of postgres/postgresql.conf.",
+            "targets": [
+                {
+                    "expr": "sum(rate(pg_stat_database_blks_hit[5m])) / (sum(rate(pg_stat_database_blks_hit[5m])) + sum(rate(pg_stat_database_blks_read[5m])))",
+                    "legendFormat": "cache hit ratio"
+                }
+            ]
+        }
+    ],
+    "notes": "Postgres panels (autovacuum lag, connection pool, buffer cache hit ratio) are fed by postgres-exporter, defined in infra/single-server-baseline/docker-compose.yml and scraped via the `postgres` job in deploy/docker/production/monitoring/prometheus/prometheus.yml.example. Cross-reference: AGGRESSIVE_OPERATIONS_GUIDE.md §4.1 watch-items."
+}

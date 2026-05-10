@@ -1,0 +1,41 @@
+# SOPS configuration — chosen secrets manager per
+# docs/runbooks/SECRETS_MANAGER_MIGRATION.md (option §2.C, age backend).
+#
+# IMPORTANT — bootstrap state:
+#   The recipients below are PLACEHOLDERS until the key-generation
+#   ceremony documented in
+#   docs/runbooks/SECRETS_MANAGER_MIGRATION.md §2.C is completed.
+#   Replace the `age1placeholder...` lines with real public keys
+#   generated via `age-keygen` before the first encrypted secret is
+#   committed.
+#
+# Recipients:
+#   - maintainer        — primary; private key held offline (offsite vault)
+#   - co-maintainer     — second person, optional but recommended; held by
+#                         co-maintainer per CO_MAINTAINER_ONBOARDING.md Rung 4
+#   - deploy            — primary host; private key in /etc/sops/age/keys.txt
+#                         on the deploy target, mode 0400, root-only
+#
+# All three recipients are listed for every creation_rule below so
+# that any of the three can decrypt independently. Removing a
+# recipient (compromise, offboarding) requires re-encrypting affected
+# files; the runbook §3 covers this.
+
+creation_rules:
+  # Encrypted env-files for the production stack. Plaintext .env files
+  # are .gitignored; only the .sops.env variants are committed.
+  - path_regex: deploy/secrets/.+\.sops\.env$
+    encrypted_regex: '^.+$'
+    age: >-
+      age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
+      age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
+      age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx
+
+  # Structured secrets (yaml/json) — encrypts values only, leaves keys
+  # plaintext for diff readability.
+  - path_regex: deploy/secrets/.+\.sops\.(yaml|yml|json)$
+    encrypted_regex: '^(data|secret|secrets|password|token|key)$'
+    age: >-
+      age1placeholder0maintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx,
+      age1placeholder1comaintainerpublickeyreplaceaftersopskeyceremonyxxxxxxxxxx,
+      age1placeholder2deployhostpublickeyreplaceaftersopskeyceremonyxxxxxxxxxxxx

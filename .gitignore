@@ -80,5 +80,7 @@ deploy/docker/production/.cloudflared/
 .next
 .env.*
 !.env.example
+# SOPS-encrypted env files are committed; see .sops.yaml + deploy/secrets/README.md
+!*.sops.env
 .pnpm-store
 apps/blackout-client/docs/release/staging-signoff.report.json

@@ -1,0 +1,40 @@
+# Synapse generic worker — single-server baseline.
+#
+# Handles client API traffic, stream-writer roles, and any role not
+# claimed by a dedicated worker. Documented but not enabled. See
+# docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md.
+#
+# Trigger to enable: main Synapse HTTP p95 sustained > 1s on the
+# synapse_capacity dashboard, or main Synapse CPU sustained > 80%.
+#
+# To enable:
+#   1. Uncomment instance_map and stream_writers stanzas in
+#      homeserver.yaml.template.
+#   2. Add a `synapse-generic-worker` service to docker-compose.yml.
+#   3. Update the nginx routing in
+#      infra/single-server-baseline/nginx/sites-available/theblackout.app.conf
+#      to send the worker-claimable client paths to this worker instead
+#      of the main process. The upstream worker-routing tables list
+#      which paths are safe to send: see
+#      https://element-hq.github.io/synapse/latest/workers.html#available-worker-applications
+#   4. Add a Prometheus scrape target for synapse-generic-worker:9103.
+
+worker_app: synapse.app.generic_worker
+worker_name: synapse-generic-worker
+
+worker_replication_host: synapse
+worker_replication_http_port: 9093
+
+worker_listeners:
+  - port: 8009
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+  - port: 9103
+    type: metrics
+    bind_addresses: ['0.0.0.0']
+
+worker_log_config: /data/theblackout.app.log.config
