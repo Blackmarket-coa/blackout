@@ -256,3 +256,27 @@ jobs:
           BLACKOUT_API_SKIP_LISTEN: "1"
           NODE_ENV: test
         run: pnpm --filter @blackout/api test:integration
+
+  launch-smoke:
+    name: Launch-smoke gate (LS-* release-blocker cases)
+    runs-on: ubuntu-latest
+    needs: api-smoke-and-integration
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run automated LS-* smoke set
+        env:
+          BLACKOUT_DB_MODE: memory
+          BLACKOUT_API_SKIP_LISTEN: "1"
+          NODE_ENV: test
+        # Per docs/launch-smoke-suite.md: every release-blocker case
+        # must pass for the launch gate to clear. Failure here is a
+        # release-no-go.
+        run: pnpm --filter @blackout/api test:launch-smoke
