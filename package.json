@@ -84,7 +84,8 @@
     "turbo": "^2.8.16",
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
-    "@electric-sql/pglite": "^0.3.9"
+    "@electric-sql/pglite": "^0.3.9",
+    "@playwright/test": "^1.56.1"
   },
   "pnpm": {
     "overrides": {

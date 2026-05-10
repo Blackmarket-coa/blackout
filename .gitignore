@@ -84,3 +84,9 @@ deploy/docker/production/.cloudflared/
 !*.sops.env
 .pnpm-store
 apps/blackout-client/docs/release/staging-signoff.report.json
+
+# Playwright artifacts
+/playwright/html-report
+/playwright/test-results
+/playwright/blob-report
+/playwright/snapshots/**/*-actual*
