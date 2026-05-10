@@ -1,0 +1,361 @@
+# PLACEHOLDER — FBM Entitlements Service OpenAPI specification
+#
+# This file is the Blackout-side anchor for the contract committed
+# to in docs/AGGRESSIVE_OPERATIONS_GUIDE.md §2.5. The canonical
+# specification lives in the FBM repository at
+# docs/contracts/entitlements.yaml and is the source of truth.
+#
+# Status: DRAFT. This is the consumer-side derivation, written from
+# Blackout's expectations (see docs/contracts/fbm-entitlements-consumer.md)
+# and the TypeScript surface at
+# packages/api/src/integrations/fbm/entitlementsContract.ts.
+#
+# When the FBM repo publishes its canonical entitlements.yaml, this
+# file is reconciled against it and either:
+#   - kept as a Blackout-side mirror (useful for OpenAPI codegen
+#     against a local file), refreshed in lockstep with the FBM source, OR
+#   - removed in favour of pulling the FBM file via a submodule /
+#     sync workflow.
+#
+# Do not generate clients from this draft yet — the wire shapes are
+# guaranteed only at the consumer-doc level until the FBM source ships.
+
+openapi: 3.1.0
+
+info:
+  title: FBM Entitlements Service (consumer-side draft)
+  version: 0.1.0-draft
+  description: |
+    Read-only contract for the FBM Entitlements Service consumed by
+    Blackout. Derived from the four-question framing in
+    `docs/AGGRESSIVE_OPERATIONS_GUIDE.md` §2.5:
+
+      1. Access — does this user have read/write/administer permission
+         on this resource?
+      2. Economic standing — Coalition Credits balance, pending
+         payouts, vendor sales volume, creator reward eligibility.
+      3. Governance roles — coalition roles, Matrix ACLs, FBM commerce
+         permissions.
+      4. Coalition membership — coalition list with status.
+
+    The consumer-side conventions (timeouts, retries, cache-control)
+    are documented in `docs/contracts/fbm-entitlements-consumer.md`
+    and are not part of the wire contract.
+
+servers:
+  - url: https://entitlements.freeblackmarket.example/v1
+    description: Production (URL placeholder; canonical to be set in FBM repo)
+  - url: http://localhost:7400/v1
+    description: Local FBM development
+
+security:
+  - serviceToken: []
+
+paths:
+  /entitlements/access/{mxid}:
+    get:
+      summary: Question 1 — access check for a single (resource, action)
+      operationId: checkAccess
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+        - name: urn
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/ResourceUrn' }
+        - name: action
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/AccessAction' }
+      responses:
+        '200':
+          description: Access decision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccessCheckResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /entitlements/access-batch/{mxid}:
+    post:
+      summary: Question 1 — batched access checks
+      operationId: checkAccessBatch
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checks]
+              properties:
+                checks:
+                  type: array
+                  items:
+                    type: object
+                    required: [urn, action]
+                    properties:
+                      urn: { $ref: '#/components/schemas/ResourceUrn' }
+                      action: { $ref: '#/components/schemas/AccessAction' }
+      responses:
+        '200':
+          description: Access decisions in the same order as the request
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AccessCheckResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /entitlements/economic-standing/{mxid}:
+    get:
+      summary: Question 2 — economic standing
+      operationId: getEconomicStanding
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+      responses:
+        '200':
+          description: Economic standing snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EconomicStanding' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /entitlements/governance-roles/{mxid}:
+    get:
+      summary: Question 3 — governance roles
+      operationId: getGovernanceRoles
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+      responses:
+        '200':
+          description: Governance role list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roles]
+                properties:
+                  roles:
+                    type: array
+                    items: { $ref: '#/components/schemas/GovernanceRole' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /entitlements/coalitions/{mxid}:
+    get:
+      summary: Question 4 — coalition memberships
+      operationId: getCoalitionMemberships
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+      responses:
+        '200':
+          description: Coalition membership list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [memberships]
+                properties:
+                  memberships:
+                    type: array
+                    items: { $ref: '#/components/schemas/CoalitionMembership' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /entitlements/summary/{mxid}:
+    get:
+      summary: Combined Q2 + Q3 + Q4 — preferred for dashboard render paths
+      operationId: getSummary
+      parameters:
+        - $ref: '#/components/parameters/MxidPath'
+      responses:
+        '200':
+          description: Combined summary; preferred for the Coalition Credits widget
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitlementsSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  parameters:
+    MxidPath:
+      name: mxid
+      in: path
+      required: true
+      description: URL-encoded Matrix MXID, e.g. `%40alice%3Aexample.org`.
+      schema:
+        type: string
+        pattern: '^@[A-Za-z0-9_=\-./]+:[A-Za-z0-9.\-]+$'
+        example: '@alice:theblackout.app'
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid service token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Token is valid but lacks scope for the requested resource.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: MXID not known to FBM (no canonical user record).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Service-to-service token issued by FBM to the Blackout deployment.
+        Distribution is documented in `docs/AGGRESSIVE_OPERATIONS_GUIDE.md`
+        §2.3 once the secrets-manager migration completes.
+
+  schemas:
+    AccessAction:
+      type: string
+      enum: [read, write, administer]
+
+    ResourceUrn:
+      type: string
+      description: |
+        URN naming a resource. Namespace is fixed; new resource kinds
+        require a contract revision per AOG §2.5.
+      pattern: >-
+        ^urn:fbm:(room:[!#].+|listing:.+|proposal:.+|fulfillment-node:.+|ledger-tx:.+|platform:admin)$
+      examples:
+        - 'urn:fbm:room:!abcdef:theblackout.app'
+        - 'urn:fbm:listing:lst_01H...'
+        - 'urn:fbm:platform:admin'
+
+    AccessCheckResult:
+      type: object
+      required: [allowed, source]
+      properties:
+        allowed: { type: boolean }
+        source:
+          type: string
+          description: |
+            Free-form descriptor of why access was granted/denied
+            (audit only; do not branch on it).
+          examples: ['coalition-role:steward', 'ownership', 'no-membership']
+
+    PendingPayout:
+      type: object
+      required: [currency, amountMinorUnits, expectedSettlementAt]
+      properties:
+        currency:
+          type: string
+          description: ISO 4217 OR `CC` for Coalition Credits.
+          examples: ['USD', 'CC']
+        amountMinorUnits: { type: integer, format: int64, minimum: 0 }
+        expectedSettlementAt:
+          type: [string, 'null']
+          format: date-time
+
+    CreatorRewardEligibility:
+      type: object
+      required: [program, eligible, blockedReason]
+      properties:
+        program: { type: string }
+        eligible: { type: boolean }
+        blockedReason: { type: [string, 'null'] }
+
+    EconomicStanding:
+      type: object
+      required:
+        - coalitionCreditsBalanceMinorUnits
+        - pendingPayouts
+        - vendorSalesVolumeMinorUnits30d
+        - creatorRewardEligibility
+      properties:
+        coalitionCreditsBalanceMinorUnits:
+          type: integer
+          format: int64
+        pendingPayouts:
+          type: array
+          items: { $ref: '#/components/schemas/PendingPayout' }
+        vendorSalesVolumeMinorUnits30d:
+          type: [integer, 'null']
+          format: int64
+          description: Trailing 30-day vendor sales volume, vendor's settlement currency. `null` when the user is not a vendor.
+        creatorRewardEligibility:
+          type: array
+          items: { $ref: '#/components/schemas/CreatorRewardEligibility' }
+
+    GovernanceRole:
+      type: object
+      required: [coalitionId, role, matrixAcls, commercePermissions]
+      properties:
+        coalitionId: { type: string }
+        role:
+          type: string
+          examples: ['steward', 'treasurer', 'member']
+        matrixAcls:
+          type: array
+          items:
+            type: object
+            required: [roomId, powerLevel]
+            properties:
+              roomId: { type: string, pattern: '^![^:]+:.+' }
+              powerLevel: { type: integer, minimum: 0, maximum: 100 }
+        commercePermissions:
+          type: array
+          items: { type: string }
+
+    CoalitionMembershipStatus:
+      type: string
+      enum: [active, pending, suspended, expelled, former]
+
+    CoalitionMembership:
+      type: object
+      required:
+        - coalitionId
+        - coalitionDisplayName
+        - status
+        - joinedAt
+        - coalitionEntitlements
+      properties:
+        coalitionId: { type: string }
+        coalitionDisplayName: { type: string }
+        status: { $ref: '#/components/schemas/CoalitionMembershipStatus' }
+        joinedAt: { type: string, format: date-time }
+        coalitionEntitlements:
+          type: array
+          items: { type: string }
+
+    EntitlementsSummary:
+      type: object
+      required:
+        - mxid
+        - economicStanding
+        - governanceRoles
+        - coalitionMemberships
+        - cacheTtlSeconds
+      properties:
+        mxid: { type: string }
+        economicStanding: { $ref: '#/components/schemas/EconomicStanding' }
+        governanceRoles:
+          type: array
+          items: { $ref: '#/components/schemas/GovernanceRole' }
+        coalitionMemberships:
+          type: array
+          items: { $ref: '#/components/schemas/CoalitionMembership' }
+        cacheTtlSeconds:
+          type: integer
+          minimum: 0
+          description: Server-supplied freshness window. Consumers cap at 30s for the summary endpoint per `docs/contracts/fbm-entitlements-consumer.md`.
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }

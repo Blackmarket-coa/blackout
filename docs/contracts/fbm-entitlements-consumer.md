@@ -158,10 +158,15 @@ specification. Until that ships:
 - Blackout-side consumers (Coalition Credits widget, governance UI)
   target the interface and use a stub fixture in dev/test until the
   FBM service is reachable.
+- A draft OpenAPI specification has been pushed alongside this doc
+  at `docs/contracts/fbm-entitlements.openapi.yaml` as a placeholder
+  anchor. It is the consumer-side derivation, not the canonical
+  source — generate clients only after FBM publishes its
+  `docs/contracts/entitlements.yaml` and we reconcile.
 - When the FBM OpenAPI specification ships, it is reconciled against
-  this document. Differences are resolved on the FBM side if they are
-  contract-level; on the Blackout side if they are
-  consumer-convention-level (caching, retry).
+  this document and the placeholder yaml. Differences are resolved
+  on the FBM side if they are contract-level; on the Blackout side
+  if they are consumer-convention-level (caching, retry).
 
 Cross-references:
 

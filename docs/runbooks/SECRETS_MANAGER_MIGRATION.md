@@ -27,6 +27,41 @@ procedure differs per option.
 Record the choice in [`../operations/SPOF_MAP.md`](../operations/SPOF_MAP.md)
 row 7 once made.
 
+### Decision recorded — 2026-05-10
+
+**Chosen: SOPS + age** (the third option above), for these reasons:
+
+- **Smallest attack surface.** No long-lived secret service to harden,
+  patch, or expose. Encryption-at-rest in the repo, decryption requires
+  possession of an age private key on the host. A poorly-operated Vault
+  is less secure than a hard-to-misuse SOPS+age setup.
+- **Solo-dev capacity passes the §3 filter.** Zero operational overhead
+  beyond `sops` CLI invocations. No additional service to back up,
+  monitor, or rotate seal keys for.
+- **Bus-factor.** Multi-recipient encryption (maintainer + co-maintainer
+  + deploy host) gives every encrypted file three independent decryptors
+  without sharing a single key.
+- **Audit-log gap is acceptable** at current scale: git history is the
+  rotation log, and the AI-driven security workflow already covers the
+  broader audit surface. Revisit if the platform scales past the
+  Foundation milestone capacity profile.
+
+OSS adoption — both [SOPS](https://github.com/getsops/sops) (Apache-2.0)
+and [age](https://github.com/FiloSottile/age) (BSD-3-Clause) are adopted
+without modification. Upstream releases are pinned via the standard
+`apt` / Homebrew / asdf flows on the deploy host; no in-repo package
+mirror is required.
+
+Repo state landed alongside this decision:
+
+- `.sops.yaml` at the repo root with `creation_rules` matching
+  `deploy/secrets/*.sops.{env,yaml,yml,json}`. Recipient public keys
+  are placeholders until §2.C key-generation completes.
+- `deploy/secrets/README.md` documenting layout, read/edit/add
+  workflow, and the deploy-side decryption path.
+- `.gitignore` updated to allow `*.sops.env` files alongside the
+  existing `.env*` block.
+
 ---
 
 ## 1) Preflight inventory
