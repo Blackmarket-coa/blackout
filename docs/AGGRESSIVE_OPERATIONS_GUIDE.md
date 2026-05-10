@@ -531,7 +531,7 @@ Differentiation milestone and beyond unbuilt rows:
 
 | System                                                   | Progress | Status                                       |
 |----------------------------------------------------------|----------|----------------------------------------------|
-| Secrets manager consolidation (Vault / Infisical / SOPS) | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/SECRETS_MANAGER_MIGRATION.md` |
+| Secrets manager consolidation (Vault / Infisical / SOPS) | 0–100%   | Foundation milestone critical; runbook at `docs/runbooks/SECRETS_MANAGER_MIGRATION.md`; preflight inventory shipped at `docs/operations/evidence/2026-05-10-secrets-manager-inventory.md`; awaits maintainer decision on manager choice |
 | AI-driven security and dependency update workflow        | Doc shipped | Foundation milestone; at `docs/operations/AI_SECURITY_WORKFLOW.md`; aggregation workflow at `.github/workflows/upstream-advisories.yml` |
 | Upstream advisories aggregation feed                     | Doc shipped | Foundation milestone; at `docs/operations/UPSTREAM_ADVISORIES.md`; fed by `.github/workflows/upstream-advisories.yml` |
 | ClickHouse + Cube + Metabase analytics consolidation     | 0–100%   | Foundation milestone                         |

@@ -76,6 +76,11 @@ Save the table to a draft `inventory.md` under
 window. It is the source of truth for the migration; do not begin step 2
 until the table is reviewed.
 
+The current inventory is at
+[`../operations/evidence/2026-05-10-secrets-manager-inventory.md`](../operations/evidence/2026-05-10-secrets-manager-inventory.md).
+Refresh it before starting §2 if the env-var landscape has shifted (re-walk
+the source list at the top of the inventory; diff against the table).
+
 ### 1.3 Bus-factor preflight
 
 - [ ] [`../operations/CO_MAINTAINER_ONBOARDING.md`](../operations/CO_MAINTAINER_ONBOARDING.md)
