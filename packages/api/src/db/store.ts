@@ -37,6 +37,7 @@ import type {
   AdRevenueShareRecord,
   PasswordResetTokenRecord,
   EmailVerificationTokenRecord,
+  AccountDeletionTokenRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
   LinkedAccountRecord,
@@ -89,6 +90,7 @@ type PersistedState = {
   adRevenueShares: AdRevenueShareRecord[];
   passwordResetTokens: PasswordResetTokenRecord[];
   emailVerificationTokens: EmailVerificationTokenRecord[];
+  accountDeletionTokens: AccountDeletionTokenRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
@@ -136,6 +138,7 @@ class InMemoryDb {
   adRevenueShares = new Map<string, AdRevenueShareRecord>();
   passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
   emailVerificationTokens = new Map<string, EmailVerificationTokenRecord>();
+  accountDeletionTokens = new Map<string, AccountDeletionTokenRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
@@ -293,6 +296,55 @@ class InMemoryDb {
       }
     }
     return removed;
+  }
+
+  // --- account deletion tokens ---
+
+  createAccountDeletionToken(
+    input: Omit<AccountDeletionTokenRecord, 'createdAt'>,
+  ): AccountDeletionTokenRecord {
+    const record: AccountDeletionTokenRecord = { ...input, createdAt: nowIso() };
+    this.accountDeletionTokens.set(record.id, record);
+    return record;
+  }
+
+  findAccountDeletionTokenByHash(tokenHash: string): AccountDeletionTokenRecord | undefined {
+    return [...this.accountDeletionTokens.values()].find((t) => t.tokenHash === tokenHash);
+  }
+
+  consumeAccountDeletionToken(id: string): AccountDeletionTokenRecord | undefined {
+    const existing = this.accountDeletionTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.consumedAt) return existing;
+    const updated: AccountDeletionTokenRecord = { ...existing, consumedAt: nowIso() };
+    this.accountDeletionTokens.set(id, updated);
+    return updated;
+  }
+
+  /** Best-effort cascade: drop all per-user auth artifacts so a deleted user
+   *  cannot retain a usable session. Shared records (messages, forum posts)
+   *  are intentionally left alone — anonymization vs. preservation is a
+   *  product-policy choice the caller can layer on top. */
+  purgeUserAuthArtifacts(userId: string): void {
+    for (const [id, record] of this.passwordResetTokens) {
+      if (record.userId === userId) this.passwordResetTokens.delete(id);
+    }
+    for (const [id, record] of this.emailVerificationTokens) {
+      if (record.userId === userId) this.emailVerificationTokens.delete(id);
+    }
+    for (const [id, record] of this.accountDeletionTokens) {
+      if (record.userId === userId) this.accountDeletionTokens.delete(id);
+    }
+    for (const [id, record] of this.refreshTokens) {
+      if (record.userId === userId) this.refreshTokens.delete(id);
+    }
+    for (const key of [...this.linkedAccounts.keys()]) {
+      const record = this.linkedAccounts.get(key);
+      if (record?.blackoutUserId === userId) this.linkedAccounts.delete(key);
+    }
+    for (const [stateHash, record] of this.pendingOAuthLinks) {
+      if (record.blackoutUserId === userId) this.pendingOAuthLinks.delete(stateHash);
+    }
   }
 
   // --- refresh tokens ---
@@ -1661,6 +1713,9 @@ class FileBackedDb extends InMemoryDb {
     this.emailVerificationTokens = new Map(
       (parsed.emailVerificationTokens ?? []).map((row) => [row.id, row])
     );
+    this.accountDeletionTokens = new Map(
+      (parsed.accountDeletionTokens ?? []).map((row) => [row.id, row])
+    );
     this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
@@ -1735,6 +1790,7 @@ class FileBackedDb extends InMemoryDb {
       adRevenueShares: [...this.adRevenueShares.values()],
       passwordResetTokens: [...this.passwordResetTokens.values()],
       emailVerificationTokens: [...this.emailVerificationTokens.values()],
+      accountDeletionTokens: [...this.accountDeletionTokens.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],
@@ -1807,6 +1863,25 @@ class FileBackedDb extends InMemoryDb {
     const updated = super.markUserEmailVerified(id, at);
     if (updated) this.persist();
     return updated;
+  }
+
+  override createAccountDeletionToken(
+    input: Omit<AccountDeletionTokenRecord, 'createdAt'>,
+  ): AccountDeletionTokenRecord {
+    const record = super.createAccountDeletionToken(input);
+    this.persist();
+    return record;
+  }
+
+  override consumeAccountDeletionToken(id: string): AccountDeletionTokenRecord | undefined {
+    const updated = super.consumeAccountDeletionToken(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override purgeUserAuthArtifacts(userId: string): void {
+    super.purgeUserAuthArtifacts(userId);
+    this.persist();
   }
 
   override createRefreshToken(

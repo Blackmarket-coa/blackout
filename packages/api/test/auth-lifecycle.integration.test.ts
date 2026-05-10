@@ -223,6 +223,69 @@ test('ResendMailer retries transient errors and surfaces permanent ones', async 
   assert.equal(permAttempts, 1);
 });
 
+test('account export returns user-scoped records and strips the password hash', async () => {
+  const { db } = await loadModules();
+  const lifecycle = await import('../src/services/accountLifecycle');
+  const user = await seedUser(db);
+
+  const exported = lifecycle.exportUserData(user.id);
+  assert.ok(exported);
+  assert.equal(exported!.user.id, user.id);
+  // passwordHash must not leak.
+  assert.equal((exported!.user as Record<string, unknown>).passwordHash, undefined);
+  assert.equal(exported!.schemaVersion, 1);
+  assert.ok(Array.isArray(exported!.linkedAccounts));
+  assert.ok(Array.isArray(exported!.messages));
+});
+
+test('account deletion confirms and purges user + tokens; rejects cross-user', async () => {
+  const { db, refreshToken } = await loadModules();
+  const lifecycle = await import('../src/services/accountLifecycle');
+  const userA = await seedUser(db);
+  const userB = await seedUser(db);
+
+  // Issue a refresh token on userA so we can verify it's purged.
+  const refresh = refreshToken.issueRefreshToken({ userId: userA.id });
+  assert.ok(db.findRefreshTokenByHash(refreshToken.__test__.sha256(refresh.token)));
+
+  const issued = lifecycle.requestAccountDeletion({ userId: userA.id });
+  assert.ok(issued);
+
+  // Cross-user token use is rejected.
+  assert.equal(lifecycle.confirmAccountDeletion(issued!.token, userB.id).kind, 'user_mismatch');
+
+  // Correct user succeeds.
+  const ok = lifecycle.confirmAccountDeletion(issued!.token, userA.id);
+  assert.equal(ok.kind, 'ok');
+
+  // The user record is gone.
+  assert.equal(db.getUserById(userA.id), undefined);
+  // Refresh tokens for the deleted user are gone.
+  assert.equal(db.findRefreshTokenByHash(refreshToken.__test__.sha256(refresh.token)), undefined);
+
+  // Replay is rejected — the token is purged along with the user's other auth
+  // artifacts during deletion, so the second lookup returns 'invalid'. Either
+  // 'invalid' or 'consumed' is acceptable here; the security property is that
+  // a successful deletion cannot be replayed.
+  const replay = lifecycle.confirmAccountDeletion(issued!.token, userA.id);
+  assert.ok(replay.kind === 'invalid' || replay.kind === 'consumed', `unexpected replay outcome: ${replay.kind}`);
+});
+
+test('account deletion rejects expired tokens', async () => {
+  const { db } = await loadModules();
+  const lifecycle = await import('../src/services/accountLifecycle');
+  const user = await seedUser(db);
+  const issued = lifecycle.requestAccountDeletion({ userId: user.id });
+  assert.ok(issued);
+
+  const stored = db.findAccountDeletionTokenByHash(lifecycle.__test__.sha256(issued!.token));
+  db.accountDeletionTokens.set(stored!.id, {
+    ...stored!,
+    expiresAt: new Date(Date.now() - 1000).toISOString(),
+  });
+  assert.equal(lifecycle.confirmAccountDeletion(issued!.token, user.id).kind, 'expired');
+});
+
 test('revokeSession denylist blocks reuse of a still-valid jwt', async () => {
   const { auth, db } = await loadModules();
   auth.clearAuthRuntimeConfigCache();

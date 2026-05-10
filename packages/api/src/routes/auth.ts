@@ -19,6 +19,11 @@ import {
   consumeEmailVerificationToken,
   issueEmailVerificationToken,
 } from '../services/emailVerification';
+import {
+  confirmAccountDeletion,
+  exportUserData,
+  requestAccountDeletion,
+} from '../services/accountLifecycle';
 import { getMailer } from '../services/mailer';
 import { log } from '../telemetry/logger';
 import { authFailuresTotal, refreshTokenReusesTotal } from '../telemetry/metrics';
@@ -33,6 +38,8 @@ auth.use('/password/change', authRateLimit);
 auth.use('/token/refresh', authRateLimit);
 auth.use('/email/verify/request', authRateLimit);
 auth.use('/email/verify/confirm', authRateLimit);
+auth.use('/account/delete/request', authRateLimit);
+auth.use('/account/delete/confirm', authRateLimit);
 
 const registerSchema = z.object({
   username: z.string().min(1),
@@ -367,6 +374,87 @@ auth.post('/email/verify/confirm', async (c) => {
     case 'invalid':
     default:
       return c.json({ code: 'verify_token_invalid', message: 'Verification token invalid' }, 400);
+  }
+});
+
+// --- Account lifecycle: data export + deletion ---
+
+auth.get('/account/export', (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to export account data');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const data = exportUserData(user.sub);
+  if (!data) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  // Use a stable filename hint so the client can save it directly.
+  c.header(
+    'content-disposition',
+    `attachment; filename="blackout-export-${user.sub}-${data.exportedAt}.json"`,
+  );
+  return c.json(data);
+});
+
+auth.post('/account/delete/request', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to delete account');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const issued = requestAccountDeletion({
+    userId: user.sub,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  if (!issued) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+
+  try {
+    await getMailer().send({
+      to: issued.user.email,
+      subject: 'Confirm Blackout account deletion',
+      text: `You (or someone with access to your account) requested account deletion.\n\nUse this token to confirm deletion: ${issued.token}\n\nIt expires in 30 minutes. If this was not you, change your password immediately and ignore this email — no data has been deleted.`,
+      kind: 'account_deletion',
+    });
+  } catch (err) {
+    log.warn('account_deletion_mail_failed', { error: String(err) });
+  }
+  return c.json({ ok: true, expiresAt: issued.expiresAt }, 202);
+});
+
+const accountDeleteConfirmSchema = z.object({ token: z.string().min(1) });
+
+auth.post('/account/delete/confirm', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to delete account');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const parsed = await readJsonBody(c, accountDeleteConfirmSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const outcome = confirmAccountDeletion(parsed.token, user.sub);
+  switch (outcome.kind) {
+    case 'ok':
+      // After deletion the JWT still cryptographically validates — denylist
+      // it so the holder can't replay until expiry.
+      if (user.jti && user.exp) {
+        db.revokeSession({
+          jti: user.jti,
+          userId: user.sub,
+          expiresAt: new Date(user.exp * 1000).toISOString(),
+          reason: 'account_deleted',
+        });
+      }
+      return c.json({ ok: true });
+    case 'expired':
+      return c.json({ code: 'delete_token_expired', message: 'Deletion token expired' }, 410);
+    case 'consumed':
+      return c.json({ code: 'delete_token_consumed', message: 'Deletion token already used' }, 410);
+    case 'user_mismatch':
+      return c.json(
+        { code: 'delete_token_user_mismatch', message: 'Deletion token does not belong to the authenticated user' },
+        403,
+      );
+    case 'invalid':
+    default:
+      return c.json({ code: 'delete_token_invalid', message: 'Deletion token invalid' }, 400);
   }
 });
 

@@ -24,6 +24,17 @@ export interface PasswordResetTokenRecord {
   userAgentHash?: string;
 }
 
+export interface AccountDeletionTokenRecord {
+  id: UUID;
+  userId: UUID;
+  tokenHash: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+  ipHash?: string;
+  userAgentHash?: string;
+}
+
 export interface EmailVerificationTokenRecord {
   id: UUID;
   userId: UUID;
