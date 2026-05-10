@@ -306,3 +306,92 @@ Expected outcomes:
 - Burst login/registration tests produce `429` responses.
 - TLS check reports >=21 days remaining (or triggers alert path).
 
+## 13) Capacity telemetry
+
+Synapse exposes Prometheus metrics on a dedicated internal listener on
+port 9101 at path `/_synapse/metrics`. The listener is configured in
+`synapse/homeserver.yaml.template` (the `type: metrics` listener and
+`enable_metrics: true` toggle); the docker-compose service exposes
+9101 only inside the `app`/`data` networks, never to the host.
+
+The matching Prometheus scrape job is defined in
+`deploy/docker/production/monitoring/prometheus/prometheus.yml.example`
+under the `synapse` job. The Grafana dashboard that consumes these
+metrics is `docs/operations/dashboards/synapse_capacity_dashboard.json`.
+
+The dashboard covers the §4.1 watch-items from
+`docs/AGGRESSIVE_OPERATIONS_GUIDE.md`: federation outbound queue
+(PDUs and EDUs), media-store growth proxies, state-group count,
+request-time p95, background DB transaction p95, and process resource
+use. Postgres-side panels (autovacuum lag, connection pool wait) are
+called out in the dashboard's `notes` field as a follow-up that
+requires a `postgres_exporter` scrape target — not yet wired up.
+
+Capacity bands are deliberately not set; per §4.1, they require
+operating telemetry that does not yet exist. The dashboard is the
+substrate for setting them once the data is in.
+
+## 14) Media store lifecycle
+
+Media retention is configured under the `media_retention:` block in
+`synapse/homeserver.yaml.template`:
+
+| Class | Retained for | Why |
+|-------|--------------|-----|
+| Local media (uploaded by our users) | 365 days | Cannot be re-fetched from elsewhere; treat as user data |
+| Remote media (federation-cached) | 30 days | Re-fetchable from the originating homeserver on demand |
+
+To widen retention, increase the values; to tighten, decrease and run
+a manual GC pass through the Synapse admin API. Synapse runs a media
+retention background task automatically after the values are set;
+no separate cron is required.
+
+The media-store volume (`blackout-synapse-media`, mounted at `/media`)
+is in the §1 backup-criticality "Critical" tier. Retention only
+controls Synapse's GC cadence; backups are independent and continue to
+hold media beyond the retention window.
+
+## 15) Postgres baseline tuning
+
+The Postgres container runs with the config file at
+`postgres/postgresql.conf` (mounted at `/etc/postgresql/postgresql.conf`
+inside the container). Tuning rationale and re-evaluation triggers
+live as comments in the config file itself.
+
+Headlines:
+
+- **Memory**: `shared_buffers=8GB`, `effective_cache_size=24GB`,
+  `work_mem=32MB`, `maintenance_work_mem=2GB`. Conservative for the
+  consolidated DL360; widen once telemetry shows the planner spilling.
+- **Autovacuum**: more aggressive than Postgres defaults
+  (`autovacuum_vacuum_scale_factor=0.05`,
+  `autovacuum_analyze_scale_factor=0.025`,
+  `autovacuum_max_workers=4`). Synapse state-table churn is the
+  rationale.
+- **WAL**: `wal_level=replica` plus `wal_compression=on`, ready for
+  the Differentiation milestone streaming-replication deliverable.
+- **Observability**: `pg_stat_statements` preloaded;
+  `track_io_timing=on`; `log_autovacuum_min_duration=1s` so autovacuum
+  starvation surfaces in logs.
+
+Reload non-restart parameters with `pg_ctl reload` from inside the
+postgres container; restart the service for memory-related changes.
+
+## 16) Worker-mode references
+
+Synapse runs as a single process by default. Worker-mode artifacts are
+pre-staged but not enabled:
+
+- Worker config files: `synapse/workers/{federation_sender,generic_worker,background_worker}.yaml`.
+- Commented-in main-process stanzas: bottom of
+  `synapse/homeserver.yaml.template`.
+- Enablement runbook (when, how, validation, rollback):
+  `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md`.
+
+The triggers that justify enabling workers are panels on the
+`synapse_capacity` dashboard (§13 above); the runbook lists the
+specific thresholds. Until those triggers fire, leave workers
+disabled. The §9.2 tracker row in the operations guide is satisfied
+by the artifacts existing in a clearly enable-able state, not by them
+being live.
+

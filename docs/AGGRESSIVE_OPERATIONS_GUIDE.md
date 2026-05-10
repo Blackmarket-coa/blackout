@@ -496,10 +496,10 @@ Foundation milestone unbuilt rows:
 
 | System                                                        | Progress | Status                                    |
 |---------------------------------------------------------------|----------|-------------------------------------------|
-| Synapse capacity telemetry (Prometheus + Grafana)             | 0–100%   | Foundation milestone critical             |
-| Synapse media retention policy                                | 0–100%   | Foundation milestone critical             |
-| Postgres tuning baseline                                      | 0–100%   | Foundation milestone critical             |
-| Synapse worker-mode config (documented, not enabled)          | 0–100%   | Foundation milestone critical             |
+| Synapse capacity telemetry (Prometheus + Grafana)             | Doc shipped | Foundation milestone critical; listener at `infra/single-server-baseline/synapse/homeserver.yaml.template`, scrape at `deploy/docker/production/monitoring/prometheus/prometheus.yml.example`, dashboard at `docs/operations/dashboards/synapse_capacity_dashboard.json` |
+| Synapse media retention policy                                | Doc shipped | Foundation milestone critical; `media_retention:` block in `infra/single-server-baseline/synapse/homeserver.yaml.template`; rationale in `infra/single-server-baseline/RUNBOOK.md` §14 |
+| Postgres tuning baseline                                      | Doc shipped | Foundation milestone critical; `infra/single-server-baseline/postgres/postgresql.conf`; rationale in `infra/single-server-baseline/RUNBOOK.md` §15 |
+| Synapse worker-mode config (documented, not enabled)          | Doc shipped | Foundation milestone critical; configs at `infra/single-server-baseline/synapse/workers/`; enablement at `docs/runbooks/SYNAPSE_WORKER_ENABLEMENT.md` |
 | Coalition Credits balance widget (consumes FBM entitlements)  | 0–100%   | Foundation milestone critical             |
 | Cooperative governance UI with Matrix ACL sync                | 0–100%   | Foundation milestone critical             |
 | Settings: Appearance + Steganography pages                    | 0–100%   | Foundation milestone; in flight           |
