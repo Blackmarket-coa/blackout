@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../../state/auth';
+import { RegistryTabBar } from '../../core/features/RegistryTabBar';
 import { ProposalCard } from './ProposalCard';
 import { ProposalCreator } from './ProposalCreator';
 import { ProposalDetail } from './ProposalDetail';
@@ -8,13 +10,10 @@ import { useGovernanceDiagnostics, useProposalResult, useProposals, useVotes, ty
 
 type GovernanceTab = 'active' | 'past' | 'create' | 'my-votes' | 'results';
 
-const tabButtonStyle = (active: boolean) => ({
-    border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-default)',
-    borderRadius: 8,
-    background: active ? 'var(--accent-muted)' : 'var(--bg-input)',
-    color: 'var(--text-primary)',
-    padding: '6px 10px',
-});
+const VALID_TABS: ReadonlySet<GovernanceTab> = new Set(['active', 'past', 'create', 'my-votes', 'results']);
+
+const isValidTab = (raw: string | null): raw is GovernanceTab =>
+    raw !== null && VALID_TABS.has(raw as GovernanceTab);
 
 const voteChoiceLabel = (choice: string | string[]): string =>
     typeof choice === 'string' ? choice : choice.join(', ');
@@ -119,7 +118,17 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
     const currentUserId = useAtomValue(userIdAtom) ?? '';
     const proposals = useProposals(roomId);
     const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<GovernanceTab>('active');
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+    // Derive the active tab from the URL so the registry-declared right-panel
+    // tab bar (BKL-003) drives navigation. /governance/new maps to 'create';
+    // /governance?tab=<id> maps to that tab; the default is 'active'.
+    const tabFromQuery = searchParams.get('tab');
+    const activeTab: GovernanceTab = location.pathname.endsWith('/governance/new')
+        ? 'create'
+        : isValidTab(tabFromQuery)
+            ? tabFromQuery
+            : 'active';
     const diagnostics = useGovernanceDiagnostics(roomId, selectedProposalId ?? undefined);
 
     const activeProposals = useMemo(
@@ -135,43 +144,35 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
         <section style={{ display: 'grid', gap: 12 }}>
             <header style={{ display: 'grid', gap: 8 }}>
                 <h2 style={{ margin: 0 }}>Governance Dashboard</h2>
-                <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('active')}
-                        style={tabButtonStyle(activeTab === 'active')}
-                    >
-                        Active
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('past')}
-                        style={tabButtonStyle(activeTab === 'past')}
-                    >
-                        Past
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('create')}
-                        style={tabButtonStyle(activeTab === 'create')}
-                    >
-                        Create
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('my-votes')}
-                        style={tabButtonStyle(activeTab === 'my-votes')}
-                    >
-                        My Votes
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('results')}
-                        style={tabButtonStyle(activeTab === 'results')}
-                    >
-                        Results
-                    </button>
-                </div>
+                <RegistryTabBar
+                    kind="right-panel"
+                    pathname={`${location.pathname}${location.search}`}
+                    barStyle={{
+                        display: 'inline-flex',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        background: 'transparent',
+                        borderTop: 'none',
+                        padding: 0,
+                        justifyContent: 'flex-start',
+                    }}
+                    itemStyle={{
+                        flex: 'none',
+                        flexDirection: 'row',
+                        gap: 6,
+                        padding: '6px 10px',
+                        minHeight: 0,
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 8,
+                        background: 'var(--bg-input)',
+                        fontSize: 13,
+                    }}
+                    activeItemStyle={{
+                        border: '1px solid var(--accent-primary)',
+                        background: 'var(--accent-muted)',
+                    }}
+                    data-testid="governance-right-panel-tabs"
+                />
             </header>
 
 
