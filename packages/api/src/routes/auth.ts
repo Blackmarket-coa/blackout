@@ -15,6 +15,10 @@ import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { issueRefreshToken, revokeRefreshToken, revokeAllForUser, rotateRefreshToken } from '../services/refreshToken';
 import { consumePasswordResetToken, issuePasswordResetToken } from '../services/passwordReset';
+import {
+  consumeEmailVerificationToken,
+  issueEmailVerificationToken,
+} from '../services/emailVerification';
 import { getMailer } from '../services/mailer';
 import { log } from '../telemetry/logger';
 import { authFailuresTotal, refreshTokenReusesTotal } from '../telemetry/metrics';
@@ -27,6 +31,8 @@ auth.use('/password/reset/request', authRateLimit);
 auth.use('/password/reset/confirm', authRateLimit);
 auth.use('/password/change', authRateLimit);
 auth.use('/token/refresh', authRateLimit);
+auth.use('/email/verify/request', authRateLimit);
+auth.use('/email/verify/confirm', authRateLimit);
 
 const registerSchema = z.object({
   username: z.string().min(1),
@@ -95,6 +101,27 @@ auth.post('/register', async (c) => {
   }
 
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+
+  // Fire the email-verification flow at registration. Failures are logged but
+  // never block sign-up — the user can request a fresh verification email
+  // later via /email/verify/request.
+  const verification = issueEmailVerificationToken({
+    userId: user.id,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  if (verification.kind === 'ok') {
+    try {
+      await getMailer().send({
+        to: user.email,
+        subject: 'Verify your Blackout email',
+        text: `Use this token to verify your email: ${verification.token}\n\nIt expires in 24 hours. If you did not create this account, ignore this email.`,
+        kind: 'email_verification',
+      });
+    } catch (err) {
+      log.warn('email_verification_mail_failed', { error: String(err) });
+    }
+  }
 
   return c.json(
     {
@@ -278,6 +305,68 @@ auth.post('/password/reset/confirm', async (c) => {
     case 'invalid':
     default:
       return c.json({ code: 'reset_token_invalid', message: 'Reset token invalid' }, 400);
+  }
+});
+
+const emailVerifyConfirmSchema = z.object({ token: z.string().min(1) });
+
+auth.post('/email/verify/request', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to verify email');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const outcome = issueEmailVerificationToken({
+    userId: user.sub,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+
+  switch (outcome.kind) {
+    case 'ok': {
+      try {
+        await getMailer().send({
+          to: outcome.user.email,
+          subject: 'Verify your Blackout email',
+          text: `Use this token to verify your email: ${outcome.token}\n\nIt expires in 24 hours. If you did not request this, ignore this email.`,
+          kind: 'email_verification',
+        });
+      } catch (err) {
+        log.warn('email_verification_mail_failed', { error: String(err) });
+        // Do not surface mail-transport failures to the caller — the response
+        // shape stays uniform so a polling client can't infer transport state.
+      }
+      return c.json({ ok: true }, 202);
+    }
+    case 'already_verified':
+      return c.json({ ok: true, alreadyVerified: true });
+    case 'throttled':
+      return c.json({ code: 'too_many_requests', message: 'Too many verification requests. Try again later.' }, 429);
+    case 'unknown_user':
+    default:
+      return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  }
+});
+
+auth.post('/email/verify/confirm', async (c) => {
+  const parsed = await readJsonBody(c, emailVerifyConfirmSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const outcome = consumeEmailVerificationToken(parsed.token);
+  switch (outcome.kind) {
+    case 'ok':
+      return c.json({ ok: true, userId: outcome.user.id, emailVerifiedAt: outcome.user.emailVerifiedAt });
+    case 'expired':
+      return c.json({ code: 'verify_token_expired', message: 'Verification token expired' }, 410);
+    case 'consumed':
+      return c.json({ code: 'verify_token_consumed', message: 'Verification token already used' }, 410);
+    case 'email_changed':
+      return c.json(
+        { code: 'verify_token_email_changed', message: 'Email address has changed; request a new verification.' },
+        409,
+      );
+    case 'invalid':
+    default:
+      return c.json({ code: 'verify_token_invalid', message: 'Verification token invalid' }, 400);
   }
 });
 

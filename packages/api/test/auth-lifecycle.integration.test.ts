@@ -127,6 +127,102 @@ test('password reset rejects expired and weak passwords', async () => {
   assert.equal(passwordReset.consumePasswordResetToken(issued.token, 'StrongPass-12345!').kind, 'expired');
 });
 
+test('email verification issues, mails, and consumes a token once', async () => {
+  const { db } = await loadModules();
+  const emailVerification = await import('../src/services/emailVerification');
+  const user = await seedUser(db);
+  assert.equal(user.emailVerifiedAt, undefined);
+
+  const outcome = emailVerification.issueEmailVerificationToken({ userId: user.id });
+  assert.equal(outcome.kind, 'ok');
+  if (outcome.kind !== 'ok') return;
+
+  const consumed = emailVerification.consumeEmailVerificationToken(outcome.token);
+  assert.equal(consumed.kind, 'ok');
+  if (consumed.kind === 'ok') {
+    assert.ok(consumed.user.emailVerifiedAt);
+  }
+
+  // Replay is rejected.
+  const replay = emailVerification.consumeEmailVerificationToken(outcome.token);
+  assert.equal(replay.kind, 'consumed');
+
+  // A second issue on a now-verified user short-circuits.
+  const reissue = emailVerification.issueEmailVerificationToken({ userId: user.id });
+  assert.equal(reissue.kind, 'already_verified');
+});
+
+test('email verification rejects expired and email-changed tokens', async () => {
+  const { db } = await loadModules();
+  const emailVerification = await import('../src/services/emailVerification');
+  const user = await seedUser(db);
+
+  // expired
+  const expiredOutcome = emailVerification.issueEmailVerificationToken({ userId: user.id });
+  assert.equal(expiredOutcome.kind, 'ok');
+  if (expiredOutcome.kind !== 'ok') return;
+  const stored = db.findEmailVerificationTokenByHash(emailVerification.__test__.sha256(expiredOutcome.token));
+  db.emailVerificationTokens.set(stored!.id, {
+    ...stored!,
+    expiresAt: new Date(Date.now() - 1000).toISOString(),
+  });
+  assert.equal(emailVerification.consumeEmailVerificationToken(expiredOutcome.token).kind, 'expired');
+
+  // email changed since issuance — reseed a fresh user, swap their email, then try to consume.
+  const user2 = await seedUser(db);
+  const liveOutcome = emailVerification.issueEmailVerificationToken({ userId: user2.id });
+  assert.equal(liveOutcome.kind, 'ok');
+  if (liveOutcome.kind !== 'ok') return;
+  db.users.set(user2.id, { ...user2, email: `changed-${user2.id.slice(0, 4)}@example.com` });
+  assert.equal(emailVerification.consumeEmailVerificationToken(liveOutcome.token).kind, 'email_changed');
+});
+
+test('email verification throttles excess requests', async () => {
+  const { db } = await loadModules();
+  const emailVerification = await import('../src/services/emailVerification');
+  process.env.EMAIL_VERIFICATION_THROTTLE_MAX = '2';
+  try {
+    const user = await seedUser(db);
+    assert.equal(emailVerification.issueEmailVerificationToken({ userId: user.id }).kind, 'ok');
+    assert.equal(emailVerification.issueEmailVerificationToken({ userId: user.id }).kind, 'ok');
+    assert.equal(emailVerification.issueEmailVerificationToken({ userId: user.id }).kind, 'throttled');
+  } finally {
+    delete process.env.EMAIL_VERIFICATION_THROTTLE_MAX;
+  }
+});
+
+test('ResendMailer retries transient errors and surfaces permanent ones', async () => {
+  const mailer = await import('../src/services/mailer');
+  let attempts = 0;
+  const transientThenOk = new mailer.ResendMailer({
+    apiKey: 'test',
+    from: 'noreply@blackout.local',
+    backoffMs: 1,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        return new Response('upstream', { status: 503 });
+      }
+      return new Response('{"id":"ok"}', { status: 200 });
+    },
+  });
+  await transientThenOk.send({ to: 'a@b.test', subject: 's', text: 't', kind: 'unit_test' });
+  assert.equal(attempts, 3);
+
+  let permAttempts = 0;
+  const permanent = new mailer.ResendMailer({
+    apiKey: 'test',
+    from: 'noreply@blackout.local',
+    backoffMs: 1,
+    fetchImpl: async () => {
+      permAttempts += 1;
+      return new Response('bad request', { status: 400 });
+    },
+  });
+  await assert.rejects(permanent.send({ to: 'a@b.test', subject: 's', text: 't' }));
+  assert.equal(permAttempts, 1);
+});
+
 test('revokeSession denylist blocks reuse of a still-valid jwt', async () => {
   const { auth, db } = await loadModules();
   auth.clearAuthRuntimeConfigCache();

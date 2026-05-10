@@ -53,6 +53,7 @@ import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
+import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
 import { registerFeatureModules } from './modules';
 
@@ -192,6 +193,7 @@ if (shouldListen) {
   // bare-bones deployments.
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
+  bootstrapMailer();
 
   // Resume any persisted Twitch chat bridges so they survive a redeploy.
   // Gated on an opt-in env var so the auto-restart doesn't surprise local
