@@ -196,6 +196,50 @@ services:
       - no-new-privileges:true
     <<: *common-logging
 
+  postgres-exporter:
+    # Exposes Postgres health metrics (autovacuum lag, connection pool,
+    # buffer cache hit ratio, locks, replication state) on port 9187.
+    # Consumed by the `postgres` scrape job in
+    # deploy/docker/production/monitoring/prometheus/prometheus.yml.example
+    # and the Postgres panels in
+    # docs/operations/dashboards/synapse_capacity_dashboard.json.
+    #
+    # Connects as POSTGRES_USER (the application superuser). The
+    # upgrade path is a dedicated read-only user with the pg_monitor
+    # role:
+    #   CREATE USER postgres_exporter WITH PASSWORD '...';
+    #   GRANT pg_monitor TO postgres_exporter;
+    # then point DATA_SOURCE_NAME at that user. Tracked in
+    # infra/single-server-baseline/RUNBOOK.md §13.
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: blackout-postgres-exporter
+    restart: unless-stopped
+    expose:
+      - "9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      # Enable optional collectors that surface autovacuum lag and
+      # statement-level activity. pg_stat_statements collector requires
+      # the extension to be preloaded — see postgres/postgresql.conf.
+      - PG_EXPORTER_AUTO_DISCOVER_DATABASES=true
+      - PG_EXPORTER_INCLUDE_DATABASES=${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9187/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - data
+      - app
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    <<: *common-logging
+
   coturn:
     image: coturn/coturn:4.6.3-r0
     container_name: blackout-coturn

@@ -45,6 +45,21 @@ scrape_configs:
           service: synapse
           tier: matrix
 
+  - job_name: postgres
+    # Scrape postgres-exporter for autovacuum lag, connection pool, and
+    # buffer-cache hit-ratio panels in
+    # docs/operations/dashboards/synapse_capacity_dashboard.json.
+    # Co-deployed with the single-server-baseline stack, see
+    # infra/single-server-baseline/docker-compose.yml.
+    scheme: http
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+        labels:
+          service: postgres-exporter
+          tier: data
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

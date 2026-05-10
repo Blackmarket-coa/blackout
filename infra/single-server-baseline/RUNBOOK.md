@@ -323,9 +323,26 @@ The dashboard covers the §4.1 watch-items from
 `docs/AGGRESSIVE_OPERATIONS_GUIDE.md`: federation outbound queue
 (PDUs and EDUs), media-store growth proxies, state-group count,
 request-time p95, background DB transaction p95, and process resource
-use. Postgres-side panels (autovacuum lag, connection pool wait) are
-called out in the dashboard's `notes` field as a follow-up that
-requires a `postgres_exporter` scrape target — not yet wired up.
+use.
+
+Postgres-side panels (autovacuum lag on Synapse state tables, connection
+pool utilisation, buffer-cache hit ratio) are fed by the
+`postgres-exporter` service in `docker-compose.yml`, scraped by the
+`postgres` job in
+`deploy/docker/production/monitoring/prometheus/prometheus.yml.example`.
+
+The exporter currently connects as `POSTGRES_USER` (the application
+superuser) for simplicity. The recommended upgrade is a dedicated
+read-only role:
+
+```sql
+CREATE USER postgres_exporter WITH PASSWORD '<secret>';
+GRANT pg_monitor TO postgres_exporter;
+```
+
+Then update `DATA_SOURCE_NAME` on the exporter and the secret in the
+secrets manager. Tracked here because it is a low-priority hardening
+step rather than a Foundation gate.
 
 Capacity bands are deliberately not set; per §4.1, they require
 operating telemetry that does not yet exist. The dashboard is the
