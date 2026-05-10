@@ -19,6 +19,8 @@ import {
   syncRefund,
   type SubscriptionWebhookEvent,
 } from '../services/subscriptions';
+import { verifyBillingWebhook } from '../services/billingWebhookSignature';
+import { log } from '../telemetry/logger';
 
 const subscriptions = new Hono();
 
@@ -102,10 +104,37 @@ subscriptions.post('/portal', async (c) => {
 });
 
 subscriptions.post('/webhooks/lago', async (c) => {
-  const parsed = await readJsonBody(c, webhookSchema);
-  if (parsed instanceof Response) return parsed;
+  // Read the raw body so HMAC verification is byte-exact. Re-parsing JSON
+  // afterwards is safe — we already require valid JSON via the Zod schema.
+  const rawBody = await c.req.text();
+  const headers: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(c.req.header())) {
+    headers[key.toLowerCase()] = value;
+  }
+  const verification = verifyBillingWebhook(rawBody, headers);
+  if (!verification.ok) {
+    log.warn('billing_webhook_rejected', {
+      provider: verification.provider,
+      reason: verification.reason,
+    });
+    return c.json(
+      { code: 'webhook_unauthorized', message: 'Webhook signature verification failed', reason: verification.reason },
+      401,
+    );
+  }
 
-  const result = applySubscriptionWebhookEvent(parsed as SubscriptionWebhookEvent);
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return c.json({ code: 'invalid_json', message: 'Webhook payload is not valid JSON' }, 400);
+  }
+  const parsed = webhookSchema.safeParse(payload);
+  if (!parsed.success) {
+    return c.json({ code: 'invalid_payload', message: 'Webhook payload failed validation', issues: parsed.error.issues }, 400);
+  }
+
+  const result = applySubscriptionWebhookEvent(parsed.data as SubscriptionWebhookEvent);
   return c.json({ ok: true, processed: result.processed, status: result.status, userId: result.userId });
 });
 
