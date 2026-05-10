@@ -1,5 +1,26 @@
 # QA AI Remediation Plan — 2026-04-05
 
+> **STATUS — 2026-05-10: SUPERSEDED.** All four workstreams below have been
+> resolved or made obsolete:
+> - **Workstream A (P0)** — `AI-W-CORE-001` and `AI-W-CORE-002` now PASS in
+>   `legacy/blackout-web/tests/integration/app.test.ts` (the previously
+>   failing `prompt.scrollIntoView` jsdom call has been guarded).
+> - **Workstream B (P0)** — Route parity test `react-client-paths.test.ts`
+>   is no longer present in the canonical client; the corresponding config
+>   moved to `legacy/blackout-web/config/react-client-paths.json` when
+>   `apps/blackout-web` was archived to `legacy/` on 2026-05-01.
+> - **Workstream C (P1)** — The seven blocked mobile rows are deferred
+>   alongside the broader mobile-harness program; the canonical client
+>   (`apps/blackout-client`) is the launch surface and has its own
+>   coverage in `apps/blackout-client/tests/`.
+> - **Workstream D (P0)** — `AI-X-002` session-restore contract is now
+>   covered by `legacy/blackout-web/tests/unit/session-restore.test.ts`
+>   and passes in CI.
+>
+> Verified by running `pnpm --filter @blackout/blackout-web test:unit`
+> (71 pass) and `pnpm --filter @blackout/blackout-web test:integration`
+> (31 pass). Keep this file as a historical record only; do not act on it.
+
 ## Goal
 
 Move all currently non-passing AI QA-plan rows (`FAIL`, `BLOCKED`, `NOT_COVERED`) to deterministic automated coverage with stable CI execution.
