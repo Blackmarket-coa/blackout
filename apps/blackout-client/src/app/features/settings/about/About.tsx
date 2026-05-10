@@ -65,6 +65,7 @@ export function About({ requestClose }: AboutProps) {
                       size="300"
                       radii="300"
                       before={<Icon src={Icons.Code} size="100" filled />}
+                      onClick={() => trackSettingsInteraction('about', 'source_code_link', 'follow')}
                     >
                       <Text size="B300">Source Code</Text>
                     </Button>
@@ -97,7 +98,10 @@ export function About({ requestClose }: AboutProps) {
                     description="Clear all your locally stored data and reload from server."
                     after={
                       <Button
-                        onClick={() => clearCacheAndReload(mx)}
+                        onClick={() => {
+                          trackSettingsInteraction('about', 'clear_cache', 'invoke');
+                          clearCacheAndReload(mx);
+                        }}
                         variant="Secondary"
                         fill="Soft"
                         size="300"
