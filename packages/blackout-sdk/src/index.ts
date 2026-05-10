@@ -7,6 +7,7 @@ export * from './client/media';
 export * from './errors/sdkError';
 export * from './governance/actions';
 export * from './governance/matrixActions';
+export * from './playbook/matrixActions';
 export * from './forum/actions';
 export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';

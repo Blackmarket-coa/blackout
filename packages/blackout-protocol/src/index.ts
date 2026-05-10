@@ -17,6 +17,8 @@ export * from './deadman/events';
 
 export * from './governance/contracts';
 
+export * from './playbook';
+
 export * from './entitlements/types';
 
 export * from './entitlements/schema';

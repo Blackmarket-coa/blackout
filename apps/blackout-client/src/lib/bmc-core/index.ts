@@ -2,6 +2,7 @@ export * from './types';
 export * from './crypto';
 export * from './governance';
 export * from './federation';
+export * from './playbook';
 export * from '../../app/plugins/composer/quickActionCatalog';
 
 export * from './feature-presets';

@@ -17,13 +17,31 @@ export interface GovernanceProposalOption {
     label: string;
 }
 
-export type GovernanceProposalType = 'binary' | 'multiple_choice' | 'ranked';
+/**
+ * Proposal type union.
+ *
+ * `'consent'` is the sociocratic primitive: rather than tallying for/against
+ * votes, consent proposals collect three reactions on the proposal event
+ * itself — 🌱 (safe to try), 🌾 (concern, opens an inline note), and 🪨
+ * (paramount objection, opens a structured "what harm?" form). The other
+ * types remain shipped and selectable; playbooks pick the default.
+ *
+ * Vocabulary cross-reference: Loomio's "advice / consent / consensus" copy
+ * pattern. We start with consent as the v1 sociocratic surface; consensus and
+ * advice are deferred to v2 along with their UI affordances.
+ */
+export type GovernanceProposalType = 'binary' | 'multiple_choice' | 'ranked' | 'consent';
 export type GovernanceProposalStatus = 'active' | 'passed' | 'failed' | 'cancelled';
 
 export interface GovernanceProposalPayload {
     title: string;
     description: string;
     type: GovernanceProposalType;
+    /**
+     * Options array. Empty for consent proposals (the reaction palette
+     * carries the choices); required and non-empty for binary/multiple-choice
+     * /ranked.
+     */
     options: GovernanceProposalOption[];
     quorum: number;
     deadline: string;
