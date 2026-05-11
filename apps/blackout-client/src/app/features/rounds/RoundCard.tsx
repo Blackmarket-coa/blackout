@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import {
@@ -7,7 +7,8 @@ import {
 import { userIdAtom } from '../../state/auth';
 import { roomIdToReplyDraftAtomFamily } from '../../state/room/roomInputDrafts';
 import { useDenPlaybook } from '../playbook/usePlaybook';
-import { useRoundContributions } from './useRounds';
+import { useRoundContributions, useSendVoiceRoundReply } from './useRounds';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 /**
@@ -76,6 +77,34 @@ export function RoundCard({ roomId, eventId, payload, senderId, room }: RoundCar
     const playbook = useDenPlaybook(roomId);
     const contributions = useRoundContributions(roomId, eventId);
     const setReplyDraft = useSetAtom(roomIdToReplyDraftAtomFamily(roomId));
+    const sendVoiceReply = useSendVoiceRoundReply(roomId);
+    const voice = useVoiceRecorder();
+    const [sendingVoice, setSendingVoice] = useState(false);
+    const [voiceError, setVoiceError] = useState<string | null>(null);
+
+    // Voice notes are offered when the round itself allows them AND the den's
+    // playbook has the voiceNotesOnRounds feature flag. Hearth-style casual
+    // dens stay text-only by default.
+    const voiceAllowed =
+        payload.allowVoice && (playbook?.features.voiceNotesOnRounds ?? false);
+
+    // When the recorder produces a file, ship it as a round reply, then
+    // reset so a follow-up tap starts a fresh recording. Errors surface to
+    // the user via the inline status row; the file isn't lost.
+    useEffect(() => {
+        if (!voice.file || sendingVoice) return;
+        const fileToSend = voice.file;
+        setSendingVoice(true);
+        setVoiceError(null);
+        void sendVoiceReply(fileToSend, eventId)
+            .catch((cause) => {
+                setVoiceError(cause instanceof Error ? cause.message : String(cause));
+            })
+            .finally(() => {
+                voice.reset();
+                setSendingVoice(false);
+            });
+    }, [voice.file, voice, sendingVoice, sendVoiceReply, eventId]);
 
     /**
      * The expected speakers are either the explicit invitee list or — when
@@ -153,16 +182,49 @@ export function RoundCard({ roomId, eventId, payload, senderId, room }: RoundCar
                     <span style={styles.rowLabel}>Speaking now</span>
                     <div style={styles.pillRow}>
                         {speakingNow ? (
-                            <button
-                                type="button"
-                                data-testid="round-tap-to-speak"
-                                onClick={tapToSpeak}
-                                style={{ ...styles.avatar, ...styles.avatarSelf }}
-                                title={`Tap to add your ${BLACKOUT_TERMS.round.singular} reply`}
-                                aria-label="Tap to speak"
-                            >
-                                {shortLabel(speakingNow)}
-                            </button>
+                            <>
+                                <button
+                                    type="button"
+                                    data-testid="round-tap-to-speak"
+                                    onClick={tapToSpeak}
+                                    style={{ ...styles.avatar, ...styles.avatarSelf }}
+                                    title={`Tap to add your ${BLACKOUT_TERMS.round.singular} reply`}
+                                    aria-label="Tap to speak"
+                                >
+                                    {shortLabel(speakingNow)}
+                                </button>
+                                {voiceAllowed && voice.supported && (
+                                    <button
+                                        type="button"
+                                        data-testid="round-record-voice"
+                                        onClick={() =>
+                                            voice.recording ? voice.stop() : void voice.start()
+                                        }
+                                        disabled={sendingVoice}
+                                        style={{
+                                            ...styles.avatar,
+                                            borderColor: voice.recording
+                                                ? 'var(--danger, #EF5350)'
+                                                : 'var(--accent-primary)',
+                                            background: voice.recording
+                                                ? 'rgba(239, 83, 80, 0.18)'
+                                                : 'var(--accent-muted)',
+                                        }}
+                                        title={
+                                            voice.recording
+                                                ? 'Stop recording'
+                                                : 'Record a voice reply'
+                                        }
+                                        aria-label={
+                                            voice.recording
+                                                ? 'Stop voice recording'
+                                                : 'Record voice reply'
+                                        }
+                                    >
+                                        {voice.recording ? '⏺' : sendingVoice ? '↑' : '🎙'}
+                                    </button>
+                                )}
+                            </>
                         ) : (
                             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                                 {myUserId && spokenSet.has(myUserId)
@@ -193,6 +255,18 @@ export function RoundCard({ roomId, eventId, payload, senderId, room }: RoundCar
                     </div>
                 </div>
             </section>
+            {(voiceError || voice.error || sendingVoice) && (
+                <p
+                    role={voiceError || voice.error ? 'alert' : 'status'}
+                    style={{
+                        margin: 0,
+                        fontSize: 11,
+                        color: voiceError || voice.error ? 'var(--danger, #EF5350)' : 'var(--text-secondary)',
+                    }}
+                >
+                    {voiceError ?? voice.error?.message ?? (sendingVoice ? 'Sending voice reply…' : '')}
+                </p>
+            )}
         </section>
     );
 }

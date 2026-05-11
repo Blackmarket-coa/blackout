@@ -10,6 +10,7 @@ import { createRoundsMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useCompleteQuest } from '../quests/useQuests';
+import { uploadMedia } from '../media/utils/matrixMedia';
 
 export interface OpenRoundModel extends RoundOpenedPayload {
     /** Matrix event id of the opening event. Required to anchor replies. */
@@ -210,5 +211,70 @@ export const useCloseRound = (roomId: string, closerId: string | null) => {
             });
         },
         [actions, closerId, roomId],
+    );
+};
+
+/**
+ * Hook: send a voice-note reply to an open round event.
+ *
+ * Uploads the captured File through `uploadMedia`, then writes an
+ * `m.room.message` with `msgtype: 'm.audio'`, the MSC3245 voice marker
+ * (`org.matrix.msc3245.voice`), and an `m.in_reply_to` relation pointing
+ * at the round-opening event so `collectRoundContributions` picks it up
+ * on the next render.
+ *
+ * Mirrors AudioMessage.tsx's detection contract so existing renderers
+ * surface the waveform automatically. The caller (RoundCard) handles
+ * MediaRecorder lifecycle via `useVoiceRecorder`.
+ */
+/**
+ * Pure builder for the voice-reply `m.room.message` content. Extracted so
+ * the shape (msgtype + msc3245 voice marker + in_reply_to relation) can
+ * be exercised by tests without hitting the Matrix client.
+ */
+export interface VoiceReplyContentInput {
+    url: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+    roundEventId: string;
+}
+
+export function buildVoiceReplyContent(
+    input: VoiceReplyContentInput,
+): Record<string, unknown> {
+    return {
+        msgtype: 'm.audio',
+        body: input.fileName,
+        url: input.url,
+        info: {
+            mimetype: input.mimeType,
+            size: input.size,
+        },
+        // AudioMessage detection: org.matrix.msc3245.voice flags the
+        // message as a voice note so the waveform renderer kicks in.
+        'org.matrix.msc3245.voice': {},
+        'org.matrix.msc1767.audio': {},
+        'm.relates_to': {
+            'm.in_reply_to': { event_id: input.roundEventId },
+        },
+    };
+}
+
+export const useSendVoiceRoundReply = (roomId: string) => {
+    const client = useMatrixClient();
+    return useCallback(
+        async (file: File, roundEventId: string): Promise<void> => {
+            const url = await uploadMedia(client, file);
+            const content = buildVoiceReplyContent({
+                url,
+                fileName: file.name,
+                mimeType: file.type,
+                size: file.size,
+                roundEventId,
+            });
+            await client.sendEvent(roomId, 'm.room.message' as never, content as never);
+        },
+        [client, roomId],
     );
 };

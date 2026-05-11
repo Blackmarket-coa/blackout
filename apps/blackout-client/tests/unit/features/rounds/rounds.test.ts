@@ -148,6 +148,37 @@ describe('collectRoundContributions', () => {
         expect(result[0]?.isVoice).toBe(true);
     });
 
+    it('round-trips the buildVoiceReplyContent shape', async () => {
+        // Belt + suspenders: the builder produces a content object whose
+        // m.in_reply_to + msc3245 flag the collector recognizes as a voice
+        // contribution. Keeps the producer/consumer pair in lockstep.
+        const { buildVoiceReplyContent } = await import(
+            '../../../../src/app/features/rounds/useRounds'
+        );
+        const content = buildVoiceReplyContent({
+            url: 'mxc://x/abc',
+            fileName: 'voice-note.webm',
+            mimeType: 'audio/webm',
+            size: 1024,
+            roundEventId: ROUND_ID,
+        });
+        const result = collectRoundContributions(
+            [
+                // @ts-expect-error fake event
+                event({
+                    id: 'r-voice',
+                    sender: '@me:x',
+                    ts: 9,
+                    content,
+                }),
+            ],
+            ROUND_ID,
+        );
+        expect(result.length).toBe(1);
+        expect(result[0].contributorId).toBe('@me:x');
+        expect(result[0].isVoice).toBe(true);
+    });
+
     it('ignores redacted events', () => {
         const result = collectRoundContributions(
             [
