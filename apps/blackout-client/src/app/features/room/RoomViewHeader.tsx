@@ -76,6 +76,7 @@ import { TrialBanner } from '../playbook/TrialBanner';
 import { DenHeaderStrip } from '../../components/den-signature';
 import { useCompostAvailable } from '../compost/useCompost';
 import { CompostDialog } from '../compost/CompostDialog';
+import { useAwaitsMe } from '../notifications/hooks/useAwaitsMe';
 
 type RoomMenuProps = {
   room: Room;
@@ -337,6 +338,12 @@ export function RoomViewHeader() {
     setRightPanel('threads');
   };
 
+  const handleOpenNotificationsPanel = () => {
+    setRightPanel('notifications');
+  };
+
+  const awaitsMe = useAwaitsMe(room.roomId);
+
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     setMenuAnchor(evt.currentTarget.getBoundingClientRect());
   };
@@ -513,6 +520,47 @@ export function RoomViewHeader() {
               )}
             </TooltipProvider>
           )}
+          <TooltipProvider
+            position="Bottom"
+            offset={4}
+            tooltip={
+              <Tooltip>
+                <Text>
+                  {awaitsMe.count > 0
+                    ? `Awaits-me · ${awaitsMe.count} item${awaitsMe.count === 1 ? '' : 's'}`
+                    : 'Notifications'}
+                </Text>
+              </Tooltip>
+            }
+          >
+            {(triggerRef) => (
+              <IconButton
+                ref={triggerRef}
+                style={{ position: 'relative' }}
+                onClick={handleOpenNotificationsPanel}
+                data-testid="room-header-notifications"
+              >
+                {awaitsMe.count > 0 && (
+                  <Badge
+                    style={{
+                      position: 'absolute',
+                      left: toRem(3),
+                      top: toRem(3),
+                    }}
+                    variant="Secondary"
+                    size="400"
+                    fill="Solid"
+                    radii="Pill"
+                  >
+                    <Text as="span" size="L400">
+                      {awaitsMe.count}
+                    </Text>
+                  </Badge>
+                )}
+                <Icon size="400" src={Icons.Bell} filled={awaitsMe.count > 0} />
+              </IconButton>
+            )}
+          </TooltipProvider>
           {screenSize === ScreenSize.Desktop && (
             <TooltipProvider
               position="Bottom"
