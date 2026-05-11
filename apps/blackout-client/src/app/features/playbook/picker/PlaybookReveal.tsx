@@ -27,6 +27,8 @@ import { restrictedSupported } from '../../../utils/matrix';
 import { CreateRoomKind, createRoom } from '../../../components/create-room';
 import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
 import { useSetAnyPlaybook } from '../usePlaybook';
+import { useUpsertAnyDocument } from '../../documents/useDenDocuments';
+import { seedDocumentsForPlaybook } from '../../documents/templates';
 import { RevealActions, RevealHeader } from './PlaybookPicker.css';
 
 /**
@@ -71,6 +73,7 @@ export function PlaybookReveal({
     const [editedDomain, setEditedDomain] = useState<string>('');
 
     const setPlaybook = useSetAnyPlaybook();
+    const upsertDocument = useUpsertAnyDocument();
 
     const plantBody = useCallback(async () => {
         const cleanedName = editedName.trim() || entry.name;
@@ -96,17 +99,41 @@ export function PlaybookReveal({
         });
         await setPlaybook(roomId, payload);
 
+        // Seed founding documents the playbook recommends. Errors here are
+        // non-fatal — the den is still usable without seeds, and the user
+        // can author docs from scratch in the Documents tab.
+        if (entry.features.documents) {
+            const seeds = seedDocumentsForPlaybook(playbookId);
+            const me = mx.getUserId() ?? '';
+            const seededAt = new Date().toISOString();
+            await Promise.allSettled(
+                seeds.map((template) =>
+                    upsertDocument(roomId, {
+                        docId: template.id,
+                        title: template.title,
+                        body: template.body,
+                        version: 1,
+                        derivedFromTemplateId: template.id,
+                        lastEditorId: me,
+                        editedAt: seededAt,
+                    }),
+                ),
+            );
+        }
+
         return roomId;
     }, [
         editedName,
         editedDomain,
         entry.name,
         entry.features.governanceActive,
+        entry.features.documents,
         space,
         defaultVersion,
         mx,
         playbookId,
         setPlaybook,
+        upsertDocument,
     ]);
 
     const [plantState, plant] = useAsyncCallback<string, Error | MatrixError, []>(plantBody);

@@ -11,6 +11,7 @@ export * from './playbook/matrixActions';
 export * from './rounds/matrixActions';
 export * from './roles/matrixActions';
 export * from './compost/matrixActions';
+export * from './documents/matrixActions';
 export * from './forum/actions';
 export * from './deaddrop/actions';
 export * from './deaddrop/matrixActions';
