@@ -12,7 +12,8 @@ export type SettingsSectionId =
     | 'accessibility'
     | 'keybinds'
     | 'developer'
-    | 'about';
+    | 'about'
+    | 'character-sheet';
 export type ThemeOption = BlackoutThemeId;
 export type ChatDensityOption = 'compact' | 'cozy';
 export type EmojiStyleOption = 'system' | 'twemoji';

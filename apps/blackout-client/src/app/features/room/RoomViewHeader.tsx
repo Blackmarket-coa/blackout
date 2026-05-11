@@ -74,6 +74,8 @@ import { rightPanelAtom } from '../../state/navigation';
 import { useDenPlaybook } from '../playbook/usePlaybook';
 import { TrialBanner } from '../playbook/TrialBanner';
 import { DenHeaderStrip } from '../../components/den-signature';
+import { useCompostAvailable } from '../compost/useCompost';
+import { CompostDialog } from '../compost/CompostDialog';
 
 type RoomMenuProps = {
   room: Room;
@@ -85,6 +87,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
+  const compostAvailable = useCompostAvailable(room.roomId);
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canInvite = permissions.action('invite', mx.getSafeUserId());
@@ -228,6 +231,33 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
       </Box>
       <Line variant="Surface" size="300" />
       <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
+        {compostAvailable && (
+          <UseStateProvider initial={false}>
+            {(showCompost, setShowCompost) => (
+              <>
+                <MenuItem
+                  onClick={() => setShowCompost(true)}
+                  variant="Surface"
+                  fill="None"
+                  size="300"
+                  radii="300"
+                  aria-pressed={showCompost}
+                >
+                  <Text style={{ flexGrow: 1 }} as="span" size="T300" truncate>
+                    Compost this Den
+                  </Text>
+                </MenuItem>
+                {showCompost && (
+                  <CompostDialog
+                    roomId={room.roomId}
+                    onClose={() => setShowCompost(false)}
+                    onComposted={requestClose}
+                  />
+                )}
+              </>
+            )}
+          </UseStateProvider>
+        )}
         <UseStateProvider initial={false}>
           {(promptLeave, setPromptLeave) => (
             <>

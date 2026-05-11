@@ -12,6 +12,7 @@ import {
     useSpatialFeed,
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
+import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
@@ -39,6 +40,8 @@ export function MapTab({ scope }: MapTabProps) {
     const spatialItems = spatialState.data?.items ?? [];
     const aidPosts = aidState.data?.posts ?? [];
     const sellerLocations = sellerState.data?.locations ?? [];
+    const myceliumGraph = useMyceliumGraph();
+    const myceliumActive = activeLayers.has('mycelium');
 
     const toggleLayer = (key: SpatialLayerKey) => {
         setActiveLayers((prev) => {
@@ -111,6 +114,39 @@ export function MapTab({ scope }: MapTabProps) {
                     Map preview · attach <code>maplibre-gl</code> to render real tiles. Pin list
                     shows the current scope.
                 </div>
+
+                {myceliumActive && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            inset: 60,
+                            display: 'grid',
+                            placeItems: 'center',
+                            pointerEvents: 'none',
+                        }}
+                        data-testid="mycelium-overlay-wrap"
+                    >
+                        <div style={{ width: '100%', height: '100%', pointerEvents: 'auto' }}>
+                            <MyceliumLayer
+                                graph={myceliumGraph}
+                                onSelectNode={(nodeId) =>
+                                    setSelectedPin({
+                                        id: nodeId,
+                                        title:
+                                            myceliumGraph.nodes.find((n) => n.id === nodeId)
+                                                ?.label ?? nodeId,
+                                        subtitle: `mycelium · ${
+                                            myceliumGraph.nodes.find((n) => n.id === nodeId)
+                                                ?.memberCount ?? 0
+                                        } members`,
+                                        layer: 'mycelium',
+                                        denId: nodeId,
+                                    })
+                                }
+                            />
+                        </div>
+                    </div>
+                )}
 
                 <ul style={{ position: 'absolute', bottom: 12, left: 12, right: 12, listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
                     {pinList(spatialItems, aidPosts, sellerLocations).map((pin) => (

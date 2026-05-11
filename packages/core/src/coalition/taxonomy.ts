@@ -5,6 +5,7 @@ export const SPATIAL_LAYER_DEFINITIONS = [
     { key: 'votes', label: 'Governance', aliases: ['votes', 'governance'] },
     { key: 'aid', label: 'Mutual Aid', aliases: ['aid', 'mutual aid'] },
     { key: 'infra', label: 'Infrastructure', aliases: ['infra', 'infrastructure'] },
+    { key: 'mycelium', label: 'Federation', aliases: ['mycelium', 'federation', 'constellation'] },
 ] as const;
 
 export type SpatialLayerKey = (typeof SPATIAL_LAYER_DEFINITIONS)[number]['key'];
