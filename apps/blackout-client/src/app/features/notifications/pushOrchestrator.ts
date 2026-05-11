@@ -168,6 +168,30 @@ export const cleanupInvalidOrExpiredTokens = (
 
 export const resolveWorkflow = (eventType: PlatformEventType): NotificationWorkflow => WORKFLOW_MAP[eventType];
 
+/**
+ * Three-bucket notification category for the in-app drawer + OS toast label.
+ * Maps each existing `PlatformEventType` to one of:
+ *   • awaits_me — decisions or rounds that owe a response (push by default)
+ *   • about_me  — replies / mentions that name *me* (push opt-in)
+ *   • pulse     — ambient digest (email/morning only, never push)
+ *
+ * This is *augment* not *replace* — `PlatformEventType` and the workflow
+ * machinery above remain the authoritative routing keys; categories are a
+ * derived label for the receiver UI. New decision-style event types added
+ * by future work-streams should map themselves to `awaits_me` here.
+ */
+export type NotificationCategory = 'awaits_me' | 'about_me' | 'pulse';
+
+const CATEGORY_MAP: Record<PlatformEventType, NotificationCategory> = {
+  mention: 'about_me',
+  reply: 'about_me',
+  subscription: 'pulse',
+  mod_alert: 'awaits_me',
+};
+
+export const resolveCategory = (eventType: PlatformEventType): NotificationCategory =>
+  CATEGORY_MAP[eventType];
+
 const isSuppressed = (
   event: PlatformEvent,
   preferences: UserNotificationPreferences,
