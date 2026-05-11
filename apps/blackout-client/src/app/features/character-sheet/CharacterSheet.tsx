@@ -117,10 +117,47 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
         );
     }
 
+    const copyDeepLink = async () => {
+        if (typeof window === 'undefined') return;
+        const url = `${window.location.origin}/character-sheet/${encodeURIComponent(sheet.userId)}`;
+        try {
+            await navigator.clipboard?.writeText?.(url);
+        } catch {
+            // Best-effort — clipboard write can fail without HTTPS or
+            // user activation. The user can still grab the URL bar.
+        }
+    };
+
     return (
         <main style={styles.page} data-testid="character-sheet">
             <header style={styles.block}>
-                <h1 style={{ margin: 0, fontSize: 18 }}>{sheet.userId}</h1>
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                    }}
+                >
+                    <h1 style={{ margin: 0, fontSize: 18 }}>{sheet.userId}</h1>
+                    <button
+                        type="button"
+                        onClick={() => void copyDeepLink()}
+                        data-testid="character-sheet-copy-link"
+                        title="Copy a link to this sheet"
+                        style={{
+                            fontSize: 11,
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            padding: '2px 10px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Copy link
+                    </button>
+                </div>
                 <p style={styles.label}>
                     A record of the {BLACKOUT_TERMS.den.plural} you&apos;ve planted, the
                     {' '}roles you&apos;ve carried, and the moments along the way. Yours to read,
