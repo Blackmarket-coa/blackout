@@ -71,6 +71,8 @@ import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { rightPanelAtom } from '../../state/navigation';
+import { useDenPlaybook } from '../playbook/usePlaybook';
+import { DenHeaderStrip } from '../../components/den-signature';
 
 type RoomMenuProps = {
   room: Room;
@@ -268,6 +270,7 @@ export function RoomViewHeader() {
   const mDirects = useAtomValue(mDirectAtom);
 
   const pinnedEvents = useRoomPinnedEvents(room);
+  const playbook = useDenPlaybook(room.roomId);
   const encryptionEvent = useStateEvent(room, StateEvent.RoomEncryption);
   const ecryptedRoom = !!encryptionEvent;
   const avatarMxc = useRoomAvatar(room, mDirects.has(room.roomId));
@@ -312,6 +315,8 @@ export function RoomViewHeader() {
   };
 
   return (
+    <>
+      {playbook && <DenHeaderStrip playbook={playbook} />}
     <PageHeader balance={screenSize === ScreenSize.Mobile}>
       <Box grow="Yes" gap="300">
         {screenSize === ScreenSize.Mobile && (
@@ -549,5 +554,6 @@ export function RoomViewHeader() {
         </Box>
       </Box>
     </PageHeader>
+    </>
   );
 }
