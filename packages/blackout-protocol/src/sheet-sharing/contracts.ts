@@ -44,9 +44,39 @@ export const PRIVATE_SHEET_SHARING: CharacterSheetSharingPayload = {
     updatedAt: '1970-01-01T00:00:00Z',
 };
 
+/**
+ * Per-room grant. Matrix account data is per-user-private, so a viewer
+ * can't read the holder's preferences directly. To let den members
+ * discover which fellow members have shared their sheet *with this
+ * circle*, the holder mirrors each opt-in into a room state event keyed
+ * by their user id. Empty / missing state event means no grant.
+ *
+ * The payload is intentionally minimal — just a timestamp — so the room
+ * timeline isn't doing double duty as the holder's preferences store.
+ * The holder's account-data event remains authoritative for cross-device
+ * sync; the room state event is the discoverable side.
+ */
+export interface CharacterSheetSharedGrantPayload {
+    /** ISO-8601 timestamp the grant was last written. */
+    sharedAt: string;
+}
+
+export const isCharacterSheetSharedGrantPayload = (
+    value: unknown,
+): value is CharacterSheetSharedGrantPayload => {
+    if (!value || typeof value !== 'object') return false;
+    const p = value as Record<string, unknown>;
+    return typeof p.sharedAt === 'string';
+};
+
 export type CharacterSheetSharingEvent = EventEnvelope<
     'blackout.user.sheet.sharing',
     CharacterSheetSharingPayload
+>;
+
+export type CharacterSheetSharedGrantEvent = EventEnvelope<
+    'blackout.user.sheet.shared',
+    CharacterSheetSharedGrantPayload
 >;
 
 export interface CharacterSheetSharingProtocolSurface {

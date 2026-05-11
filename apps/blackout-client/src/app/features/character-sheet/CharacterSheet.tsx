@@ -4,9 +4,11 @@ import {
     useResetSheetSharing,
     useToggleSheetSharing,
 } from './sharingPreferences';
+import { useCanViewSheet } from './useCanViewSheet';
 import { PLAYBOOK_CATALOG, type PlaybookId } from '@blackout/protocol';
 import { useAtomValue } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { userIdAtom } from '../../state/auth';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 /**
@@ -82,7 +84,13 @@ function playbookLabel(id: PlaybookId | null): string {
 }
 
 export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
-    const sheet = useCharacterSheet();
+    const viewerId = useAtomValue(userIdAtom);
+    const sheet = useCharacterSheet(userId);
+    const canView = useCanViewSheet(userId ?? viewerId);
+    const sharing = useCharacterSheetSharing();
+    const toggleSharing = useToggleSheetSharing();
+    const resetSharing = useResetSheetSharing();
+    const joinedRooms = useAtomValue(joinedRoomsAtom);
 
     if (!sheet) {
         return (
@@ -92,13 +100,22 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
         );
     }
 
-    // The hook always reads the current user; cross-user is deferred.
-    void userId;
+    const isSelfView = !userId || userId === viewerId;
 
-    const sharing = useCharacterSheetSharing();
-    const toggleSharing = useToggleSheetSharing();
-    const resetSharing = useResetSheetSharing();
-    const joinedRooms = useAtomValue(joinedRoomsAtom);
+    if (!isSelfView && !canView) {
+        return (
+            <main style={styles.page} data-testid="character-sheet-private">
+                <header style={styles.block}>
+                    <h1 style={{ margin: 0, fontSize: 18 }}>{userId}</h1>
+                    <p style={styles.label}>
+                        This member hasn&apos;t shared their character sheet with any
+                        {' '}{BLACKOUT_TERMS.den.singular} you&apos;re a part of. Sheets are
+                        private by default — only the holder can choose to open them up.
+                    </p>
+                </header>
+            </main>
+        );
+    }
 
     return (
         <main style={styles.page} data-testid="character-sheet">
@@ -182,6 +199,7 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
                 )}
             </section>
 
+            {isSelfView && (
             <section style={styles.block} data-testid="character-sheet-sharing">
                 <header
                     style={{
@@ -272,6 +290,7 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
                     </ul>
                 )}
             </section>
+            )}
         </main>
     );
 }
