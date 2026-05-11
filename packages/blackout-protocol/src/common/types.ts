@@ -38,7 +38,8 @@ export type BlackoutEventName =
     | 'blackout.governance.round.closed'
     | 'blackout.governance.role.set'
     | 'blackout.den.composted'
-    | 'blackout.den.document.upserted';
+    | 'blackout.den.document.upserted'
+    | 'blackout.user.quests';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;
