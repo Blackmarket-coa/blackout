@@ -1,0 +1,176 @@
+import { useCharacterSheet } from './useCharacterSheet';
+import { PLAYBOOK_CATALOG, type PlaybookId } from '@blackout/protocol';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+
+/**
+ * Per-user Character Sheet (J4) with embedded Quest Log (J6).
+ *
+ * Stat-block visual idiom, solarpunk-flavored — no parchment textures
+ * (banlist) and no XP bars (banlist revision still excludes
+ * status-conferring affordances). The sheet shows:
+ *
+ *   • the playbook the user first planted under (identity anchor),
+ *   • the roles they currently hold across dens (with term end),
+ *   • a count of joined dens (one cheap stat),
+ *   • a newest-first quest log rendered as narrative beats.
+ *
+ * Visible to the user themselves by default; sharing-with-others is
+ * deferred (the brief calls for opt-in sharing, but the surface bears
+ * implementation cost we don't need for v1 acceptance).
+ */
+export interface CharacterSheetProps {
+    /**
+     * Optional user id we're rendering for. If omitted, falls back to the
+     * current user (the hook reads from userIdAtom). Cross-user rendering
+     * is deferred — the prop is reserved so future shared sheets can
+     * mount without a refactor.
+     */
+    userId?: string;
+}
+
+const styles = {
+    page: { display: 'grid', gap: 16, padding: 16, maxWidth: 720, margin: '0 auto' } as const,
+    block: {
+        border: '1px solid var(--border-default)',
+        borderRadius: 12,
+        background: 'var(--bg-surface)',
+        padding: 12,
+        display: 'grid',
+        gap: 8,
+    } as const,
+    statRow: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+        gap: 12,
+    } as const,
+    stat: {
+        border: '1px solid var(--border-default)',
+        borderRadius: 8,
+        background: 'var(--bg-input)',
+        padding: 10,
+        display: 'grid',
+        gap: 2,
+    } as const,
+    label: { fontSize: 11, color: 'var(--text-secondary)' } as const,
+    value: { fontSize: 18, fontWeight: 700 } as const,
+    rolesList: { margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 } as const,
+    roleRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '6px 0',
+        borderBottom: '1px dashed var(--border-default)',
+    } as const,
+    log: { margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 } as const,
+    logRow: {
+        padding: '6px 0',
+        borderBottom: '1px dashed var(--border-default)',
+        fontSize: 13,
+    } as const,
+};
+
+function playbookLabel(id: PlaybookId | null): string {
+    if (!id) return '—';
+    return PLAYBOOK_CATALOG[id].name;
+}
+
+export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
+    const sheet = useCharacterSheet();
+
+    if (!sheet) {
+        return (
+            <main style={styles.page} data-testid="character-sheet-empty">
+                <p style={styles.label}>Sign in to see your character sheet.</p>
+            </main>
+        );
+    }
+
+    // The hook always reads the current user; cross-user is deferred.
+    void userId;
+
+    return (
+        <main style={styles.page} data-testid="character-sheet">
+            <header style={styles.block}>
+                <h1 style={{ margin: 0, fontSize: 18 }}>{sheet.userId}</h1>
+                <p style={styles.label}>
+                    A record of the {BLACKOUT_TERMS.den.plural} you&apos;ve planted, the
+                    {' '}roles you&apos;ve carried, and the moments along the way. Yours to read,
+                    yours to share when you choose.
+                </p>
+            </header>
+
+            <section style={styles.statRow} data-testid="character-sheet-stats">
+                <div style={styles.stat}>
+                    <span style={styles.label}>First {BLACKOUT_TERMS.playbook.singular}</span>
+                    <span style={styles.value}>{playbookLabel(sheet.firstPlaybook)}</span>
+                </div>
+                <div style={styles.stat}>
+                    <span style={styles.label}>{BLACKOUT_TERMS.den.titlePlural} joined</span>
+                    <span style={styles.value}>{sheet.densJoined}</span>
+                </div>
+                <div style={styles.stat}>
+                    <span style={styles.label}>Roles held</span>
+                    <span style={styles.value}>{sheet.rolesHeld.length}</span>
+                </div>
+                <div style={styles.stat}>
+                    <span style={styles.label}>Quests completed</span>
+                    <span style={styles.value}>{sheet.questLog.length}</span>
+                </div>
+            </section>
+
+            <section style={styles.block}>
+                <strong>Roles you carry</strong>
+                {sheet.rolesHeld.length === 0 ? (
+                    <p style={styles.label}>
+                        No roles held right now. Roles are term-bound — opening an election in
+                        a {BLACKOUT_TERMS.den.singular} adds the first one here.
+                    </p>
+                ) : (
+                    <ul style={styles.rolesList}>
+                        {sheet.rolesHeld.map((role) => (
+                            <li
+                                key={`${role.roomId}:${role.roleId}`}
+                                style={styles.roleRow}
+                                data-testid={`character-role-${role.roleId}`}
+                            >
+                                <span>
+                                    <strong>{role.roleName}</strong>{' '}
+                                    <span style={styles.label}>in {role.roomName}</span>
+                                </span>
+                                <span style={styles.label}>
+                                    term ends {role.termEnd.slice(0, 10)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
+            <section style={styles.block} data-testid="character-sheet-quest-log">
+                <strong>Quest log</strong>
+                {sheet.questLog.length === 0 ? (
+                    <p style={styles.label}>
+                        Nothing logged yet. The quest sheet ticks beats here as you do them.
+                    </p>
+                ) : (
+                    <ul style={styles.log}>
+                        {sheet.questLog.map((entry, index) => (
+                            <li
+                                key={`${entry.id}-${index}`}
+                                style={styles.logRow}
+                                data-testid={`character-quest-${entry.id}`}
+                            >
+                                <strong>{entry.narrative}</strong>{' '}
+                                <span style={styles.label}>
+                                    · {new Date(entry.completedAt).toLocaleDateString()}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+        </main>
+    );
+}
+
+export default CharacterSheet;

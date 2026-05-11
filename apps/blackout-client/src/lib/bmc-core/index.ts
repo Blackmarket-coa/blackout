@@ -8,6 +8,7 @@ export * from './awaitsMe';
 export * from './mycelium';
 export * from './trial';
 export * from './questDetection';
+export * from './characterSheet';
 export * from '../../app/plugins/composer/quickActionCatalog';
 
 export * from './feature-presets';
