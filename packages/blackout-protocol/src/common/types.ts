@@ -36,7 +36,8 @@ export type BlackoutEventName =
     | 'blackout.den.playbook.set'
     | 'blackout.governance.round.opened'
     | 'blackout.governance.round.closed'
-    | 'blackout.governance.role.set';
+    | 'blackout.governance.role.set'
+    | 'blackout.den.composted';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

@@ -23,6 +23,8 @@ export * from './rounds';
 
 export * from './roles';
 
+export * from './compost';
+
 export * from './entitlements/types';
 
 export * from './entitlements/schema';
