@@ -8,26 +8,44 @@ type RadialBloomProps = {
   scales: Animated.Value[];
   onClose: () => void;
   onAction: (action: RadialAction["label"]) => void;
+  /**
+   * Optional context-derived action list. When omitted, RadialBloom falls
+   * back to the original 8-wedge `RADIAL_ACTIONS` constant so existing
+   * call sites continue to render the casual layout unchanged. Governance
+   * consumers pass `selectRadialActions(ctx)` from `@blackout/core`.
+   */
+  actions?: ReadonlyArray<RadialAction>;
 };
 
-export function RadialBloom({ open, scales, onClose, onAction }: RadialBloomProps) {
+export function RadialBloom({ open, scales, onClose, onAction, actions }: RadialBloomProps) {
+  const resolved = actions && actions.length > 0 ? actions : RADIAL_ACTIONS;
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.radialOverlay} onPress={onClose}>
         <Text style={styles.radialHint}>Tap outside to close · Esc to dismiss</Text>
         <Pressable style={styles.radialHub} onPress={() => undefined}>
           <View style={styles.radialRingCircle} />
-          {RADIAL_ACTIONS.map((action, index) => {
+          {resolved.map((action, index) => {
             const radius = 100;
             const radians = (action.angle * Math.PI) / 180;
             const x = radius * Math.cos(radians);
             const y = radius * Math.sin(radians);
+            const scale = scales[index] ?? scales[scales.length - 1];
             return (
               <Animated.View
                 key={action.label}
-                style={[styles.radialNodeWrap, { transform: [{ translateX: x }, { translateY: y }, { scale: scales[index] }] }]}
+                style={[styles.radialNodeWrap, { transform: [{ translateX: x }, { translateY: y }, { scale }] }]}
               >
-                <Pressable style={({ pressed }) => [styles.radialNode, pressed && styles.radialNodeHovered]} onPress={() => onAction(action.label)}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.radialNode,
+                    action.pulses && styles.radialNodePulses,
+                    pressed && styles.radialNodeHovered,
+                  ]}
+                  onPress={() => onAction(action.label)}
+                  accessibilityLabel={action.label}
+                  accessibilityHint={action.pulses ? "Awaits your response" : undefined}
+                >
                   <Text style={styles.radialNodeLabel}>{action.label}</Text>
                 </Pressable>
               </Animated.View>
@@ -90,6 +108,11 @@ const styles = StyleSheet.create({
   radialNodeHovered: {
     backgroundColor: "rgba(26,188,156,0.3)",
     borderColor: "#1ABC9C",
+  },
+  radialNodePulses: {
+    borderColor: "#1ABC9C",
+    borderWidth: 1.5,
+    backgroundColor: "rgba(26,188,156,0.25)",
   },
   radialNodeLabel: {
     color: "#b0d8c0",

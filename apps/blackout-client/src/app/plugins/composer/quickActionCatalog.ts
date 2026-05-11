@@ -55,9 +55,30 @@ export type SelectionTarget =
 
 export type DomainId = 'governance' | 'trade' | 'logistics' | 'discover';
 
+export type CasualRadialLabel =
+    | 'Vote'
+    | 'People'
+    | 'Create'
+    | 'Map'
+    | 'Events'
+    | 'Settings'
+    | 'Message'
+    | 'Search';
+
+export type GovernanceRadialLabel =
+    | 'Propose'
+    | 'Round'
+    | 'Consent'
+    | 'Role'
+    | 'Treasury'
+    | 'Party';
+
+export type RadialLabel = CasualRadialLabel | GovernanceRadialLabel;
+
 export type RadialAction = {
-    label: 'Vote' | 'People' | 'Create' | 'Map' | 'Events' | 'Settings' | 'Message' | 'Search';
+    label: RadialLabel;
     angle: number;
+    pulses?: boolean;
 };
 
 export const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
