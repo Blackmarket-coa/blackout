@@ -17,6 +17,11 @@ import {
     type AwaitsMeItem,
     type AwaitsMeProposal,
 } from '../../../../lib/bmc-core';
+import {
+    awaitsMeAcrossRoomsAtom,
+    awaitsMeByRoomAtom,
+    type AwaitsMeAcrossRoomsValue,
+} from '../../../state/awaitsMe';
 
 /**
  * Per-room "awaits me" derivation. Composes the three sources (consent
@@ -119,33 +124,28 @@ export function useAwaitsMe(roomId: string | null | undefined): AwaitsMeForRoom 
 }
 
 /**
- * Aggregate "awaits me" across every joined room. Returns the total count
- * and a per-room breakdown — useful for the sidebar badge and a future
- * notifications drawer.
+ * Aggregate "awaits me" across every joined room.
  *
- * Implementation note: we deliberately do *not* call `useAwaitsMe(roomId)`
- * in a loop (React hooks must be called unconditionally). Instead we
- * derive each room's awaits-me directly from its `room.getLiveTimeline()`
- * via the existing room object. Callers needing rich per-room items
- * should call `useAwaitsMe(roomId)` from the open room itself.
- *
- * For v1 this hook just exposes a placeholder count of 0 and a callback
- * the consumer can use to subscribe to individual rooms. The full
- * cross-room derivation is deferred to a follow-up that adds a shared
- * timeline cache.
+ * Backed by `awaitsMeAcrossRoomsAtom` — a Jotai derived atom that
+ * memoizes the computation across all subscribers. Sidebar rows, shell
+ * badges, and the standalone drawer share the same walk per dependency
+ * change, so adding consumers costs nothing.
  */
-export function useAwaitsMeAcrossRooms(): {
-    totalCount: number;
-    rooms: Array<{ roomId: string; count: number }>;
-} {
-    const rooms = useAtomValue(joinedRoomsAtom);
-    return useMemo(
-        () => ({
-            totalCount: 0,
-            rooms: rooms.map((room) => ({ roomId: room.roomId, count: 0 })),
-        }),
-        [rooms],
-    );
+export type AwaitsMeAcrossRoomsResult = AwaitsMeAcrossRoomsValue;
+
+export function useAwaitsMeAcrossRooms(): AwaitsMeAcrossRoomsResult {
+    return useAtomValue(awaitsMeAcrossRoomsAtom);
+}
+
+/**
+ * Per-room cheap lookup of the awaits-me count, used by sidebar rows.
+ * Subscribes only to the `byRoom` slice so reshuffles of the merged
+ * items list don't re-render every row.
+ */
+export function useAwaitsMeCount(roomId: string | null | undefined): number {
+    const byRoom = useAtomValue(awaitsMeByRoomAtom);
+    if (!roomId) return 0;
+    return byRoom.get(roomId) ?? 0;
 }
 
 type CollectedReactions = ReturnType<typeof useConsentReactions>;
