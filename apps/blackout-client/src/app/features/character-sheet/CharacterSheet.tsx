@@ -1,5 +1,12 @@
 import { useCharacterSheet } from './useCharacterSheet';
+import {
+    useCharacterSheetSharing,
+    useResetSheetSharing,
+    useToggleSheetSharing,
+} from './sharingPreferences';
 import { PLAYBOOK_CATALOG, type PlaybookId } from '@blackout/protocol';
+import { useAtomValue } from 'jotai';
+import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 /**
@@ -88,6 +95,11 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
     // The hook always reads the current user; cross-user is deferred.
     void userId;
 
+    const sharing = useCharacterSheetSharing();
+    const toggleSharing = useToggleSheetSharing();
+    const resetSharing = useResetSheetSharing();
+    const joinedRooms = useAtomValue(joinedRoomsAtom);
+
     return (
         <main style={styles.page} data-testid="character-sheet">
             <header style={styles.block}>
@@ -166,6 +178,97 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
                                 </span>
                             </li>
                         ))}
+                    </ul>
+                )}
+            </section>
+
+            <section style={styles.block} data-testid="character-sheet-sharing">
+                <header
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}
+                >
+                    <strong>Sharing</strong>
+                    {sharing.sharedRoomSet.size > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => void resetSharing()}
+                            style={{
+                                fontSize: 12,
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                padding: '2px 10px',
+                                cursor: 'pointer',
+                            }}
+                            data-testid="character-sheet-stop-sharing"
+                        >
+                            Stop sharing everywhere
+                        </button>
+                    )}
+                </header>
+                <p style={styles.label}>
+                    Your sheet is private by default. Opt in per {BLACKOUT_TERMS.den.singular}
+                    {' '}so its members can see it; toggle off anytime.
+                </p>
+                {joinedRooms.length === 0 ? (
+                    <p style={styles.label}>You haven&apos;t joined any {BLACKOUT_TERMS.den.plural} yet.</p>
+                ) : (
+                    <ul
+                        style={{
+                            margin: 0,
+                            padding: 0,
+                            listStyle: 'none',
+                            display: 'grid',
+                            gap: 4,
+                        }}
+                    >
+                        {joinedRooms.map((room) => {
+                            const isShared = sharing.isSharedWith(room.roomId);
+                            return (
+                                <li
+                                    key={room.roomId}
+                                    style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        gap: 8,
+                                        padding: '4px 0',
+                                        borderBottom: '1px dashed var(--border-default)',
+                                    }}
+                                >
+                                    <span style={{ fontSize: 13 }}>
+                                        {room.name ?? room.roomId}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={isShared}
+                                        onClick={() => void toggleSharing(room.roomId)}
+                                        data-testid={`character-sheet-share-${room.roomId}`}
+                                        style={{
+                                            fontSize: 12,
+                                            border: `1px solid ${
+                                                isShared
+                                                    ? 'var(--accent-primary)'
+                                                    : 'var(--border-default)'
+                                            }`,
+                                            borderRadius: 999,
+                                            background: isShared
+                                                ? 'var(--accent-muted)'
+                                                : 'var(--bg-input)',
+                                            color: 'var(--text-primary)',
+                                            padding: '2px 10px',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        {isShared ? 'Sharing' : 'Share'}
+                                    </button>
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
             </section>

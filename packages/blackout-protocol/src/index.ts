@@ -29,6 +29,8 @@ export * from './documents';
 
 export * from './quests';
 
+export * from './sheet-sharing';
+
 export * from './entitlements/types';
 
 export * from './entitlements/schema';

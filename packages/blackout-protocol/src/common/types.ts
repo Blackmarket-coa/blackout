@@ -39,7 +39,8 @@ export type BlackoutEventName =
     | 'blackout.governance.role.set'
     | 'blackout.den.composted'
     | 'blackout.den.document.upserted'
-    | 'blackout.user.quests';
+    | 'blackout.user.quests'
+    | 'blackout.user.sheet.sharing';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;
