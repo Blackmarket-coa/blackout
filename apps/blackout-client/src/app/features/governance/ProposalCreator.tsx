@@ -1,12 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     useCreateProposal,
     type ProposalContent,
     type ProposalOption,
     type ProposalType,
 } from './useProposals';
+import { useDenPlaybook } from '../playbook/usePlaybook';
 
 const defaultOptions = (type: ProposalType): ProposalOption[] => {
+    if (type === 'consent') {
+        // Consent proposals carry no options — the 🌱 / 🌾 / 🪨 reaction
+        // palette is the choice space.
+        return [];
+    }
     if (type === 'binary') {
         return [
             { id: 'yes', label: 'Yes' },
@@ -20,11 +26,11 @@ const defaultOptions = (type: ProposalType): ProposalOption[] => {
     ];
 };
 
-const defaultDraft = (): ProposalContent => ({
+const defaultDraft = (initialType: ProposalType = 'binary'): ProposalContent => ({
     title: '',
     description: '',
-    type: 'binary',
-    options: defaultOptions('binary'),
+    type: initialType,
+    options: defaultOptions(initialType),
     quorum: 1,
     deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     eligibility: 'all',
@@ -39,20 +45,45 @@ export const ProposalCreator = ({
     onCreated?: () => void;
 }) => {
     const createProposal = useCreateProposal(roomId);
-    const [draft, setDraft] = useState<ProposalContent>(() => defaultDraft());
+    const playbook = useDenPlaybook(roomId);
+    // Playbooks with consent or consensus leadership default to consent
+    // proposals — sociocratic primitives ship as the *default*, not as an
+    // opt-in. Other playbooks keep the historical 'binary' default.
+    const defaultType: ProposalType =
+        playbook && (playbook.leadership === 'consent' || playbook.leadership === 'consensus')
+            ? 'consent'
+            : 'binary';
+
+    const [draft, setDraft] = useState<ProposalContent>(() => defaultDraft(defaultType));
+    const [touchedType, setTouchedType] = useState(false);
     const [preview, setPreview] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // If the playbook loads after first render and the user hasn't picked a
+    // type yet, re-seed the draft so the default reflects the den's culture.
+    useEffect(() => {
+        if (touchedType) return;
+        setDraft((prev) => {
+            if (prev.title.trim().length > 0 || prev.description.trim().length > 0) return prev;
+            if (prev.type === defaultType) return prev;
+            return { ...prev, type: defaultType, options: defaultOptions(defaultType) };
+        });
+    }, [defaultType, touchedType]);
+
     const canSubmit = useMemo(() => {
         const hasTitle = draft.title.trim().length > 0;
+        const hasDeadline = Number.isFinite(Date.parse(draft.deadline));
+        if (draft.type === 'consent') {
+            return hasTitle && draft.quorum > 0 && hasDeadline;
+        }
         const hasOptions =
             draft.options.length >= 2 &&
             draft.options.every((option) => option.label.trim().length > 0);
-        const hasDeadline = Number.isFinite(Date.parse(draft.deadline));
         return hasTitle && hasOptions && draft.quorum > 0 && hasDeadline;
-    }, [draft.deadline, draft.options, draft.quorum, draft.title]);
+    }, [draft.deadline, draft.options, draft.quorum, draft.title, draft.type]);
 
     const onChangeType = (type: ProposalType) => {
+        setTouchedType(true);
         setDraft((prev) => ({
             ...prev,
             type,
@@ -197,12 +228,20 @@ export const ProposalCreator = ({
                                 padding: '6px 8px',
                             }}
                         >
+                            <option value="consent">Consent (🌱 / 🌾 / 🪨)</option>
                             <option value="binary">Binary</option>
                             <option value="multiple_choice">Multiple choice</option>
                             <option value="ranked">Ranked</option>
                         </select>
                     </label>
 
+                    {draft.type === 'consent' ? (
+                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                            Consent proposals carry no options — the circle reacts with{' '}
+                            <span aria-hidden>🌱 / 🌾 / 🪨</span> and concerns or objections
+                            open inline. Any paramount objection blocks until resolved.
+                        </p>
+                    ) : (
                     <div style={{ display: 'grid', gap: 6 }}>
                         <div
                             style={{
@@ -330,6 +369,7 @@ export const ProposalCreator = ({
                             </div>
                         ))}
                     </div>
+                    )}
 
                     <div
                         style={{

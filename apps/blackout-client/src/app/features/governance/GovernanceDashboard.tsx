@@ -94,7 +94,8 @@ const ProposalResultRow = ({
             <strong>{proposal.title}</strong>
             <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
                 Computed status: {result.data?.computedStatus ?? proposal.status} • Votes:{' '}
-                {result.data?.voteCount ?? 0}/{proposal.quorum}
+                {result.data && result.data.kind === 'vote' ? result.data.voteCount : 0}/
+                {proposal.quorum}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
