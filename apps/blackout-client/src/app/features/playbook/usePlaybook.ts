@@ -9,6 +9,7 @@ import {
 import { createPlaybookMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { useCompleteQuest } from '../quests/useQuests';
 
 export interface DenPlaybookModel extends DenPlaybookPayload {
     /** Matrix room id this playbook decorates. */
@@ -49,6 +50,7 @@ export function useDenPlaybook(roomId: string | null | undefined): DenPlaybookMo
  */
 export function useSetAnyPlaybook() {
     const client = useMatrixClient();
+    const completeQuest = useCompleteQuest();
     const actions = useMemo(
         () =>
             createPlaybookMatrixActions({
@@ -62,8 +64,13 @@ export function useSetAnyPlaybook() {
     return useCallback(
         async (roomId: string, payload: DenPlaybookPayload) => {
             await actions.setPlaybook(roomId, payload);
+            // J3 auto-completion: writing a playbook with a non-empty domain
+            // sentence ticks the first-domain quest. Idempotent.
+            if (typeof payload.domain === 'string' && payload.domain.trim().length > 0) {
+                void completeQuest('first-domain', roomId);
+            }
         },
-        [actions],
+        [actions, completeQuest],
     );
 }
 

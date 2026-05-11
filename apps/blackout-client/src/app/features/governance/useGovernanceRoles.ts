@@ -9,6 +9,8 @@ import {
 import { createRolesMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { userIdAtom } from '../../state/auth';
+import { useCompleteQuest } from '../quests/useQuests';
 
 /**
  * Term-bound, electable sociocratic roles. Distinct from the power-level-
@@ -61,6 +63,8 @@ export const useGovernanceRoles = (roomId: string | null | undefined): Governanc
  */
 export const useSetGovernanceRole = (roomId: string | null | undefined) => {
     const client = useMatrixClient();
+    const myUserId = useAtomValue(userIdAtom);
+    const completeQuest = useCompleteQuest();
     const actions = useMemo(
         () =>
             createRolesMatrixActions({
@@ -76,7 +80,15 @@ export const useSetGovernanceRole = (roomId: string | null | undefined) => {
         async (payload: RolePayload) => {
             if (!roomId) throw new Error('useSetGovernanceRole: roomId is required');
             await actions.setRole(roomId, payload);
+            // J3 auto-completion: getting nominated into a role (someone
+            // writes payload.holderId === me) ticks the first-role-nomination
+            // quest. We can't observe nominations on someone else's writes,
+            // so we tick the quest whenever the local user wrote a role
+            // that elevates them.
+            if (myUserId && payload.holderId === myUserId) {
+                void completeQuest('first-role-nomination', roomId);
+            }
         },
-        [actions, roomId],
+        [actions, completeQuest, myUserId, roomId],
     );
 };

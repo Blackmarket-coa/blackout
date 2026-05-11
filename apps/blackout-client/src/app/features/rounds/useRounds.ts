@@ -9,6 +9,7 @@ import {
 import { createRoundsMatrixActions } from '@blackout/sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useCompleteQuest } from '../quests/useQuests';
 
 export interface OpenRoundModel extends RoundOpenedPayload {
     /** Matrix event id of the opening event. Required to anchor replies. */
@@ -138,6 +139,7 @@ export const useRoundContributions = (
  */
 export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
     const client = useMatrixClient();
+    const completeQuest = useCompleteQuest();
     const actions = useMemo(
         () =>
             createRoundsMatrixActions({
@@ -173,8 +175,12 @@ export const useOpenRound = (roomId: string, facilitatorId: string | null) => {
                 invitees,
                 status: 'open',
             });
+            // J3 quest auto-completion: facilitating a round ticks the
+            // "first-round" beat. Idempotent — calls after the first are
+            // no-ops.
+            void completeQuest('first-round', roomId);
         },
-        [actions, facilitatorId, roomId],
+        [actions, completeQuest, facilitatorId, roomId],
     );
 };
 

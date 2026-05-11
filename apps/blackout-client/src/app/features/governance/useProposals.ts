@@ -25,6 +25,7 @@ export type VoteContent = GovernanceVotePayload;
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useCompleteQuest } from '../quests/useQuests';
 import {
     GOVERNANCE_SCHEMA_VERSION,
     normalizeProposalEventContent,
@@ -272,6 +273,7 @@ export const useConsentReactions = (
  */
 export const useCastConsent = (roomId: string) => {
     const client = useMatrixClient();
+    const completeQuest = useCompleteQuest();
     return useCallback(
         async ({
             proposalEventId,
@@ -293,8 +295,11 @@ export const useCastConsent = (roomId: string) => {
                 content['co.bmc.consent.note'] = note.trim();
             }
             await client.sendEvent(roomId, 'm.reaction' as never, content as never);
+            // J3 auto-completion: any consent reaction (🌱/🌾/🪨) ticks the
+            // first-consent quest. Idempotent.
+            void completeQuest('first-consent', roomId);
         },
-        [client, roomId],
+        [client, completeQuest, roomId],
     );
 };
 
