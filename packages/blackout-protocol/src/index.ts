@@ -19,6 +19,10 @@ export * from './governance/contracts';
 
 export * from './playbook';
 
+export * from './rounds';
+
+export * from './roles';
+
 export * from './entitlements/types';
 
 export * from './entitlements/schema';

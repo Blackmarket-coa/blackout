@@ -33,7 +33,10 @@ export type BlackoutEventName =
     | 'blackout.deadman.switch.cancelled'
     | 'blackout.deaddrop.share.submitted'
     | 'blackout.deaddrop.audit'
-    | 'blackout.den.playbook.set';
+    | 'blackout.den.playbook.set'
+    | 'blackout.governance.round.opened'
+    | 'blackout.governance.round.closed'
+    | 'blackout.governance.role.set';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;
