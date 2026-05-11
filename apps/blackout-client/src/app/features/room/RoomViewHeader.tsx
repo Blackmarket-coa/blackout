@@ -72,6 +72,7 @@ import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { rightPanelAtom } from '../../state/navigation';
 import { useDenPlaybook } from '../playbook/usePlaybook';
+import { TrialBanner } from '../playbook/TrialBanner';
 import { DenHeaderStrip } from '../../components/den-signature';
 
 type RoomMenuProps = {
@@ -316,6 +317,7 @@ export function RoomViewHeader() {
 
   return (
     <>
+      {playbook && playbook.mode === 'trial' && <TrialBanner roomId={room.roomId} />}
       {playbook && <DenHeaderStrip playbook={playbook} />}
     <PageHeader balance={screenSize === ScreenSize.Mobile}>
       <Box grow="Yes" gap="300">
