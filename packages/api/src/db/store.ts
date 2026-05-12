@@ -36,6 +36,7 @@ import type {
   AdRevenuePeriodRecord,
   AdRevenueShareRecord,
   PasswordResetTokenRecord,
+  EmailVerificationTokenRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
   LinkedAccountRecord,
@@ -87,6 +88,7 @@ type PersistedState = {
   adRevenuePeriods: AdRevenuePeriodRecord[];
   adRevenueShares: AdRevenueShareRecord[];
   passwordResetTokens: PasswordResetTokenRecord[];
+  emailVerificationTokens: EmailVerificationTokenRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
@@ -133,6 +135,7 @@ class InMemoryDb {
   adRevenuePeriods = new Map<string, AdRevenuePeriodRecord>();
   adRevenueShares = new Map<string, AdRevenueShareRecord>();
   passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
+  emailVerificationTokens = new Map<string, EmailVerificationTokenRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
@@ -233,6 +236,73 @@ class InMemoryDb {
     for (const [id, record] of this.passwordResetTokens) {
       if (new Date(record.expiresAt).getTime() < now.getTime()) {
         this.passwordResetTokens.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  // --- email verification ---
+
+  createEmailVerificationToken(
+    input: Omit<EmailVerificationTokenRecord, 'createdAt'>,
+  ): EmailVerificationTokenRecord {
+    const record: EmailVerificationTokenRecord = { ...input, createdAt: nowIso() };
+    this.emailVerificationTokens.set(record.id, record);
+    return record;
+  }
+
+  findEmailVerificationTokenByHash(tokenHash: string): EmailVerificationTokenRecord | undefined {
+    return [...this.emailVerificationTokens.values()].find((t) => t.tokenHash === tokenHash);
+  }
+
+  listEmailVerificationTokensForUser(userId: string): EmailVerificationTokenRecord[] {
+    return [...this.emailVerificationTokens.values()].filter((t) => t.userId === userId);
+  }
+
+  markEmailVerificationTokenSent(id: string): EmailVerificationTokenRecord | undefined {
+    const existing = this.emailVerificationTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.sentAt) return existing;
+    const updated: EmailVerificationTokenRecord = { ...existing, sentAt: nowIso() };
+    this.emailVerificationTokens.set(id, updated);
+    return updated;
+  }
+
+  consumeEmailVerificationToken(id: string): EmailVerificationTokenRecord | undefined {
+    const existing = this.emailVerificationTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.consumedAt) return existing;
+    const updated: EmailVerificationTokenRecord = { ...existing, consumedAt: nowIso() };
+    this.emailVerificationTokens.set(id, updated);
+    return updated;
+  }
+
+  revokeEmailVerificationTokensForUser(userId: string, reason: string): number {
+    let revoked = 0;
+    for (const [id, record] of this.emailVerificationTokens) {
+      if (record.userId === userId && !record.consumedAt && !record.revokedReason) {
+        this.emailVerificationTokens.set(id, { ...record, revokedReason: reason });
+        revoked += 1;
+      }
+    }
+    return revoked;
+  }
+
+  markUserEmailVerified(id: string, verifiedAt: string = nowIso()): UserRecord | undefined {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    if (user.emailVerifiedAt) return user;
+    const updated: UserRecord = { ...user, emailVerifiedAt: verifiedAt };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  deleteExpiredEmailVerificationTokens(now: Date = new Date()): number {
+    let removed = 0;
+    for (const [id, record] of this.emailVerificationTokens) {
+      if (new Date(record.expiresAt).getTime() < now.getTime() && !record.consumedAt) {
+        this.emailVerificationTokens.delete(id);
         removed += 1;
       }
     }
@@ -1602,6 +1672,9 @@ class FileBackedDb extends InMemoryDb {
     this.passwordResetTokens = new Map(
       (parsed.passwordResetTokens ?? []).map((row) => [row.id, row])
     );
+    this.emailVerificationTokens = new Map(
+      (parsed.emailVerificationTokens ?? []).map((row) => [row.id, row])
+    );
     this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
@@ -1675,6 +1748,7 @@ class FileBackedDb extends InMemoryDb {
       adRevenuePeriods: [...this.adRevenuePeriods.values()],
       adRevenueShares: [...this.adRevenueShares.values()],
       passwordResetTokens: [...this.passwordResetTokens.values()],
+      emailVerificationTokens: [...this.emailVerificationTokens.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],
@@ -1727,6 +1801,44 @@ class FileBackedDb extends InMemoryDb {
     const updated = super.consumePasswordResetToken(id);
     if (updated) this.persist();
     return updated;
+  }
+
+  override createEmailVerificationToken(
+    input: Omit<EmailVerificationTokenRecord, 'createdAt'>,
+  ): EmailVerificationTokenRecord {
+    const record = super.createEmailVerificationToken(input);
+    this.persist();
+    return record;
+  }
+
+  override markEmailVerificationTokenSent(id: string): EmailVerificationTokenRecord | undefined {
+    const updated = super.markEmailVerificationTokenSent(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override consumeEmailVerificationToken(id: string): EmailVerificationTokenRecord | undefined {
+    const updated = super.consumeEmailVerificationToken(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override revokeEmailVerificationTokensForUser(userId: string, reason: string): number {
+    const count = super.revokeEmailVerificationTokensForUser(userId, reason);
+    if (count > 0) this.persist();
+    return count;
+  }
+
+  override markUserEmailVerified(id: string, verifiedAt?: string): UserRecord | undefined {
+    const updated = super.markUserEmailVerified(id, verifiedAt);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deleteExpiredEmailVerificationTokens(now?: Date): number {
+    const removed = super.deleteExpiredEmailVerificationTokens(now);
+    if (removed > 0) this.persist();
+    return removed;
   }
 
   override createRefreshToken(

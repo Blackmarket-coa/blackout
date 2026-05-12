@@ -35,3 +35,52 @@ sizes upstream of Hono, so the bypass cannot grow a request past the
 ingress cap. Hono's bodyLimit is defense-in-depth, not the primary
 limit. Tracked for Hono >=4.13.0 bump in a follow-up PR.
 """
+
+# vite-plugin-pwa@0.20.5 (devDep of @blackout/client) → workbox-build@7.4.0 →
+# ajv@8.18.0 → fast-uri@3.1.0. Build-time only; the PWA service worker is
+# generated at compile time from a fixed input, and fast-uri is never loaded
+# at runtime. Same disposition recorded in
+# docs/operations/UPSTREAM_ADVISORIES.md. Cleared transitively when
+# vite-plugin-pwa is bumped to a release that pulls in a workbox-build with
+# patched ajv.
+
+[[IgnoredVulns]]
+id = "GHSA-v39h-62p7-jpjc"
+ignoreUntil = 2026-08-31
+reason = """
+fast-uri host confusion via percent-encoded authority delimiters. Path is
+vite-plugin-pwa → workbox-build → ajv → fast-uri, all devDependencies.
+fast-uri only executes at PWA build time when workbox compiles the service
+worker; it never reaches a request-handling path in the production bundle.
+Tracked for vite-plugin-pwa major bump in a follow-up PR.
+"""
+
+# Second fast-uri advisory on the same vite-plugin-pwa devDep chain
+# (fixed in fast-uri 3.1.1). Same build-time-only disposition.
+
+[[IgnoredVulns]]
+id = "GHSA-q3j6-qgpj-74h6"
+ignoreUntil = 2026-08-31
+reason = """
+fast-uri ReDoS via crafted authority URI. Path is vite-plugin-pwa →
+workbox-build → ajv → fast-uri, all devDependencies. fast-uri only runs
+at PWA build time; it never sees an attacker-controlled URI at runtime.
+Tracked for vite-plugin-pwa major bump in a follow-up PR.
+"""
+
+# Same devDep chain as fast-uri above: vite-plugin-pwa → workbox-build →
+# @babel/preset-env → @babel/plugin-transform-modules-systemjs. Build-time
+# transformer; not in the runtime bundle.
+
+[[IgnoredVulns]]
+id = "GHSA-fv7c-fp4j-7gwp"
+ignoreUntil = 2026-08-31
+reason = """
+@babel/plugin-transform-modules-systemjs generates arbitrary code when
+compiling malicious input. Path is vite-plugin-pwa → workbox-build →
+@babel/preset-env → @babel/plugin-transform-modules-systemjs, all
+devDependencies. The transformer only runs at build time on first-party
+source we control; an attacker would need to land malicious source in the
+repo to exploit it, by which point they have a much larger attack surface.
+Tracked for vite-plugin-pwa major bump in a follow-up PR.
+"""

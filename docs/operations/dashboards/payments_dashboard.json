@@ -1,0 +1,17 @@
+{
+  "title": "Payments — Marketplace Health",
+  "version": 1,
+  "panels": [
+    { "id": "checkout_request_rate", "metric": "rate(http_requests_total{route=\"/v1/marketplace/checkout\"}[5m])" },
+    { "id": "checkout_error_ratio", "metric": "sum(rate(http_requests_total{route=\"/v1/marketplace/checkout\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{route=\"/v1/marketplace/checkout\"}[5m]))" },
+    { "id": "checkout_latency_p95", "metric": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"/v1/marketplace/checkout\"}[5m])))" },
+    { "id": "webhook_received_rate", "metric": "sum by (providerId) (rate(marketplace_webhook_received_total[5m]))" },
+    { "id": "webhook_rejected_rate", "metric": "sum by (providerId, reason) (rate(marketplace_webhook_rejected_total[5m]))" },
+    { "id": "entitlements_granted_rate", "metric": "sum by (providerId, kind) (rate(marketplace_entitlement_granted_total[5m]))" },
+    { "id": "entitlements_status_change_rate", "metric": "sum by (providerId, status) (rate(marketplace_entitlement_status_change_total[5m]))" },
+    { "id": "tip_capture_rate", "metric": "sum by (providerId) (rate(marketplace_tip_captured_total[5m]))" },
+    { "id": "tip_refund_rate", "metric": "sum by (providerId) (rate(marketplace_tip_refunded_total[5m]))" },
+    { "id": "creator_sub_capture_rate", "metric": "sum by (providerId) (rate(marketplace_creator_sub_captured_total[5m]))" },
+    { "id": "creator_sub_refund_rate", "metric": "sum by (providerId) (rate(marketplace_creator_sub_refunded_total[5m]))" }
+  ]
+}

@@ -48,6 +48,8 @@
     "contracts:generate": "pnpm --filter @blackout/contracts generate",
     "contracts:check": "node tools/ci/check-contracts-generated.mjs",
     "guard:call-config": "node tools/ci/check-call-config.mjs",
+    "guard:ops-artifacts": "node tools/ci/check-ops-artifacts.mjs",
+    "guard:audit-clean": "pnpm audit --prod --audit-level moderate",
     "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
     "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
     "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
