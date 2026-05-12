@@ -23,16 +23,17 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
  *   • a count of joined dens (one cheap stat),
  *   • a newest-first quest log rendered as narrative beats.
  *
- * Visible to the user themselves by default; sharing-with-others is
- * deferred (the brief calls for opt-in sharing, but the surface bears
- * implementation cost we don't need for v1 acceptance).
+ * Self-view by default. Cross-user view (J4 sharing) gates on
+ * `useCanViewSheet`, which checks the holder's per-room `co.bmc.user.sheet.shared`
+ * state events. Sharing is opt-in per den from the holder's own sheet.
  */
 export interface CharacterSheetProps {
     /**
      * Optional user id we're rendering for. If omitted, falls back to the
-     * current user (the hook reads from userIdAtom). Cross-user rendering
-     * is deferred — the prop is reserved so future shared sheets can
-     * mount without a refactor.
+     * current user (the hook reads from userIdAtom). When the rendered user
+     * is not the viewer, the sheet honors the holder's per-room sharing
+     * grants — viewers who share no den with a granted room see a private
+     * placeholder instead.
      */
     userId?: string;
 }

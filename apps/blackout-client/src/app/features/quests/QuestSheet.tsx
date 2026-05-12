@@ -1,4 +1,4 @@
-import { useUserQuests, useDismissQuests, useCompleteQuest } from './useQuests';
+import { useUserQuests, useDismissQuests } from './useQuests';
 import {
     QUEST_IDS,
     type QuestId,
@@ -88,9 +88,6 @@ const styles = {
 export function QuestSheet({ onDismiss }: QuestSheetProps = {}) {
     const { payload, allComplete, dismissed } = useUserQuests();
     const dismiss = useDismissQuests();
-    // Imported so callers don't have to reach for it — keeps the export
-    // surface coherent.
-    void useCompleteQuest;
 
     if (dismissed || allComplete) return null;
 
