@@ -30,8 +30,6 @@ export interface AwaitsMeProposal {
     timestamp: number;
 }
 
-export type AwaitsMeKind = 'consent' | 'round' | 'role';
-
 export interface AwaitsMeItemConsent {
     kind: 'consent';
     roomId: string;
