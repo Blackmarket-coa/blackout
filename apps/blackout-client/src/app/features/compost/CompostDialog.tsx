@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../../state/auth';
 import { useCompostDen } from './useCompost';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 
 /**
  * Dialog that confirms composting a den. The brief frames compost as
@@ -68,6 +69,8 @@ export function CompostDialog({ roomId, onClose, onComposted }: CompostDialogPro
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+
+    useDismissOnOutsideOrEscape(!busy, null, onClose);
 
     const submit = async () => {
         setBusy(true);

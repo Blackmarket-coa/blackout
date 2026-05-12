@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { PLAYBOOK_CATALOG, PLAYBOOK_IDS, type PlaybookId } from '@blackout/protocol';
 import { useParty } from './useParty';
 import { BLACKOUT_TERMS } from '../../../lib/blackoutTerminology';
+import { useDismissOnOutsideOrEscape } from '../../room/useDismissOnOutsideOrEscape';
 
 /**
  * Party formation dialog (J5).
@@ -79,6 +80,8 @@ export function PartyFormationDialog({
     const [playbookId, setPlaybookId] = useState<PlaybookId>('confluence');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+
+    useDismissOnOutsideOrEscape(!busy, null, onClose);
 
     const playbookOptions = useMemo(() => [...PLAYBOOK_IDS], []);
 
