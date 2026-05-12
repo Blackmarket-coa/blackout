@@ -38,8 +38,9 @@ test('normalizeSpatialLayerKeys deduplicates and discards unknowns', () => {
     assert.deepEqual(keys, ['vendors', 'aid']);
 });
 
-test('SPATIAL_LAYER_KEYS covers six canonical layers', () => {
-    assert.equal(SPATIAL_LAYER_KEYS.length, 6);
+test('SPATIAL_LAYER_KEYS covers the canonical layers (now seven, including mycelium)', () => {
+    assert.equal(SPATIAL_LAYER_KEYS.length, 7);
+    assert.ok(SPATIAL_LAYER_KEYS.includes('mycelium'));
 });
 
 test('deriveSpatialEventStatus handles upcoming/live/past', () => {
