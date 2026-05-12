@@ -9,6 +9,8 @@ export interface UserRecord {
   reputationTier: 'member' | 'vendor' | 'coordinator' | 'arbiter';
   pubkeyEd25519: string;
   createdAt: string;
+  /** ISO 8601 timestamp when the email was confirmed via a verification link. */
+  emailVerifiedAt?: string;
 }
 
 export interface PasswordResetTokenRecord {
@@ -17,6 +19,24 @@ export interface PasswordResetTokenRecord {
   tokenHash: string;
   expiresAt: string;
   consumedAt?: string;
+  createdAt: string;
+  ipHash?: string;
+  userAgentHash?: string;
+}
+
+export interface EmailVerificationTokenRecord {
+  id: UUID;
+  userId: UUID;
+  /** Email this token was issued for; pinned to detect email-change races. */
+  email: string;
+  tokenHash: string;
+  expiresAt: string;
+  /** ISO 8601 timestamp when the provider accepted the send. */
+  sentAt?: string;
+  /** ISO 8601 timestamp when the token was redeemed. */
+  consumedAt?: string;
+  /** Non-empty reason string when token was administratively revoked. */
+  revokedReason?: string;
   createdAt: string;
   ipHash?: string;
   userAgentHash?: string;

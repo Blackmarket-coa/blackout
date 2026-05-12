@@ -211,6 +211,36 @@ jobs:
       - name: CORS allowlist guard
         run: node tools/ci/check-cors-allowlist.mjs
 
+  ops-artifacts-lint:
+    name: Ops artifacts lint (alerts + dashboards)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm guard:ops-artifacts
+
+  audit-clean:
+    name: Dependency audit (no advisories at moderate+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm guard:audit-clean
+
   helm-chart-lint:
     name: Helm chart lint + template
     runs-on: ubuntu-latest

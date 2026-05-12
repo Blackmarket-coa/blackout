@@ -54,6 +54,7 @@ import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
 import { runSecurityPreflight } from './config/security';
+import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 
 const securityPreflight = runSecurityPreflight();
@@ -192,6 +193,16 @@ if (shouldListen) {
   // bare-bones deployments.
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
+
+  // Resolve the outbound mail transport. Production refuses to start
+  // without an explicit MAIL_PROVIDER (see services/mailer.ts), so this
+  // throw will surface in the process supervisor.
+  initMailerFromEnv().catch((err) => {
+    log.warn('mailer init failed', { error: String(err) });
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
+  });
 
   // Resume any persisted Twitch chat bridges so they survive a redeploy.
   // Gated on an opt-in env var so the auto-restart doesn't surprise local

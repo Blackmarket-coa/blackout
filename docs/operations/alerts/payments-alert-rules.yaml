@@ -1,0 +1,64 @@
+groups:
+  - name: payments
+    rules:
+      - alert: MarketplaceWebhookSignatureFailuresSpike
+        expr: |
+          increase(marketplace_webhook_rejected_total{reason="signature-mismatch"}[10m]) > 5
+        for: 10m
+        labels:
+          severity: critical
+          surface: payments
+        annotations:
+          summary: Marketplace webhook signature failures spiking.
+          runbook: docs/operations/runbooks/marketplace-incident.md
+          description: |
+            Either the upstream marketplace rotated its webhook secret without coordination,
+            or a third party is attempting to spoof entitlement events. Confirm with the
+            marketplace operator before adjusting the shared secret. Sustained signature
+            failures may cause delayed entitlement delivery if legitimate events are being
+            rejected.
+
+      - alert: MarketplaceWebhookInvalidPayloadHigh
+        expr: |
+          increase(marketplace_webhook_rejected_total{reason="invalid-event-payload"}[15m]) > 10
+        for: 15m
+        labels:
+          severity: warning
+          surface: payments
+        annotations:
+          summary: Marketplace webhook payloads failing schema validation.
+          description: |
+            The marketplace may be emitting a new event shape ahead of a client-side schema
+            update. Inspect a representative payload and either ship the schema update or open
+            a follow-up with the marketplace operator.
+
+      - alert: MarketplaceCheckoutErrorRateHigh
+        expr: |
+          sum(rate(http_requests_total{route=~"/v1/marketplace/checkout", status=~"5.."}[10m]))
+          /
+          clamp_min(sum(rate(http_requests_total{route=~"/v1/marketplace/checkout"}[10m])), 0.001)
+          > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          surface: payments
+        annotations:
+          summary: "More than 5% of checkout calls returning 5xx for 10 minutes."
+          description: |
+            Likely an upstream marketplace outage or a regression in our adapter. Failures here
+            translate directly to abandoned purchases, so this is a launch-blocking signal.
+
+      - alert: MarketplaceEntitlementGrantStalled
+        expr: |
+          (sum(increase(marketplace_webhook_received_total{signatureOk="true"}[30m])) > 5)
+          and on() (sum(increase(marketplace_entitlement_granted_total[30m])) == 0)
+        for: 30m
+        labels:
+          severity: warning
+          surface: payments
+        annotations:
+          summary: Signed webhooks delivered but no entitlements granted.
+          description: |
+            Webhook ingress is healthy but the entitlement pipeline isn't producing grants.
+            Common causes - a recent schema/version mismatch in lifecycle event handlers, or a
+            DB write failure in `marketplaceEntitlements.applyLifecycleEvent`.

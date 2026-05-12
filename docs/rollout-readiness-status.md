@@ -88,6 +88,35 @@ pnpm audit --audit-level moderate  # pass (no known vulnerabilities found)
 
 Evidence artifact: `docs/operations/evidence/2026-03-15-security-audit-refresh.md`.
 
+## Baseline + production-readiness evidence refresh (2026-05-12)
+
+Closes the production-readiness workstreams from `docs/DEPLOYMENT_READINESS_PLAN.md`
+(email verification, payments webhook tests, ops alerts/dashboards, canary
+runbook, post-deploy verify script, ops-artifact CI gate, deploy-critical
+smoke).
+
+```bash
+pnpm install --no-frozen-lockfile               # pass
+pnpm lint                                        # 18/18 packages pass
+pnpm build                                       # 15/15 packages pass
+pnpm test                                        # 19/19 packages pass (turbo)
+pnpm web:test                                    # 805/805 tests pass (138 files)
+NODE_ENV=test pnpm --filter @blackout/api \
+  exec tsx --test --test-concurrency=4 \
+  --test-timeout=90000 'test/*.integration.test.ts'
+                                                 # 665/665 tests pass
+pnpm audit --prod --audit-level moderate         # No known vulnerabilities found
+                                                 # (3 high advisories in
+                                                 # devDeps only — vite-plugin-pwa
+                                                 # → workbox-build chain; tracked
+                                                 # in UPSTREAM_ADVISORIES.md)
+pnpm guard:ops-artifacts                         # 4 alert files + 6 dashboards pass shape lint
+```
+
+Evidence artifacts:
+- `docs/operations/evidence/2026-05-12-baseline-replay.md` (full replay output)
+- `docs/operations/evidence/2026-05-12-production-readiness-closeout.md` (workstream delta)
+
 ## Go/No-Go status
 
 **Go** with clean current dependency audit results and canonical parity replay automation in place.
