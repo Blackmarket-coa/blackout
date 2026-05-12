@@ -17,6 +17,20 @@ export * from './deadman/events';
 
 export * from './governance/contracts';
 
+export * from './playbook';
+
+export * from './rounds';
+
+export * from './roles';
+
+export * from './compost';
+
+export * from './documents';
+
+export * from './quests';
+
+export * from './sheet-sharing';
+
 export * from './entitlements/types';
 
 export * from './entitlements/schema';

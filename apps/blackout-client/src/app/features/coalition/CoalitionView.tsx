@@ -7,6 +7,7 @@ import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
 import ShopTab from './tabs/ShopTab';
+import { DocumentsTab } from '../documents/DocumentsTab';
 
 export interface CoalitionViewProps {
     /**
@@ -76,6 +77,9 @@ export function CoalitionView({
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
                 {activeTab === 'map' ? <MapTab scope={scope} /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
+                {activeTab === 'documents' && denId ? (
+                    <DocumentsTab roomId={denId} />
+                ) : null}
             </div>
         </section>
     );

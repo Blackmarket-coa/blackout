@@ -22,7 +22,7 @@
     "@blackout/protocol": "workspace:*",
     "@hono/node-server": "1.19.13",
     "@simplewebauthn/server": "13.3.0",
-    "hono": "4.12.14",
+    "hono": "4.12.18",
     "livekit-server-sdk": "^2.15.2",
     "pg": "^8.13.1",
     "socket.io": "^4.8.3",

@@ -1,9 +1,10 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement, useEffect, useState, type ReactElement } from 'react';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router-dom';
 import type { FeatureRoute } from '../../core/features/types';
 import ProfilePage from './ProfilePage';
 import ProfileEditor from './ProfileEditor';
+import { CharacterSheet } from '../character-sheet/CharacterSheet';
 import { myProfileAtom, viewedProfileAtom } from './profileAtoms';
 import { fetchProfile } from './profileClient';
 import type { MemberProfile } from './profileTypes';
@@ -103,8 +104,35 @@ const UserProfileRoutePage = () => {
     });
 };
 
+/**
+ * Route handler for `/character-sheet/:userId`.
+ *
+ * Mounts CharacterSheet with the URL-encoded user id forwarded as a prop.
+ * The component itself owns the visibility gate via useCanViewSheet, so
+ * this route doesn't need to pre-resolve anything — it just hands the
+ * target user id to the sheet and lets the existing self-view vs private-
+ * placeholder vs cross-user-allowed branches handle the rest.
+ *
+ * Sharing a sheet link in chat (e.g. "/character-sheet/@friend:server")
+ * is the use case that finally justifies the dedicated route over the
+ * inline ProfileModal expansion.
+ */
+const CharacterSheetRoutePage = () => {
+    const { userId } = useParams();
+    const decodedUserId = userId ? decodeURIComponent(userId) : undefined;
+    // `createElement` typing for the third argument can't infer the
+    // component's props when the component is a plain function returning
+    // JSX rather than React.FC<Props>; pass props through `as` to keep
+    // the call site honest.
+    return createElement(
+        CharacterSheet as (props: { userId?: string }) => ReactElement | null,
+        { userId: decodedUserId },
+    );
+};
+
 export const profileRoutes: FeatureRoute[] = [
     { path: '/profile/me', component: MyProfileRoutePage },
     { path: '/profile/me/edit', component: MyProfileEditorRoutePage },
     { path: '/profile/:userId', component: UserProfileRoutePage },
+    { path: '/character-sheet/:userId', component: CharacterSheetRoutePage },
 ];

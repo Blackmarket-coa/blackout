@@ -1,6 +1,12 @@
 import type { ProposalContent, ProposalOption, ProposalStatus, ProposalType, VoteContent } from './useProposals';
 
-export const GOVERNANCE_SCHEMA_VERSION = 1;
+/**
+ * Re-exported from `@blackout/protocol` so the migration flag stays accurate
+ * after the v1→v2 bump for the `'consent'` proposal type. v1-shaped events
+ * still normalize (back-compat) but are surfaced as `migrated: true`.
+ */
+export { GOVERNANCE_SCHEMA_VERSION } from '@blackout/protocol';
+import { GOVERNANCE_SCHEMA_VERSION as PROTOCOL_GOVERNANCE_SCHEMA_VERSION } from '@blackout/protocol';
 
 const toProposalStatus = (status: unknown, phase: unknown): ProposalStatus | null => {
     if (status === 'active' || status === 'passed' || status === 'failed' || status === 'cancelled') {
@@ -13,7 +19,14 @@ const toProposalStatus = (status: unknown, phase: unknown): ProposalStatus | nul
 };
 
 const toProposalType = (type: unknown): ProposalType | null => {
-    if (type === 'binary' || type === 'multiple_choice' || type === 'ranked') return type;
+    if (
+        type === 'binary' ||
+        type === 'multiple_choice' ||
+        type === 'ranked' ||
+        type === 'consent'
+    ) {
+        return type;
+    }
     return null;
 };
 
@@ -69,6 +82,18 @@ export const normalizeProposalEventContent = (
         })
         .filter((item): item is ProposalOption => item !== null);
 
+    // Consent proposals carry no options — the reaction palette
+    // (🌱 / 🌾 / 🪨) is the choice space. Other types must have at least one
+    // option to be meaningful, but we leave that enforcement to the creator UI.
+    if (type !== 'consent' && options.length === 0 && optionsRaw.length > 0) {
+        return {
+            data: null,
+            schemaVersion,
+            migrated: false,
+            reason: 'proposal options malformed',
+        };
+    }
+
     return {
         data: {
             title,
@@ -81,7 +106,7 @@ export const normalizeProposalEventContent = (
             status,
         },
         schemaVersion,
-        migrated: schemaVersion !== GOVERNANCE_SCHEMA_VERSION,
+        migrated: schemaVersion !== PROTOCOL_GOVERNANCE_SCHEMA_VERSION,
         reason: null,
     };
 };
@@ -114,7 +139,7 @@ export const normalizeVoteEventContent = (
             choice,
         },
         schemaVersion,
-        migrated: schemaVersion !== GOVERNANCE_SCHEMA_VERSION,
+        migrated: schemaVersion !== PROTOCOL_GOVERNANCE_SCHEMA_VERSION,
         reason: null,
     };
 };

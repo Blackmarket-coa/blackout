@@ -20,6 +20,7 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
     video: 'For You',
     map: 'Local',
     shop: 'Shop',
+    documents: 'Documents',
 };
 
 export const COALITION_TAB_ORDER: CoalitionTabId[] = [...COALITION_TABS];

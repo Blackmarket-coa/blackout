@@ -31,6 +31,11 @@ import { Reactions } from './Reactions';
 import { ProfileModal } from '../profile/ProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
 import { roomViewLayoutRhythm } from './roomViewLayoutContract';
+import {
+    ROUND_OPENED_EVENT_TYPE,
+    type RoundOpenedPayload,
+} from '@blackout/protocol';
+import { RoundCard } from '../rounds/RoundCard';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -499,6 +504,24 @@ const MessageBubble = ({
 
     if (isStateEvent(event)) {
         return <div style={styles.stateEvent}>{resolveStateCopy(event, room)}</div>;
+    }
+
+    if (event.getType() === ROUND_OPENED_EVENT_TYPE) {
+        const payload = event.getContent<RoundOpenedPayload>();
+        if (payload && typeof payload.roundId === 'string') {
+            return (
+                <article style={styles.messageRow} data-event-id={event.getId() ?? undefined}>
+                    <div />
+                    <RoundCard
+                        roomId={roomId}
+                        eventId={event.getId() ?? ''}
+                        payload={payload}
+                        senderId={sender}
+                        room={room}
+                    />
+                </article>
+            );
+        }
     }
 
     const sticker = getMsgType(event) === 'm.sticker' || event.getType() === 'm.sticker';

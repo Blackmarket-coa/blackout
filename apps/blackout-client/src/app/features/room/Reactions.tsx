@@ -19,6 +19,13 @@ interface ReactionSummary {
 interface ReactionsProps {
     roomId: string;
     targetEventId: string;
+    /**
+     * Optional emoji list to prepend in the picker's "Recent" row. Consent-
+     * shaped proposals pass `['🌱','🌾','🪨']` so the sociocratic palette is
+     * the first thing the user sees; non-consent surfaces leave this undefined
+     * and fall back to the historical DEFAULT_EMOJI list.
+     */
+    defaultPalette?: readonly string[];
 }
 
 const DEFAULT_EMOJI = ['👍', '❤️', '😂', '🎉', '👀', '🔥', '😮', '🙏'];
@@ -109,12 +116,15 @@ const EmojiPicker = ({
     customEmoji,
     recents,
     onSelect,
+    defaultPalette,
 }: {
     customEmoji: Record<string, string>;
     recents: string[];
     onSelect: (emoji: string) => void;
+    defaultPalette?: readonly string[];
 }) => {
-    const common = [...new Set([...recents, ...DEFAULT_EMOJI])].slice(0, 24);
+    const seed = defaultPalette ?? DEFAULT_EMOJI;
+    const common = [...new Set([...seed, ...recents, ...DEFAULT_EMOJI])].slice(0, 24);
     const custom = Object.entries(customEmoji).slice(0, 30);
 
     return (
@@ -174,7 +184,7 @@ const EmojiPicker = ({
     );
 };
 
-export const Reactions = memo(({ roomId, targetEventId }: ReactionsProps) => {
+export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: ReactionsProps) => {
     const client = useMatrixClient();
     const myUserId = useAtomValue(userIdAtom);
     const { data: room } = useRoom(roomId);
@@ -249,6 +259,7 @@ export const Reactions = memo(({ roomId, targetEventId }: ReactionsProps) => {
                     <EmojiPicker
                         customEmoji={customEmoji}
                         recents={recent}
+                        defaultPalette={defaultPalette}
                         onSelect={(emoji) =>
                             void sendReaction(emoji).then(() => setPickerOpen(false))
                         }
@@ -354,6 +365,7 @@ export const Reactions = memo(({ roomId, targetEventId }: ReactionsProps) => {
                 <EmojiPicker
                     customEmoji={customEmoji}
                     recents={recent}
+                    defaultPalette={defaultPalette}
                     onSelect={(emoji) => {
                         void sendReaction(emoji);
                         setPickerOpen(false);

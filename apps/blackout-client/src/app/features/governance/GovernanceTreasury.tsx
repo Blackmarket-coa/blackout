@@ -4,10 +4,15 @@ import {
     getTreasurySnapshot as getTreasurySnapshotDefault,
     listTreasurySnapshots as listTreasurySnapshotsDefault,
 } from './governanceClient';
+import { GardenView } from './GardenView';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+
+export type TreasuryView = 'list' | 'garden';
 
 export interface GovernanceTreasuryProps {
     getTreasurySnapshot?: typeof getTreasurySnapshotDefault;
     listTreasurySnapshots?: typeof listTreasurySnapshotsDefault;
+    initialView?: TreasuryView;
 }
 
 const containerStyle: CSSProperties = { display: 'grid', gap: 16, padding: 16 };
@@ -23,12 +28,14 @@ const cardStyle: CSSProperties = {
 export function GovernanceTreasury({
     getTreasurySnapshot = getTreasurySnapshotDefault,
     listTreasurySnapshots = listTreasurySnapshotsDefault,
+    initialView = 'list',
 }: GovernanceTreasuryProps = {}) {
     const [latest, setLatest] = useState<GovernanceTreasurySnapshotPayload | null>(null);
     const [history, setHistory] = useState<GovernanceTreasurySnapshotPayload[]>([]);
     const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
     const [loading, setLoading] = useState(true);
     const [historyError, setHistoryError] = useState<string | null>(null);
+    const [view, setView] = useState<TreasuryView>(initialView);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -76,11 +83,37 @@ export function GovernanceTreasury({
 
     return (
         <main style={containerStyle} data-testid="governance-treasury">
-            <header>
-                <h1 style={{ margin: 0 }}>Governance Treasury</h1>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>
-                    Latest snapshot and rolling history of treasury balances.
-                </p>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h1 style={{ margin: 0 }}>Governance Treasury</h1>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>
+                        Latest snapshot and rolling history of treasury balances.
+                    </p>
+                </div>
+                <div role="group" aria-label="Treasury view" style={{ display: 'flex', gap: 6 }}>
+                    {(['list', 'garden'] as const).map((option) => (
+                        <button
+                            key={option}
+                            type="button"
+                            data-testid={`treasury-view-${option}`}
+                            aria-pressed={view === option}
+                            onClick={() => setView(option)}
+                            style={{
+                                border: `1px solid ${view === option ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                                background: view === option ? 'var(--accent-muted)' : 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                borderRadius: 999,
+                                padding: '4px 10px',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {option === 'list'
+                                ? BLACKOUT_TERMS.garden.ledgerView
+                                : BLACKOUT_TERMS.garden.view}
+                        </button>
+                    ))}
+                </div>
             </header>
 
             <section style={cardStyle} data-testid="governance-treasury-latest">
@@ -113,24 +146,28 @@ export function GovernanceTreasury({
                                 {latest.totalReference.amount} {latest.totalReference.currency}
                             </strong>
                         ) : null}
-                        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                            <thead>
-                                <tr style={{ textAlign: 'left' }}>
-                                    <th>Asset</th>
-                                    <th>Balance</th>
-                                    <th>Δ 24h</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {latest.lines.map((line) => (
-                                    <tr key={line.asset}>
-                                        <td>{line.asset}</td>
-                                        <td>{line.balance}</td>
-                                        <td>{line.delta24h ?? '—'}</td>
+                        {view === 'garden' ? (
+                            <GardenView latest={latest} />
+                        ) : (
+                            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                                <thead>
+                                    <tr style={{ textAlign: 'left' }}>
+                                        <th>Asset</th>
+                                        <th>Balance</th>
+                                        <th>Δ 24h</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {latest.lines.map((line) => (
+                                        <tr key={line.asset}>
+                                            <td>{line.asset}</td>
+                                            <td>{line.balance}</td>
+                                            <td>{line.delta24h ?? '—'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
                     </>
                 )}
             </section>

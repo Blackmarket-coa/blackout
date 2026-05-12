@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import { useNavigate } from 'react-router-dom';
 import { GovernanceDashboard } from '../../features/governance';
+import { NotificationsDrawer } from '../../features/notifications/components/NotificationsDrawer';
 import { RoleBadge } from '../../features/roles/RoleBadge';
 import { RoleEditor } from '../../features/roles/RoleEditor';
 import { RolePicker } from '../../features/roles/RolePicker';
@@ -458,6 +459,7 @@ const baselineSlotRegistry: RightPanelSlotRegistry = {
     search: SearchPanel,
     governance: ({ room }) => <GovernanceDashboard roomId={room.roomId} />,
     monetization: MonetizationPanel,
+    notifications: ({ room }) => <NotificationsDrawer roomId={room.roomId} />,
 };
 
 const pluginSlots: RightPanelSlotRegistry = {

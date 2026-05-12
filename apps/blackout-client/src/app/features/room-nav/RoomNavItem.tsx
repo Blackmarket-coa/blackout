@@ -24,6 +24,10 @@ import { UnreadBadge, UnreadBadgeCenter } from '../../components/unread-badge';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '../../utils/room';
 import { nameInitials } from '../../utils/common';
+import { DenSignatureBadge } from '../../components/den-signature';
+import { useDenPlaybook } from '../playbook/usePlaybook';
+import { useCompost } from '../compost/useCompost';
+import { useAwaitsMeCount } from '../notifications/hooks/useAwaitsMe';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useRoomUnread } from '../../state/hooks/unread';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
@@ -232,6 +236,9 @@ export function RoomNavItem({
   const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
+  const playbook = useDenPlaybook(room.roomId);
+  const composted = useCompost(room.roomId);
+  const awaitsMeCount = useAwaitsMeCount(room.roomId);
   const typingMember = useRoomTypingMember(room.roomId).filter(
     (receipt) => receipt.userId !== mx.getUserId()
   );
@@ -276,15 +283,29 @@ export function RoomNavItem({
                       : getRoomAvatarUrl(mx, room, 96, useAuthentication)
                   }
                   alt={room.name}
-                  renderFallback={() => (
-                    <Text as="span" size="H6">
-                      {nameInitials(room.name)}
-                    </Text>
-                  )}
+                  renderFallback={() =>
+                    playbook ? (
+                      <DenSignatureBadge
+                        shape={playbook.structure}
+                        accent={playbook.accent}
+                        size="md"
+                      />
+                    ) : (
+                      <Text as="span" size="H6">
+                        {nameInitials(room.name)}
+                      </Text>
+                    )
+                  }
                 />
               ) : (
                 <RoomIcon
-                  style={{ opacity: unread ? config.opacity.P500 : config.opacity.P300 }}
+                  style={{
+                    opacity: composted
+                      ? config.opacity.Placeholder
+                      : unread
+                      ? config.opacity.P500
+                      : config.opacity.P300,
+                  }}
                   filled={selected}
                   size="100"
                   joinRule={room.getJoinRule()}
@@ -299,6 +320,21 @@ export function RoomNavItem({
             {!optionsVisible && !unread && !selected && typingMember.length > 0 && (
               <Badge size="300" variant="Secondary" fill="Soft" radii="Pill" outlined>
                 <TypingIndicator size="300" disableAnimation />
+              </Badge>
+            )}
+            {!optionsVisible && awaitsMeCount > 0 && (
+              <Badge
+                size="300"
+                variant="Primary"
+                fill="Solid"
+                radii="Pill"
+                outlined
+                aria-label={`${awaitsMeCount} awaits-me item${awaitsMeCount === 1 ? '' : 's'}`}
+                data-testid={`room-nav-awaits-${room.roomId}`}
+              >
+                <Text as="span" size="L400">
+                  {awaitsMeCount}
+                </Text>
               </Badge>
             )}
             {!optionsVisible && unread && (

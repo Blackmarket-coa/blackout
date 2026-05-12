@@ -11,7 +11,13 @@ export const GOVERNANCE_VOTE_EVENT_TYPE = 'co.bmc.vote';
 export const GOVERNANCE_MEETING_EVENT_TYPE = 'co.bmc.governance.meeting';
 export const GOVERNANCE_TREASURY_SNAPSHOT_EVENT_TYPE =
     'co.bmc.governance.treasury.snapshot';
-export const GOVERNANCE_SCHEMA_VERSION = 1;
+/**
+ * Bumped to 2 when `'consent'` joined the GovernanceProposalType union.
+ * The change is additive: v1 readers see the new literal and should fall back
+ * to ignoring (or treating as binary). Existing normalizers stay tolerant of
+ * v1-shaped events; see `eventSchemas.ts` in the client.
+ */
+export const GOVERNANCE_SCHEMA_VERSION = 2;
 
 export type GovernanceProposalCreated = EventEnvelope<
     'blackout.governance.proposal.created',
