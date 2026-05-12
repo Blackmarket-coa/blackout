@@ -2,14 +2,25 @@ import { useCharacterSheet } from './useCharacterSheet';
 import {
     useCharacterSheetSharing,
     useResetSheetSharing,
+    useToggleSheetSection,
     useToggleSheetSharing,
 } from './sharingPreferences';
-import { useCanViewSheet } from './useCanViewSheet';
-import { PLAYBOOK_CATALOG, type PlaybookId } from '@blackout/protocol';
+import { useCanViewSheet, useCanViewSheetSection } from './useCanViewSheet';
+import {
+    CHARACTER_SHEET_SECTION_IDS,
+    PLAYBOOK_CATALOG,
+    type CharacterSheetSectionId,
+    type PlaybookId,
+} from '@blackout/protocol';
 import { useAtomValue } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { userIdAtom } from '../../state/auth';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+
+const SECTION_LABELS: Record<CharacterSheetSectionId, string> = {
+    header: 'Header',
+    stats: 'Stats',
+};
 
 /**
  * Per-user Character Sheet (J4) with embedded Quest Log (J6).
@@ -23,16 +34,17 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
  *   • a count of joined dens (one cheap stat),
  *   • a newest-first quest log rendered as narrative beats.
  *
- * Visible to the user themselves by default; sharing-with-others is
- * deferred (the brief calls for opt-in sharing, but the surface bears
- * implementation cost we don't need for v1 acceptance).
+ * Self-view by default. Cross-user view (J4 sharing) gates on
+ * `useCanViewSheet`, which checks the holder's per-room `co.bmc.user.sheet.shared`
+ * state events. Sharing is opt-in per den from the holder's own sheet.
  */
 export interface CharacterSheetProps {
     /**
      * Optional user id we're rendering for. If omitted, falls back to the
-     * current user (the hook reads from userIdAtom). Cross-user rendering
-     * is deferred — the prop is reserved so future shared sheets can
-     * mount without a refactor.
+     * current user (the hook reads from userIdAtom). When the rendered user
+     * is not the viewer, the sheet honors the holder's per-room sharing
+     * grants — viewers who share no den with a granted room see a private
+     * placeholder instead.
      */
     userId?: string;
 }
@@ -87,8 +99,11 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
     const viewerId = useAtomValue(userIdAtom);
     const sheet = useCharacterSheet(userId);
     const canView = useCanViewSheet(userId ?? viewerId);
+    const canViewHeader = useCanViewSheetSection(userId ?? viewerId, 'header');
+    const canViewStats = useCanViewSheetSection(userId ?? viewerId, 'stats');
     const sharing = useCharacterSheetSharing();
     const toggleSharing = useToggleSheetSharing();
+    const toggleSection = useToggleSheetSection();
     const resetSharing = useResetSheetSharing();
     const joinedRooms = useAtomValue(joinedRoomsAtom);
 
@@ -130,59 +145,63 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
 
     return (
         <main style={styles.page} data-testid="character-sheet">
-            <header style={styles.block}>
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
-                    }}
-                >
-                    <h1 style={{ margin: 0, fontSize: 18 }}>{sheet.userId}</h1>
-                    <button
-                        type="button"
-                        onClick={() => void copyDeepLink()}
-                        data-testid="character-sheet-copy-link"
-                        title="Copy a link to this sheet"
+            {(isSelfView || canViewHeader) && (
+                <header style={styles.block} data-testid="character-sheet-header">
+                    <div
                         style={{
-                            fontSize: 11,
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 999,
-                            background: 'var(--bg-input)',
-                            color: 'var(--text-primary)',
-                            padding: '2px 10px',
-                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 8,
                         }}
                     >
-                        Copy link
-                    </button>
-                </div>
-                <p style={styles.label}>
-                    A record of the {BLACKOUT_TERMS.den.plural} you&apos;ve planted, the
-                    {' '}roles you&apos;ve carried, and the moments along the way. Yours to read,
-                    yours to share when you choose.
-                </p>
-            </header>
+                        <h1 style={{ margin: 0, fontSize: 18 }}>{sheet.userId}</h1>
+                        <button
+                            type="button"
+                            onClick={() => void copyDeepLink()}
+                            data-testid="character-sheet-copy-link"
+                            title="Copy a link to this sheet"
+                            style={{
+                                fontSize: 11,
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                padding: '2px 10px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Copy link
+                        </button>
+                    </div>
+                    <p style={styles.label}>
+                        A record of the {BLACKOUT_TERMS.den.plural} you&apos;ve planted, the
+                        {' '}roles you&apos;ve carried, and the moments along the way. Yours to read,
+                        yours to share when you choose.
+                    </p>
+                </header>
+            )}
 
-            <section style={styles.statRow} data-testid="character-sheet-stats">
-                <div style={styles.stat}>
-                    <span style={styles.label}>First {BLACKOUT_TERMS.playbook.singular}</span>
-                    <span style={styles.value}>{playbookLabel(sheet.firstPlaybook)}</span>
-                </div>
-                <div style={styles.stat}>
-                    <span style={styles.label}>{BLACKOUT_TERMS.den.titlePlural} joined</span>
-                    <span style={styles.value}>{sheet.densJoined}</span>
-                </div>
-                <div style={styles.stat}>
-                    <span style={styles.label}>Roles held</span>
-                    <span style={styles.value}>{sheet.rolesHeld.length}</span>
-                </div>
-                <div style={styles.stat}>
-                    <span style={styles.label}>Quests completed</span>
-                    <span style={styles.value}>{sheet.questLog.length}</span>
-                </div>
-            </section>
+            {(isSelfView || canViewStats) && (
+                <section style={styles.statRow} data-testid="character-sheet-stats">
+                    <div style={styles.stat}>
+                        <span style={styles.label}>First {BLACKOUT_TERMS.playbook.singular}</span>
+                        <span style={styles.value}>{playbookLabel(sheet.firstPlaybook)}</span>
+                    </div>
+                    <div style={styles.stat}>
+                        <span style={styles.label}>{BLACKOUT_TERMS.den.titlePlural} joined</span>
+                        <span style={styles.value}>{sheet.densJoined}</span>
+                    </div>
+                    <div style={styles.stat}>
+                        <span style={styles.label}>Roles held</span>
+                        <span style={styles.value}>{sheet.rolesHeld.length}</span>
+                    </div>
+                    <div style={styles.stat}>
+                        <span style={styles.label}>Quests completed</span>
+                        <span style={styles.value}>{sheet.questLog.length}</span>
+                    </div>
+                </section>
+            )}
 
             <section style={styles.block}>
                 <strong>Roles you carry</strong>
@@ -283,44 +302,102 @@ export function CharacterSheet({ userId }: CharacterSheetProps = {}) {
                     >
                         {joinedRooms.map((room) => {
                             const isShared = sharing.isSharedWith(room.roomId);
+                            const sectionsOn = sharing.sectionsFor(room.roomId);
                             return (
                                 <li
                                     key={room.roomId}
                                     style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        gap: 8,
+                                        display: 'grid',
+                                        gap: 4,
                                         padding: '4px 0',
                                         borderBottom: '1px dashed var(--border-default)',
                                     }}
                                 >
-                                    <span style={{ fontSize: 13 }}>
-                                        {room.name ?? room.roomId}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        role="switch"
-                                        aria-checked={isShared}
-                                        onClick={() => void toggleSharing(room.roomId)}
-                                        data-testid={`character-sheet-share-${room.roomId}`}
+                                    <div
                                         style={{
-                                            fontSize: 12,
-                                            border: `1px solid ${
-                                                isShared
-                                                    ? 'var(--accent-primary)'
-                                                    : 'var(--border-default)'
-                                            }`,
-                                            borderRadius: 999,
-                                            background: isShared
-                                                ? 'var(--accent-muted)'
-                                                : 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                            padding: '2px 10px',
-                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            gap: 8,
+                                            alignItems: 'center',
                                         }}
                                     >
-                                        {isShared ? 'Sharing' : 'Share'}
-                                    </button>
+                                        <span style={{ fontSize: 13 }}>
+                                            {room.name ?? room.roomId}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={isShared}
+                                            onClick={() => void toggleSharing(room.roomId)}
+                                            data-testid={`character-sheet-share-${room.roomId}`}
+                                            style={{
+                                                fontSize: 12,
+                                                border: `1px solid ${
+                                                    isShared
+                                                        ? 'var(--accent-primary)'
+                                                        : 'var(--border-default)'
+                                                }`,
+                                                borderRadius: 999,
+                                                background: isShared
+                                                    ? 'var(--accent-muted)'
+                                                    : 'var(--bg-input)',
+                                                color: 'var(--text-primary)',
+                                                padding: '2px 10px',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            {isShared ? 'Sharing' : 'Share'}
+                                        </button>
+                                    </div>
+                                    {isShared && (
+                                        <div
+                                            data-testid={`character-sheet-sections-${room.roomId}`}
+                                            style={{
+                                                display: 'flex',
+                                                gap: 6,
+                                                flexWrap: 'wrap',
+                                                paddingLeft: 4,
+                                            }}
+                                        >
+                                            <span style={styles.label}>Also share</span>
+                                            {CHARACTER_SHEET_SECTION_IDS.map((section) => {
+                                                const on = sectionsOn.has(section);
+                                                return (
+                                                    <button
+                                                        key={section}
+                                                        type="button"
+                                                        role="switch"
+                                                        aria-checked={on}
+                                                        onClick={() =>
+                                                            void toggleSection(
+                                                                room.roomId,
+                                                                section,
+                                                            )
+                                                        }
+                                                        data-testid={`character-sheet-section-${room.roomId}-${section}`}
+                                                        style={{
+                                                            fontSize: 11,
+                                                            border: `1px solid ${
+                                                                on
+                                                                    ? 'var(--accent-primary)'
+                                                                    : 'var(--border-default)'
+                                                            }`,
+                                                            borderRadius: 999,
+                                                            background: on
+                                                                ? 'var(--accent-muted)'
+                                                                : 'var(--bg-input)',
+                                                            color: 'var(--text-primary)',
+                                                            padding: '1px 8px',
+                                                            cursor: 'pointer',
+                                                        }}
+                                                    >
+                                                        {on ? '✓ ' : ''}
+                                                        {SECTION_LABELS[section]}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </li>
                             );
                         })}

@@ -25,6 +25,19 @@ describe('governance event schema normalization', () => {
         expect(result.migrated).toBe(true);
     });
 
+    it('accepts proposals with an empty description string', () => {
+        const result = normalizeProposalEventContent({
+            title: 'A proposal',
+            description: '',
+            type: 'consent',
+            status: 'active',
+            deadline: '2030-01-01T00:00:00.000Z',
+            quorum: 1,
+        });
+        expect(result.data?.description).toBe('');
+        expect(result.reason).toBeNull();
+    });
+
     it('rejects malformed vote payloads and accepts legacy proposal_id', () => {
         const invalid = normalizeVoteEventContent({ proposal_id: 123, choice: 1 });
         expect(invalid.data).toBeNull();
