@@ -16,6 +16,35 @@ import type { EventEnvelope } from '../common/types';
 
 export const CHARACTER_SHEET_SHARING_PROTOCOL_VERSION = 1 as const;
 
+/**
+ * Stable identifiers for the sheet's per-section opt-ins. The "whole-sheet
+ * remainder" (Roles + Quest log) is *not* a section — it follows the
+ * per-room grant directly. Only Header (userId + copy-link block) and
+ * Stats (the four numeric cards) are independently gateable.
+ *
+ * Per the brief, defaults are explicit per-section opt-in: turning on the
+ * per-room grant alone reveals nothing from this list — each section
+ * requires its own toggle.
+ *
+ * Adding entries here is an additive minor change. Older readers ignore
+ * unknown ids, so unknown sections render as "not shared" — the safe
+ * direction for a privacy surface.
+ */
+export const CHARACTER_SHEET_SECTION_IDS = ['header', 'stats'] as const;
+export type CharacterSheetSectionId = (typeof CHARACTER_SHEET_SECTION_IDS)[number];
+
+const isStringArray = (value: unknown): value is ReadonlyArray<string> => {
+    if (!Array.isArray(value)) return false;
+    return value.every((entry) => typeof entry === 'string');
+};
+
+const isStringRecordOfStringArray = (
+    value: unknown,
+): value is Readonly<Record<string, ReadonlyArray<string>>> => {
+    if (!value || typeof value !== 'object') return false;
+    return Object.values(value as Record<string, unknown>).every(isStringArray);
+};
+
 export interface CharacterSheetSharingPayload {
     /**
      * Matrix room ids the user has opted into sharing their sheet with.
@@ -25,6 +54,14 @@ export interface CharacterSheetSharingPayload {
     sharedInRooms: ReadonlyArray<string>;
     /** ISO-8601 timestamp of the last edit. */
     updatedAt: string;
+    /**
+     * Per-room per-section opt-ins. Missing entry (or empty array) means
+     * the room's grant carries the whole-sheet remainder only — no
+     * sections from `CHARACTER_SHEET_SECTION_IDS` are revealed. Stays
+     * synchronized with the per-room state-event grant; the account-data
+     * copy is the holder's cross-device source of truth.
+     */
+    sectionsByRoom?: Readonly<Record<string, ReadonlyArray<string>>>;
 }
 
 export const isCharacterSheetSharingPayload = (
@@ -35,6 +72,9 @@ export const isCharacterSheetSharingPayload = (
     if (!Array.isArray(p.sharedInRooms)) return false;
     if (!p.sharedInRooms.every((entry) => typeof entry === 'string')) return false;
     if (typeof p.updatedAt !== 'string') return false;
+    if (p.sectionsByRoom !== undefined && !isStringRecordOfStringArray(p.sectionsByRoom)) {
+        return false;
+    }
     return true;
 };
 
@@ -59,6 +99,13 @@ export const PRIVATE_SHEET_SHARING: CharacterSheetSharingPayload = {
 export interface CharacterSheetSharedGrantPayload {
     /** ISO-8601 timestamp the grant was last written. */
     sharedAt: string;
+    /**
+     * Sections the holder has independently opted into for THIS room.
+     * Strings rather than the narrowed union so a future minor that
+     * introduces a new section id doesn't reject older payloads.
+     * Missing or empty: only the whole-sheet remainder is shared.
+     */
+    sections?: ReadonlyArray<string>;
 }
 
 export const isCharacterSheetSharedGrantPayload = (
@@ -66,7 +113,22 @@ export const isCharacterSheetSharedGrantPayload = (
 ): value is CharacterSheetSharedGrantPayload => {
     if (!value || typeof value !== 'object') return false;
     const p = value as Record<string, unknown>;
-    return typeof p.sharedAt === 'string';
+    if (typeof p.sharedAt !== 'string') return false;
+    if (p.sections !== undefined && !isStringArray(p.sections)) return false;
+    return true;
+};
+
+/**
+ * Returns true iff `payload` opts the named section in. Filters down to the
+ * known `CharacterSheetSectionId` set, so an unknown future id stored in a
+ * newer payload doesn't accidentally pass an older reader's section check.
+ */
+export const grantHasSection = (
+    payload: CharacterSheetSharedGrantPayload,
+    section: CharacterSheetSectionId,
+): boolean => {
+    if (!payload.sections) return false;
+    return payload.sections.includes(section);
 };
 
 export type CharacterSheetSharingEvent = EventEnvelope<
