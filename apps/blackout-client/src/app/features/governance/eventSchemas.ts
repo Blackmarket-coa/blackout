@@ -63,7 +63,7 @@ export const normalizeProposalEventContent = (
     const eligibility =
         typeof content.eligibility === 'string' ? content.eligibility : ('all' as const);
 
-    if (!type || !status || !title || !description || !deadline || typeof quorum !== 'number') {
+    if (!type || !status || !title || description === null || !deadline || typeof quorum !== 'number') {
         return {
             data: null,
             schemaVersion,
