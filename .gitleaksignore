@@ -18,3 +18,11 @@
 #    used as a fake `nextPageToken` value in stub responses. Not a
 #    credential; just a fixture string the test asserts is propagated.
 f36678519cc7e063c4cbdacad9e2ff956dd9c6a8:packages/api/test/youtube-chat-bridge.integration.test.ts:generic-api-key:377
+
+# 3) GitHub App auth test: a no-key PEM envelope used to exercise the
+#    `\n`-escape normalization in readGithubAuthConfig(). The string
+#    "BEGIN PRIVATE KEY" appears with the word "foo" between the
+#    headers — no actual key material. Subsequent commits rebuild the
+#    envelope from non-contiguous fragments so future edits to this
+#    fixture won't reintroduce the flag.
+eff3f80589879b156a2378743f3c42e2ce7314f1:packages/api/test/github-issues.integration.test.ts:private-key:18
