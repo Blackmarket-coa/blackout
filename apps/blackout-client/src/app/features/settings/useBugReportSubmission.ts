@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
+import { createFetchApiClient } from '@blackout/sdk';
 import { useAsyncCallback, type AsyncState } from '../../hooks/useAsyncCallback';
 import { useClientConfig } from '../../hooks/useClientConfig';
 import type { BugReportPayload } from './bugReportState';
@@ -12,50 +13,51 @@ export interface BugReportResponse {
 }
 
 export interface SubmitError {
-  status: number;
   message: string;
-  details?: unknown;
+  kind: 'retryable' | 'fatal';
 }
-
-const resolveEndpoint = (baseUrl: string | undefined): string => {
-  const trimmed = (baseUrl ?? '').replace(/\/+$/, '');
-  return `${trimmed}/bug-report`;
-};
 
 export type UseBugReportSubmission = [
   AsyncState<BugReportResponse, SubmitError>,
   (payload: BugReportPayload) => Promise<BugReportResponse>,
 ];
 
+const synthesizeFailureResponse = (message: string): BugReportResponse => ({
+  rageshakeId: null,
+  rageshakeError: message,
+  issueUrl: null,
+  issueError: message,
+  partial: false,
+});
+
 export const useBugReportSubmission = (): UseBugReportSubmission => {
   const config = useClientConfig();
-  const endpoint = resolveEndpoint(config.blackoutApiBaseUrl);
+  const client = useMemo(
+    () => createFetchApiClient({ baseUrl: config.blackoutApiBaseUrl }),
+    [config.blackoutApiBaseUrl],
+  );
 
   const submit = useCallback(
     async (payload: BugReportPayload): Promise<BugReportResponse> => {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => null);
-      if (!res.ok && res.status !== 502) {
-        const err: SubmitError = {
-          status: res.status,
-          message:
-            (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string'
-              ? body.message
-              : null) ?? res.statusText,
-          details: body && typeof body === 'object' && 'details' in body ? body.details : undefined,
-        };
-        throw err;
+      try {
+        return await client<BugReportResponse>({
+          method: 'POST',
+          path: '/bug-report',
+          body: payload,
+        });
+      } catch (err) {
+        // The SDK throws on non-2xx. The server returns 502 only when BOTH
+        // forwarding legs failed, so surface that as a synthesized "both
+        // failed" response and let the success view render the partial copy.
+        // Other HTTP failures (4xx) we still want the user to see.
+        const e = err as { message?: string; kind?: 'retryable' | 'fatal' };
+        const message = e?.message ?? 'request failed';
+        if (message.includes('(502)')) return synthesizeFailureResponse(message);
+        const submitError: SubmitError = { message, kind: e?.kind ?? 'fatal' };
+        throw submitError;
       }
-      // 502 returns the same body shape as 200 (with both errors populated);
-      // we surface it as a "success" of the submission attempt and let the
-      // UI render the dual-failure copy.
-      return body as BugReportResponse;
     },
-    [endpoint],
+    [client],
   );
 
   return useAsyncCallback<BugReportResponse, SubmitError, [BugReportPayload]>(submit);
