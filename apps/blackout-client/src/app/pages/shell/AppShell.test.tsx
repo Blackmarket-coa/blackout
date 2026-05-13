@@ -11,7 +11,11 @@ import { defaultFeatureFlags, runtimeFeatureFlags } from '../../core/features/fe
 
 const HomeStub = () => <div data-testid="home-body">home body</div>;
 const CommunitiesStub = () => <div data-testid="communities-body">communities body</div>;
+const CreateStub = () => <div data-testid="create-body">create body</div>;
 const MarketStub = () => <div data-testid="market-body">market body</div>;
+const InboxStub = () => <div data-testid="inbox-body">inbox body</div>;
+const DirectStub = () => <div data-testid="direct-body">direct body</div>;
+const ExploreStub = () => <div data-testid="explore-body">explore body</div>;
 
 const renderShell = (initialPath: string) => {
     const store = createStore();
@@ -27,7 +31,12 @@ const renderShell = (initialPath: string) => {
                 children: [
                     { path: '/', element: <HomeStub /> },
                     { path: '/communities', element: <CommunitiesStub /> },
+                    { path: '/create', element: <CreateStub /> },
                     { path: '/market', element: <MarketStub /> },
+                    { path: '/messages', element: <InboxStub /> },
+                    { path: '/messages/*', element: <InboxStub /> },
+                    { path: '/direct', element: <DirectStub /> },
+                    { path: '/explore', element: <ExploreStub /> },
                 ],
             },
         ],
@@ -130,4 +139,73 @@ describe('AppShell', () => {
         const inactive = container.querySelector('[data-panel-id="shell.home"]');
         expect(inactive?.getAttribute('aria-current')).toBeNull();
     });
+
+    // Workstream A Port 1 exit criterion: one router-integration assertion
+    // per shell panel state. The schedule lists `Home / Direct / Explore /
+    // Inbox`; the live destination set is `Home / Communities / Create /
+    // Market / Inbox`. We cover every destination's active-tab state below,
+    // and assert mode resolution for the schedule-cited Direct/Explore
+    // sub-routes (which map onto the inbox/discovery modes per modeRouter).
+    const ACTIVE_TAB_CASES: ReadonlyArray<{
+        name: string;
+        path: string;
+        panelId: string;
+    }> = [
+        { name: 'Home', path: '/', panelId: 'shell.home' },
+        { name: 'Communities', path: '/communities', panelId: 'shell.communities' },
+        { name: 'Create', path: '/create', panelId: 'shell.create' },
+        { name: 'Market', path: '/market', panelId: 'shell.market' },
+        { name: 'Inbox', path: '/messages/', panelId: 'shell.inbox' },
+    ];
+
+    for (const { name, path, panelId } of ACTIVE_TAB_CASES) {
+        it(`marks ${name} active on ${path} and no other canonical tab`, async () => {
+            const { router, container, root, store } = renderShell(path);
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const active = container.querySelector(
+                `[data-panel-id="${panelId}"][aria-current="page"]`
+            );
+            expect(active).not.toBeNull();
+
+            const otherActive = Array.from(
+                container.querySelectorAll('[data-panel-id][aria-current="page"]')
+            )
+                .map((el) => el.getAttribute('data-panel-id'))
+                .filter((id) => id !== panelId);
+            expect(otherActive).toEqual([]);
+        });
+    }
+
+    const MODE_RESOLUTION_CASES: ReadonlyArray<{
+        path: string;
+        mode: string;
+    }> = [
+        { path: '/direct', mode: 'inbox' },
+        { path: '/explore', mode: 'discovery' },
+    ];
+
+    for (const { path, mode } of MODE_RESOLUTION_CASES) {
+        it(`resolves data-shell-mode=${mode} for ${path}`, async () => {
+            const { router, container, root, store } = renderShell(path);
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const shellRoot = container.querySelector('[data-shell="app"]');
+            expect(shellRoot?.getAttribute('data-shell-mode')).toBe(mode);
+        });
+    }
 });

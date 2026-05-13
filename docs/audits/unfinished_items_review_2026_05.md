@@ -54,9 +54,27 @@ What remains is a small carry list and a large but-clearly-scoped feature backlo
 
 Documented in `docs/architecture/deferred-bodies-schedule-2026-05-01.md` §"Workstream A". Port 1 foundation is largely done (registry sidebar + settings list mounted 2026-04-30; legacy quarantine cleared 2026-05-13). The remaining ports are well-scoped, with working SDK actions ready to wire (see §5 below).
 
-| ID | Port | Estimate | Scope summary |
+#### Port 1 status — 2026-05-13 deep dive
+
+A surface-by-surface map (Explore agent, this branch) found that most of the
+original Port 1 scope is **already landed**:
+
+- `LegacyClientLayout` is **retired** (per `apps/blackout-client/src/app/core/features/featureFlags.ts:44-52`, the `shellAppShell` flag is default-on as of PR-10 and the legacy layout + `/room/:roomId` redirect were removed alongside the flip).
+- `showAdminEntry` boolean is **retired**; only doc/comment references remain (`apps/blackout-client/src/app/core/features/composition.ts:145`, `.../features/platform-ops/manifest.ts:14`, `.../core/features/types.ts:76`). `composeAdminEntries` + `hasAdminEntries` (`composition.ts:150-166`) are the canonical replacements.
+- **Mobile rail** is registry-driven: `BottomTabBar` (`apps/blackout-client/src/app/pages/shell/BottomTabBar.tsx`) renders the canonical five shell-destinations via `RegistryTabBar` reading `kind: 'mobile-tab'`. Filtered by id to keep the bar at exactly five.
+- **Desktop primary rail** is registry-driven: `PrimaryRail.tsx:53` mounts `RegistrySidebarList kind="sidebar" mode="rail"`.
+- **AppShell** (`apps/blackout-client/src/app/pages/shell/AppShell.tsx`) is the canonical wrapper around every routed destination when `shellAppShell` is on; it owns mode resolution, the mobile bottom-tab bar, and the desktop dynamic right-panel slot. ClientLayout's 3-column shell still mounts under `/communities/...` as an inner destination.
+- **Router-integration tests** for shell panel state now cover every canonical destination (`apps/blackout-client/src/app/pages/shell/AppShell.test.tsx:115-200`) — one active-tab assertion per `Home / Communities / Create / Market / Inbox` plus mode-resolution coverage for the schedule-cited `/direct` and `/explore` sub-routes. Pre-existing AppShell tests cover Outlet rendering and mode atom write-through. Added in commit on this branch.
+
+What **still remains** in Port 1's literal scope:
+
+- **`WorkspaceTabBar`** — no component yet consumes `kind: 'workspace'` panels (governance, governance/meetings, governance/treasury, plus future feature workspace entries). A natural future addition is a desktop-only tab bar above `<Outlet />` in `AppShell`, using `RegistryTabBar` with `kind="workspace"`. Placement is a small UX decision (above outlet, inside MobileTopBar's desktop equivalent, or scoped per mode) — left for a follow-up PR.
+- **`DynamicRightPanel` registry adoption** — `DynamicRightPanel.tsx` currently switch-renders on `rightPanelDescriptorAtom` with hardcoded placeholder bodies (`community-info`, `product-detail`, `livestream-chat`, etc.). Wiring it to consume feature `kind: 'right-panel'` entries (e.g. `governanceRightPanelTabs`) is a separate sub-port; the descriptor model itself is sound.
+- **`ClientLayout.tsx`'s own room-inspector right panel** (`BASE_RIGHT_PANELS` at line 72-78: `members | threads | pins | search | governance | roles`) is intentionally **not** a candidate for shell-panel-kind replacement — these are local UI state for the room view, not registry-driven destinations. Verified via type definitions (`RightPanelType` in `state/navigation.ts`) and call sites.
+
+| ID | Port | Estimate | Status / Scope summary |
 | --- | --- | --- | --- |
-| T4-01 | **Port 1 finish** — replace remaining static nav in `ClientLayout.tsx` (right panel, mobile rail, workspace tabs) with `RegistryRouteList`; adopt `composeAdminEntries` from `Sidebar.tsx`; retire `LegacyClientLayout`. | L (4–6 days) | Foundation for the rest of Workstream A. |
+| T4-01 | **Port 1 finish** — already mostly landed; remaining concrete work is `WorkspaceTabBar` + `DynamicRightPanel` registry adoption. The router-integration test coverage was the last in-scope item and landed on this branch. | Remaining: S–M (1–2 days) | Sub-PRs recommended for the two remaining slices. |
 | T4-02 | **Port 2** — render BKL-003 governance scheduler + treasury UI against `createGovernanceActions(client)`. Replace placeholders at `/governance/meetings` and `/governance/treasury`. | M (2–3 days) | Can run in parallel with T4-03/T4-04 after T4-01. |
 | T4-03 | **Port 3** — render BKL-004 notification rules editor + presence digest inbox. Drive through `createNotificationActions(client)` + `fetchPresenceDigest` / `acknowledgePresenceDigest`. | M (2–3 days) | Parallel with T4-02 / T4-04. |
 | T4-04 | **Port 4** — render BKL-006 media + dialpad + Element Call UI. Wire `createMediaActions` upload widget, `buildDialpadIntent` + `createCallActions(client).dialpadCall`, and Element Call launcher. | L (3–5 days) | Three distinct surfaces; consider sub-PRs. |
