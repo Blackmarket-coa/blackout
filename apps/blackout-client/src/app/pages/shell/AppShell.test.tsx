@@ -17,10 +17,22 @@ const InboxStub = () => <div data-testid="inbox-body">inbox body</div>;
 const DirectStub = () => <div data-testid="direct-body">direct body</div>;
 const ExploreStub = () => <div data-testid="explore-body">explore body</div>;
 
-const renderShell = (initialPath: string) => {
+const GovernanceStub = () => <div data-testid="governance-body">governance body</div>;
+const GovernanceMeetingsStub = () => (
+    <div data-testid="governance-meetings-body">governance meetings body</div>
+);
+const GovernanceTreasuryStub = () => (
+    <div data-testid="governance-treasury-body">governance treasury body</div>
+);
+
+type RenderShellOptions = {
+    capabilities?: readonly string[];
+};
+
+const renderShell = (initialPath: string, options: RenderShellOptions = {}) => {
     const store = createStore();
     store.set(capabilityContextAtom, {
-        capabilities: [],
+        capabilities: [...(options.capabilities ?? [])],
         flags: { ...defaultFeatureFlags, shellAppShell: true },
     });
 
@@ -37,6 +49,15 @@ const renderShell = (initialPath: string) => {
                     { path: '/messages/*', element: <InboxStub /> },
                     { path: '/direct', element: <DirectStub /> },
                     { path: '/explore', element: <ExploreStub /> },
+                    { path: '/governance', element: <GovernanceStub /> },
+                    {
+                        path: '/governance/meetings',
+                        element: <GovernanceMeetingsStub />,
+                    },
+                    {
+                        path: '/governance/treasury',
+                        element: <GovernanceTreasuryStub />,
+                    },
                 ],
             },
         ],
@@ -48,6 +69,13 @@ const renderShell = (initialPath: string) => {
     const root = ReactDOM.createRoot(container);
 
     return { router, container, root, store };
+};
+
+const setDesktopViewport = () => {
+    Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 1280,
+    });
 };
 
 describe('AppShell', () => {
@@ -208,4 +236,129 @@ describe('AppShell', () => {
             expect(shellRoot?.getAttribute('data-shell-mode')).toBe(mode);
         });
     }
+
+    describe('WorkspaceTabBar (desktop workspace-tab registry consumption)', () => {
+        const GOVERNANCE_CAPS = [
+            'governance.read',
+            'governance.meetings.schedule',
+            'governance.treasury.read',
+        ];
+
+        beforeEach(() => {
+            setDesktopViewport();
+        });
+
+        it('renders governance workspace tabs when on /governance with required capabilities', async () => {
+            const { router, container, root, store } = renderShell('/governance', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
+            expect(bar).not.toBeNull();
+            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map(
+                (el) => el.getAttribute('data-panel-id')
+            );
+            expect(panelIds).toEqual([
+                'governance.workspace',
+                'governance.meetings.workspace',
+                'governance.treasury.workspace',
+            ]);
+        });
+
+        it('marks Meetings active when on /governance/meetings and leaves Treasury inactive', async () => {
+            const { router, container, root, store } = renderShell('/governance/meetings', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            // The Meetings child tab is active.
+            const active = container.querySelector(
+                '[data-shell-region="workspace-tab-bar"] [data-panel-id="governance.meetings.workspace"][aria-current="page"]'
+            );
+            expect(active).not.toBeNull();
+
+            // The Treasury sibling is not active (sibling-route isolation).
+            const treasury = container.querySelector(
+                '[data-shell-region="workspace-tab-bar"] [data-panel-id="governance.treasury.workspace"]'
+            );
+            expect(treasury?.getAttribute('aria-current')).toBeNull();
+            // The Governance parent tab is also active because `isShellPathActive`
+            // is permissive about route subtrees (deep-linking keeps the parent
+            // lit, same semantic as the mobile bottom-tab bar). This is intentional.
+            const parent = container.querySelector(
+                '[data-shell-region="workspace-tab-bar"] [data-panel-id="governance.workspace"]'
+            );
+            expect(parent?.getAttribute('aria-current')).toBe('page');
+        });
+
+        it('renders nothing on root path (no workspace siblings)', async () => {
+            const { router, container, root, store } = renderShell('/', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
+            expect(bar).toBeNull();
+        });
+
+        it('renders nothing on /governance when capabilities are absent (capability-gated)', async () => {
+            const { router, container, root, store } = renderShell('/governance', {
+                capabilities: [],
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
+            expect(bar).toBeNull();
+        });
+
+        it('does not render on mobile viewport', async () => {
+            Object.defineProperty(window, 'innerWidth', {
+                configurable: true,
+                value: 480,
+            });
+            const { router, container, root, store } = renderShell('/governance', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
+            expect(bar).toBeNull();
+        });
+    });
 });
