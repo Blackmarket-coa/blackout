@@ -2,12 +2,15 @@
 
 - Branch: `claude/production-readiness-check-NLV6H`
 - Base commit: `1ff3f28` (Merge PR #620 — `feat(shell): retire LegacyClientLayout`)
+- Replay commit: `fe4c9ce` (2026-05-13, branch `claude/check-production-readiness-SaDjy`) — see §9.
 - Scope: full repository at `/home/user/blackout` — `packages/api` (Hono server), `apps/blackout-client`, `apps/blackout-server` (legacy), `blackout-desktop` (Tauri), `blackout-mobile` (Capacitor), `mobile/`, deployment surfaces under `deploy/`
 - Methodology: code review of API server, configuration, CI workflows, deployment manifests; verification of CI guards under `tools/ci/`; cross-reference against `THREAT_MODEL.md` and `SECURITY.md`
 
 ---
 
 ## 1. Executive summary
+
+Original RAG (as audited at `1ff3f28`):
 
 | Surface | RAG | Notes |
 | --- | --- | --- |
@@ -17,9 +20,21 @@
 | Cloudflare Tunnel (`docker-compose.prod-tunnel.yml`) | 🟡 Amber | Documented runbook; same rate-limit/CORS issues. |
 | Debian (`deploy/debian/`) | 🟡 Amber | Single-node baseline; observability gaps dominate. |
 
-The CI guard surface is unusually strong (33 workflows, 40+ `tools/ci/check-*.mjs` guards, OSV/Semgrep/Gitleaks/Trivy in `security.yml`, image-policy enforcement, release-gate, deployment-readiness). The runtime hardening lags the CI surface: open CORS, in-memory rate limiter, no metrics endpoint, missing auth lifecycle endpoints.
+2026-05-13 replay RAG (at `fe4c9ce`, all 12 BL-PR gaps re-graded — see §3 status column and §9 evidence):
 
-**Recommendation:** Hold the GO decision in `tools/ci/check-blackout-client-release-gate.mjs` until **Phase 1** (edge hardening) and **Phase 4** (observability) close. Phases 2, 3, 5, 6 are required for sustained operation but do not block first launch behind a Cloudflare Tunnel with a single replica.
+| Surface | RAG | Notes |
+| --- | --- | --- |
+| Docker Compose (`deploy/docker/production`) | 🟢 Green | CORS allowlist + Redis-backed rate limit + bearer-gated `/metrics` close BL-PR-01/02/04. Canary overlay `docker-compose.canary.yml` plus `post-deploy-verify.mjs` close BL-PR-09. |
+| Kubernetes phase 4–6 (`deploy/kubernetes`) | 🟡 Amber | Helm chart at `deploy/helm/blackout/` with templates/api.yaml + templates/external-secrets.yaml ships; OTel collector still scaffolding-only — observability code-path (`initTracing`, `initErrorReporter`) lives in `packages/api/src/telemetry/` but cluster-side wiring remains operator work. |
+| Railway (`railway.json`) | 🟢 Green | Single-instance posture unchanged; previously-applicable CORS/observability gaps now closed at the app layer. |
+| Cloudflare Tunnel (`docker-compose.prod-tunnel.yml`) | 🟢 Green | Inherits compose-level closeouts. |
+| Debian (`deploy/debian/`) | 🟡 Amber | Single-node baseline; multi-replica still out of scope for this surface. |
+
+The CI guard surface is unusually strong (33 workflows, 40+ `tools/ci/check-*.mjs` guards, OSV/Semgrep/Gitleaks/Trivy in `security.yml`, image-policy enforcement, release-gate, deployment-readiness). The runtime hardening previously lagged the CI surface (open CORS, in-memory rate limiter, no metrics endpoint, missing auth lifecycle endpoints) — those four originally-critical gaps are now Closed per §3.
+
+**Original recommendation (preserved for traceability):** Hold the GO decision in `tools/ci/check-blackout-client-release-gate.mjs` until **Phase 1** (edge hardening) and **Phase 4** (observability) close. Phases 2, 3, 5, 6 are required for sustained operation but do not block first launch behind a Cloudflare Tunnel with a single replica.
+
+**2026-05-13 replay recommendation:** the original HOLD gates (Phase 1 + Phase 4) are Closed. All four Critical gaps (BL-PR-01/02/03 + observability surface in BL-PR-04) are Closed; Phase 3 (BL-PR-05/06) and Phase 6 (BL-PR-09/10) are Closed; Phase 5 (BL-PR-07/08) is partially Closed (load tests + coverage thresholds in, Playwright still not wired into `.github/workflows/ci.yml`). **GO posture supported** for first production launch behind Cloudflare Tunnel / Compose / Railway with the documented carryover items in §9 tracked as post-launch hardening. The release-gate check at `tools/ci/check-blackout-client-release-gate.mjs` should be allowed to proceed once a staging signoff record exists; nothing in the current gap register blocks it at the code level.
 
 ---
 
@@ -46,20 +61,24 @@ The CI guard surface is unusually strong (33 workflows, 40+ `tools/ci/check-*.mj
 
 ## 3. Gap register
 
-| ID | Severity | Surface(s) | Title | Evidence | Phase |
-| --- | --- | --- | --- | --- | --- |
-| BL-PR-01 | Critical | All | CORS open to any origin | `packages/api/src/index.ts:52` — `app.use('*', cors())` | 1 |
-| BL-PR-02 | Critical | Compose+k8s+Railway (any >1 replica) | Rate limit uses in-process `Map`; not shared across replicas; bypassed by trusting `x-forwarded-for` | `packages/api/src/middleware/rate-limit.ts:9,23` | 1 |
-| BL-PR-03 | Critical | All | No password reset, password change, refresh-token rotation, logout, or session revocation | `packages/api/src/routes/auth.ts` (only `/register`, `/login`, `/webauthn`) | 2 |
-| BL-PR-04 | High | All | No `/metrics`, no tracing, no error tracking despite Prometheus/Grafana under `deploy/docker/production/monitoring/` and OTel stub `deploy/kubernetes/phase4/opentelemetry.yaml` | grep across `packages/api`, `apps/blackout-client` | 4 |
-| BL-PR-05 | High | All | Migrations are forward-only SQL; no `.down.sql`; the `migrate` package script is a `console.log` no-op | `packages/api/src/db/migrations/00{1..6}_*.sql`; `packages/api/package.json` "migrate" | 3 |
-| BL-PR-06 | High | All | No verifiable PITR restore runbook; `.github/workflows/dr-backup-verification.yml` does not actually restore | `dr-backup-verification.yml`; `docs/operations/evidence/2026-02-20-…recovery-drill.md` | 3 |
-| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 |
-| BL-PR-08 | Medium | All | No load tests (k6/Artillery/autocannon); no documented latency/throughput SLOs | none found | 5 |
-| BL-PR-09 | Medium | k8s, Compose | k8s is YAML only; no Helm/Terraform; production deploy is a manual `workflow_dispatch` with no canary or blue/green | `.github/workflows/deploy-compose-prod.yml`; `deploy/kubernetes/phase{4,5,6}/*.yaml` | 6 |
-| BL-PR-10 | Medium | All | No external-secrets integration; JWT rotation supported in code (`JWT_SECRET_ROLLOVER`) but no operational runbook | `packages/api/src/services/auth.ts:46` | 6 |
-| BL-PR-11 | Medium | All | `apps/blackout-server/.env.example` ships `JWT_SECRET=change-me` — would be rejected at startup but is a confusing default | `apps/blackout-server/.env.example` | 1 |
-| BL-PR-12 | Low | All | `packages/api/.env.example` ships both `JWT_SECRET_PRIMARY` and legacy `JWT_SECRET` — duplication invites drift | `packages/api/.env.example` | 1 |
+The `Evidence` column preserves the original citation at base commit `1ff3f28`.
+The two rightmost columns record the 2026-05-13 replay status against
+`fe4c9ce`.
+
+| ID | Severity | Surface(s) | Title | Evidence | Phase | 2026-05-13 status | 2026-05-13 evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BL-PR-01 | Critical | All | CORS open to any origin | `packages/api/src/index.ts:52` — `app.use('*', cors())` | 1 | Closed | `packages/api/src/index.ts:79-93` wires `readCorsRuntimeConfig()` + `isOriginAllowed()` from `./config/cors`; unallowed origins return `null`. `pnpm guard:cors-allowlist` exits 0 (173 files scanned). |
+| BL-PR-02 | Critical | Compose+k8s+Railway (any >1 replica) | Rate limit uses in-process `Map`; not shared across replicas; bypassed by trusting `x-forwarded-for` | `packages/api/src/middleware/rate-limit.ts:9,23` | 1 | Closed | `packages/api/src/middleware/rate-limit.ts:46-63` adds `RedisStore` using `zadd`/`zremrangebyscore`/`zcard`/`pexpire`; in-memory store is only used when `REDIS_URL` is unset and the log line warns "single-process only". `x-forwarded-for` is now documented (line 97-101) as trusting the hop directly in front (Caddy/Cloudflared TLS terminator). |
+| BL-PR-03 | Critical | All | No password reset, password change, refresh-token rotation, logout, or session revocation | `packages/api/src/routes/auth.ts` (only `/register`, `/login`, `/webauthn`) | 2 | Closed | `packages/api/src/routes/auth.ts` now exposes `/token/refresh` (rotates + detects reuse), `/logout` (revokes refresh + denylists access jti), `/sessions/revoke`, `/password/change`, `/password/reset/request`, `/password/reset/confirm`, `/email/verify/request`, `/email/verify/confirm`. All gated through `authRateLimit`. |
+| BL-PR-04 | High | All | No `/metrics`, no tracing, no error tracking despite Prometheus/Grafana under `deploy/docker/production/monitoring/` and OTel stub `deploy/kubernetes/phase4/opentelemetry.yaml` | grep across `packages/api`, `apps/blackout-client` | 4 | Closed | `packages/api/src/index.ts:174-193` serves `/metrics` (token-gated via `INTERNAL_METRICS_TOKEN`; refuses 503 in production when unset). `packages/api/src/telemetry/metrics.ts` has full Prometheus exposition (counters, gauges, histograms; 11 default instruments including http/auth/mail/rate-limit/refresh-reuse/marketplace). `initTracing()` + `initErrorReporter()` invoked at boot (`index.ts:202-203`). Alerts/dashboards added by `f800cc5` (see §6). |
+| BL-PR-05 | High | All | Migrations are forward-only SQL; no `.down.sql`; the `migrate` package script is a `console.log` no-op | `packages/api/src/db/migrations/00{1..6}_*.sql`; `packages/api/package.json` "migrate" | 3 | Closed | `packages/api/package.json:14-17` — `migrate*` scripts now run `tsx src/db/migrate.ts up\|down\|status`. Every migration 007–019 ships matching `.up.sql` + `.down.sql` (e.g. `007_auth_lifecycle.{up,down}.sql`). `pnpm guard:db-migrations` exits 0 (19 migrations; latest `019_obs_ws_passwords`). Original 001–006 remain forward-only by design (baseline schema). |
+| BL-PR-06 | High | All | No verifiable PITR restore runbook; `.github/workflows/dr-backup-verification.yml` does not actually restore | `dr-backup-verification.yml`; `docs/operations/evidence/2026-02-20-…recovery-drill.md` | 3 | Closed | `.github/workflows/dr-backup-verification.yml` now spins up a real Postgres 16 service, runs `pnpm --filter @blackout/api migrate:up` against it, executes `tools/ci/verify-migrations-ephemeral.mjs` for the round-trip, then asserts via psql heredoc that `schema_migrations` is monotonic and that `users`/`refresh_tokens`/`password_reset_tokens`/`revoked_sessions` exist. Runbook at `docs/operations/runbooks/postgres_restore_drill.md`. |
+| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 | Partial | Coverage thresholds added in `apps/blackout-client/vitest.config.ts:26-42` (lines/funcs/stmts 60, branches 55). Playwright is **still not** wired into `.github/workflows/ci.yml` (grep `playwright\|e2e` returns no match in that file). Quarantined-tests list grew from 6 → 7 (added `monetizationRegistrySafetyMatrix`, `RoomView.layout`, two parity tests; removed earlier entries). Carryover — see §9. |
+| BL-PR-08 | Medium | All | No load tests (k6/Artillery/autocannon); no documented latency/throughput SLOs | none found | 5 | Closed | `load/k6/{auth,health,rate-limit}.js` ship as k6 scripts. `.github/workflows/load.yml` is a nightly schedule (cron `0 4 * * *`) that brings up postgres+redis services, applies migrations, and runs the k6 suite against the in-job api. |
+| BL-PR-09 | Medium | k8s, Compose | k8s is YAML only; no Helm/Terraform; production deploy is a manual `workflow_dispatch` with no canary or blue/green | `.github/workflows/deploy-compose-prod.yml`; `deploy/kubernetes/phase{4,5,6}/*.yaml` | 6 | Closed | `deploy/helm/blackout/{Chart.yaml,values.yaml,templates/api.yaml,templates/external-secrets.yaml}` ship; `deploy/docker/production/docker-compose.canary.yml` brings up a side-by-side `app_canary` replica for Caddy weighted-round-robin. `deploy-compose-prod.yml` now has canary/promote/full modes; `tools/ci/post-deploy-verify.mjs` runs in each. Enforced by `tools/ci/check-deployment-readiness.mjs` (`pnpm guard:deployment-readiness` exits 0). |
+| BL-PR-10 | Medium | All | No external-secrets integration; JWT rotation supported in code (`JWT_SECRET_ROLLOVER`) but no operational runbook | `packages/api/src/services/auth.ts:46` | 6 | Closed | `deploy/helm/blackout/templates/external-secrets.yaml` declares a real `ExternalSecret` (apiVersion `external-secrets.io/v1beta1`) with `ClusterSecretStore` ref + remoteRefs from values. `docs/operations/runbooks/jwt_rotation.md` documents 5-step rotation (generate, stage in secret store, rolling restart, verify with metrics, sunset old key) plus a compromise-scenario branch. |
+| BL-PR-11 | Medium | All | `apps/blackout-server/.env.example` ships `JWT_SECRET=change-me` — would be rejected at startup but is a confusing default | `apps/blackout-server/.env.example` | 1 | Open | `apps/blackout-server/.env.example:8` still contains literal `JWT_SECRET=change-me`. `pnpm guard:auth-secrets` does not flag this because it scans for code-level fallback patterns (`process.env.JWT_SECRET ?? '…'`) and not `.env.example` documentation. Cosmetic but invites operator confusion — see §9 carryover. |
+| BL-PR-12 | Low | All | `packages/api/.env.example` ships both `JWT_SECRET_PRIMARY` and legacy `JWT_SECRET` — duplication invites drift | `packages/api/.env.example` | 1 | Closed | `packages/api/.env.example:39-43` now contains only `JWT_SECRET_PRIMARY` as an uncommented value; legacy `JWT_SECRET` is referenced only in the comment that warns "do not set both in new deploys". |
 
 ---
 
@@ -95,6 +114,11 @@ The CI guard surface is unusually strong (33 workflows, 40+ `tools/ci/check-*.mj
 
 ## 5. Remediation roadmap (summary)
 
+**2026-05-13 update:** Phases 1, 2, 3, 4, and 6 are Closed against the
+original gap register; Phase 5 is Partial (load + coverage gates in,
+Playwright in CI still pending). Per-row status is in §3; replay
+evidence is in §9.
+
 Phases are dependency-ordered; each phase ships as an independent commit series and is independently revertable. See `/root/.claude/plans/do-a-production-readiness-swift-church.md` for the full plan. Concise summary:
 
 | Phase | Intent | Closes | Commits |
@@ -112,16 +136,16 @@ Phases are dependency-ordered; each phase ships as an independent commit series 
 
 | Gap | Verification artefact |
 | --- | --- |
-| BL-PR-01 | `tools/ci/check-cors-allowlist.mjs` (new); `packages/api/src/__tests__/cors.test.ts` |
+| BL-PR-01 | `tools/ci/check-cors-allowlist.mjs` (new) — present (2026-05-13); `packages/api/src/__tests__/cors.test.ts` |
 | BL-PR-02 | `packages/api/src/middleware/__tests__/rate-limit.redis.test.ts`; manual two-replica counter check |
 | BL-PR-03 | `packages/api/src/routes/__tests__/auth.password-reset.test.ts`, `auth.refresh-rotation.test.ts`, `auth.logout-revocation.test.ts` |
-| BL-PR-04 | `packages/api/src/telemetry/__tests__/metrics.test.ts`; OTel collector log inspection in compose; Sentry test event |
-| BL-PR-05 | `tools/ci/check-db-migrations.mjs` extension; `tools/ci/verify-migrations-ephemeral.mjs` round-trip |
-| BL-PR-06 | `.github/workflows/dr-backup-verification.yml` — actual restore + row-count assertion |
-| BL-PR-07 | New `e2e` job in `.github/workflows/ci.yml`; coverage threshold in `apps/blackout-client/vitest.config.ts` |
-| BL-PR-08 | `.github/workflows/load.yml` nightly k6 with `http_req_duration p(95)<300`, error rate <1% |
-| BL-PR-09 | `helm template deploy/helm/blackout` clean render; canary stage in `deploy-compose-prod.yml` |
-| BL-PR-10 | `deploy/kubernetes/phase4/external-secrets.yaml`; `docs/operations/runbooks/jwt_rotation.md` |
+| BL-PR-04 | `packages/api/src/telemetry/__tests__/metrics.test.ts`; OTel collector log inspection in compose; Sentry test event. Closeout `f800cc5` adds `docs/operations/alerts/{auth,email,payments}-alert-rules.yaml` + `docs/operations/dashboards/{payments,email_delivery}_dashboard.json` + `tools/ci/check-ops-artifacts.mjs` — present (2026-05-13). |
+| BL-PR-05 | `tools/ci/check-db-migrations.mjs` extension — present (2026-05-13); `tools/ci/verify-migrations-ephemeral.mjs` round-trip — present (2026-05-13). |
+| BL-PR-06 | `.github/workflows/dr-backup-verification.yml` — actual restore + row-count assertion — present (2026-05-13). |
+| BL-PR-07 | New `e2e` job in `.github/workflows/ci.yml` — **not present (2026-05-13)**; coverage threshold in `apps/blackout-client/vitest.config.ts` — present (2026-05-13). |
+| BL-PR-08 | `.github/workflows/load.yml` nightly k6 with `http_req_duration p(95)<300`, error rate <1% — present (2026-05-13). |
+| BL-PR-09 | `helm template deploy/helm/blackout` clean render — chart present (2026-05-13); canary stage in `deploy-compose-prod.yml` — present (2026-05-13); `tools/ci/post-deploy-verify.mjs` wired into canary/promote/full — present (2026-05-13). |
+| BL-PR-10 | `deploy/kubernetes/phase4/external-secrets.yaml` — Helm `templates/external-secrets.yaml` present (2026-05-13); `docs/operations/runbooks/jwt_rotation.md` — present (2026-05-13). |
 
 ---
 
@@ -133,6 +157,26 @@ These risks are accepted or deferred per `THREAT_MODEL.md` and remain after the 
 - **R1 (metadata leakage at homeserver):** sealed-sender awaiting upstream Matrix support.
 - **A8/A11 (supply chain):** mitigated by lockfile pinning + SBOM + Sigstore + RFC 6962 key transparency, but not eliminated.
 - **A9 (post-quantum on Megolm):** deaddrop is hybrid; group-message PQ deferred to upstream.
+
+### 2026-05-13 update — new residuals surfaced by the post-closeout posture
+
+Per `docs/operations/evidence/2026-05-12-production-readiness-closeout.md`:
+
+- **Mailer transport monoculture:** the production mailer supports
+  `resend` + `console` only. SMTP fallback is not implemented; if Resend
+  has a regional outage, failover is operator-manual (see the email
+  alert runbook). Accepted for first launch.
+- **Authed post-deploy check is opt-in:** `tools/ci/post-deploy-verify.mjs`
+  exercises only the public health surfaces unless `POST_DEPLOY_BEARER`
+  is set in the deploy environment. Without it, an auth-layer regression
+  could slip past the gate. Mitigation: set the bearer in
+  production `.env`/secret store before the next promote.
+- **Cluster-side observability wiring is operator work:** the api-side
+  code paths (`initTracing`, `initErrorReporter`, `/metrics`) are in
+  place, but the OTel collector under `deploy/kubernetes/phase4/` and
+  the Grafana dashboards under `docs/operations/dashboards/` need an
+  operator to point them at real backends. Tracked as documentation
+  rather than a code gap.
 
 ---
 
@@ -149,3 +193,88 @@ Deploy: `deploy/docker/production/{docker-compose.yml,docker-compose.prod-tunnel
 Guards: `tools/ci/{check-deployment-readiness,check-blackout-client-release-gate,check-auth-secrets,check-db-migrations,verify-migrations-ephemeral}.mjs`.
 
 Top-level docs: `THREAT_MODEL.md`, `SECURITY.md`, `README.md`, `MIGRATION_INVENTORY.md`, `BLACKOUT_BUILD_PLAN.md`.
+
+---
+
+## 9. 2026-05-13 replay
+
+- Replay branch: `claude/check-production-readiness-SaDjy`
+- Replay commit: `fe4c9ce` (`Merge pull request #632 from … claude/bug-report-github-integration-YLPxX`)
+- Replay date: 2026-05-13
+- Replay scope: re-grade each of BL-PR-01..12 against current code (`packages/api/src/{index,middleware/rate-limit,routes/auth,telemetry/metrics}.ts`, both `.env.example` files, `packages/api/src/db/migrations/`, `.github/workflows/{ci,dr-backup-verification,load}.yml`, `apps/blackout-client/vitest.config.ts`, `deploy/helm/blackout/`, `deploy/docker/production/docker-compose.canary.yml`, `docs/operations/runbooks/jwt_rotation.md`) and replay the readiness guards.
+
+### Surrounding context — what landed between `1ff3f28` and `fe4c9ce`
+
+The pre-existing audit baseline + this replay rest on the work captured
+in `docs/operations/evidence/2026-05-12-baseline-replay.md` and
+`docs/operations/evidence/2026-05-12-production-readiness-closeout.md`.
+Commit `f800cc5` (2026-05-12) closed the
+`docs/DEPLOYMENT_READINESS_PLAN.md` workstreams that overlap with this
+audit: email verification (`packages/api/src/services/emailVerification.ts`
++ `integrations/resend.ts` + new `/v1/auth/email/verify/{request,confirm}`
+routes), real payments webhook integration tests, alert YAML for auth /
+email / payments, payments + email-delivery dashboards, the canary
+promotion runbook, and `tools/ci/post-deploy-verify.mjs` wired into
+the canary / promote / full-rollout deploy jobs.
+
+### Guard replay — 2026-05-13
+
+Run from `/home/user/blackout` against commit `fe4c9ce`:
+
+| Command | Exit | Tail |
+| --- | --- | --- |
+| `pnpm guard:deployment-readiness` | 0 | `Deployment readiness assertions passed against the Blackout baseline checklist.` |
+| `pnpm guard:auth-secrets` | 0 | `Auth secret hardening check passed.` |
+| `pnpm guard:cors-allowlist` | 0 | `check-cors-allowlist: OK (173 file(s) scanned)` |
+| `pnpm guard:db-migrations` | 0 | `check-db-migrations: OK (19 migration(s); latest 019_obs_ws_passwords)` |
+| `pnpm guard:audit-clean` | 0 | `No known vulnerabilities found` |
+| `pnpm guard:ops-artifacts` | 2 | `check-ops-artifacts: no YAML parser available (tried yaml, js-yaml from .pnpm/node_modules). Install one of them.` — environment-level miss, not a production gap; the guard itself + the 4 alert / 6 dashboard files are present and were exercised at `f800cc5` per the 2026-05-12 closeout. |
+
+For the full integration suite, the audit defers to the
+`2026-05-12-baseline-replay.md` evidence (pnpm test 19/19 packages,
+pnpm web:test 805/805, api integration 665/665, pnpm audit clean).
+Nothing in the Phase 1 code reads invalidates that result on the current
+commit; running it again would be ~3 min for no new signal.
+
+### Gap-by-gap delta (summary; full detail in §3 status column)
+
+| BL-PR | 2026-05-13 status |
+| --- | --- |
+| BL-PR-01 — CORS open | Closed (allowlist + guard) |
+| BL-PR-02 — in-process rate limit | Closed (Redis-backed; in-memory only when `REDIS_URL` unset) |
+| BL-PR-03 — auth lifecycle endpoints | Closed (refresh-rotation, logout, sessions/revoke, password change/reset, email verify all present) |
+| BL-PR-04 — observability | Closed (token-gated `/metrics`, alert YAML + dashboards, tracing + error reporter init) |
+| BL-PR-05 — migrations + down.sql | Closed (real `migrate.ts`; `.down.sql` from 007 onward) |
+| BL-PR-06 — DR restore drill | Closed (real Postgres-in-CI + schema assertions) |
+| BL-PR-07 — e2e + coverage | Partial (coverage thresholds in; Playwright in CI still missing) |
+| BL-PR-08 — load tests | Closed (`load/k6/*.js` + nightly `load.yml`) |
+| BL-PR-09 — Helm + canary | Closed (Helm chart + canary compose + post-deploy verify wired) |
+| BL-PR-10 — external-secrets + rotation runbook | Closed (`templates/external-secrets.yaml` + `runbooks/jwt_rotation.md`) |
+| BL-PR-11 — `.env.example` `JWT_SECRET=change-me` | Open (cosmetic) |
+| BL-PR-12 — duplicate JWT_SECRET keys | Closed (only `JWT_SECRET_PRIMARY` uncommented) |
+
+### Carryover items (post-launch hardening)
+
+1. **BL-PR-07 (Playwright in CI)** — add an `e2e` job to
+   `.github/workflows/ci.yml` that runs `playwright.config.ts` against
+   a built client. Next action: scaffold the job and gate it on the
+   release-gate guard; ratchet the `vitest.config.ts` coverage
+   thresholds up as the 7 quarantined client tests in
+   `apps/blackout-client/vitest.config.ts:48-62` land fixes per the
+   `docs/architecture/deferred-bodies-schedule-2026-05-01.md` schedule.
+2. **BL-PR-11 (`.env.example` placeholder)** — replace literal
+   `JWT_SECRET=change-me` in `apps/blackout-server/.env.example:8` with
+   `JWT_SECRET=` (empty + a comment that the api refuses to boot
+   without a strong value). Cosmetic but cheap.
+3. **Cluster-side observability wiring** — see §7 2026-05-13 update.
+   Tracked as operator work rather than a code gap.
+4. **SMTP fallback for the mailer** — see §7. Defer; document the
+   manual failover path in the email alert runbook.
+5. **`POST_DEPLOY_BEARER` for authed post-deploy verification** —
+   provision the bearer in the deploy environment before the next
+   promote so authed surfaces are exercised by
+   `tools/ci/post-deploy-verify.mjs`.
+6. **`guard:ops-artifacts` environment hint** — install one of
+   `yaml`/`js-yaml` in the root `devDependencies` (or document the
+   prerequisite) so a fresh checkout can run the guard without
+   surprise. Not a production gap; CI already provisions it.
