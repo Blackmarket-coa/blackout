@@ -6,6 +6,11 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { mxcToUrl } from '../media/utils/matrixMedia';
+import {
+    loadRecentReactions,
+    pushRecentReaction,
+    saveRecentReactions,
+} from './recentReactionsStorage';
 
 interface ReactionSummary {
     key: string;
@@ -191,7 +196,7 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
     const { data: timeline } = useRoomTimeline(roomId);
 
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [recent, setRecent] = useState<string[]>(DEFAULT_EMOJI.slice(0, 6));
+    const [recent, setRecent] = useState<string[]>(() => loadRecentReactions());
     const [windowStart, setWindowStart] = useState(0);
 
     const homeserverUrl =
@@ -222,7 +227,11 @@ export const Reactions = memo(({ roomId, targetEventId, defaultPalette }: Reacti
                 } as never,
             );
 
-            setRecent((prev) => [emoji, ...prev.filter((value) => value !== emoji)].slice(0, 12));
+            setRecent((prev) => {
+                const next = pushRecentReaction(prev, emoji);
+                saveRecentReactions(next);
+                return next;
+            });
         },
         [client, roomId, targetEventId],
     );
