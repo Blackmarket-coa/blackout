@@ -73,7 +73,7 @@ The two rightmost columns record the 2026-05-13 replay status against
 | BL-PR-04 | High | All | No `/metrics`, no tracing, no error tracking despite Prometheus/Grafana under `deploy/docker/production/monitoring/` and OTel stub `deploy/kubernetes/phase4/opentelemetry.yaml` | grep across `packages/api`, `apps/blackout-client` | 4 | Closed | `packages/api/src/index.ts:174-193` serves `/metrics` (token-gated via `INTERNAL_METRICS_TOKEN`; refuses 503 in production when unset). `packages/api/src/telemetry/metrics.ts` has full Prometheus exposition (counters, gauges, histograms; 11 default instruments including http/auth/mail/rate-limit/refresh-reuse/marketplace). `initTracing()` + `initErrorReporter()` invoked at boot (`index.ts:202-203`). Alerts/dashboards added by `f800cc5` (see §6). |
 | BL-PR-05 | High | All | Migrations are forward-only SQL; no `.down.sql`; the `migrate` package script is a `console.log` no-op | `packages/api/src/db/migrations/00{1..6}_*.sql`; `packages/api/package.json` "migrate" | 3 | Closed | `packages/api/package.json:14-17` — `migrate*` scripts now run `tsx src/db/migrate.ts up\|down\|status`. Every migration 007–019 ships matching `.up.sql` + `.down.sql` (e.g. `007_auth_lifecycle.{up,down}.sql`). `pnpm guard:db-migrations` exits 0 (19 migrations; latest `019_obs_ws_passwords`). Original 001–006 remain forward-only by design (baseline schema). |
 | BL-PR-06 | High | All | No verifiable PITR restore runbook; `.github/workflows/dr-backup-verification.yml` does not actually restore | `dr-backup-verification.yml`; `docs/operations/evidence/2026-02-20-…recovery-drill.md` | 3 | Closed | `.github/workflows/dr-backup-verification.yml` now spins up a real Postgres 16 service, runs `pnpm --filter @blackout/api migrate:up` against it, executes `tools/ci/verify-migrations-ephemeral.mjs` for the round-trip, then asserts via psql heredoc that `schema_migrations` is monotonic and that `users`/`refresh_tokens`/`password_reset_tokens`/`revoked_sessions` exist. Runbook at `docs/operations/runbooks/postgres_restore_drill.md`. |
-| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 | Closed | Coverage thresholds in `apps/blackout-client/vitest.config.ts:34-44` now actually enforced — `@vitest/coverage-v8` declared as a dep and `pnpm --filter @blackout/client run test:coverage` invoked from `.github/workflows/ci.yml`'s `unit-tests` job. Floor set at statements 18 / branches 58 / functions 25 / lines 18 against current actual ~19.6 / 60.1 / 26.1 / 19.6 (831 unit tests across 144 files; previous 60/55/60/60 thresholds had never run because the coverage dep was missing). 2026-05-13: legacy Cinny-era `playwright.config.ts` replaced with a fresh root config targeting `apps/blackout-client/tests/e2e/` via `vite preview`; smoke spec at `apps/blackout-client/tests/e2e/shell.spec.ts`; `@playwright/test ^1.58.2` added; new `e2e-smoke` job builds the client + runs chromium. Quarantine reduced 7→3: retired `tests/unit/utils/room.test.ts` (planned API never landed) and both `tests/unit/parity/*ParityTest.tsx` files (compared against the retired legacy shell); fixed `monetizationRegistrySafetyMatrix.test.tsx` (dedupe against deliberate suite-SKU + per-SKU double-registration). The 3 remaining quarantined tests are gated on Workstream A Port 1 and tracked in `docs/architecture/deferred-bodies-schedule-2026-05-01.md`. |
+| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 | Closed | Coverage thresholds now actually enforced — `@vitest/coverage-v8` declared as a dep and `pnpm --filter @blackout/client run test:coverage` invoked from `.github/workflows/ci.yml`'s `unit-tests` job. 2026-05-13: legacy Cinny-era `playwright.config.ts` replaced with a fresh root config targeting `apps/blackout-client/tests/e2e/` via `vite preview`; smoke spec at `apps/blackout-client/tests/e2e/shell.spec.ts`; `@playwright/test ^1.58.2` added; new `e2e-smoke` job builds the client + runs chromium. Quarantine reduced **7→0** at the file level: retired `tests/unit/utils/room.test.ts` (planned API never landed) and both `tests/unit/parity/*ParityTest.tsx` files (compared against the retired legacy shell); fixed `monetizationRegistrySafetyMatrix.test.tsx` (dedupe against deliberate suite-SKU + per-SKU double-registration); un-quarantined `DraupnirNavigation` (1/1 pass), `RoomView.layout` (1/1 pass), and `ClientLayout` (10/17 pass + 7 `it.skip` for scenario-specific drift) via refreshed matrix-client mocks (shared helper at `apps/blackout-client/tests/helpers/fakeMatrixClient.ts`). Coverage floor ratcheted from 18/58/25/18 → 23/62/27/23 against current actual ~23.78 / 63.80 / 27.47 across 843 tests / 147 files. |
 | BL-PR-08 | Medium | All | No load tests (k6/Artillery/autocannon); no documented latency/throughput SLOs | none found | 5 | Closed | `load/k6/{auth,health,rate-limit}.js` ship as k6 scripts. `.github/workflows/load.yml` is a nightly schedule (cron `0 4 * * *`) that brings up postgres+redis services, applies migrations, and runs the k6 suite against the in-job api. |
 | BL-PR-09 | Medium | k8s, Compose | k8s is YAML only; no Helm/Terraform; production deploy is a manual `workflow_dispatch` with no canary or blue/green | `.github/workflows/deploy-compose-prod.yml`; `deploy/kubernetes/phase{4,5,6}/*.yaml` | 6 | Closed | `deploy/helm/blackout/{Chart.yaml,values.yaml,templates/api.yaml,templates/external-secrets.yaml}` ship; `deploy/docker/production/docker-compose.canary.yml` brings up a side-by-side `app_canary` replica for Caddy weighted-round-robin. `deploy-compose-prod.yml` now has canary/promote/full modes; `tools/ci/post-deploy-verify.mjs` runs in each. Enforced by `tools/ci/check-deployment-readiness.mjs` (`pnpm guard:deployment-readiness` exits 0). |
 | BL-PR-10 | Medium | All | No external-secrets integration; JWT rotation supported in code (`JWT_SECRET_ROLLOVER`) but no operational runbook | `packages/api/src/services/auth.ts:46` | 6 | Closed | `deploy/helm/blackout/templates/external-secrets.yaml` declares a real `ExternalSecret` (apiVersion `external-secrets.io/v1beta1`) with `ClusterSecretStore` ref + remoteRefs from values. `docs/operations/runbooks/jwt_rotation.md` documents 5-step rotation (generate, stage in secret store, rolling restart, verify with metrics, sunset old key) plus a compromise-scenario branch. |
@@ -265,7 +265,7 @@ commit; running it again would be ~3 min for no new signal.
 | BL-PR-04 — observability | Closed (token-gated `/metrics`, alert YAML + dashboards, tracing + error reporter init) |
 | BL-PR-05 — migrations + down.sql | Closed (real `migrate.ts`; `.down.sql` from 007 onward) |
 | BL-PR-06 — DR restore drill | Closed (real Postgres-in-CI + schema assertions) |
-| BL-PR-07 — e2e + coverage | Closed (chromium e2e job + smoke spec; coverage gates wired and enforced at 18/58/25/18; quarantine 7→3) |
+| BL-PR-07 — e2e + coverage | Closed (chromium e2e job + smoke spec; coverage gates wired and enforced at 23/62/27/23; file-level quarantine 7→0; 7 in-test `it.skip`s remain tracked outside the audit) |
 | BL-PR-08 — load tests | Closed (`load/k6/*.js` + nightly `load.yml`) |
 | BL-PR-09 — Helm + canary | Closed (Helm chart + canary compose + post-deploy verify wired) |
 | BL-PR-10 — external-secrets + rotation runbook | Closed (`templates/external-secrets.yaml` + `runbooks/jwt_rotation.md`) |
@@ -340,11 +340,27 @@ Closed in the 2026-05-13 fourth follow-up:
   cooldown, primary success resets counter, fallback-also-fails
   surfaces both errors, factory smoke).
 
-Open carryover (no longer launch-blocking; tracked separately):
+Closed in the 2026-05-13 fifth follow-up:
 
-1. **Workstream A Port 1 quarantine refresh** — `DraupnirNavigation`,
-   `ClientLayout`, and `RoomView.layout` test files still excluded
-   in `apps/blackout-client/vitest.config.ts`. Tracked in
-   `docs/architecture/deferred-bodies-schedule-2026-05-01.md`,
-   not in this audit. Coverage thresholds should be ratcheted up
-   each time one of the three lands fixes.
+- **Workstream A Port 1 quarantine refresh** — all three remaining
+  file-level quarantine entries (`DraupnirNavigation`,
+  `RoomView.layout`, `ClientLayout`) un-quarantined via refreshed
+  matrix-client mocks (`apps/blackout-client/tests/helpers/fakeMatrixClient.ts`
+  shared helper). 12 of 19 in-scope cases pass (DraupnirNavigation
+  1/1, RoomView.layout 1/1, ClientLayout 10/17); 7 ClientLayout
+  cases remain `it.skip` with inline explanatory comments for
+  QuickSwitcher behavioural stubbing + UI-shape assertion drift
+  (tracked in `docs/architecture/deferred-bodies-schedule-2026-05-01.md`).
+  Coverage thresholds ratcheted to the new floor — statements/lines
+  23 / branches 62 / functions 27 against current actual ~23.78 /
+  63.80 / 27.47 across 843 tests / 147 files (was 831 / 144).
+  `apps/blackout-client/vitest.config.ts` exclude list is now
+  empty.
+
+Open carryover (no longer launch-blocking; tracked outside this
+audit in `docs/architecture/deferred-bodies-schedule-2026-05-01.md`):
+
+1. **7 ClientLayout `it.skip` cases** — un-skip after
+   QuickSwitcher behavioural stub lands or the real component is
+   allowed to render in tests; bump coverage floors in lock-step
+   with each un-skip.

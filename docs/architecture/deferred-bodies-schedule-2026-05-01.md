@@ -413,6 +413,45 @@ Adding to or removing from the exclude list **must** be paired with a
 matching update here. The vitest config has a `// see deferred-bodies-schedule`
 pointer to keep the two in sync.
 
+### 2026-05-13 cleanup — last 3 un-quarantined; 7 scenario `it.skip`s remain
+
+On `claude/check-production-readiness-SaDjy`:
+
+All three remaining file-level quarantine entries were lifted by
+refreshing the matrix-client mocks against the current adapter surface
+(`getAccountData`, `removeListener`, `getRoom`, `getRoomPushRule`,
+`getCrypto`, `getHomeserverUrl`, `getLiveTimeline().getState()`,
+non-empty feature `customizations`, `m.room.create` state event,
+`getSender`/`getRelation` on MatrixEvent mocks). A shared helper
+`apps/blackout-client/tests/helpers/fakeMatrixClient.ts` exposes
+`createFakeMatrixClient` + `createFakeRoom` for future tests.
+
+After the refresh:
+
+- `DraupnirNavigation.test.tsx`: 1/1 cases pass.
+- `RoomView.layout.test.tsx`: 1/1 cases pass (also needed
+  `flushSync` + a `QuestSheet` mock).
+- `ClientLayout.test.tsx`: 10 of 17 cases pass. Seven cases remain
+  `it.skip` with inline explanations, all blocked on either:
+  - a richer `QuickSwitcher` test stub that simulates the
+    `<input placeholder="Search rooms, …">` + Enter/Escape/Arrow
+    handlers (5 cases: open-switcher, arrow-nav, queues-slash,
+    validation-message, /leave + /join), or
+  - assertion updates against UI shape drift (1 case:
+    threads/pins/search "Close" text), or
+  - a rewrite against the post-Workstream-B settings drawer
+    (1 case: mobile room organization).
+
+The vitest config exclude list is now empty (header comment updated
+accordingly). Coverage thresholds ratcheted to the new floor
+(statements/lines 23 / branches 62 / functions 27) against current
+actual ~23.78 / 63.80 / 27.47 measured across **843 tests / 147
+files** (up from 831 / 144 before this work).
+
+Open follow-up: when un-skipping the 7 ClientLayout cases above,
+also bump the vitest threshold floors to track the new actual
+coverage measurement.
+
 ## Open scope questions for the next session
 
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)

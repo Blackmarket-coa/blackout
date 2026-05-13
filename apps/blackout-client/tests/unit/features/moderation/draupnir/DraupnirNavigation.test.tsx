@@ -5,7 +5,6 @@ import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import type { Room } from 'matrix-js-sdk';
 import ClientLayout from '../../../../../src/app/pages/client/ClientLayout';
 import DraupnirRoutePage from '../../../../../src/app/features/moderation/draupnir/DraupnirRoutePage';
 import {
@@ -13,37 +12,14 @@ import {
     matrixClientAtom,
     userIdAtom,
 } from '../../../../../src/app/state/auth';
+import {
+    createFakeMatrixClient,
+    createFakeRoom,
+} from '../../../../helpers/fakeMatrixClient';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: ReactDOM.Root[] = [];
-
-const makeRoom = (roomId: string, name: string, powerLevel: number): Room =>
-    ({
-        roomId,
-        name,
-        getType: () => undefined,
-        getCanonicalAlias: () => `#${name}:example.org`,
-        getUnreadNotificationCount: () => 0,
-        getMyMembership: () => 'join',
-        getJoinedMembers: () => [],
-        currentState: {
-            getStateEvents: (eventType: string) => {
-                if (eventType === 'm.room.power_levels') {
-                    return {
-                        getContent: () => ({
-                            users: { '@mod:example.org': powerLevel },
-                            users_default: 0,
-                        }),
-                    };
-                }
-                if (eventType === 'm.space.child') return [];
-                if (eventType === 'm.room.pinned_events')
-                    return { getContent: () => ({ pinned: [] }) };
-                return undefined;
-            },
-        },
-    }) as unknown as Room;
 
 vi.mock('../../../../../src/app/features/moderation/draupnir/ModDashboard', () => ({
     ModDashboard: () => <h1>Draupnir Moderation Dashboard</h1>,
@@ -58,7 +34,21 @@ vi.mock('../../../../../src/app/features/deaddrop', () => ({
     useSetDeadDrop: () => () => {},
     describeDeadDropSchedule: () => '',
     getNextDeliveryDate: () => null,
-    deaddropFeature: { id: 'deaddrop', name: 'Deaddrop', customizations: [] },
+    deaddropFeature: {
+        id: 'deaddrop',
+        name: 'Deaddrop',
+        customizations: [
+            {
+                id: 'deaddrop-stub',
+                name: 'Deaddrop stub',
+                category: 'plugin',
+                capabilityGate: { flags: ['deaddrop'] as never },
+                routes: [],
+                navItems: [],
+                settings: [],
+            },
+        ],
+    },
     deaddropNavItems: [],
     deaddropRoutes: [],
     deaddropSettings: [],
@@ -125,15 +115,15 @@ describe('Draupnir moderation navigation', () => {
     });
 
     it('navigates from ClientLayout moderation entry to Draupnir dashboard route', async () => {
-        const rooms = [makeRoom('!mod:example.org', 'Moderation HQ', 100)];
-        const mockClient = {
-            getRooms: () => rooms,
-            getRoom: (roomId: string) => rooms.find((room) => room.roomId === roomId) ?? null,
-            getUser: () => ({ presence: 'online' }),
-            setAccountData: vi.fn().mockResolvedValue(undefined),
-            leave: vi.fn().mockResolvedValue(undefined),
-            joinRoom: vi.fn().mockResolvedValue({ roomId: '!joined:example.org' }),
-        };
+        const rooms = [
+            createFakeRoom({
+                roomId: '!mod:example.org',
+                name: 'Moderation HQ',
+                powerLevelUsers: { '@mod:example.org': 100 },
+                powerLevelUsersDefault: 0,
+            }),
+        ];
+        const mockClient = createFakeMatrixClient({ rooms });
 
         const store = createStore();
         store.set(authStateAtom, 'logged_in');

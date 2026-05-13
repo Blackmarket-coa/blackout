@@ -1,13 +1,17 @@
 // Vitest configuration for @blackout/client.
 //
-// The `exclude` list below quarantines pre-existing broken test files that
-// surfaced when CI was repointed from `@blackout/blackout-web` (legacy shell
-// archived 2026-05-01) to `@blackout/client`. Each entry must have a
-// matching row in
-// `docs/architecture/deferred-bodies-schedule-2026-05-01.md`
-// under "Test debt — quarantined unit tests" so the cleanup is tracked.
+// As of 2026-05-13 the file-level quarantine that surfaced when CI was
+// repointed from `@blackout/blackout-web` (archived 2026-05-01) to
+// `@blackout/client` is empty. Three previously-quarantined files
+// (DraupnirNavigation, RoomView.layout, ClientLayout) were brought back
+// online by refreshing their mocks against the current matrix-client
+// surface; seven scenario-specific cases inside ClientLayout.test.tsx
+// remain `it.skip(...)` with explanatory comments, tracked in
+// `docs/architecture/deferred-bodies-schedule-2026-05-01.md`.
 //
-// Do NOT add new entries here without also updating that doc.
+// Coverage thresholds are no-regression floors keyed to current actual
+// coverage with a small margin. Bump them in lock-step every time a
+// `it.skip` is un-skipped or new src/ code lands with tests.
 
 import { defineConfig } from 'vitest/config';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
@@ -19,19 +23,6 @@ export default defineConfig({
     // `.css.ts` ("Styles were unable to be assigned to a file").
     plugins: [vanillaExtractPlugin()],
     test: {
-        // Production-readiness audit, May 2026: enforce per-PR coverage so
-        // new client code lands with tests. Thresholds are no-regression
-        // floors keyed to the current actual coverage (~19.6 lines/stmts,
-        // ~60.1 branches, ~26.1 functions) with a small margin; ratchet up
-        // as the remaining feature-blocked quarantined tests
-        // (DraupnirNavigation, ClientLayout, RoomView.layout) come back
-        // online under Workstream A Port 1.
-        //
-        // The previous thresholds (60/55/60/60) were aspirational only — they
-        // were never enforced because @vitest/coverage-v8 was not installed
-        // and CI did not pass --coverage. Both gaps are now closed:
-        // - @vitest/coverage-v8 declared in devDependencies
-        // - .github/workflows/ci.yml unit-tests job runs `test:coverage`
         coverage: {
             provider: 'v8',
             include: ['src/**/*.{ts,tsx}'],
@@ -42,10 +33,13 @@ export default defineConfig({
                 'src/**/types.ts',
             ],
             thresholds: {
-                lines: 18,
-                functions: 25,
-                branches: 58,
-                statements: 18,
+                // Current actual coverage (843 tests, 147 files):
+                //   statements/lines ~23.78, branches ~63.80, functions ~27.47
+                // Floors set ~1pp below current to absorb measurement noise.
+                lines: 23,
+                functions: 27,
+                branches: 62,
+                statements: 23,
             },
             reporter: ['text', 'lcov'],
         },
@@ -54,13 +48,6 @@ export default defineConfig({
             '**/node_modules/**',
             '**/dist/**',
             '**/.{idea,git,cache,output,temp}/**',
-            // Quarantined pre-existing broken files (see deferred-bodies-schedule):
-            // ClientLayout / DraupnirNavigation / RoomView.layout assert against a
-            // shell + adapter surface still being landed under Workstream A Port 1
-            // (current mocks predate `useLegacyRoomAdapter` + `useCoalitionState`).
-            'tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx',
-            'tests/unit/pages/client/ClientLayout.test.tsx',
-            'tests/unit/features/room/RoomView.layout.test.tsx',
         ],
     },
 });
