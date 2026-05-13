@@ -120,12 +120,14 @@ Captured during the 2026-05-13 walkthrough of this review:
 | T5-05 | Workstream F stage channels: ship inside Phase 4 or carve to Phase 5? | **Phase 4** | No deferral; stage channels are part of the polish/closing pass. |
 | T6-01 | `MIGRATION_INVENTORY.md` vs `deferred-bodies-schedule-2026-05-01.md` reconciliation | **Pick the latest (= deferred-bodies-schedule is canonical)** | `MIGRATION_INVENTORY.md` is marked historical/archival with a pointer banner; `audit/phase0/` and `scripts/migration/phase0_audit.sh` remain canonical for Phase 0 traceability. |
 
-Still open (asked but not yet decided):
+Additional decisions captured the same session:
 
-- **T2-01** — produce the four solarpunk SVGs vs. accept placeholder leading icons and remove the TODO.
-- **T2-02** — add `StreamRecord.den_id` schema + migration vs. scope-cut the chat/shelf overlay from the v1 livestream viewer.
-- **T3-01** — legacy-shell archive push (`archive/element-web-fork`, `v0-element-fork`) status owner and timing; also whether Phase 1 destructive cleanup is still planned given the in-place Workstream A path.
-- **T4-01** — start Workstream A Port 1 (canonical `ClientLayout` rewire) now, or hold.
+| ID | Question | Decision | Notes |
+| --- | --- | --- | --- |
+| T2-01 | `QuestionSize.tsx` solarpunk SVGs vs. drop the TODO | **Produce the SVGs (design ticket)** | Design owns delivery of `q1-size-{trio\|small\|medium\|constellation}.svg` under `public/res/svg/playbook/`. TODO remains in code as a tracking marker until assets land; `leadingIcon` prop is already plumbed through `QuestionCardList`. |
+| T2-02 | Add `StreamRecord.den_id` vs. scope-cut the livestream chat/shelf | **Add it** | New column on `StreamRecord` (server-side schema + migration under `packages/api/src/db/migrations/`) so `LivestreamViewer.tsx:134` can wire the den chat overlay + product shelf. Tracked as a follow-up work item; not in Port 1 scope. |
+| T3-01 | Legacy-shell archive push status | **Superseded by Workstream A** | The Phase 0 archive push (`archive/element-web-fork`, `v0-element-fork`) is no longer a blocker because the destructive Phase 1 cleanup it guarded is replaced by the in-place Workstream A path. Local archive branch + tag + `audit/phase0/` artifacts remain canonical for traceability. `PHASE0_STATUS.md` updated with a banner. |
+| T4-01 | Start Workstream A Port 1 now? | **Start now** | Branch `claude/review-unfinished-items-bLx3q` carries the implementation work. See Workstream A Port 1 scope in `deferred-bodies-schedule-2026-05-01.md`. |
 
 ## 7. Verification commands
 

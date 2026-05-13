@@ -1,5 +1,17 @@
 # PHASE0_STATUS
 
+> **Status (2026-05-13): superseded.** The "Required next steps" archive
+> push at the bottom of this document is no longer a blocker. The
+> in-place Workstream A path in
+> [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md)
+> replaces the destructive Phase 1 cleanup that the archive push was
+> guarding. The local `archive/element-web-fork` branch + `v0-element-fork`
+> tag (and the `audit/phase0/` artifacts) remain canonical for
+> traceability, but no remote-push action is required to unblock
+> further work. See
+> [`docs/audits/unfinished_items_review_2026_05.md`](docs/audits/unfinished_items_review_2026_05.md)
+> §"Decisions log" (T3-01) for the reconciliation decision.
+
 This file tracks implementation of **Phase 0 — Preserve and Audit** from the migration plan.
 
 ## Completed in-repo
