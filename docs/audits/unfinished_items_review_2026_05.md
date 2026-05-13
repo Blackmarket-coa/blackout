@@ -68,9 +68,16 @@ original Port 1 scope is **already landed**:
 
 What **still remains** in Port 1's literal scope:
 
-- ~~**`WorkspaceTabBar`**~~ — **landed on this branch.** New component at `apps/blackout-client/src/app/pages/shell/WorkspaceTabBar.tsx` consumes `kind: 'workspace'` panels via `RegistryTabBar`, scoped by top-level path segment so it acts as intra-destination navigation (e.g. on `/governance/*` shows `Governance / Meetings / Treasury`). Mounted in `AppShell.tsx` desktop view as the first child of `<main>`. Five new tests in `AppShell.test.tsx`: composition for governance routes, active state on `/governance/meetings` with sibling-route isolation, null on root, capability-gated null when capabilities absent, no-render on mobile viewport.
-- **`DynamicRightPanel` registry adoption** — `DynamicRightPanel.tsx` currently switch-renders on `rightPanelDescriptorAtom` with hardcoded placeholder bodies (`community-info`, `product-detail`, `livestream-chat`, etc.). Wiring it to consume feature `kind: 'right-panel'` entries (e.g. `governanceRightPanelTabs`) is a separate sub-port; the descriptor model itself is sound.
+- ~~**`WorkspaceTabBar`**~~ — **landed on this branch.** New component at `apps/blackout-client/src/app/pages/shell/WorkspaceTabBar.tsx` consumes `kind: 'workspace'` panels via `RegistryTabBar`, scoped by top-level path segment so it acts as intra-destination navigation (e.g. on `/governance/*` shows `Governance / Meetings / Treasury`). Mounted in `AppShell.tsx` desktop view as the first child of `<main>`. Five tests in `AppShell.test.tsx`.
+- ~~**`DynamicRightPanel` registry adoption**~~ — **landed on this branch.** New component at `apps/blackout-client/src/app/pages/shell/RightPanelTabBar.tsx` consumes `kind: 'right-panel'` panels via `RegistryTabBar`, scoped by top-level path segment. Mounted inside `DynamicRightPanel.tsx` above the descriptor body; the panel now renders when either the descriptor is set OR matching registry entries exist. The legacy-room and none+empty-registry cases still short-circuit to null. Four tests in `AppShell.test.tsx`. Active-state caveat documented in `RightPanelTabBar.tsx`: query-param-based entries (e.g. `to: '/governance?tab=active'`) won't highlight until query-aware matching lands; pure-path entries (`/governance/new`) highlight correctly.
 - **`ClientLayout.tsx`'s own room-inspector right panel** (`BASE_RIGHT_PANELS` at line 72-78: `members | threads | pins | search | governance | roles`) is intentionally **not** a candidate for shell-panel-kind replacement — these are local UI state for the room view, not registry-driven destinations. Verified via type definitions (`RightPanelType` in `state/navigation.ts`) and call sites.
+
+**Port 1 status: CLOSED** as of this branch. All three deferred-bodies-schedule exit criteria are satisfied:
+1. ✓ `showAdminEntry` retired; `composeAdminEntries`/`hasAdminEntries` are the canonical replacements; no ad-hoc admin-gate booleans remain.
+2. ✓ Workspace tabs (`WorkspaceTabBar`) and mobile rail (`BottomTabBar`) both consume the registry composer.
+3. ✓ Router-integration tests assert one active-tab state per canonical destination (Home/Communities/Create/Market/Inbox) plus mode resolution for the schedule-cited `/direct` and `/explore` sub-routes.
+
+Bonus beyond the schedule's literal scope: registry adoption for `kind: 'right-panel'` panels via `RightPanelTabBar` mounted in `DynamicRightPanel`, with capability-gated composition.
 
 | ID | Port | Estimate | Status / Scope summary |
 | --- | --- | --- | --- |

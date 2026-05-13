@@ -50,6 +50,7 @@ const renderShell = (initialPath: string, options: RenderShellOptions = {}) => {
                     { path: '/direct', element: <DirectStub /> },
                     { path: '/explore', element: <ExploreStub /> },
                     { path: '/governance', element: <GovernanceStub /> },
+                    { path: '/governance/new', element: <GovernanceStub /> },
                     {
                         path: '/governance/meetings',
                         element: <GovernanceMeetingsStub />,
@@ -359,6 +360,104 @@ describe('AppShell', () => {
 
             const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
             expect(bar).toBeNull();
+        });
+    });
+
+    describe('RightPanelTabBar (desktop right-panel registry consumption)', () => {
+        const GOVERNANCE_CAPS = [
+            'governance.read',
+            'governance.meetings.schedule',
+            'governance.treasury.read',
+        ];
+
+        beforeEach(() => {
+            setDesktopViewport();
+        });
+
+        it('renders governance right-panel tabs inside the panel on /governance', async () => {
+            const { router, container, root, store } = renderShell('/governance', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const aside = container.querySelector('[data-shell-region="right-panel"]');
+            expect(aside).not.toBeNull();
+
+            const bar = container.querySelector(
+                '[data-testid="app-shell-right-panel-tab-bar"]'
+            );
+            expect(bar).not.toBeNull();
+
+            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map(
+                (el) => el.getAttribute('data-panel-id')
+            );
+            expect(panelIds).toEqual([
+                'governance.right-panel.active',
+                'governance.right-panel.past',
+                'governance.right-panel.create',
+                'governance.right-panel.my-votes',
+                'governance.right-panel.results',
+            ]);
+        });
+
+        it('marks Create active on /governance/new (pure-path entry)', async () => {
+            const { router, container, root, store } = renderShell('/governance/new', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const active = container.querySelector(
+                '[data-shell-region="right-panel-tab-bar"] [data-panel-id="governance.right-panel.create"][aria-current="page"]'
+            );
+            expect(active).not.toBeNull();
+        });
+
+        it('does not render the shell-level right panel on root path (no descriptor, no registry tabs)', async () => {
+            const { router, container, root, store } = renderShell('/', {
+                capabilities: GOVERNANCE_CAPS,
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const aside = container.querySelector('[data-shell-region="right-panel"]');
+            expect(aside).toBeNull();
+        });
+
+        it('does not render the right panel on /governance when capabilities are absent', async () => {
+            const { router, container, root, store } = renderShell('/governance', {
+                capabilities: [],
+            });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <RouterProvider router={router} />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            const aside = container.querySelector('[data-shell-region="right-panel"]');
+            expect(aside).toBeNull();
         });
     });
 });
