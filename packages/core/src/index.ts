@@ -14,3 +14,5 @@ export * from './apps';
 
 export * from './coalition';
 export * from './coliseum';
+
+export * from './redaction';

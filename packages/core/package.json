@@ -17,6 +17,7 @@
     "typescript": "5.9.3"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./redaction": "./src/redaction/index.ts"
   }
 }
