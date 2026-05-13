@@ -80,13 +80,16 @@
     "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs",
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
-    "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment"
+    "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
-    "@electric-sql/pglite": "^0.3.9"
+    "@electric-sql/pglite": "^0.3.9",
+    "@playwright/test": "^1.58.2"
   },
   "pnpm": {
     "overrides": {

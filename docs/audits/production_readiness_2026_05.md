@@ -34,7 +34,7 @@ The CI guard surface is unusually strong (33 workflows, 40+ `tools/ci/check-*.mj
 
 **Original recommendation (preserved for traceability):** Hold the GO decision in `tools/ci/check-blackout-client-release-gate.mjs` until **Phase 1** (edge hardening) and **Phase 4** (observability) close. Phases 2, 3, 5, 6 are required for sustained operation but do not block first launch behind a Cloudflare Tunnel with a single replica.
 
-**2026-05-13 replay recommendation:** the original HOLD gates (Phase 1 + Phase 4) are Closed. All four Critical gaps (BL-PR-01/02/03 + observability surface in BL-PR-04) are Closed; Phase 3 (BL-PR-05/06) and Phase 6 (BL-PR-09/10) are Closed; Phase 5 (BL-PR-07/08) is partially Closed (load tests + coverage thresholds in, Playwright still not wired into `.github/workflows/ci.yml`). **GO posture supported** for first production launch behind Cloudflare Tunnel / Compose / Railway with the documented carryover items in §9 tracked as post-launch hardening. The release-gate check at `tools/ci/check-blackout-client-release-gate.mjs` should be allowed to proceed once a staging signoff record exists; nothing in the current gap register blocks it at the code level.
+**2026-05-13 replay recommendation:** the original HOLD gates (Phase 1 + Phase 4) are Closed. All four Critical gaps (BL-PR-01/02/03 + observability surface in BL-PR-04) are Closed; Phase 3 (BL-PR-05/06), Phase 5 (BL-PR-07/08), and Phase 6 (BL-PR-09/10) are Closed. After the late-day follow-up commit, BL-PR-07 closure shipped (smoke spec + chromium e2e job in CI) and BL-PR-11 closure shipped (placeholder cleared in `apps/blackout-server/.env.example`). The only remaining carryover from the gap register is the BL-PR-07 coverage-threshold ratchet, which is gated on the 7 quarantined client tests landing fixes per the deferred-bodies schedule — that is iterative work, not a launch blocker. **GO posture supported** for first production launch behind Cloudflare Tunnel / Compose / Railway with the §9 carryover items tracked as post-launch hardening. The release-gate check at `tools/ci/check-blackout-client-release-gate.mjs` should be allowed to proceed once a staging signoff record exists; nothing in the current gap register blocks it at the code level.
 
 ---
 
@@ -73,11 +73,11 @@ The two rightmost columns record the 2026-05-13 replay status against
 | BL-PR-04 | High | All | No `/metrics`, no tracing, no error tracking despite Prometheus/Grafana under `deploy/docker/production/monitoring/` and OTel stub `deploy/kubernetes/phase4/opentelemetry.yaml` | grep across `packages/api`, `apps/blackout-client` | 4 | Closed | `packages/api/src/index.ts:174-193` serves `/metrics` (token-gated via `INTERNAL_METRICS_TOKEN`; refuses 503 in production when unset). `packages/api/src/telemetry/metrics.ts` has full Prometheus exposition (counters, gauges, histograms; 11 default instruments including http/auth/mail/rate-limit/refresh-reuse/marketplace). `initTracing()` + `initErrorReporter()` invoked at boot (`index.ts:202-203`). Alerts/dashboards added by `f800cc5` (see §6). |
 | BL-PR-05 | High | All | Migrations are forward-only SQL; no `.down.sql`; the `migrate` package script is a `console.log` no-op | `packages/api/src/db/migrations/00{1..6}_*.sql`; `packages/api/package.json` "migrate" | 3 | Closed | `packages/api/package.json:14-17` — `migrate*` scripts now run `tsx src/db/migrate.ts up\|down\|status`. Every migration 007–019 ships matching `.up.sql` + `.down.sql` (e.g. `007_auth_lifecycle.{up,down}.sql`). `pnpm guard:db-migrations` exits 0 (19 migrations; latest `019_obs_ws_passwords`). Original 001–006 remain forward-only by design (baseline schema). |
 | BL-PR-06 | High | All | No verifiable PITR restore runbook; `.github/workflows/dr-backup-verification.yml` does not actually restore | `dr-backup-verification.yml`; `docs/operations/evidence/2026-02-20-…recovery-drill.md` | 3 | Closed | `.github/workflows/dr-backup-verification.yml` now spins up a real Postgres 16 service, runs `pnpm --filter @blackout/api migrate:up` against it, executes `tools/ci/verify-migrations-ephemeral.mjs` for the round-trip, then asserts via psql heredoc that `schema_migrations` is monotonic and that `users`/`refresh_tokens`/`password_reset_tokens`/`revoked_sessions` exist. Runbook at `docs/operations/runbooks/postgres_restore_drill.md`. |
-| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 | Partial | Coverage thresholds added in `apps/blackout-client/vitest.config.ts:26-42` (lines/funcs/stmts 60, branches 55). Playwright is **still not** wired into `.github/workflows/ci.yml` (grep `playwright\|e2e` returns no match in that file). Quarantined-tests list grew from 6 → 7 (added `monetizationRegistrySafetyMatrix`, `RoomView.layout`, two parity tests; removed earlier entries). Carryover — see §9. |
+| BL-PR-07 | High | All | Playwright configured but not wired into `.github/workflows/ci.yml`; no Vitest coverage thresholds; 6 quarantined client tests | `playwright.config.ts`, `apps/blackout-client/vitest.config.ts:22-44` | 5 | Closed (with carryover) | Coverage thresholds in `apps/blackout-client/vitest.config.ts:26-42` (lines/funcs/stmts 60, branches 55). 2026-05-13: legacy Cinny-era `playwright.config.ts` replaced with a fresh root config targeting `apps/blackout-client/tests/e2e/` via `vite preview`; smoke spec at `apps/blackout-client/tests/e2e/shell.spec.ts` (title + React-root + console-error guards); `@playwright/test ^1.58.2` added to root devDependencies; new `e2e-smoke` job in `.github/workflows/ci.yml` builds the client, installs chromium, runs the suite, and uploads the report on failure. Quarantine list (7 entries in `vitest.config.ts:48-62`) tracked separately under `docs/architecture/deferred-bodies-schedule-2026-05-01.md` — coverage-threshold ratchet remains carryover. |
 | BL-PR-08 | Medium | All | No load tests (k6/Artillery/autocannon); no documented latency/throughput SLOs | none found | 5 | Closed | `load/k6/{auth,health,rate-limit}.js` ship as k6 scripts. `.github/workflows/load.yml` is a nightly schedule (cron `0 4 * * *`) that brings up postgres+redis services, applies migrations, and runs the k6 suite against the in-job api. |
 | BL-PR-09 | Medium | k8s, Compose | k8s is YAML only; no Helm/Terraform; production deploy is a manual `workflow_dispatch` with no canary or blue/green | `.github/workflows/deploy-compose-prod.yml`; `deploy/kubernetes/phase{4,5,6}/*.yaml` | 6 | Closed | `deploy/helm/blackout/{Chart.yaml,values.yaml,templates/api.yaml,templates/external-secrets.yaml}` ship; `deploy/docker/production/docker-compose.canary.yml` brings up a side-by-side `app_canary` replica for Caddy weighted-round-robin. `deploy-compose-prod.yml` now has canary/promote/full modes; `tools/ci/post-deploy-verify.mjs` runs in each. Enforced by `tools/ci/check-deployment-readiness.mjs` (`pnpm guard:deployment-readiness` exits 0). |
 | BL-PR-10 | Medium | All | No external-secrets integration; JWT rotation supported in code (`JWT_SECRET_ROLLOVER`) but no operational runbook | `packages/api/src/services/auth.ts:46` | 6 | Closed | `deploy/helm/blackout/templates/external-secrets.yaml` declares a real `ExternalSecret` (apiVersion `external-secrets.io/v1beta1`) with `ClusterSecretStore` ref + remoteRefs from values. `docs/operations/runbooks/jwt_rotation.md` documents 5-step rotation (generate, stage in secret store, rolling restart, verify with metrics, sunset old key) plus a compromise-scenario branch. |
-| BL-PR-11 | Medium | All | `apps/blackout-server/.env.example` ships `JWT_SECRET=change-me` — would be rejected at startup but is a confusing default | `apps/blackout-server/.env.example` | 1 | Open | `apps/blackout-server/.env.example:8` still contains literal `JWT_SECRET=change-me`. `pnpm guard:auth-secrets` does not flag this because it scans for code-level fallback patterns (`process.env.JWT_SECRET ?? '…'`) and not `.env.example` documentation. Cosmetic but invites operator confusion — see §9 carryover. |
+| BL-PR-11 | Medium | All | `apps/blackout-server/.env.example` ships `JWT_SECRET=change-me` — would be rejected at startup but is a confusing default | `apps/blackout-server/.env.example` | 1 | Closed | 2026-05-13: `apps/blackout-server/.env.example:8` placeholder cleared to empty (`JWT_SECRET=`); the comment block above it now explicitly says leaving it blank is safer than shipping a placeholder a deployer might forget to replace. The Hono API still rejects empty/weak values at startup via `runSecurityPreflight()`. |
 | BL-PR-12 | Low | All | `packages/api/.env.example` ships both `JWT_SECRET_PRIMARY` and legacy `JWT_SECRET` — duplication invites drift | `packages/api/.env.example` | 1 | Closed | `packages/api/.env.example:39-43` now contains only `JWT_SECRET_PRIMARY` as an uncommented value; legacy `JWT_SECRET` is referenced only in the comment that warns "do not set both in new deploys". |
 
 ---
@@ -114,10 +114,10 @@ The two rightmost columns record the 2026-05-13 replay status against
 
 ## 5. Remediation roadmap (summary)
 
-**2026-05-13 update:** Phases 1, 2, 3, 4, and 6 are Closed against the
-original gap register; Phase 5 is Partial (load + coverage gates in,
-Playwright in CI still pending). Per-row status is in §3; replay
-evidence is in §9.
+**2026-05-13 update:** Phases 1, 2, 3, 4, 5, and 6 are Closed against the
+original gap register. The only remaining work is the BL-PR-07 coverage
+ratchet, which depends on the 7 quarantined client tests landing fixes.
+Per-row status is in §3; replay evidence is in §9.
 
 Phases are dependency-ordered; each phase ships as an independent commit series and is independently revertable. See `/root/.claude/plans/do-a-production-readiness-swift-church.md` for the full plan. Concise summary:
 
@@ -142,7 +142,7 @@ Phases are dependency-ordered; each phase ships as an independent commit series 
 | BL-PR-04 | `packages/api/src/telemetry/__tests__/metrics.test.ts`; OTel collector log inspection in compose; Sentry test event. Closeout `f800cc5` adds `docs/operations/alerts/{auth,email,payments}-alert-rules.yaml` + `docs/operations/dashboards/{payments,email_delivery}_dashboard.json` + `tools/ci/check-ops-artifacts.mjs` — present (2026-05-13). |
 | BL-PR-05 | `tools/ci/check-db-migrations.mjs` extension — present (2026-05-13); `tools/ci/verify-migrations-ephemeral.mjs` round-trip — present (2026-05-13). |
 | BL-PR-06 | `.github/workflows/dr-backup-verification.yml` — actual restore + row-count assertion — present (2026-05-13). |
-| BL-PR-07 | New `e2e` job in `.github/workflows/ci.yml` — **not present (2026-05-13)**; coverage threshold in `apps/blackout-client/vitest.config.ts` — present (2026-05-13). |
+| BL-PR-07 | New `e2e-smoke` job in `.github/workflows/ci.yml` — present (2026-05-13, late-day follow-up); fresh `playwright.config.ts` + `apps/blackout-client/tests/e2e/shell.spec.ts` + `@playwright/test` dep — present; coverage threshold in `apps/blackout-client/vitest.config.ts` — present (2026-05-13). |
 | BL-PR-08 | `.github/workflows/load.yml` nightly k6 with `http_req_duration p(95)<300`, error rate <1% — present (2026-05-13). |
 | BL-PR-09 | `helm template deploy/helm/blackout` clean render — chart present (2026-05-13); canary stage in `deploy-compose-prod.yml` — present (2026-05-13); `tools/ci/post-deploy-verify.mjs` wired into canary/promote/full — present (2026-05-13). |
 | BL-PR-10 | `deploy/kubernetes/phase4/external-secrets.yaml` — Helm `templates/external-secrets.yaml` present (2026-05-13); `docs/operations/runbooks/jwt_rotation.md` — present (2026-05-13). |
@@ -246,35 +246,45 @@ commit; running it again would be ~3 min for no new signal.
 | BL-PR-04 — observability | Closed (token-gated `/metrics`, alert YAML + dashboards, tracing + error reporter init) |
 | BL-PR-05 — migrations + down.sql | Closed (real `migrate.ts`; `.down.sql` from 007 onward) |
 | BL-PR-06 — DR restore drill | Closed (real Postgres-in-CI + schema assertions) |
-| BL-PR-07 — e2e + coverage | Partial (coverage thresholds in; Playwright in CI still missing) |
+| BL-PR-07 — e2e + coverage | Closed with carryover (chromium e2e job + smoke spec; coverage ratchet pending quarantine cleanup) |
 | BL-PR-08 — load tests | Closed (`load/k6/*.js` + nightly `load.yml`) |
 | BL-PR-09 — Helm + canary | Closed (Helm chart + canary compose + post-deploy verify wired) |
 | BL-PR-10 — external-secrets + rotation runbook | Closed (`templates/external-secrets.yaml` + `runbooks/jwt_rotation.md`) |
-| BL-PR-11 — `.env.example` `JWT_SECRET=change-me` | Open (cosmetic) |
+| BL-PR-11 — `.env.example` `JWT_SECRET=change-me` | Closed (placeholder cleared) |
 | BL-PR-12 — duplicate JWT_SECRET keys | Closed (only `JWT_SECRET_PRIMARY` uncommented) |
 
 ### Carryover items (post-launch hardening)
 
-1. **BL-PR-07 (Playwright in CI)** — add an `e2e` job to
-   `.github/workflows/ci.yml` that runs `playwright.config.ts` against
-   a built client. Next action: scaffold the job and gate it on the
-   release-gate guard; ratchet the `vitest.config.ts` coverage
-   thresholds up as the 7 quarantined client tests in
-   `apps/blackout-client/vitest.config.ts:48-62` land fixes per the
-   `docs/architecture/deferred-bodies-schedule-2026-05-01.md` schedule.
-2. **BL-PR-11 (`.env.example` placeholder)** — replace literal
-   `JWT_SECRET=change-me` in `apps/blackout-server/.env.example:8` with
-   `JWT_SECRET=` (empty + a comment that the api refuses to boot
-   without a strong value). Cosmetic but cheap.
-3. **Cluster-side observability wiring** — see §7 2026-05-13 update.
+Closed in the 2026-05-13 late-day follow-up:
+
+- **BL-PR-07 (Playwright in CI)** — root `playwright.config.ts` rewritten
+  to target `apps/blackout-client/tests/e2e/`; smoke spec
+  `shell.spec.ts` (title + React-root + console-error guards);
+  `@playwright/test ^1.58.2` added to root `devDependencies`; new
+  `e2e-smoke` job in `.github/workflows/ci.yml` builds the client,
+  installs chromium, runs the suite, and uploads the report on
+  failure.
+- **BL-PR-11 (`.env.example` placeholder)** — `JWT_SECRET=change-me`
+  in `apps/blackout-server/.env.example:8` replaced with empty
+  `JWT_SECRET=` and a comment block explaining why blank is safer
+  than a placeholder.
+
+Open carryover (still post-launch hardening):
+
+1. **BL-PR-07 coverage ratchet** — bump
+   `apps/blackout-client/vitest.config.ts` thresholds above the
+   current 60/55 floor as the 7 quarantined client tests in
+   `vitest.config.ts:48-62` land fixes per
+   `docs/architecture/deferred-bodies-schedule-2026-05-01.md`.
+2. **Cluster-side observability wiring** — see §7 2026-05-13 update.
    Tracked as operator work rather than a code gap.
-4. **SMTP fallback for the mailer** — see §7. Defer; document the
+3. **SMTP fallback for the mailer** — see §7. Defer; document the
    manual failover path in the email alert runbook.
-5. **`POST_DEPLOY_BEARER` for authed post-deploy verification** —
+4. **`POST_DEPLOY_BEARER` for authed post-deploy verification** —
    provision the bearer in the deploy environment before the next
    promote so authed surfaces are exercised by
    `tools/ci/post-deploy-verify.mjs`.
-6. **`guard:ops-artifacts` environment hint** — install one of
+5. **`guard:ops-artifacts` environment hint** — install one of
    `yaml`/`js-yaml` in the root `devDependencies` (or document the
    prerequisite) so a fresh checkout can run the guard without
    surprise. Not a production gap; CI already provisions it.
