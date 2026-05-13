@@ -108,7 +108,26 @@ When Tier 4 starts, these are ready to wire against (no need to build):
 - Shared test helpers `createFakeMatrixClient` + `createFakeRoom` at `apps/blackout-client/tests/helpers/fakeMatrixClient.ts`
 - `buildQuickSwitcherIndex` + `rankQuickSwitcherResults` (T5-05 partial)
 
-## 6. Verification commands
+## 6. Decisions log
+
+Captured during the 2026-05-13 walkthrough of this review:
+
+| ID | Question | Decision | Notes |
+| --- | --- | --- | --- |
+| T5-01 | `@blackout/ui` v1 primitives styling approach | **vanilla-extract** | Consistent with `apps/blackout-client`'s existing styling stack; no new build infra. |
+| T5-03 | Workstream D GIF picker provider | **Giphy** | Provider lock-in implies Giphy SDK + API key in `packages/api` config; ToS review still required before rollout. |
+| T5-04 | Workstream E AutoMod appservice ownership | **Option 3 — adopt Draupnir/Mjolnir (OSS)** | The repo already ships client UI for this path (BKL-009 Mjolnir Settings, un-quarantined `DraupnirNavigation.test.tsx`). Platform/infra commits to deploying + on-calling the Draupnir sidecar (Helm chart, secrets, log routing). |
+| T5-05 | Workstream F stage channels: ship inside Phase 4 or carve to Phase 5? | **Phase 4** | No deferral; stage channels are part of the polish/closing pass. |
+| T6-01 | `MIGRATION_INVENTORY.md` vs `deferred-bodies-schedule-2026-05-01.md` reconciliation | **Pick the latest (= deferred-bodies-schedule is canonical)** | `MIGRATION_INVENTORY.md` is marked historical/archival with a pointer banner; `audit/phase0/` and `scripts/migration/phase0_audit.sh` remain canonical for Phase 0 traceability. |
+
+Still open (asked but not yet decided):
+
+- **T2-01** — produce the four solarpunk SVGs vs. accept placeholder leading icons and remove the TODO.
+- **T2-02** — add `StreamRecord.den_id` schema + migration vs. scope-cut the chat/shelf overlay from the v1 livestream viewer.
+- **T3-01** — legacy-shell archive push (`archive/element-web-fork`, `v0-element-fork`) status owner and timing; also whether Phase 1 destructive cleanup is still planned given the in-place Workstream A path.
+- **T4-01** — start Workstream A Port 1 (canonical `ClientLayout` rewire) now, or hold.
+
+## 7. Verification commands
 
 These confirm the survey itself; rerun them on later branches to validate the open carry list has not grown:
 
