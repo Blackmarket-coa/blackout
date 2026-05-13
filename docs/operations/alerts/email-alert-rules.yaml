@@ -62,3 +62,19 @@ groups:
           description: |
             Slow provider responses inflate registration latency since the verification email
             is fired inline. If sustained, consider moving the dispatch into a worker queue.
+
+      - alert: MailFailoverActive
+        expr: mail_failover_primary_active == 0
+        for: 10m
+        labels:
+          severity: warning
+          surface: email
+        annotations:
+          summary: Mailer auto-failover routed to SMTP fallback.
+          description: |
+            The resend → smtp circuit breaker tripped because the primary transport exceeded
+            MAIL_FAILOVER_FAILURE_THRESHOLD consecutive failures. The breaker will probe
+            primary again after MAIL_FAILOVER_COOLDOWN_MS. If this fires repeatedly the
+            primary provider is in a sustained outage — check Resend status, API key
+            validity, and DNS records, and consider extending the cooldown or pinning
+            MAIL_PROVIDER=smtp until the upstream incident resolves.

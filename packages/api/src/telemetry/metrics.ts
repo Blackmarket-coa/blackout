@@ -279,4 +279,15 @@ export const marketplaceWebhooksTotal = new Counter(
   ['provider', 'outcome'],
 );
 
+export const mailFailoverStateChangesTotal = new Counter(
+  'mail_failover_state_changes_total',
+  'Transitions of the mailer failover breaker between closed/half-open/open.',
+  ['from', 'to'],
+);
+
+export const mailFailoverPrimaryActive = new Gauge(
+  'mail_failover_primary_active',
+  'Set to 1 when the primary mailer (resend) is the currently-routed transport, 0 when failed over to the fallback (smtp).',
+);
+
 export const __test__ = { Registry };

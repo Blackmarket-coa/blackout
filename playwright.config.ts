@@ -1,96 +1,40 @@
-/*
-Copyright 2024 New Vector Ltd.
-Copyright 2023 The Matrix.org Foundation C.I.C.
+import { defineConfig, devices } from '@playwright/test';
 
-SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
-Please see LICENSE files in the repository root for full details.
-*/
+// End-to-end smoke layer for the Blackout web client. Keeps a small surface
+// area on purpose — the unit / integration suites live under
+// apps/blackout-client/tests/{unit,smoke}; this layer is the canary that
+// proves a built bundle still boots in a real browser.
 
-import { defineConfig, devices } from "@playwright/test";
+const PORT = Number.parseInt(process.env.E2E_PORT ?? '4173', 10);
+const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
-import { type WorkerOptions } from "./playwright/services";
-
-const baseURL = process.env["BASE_URL"] ?? "http://localhost:8080";
-
-const chromeProject = {
-    ...devices["Desktop Chrome"],
-    channel: "chromium",
-    permissions: ["clipboard-write", "clipboard-read", "microphone"],
-    launchOptions: {
-        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--mute-audio"],
+export default defineConfig({
+  testDir: 'apps/blackout-client/tests/e2e',
+  outputDir: 'apps/blackout-client/playwright-report/test-results',
+  reporter: process.env.CI
+    ? [['github'], ['list']]
+    : [['html', { outputFolder: 'apps/blackout-client/playwright-report/html', open: 'never' }]],
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  workers: 1,
+  use: {
+    baseURL,
+    viewport: { width: 1280, height: 720 },
+    trace: 'on-first-retry',
+    video: 'retain-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
-};
-
-export default defineConfig<WorkerOptions>({
-    projects: [
-        {
-            name: "Chrome",
-            use: {
-                ...chromeProject,
-            },
-        },
-        {
-            name: "Firefox",
-            use: {
-                ...devices["Desktop Firefox"],
-                launchOptions: {
-                    firefoxUserPrefs: {
-                        "permissions.default.microphone": 1,
-                    },
-                },
-                // This is needed to work around an issue between Playwright routes, Firefox, and Service workers
-                // https://github.com/microsoft/playwright/issues/33561#issuecomment-2471642120
-                serviceWorkers: "block",
-            },
-            ignoreSnapshots: true,
-        },
-        {
-            name: "WebKit",
-            use: {
-                ...devices["Desktop Safari"],
-                // Seemingly WebKit has the same issue as Firefox in Playwright routes not working
-                // https://playwright.dev/docs/network#missing-network-events-and-service-workers
-                serviceWorkers: "block",
-            },
-            ignoreSnapshots: true,
-        },
-        {
-            name: "Dendrite",
-            use: {
-                ...chromeProject,
-                homeserverType: "dendrite",
-            },
-            ignoreSnapshots: true,
-        },
-        {
-            name: "Pinecone",
-            use: {
-                ...chromeProject,
-                homeserverType: "pinecone",
-            },
-            ignoreSnapshots: true,
-        },
-    ],
-    use: {
-        viewport: { width: 1280, height: 720 },
-        ignoreHTTPSErrors: true,
-        video: "retain-on-failure",
-        baseURL,
-        trace: "on-first-retry",
-    },
-    webServer: {
-        command: process.env.CI ? "npx serve -p 8080 -L ./webapp" : "yarn start",
-        url: `${baseURL}/config.json`,
-        reuseExistingServer: true,
-        timeout: (process.env.CI ? 30 : 120) * 1000,
-        stdout: "pipe",
-    },
-    testDir: "playwright/e2e",
-    outputDir: "playwright/test-results",
-    workers: 1,
-    retries: process.env.CI ? 2 : 0,
-    reporter: process.env.CI ? [["blob"], ["github"]] : [["html", { outputFolder: "playwright/html-report" }]],
-    snapshotDir: "playwright/snapshots",
-    snapshotPathTemplate: "{snapshotDir}/{testFilePath}/{arg}-{platform}{ext}",
-    forbidOnly: !!process.env.CI,
+  ],
+  webServer: {
+    command: `pnpm --filter @blackout/client exec vite preview --port ${PORT} --host 127.0.0.1 --strictPort`,
+    url: baseURL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
 });

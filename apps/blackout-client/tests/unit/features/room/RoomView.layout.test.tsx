@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
+import { flushSync } from 'react-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ReactDOM from 'react-dom/client';
 import { RoomView } from '../../../../src/app/features/room/RoomView';
@@ -38,6 +39,9 @@ vi.mock('../../../../src/app/hooks/useRoomPermissions', () => ({
     useRoomPermissions: () => ({ event: () => true }),
 }));
 vi.mock('../../../../src/app/hooks/useRoomCreators', () => ({ useRoomCreators: () => [] }));
+vi.mock('../../../../src/app/features/quests/QuestSheet', () => ({
+    QuestSheet: () => <div data-testid="quest-sheet" />,
+}));
 
 const mountedRoots: ReactDOM.Root[] = [];
 
@@ -52,8 +56,10 @@ describe('RoomView baseline parity', () => {
         document.body.appendChild(container);
         const root = ReactDOM.createRoot(container);
 
-        root.render(<RoomView room={{ roomId: '!room:example.org' } as never} />);
         mountedRoots.push(root);
+        flushSync(() => {
+            root.render(<RoomView room={{ roomId: '!room:example.org' } as never} />);
+        });
 
         const timeline = container.querySelector('[data-testid="room-timeline"]');
         const composer = container.querySelector('[data-testid="room-composer"]');

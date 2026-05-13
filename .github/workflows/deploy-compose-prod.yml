@@ -84,6 +84,8 @@ jobs:
       - name: Post-deploy verification (canary)
         env:
           POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
         run: |
           if [ -z "$POST_DEPLOY_BASE_URL" ]; then
             echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
@@ -122,6 +124,8 @@ jobs:
       - name: Post-deploy verification (promote)
         env:
           POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
         run: |
           if [ -z "$POST_DEPLOY_BASE_URL" ]; then
             echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
@@ -168,6 +172,8 @@ jobs:
       - name: Post-deploy verification (full rollout)
         env:
           POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
         run: |
           if [ -z "$POST_DEPLOY_BASE_URL" ]; then
             echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."

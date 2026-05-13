@@ -46,36 +46,103 @@ export const getMailer = (): Mailer => {
   return cached;
 };
 
+const buildResendFromEnv = async (env: NodeJS.ProcessEnv): Promise<Mailer> => {
+  const apiKey = env.MAIL_RESEND_API_KEY;
+  const from = env.MAIL_FROM_ADDRESS;
+  if (!apiKey || !from) {
+    throw new Error(
+      '[mailer] Resend transport requires MAIL_RESEND_API_KEY and MAIL_FROM_ADDRESS to be set.',
+    );
+  }
+  const { createResendMailer } = await import('../integrations/resend');
+  return createResendMailer({ apiKey, from });
+};
+
+const buildSmtpFromEnv = async (env: NodeJS.ProcessEnv): Promise<Mailer> => {
+  const host = env.MAIL_SMTP_HOST;
+  const from = env.MAIL_FROM_ADDRESS;
+  if (!host || !from) {
+    throw new Error(
+      '[mailer] SMTP transport requires MAIL_SMTP_HOST and MAIL_FROM_ADDRESS to be set.',
+    );
+  }
+  const portRaw = env.MAIL_SMTP_PORT;
+  const port = portRaw ? Number.parseInt(portRaw, 10) : undefined;
+  if (portRaw && (!Number.isFinite(port) || port! <= 0 || port! > 65535)) {
+    throw new Error(`[mailer] MAIL_SMTP_PORT must be a valid TCP port (got ${portRaw}).`);
+  }
+  const secureRaw = env.MAIL_SMTP_SECURE?.toLowerCase();
+  const secure = secureRaw === undefined ? undefined : secureRaw === 'true' || secureRaw === '1';
+  const { createSmtpMailer } = await import('../integrations/smtp');
+  return createSmtpMailer({
+    host,
+    port,
+    secure,
+    user: env.MAIL_SMTP_USER,
+    pass: env.MAIL_SMTP_PASS,
+    from,
+  });
+};
+
 /**
  * Selects a mailer transport from environment variables. Mirrors the
  * security preflight pattern: in production, refuse to silently fall back
  * to the console mailer — the caller must explicitly opt in via
  * MAIL_PROVIDER=console (e.g. for staging shadow deploys).
  *
- * Currently supported providers: `resend`, `console`. The SMTP transport
- * is reserved for a follow-up; refuse rather than fall back.
+ * Supported providers:
+ *   - `resend`               — Resend HTTP API only.
+ *   - `smtp`                  — SMTP (nodemailer) only.
+ *   - `resend-failover-smtp`  — Resend primary, SMTP fallback. Wraps both in
+ *                               a circuit-breaker (see
+ *                               `integrations/failoverMailer.ts`); trips
+ *                               after `MAIL_FAILOVER_FAILURE_THRESHOLD`
+ *                               (default 3) consecutive primary errors and
+ *                               routes through SMTP for
+ *                               `MAIL_FAILOVER_COOLDOWN_MS` (default 5 min)
+ *                               before probing primary again.
+ *   - `console`               — staging-only; explicit opt-in required
+ *                               when NODE_ENV=production.
  */
 export const initMailerFromEnv = async (env: NodeJS.ProcessEnv = process.env): Promise<Mailer> => {
   const provider = (env.MAIL_PROVIDER ?? '').toLowerCase();
   const isProd = env.NODE_ENV === 'production';
   if (provider === 'resend') {
-    const apiKey = env.MAIL_RESEND_API_KEY;
-    const from = env.MAIL_FROM_ADDRESS;
-    if (!apiKey || !from) {
-      throw new Error(
-        '[mailer] MAIL_PROVIDER=resend requires MAIL_RESEND_API_KEY and MAIL_FROM_ADDRESS to be set.',
-      );
-    }
-    const { createResendMailer } = await import('../integrations/resend');
-    const mailer = createResendMailer({ apiKey, from });
+    const mailer = await buildResendFromEnv(env);
     setMailer(mailer);
     log.info('mailer:init', { provider: 'resend' });
+    return mailer;
+  }
+  if (provider === 'smtp') {
+    const mailer = await buildSmtpFromEnv(env);
+    setMailer(mailer);
+    log.info('mailer:init', { provider: 'smtp' });
+    return mailer;
+  }
+  if (provider === 'resend-failover-smtp') {
+    const [primary, fallback] = await Promise.all([
+      buildResendFromEnv(env),
+      buildSmtpFromEnv(env),
+    ]);
+    const threshold = Number.parseInt(env.MAIL_FAILOVER_FAILURE_THRESHOLD ?? '', 10);
+    const cooldownMs = Number.parseInt(env.MAIL_FAILOVER_COOLDOWN_MS ?? '', 10);
+    const { createFailoverMailer } = await import('../integrations/failoverMailer');
+    const mailer = createFailoverMailer({
+      primary,
+      fallback,
+      primaryName: 'resend',
+      fallbackName: 'smtp',
+      failureThreshold: Number.isFinite(threshold) && threshold > 0 ? threshold : undefined,
+      cooldownMs: Number.isFinite(cooldownMs) && cooldownMs > 0 ? cooldownMs : undefined,
+    });
+    setMailer(mailer);
+    log.info('mailer:init', { provider: 'resend-failover-smtp' });
     return mailer;
   }
   if (provider === 'console' || provider === '') {
     if (isProd && provider !== 'console') {
       throw new Error(
-        '[mailer] MAIL_PROVIDER must be set in production (set MAIL_PROVIDER=resend or explicit MAIL_PROVIDER=console for staging shadow).',
+        '[mailer] MAIL_PROVIDER must be set in production (set MAIL_PROVIDER=resend, MAIL_PROVIDER=smtp, MAIL_PROVIDER=resend-failover-smtp, or explicit MAIL_PROVIDER=console for staging shadow).',
       );
     }
     const mailer = new ConsoleMailer();
