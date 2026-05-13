@@ -42,6 +42,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      yaml:
+        specifier: ^2.6.1
+        version: 2.8.3
 
   apps/blackout-client:
     dependencies:
@@ -490,6 +493,9 @@ importers:
       livekit-server-sdk:
         specifier: ^2.15.2
         version: 2.15.2
+      nodemailer:
+        specifier: ^7.0.10
+        version: 7.0.13
       pg:
         specifier: ^8.13.1
         version: 8.20.0
@@ -503,6 +509,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@types/nodemailer':
+        specifier: ^7.0.4
+        version: 7.0.11
       '@types/pg':
         specifier: ^8.11.10
         version: 8.20.0
@@ -3271,6 +3280,9 @@ packages:
   '@types/node@24.12.0':
     resolution: {integrity: sha512-GYDxsZi3ChgmckRT9HPU0WEhKLP08ev/Yfcq2AstjrDASOYCSXeyjDsHg4v5t4jOj7cyDX3vmprafKlWIG9MXQ==}
 
+  '@types/nodemailer@7.0.11':
+    resolution: {integrity: sha512-E+U4RzR2dKrx+u3N4DlsmLaDC6mMZOM/TPROxA0UAPiTgI0y4CEFBmZE+coGWTjakDriRsXG368lNk1u9Q0a2g==}
+
   '@types/pg@8.20.0':
     resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
@@ -5466,6 +5478,10 @@ packages:
 
   node-releases@2.0.37:
     resolution: {integrity: sha512-1h5gKZCF+pO/o3Iqt5Jp7wc9rH3eJJ0+nh/CIoiRwjRxde/hAHyLPXYN4V3CqKAbiZPSeJFSWHmJsbkicta0Eg==}
+
+  nodemailer@7.0.13:
+    resolution: {integrity: sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw==}
+    engines: {node: '>=6.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
@@ -10080,6 +10096,10 @@ snapshots:
       undici-types: 7.16.0
     optional: true
 
+  '@types/nodemailer@7.0.11':
+    dependencies:
+      '@types/node': 22.19.15
+
   '@types/pg@8.20.0':
     dependencies:
       '@types/node': 22.19.15
@@ -12723,6 +12743,8 @@ snapshots:
   node-releases@2.0.36: {}
 
   node-releases@2.0.37: {}
+
+  nodemailer@7.0.13: {}
 
   normalize-path@3.0.0: {}
 

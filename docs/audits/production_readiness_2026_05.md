@@ -158,25 +158,39 @@ These risks are accepted or deferred per `THREAT_MODEL.md` and remain after the 
 - **A8/A11 (supply chain):** mitigated by lockfile pinning + SBOM + Sigstore + RFC 6962 key transparency, but not eliminated.
 - **A9 (post-quantum on Megolm):** deaddrop is hybrid; group-message PQ deferred to upstream.
 
-### 2026-05-13 update — new residuals surfaced by the post-closeout posture
+### 2026-05-13 update — residuals worked
 
-Per `docs/operations/evidence/2026-05-12-production-readiness-closeout.md`:
+Original 2026-05-13 residuals (surfaced from
+`docs/operations/evidence/2026-05-12-production-readiness-closeout.md`)
+and their disposition after the late-day follow-up:
 
-- **Mailer transport monoculture:** the production mailer supports
-  `resend` + `console` only. SMTP fallback is not implemented; if Resend
-  has a regional outage, failover is operator-manual (see the email
-  alert runbook). Accepted for first launch.
-- **Authed post-deploy check is opt-in:** `tools/ci/post-deploy-verify.mjs`
-  exercises only the public health surfaces unless `POST_DEPLOY_BEARER`
-  is set in the deploy environment. Without it, an auth-layer regression
-  could slip past the gate. Mitigation: set the bearer in
-  production `.env`/secret store before the next promote.
-- **Cluster-side observability wiring is operator work:** the api-side
-  code paths (`initTracing`, `initErrorReporter`, `/metrics`) are in
-  place, but the OTel collector under `deploy/kubernetes/phase4/` and
-  the Grafana dashboards under `docs/operations/dashboards/` need an
-  operator to point them at real backends. Tracked as documentation
-  rather than a code gap.
+- **Mailer transport monoculture → Closed.** SMTP transport implemented
+  at `packages/api/src/integrations/smtp.ts` (nodemailer-backed, retry
+  with jitter, EAUTH / EENVELOPE / 5xx treated as permanent and
+  fail-fast). Selectable via `MAIL_PROVIDER=smtp` +
+  `MAIL_SMTP_{HOST,PORT,SECURE,USER,PASS}` +
+  `MAIL_FROM_ADDRESS`. Wired into `initMailerFromEnv()`
+  (`packages/api/src/services/mailer.ts`). Tested in
+  `packages/api/test/smtp-mailer.integration.test.ts` (5 cases:
+  happy path, transient retry, permanent fail-fast, retries exhausted,
+  `isPermanentError` boundary). Automatic resend→smtp failover is
+  not implemented — operator switches the env var on a regional
+  outage. Documented in `docs/operations/observability-setup.md` §6.
+- **Authed post-deploy check opt-in → Closed (CI side).** All three
+  deploy jobs in `.github/workflows/deploy-compose-prod.yml`
+  (`canary` / `promote` / `full-rollout`) now pass
+  `POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}` and
+  `POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}`
+  to `tools/ci/post-deploy-verify.mjs`. Provisioning the
+  `POST_DEPLOY_BEARER` GitHub secret remains the operator's call;
+  when unset, the authed-self check is skipped (existing behaviour
+  in `post-deploy-verify.mjs:128`).
+- **Cluster-side observability wiring → Closed (doc side).**
+  `docs/operations/observability-setup.md` published as the
+  operator setup guide: scrape config, alert rule import, dashboard
+  import, OTel collector wiring, Sentry DSN, plus a per-environment
+  verification checklist that produces evidence under
+  `docs/operations/evidence/<YYYY-MM-DD>-observability-bringup-<env>.md`.
 
 ---
 
@@ -255,7 +269,7 @@ commit; running it again would be ~3 min for no new signal.
 
 ### Carryover items (post-launch hardening)
 
-Closed in the 2026-05-13 late-day follow-up:
+Closed in the 2026-05-13 late-day follow-up (commit `186c67f`):
 
 - **BL-PR-07 (Playwright in CI)** — root `playwright.config.ts` rewritten
   to target `apps/blackout-client/tests/e2e/`; smoke spec
@@ -269,22 +283,41 @@ Closed in the 2026-05-13 late-day follow-up:
   `JWT_SECRET=` and a comment block explaining why blank is safer
   than a placeholder.
 
+Closed in the 2026-05-13 second follow-up:
+
+- **SMTP fallback for the mailer** — `packages/api/src/integrations/smtp.ts`
+  + wiring in `services/mailer.ts`; 5 integration tests; `nodemailer ^7.0.10`
+  added to `@blackout/api`; env vars documented in `packages/api/.env.example`.
+  Operator-driven failover (env switch) — see §7 2026-05-13 update.
+- **Cluster-side observability wiring** — `docs/operations/observability-setup.md`
+  published. Covers `INTERNAL_METRICS_TOKEN`, Prometheus scrape, alert
+  rule + dashboard import, OTel collector wiring, Sentry DSN, per-env
+  verification checklist. References every existing alert/dashboard/
+  runbook artefact in the repo.
+- **`POST_DEPLOY_BEARER` plumbing** — `.github/workflows/deploy-compose-prod.yml`
+  now passes `POST_DEPLOY_BEARER` (from secrets) and
+  `POST_DEPLOY_EXPECTED_VERSION` (from the `image_tag` input) to all
+  three deploy modes. Provisioning the secret remains the operator's
+  call; absence preserves the existing skip behaviour.
+- **`guard:ops-artifacts` environment hint** — `yaml ^2.6.1` added to
+  root `devDependencies`; `pnpm guard:ops-artifacts` now exits 0 on
+  a fresh checkout (`Ops artifact checks passed (4 alert files, 6
+  dashboards).`).
+
 Open carryover (still post-launch hardening):
 
 1. **BL-PR-07 coverage ratchet** — bump
    `apps/blackout-client/vitest.config.ts` thresholds above the
    current 60/55 floor as the 7 quarantined client tests in
    `vitest.config.ts:48-62` land fixes per
-   `docs/architecture/deferred-bodies-schedule-2026-05-01.md`.
-2. **Cluster-side observability wiring** — see §7 2026-05-13 update.
-   Tracked as operator work rather than a code gap.
-3. **SMTP fallback for the mailer** — see §7. Defer; document the
-   manual failover path in the email alert runbook.
-4. **`POST_DEPLOY_BEARER` for authed post-deploy verification** —
-   provision the bearer in the deploy environment before the next
-   promote so authed surfaces are exercised by
-   `tools/ci/post-deploy-verify.mjs`.
-5. **`guard:ops-artifacts` environment hint** — install one of
-   `yaml`/`js-yaml` in the root `devDependencies` (or document the
-   prerequisite) so a fresh checkout can run the guard without
-   surprise. Not a production gap; CI already provisions it.
+   `docs/architecture/deferred-bodies-schedule-2026-05-01.md`. Of
+   the 7, only the two `tests/unit/parity/*` files are tractable
+   immediately (retire candidates per the schedule); the other 5 are
+   gated on Workstream A Port 1 / Workstream B feature work and
+   should be addressed in their own commits, not as audit residue.
+2. **Automatic resend → smtp failover** — the SMTP transport
+   landed; an automatic provider-failover wrapper that demotes
+   resend when its 10m failure rate exceeds threshold is *not*
+   implemented. Tracked as future hardening; the manual
+   `MAIL_PROVIDER` switch + `MailSendFailureRateHigh` page is the
+   interim mitigation.

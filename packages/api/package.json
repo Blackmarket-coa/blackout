@@ -24,12 +24,14 @@
     "@simplewebauthn/server": "13.3.0",
     "hono": "4.12.18",
     "livekit-server-sdk": "^2.15.2",
+    "nodemailer": "^7.0.10",
     "pg": "^8.13.1",
     "socket.io": "^4.8.3",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/nodemailer": "^7.0.4",
     "@types/pg": "^8.11.10",
     "socket.io-client": "^4.8.3"
   }

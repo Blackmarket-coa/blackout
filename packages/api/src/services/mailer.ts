@@ -52,8 +52,9 @@ export const getMailer = (): Mailer => {
  * to the console mailer — the caller must explicitly opt in via
  * MAIL_PROVIDER=console (e.g. for staging shadow deploys).
  *
- * Currently supported providers: `resend`, `console`. The SMTP transport
- * is reserved for a follow-up; refuse rather than fall back.
+ * Supported providers: `resend`, `smtp`, `console`. SMTP is the fallback
+ * path when a regional Resend outage requires switching transports
+ * (see docs/operations/alerts/email-alert-rules.yaml).
  */
 export const initMailerFromEnv = async (env: NodeJS.ProcessEnv = process.env): Promise<Mailer> => {
   const provider = (env.MAIL_PROVIDER ?? '').toLowerCase();
@@ -72,10 +73,38 @@ export const initMailerFromEnv = async (env: NodeJS.ProcessEnv = process.env): P
     log.info('mailer:init', { provider: 'resend' });
     return mailer;
   }
+  if (provider === 'smtp') {
+    const host = env.MAIL_SMTP_HOST;
+    const from = env.MAIL_FROM_ADDRESS;
+    if (!host || !from) {
+      throw new Error(
+        '[mailer] MAIL_PROVIDER=smtp requires MAIL_SMTP_HOST and MAIL_FROM_ADDRESS to be set.',
+      );
+    }
+    const portRaw = env.MAIL_SMTP_PORT;
+    const port = portRaw ? Number.parseInt(portRaw, 10) : undefined;
+    if (portRaw && (!Number.isFinite(port) || port! <= 0 || port! > 65535)) {
+      throw new Error(`[mailer] MAIL_SMTP_PORT must be a valid TCP port (got ${portRaw}).`);
+    }
+    const secureRaw = env.MAIL_SMTP_SECURE?.toLowerCase();
+    const secure = secureRaw === undefined ? undefined : secureRaw === 'true' || secureRaw === '1';
+    const { createSmtpMailer } = await import('../integrations/smtp');
+    const mailer = createSmtpMailer({
+      host,
+      port,
+      secure,
+      user: env.MAIL_SMTP_USER,
+      pass: env.MAIL_SMTP_PASS,
+      from,
+    });
+    setMailer(mailer);
+    log.info('mailer:init', { provider: 'smtp', host, port: port ?? 'default' });
+    return mailer;
+  }
   if (provider === 'console' || provider === '') {
     if (isProd && provider !== 'console') {
       throw new Error(
-        '[mailer] MAIL_PROVIDER must be set in production (set MAIL_PROVIDER=resend or explicit MAIL_PROVIDER=console for staging shadow).',
+        '[mailer] MAIL_PROVIDER must be set in production (set MAIL_PROVIDER=resend, MAIL_PROVIDER=smtp, or explicit MAIL_PROVIDER=console for staging shadow).',
       );
     }
     const mailer = new ConsoleMailer();
