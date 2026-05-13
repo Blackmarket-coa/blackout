@@ -1,4 +1,10 @@
 /* eslint-disable import/first */
+import { installConsoleCapture } from './app/lib/diagnostics/consoleCapture';
+
+// Install the console ring buffer before any other import emits, so the
+// "Report a bug" diagnostics opt-in can attach the most recent 50 lines.
+installConsoleCapture();
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { enableMapSet } from 'immer';
@@ -92,6 +98,21 @@ const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
 const registryFetchers = buildRegistryFetchers(apiClient);
 
 void initDesktopBridge();
+
+// Sentry client capture. No-ops when the DSN is empty or @sentry/browser
+// isn't installed. Reads from the same Vite env as the API base URL so
+// ops can flip it on per-environment without rebuilding.
+void (async () => {
+    const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+    const dsn = env.VITE_SENTRY_DSN;
+    if (!dsn) return;
+    const { initSentry } = await import('./app/lib/sentry/init');
+    await initSentry({
+        dsn,
+        release: env.VITE_APP_VERSION,
+        environment: env.MODE,
+    });
+})();
 
 // eslint-disable-next-line react-refresh/only-export-components
 const DevCapabilitySeeder = () => {
