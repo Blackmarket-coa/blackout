@@ -1,18 +1,7 @@
 import { createElement } from 'react';
 import type { FeatureRoute } from '../../core/features/types';
+import { DialpadForm } from './DialpadForm';
 import { MediaUploadWidget } from './MediaUploadWidget';
-
-const DialpadRoutePage = () =>
-    createElement(
-        'main',
-        { style: { padding: 16 } },
-        createElement('h1', null, 'Dialpad'),
-        createElement(
-            'p',
-            null,
-            'PSTN-style dialpad placeholder. Backed by `dialpadCall` SDK action and `blackout.call.launch.intent` events.'
-        )
-    );
 
 const ElementCallRoutePage = () =>
     createElement(
@@ -31,7 +20,7 @@ export const mediaPipelineRoutes: FeatureRoute[] = [
 ];
 
 export const callDialpadRoutes: FeatureRoute[] = [
-    { path: '/call/dialpad', component: DialpadRoutePage },
+    { path: '/call/dialpad', component: DialpadForm },
 ];
 
 export const callElementRoutes: FeatureRoute[] = [
