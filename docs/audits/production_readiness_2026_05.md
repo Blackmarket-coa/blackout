@@ -173,9 +173,14 @@ and their disposition after the late-day follow-up:
   (`packages/api/src/services/mailer.ts`). Tested in
   `packages/api/test/smtp-mailer.integration.test.ts` (5 cases:
   happy path, transient retry, permanent fail-fast, retries exhausted,
-  `isPermanentError` boundary). Automatic resend→smtp failover is
-  not implemented — operator switches the env var on a regional
-  outage. Documented in `docs/operations/observability-setup.md` §6.
+  `isPermanentError` boundary). 2026-05-13 fourth follow-up added
+  automatic resend → smtp failover via
+  `packages/api/src/integrations/failoverMailer.ts` (circuit breaker
+  with `closed`/`open`/`half-open` states; selectable via
+  `MAIL_PROVIDER=resend-failover-smtp`); 7-case test in
+  `failover-mailer.integration.test.ts`. New
+  `MailFailoverActive` Prometheus alert. Documented in
+  `docs/operations/observability-setup.md` §6.
 - **Authed post-deploy check opt-in → Closed (CI side).** All three
   deploy jobs in `.github/workflows/deploy-compose-prod.yml`
   (`canary` / `promote` / `full-rollout`) now pass
@@ -313,6 +318,28 @@ Closed in the 2026-05-13 third follow-up:
   functions 25 / lines 18 against current actual ~19.6 / 60.1 /
   26.1 / 19.6, `test:coverage` wired into `unit-tests` job.
 
+Closed in the 2026-05-13 fourth follow-up:
+
+- **Automatic resend → smtp failover** —
+  `packages/api/src/integrations/failoverMailer.ts` wraps the
+  resend + smtp transports in a circuit breaker
+  (`closed` → `open` after `MAIL_FAILOVER_FAILURE_THRESHOLD`
+  consecutive primary failures, `open` → `half-open` after
+  `MAIL_FAILOVER_COOLDOWN_MS`, `half-open` probe outcome decides
+  next state). Selectable via `MAIL_PROVIDER=resend-failover-smtp`
+  in `initMailerFromEnv()`. Two new instruments —
+  `mail_failover_state_changes_total` (counter, labelled by
+  from/to) and `mail_failover_primary_active` (gauge: 1 when
+  primary is routing, 0 when failed over). New
+  `MailFailoverActive` alert in
+  `docs/operations/alerts/email-alert-rules.yaml` fires after
+  10m of the breaker being open. Tested in
+  `packages/api/test/failover-mailer.integration.test.ts` (7
+  cases: closed→open transition, fallback used while open,
+  half-open success closes, half-open failure re-opens with fresh
+  cooldown, primary success resets counter, fallback-also-fails
+  surfaces both errors, factory smoke).
+
 Open carryover (no longer launch-blocking; tracked separately):
 
 1. **Workstream A Port 1 quarantine refresh** — `DraupnirNavigation`,
@@ -321,9 +348,3 @@ Open carryover (no longer launch-blocking; tracked separately):
    `docs/architecture/deferred-bodies-schedule-2026-05-01.md`,
    not in this audit. Coverage thresholds should be ratcheted up
    each time one of the three lands fixes.
-2. **Automatic resend → smtp failover** — the SMTP transport
-   landed; an automatic provider-failover wrapper that demotes
-   resend when its 10m failure rate exceeds threshold is *not*
-   implemented. Tracked as future hardening; the manual
-   `MAIL_PROVIDER` switch + `MailSendFailureRateHigh` page is the
-   interim mitigation.
