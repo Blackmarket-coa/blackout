@@ -1,17 +1,6 @@
 import { createElement } from 'react';
 import type { FeatureRoute } from '../../core/features/types';
-
-const MediaPipelineRoutePage = () =>
-    createElement(
-        'main',
-        { style: { padding: 16 } },
-        createElement('h1', null, 'Media Pipeline'),
-        createElement(
-            'p',
-            null,
-            'In-flight uploads and recently completed media. Backed by `fetchUploadProgress` / `cancelUpload` / `fetchCompletedUpload` SDK actions and `blackout.media.upload.completed` events.'
-        )
-    );
+import { MediaUploadWidget } from './MediaUploadWidget';
 
 const DialpadRoutePage = () =>
     createElement(
@@ -38,7 +27,7 @@ const ElementCallRoutePage = () =>
     );
 
 export const mediaPipelineRoutes: FeatureRoute[] = [
-    { path: '/media/uploads', component: MediaPipelineRoutePage },
+    { path: '/media/uploads', component: MediaUploadWidget },
 ];
 
 export const callDialpadRoutes: FeatureRoute[] = [
