@@ -1,0 +1,119 @@
+# Unfinished Items Triage — May 2026
+
+- Branch: `claude/review-unfinished-items-bLx3q`
+- Base commit: `01fd4a2` (Merge PR #634 — `claude/prepare-deployment-Xj8R7`)
+- Scope: full repository at `/home/user/blackout` — every workspace, every doc tracker
+- Methodology: code-marker grep (TODO/FIXME/XXX/HACK, `it.skip`/`describe.skip`/`xit`/`xdescribe`/`it.todo`, `@ts-ignore`/`@ts-expect-error`, "not implemented" / stub markers), review of status/roadmap markdown trackers, cross-reference against `docs/audits/production_readiness_2026_05.md` and `docs/architecture/deferred-bodies-schedule-2026-05-01.md`
+- Companion to `docs/audits/production_readiness_2026_05.md` (closed-state gap register) and `docs/architecture/deferred-bodies-schedule-2026-05-01.md` (forward-looking workstream sequencing).
+
+---
+
+## 1. Executive summary
+
+The repository is in unusually good shape for a project of this size:
+
+- `docs/audits/production_readiness_2026_05.md` §3 — **all 12 BL-PR launch gaps Closed** as of the 2026-05-13 replay at `fe4c9ce`.
+- `docs/unfinished-code-checklist.md` — **0 open** TODO/FIXME/TBD/not-implemented markers tracked in scope; 79 historical items resolved.
+- `apps/blackout-client/vitest.config.ts` — exclude list is **empty**; 0 file-level quarantines.
+- `grep -rE "\.skip\(|xit\(|xdescribe\(" --include="*.test.*"` over the whole repo — **0 actual skipped test calls** outside `legacy/`.
+
+What remains is a small carry list and a large but-clearly-scoped feature backlog. This document triages the carry list into tiers, proposes an order of attack, and identifies the existing utilities to reuse so any future work doesn't re-derive primitives.
+
+## 2. Triage summary
+
+| Bucket | Items | Tractable now? |
+| --- | --- | --- |
+| Doc debt (stale comment) | 1 | **Resolved this branch** (commit `c7b7ffc`) |
+| Code-level TODOs in production paths | 2 | No — both blocked on external inputs (design assets, server schema) |
+| Operational unblock | 1 | No in CI sandbox — needs a real dev clone with `origin` configured |
+| Multi-week feature workstreams | 6 (Workstreams A–F in `deferred-bodies-schedule-2026-05-01.md`) | Partially — Workstream A Ports 2–5 are well-scoped |
+| Phase-ordered monorepo port plan | `MIGRATION_INVENTORY.md` §G | Largely superseded by Workstream A; status owner needs to confirm |
+
+## 3. Tier register
+
+### Tier 1 — Quick wins (≤ 1 hour)
+
+| ID | Item | Status | Evidence |
+| --- | --- | --- | --- |
+| T1-01 | Refresh stale header comment in `apps/blackout-client/vitest.config.ts` referencing 7 `it.skip` cases that were already cleared in commit `050fc2f`. | **Closed** on this branch (commit `c7b7ffc`). | `git log --oneline -- apps/blackout-client/vitest.config.ts` |
+
+### Tier 2 — Tractable but blocked-on-input
+
+| ID | Location | Description | Blocker | Estimate after unblock |
+| --- | --- | --- | --- | --- |
+| T2-01 | `apps/blackout-client/src/app/features/playbook/picker/QuestionSize.tsx:13` (`TODO(plan/B)`) | Replace SequenceCard's leading icon slot with bespoke solarpunk SVGs at `public/res/svg/playbook/q1-size-{trio\|small\|medium\|constellation}.svg`. Component already accepts `leadingIcon`. | Assets do not exist yet. | S |
+| T2-02 | `apps/blackout-client/src/app/features/streams/LivestreamViewer.tsx:134` (server-side TODO) | Matrix den chat overlay + product shelf for the livestream viewer. | `StreamRecord` schema in `packages/api` needs a stream→den association before client can wire the overlay. Requires a new migration under `packages/api/src/db/migrations/`. | M |
+
+### Tier 3 — Operational unblock
+
+| ID | Item | Owner | Notes |
+| --- | --- | --- | --- |
+| T3-01 | Phase 0 archive push: `git push origin archive/element-web-fork` + `git push origin v0-element-fork`, then verify with `git ls-remote --heads --tags origin`. | Platform | `PHASE0_STATUS.md` documents this is blocked in this CI sandbox because no `origin` is configured. Must happen in a clone with push auth before any Phase 1 destructive cleanup. Confirm with the migration owner whether Phase 1 is still planned or has been superseded by Workstream A (Tier 4). |
+
+### Tier 4 — Workstream A: Migration Ports (recommended next track)
+
+Documented in `docs/architecture/deferred-bodies-schedule-2026-05-01.md` §"Workstream A". Port 1 foundation is largely done (registry sidebar + settings list mounted 2026-04-30; legacy quarantine cleared 2026-05-13). The remaining ports are well-scoped, with working SDK actions ready to wire (see §5 below).
+
+| ID | Port | Estimate | Scope summary |
+| --- | --- | --- | --- |
+| T4-01 | **Port 1 finish** — replace remaining static nav in `ClientLayout.tsx` (right panel, mobile rail, workspace tabs) with `RegistryRouteList`; adopt `composeAdminEntries` from `Sidebar.tsx`; retire `LegacyClientLayout`. | L (4–6 days) | Foundation for the rest of Workstream A. |
+| T4-02 | **Port 2** — render BKL-003 governance scheduler + treasury UI against `createGovernanceActions(client)`. Replace placeholders at `/governance/meetings` and `/governance/treasury`. | M (2–3 days) | Can run in parallel with T4-03/T4-04 after T4-01. |
+| T4-03 | **Port 3** — render BKL-004 notification rules editor + presence digest inbox. Drive through `createNotificationActions(client)` + `fetchPresenceDigest` / `acknowledgePresenceDigest`. | M (2–3 days) | Parallel with T4-02 / T4-04. |
+| T4-04 | **Port 4** — render BKL-006 media + dialpad + Element Call UI. Wire `createMediaActions` upload widget, `buildDialpadIntent` + `createCallActions(client).dialpadCall`, and Element Call launcher. | L (3–5 days) | Three distinct surfaces; consider sub-PRs. |
+| T4-05 | **Port 5** — move BKL-007/008/009 Preferences / Sidebar / Labs / Stego / Mjolnir into the canonical settings IA. | M (2–3 days) | Final pass for Workstream A. |
+
+Workstream A total: **~13–20 days** at the deferred-bodies-schedule sizing.
+
+### Tier 5 — Larger workstreams to triage before committing
+
+Real but should not be started until product/program confirms scope. Each is documented under `docs/architecture/deferred-bodies-schedule-2026-05-01.md` and partially in `DISCORD_PARITY_BUILD_PLAN.md`.
+
+| ID | Workstream | Estimate | Recommendation |
+| --- | --- | --- | --- |
+| T5-01 | **Workstream B — UI Primitives v1 (`@blackout/ui`)** | XL (~3–4 weeks) | Defer or split into B1 (essential 8 primitives, L) and B1.1 (rest, L). Decide token strategy (recommended: vanilla-extract) before scoping. |
+| T5-02 | **Workstream C — Reactions / Threading parity hardening** | L (5–7 days) | Depends on T4-01; can run alongside Workstream B once foundation primitives ship. |
+| T5-03 | **Workstream D — Discord parity Phase 2 (rich media + voice)** | XL (~3–4 weeks) | Depends on T4-04 + Workstream B. GIF provider choice (Tenor vs Giphy) needs a product decision first. |
+| T5-04 | **Workstream E — Discord parity Phase 3 (community + governance)** | XL (~4 weeks) | Blocked on cross-team AutoMod appservice ownership. |
+| T5-05 | **Workstream F — Discord parity Phase 4 (polish)** | XL (~4 weeks) | Closing pass; recent-messages source for the quick switcher is the only specific open item. |
+
+### Tier 6 — Status to clarify before touching
+
+| ID | Item | Question |
+| --- | --- | --- |
+| T6-01 | `MIGRATION_INVENTORY.md` §G — phase-ordered port plan. Lists a 5-step monorepo restructure (Core → Design → UI rebuild → App shells → Deploy adaptation); §H lists 3 open validation items. | Workstream A in the deferred-bodies-schedule appears to be the active execution path. Confirm with the migration owner whether `MIGRATION_INVENTORY.md` is now informational/archival or still drives work. |
+
+## 4. Critical files referenced
+
+- `apps/blackout-client/vitest.config.ts` (T1-01 — resolved)
+- `apps/blackout-client/src/app/features/playbook/picker/QuestionSize.tsx` (T2-01)
+- `apps/blackout-client/src/app/features/streams/LivestreamViewer.tsx` (T2-02)
+- `apps/blackout-client/src/app/pages/client/ClientLayout.tsx` (T4-01)
+- `apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx` (T5-05 recent-messages source)
+- `PHASE0_STATUS.md`, `MIGRATION_INVENTORY.md` (T3-01, T6-01)
+- `docs/architecture/deferred-bodies-schedule-2026-05-01.md` (master sequencing doc — keeps Tier 4/5 in sync)
+- `docs/architecture/frontend-consolidation-migration-backlog.md` (BKL-xxx feature traceability)
+- `docs/audits/production_readiness_2026_05.md` (gap-register baseline)
+- `docs/unfinished-code-checklist.md` (open queue, currently 0)
+- `docs/DEPLOYMENT_READINESS_PLAN.md` (all workstreams Complete per 2026-05-12 replay)
+
+## 5. Reusable utilities / existing SDK actions
+
+When Tier 4 starts, these are ready to wire against (no need to build):
+
+- `createGovernanceActions(client)` — `scheduleMeeting`, `listMeetings`, `cancelMeeting`, `getTreasurySnapshot`, `listTreasurySnapshots`
+- `createNotificationActions(client)` — `fetchNotificationRules`, `upsertNotificationRule`, `deleteNotificationRule`
+- `fetchPresenceDigest`, `acknowledgePresenceDigest`, `buildPresenceDigest`
+- `createMediaActions(client)` — `fetchUploadProgress`, `cancelUpload`, `fetchCompletedUpload`
+- `createCallActions(client).dialpadCall`, `buildDialpadIntent`
+- Shared test helpers `createFakeMatrixClient` + `createFakeRoom` at `apps/blackout-client/tests/helpers/fakeMatrixClient.ts`
+- `buildQuickSwitcherIndex` + `rankQuickSwitcherResults` (T5-05 partial)
+
+## 6. Verification commands
+
+These confirm the survey itself; rerun them on later branches to validate the open carry list has not grown:
+
+1. `grep -rE "\.skip\(|xit\(|xdescribe\(" --include='*.test.*'` over the repo — confirm 0 actual skipped test calls outside `legacy/`.
+2. `grep -rnE "TODO|FIXME|XXX|HACK" --include='*.ts' --include='*.tsx'` excluding `node_modules`, `legacy/`, `docs/`, `_port/`, and `*.test.*` — confirm only the 2 listed TODOs remain (T2-01, T2-02).
+3. `head apps/blackout-client/vitest.config.ts` — confirm exclude list is `[default vitest excludes]` only.
+4. `head docs/unfinished-code-checklist.md` — confirm "Open items: 0".
+5. Baseline gates (currently passing per `docs/rollout-readiness-status.md`): `pnpm install --no-frozen-lockfile && pnpm lint && pnpm test && pnpm audit --audit-level moderate`.
