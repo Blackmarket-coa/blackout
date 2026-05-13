@@ -65,7 +65,7 @@ jobs:
         run: |
           pnpm --filter @blackout/core run build
           pnpm --filter @blackout/design run build
-      - run: pnpm --filter @blackout/client run test:unit
+      - run: pnpm --filter @blackout/client run test:coverage
       - run: pnpm --filter @blackout/client run test:integration
 
   feature-registry-validation:

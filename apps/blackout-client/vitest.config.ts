@@ -20,9 +20,18 @@ export default defineConfig({
     plugins: [vanillaExtractPlugin()],
     test: {
         // Production-readiness audit, May 2026: enforce per-PR coverage so
-        // new client code lands with tests. Thresholds intentionally start
-        // modest given the quarantine debt below; ratchet up as the
-        // deferred-bodies schedule lands fixes.
+        // new client code lands with tests. Thresholds are no-regression
+        // floors keyed to the current actual coverage (~19.6 lines/stmts,
+        // ~60.1 branches, ~26.1 functions) with a small margin; ratchet up
+        // as the remaining feature-blocked quarantined tests
+        // (DraupnirNavigation, ClientLayout, RoomView.layout) come back
+        // online under Workstream A Port 1.
+        //
+        // The previous thresholds (60/55/60/60) were aspirational only — they
+        // were never enforced because @vitest/coverage-v8 was not installed
+        // and CI did not pass --coverage. Both gaps are now closed:
+        // - @vitest/coverage-v8 declared in devDependencies
+        // - .github/workflows/ci.yml unit-tests job runs `test:coverage`
         coverage: {
             provider: 'v8',
             include: ['src/**/*.{ts,tsx}'],
@@ -33,10 +42,10 @@ export default defineConfig({
                 'src/**/types.ts',
             ],
             thresholds: {
-                lines: 60,
-                functions: 60,
-                branches: 55,
-                statements: 60,
+                lines: 18,
+                functions: 25,
+                branches: 58,
+                statements: 18,
             },
             reporter: ['text', 'lcov'],
         },
@@ -46,19 +55,12 @@ export default defineConfig({
             '**/dist/**',
             '**/.{idea,git,cache,output,temp}/**',
             // Quarantined pre-existing broken files (see deferred-bodies-schedule):
-            // missing util exports in src/app/utils/room.ts
-            'tests/unit/utils/room.test.ts',
-            // assertion-level drift (DraupnirNavigation expects 'Moderation' link textContent that the current shell does not render)
+            // ClientLayout / DraupnirNavigation / RoomView.layout assert against a
+            // shell + adapter surface still being landed under Workstream A Port 1
+            // (current mocks predate `useLegacyRoomAdapter` + `useCoalitionState`).
             'tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx',
-            // assertion-level drift (ClientLayout test expects elements the modern shell does not render yet)
             'tests/unit/pages/client/ClientLayout.test.tsx',
-            // monetization customizations expected count drifted (15 vs 7)
-            'tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx',
-            // RoomView.layout test environment / assertion drift
             'tests/unit/features/room/RoomView.layout.test.tsx',
-            // parity tests against legacy shell behavior — superseded by canonical client work
-            'tests/unit/parity/baselineResetSnapshotParity.test.tsx',
-            'tests/unit/parity/monetizationLayoutParity.test.tsx',
         ],
     },
 });
