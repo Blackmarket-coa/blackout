@@ -360,7 +360,35 @@ Closed in the 2026-05-13 fifth follow-up:
 Open carryover (no longer launch-blocking; tracked outside this
 audit in `docs/architecture/deferred-bodies-schedule-2026-05-01.md`):
 
-1. **7 ClientLayout `it.skip` cases** — un-skip after
-   QuickSwitcher behavioural stub lands or the real component is
-   allowed to render in tests; bump coverage floors in lock-step
-   with each un-skip.
+_None._ The 7 ClientLayout `it.skip` cases were cleared in the
+2026-05-13 sixth follow-up (see below); no other code-level
+carryover remains.
+
+Closed in the 2026-05-13 sixth follow-up:
+
+- **7 ClientLayout `it.skip` cases cleared** — diagnosis showed
+  the existing skip comments were stale: the QuickSwitcher tests
+  were failing on a placeholder string that no longer matches the
+  live component (`Search rooms, spaces, DMs, members, settings,
+  actions`), not on a missing behavioural stub. The "settings
+  drawer no longer renders Room organization" comment was also
+  wrong — only the aria-label changed (Room → Den) when
+  terminology migrated. Fix:
+  - Added four stable test ids to source — `right-panel` and
+    `mobile-den-organization` on `ClientLayout.tsx`, and
+    `quick-switcher-input` on `QuickSwitcher.tsx`.
+  - Replaced stale placeholder/aria-label selectors with the new
+    test ids; updated terminology-driven assertion strings
+    (`Select a room` → `Select a den`, `All rooms` → `All dens`)
+    to regex matches that tolerate future terminology drift.
+  - Seeded `makeRoom({ timelineEvents })` in the threads/pins/search
+    test so the real `useLegacyRoomTimelineAdapter` surfaces the
+    seeded events to the right-panel renderer (the previous
+    `useRoomTimeline` mock path no longer matches the live import).
+  - Scoped the panel row-button find to
+    `[data-testid="right-panel"] button` so it can't match the
+    rail's `Threads` toggle, and rewrote the close-assertion to
+    verify the aside unmounted rather than relying on absence of
+    the `Close` substring.
+  Result: `apps/blackout-client/tests/unit/pages/client/ClientLayout.test.tsx`
+  now reports **17 passed, 0 skipped** (was 10 passed, 7 skipped).

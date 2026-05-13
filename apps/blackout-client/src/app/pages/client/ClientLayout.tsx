@@ -1388,6 +1388,7 @@ export const ClientLayout = () => {
 
                 {rightPanel ? (
                     <aside
+                        data-testid="right-panel"
                         style={{
                             position: 'absolute',
                             top: 0,
@@ -1521,6 +1522,7 @@ export const ClientLayout = () => {
                                         Den organization
                                     </span>
                                     <select
+                                        data-testid="mobile-den-organization"
                                         aria-label="Den organization"
                                         value={settings.mobileRoomListScope ?? 'space'}
                                         onChange={(event) =>

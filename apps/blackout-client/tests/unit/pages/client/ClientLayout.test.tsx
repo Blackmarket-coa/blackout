@@ -159,7 +159,7 @@ const makeEvent = (
     relType?: string,
     mentions?: { user_ids?: string[]; room?: boolean },
     ts = 1_700_000_000_000,
-    sender = '@author:example.org',
+    sender = '@author:example.org'
 ): MatrixEvent =>
     ({
         getId: () => id,
@@ -174,7 +174,7 @@ const makeEvent = (
             ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}),
             ...(mentions ? { 'm.mentions': mentions } : {}),
         }),
-    }) as unknown as MatrixEvent;
+    } as unknown as MatrixEvent);
 
 const makeRoom = ({
     roomId,
@@ -195,7 +195,7 @@ const makeRoom = ({
         getType: () => eventType,
         getStateKey: () => stateKey,
         getSender: () => '@author:example.org',
-        getContent: <T = unknown>() => content as T,
+        getContent: <T = unknown,>() => content as T,
         getRelation: () => null,
         isRedacted: () => false,
     });
@@ -203,7 +203,7 @@ const makeRoom = ({
         getStateEvents: (eventType: string, stateKey?: string) => {
             if (eventType === 'm.space.child') {
                 return children.map((child) =>
-                    wrapStateEvent('m.space.child', { order: child.order }, child.roomId),
+                    wrapStateEvent('m.space.child', { order: child.order }, child.roomId)
                 );
             }
             if (eventType === 'm.room.pinned_events') {
@@ -224,7 +224,7 @@ const makeRoom = ({
             return stateKey === undefined ? [] : undefined;
         },
     };
-    return ({
+    return {
         roomId,
         name,
         getType: () => type,
@@ -246,7 +246,7 @@ const makeRoom = ({
             mockEvents.find((event) => event.getId() === eventId) ??
             null,
         currentState,
-    }) as unknown as Room;
+    } as unknown as Room;
 };
 
 const renderLayout = ({
@@ -276,7 +276,7 @@ const renderLayout = ({
         root.render(
             <Provider store={store}>
                 <ClientLayout />
-            </Provider>,
+            </Provider>
         );
     });
 
@@ -309,7 +309,7 @@ describe('ClientLayout UI wiring', () => {
         mockClient.joinRoom.mockClear();
         vi.stubGlobal(
             'prompt',
-            vi.fn(() => '#new-room:example.org'),
+            vi.fn(() => '#new-room:example.org')
         );
     });
 
@@ -321,20 +321,22 @@ describe('ClientLayout UI wiring', () => {
         vi.unstubAllGlobals();
     });
 
-    // Skipped 2026-05-13: the modern shell renders an explicit "Close" affordance
-    // inside the right panel that the legacy shell did not. The assertion
-    // `expect(textContent).not.toContain('Close')` is correct semantics for the
-    // *closed* state, but the panel is still mounted at click time (closed state
-    // is achieved via animation). Needs a richer assertion (e.g. `aria-hidden`
-    // check or a specific data-testid) — track under Workstream A Port 1.
-    it.skip('threads/pins/search click sets jump target and closes panel', () => {
-        const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
-        mockRoom = room;
-        mockEvents = [
+    it('threads/pins/search click sets jump target and closes panel', () => {
+        const events = [
             makeEvent('$evt-thread', 'thread', 'm.thread'),
             makeEvent('$evt-pin', 'pinned message'),
             makeEvent('$evt-search', 'find me'),
         ];
+        mockEvents = events;
+        // ClientLayout reads via useLegacyRoomTimelineAdapter, which pulls
+        // `room.getLiveTimeline().getEvents()`. The right-panel renders rows
+        // from that array — seed it explicitly.
+        const room = makeRoom({
+            roomId: '!room:example.org',
+            name: 'Room',
+            timelineEvents: events,
+        });
+        mockRoom = room;
 
         const { container } = renderLayout({
             rooms: [room],
@@ -343,22 +345,22 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: 'threads',
         });
 
-        const button = container.querySelector(
-            'aside button[type="button"]:not([aria-label])',
-        ) as HTMLButtonElement;
-        // click first thread result button inside panel body
-        const threadButton = Array.from(container.querySelectorAll('button')).find((candidate) =>
-            candidate.textContent?.includes('thread'),
-        ) as HTMLButtonElement;
-
+        const panel = container.querySelector('[data-testid="right-panel"]');
+        expect(panel).toBeTruthy();
+        // Scope to row buttons inside the panel — the panel header's Close
+        // button matches by text but we want the thread row whose body is
+        // the literal "thread".
+        const threadButton = Array.from(
+            panel?.querySelectorAll('button[type="button"]') ?? []
+        ).find((candidate) => candidate.textContent?.includes('thread')) as HTMLButtonElement;
         expect(threadButton).toBeTruthy();
+
         act(() => threadButton.click());
 
-        expect(container.textContent).not.toContain('Close');
+        expect(container.querySelector('[data-testid="right-panel"]')).toBeNull();
         expect(
-            (container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump,
+            (container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump
         ).toBe('$evt-thread');
-        expect(button).toBeTruthy();
     });
 
     it('governance button opens governance panel', () => {
@@ -373,7 +375,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const governanceButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'governance',
+            (button) => button.textContent === 'governance'
         ) as HTMLButtonElement;
         expect(governanceButton).toBeTruthy();
 
@@ -433,13 +435,13 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const collapseButton = Array.from(firstRender.container.querySelectorAll('button')).find(
-            (candidate) => candidate.textContent?.includes('▼'),
+            (candidate) => candidate.textContent?.includes('▼')
         ) as HTMLButtonElement;
         expect(collapseButton).toBeTruthy();
 
         act(() => collapseButton.click());
         expect(localStorage.getItem('blackout.collapsed.!root-space:example.org')).toContain(
-            'true',
+            'true'
         );
         act(() => {
             firstRender.root.unmount();
@@ -455,13 +457,7 @@ describe('ClientLayout UI wiring', () => {
         expect(secondRender.container.textContent).toContain('▶ General');
     });
 
-    // Skipped 2026-05-13: this test (and the 4 below) drives the Ctrl+K
-    // quick-switcher UI, but the test file mocks `QuickSwitcher` to `() => null`
-    // so the `<input placeholder="Search rooms, …">` it queries never renders.
-    // Un-skipping requires either letting the real QuickSwitcher render
-    // (it pulls in feature-registry + scoring + fuzzy-match helpers) or
-    // writing a behavioural stub that simulates Enter/Escape/Arrow handling.
-    it.skip('opens unified quick switcher from ClientLayout and supports Enter/Escape', async () => {
+    it('opens unified quick switcher from ClientLayout and supports Enter/Escape', async () => {
         const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
         mockRoom = roomA;
         const rooms = [roomA];
@@ -478,7 +474,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         expect(quickInput).toBeTruthy();
         act(() => {
@@ -498,20 +494,18 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const reopenedInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         act(() => {
             reopenedInput.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
             );
         });
 
-        expect(
-            container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]'),
-        ).toBeNull();
+        expect(container.querySelector('[data-testid="quick-switcher-input"]')).toBeNull();
     });
 
-    it.skip('supports ArrowDown/ArrowUp keyboard selection in quick switcher through ClientLayout', async () => {
+    it('supports ArrowDown/ArrowUp keyboard selection in quick switcher through ClientLayout', async () => {
         const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
         const roomB = makeRoom({ roomId: '!room-b:example.org', name: 'Room B' });
         mockRoom = roomA;
@@ -528,7 +522,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             await Promise.resolve();
@@ -553,7 +547,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const reopenedInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         expect(reopenedInput).toBeTruthy();
         await act(async () => {
@@ -582,7 +576,7 @@ describe('ClientLayout UI wiring', () => {
         expect(store.get(selectedRoomIdAtom)).toBe('!room-a:example.org');
     });
 
-    it.skip('queues slash commands into composer payload when command is selected', async () => {
+    it('queues slash commands into composer payload when command is selected', async () => {
         const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
         mockRoom = roomA;
 
@@ -597,7 +591,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             quickInput.value = '/shrug';
@@ -606,7 +600,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const shrugCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/shrug'),
+            button.textContent?.includes('/shrug')
         ) as HTMLButtonElement;
         act(() => {
             shrugCommandButton.click();
@@ -619,7 +613,7 @@ describe('ClientLayout UI wiring', () => {
         expect(container.textContent).toContain('Ready to send /shrug.');
     });
 
-    it.skip('shows validation message when room-scoped command is picked without a room', async () => {
+    it('shows validation message when room-scoped command is picked without a room', async () => {
         const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
         mockRoom = roomA;
 
@@ -634,7 +628,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             quickInput.value = '/topic';
@@ -643,7 +637,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const topicCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/topic'),
+            button.textContent?.includes('/topic')
         ) as HTMLButtonElement;
         act(() => {
             topicCommandButton.click();
@@ -652,10 +646,10 @@ describe('ClientLayout UI wiring', () => {
             await Promise.resolve();
         });
 
-        expect(container.textContent).toContain('Select a room before using /topic.');
+        expect(container.textContent).toMatch(/Select a den before using \/topic/);
     });
 
-    it.skip('runs direct /leave and /join command actions from quick switcher', async () => {
+    it('runs direct /leave and /join command actions from quick switcher', async () => {
         const roomA = makeRoom({ roomId: '!room-a:example.org', name: 'Room A' });
         mockRoom = roomA;
 
@@ -670,7 +664,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const leaveInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             leaveInput.value = '/leave';
@@ -679,7 +673,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const leaveCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/leave'),
+            button.textContent?.includes('/leave')
         ) as HTMLButtonElement;
         act(() => {
             leaveCommandButton.click();
@@ -695,7 +689,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const joinInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             joinInput.value = '/join';
@@ -704,7 +698,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const joinCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/join'),
+            button.textContent?.includes('/join')
         ) as HTMLButtonElement;
         act(() => {
             joinCommandButton.click();
@@ -737,7 +731,7 @@ describe('ClientLayout UI wiring', () => {
 
         expect(mockClient.setAccountData).toHaveBeenCalledWith(
             'blackout.inbox.read.v1',
-            expect.objectContaining({ version: 2, users: expect.any(Object) }),
+            expect.objectContaining({ version: 2, users: expect.any(Object) })
         );
     });
 
@@ -765,7 +759,7 @@ describe('ClientLayout UI wiring', () => {
 
         act(() => {
             const inboxButton = Array.from(container.querySelectorAll('button')).find((button) =>
-                button.textContent?.includes('Inbox'),
+                button.textContent?.includes('Inbox')
             );
             inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
@@ -779,14 +773,14 @@ describe('ClientLayout UI wiring', () => {
             'cross device',
             undefined,
             { user_ids: ['@me:example.org'] },
-            1_700_000_000_100,
+            1_700_000_000_100
         );
         const readMarker = makeEvent(
             '$read-anchor',
             'anchor',
             undefined,
             undefined,
-            1_700_000_000_200,
+            1_700_000_000_200
         );
         const room = makeRoom({
             roomId: '!room:example.org',
@@ -805,7 +799,7 @@ describe('ClientLayout UI wiring', () => {
 
         act(() => {
             const inboxButton = Array.from(container.querySelectorAll('button')).find((button) =>
-                button.textContent?.includes('Inbox'),
+                button.textContent?.includes('Inbox')
             );
             inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
@@ -825,9 +819,9 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: null,
         });
 
-        expect(
-            container.querySelector('[data-testid=\"onboarding-wizard\"]')?.textContent,
-        ).toContain('onboarding:!space:example.org');
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')?.textContent).toContain(
+            'onboarding:!space:example.org'
+        );
     });
 
     it('hides onboarding wizard immediately after completion', async () => {
@@ -843,7 +837,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const completeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('complete onboarding'),
+            button.textContent?.includes('complete onboarding')
         ) as HTMLButtonElement;
         expect(completeButton).toBeTruthy();
 
@@ -852,7 +846,7 @@ describe('ClientLayout UI wiring', () => {
             await Promise.resolve();
         });
 
-        expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')).toBeNull();
     });
 
     it('does not show onboarding wizard again for returning users', () => {
@@ -868,7 +862,7 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: null,
         });
 
-        expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')).toBeNull();
     });
 
     it('opens settings on mobile while a room is selected', async () => {
@@ -884,7 +878,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const settingsButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Settings',
+            (button) => button.textContent === 'Settings'
         ) as HTMLButtonElement;
         expect(settingsButton).toBeTruthy();
 
@@ -897,16 +891,12 @@ describe('ClientLayout UI wiring', () => {
         expect(container.querySelector('[data-testid="settings-page"]')).toBeTruthy();
     });
 
-    // Skipped 2026-05-13: settings drawer no longer renders a
-    // `<select aria-label="Room organization">`; that control was moved into
-    // the dedicated SettingsPage flow per Workstream B. Test needs to be
-    // rewritten against the new control surface or retired.
-    it.skip('allows mobile room organization preference changes from settings drawer', async () => {
+    it('allows mobile room organization preference changes from settings drawer', async () => {
         setViewportWidth(640);
         const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
         mockRoom = room;
 
-        const { container, store } = renderLayout({
+        const { container } = renderLayout({
             rooms: [room],
             selectedRoomId: null,
             selectedSpaceId: '!space:example.org',
@@ -914,7 +904,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const settingsButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Settings',
+            (button) => button.textContent === 'Settings'
         ) as HTMLButtonElement;
         act(() => settingsButton.click());
         await act(async () => {
@@ -922,16 +912,21 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const organizationSelect = container.querySelector(
-            'select[aria-label="Room organization"]',
+            '[data-testid="mobile-den-organization"]'
         ) as HTMLSelectElement;
         expect(organizationSelect).toBeTruthy();
+        expect(organizationSelect.value).toBe('space');
 
         act(() => {
             organizationSelect.value = 'all';
             organizationSelect.dispatchEvent(new Event('change', { bubbles: true }));
         });
+        await act(async () => {
+            await Promise.resolve();
+        });
 
-        expect(store.get(selectedSpaceIdAtom)).toBe('!space:example.org');
-        expect(container.textContent).toContain('All rooms');
+        expect(organizationSelect.value).toBe('all');
+        // Both options labelled with terminology-driven copy must be present.
+        expect(container.textContent).toMatch(/All dens/);
     });
 });

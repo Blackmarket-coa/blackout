@@ -452,6 +452,45 @@ Open follow-up: when un-skipping the 7 ClientLayout cases above,
 also bump the vitest threshold floors to track the new actual
 coverage measurement.
 
+### 2026-05-13 cleanup — sixth follow-up — 7 `it.skip`s cleared
+
+On `claude/prepare-deployment-Xj8R7`:
+
+The 7 remaining `it.skip` cases in `ClientLayout.test.tsx` were
+all cleared. Diagnosis showed the original skip comments were
+misleading — the QuickSwitcher cases were failing on a stale
+placeholder selector (the real component renders
+`Search rooms, spaces, DMs, members, settings, actions`), not on
+a missing behavioural stub, and the "settings drawer no longer
+renders Room organization" comment was wrong (only the aria-label
+changed when terminology migrated to "Den"). Approach:
+
+1. Four stable `data-testid` attributes were added in source —
+   `right-panel` and `mobile-den-organization` on
+   `apps/blackout-client/src/app/pages/client/ClientLayout.tsx`
+   and `quick-switcher-input` on
+   `apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx`.
+2. The 9 stale `input[placeholder="…"]` selectors in the test
+   file were replaced with `[data-testid="quick-switcher-input"]`.
+3. The terminology-driven assertion strings (`Select a room`,
+   `All rooms`) were rewritten as regex matches against the
+   actual live strings (`Select a den`, `All dens`).
+4. The threads/pins/search test was rewritten to (a) seed
+   `makeRoom({ timelineEvents })` so the live
+   `useLegacyRoomTimelineAdapter` surfaces events to the
+   right-panel renderer, (b) scope row-button find to
+   `[data-testid="right-panel"] button` so it cannot match the
+   rail's `Threads` toggle, and (c) assert aside unmount via the
+   testid rather than absence of the literal `Close` substring.
+
+Result: `ClientLayout.test.tsx` is **17 passed, 0 skipped**. No
+behavioural stub for `QuickSwitcher` was needed — the real
+component renders fine under the existing test provider. No
+`useCapabilityContext` mock was needed either. The vitest
+threshold floors did not change because the un-skipped tests
+exercise paths already covered by the surrounding passing
+suite.
+
 ## Open scope questions for the next session
 
 1. **UI Primitives styling:** vanilla-extract vs CSS-in-JS vs pure CSS? (Recommended: vanilla-extract for consistency with `apps/blackout-client`.)

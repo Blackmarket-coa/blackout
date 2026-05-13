@@ -497,6 +497,7 @@ export const QuickSwitcher = ({
             >
                 <input
                     autoFocus
+                    data-testid="quick-switcher-input"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     onKeyDown={handleKeyDown}
