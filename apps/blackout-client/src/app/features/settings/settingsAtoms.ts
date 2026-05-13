@@ -13,7 +13,8 @@ export type SettingsSectionId =
     | 'keybinds'
     | 'developer'
     | 'about'
-    | 'character-sheet';
+    | 'character-sheet'
+    | 'bug-report';
 export type ThemeOption = BlackoutThemeId;
 export type ChatDensityOption = 'compact' | 'cozy';
 export type EmojiStyleOption = 'system' | 'twemoji';

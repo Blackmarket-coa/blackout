@@ -44,6 +44,7 @@ import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
+import bugReportRoutes from './routes/bugReport';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';
@@ -160,6 +161,13 @@ app.route('/discord-compat/webhooks', discordCompatWebhookExecuteRoutes);
 // MATRIX_APPSERVICE_HS_TOKEN. Synapse PUTs event batches here on every
 // room transaction we're registered to receive.
 app.route('/_matrix/app/v1', matrixAppserviceRoutes);
+
+// User-facing bug report intake. Mounted top-level (outside /v1) so
+// anonymous reports work without the v1 auth middleware. Validates with
+// zod, rate-limited at BUG_REPORT_RATE_LIMIT_MAX/hour/IP, dual-forwards
+// to a rageshake-compatible receiver (raw logs) and GitHub (sanitized
+// issue body).
+app.route('/bug-report', bugReportRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
