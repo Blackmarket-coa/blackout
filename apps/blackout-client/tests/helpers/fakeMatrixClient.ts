@@ -10,7 +10,7 @@
 // render tree doesn't throw on a missing method.
 
 import { vi } from 'vitest';
-import type { MatrixClient, Room } from 'matrix-js-sdk';
+import type { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 
 export interface FakeClientOverrides {
   rooms?: Room[];
@@ -110,6 +110,13 @@ export interface FakeRoomOverrides {
   /** When set, `room.isSpaceRoom()` returns this regardless of `type`. */
   isSpaceRoom?: boolean;
   mxcAvatarUrl?: string;
+  /**
+   * Events surfaced by `room.getLiveTimeline().getEvents()`. The room
+   * owns the array so callers can mutate it after construction (e.g.
+   * push a new reaction then re-emit `Room.timeline` from the fake
+   * client to trigger the adapter's listener).
+   */
+  timelineEvents?: MatrixEvent[];
 }
 
 export const createFakeRoom = (overrides: FakeRoomOverrides = {}): Room => {
@@ -154,6 +161,8 @@ export const createFakeRoom = (overrides: FakeRoomOverrides = {}): Room => {
     },
   };
 
+  const timelineEvents = overrides.timelineEvents ?? [];
+
   const room = {
     roomId,
     name,
@@ -170,7 +179,7 @@ export const createFakeRoom = (overrides: FakeRoomOverrides = {}): Room => {
     getEventReadUpTo: () => null,
     hasMembershipState: () => false,
     getLiveTimeline: () => ({
-      getEvents: () => [],
+      getEvents: () => timelineEvents,
       getState: () => currentState,
     }),
     currentState,
