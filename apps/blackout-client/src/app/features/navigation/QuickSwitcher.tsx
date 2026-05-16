@@ -16,6 +16,7 @@ export type QuickSwitcherCategory =
     | 'Rooms'
     | 'Spaces'
     | 'DMs'
+    | 'Messages'
     | 'Pages'
     | 'Users'
     | 'Commands'
@@ -40,6 +41,10 @@ export interface QuickSwitcherEntry {
     lastActive?: number;
     /** Tie-break ranking signal sourced from `room.getUnreadNotificationCount()`. */
     unread?: number;
+    /** Room id to select when this entry is activated (Messages + Rooms-as-jump-targets). */
+    jumpRoomId?: string;
+    /** Event id to jump to within `jumpRoomId` (Messages results). */
+    jumpEventId?: string;
 }
 
 export type QuickSwitcherPageEntry = { id: string; label: string; to: string };
@@ -48,6 +53,40 @@ export type QuickSwitcherSettingEntry = {
     id: SettingsSectionId;
     title: string;
     subtitle: string;
+};
+
+/**
+ * Recent-message search source for the canonical quick switcher
+ * (Workstream F closing pass — closes the "recent-messages source still
+ * pending" open item in `deferred-bodies-schedule-2026-05-01.md`).
+ *
+ * Callers source the messages from whatever timeline they have on hand
+ * (last-N from the active room, a global timeline tap, an out-of-band
+ * search response) and hand them to `buildQuickSwitcherIndex`. The
+ * indexer doesn't do any timeline reading itself so the switcher stays
+ * decoupled from the Matrix client.
+ */
+export type QuickSwitcherMessageEntry = {
+    /** Stable id (typically the Matrix event id). */
+    id: string;
+    /** Room the message lives in. */
+    roomId: string;
+    /** Display name of the room (for the subtitle line). */
+    roomName: string;
+    /** Plain-text preview (will be truncated visually by the UI). */
+    preview: string;
+    /** Sender display name or matrix id; included in keywords for search. */
+    sender?: string;
+    /** Origin server timestamp; used as a recency tie-breaker. */
+    timestamp: number;
+};
+
+const MESSAGE_PREVIEW_LIMIT = 140;
+
+const truncatePreview = (text: string, limit: number = MESSAGE_PREVIEW_LIMIT): string => {
+    const collapsed = text.replace(/\s+/g, ' ').trim();
+    if (collapsed.length <= limit) return collapsed;
+    return `${collapsed.slice(0, limit - 1)}…`;
 };
 
 interface QuickSwitcherProps {
@@ -113,7 +152,8 @@ const safeCall = <T,>(fn: (() => T) | undefined, fallback: T): T => {
 export const buildQuickSwitcherIndex = (
     rooms: readonly Room[],
     pages: readonly QuickSwitcherPageEntry[] = [],
-    settings: readonly QuickSwitcherSettingEntry[] = DEFAULT_SETTINGS
+    settings: readonly QuickSwitcherSettingEntry[] = DEFAULT_SETTINGS,
+    messages: readonly QuickSwitcherMessageEntry[] = []
 ): QuickSwitcherEntry[] => {
     const list: QuickSwitcherEntry[] = [];
     const seenUsers = new Set<string>();
@@ -161,6 +201,24 @@ export const buildQuickSwitcherIndex = (
                 subtitle: member.userId,
                 keywords: `${member.name ?? ''} ${member.userId}`,
             });
+        });
+    });
+
+    messages.forEach((message) => {
+        const preview = truncatePreview(message.preview);
+        // Skip entries whose preview collapses to nothing (whitespace-only,
+        // empty string) so they can't pollute fuzzy matches with empty
+        // keywords.
+        if (!preview) return;
+        list.push({
+            id: `message-${message.id}`,
+            category: 'Messages',
+            title: preview,
+            subtitle: `In ${message.roomName}${message.sender ? ` · ${message.sender}` : ''}`,
+            keywords: `${preview} ${message.roomName} ${message.sender ?? ''} ${message.roomId}`,
+            lastActive: message.timestamp,
+            jumpRoomId: message.roomId,
+            jumpEventId: message.id,
         });
     });
 
@@ -247,6 +305,7 @@ const CATEGORY_ORDER: QuickSwitcherCategory[] = [
     'Rooms',
     'Spaces',
     'DMs',
+    'Messages',
     'Pages',
     'Users',
     'Commands',
@@ -342,6 +401,7 @@ export const QuickSwitcher = ({
             Rooms: [],
             Spaces: [],
             DMs: [],
+            Messages: [],
             Pages: [],
             Users: [],
             Commands: [],

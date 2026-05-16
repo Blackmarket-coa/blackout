@@ -1,26 +1,21 @@
-import { createElement } from 'react';
 import type { FeatureSettingsItem } from '../../core/features/types';
-
-const MjolnirSettingsSection = () =>
-    createElement(
-        'section',
-        { style: { padding: 12 } },
-        createElement('h2', null, 'Mjolnir moderation'),
-        createElement(
-            'p',
-            null,
-            'Personal banlist rules, list subscriptions, and protection toggles. Backed by the BKL-009 mjolnir SDK + protection-state events.'
-        )
-    );
+import { MjolnirSettingsPage } from './MjolnirSettingsPage';
 
 /**
- * Mjolnir moderation settings section — BKL-009 parity with `_port`'s
- * `MjolnirUserSettingsTab`. Placeholder pending the canonical settings IA
- * rewire shared with BKL-007.
+ * Mjolnir moderation settings section — BKL-009. Port 5 (BKL-001 /
+ * Workstream A) rewires this entry so the canonical settings IA
+ * renders the real `MjolnirSettingsPage` (banlist rules + protection
+ * toggles) rather than the prior placeholder.
+ *
+ * The page self-sources its fetcher via `useRegistryFetcher('mjolnir')`
+ * with an empty stub fallback. The section name preserves the
+ * `Moderation / Mjolnir` prefix so the IA can later infer a
+ * "Moderation" group from the segment before the separator without a
+ * data-shape migration.
  */
 export const mjolnirSettingsItems: FeatureSettingsItem[] = [
     {
         section: 'Moderation / Mjolnir',
-        component: MjolnirSettingsSection,
+        component: MjolnirSettingsPage,
     },
 ];

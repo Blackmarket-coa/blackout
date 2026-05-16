@@ -1,6 +1,28 @@
 import { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
+import { useLocation } from 'react-router-dom';
 import { rightPanelDescriptorAtom } from '../../state/navigation';
+import { buildFeatureRegistry } from '../../core/features/buildRegistry';
+import { defaultFeatureFlags } from '../../core/features/featureFlags';
+import { useCapabilityContext } from '../../core/features/capabilityContext';
+import { composeShellPanels, selectPanelsByKind } from '../../core/features/composition';
+import type { FeatureFlags, ShellPanelEntry } from '../../core/features/types';
+import { RightPanelTabBar } from './RightPanelTabBar';
+
+const firstSegment = (pathname: string): string => {
+    const match = pathname.match(/^\/([^/?#]+)/);
+    return match ? match[1] : '';
+};
+
+const useRightPanelEntriesForPath = (pathname: string): readonly ShellPanelEntry[] => {
+    const ctx = useCapabilityContext();
+    const flags = { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags;
+    const registry = buildFeatureRegistry(flags);
+    const panels = selectPanelsByKind(composeShellPanels(registry, ctx), 'right-panel');
+    const segment = firstSegment(pathname);
+    if (!segment) return [];
+    return panels.filter((entry) => firstSegment(entry.to) === segment);
+};
 
 const PANEL_STYLE: CSSProperties = {
     width: 320,
@@ -11,16 +33,18 @@ const PANEL_STYLE: CSSProperties = {
     background: 'var(--bg-surface, #0f172a)',
     borderLeft: '1px solid var(--border-default, #374151)',
     color: 'var(--text-primary, #f8fafc)',
-    overflow: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
 };
 
-const EMPTY_STYLE: CSSProperties = {
-    ...PANEL_STYLE,
-    display: 'grid',
-    placeItems: 'center',
-    color: 'var(--text-muted, #9ca3af)',
+const BODY_STYLE: CSSProperties = {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'auto',
     padding: 16,
     fontSize: 13,
+    color: 'var(--text-muted, #9ca3af)',
 };
 
 /**
@@ -37,13 +61,27 @@ const EMPTY_STYLE: CSSProperties = {
  */
 export const DynamicRightPanel = () => {
     const descriptor = useAtomValue(rightPanelDescriptorAtom);
+    const location = useLocation();
+    const registryEntries = useRightPanelEntriesForPath(location.pathname);
 
-    if (descriptor.kind === 'none') {
+    // ClientLayout owns its own right panel for legacy room views; the
+    // shell-level slot must stay hidden so we never paint two side-by-side.
+    if (descriptor.kind === 'legacy-room') {
         return null;
     }
 
-    let body: JSX.Element;
+    // When there are no descriptors AND no registry-driven tabs, render
+    // nothing — keeps the shell-level slot invisible on routes that
+    // don't have a right-panel surface.
+    if (descriptor.kind === 'none' && registryEntries.length === 0) {
+        return null;
+    }
+
+    let body: JSX.Element | null = null;
     switch (descriptor.kind) {
+        case 'none':
+            body = null;
+            break;
         case 'community-info':
             body = (
                 <div>
@@ -92,12 +130,9 @@ export const DynamicRightPanel = () => {
                 </div>
             );
             break;
-        case 'legacy-room':
-            // ClientLayout owns its own right panel today; we hide the
-            // shell-level slot when the descriptor advertises a legacy
-            // panel so we never paint two side-by-side.
-            return null;
         default: {
+            // Legacy-room is handled above with an early return; the switch
+            // here is exhaustive for the remaining narrowed kinds.
             const exhaustiveCheck: never = descriptor;
             void exhaustiveCheck;
             body = <div />;
@@ -106,11 +141,12 @@ export const DynamicRightPanel = () => {
 
     return (
         <aside
-            style={EMPTY_STYLE}
+            style={PANEL_STYLE}
             data-shell-region="right-panel"
             data-right-panel-kind={descriptor.kind}
         >
-            <div style={{ width: '100%', maxWidth: 280 }}>{body}</div>
+            {registryEntries.length > 0 ? <RightPanelTabBar /> : null}
+            {body ? <div style={BODY_STYLE}>{body}</div> : null}
         </aside>
     );
 };

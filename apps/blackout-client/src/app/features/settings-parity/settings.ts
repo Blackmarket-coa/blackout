@@ -1,47 +1,47 @@
-import { createElement } from 'react';
 import type { FeatureSettingsItem } from '../../core/features/types';
-
-const buildPlaceholderSection = (title: string, body: string) =>
-    function SettingsParitySection() {
-        return createElement(
-            'section',
-            { style: { padding: 12 } },
-            createElement('h2', null, title),
-            createElement('p', null, body)
-        );
-    };
+import { LabsPage } from './LabsPage';
+import { PreferencesPage } from './PreferencesPage';
+import { SidebarPage } from './SidebarPage';
 
 /**
- * Settings sections introduced for BKL-007 — preferences / sidebar / labs
- * tab parity with `_port`. Placeholders pending the canonical settings IA
- * rewire (the same rewire BKL-008's tab depends on for navigation).
+ * Settings sections for BKL-007 — Preferences / Sidebar / Labs surfaces.
+ *
+ * Port 5 (BKL-001 / Workstream A) rewires these so the canonical
+ * settings IA renders the real `PreferencesPage` / `SidebarPage` /
+ * `LabsPage` components rather than the prior placeholders.
+ *
+ * Each page self-sources its fetcher via `useRegistryFetcher(...)`
+ * (`'preferences'` / `'sidebarSettings'` / `'labs'`) with a no-op stub
+ * fallback so the section still renders when the registry fetcher is
+ * not wired (e.g. in the IA navigation test).
  */
 export const preferencesSettings: FeatureSettingsItem[] = [
     {
         section: 'Preferences',
-        component: buildPlaceholderSection(
-            'Preferences',
-            'Language, autocomplete delay, read-marker thresholds, timezone. Backed by `fetchBucket` / `setSetting` (category `preferences`, scope `device` or `account`).'
-        ),
+        component: PreferencesPage,
     },
 ];
 
 export const sidebarSettings: FeatureSettingsItem[] = [
     {
         section: 'Sidebar',
-        component: buildPlaceholderSection(
-            'Sidebar',
-            'Meta-space toggles (Home/Favourites/People/Orphans/VideoRooms). Backed by `fetchBucket` / `setSetting` (category `sidebar`, scope `account`).'
-        ),
+        component: SidebarPage,
     },
 ];
 
+/**
+ * The Labs section is gated twice:
+ * - The registry checks the `settings.labs.show` capability + the
+ *   `settingsParity` flag (manifest.ts) before composing this entry
+ *   at all.
+ * - Inside `LabsPage`, `resolveLabsGate({ configFlag, developerMode })`
+ *   from `@blackout/sdk` hides the feature list when neither
+ *   `configFlag` nor `developerMode` is true. Per-user developer mode
+ *   is fetched via `fetcher.fetchLabsGate()` on mount.
+ */
 export const labsSettings: FeatureSettingsItem[] = [
     {
         section: 'Labs',
-        component: buildPlaceholderSection(
-            'Labs',
-            'Experimental + beta feature toggles, gated by `legacy.config.labs_gate`. Backed by `fetchLabsFeatures` / `setLabsFeatureEnabled` / `fetchLabsGate` and `resolveLabsGate`.'
-        ),
+        component: LabsPage,
     },
 ];

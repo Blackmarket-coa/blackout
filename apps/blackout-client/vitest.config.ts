@@ -5,8 +5,12 @@
 // `@blackout/client` is empty. Three previously-quarantined files
 // (DraupnirNavigation, RoomView.layout, ClientLayout) were brought back
 // online by refreshing their mocks against the current matrix-client
-// surface; seven scenario-specific cases inside ClientLayout.test.tsx
-// remain `it.skip(...)` with explanatory comments, tracked in
+// surface, and the seven scenario-specific `it.skip(...)` cases inside
+// ClientLayout.test.tsx were subsequently cleared via stable testids
+// (`right-panel`, `mobile-den-organization`, `quick-switcher-input`),
+// updated placeholder selectors, and refreshed "den" terminology
+// assertions. ClientLayout.test.tsx now runs 17 passed / 0 skipped. The
+// full history of this work is tracked in
 // `docs/architecture/deferred-bodies-schedule-2026-05-01.md`.
 //
 // Coverage thresholds are no-regression floors keyed to current actual
