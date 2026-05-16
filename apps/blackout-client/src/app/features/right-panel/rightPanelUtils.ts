@@ -55,6 +55,75 @@ export const getEventTimestamp = (event: MatrixEvent): string => {
 export const getThreadEvents = (events: MatrixEvent[]): MatrixEvent[] =>
     events.filter((event) => getTimelineRelation(event)?.rel_type === 'm.thread');
 
+/**
+ * Pull the thread root event id off an event's `m.relates_to` relation,
+ * if any. Returns `null` for events that aren't thread replies (no
+ * relation, wrong rel_type, missing event_id, or non-string event_id).
+ *
+ * Foundation helper for the in-room thread panel rewrite (Workstream C,
+ * `deferred-bodies-schedule-2026-05-01.md`).
+ */
+export const getThreadRootEventId = (event: MatrixEvent): string | null => {
+    const relation = getTimelineRelation(event);
+    if (!relation || relation.rel_type !== 'm.thread') return null;
+    const eventId = relation.event_id;
+    return typeof eventId === 'string' && eventId.length > 0 ? eventId : null;
+};
+
+/**
+ * Returns the unique set of thread-root event ids referenced by the
+ * thread replies in `events`. Order matches first-occurrence in the
+ * input so callers can render the same roots in a stable order without
+ * re-sorting.
+ */
+export const getThreadRootIds = (events: MatrixEvent[]): string[] => {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const event of events) {
+        const rootId = getThreadRootEventId(event);
+        if (!rootId || seen.has(rootId)) continue;
+        seen.add(rootId);
+        ordered.push(rootId);
+    }
+    return ordered;
+};
+
+/**
+ * Groups thread reply events under their root event id. Returns a map
+ * from root event id to the chronological list of replies (preserving
+ * input order — callers can sort by `event.getTs()` if they need a
+ * different ordering). Non-thread events are dropped silently.
+ */
+export const groupThreadReplies = (events: MatrixEvent[]): Map<string, MatrixEvent[]> => {
+    const groups = new Map<string, MatrixEvent[]>();
+    for (const event of events) {
+        const rootId = getThreadRootEventId(event);
+        if (!rootId) continue;
+        const list = groups.get(rootId);
+        if (list) list.push(event);
+        else groups.set(rootId, [event]);
+    }
+    return groups;
+};
+
+/**
+ * Find the actual thread-root event in `events` by its id. Returns the
+ * first match, or `null` if not present in the timeline window.
+ * Useful for the thread panel header (which renders the root message
+ * above the reply tree) when the right-panel's event window already
+ * contains the root.
+ */
+export const findThreadRoot = (
+    events: MatrixEvent[],
+    rootEventId: string,
+): MatrixEvent | null => {
+    if (!rootEventId) return null;
+    for (const event of events) {
+        if (event.getId?.() === rootEventId) return event;
+    }
+    return null;
+};
+
 export const getPinnedEvents = (room: Room | null, events: MatrixEvent[]): MatrixEvent[] => {
     if (!room) return [];
     const pinState = room.currentState.getStateEvents('m.room.pinned_events', '');
