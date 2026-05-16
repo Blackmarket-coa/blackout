@@ -1,6 +1,11 @@
 # Unfinished Items Triage — May 2026
 
-- Branch: `claude/review-unfinished-items-bLx3q`
+- Branch: `claude/review-unfinished-items-bLx3q` (merged); follow-up
+  call-site integrations land on
+  `claude/complete-call-site-integrations-7dZf2` (#1 ThreadPanel mount,
+  #2 ThreadUnreadBadge sidebar mount, #3 native pickPhoto in composer,
+  #4 Reactions Matrix-mock tests). Remaining open items: T2-01 (Design
+  SVGs) and T2-02 (server-side `StreamRecord.den_id` migration).
 - Base commit: `01fd4a2` (Merge PR #634 — `claude/prepare-deployment-Xj8R7`)
 - Scope: full repository at `/home/user/blackout` — every workspace, every doc tracker
 - Methodology: code-marker grep (TODO/FIXME/XXX/HACK, `it.skip`/`describe.skip`/`xit`/`xdescribe`/`it.todo`, `@ts-ignore`/`@ts-expect-error`, "not implemented" / stub markers), review of status/roadmap markdown trackers, cross-reference against `docs/audits/production_readiness_2026_05.md` and `docs/architecture/deferred-bodies-schedule-2026-05-01.md`
