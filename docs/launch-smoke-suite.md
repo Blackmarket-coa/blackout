@@ -60,6 +60,7 @@ Release is blocked if **any** of the following occur:
 | LS-AUTH-03 | A+M | Password recovery request | Trigger "forgot password" for `smoke_member_a`. | Recovery email/token issued; success confirmation shown without account enumeration leakage. | Yes |
 | LS-AUTH-04 | M | Recovery completion | Use recovery link/token, set new password, login with new password. | Password reset completes; old password invalidated; new password works. | Yes |
 | LS-AUTH-05 | A | Session continuity after refresh | Login then hard-refresh app route. | Session persists (or expected re-auth prompt), app remains usable. | Yes |
+| LS-AUTH-06 | A | Fresh signup happy path | Open `/register` deep link, fill the simplest UIA flow the homeserver advertises (Dummy / Password, plus `LS_AUTH_REGISTRATION_TOKEN` when configured), submit. | Account is created; the new session lands on the authenticated home surface without hitting `/login` or `/register`. | Yes |
 
 ### 2) Room + DM Messaging
 
@@ -106,7 +107,7 @@ Release is blocked if **any** of the following occur:
 
 ## Automated Execution Set (CI/Staging)
 Prioritize these IDs in a runnable automated smoke job:
-- Auth: LS-AUTH-01, LS-AUTH-02, LS-AUTH-03, LS-AUTH-05
+- Auth: LS-AUTH-01, LS-AUTH-02, LS-AUTH-03, LS-AUTH-05, LS-AUTH-06
 - Messaging: LS-MSG-01, LS-MSG-02, LS-MSG-03
 - Media: LS-MEDIA-01, LS-MEDIA-02, LS-MEDIA-03
 - Moderation: LS-MOD-01, LS-MOD-03

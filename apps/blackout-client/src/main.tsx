@@ -13,7 +13,7 @@ import 'folds/dist/style.css';
 import { configClass, varsClass } from 'folds';
 import { useAtomValue } from 'jotai';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
@@ -168,6 +168,16 @@ const buildAppRouter = (capabilityContext: {
     // room URL is `/communities/:canopyId/dens/:denId`. Deep links
     // hitting the old form will 404 after the year-long grace
     // window from PR 1.
+    // Auth deep-link paths are valid URLs when logged out (the LoginPage
+    // reads `window.location.pathname` to pick the active tab). Once
+    // the user is logged in the router takes over, so we redirect each
+    // of them to the canonical landing page rather than 404.
+    const authRedirectRoutes = [
+        { path: '/login', element: <Navigate to="/" replace /> },
+        { path: '/register', element: <Navigate to="/" replace /> },
+        { path: '/reset-password', element: <Navigate to="/" replace /> },
+    ];
+
     const destinationRoutes = [
         {
             path: '/',
@@ -177,6 +187,7 @@ const buildAppRouter = (capabilityContext: {
             path: '/moderation/draupnir',
             element: <DraupnirRoutePage />,
         },
+        ...authRedirectRoutes,
         ...registryRoutes,
     ];
 

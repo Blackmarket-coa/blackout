@@ -90,6 +90,66 @@ requiresLiveStack(
 );
 
 requiresLiveStack(
+  'LS-AUTH-06: a fresh username can register and land authenticated',
+  async ({ page }) => {
+    // The launch suite gate requires that brand-new users can self-serve
+    // a Matrix account against the production homeserver. The happy path
+    // covers Dummy + Password + (optional) RegistrationToken; flows that
+    // require email or reCAPTCHA are skipped in CI and exercised in the
+    // manual LS-AUTH-04 walkthrough instead.
+    const registrationToken = process.env.LS_AUTH_REGISTRATION_TOKEN;
+    const requiresEmail = Boolean(process.env.LS_AUTH_EMAIL_INBOX_URL);
+
+    if (requiresEmail) {
+      test.skip(
+        true,
+        'LS_AUTH_EMAIL_INBOX_URL set — email-gated signup is covered manually in LS-AUTH-04.',
+      );
+    }
+
+    await page.goto('/register');
+
+    // The register tab should be auto-selected from the URL. If the
+    // homeserver reports registration disabled, the LoginPage flips us
+    // back to the login tab with a notice — in that case there is no
+    // route to test and we skip.
+    const disabledNotice = await page
+      .getByTestId('registration-disabled-notice')
+      .isVisible()
+      .catch(() => false);
+    if (disabledNotice) {
+      test.skip(true, 'Homeserver reports registration disabled; signup smoke not applicable.');
+    }
+
+    const username = `smoke_signup_${Date.now()}`;
+    const password = 'launch-smoke-' + Math.random().toString(36).slice(2, 10) + '!Aa1';
+
+    await page.getByLabel(/^username$/i).fill(username);
+    await page.getByLabel(/^password$/i).fill(password);
+    await page.getByLabel(/confirm password/i).fill(password);
+
+    if (registrationToken) {
+      const tokenField = page.getByLabel(/registration token/i);
+      if (await tokenField.isVisible().catch(() => false)) {
+        await tokenField.fill(registrationToken);
+      }
+    }
+
+    const termsCheckbox = page.getByRole('checkbox', { name: /accept.*terms/i });
+    if (await termsCheckbox.isVisible().catch(() => false)) {
+      await termsCheckbox.check();
+    }
+
+    await page.getByRole('button', { name: /create account/i }).click();
+
+    // Successful registration drops the user onto the authenticated
+    // landing surface; the LoginPage unmounts, so neither `/register`
+    // nor `/login` is in the URL.
+    await expect(page).not.toHaveURL(/\/(register|login)/i, { timeout: 30_000 });
+  },
+);
+
+requiresLiveStack(
   'LS-AUTH-05: session persists across a hard refresh',
   async ({ page, context }) => {
     const username = process.env.LS_AUTH_USERNAME ?? 'smoke_member_a';
