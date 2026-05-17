@@ -8,11 +8,12 @@ import { useAttachPhoto } from '../../../../../src/app/features/room/attachments
 type HarnessProps = {
     pickPhoto?: Parameters<typeof useAttachPhoto>[0]['pickPhoto'];
     isNative: () => boolean;
+    track?: Parameters<typeof useAttachPhoto>[0]['track'];
     onState: (state: { files: File[]; clicks: number }) => void;
     onAttach: (run: () => Promise<void>) => void;
 };
 
-const Harness = ({ pickPhoto, isNative, onState, onAttach }: HarnessProps) => {
+const Harness = ({ pickPhoto, isNative, track, onState, onAttach }: HarnessProps) => {
     const [files, setFiles] = useState<File[]>([]);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const clicksRef = useRef(0);
@@ -21,6 +22,7 @@ const Harness = ({ pickPhoto, isNative, onState, onAttach }: HarnessProps) => {
         attachmentInputRef: inputRef,
         pickPhoto,
         isNative,
+        track,
     });
     React.useEffect(() => {
         onState({ files, clicks: clicksRef.current });
@@ -122,6 +124,61 @@ describe('useAttachPhoto (Port 4 carry-over — native composer attach branch)',
 
         expect(pickPhoto).toHaveBeenCalled();
         expect(harness.getState().files).toHaveLength(0);
+    });
+
+    it('emits attach_photo_picked telemetry tagged with the native source', async () => {
+        const file = new File(['hi'], 'photo.jpg', { type: 'image/jpeg' });
+        const pickPhoto = vi.fn().mockResolvedValue({ file, source: 'capacitor-camera' });
+        const track = vi.fn();
+        const harness = await mountHarness({
+            pickPhoto,
+            isNative: () => true,
+            track,
+        });
+
+        await harness.run();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(track).toHaveBeenCalledTimes(1);
+        expect(track).toHaveBeenCalledWith('capacitor-camera');
+    });
+
+    it('does not emit telemetry when the native picker is cancelled', async () => {
+        const pickPhoto = vi.fn().mockResolvedValue(null);
+        const track = vi.fn();
+        const harness = await mountHarness({
+            pickPhoto,
+            isNative: () => true,
+            track,
+        });
+
+        await harness.run();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(track).not.toHaveBeenCalled();
+    });
+
+    it('emits attach_photo_picked telemetry tagged as web on the file-input fallback', async () => {
+        const pickPhoto = vi.fn();
+        const track = vi.fn();
+        const harness = await mountHarness({
+            pickPhoto,
+            isNative: () => false,
+            track,
+        });
+        const input = document.querySelector(
+            '[data-testid="attachment-input"]',
+        ) as HTMLInputElement;
+        input.click = vi.fn();
+
+        await harness.run();
+
+        expect(track).toHaveBeenCalledTimes(1);
+        expect(track).toHaveBeenCalledWith('web');
     });
 
     it('clicks the hidden file input on web and never invokes the native picker', async () => {
