@@ -46,8 +46,11 @@ export interface PickPhotoAttachmentResult {
     source: NativePickedPhoto['source'];
 }
 
-const DEFAULT_FILE_FACTORY: PickPhotoOptions['fileFactory'] = (bits, name, options) =>
-    new File(bits, name, options);
+const DEFAULT_FILE_FACTORY: NonNullable<PickPhotoOptions['fileFactory']> = (
+    bits,
+    name,
+    options,
+) => new File(bits, name, options);
 
 export async function pickPhotoAttachment(
     options: PickPhotoOptions = {},

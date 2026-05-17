@@ -103,6 +103,19 @@ export async function nativeShare(payload: NativeSharePayload): Promise<ShareDis
 }
 
 /**
+ * Synchronous native-runtime probe. Returns `true` only when the
+ * Capacitor runtime has injected `window.Capacitor.isNativePlatform()`
+ * and the call returns true. Web builds always return `false`, which
+ * lets call sites pick the file-input path without paying the dynamic
+ * `@capacitor/core` import.
+ */
+export function isNativePlatform(): boolean {
+    if (typeof window === 'undefined') return false;
+    const cap = (window as unknown as { Capacitor?: CapacitorBridge }).Capacitor;
+    return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true;
+}
+
+/**
  * Quick capability probe so call sites can hide a Share button when the
  * environment cannot fulfill it through any transport.
  */

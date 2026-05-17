@@ -24,6 +24,8 @@ import {
     groupMembersByPresence,
     searchEvents,
 } from '../../features/right-panel/rightPanelUtils';
+import { ThreadPanel } from '../../features/right-panel/ThreadPanel';
+import { MessageComposer } from '../../features/room/MessageComposer';
 import type { PluginDefinition, UISlotRegistry } from '../contracts';
 import { isRuntimePluginEnabled } from '../manifest';
 import {
@@ -42,6 +44,12 @@ export type RightPanelSlotProps = {
     events: MatrixEvent[];
     onJumpToEvent: (eventId: string) => void;
     rolesEnabled: boolean;
+    /**
+     * Root event id of the currently focused thread, or `null` when the
+     * threads slot should render its flat starters list. Threaded by
+     * `RightPanelContent` from `activeThreadRootIdAtom`.
+     */
+    activeThreadRootId: string | null;
 };
 
 export type RightPanelSlotName = Exclude<RightPanelType, null>;
@@ -440,14 +448,33 @@ const MonetizationPanel: RightPanelSlotRenderer = ({ room }) => {
 
 const baselineSlotRegistry: RightPanelSlotRegistry = {
     members: MembersPanel,
-    threads: ({ events, onJumpToEvent }) => (
-        <TimelineEventList
-            events={getThreadEvents(events)}
-            emptyMessage="No active threads yet."
-            fallbackBody="[thread message]"
-            onJumpToEvent={onJumpToEvent}
-        />
-    ),
+    threads: ({ events, room, onJumpToEvent, activeThreadRootId }) => {
+        if (!activeThreadRootId) {
+            return (
+                <TimelineEventList
+                    events={getThreadEvents(events)}
+                    emptyMessage="No active threads yet."
+                    fallbackBody="[thread message]"
+                    onJumpToEvent={onJumpToEvent}
+                />
+            );
+        }
+        return (
+            <ThreadPanel
+                events={events}
+                rootEventId={activeThreadRootId}
+                fallbackBody="[thread message]"
+                onJumpToEvent={onJumpToEvent}
+                renderComposer={(rootEventId) => (
+                    <MessageComposer
+                        roomId={room.roomId}
+                        target={{ mode: 'thread', rootEventId }}
+                        placeholder="Reply in thread"
+                    />
+                )}
+            />
+        );
+    },
     pins: ({ events, room, onJumpToEvent }) => (
         <TimelineEventList
             events={getPinnedEvents(room, events)}

@@ -11,6 +11,8 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import { useSetAtom } from 'jotai';
+import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -451,12 +453,33 @@ const ReplyPreview = ({ event }: { event: MatrixEvent }) => {
 
 const ThreadIndicator = ({ event }: { event: MatrixEvent }) => {
     const relation = getRelation(event);
+    const setActiveThreadRoot = useSetAtom(activeThreadRootIdAtom);
+    const setRightPanel = useSetAtom(rightPanelAtom);
     if (relation?.rel_type !== 'm.thread') return null;
     const threadRoot = typeof relation.event_id === 'string' ? relation.event_id : null;
+    const handleOpen = threadRoot
+        ? () => {
+              setActiveThreadRoot(threadRoot);
+              setRightPanel('threads');
+          }
+        : undefined;
     return (
-        <div style={styles.pill}>
+        <button
+            type="button"
+            data-testid="thread-indicator"
+            data-thread-root={threadRoot ?? ''}
+            onClick={handleOpen}
+            disabled={!handleOpen}
+            style={{
+                ...styles.pill,
+                cursor: handleOpen ? 'pointer' : 'default',
+                background: 'transparent',
+                color: 'inherit',
+                font: 'inherit',
+            }}
+        >
             🧵 Thread reply{threadRoot ? ` · ${threadRoot.slice(0, 10)}…` : ''}
-        </div>
+        </button>
     );
 };
 
