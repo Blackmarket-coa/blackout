@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import type { PluginCapability } from '@blackout/protocol';
 import { capabilityContextAtom } from '../../core/features/capabilityContext';
 import { coreFeatureModules } from '../../core/features/coreModules';
 import {
@@ -16,6 +17,21 @@ import { installedPluginsAtom } from '../monetization/install/installedPluginsAt
 const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(
     Object.values(runtimePluginFeatureFlags),
 );
+
+const CAPABILITY_LABELS: Record<PluginCapability, string> = {
+    'shell.panel.read': 'Read shell panels',
+    'shell.panel.write': 'Modify shell panels',
+    'message.read': 'Read messages',
+    'message.compose': 'Compose messages',
+    'storage.read': 'Read local storage',
+    'storage.write': 'Write local storage',
+    'http.fetch': 'Make network requests',
+};
+
+const describeCapabilities = (capabilities: readonly PluginCapability[]): string => {
+    if (capabilities.length === 0) return 'No special permissions';
+    return capabilities.map((cap) => CAPABILITY_LABELS[cap] ?? cap).join(' · ');
+};
 
 type PluginRow = {
     moduleId: string;
@@ -203,17 +219,24 @@ export const PluginsView = () => {
                                         {record.manifest.id}@{record.manifest.version}
                                     </code>
                                     <span
+                                        aria-label={
+                                            record.lastError
+                                                ? `${record.status} (with error)`
+                                                : record.status
+                                        }
                                         style={{
                                             fontSize: 11,
                                             padding: '1px 6px',
                                             borderRadius: 999,
-                                            background:
-                                                record.status === 'enabled'
-                                                    ? 'var(--accent-primary, #4ECDC4)'
-                                                    : 'var(--text-muted, #888)',
+                                            background: record.lastError
+                                                ? 'var(--danger, #b3261e)'
+                                                : record.status === 'enabled'
+                                                  ? 'var(--accent-primary, #4ECDC4)'
+                                                  : 'var(--text-muted, #888)',
                                             color: '#fff',
                                         }}
                                     >
+                                        {record.lastError ? '⚠ ' : ''}
                                         {record.status}
                                     </span>
                                 </div>
@@ -223,6 +246,16 @@ export const PluginsView = () => {
                                     {record.manifest.listing.publicSlug
                                         ? ` · /${record.manifest.listing.publicSlug}`
                                         : ''}
+                                </small>
+                                <small
+                                    data-testid={`plugin-permissions-${record.manifest.id}`}
+                                    style={{
+                                        display: 'block',
+                                        color: 'var(--text-muted)',
+                                        fontSize: 11,
+                                    }}
+                                >
+                                    Permissions: {describeCapabilities(record.manifest.capabilities)}
                                 </small>
                                 {record.lastError ? (
                                     <div
