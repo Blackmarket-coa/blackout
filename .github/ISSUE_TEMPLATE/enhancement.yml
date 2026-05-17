@@ -1,17 +1,18 @@
 name: Enhancement request
-description: Do you have a suggestion or feature request?
-labels: [T-Enhancement]
+description: Suggest an improvement to an existing feature. For brand-new features or cross-cutting ideas, prefer a Discussion.
+labels: [T-Enhancement, needs-triage]
 body:
     - type: markdown
       attributes:
           value: |
-              Thank you for taking the time to propose an enhancement to an existing feature. If you would like to propose a new feature or a major cross-platform change, please [start a discussion here](https://github.com/element-hq/element-meta/discussions/new?category=ideas).
+              For brand-new features or large cross-cutting ideas, please open a
+              [Discussion](https://github.com/Blackmarket-coa/blackout/discussions/new/choose) first
+              (Roadmap, Plugin Ideas, or Governance categories) so we can gather signal before opening an issue.
     - type: textarea
       id: usecase
       attributes:
           label: Your use case
-          description: What would you like to be able to do? Please feel welcome to include screenshots or mock ups.
-          placeholder: Tell us what you would like to do!
+          description: What would you like to be able to do? Mock-ups or screenshots welcome.
           value: |
               #### What would you like to do?
 
@@ -23,14 +24,22 @@ body:
     - type: textarea
       id: alternative
       attributes:
-          label: Have you considered any alternatives?
-          placeholder: A clear and concise description of any alternative solutions or features you've considered.
+          label: Alternatives considered
+          placeholder: Other approaches you thought about.
+      validations:
+          required: false
+    - type: input
+      id: coliseum-link
+      attributes:
+          label: Linked Coliseum challenge (optional)
+          description: If this enhancement came out of a Coliseum challenge, paste the challenge ID (e.g. `challenge:onboarding`).
+          placeholder: challenge:onboarding
       validations:
           required: false
     - type: textarea
       id: additional-context
       attributes:
           label: Additional context
-          placeholder: Is there anything else you'd like to add?
+          placeholder: Anything else worth noting.
       validations:
           required: false

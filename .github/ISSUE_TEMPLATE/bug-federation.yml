@@ -1,0 +1,71 @@
+name: Bug report (federation)
+description: File a bug that involves more than one homeserver — message delivery, room joins, sync, media, presence across servers.
+labels: [T-Defect, area:federation, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Federation bugs are most useful when both sides describe what they saw. See
+              [`docs/operations/runbooks/independent-org-to-coalition-onboarding.md`](https://github.com/Blackmarket-coa/blackout/blob/develop/docs/operations/runbooks/independent-org-to-coalition-onboarding.md)
+              for context on how peer homeservers join the coalition.
+    - type: input
+      id: local-hs
+      attributes:
+          label: Local homeserver
+          description: The homeserver you're signed in on.
+          placeholder: e.g. matrix.theblackout.app or my-peer-hs.example
+      validations:
+          required: true
+    - type: input
+      id: remote-hs
+      attributes:
+          label: Remote homeserver
+          description: The other side of the conversation / room.
+          placeholder: e.g. matrix.org, conduit.example
+      validations:
+          required: true
+    - type: input
+      id: room
+      attributes:
+          label: Room ID or alias
+          placeholder: e.g. !abcdef:matrix.theblackout.app
+      validations:
+          required: false
+    - type: input
+      id: event-ids
+      attributes:
+          label: Relevant event IDs
+          description: Paste one or more event IDs that demonstrate the issue.
+          placeholder: e.g. $abc...:matrix.theblackout.app
+      validations:
+          required: false
+    - type: textarea
+      id: what-happened
+      attributes:
+          label: What happened
+          value: |
+              #### Action (which side, what was attempted)
+
+              #### Expected outcome on the other side
+
+              #### Actual outcome
+      validations:
+          required: true
+    - type: textarea
+      id: server-logs
+      attributes:
+          label: Homeserver log snippet (if available)
+          description: Paste relevant lines from your homeserver log; redact identifiers as needed.
+          render: text
+      validations:
+          required: false
+    - type: dropdown
+      id: eventually-arrived
+      attributes:
+          label: Did the event eventually arrive on the other side?
+          options:
+              - "Yes — arrived but delayed (note delay in description)"
+              - "No — never arrived"
+              - "Unknown"
+      validations:
+          required: true

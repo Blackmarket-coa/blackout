@@ -1,0 +1,60 @@
+name: Bug report (performance)
+description: File a bug for slow load, scroll jank, memory growth, battery drain, or other perf regressions.
+labels: [T-Defect, area:performance, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Perf reports are most actionable when you frame them as "baseline vs. degradation" — what was acceptable before, what's not now.
+    - type: dropdown
+      id: surface
+      attributes:
+          label: Surface
+          options:
+              - "Web"
+              - "Desktop"
+              - "Mobile (iOS)"
+              - "Mobile (Android)"
+      validations:
+          required: true
+    - type: dropdown
+      id: metric
+      attributes:
+          label: Which metric is degraded?
+          options:
+              - "Initial load / cold start"
+              - "Scroll smoothness / FPS"
+              - "Memory growth over time"
+              - "Battery drain"
+              - "Network usage"
+              - "Other (describe below)"
+      validations:
+          required: true
+    - type: textarea
+      id: repro-size
+      attributes:
+          label: Repro size
+          description: Roughly how much data is involved? Number of rooms joined, messages in the backlog, members in the room, etc.
+          placeholder: e.g. 80 rooms joined, scrolling a 5000-message backlog
+      validations:
+          required: true
+    - type: textarea
+      id: measurement
+      attributes:
+          label: What you measured
+          description: Numbers, percentages, screenshots of perf traces, etc.
+          value: |
+              #### Baseline (what's acceptable / what it used to be)
+
+              #### Current (what you're seeing now)
+
+              #### How you measured
+      validations:
+          required: true
+    - type: textarea
+      id: trace
+      attributes:
+          label: Perf trace (optional)
+          description: Attach a perf trace if you have one — Chrome DevTools, Safari Web Inspector, Android Studio Profiler, Xcode Instruments.
+      validations:
+          required: false

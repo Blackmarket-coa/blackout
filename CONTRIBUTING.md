@@ -1,78 +1,102 @@
-# Contributing code to Element Web
+# Contributing to Blackout
 
-Everyone is welcome to contribute code to Element Web, provided that they are willing to license their contributions to Element under a [Contributor License Agreement](https://cla-assistant.io/element-hq/element-web) (CLA). This ensures that their contribution will be made available under an OSI-approved open-source license, currently licensed under Affero General Public License v3 (AGPLv3) or General Public License v3 (GPLv3) at your choice.
+Thanks for your interest in Blackout. This document covers how to contribute
+code, where to chat, and what we expect from pull requests. For non-developer
+testing during the V1 test flight, see [`TESTERS.md`](TESTERS.md). For the
+role taxonomy (Scout / Operator / Builder / Signal / Federation Team), see
+[`CONTRIBUTOR_ROLES.md`](CONTRIBUTOR_ROLES.md).
 
-If you're contributing, or thinking about contributing, please come & chat to
-us in our development room, [#element-dev](https://matrix.to/#/#element-dev:matrix.org).
-This is the best place to ask questions about the code, how to work on the project
-or whether a change is likely to be accepted.
+## License and sign-off
 
-## _port migration guardrail
+Blackout is dual-licensed under **AGPL-3.0** ([`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0))
+and **GPL-3.0** ([`LICENSE-GPL-3.0`](LICENSE-GPL-3.0)), with a separate
+commercial option available — see [`LICENSE-COMMERCIAL`](LICENSE-COMMERCIAL).
 
-The `_port/` tree is parked reference material for migration and is read-only for implementation work.
+Contributors certify the origin of their work using the **Developer Certificate
+of Origin** ([DCO](https://developercertificate.org/)) — we do not require a
+separate CLA. Sign off each commit:
+
+```
+git commit -s
+```
+
+This adds a `Signed-off-by: Your Name <you@example.com>` trailer that affirms
+you have the right to submit the work under the project's license. By signing
+off, you agree to the DCO. The commit author's name and email must match the
+sign-off line.
+
+## Where to chat
+
+- **Developer / contributor chat:** [`#blackout-dev:theblackout.app`](https://matrix.to/#/#blackout-dev:theblackout.app)
+  — code, architecture, contribution questions.
+- **Tester / orientation chat:** [`#welcome:theblackout.app`](https://matrix.to/#/#welcome:theblackout.app)
+  — for getting started on the hosted instance.
+- **Open-ended discussion:** [GitHub Discussions](https://github.com/Blackmarket-coa/blackout/discussions)
+  — roadmap, plugin ideas, governance, UX feedback, federation, steganography
+  research.
+
+## `_port/` migration guardrail
+
+The `_port/` tree is parked reference material for migration and is read-only
+for implementation work.
 
 - Run `pnpm guard:port` before opening a PR.
 - For branch comparisons (e.g. local CI parity), run `pnpm guard:port:range -- --base <ref>`.
-- Only migration metadata docs (`_port/README.md`, `_port/MIGRATION_INVENTORY.md`) are allowed to change by default.
+- Only migration metadata docs (`_port/README.md`, `_port/MIGRATION_INVENTORY.md`)
+  are allowed to change by default.
 
 ## How to contribute
 
-The preferred and easiest way to contribute changes to the project is to fork
-it on github, and then create a pull request to ask us to pull your changes
-into our repo (https://help.github.com/articles/using-pull-requests/)
+The preferred and easiest way to contribute changes is to fork the repo on
+GitHub and open a pull request. We use GitHub's pull request workflow to review
+contributions, either asking for refinements or merging directly.
 
-We use GitHub's pull request workflow to review the contribution, and either
-ask you to make any refinements needed or merge it and make them ourselves.
+Pick up a [`good first issue`](https://github.com/Blackmarket-coa/blackout/labels/good%20first%20issue)
+if you're new — these are scoped, well-documented, and reviewed quickly.
 
-Your PR should have a title that describes what change is being made. This
-is used for the text in the Changelog entry by default (see below), so a good
-title will tell a user succinctly what change is being made. "Fix bug where
-cows had five legs" and, "Add support for miniature horses" are examples of good
-titles. Don't include an issue number here: that belongs in the description.
-Definitely don't use the GitHub default of "Update file.ts".
+### PR titles
 
-As for your PR description, it should include these things:
+Your PR should have a title that describes what change is being made. This is
+used for the changelog entry by default, so a good title tells a user
+succinctly what is changing. "Fix bug where cows had five legs" and "Add
+support for miniature horses" are examples of good titles. Don't include an
+issue number in the title — that belongs in the description. Avoid the GitHub
+default of "Update file.ts".
 
-- References to any bugs fixed by the change (in GitHub's `Fixes` notation)
-- Describe the why and what is changing in the PR description so it's easy for
-  onlookers and reviewers to onboard and context switch. This information is
-  also helpful when we come back to look at this in 6 months and ask "why did
-  we do it like that?" we have a chance of finding out.
-    - Why didn't it work before? Why does it work now? What use cases does it
-      unlock?
-    - If you find yourself adding information on how the code works or why you
-      chose to do it the way you did, make sure this information is instead
-      written as comments in the code itself.
-    - Sometimes a PR can change considerably as it is developed. In this case,
-      the description should be updated to reflect the most recent state of
-      the PR. (It can be helpful to retain the old content under a suitable
-      heading, for additional context.)
-- Include both **before** and **after** screenshots to easily compare and discuss
-  what's changing.
-- Include a step-by-step testing strategy so that a reviewer can check out the
-  code locally and easily get to the point of testing your change.
-- Add comments to the diff for the reviewer that might help them to understand
-  why the change is necessary or how they might better understand and review it.
+### PR descriptions
+
+Your PR description should include:
+
+- References to any bugs fixed by the change (in GitHub's `Fixes #123` notation).
+- The why and what of the change, so reviewers can onboard and context-switch
+  easily. This is also helpful when revisiting the change months later.
+  - Why didn't it work before? Why does it work now? What use cases does it
+    unlock?
+  - If you find yourself explaining how the code works in the PR description,
+    consider putting that explanation as a comment in the code itself.
+  - If the PR evolves significantly during review, update the description to
+    reflect the most recent state.
+- Before/after screenshots for visible changes.
+- A step-by-step testing strategy so a reviewer can check out the code
+  locally and exercise your change.
+- Inline diff comments where context helps the reviewer.
 
 ### Changelogs
 
-There's no need to manually add Changelog entries: we use information in the
-pull request to populate the information that goes into the changelogs our
-users see, both for Element Web itself and other projects on which it is based.
-This is picked up from both labels on the pull request and the `Notes:`
-annotation in the description. By default, the PR title will be used for the
-changelog entry, but you can specify more options, as follows.
+There's no need to add changelog entries manually — we generate them from PR
+information. By default the PR title is used; you can override this with a
+`Notes:` annotation in the description.
 
-To add a longer, more detailed description of the change for the changelog:
+To add a longer description:
 
 _Fix llama herding bug_
 
 ```
-Notes: Fix a bug (https://github.com/matrix-org/notaproject/issues/123) where the 'Herd' button would not herd more than 8 Llamas if the moon was in the waxing gibbous phase
+Notes: Fix a bug (https://github.com/Blackmarket-coa/blackout/issues/123) where the 'Herd' button would not herd more than 8 llamas if the moon was in the waxing gibbous phase.
 ```
 
-For some PRs, it's not useful to have an entry in the user-facing changelog (this is
-the default for PRs labelled with `T-Task`):
+For PRs that don't need a user-facing changelog entry (the default for
+`T-Task`):
 
 _Remove outdated comment from `Ungulates.ts`_
 
@@ -80,26 +104,24 @@ _Remove outdated comment from `Ungulates.ts`_
 Notes: none
 ```
 
-Sometimes, you're fixing a bug in a downstream project, in which case you want
-an entry in that project's changelog. You can do that too:
+For changes spanning multiple downstream surfaces, scope the notes:
 
 _Fix another herding bug_
 
 ```
 Notes: Fix a bug where the `herd()` function would only work on Tuesdays
-element-web notes: Fix a bug where the 'Herd' button only worked on Tuesdays
+blackout notes: Fix a bug where the 'Herd' button only worked on Tuesdays
 ```
 
-This example is for Element Web. You can specify:
+Scopes you can specify:
 
-- element-web
-- element-desktop
+- `blackout` — main client / web
+- `blackout-desktop` — Tauri wrapper
+- `blackout-mobile` — Capacitor mobile build
 
-If your PR introduces a breaking change, use the `Notes` section in the same
-way, additionally adding the `X-Breaking-Change` label (see below). There's no need
-to specify in the notes that it's a breaking change - this will be added
-automatically based on the label - but remember to tell the developer how to
-migrate:
+If your PR introduces a breaking change, add the `X-Breaking-Change` label.
+You don't need to call out "breaking" in the notes — the label handles that —
+but you do need to document the migration:
 
 _Remove legacy class_
 
@@ -107,52 +129,51 @@ _Remove legacy class_
 Notes: Remove legacy `Camelopard` class. `Giraffe` should be used instead.
 ```
 
-Other metadata can be added using labels.
+### Labels
 
-- `X-Breaking-Change`: A breaking change - adding this label will mean the change causes a _major_ version bump.
-- `T-Enhancement`: A new feature - adding this label will mean the change causes a _minor_ version bump.
-- `T-Defect`: A bug fix (in either code or docs).
-- `T-Task`: No user-facing changes, eg. code comments, CI fixes, refactors or tests. Won't have a changelog entry unless you specify one.
+Other metadata is added via labels (see the full scheme in
+[`.github/labels.yml`](.github/labels.yml)):
 
-If you don't have permission to add labels, your PR reviewer(s) can work with you
-to add them: ask in the PR description or comments.
+- `X-Breaking-Change` — adding this label causes a _major_ version bump.
+- `T-Enhancement` — a new feature; causes a _minor_ version bump.
+- `T-Defect` — a bug fix (in code or docs).
+- `T-Task` — no user-facing changes (refactors, CI, tests, comments). No
+  changelog entry by default.
+- `surface:{web,desktop,mobile,server}` — which surface(s) the change touches.
+- `area:*` — domain (e.g. `area:coalition`, `area:governance`,
+  `area:steganography`, `area:livekit`).
 
-We use continuous integration, and all pull requests get automatically tested:
-if your change breaks the build, then the PR will show that there are failed
-checks, so please check back after a few minutes.
+If you don't have permission to add labels, your reviewer will add them — just
+mention it in the PR description.
+
+All PRs go through CI. If your change breaks the build, the PR will show
+failing checks; please come back after a few minutes.
 
 ## Tests
 
 Your PR should include tests.
 
-For new user facing features in `matrix-js-sdk` or `element-web`, you must include:
+For new user-facing features, include:
 
-1. Comprehensive unit tests written in Jest. These are located in `/test`.
-2. "happy path" end-to-end tests.
-   These are located in `/playwright/e2e`, and are run using `element-web`.
-   Ideally, you would also include tests for edge and error cases.
+1. **Unit tests** in Jest (located in `/test`, or co-located under
+   `packages/*/test/` depending on the package).
+2. **End-to-end "happy path" tests** in Playwright (located in
+   `/playwright/e2e`).
+3. Ideally, edge and error cases as well.
 
-Unit tests are expected even when the feature is in labs. It's good practice
-to write tests alongside the code as it ensures the code is testable from
-the start, and gives you a fast feedback loop while you're developing the
-functionality. End-to-end tests should be added prior to the feature
-leaving labs, but don't have to be present from the start (although it might
-be beneficial to have some running early, so you can test things faster).
+Unit tests are expected even when a feature is in labs — writing tests
+alongside the code keeps the code testable from the start and gives you a
+fast feedback loop. E2E tests should land before a feature leaves labs.
 
-For bugs in those repos, your change must include at least one unit test or
-end-to-end test; which is best depends on what sort of test most concisely
-exercises the area.
+For bug fixes, include at least one unit test or E2E test that fails without
+your fix and passes with it. Which kind of test is best depends on what most
+concisely exercises the area.
 
-Changes to must be accompanied by unit tests written in Jest.
-These are located in `/spec/` in `matrix-js-sdk` or `/test/` in `element-web`.
+Aim for **80%+ coverage** on new code. If you can't, document why in the PR.
 
-When writing unit tests, please aim for a high level of test coverage
-for new code - 80% or greater. If you cannot achieve that, please document
-why it's not possible in your PR.
-
-Some sections of code are not sensible to add coverage for, such as those
-which explicitly inhibit noisy logging for tests. Which can be hidden using
-an istanbul magic comment as [documented here][1]. See example:
+Some code sensibly doesn't have coverage (e.g. branches that explicitly
+inhibit noisy logging in tests). Hide those with an istanbul comment as
+[documented here](https://github.com/gotwarlost/istanbul/blob/master/ignoring-code-for-coverage.md):
 
 ```javascript
 /* istanbul ignore if */
@@ -161,79 +182,77 @@ if (process.env.NODE_ENV !== "test") {
 }
 ```
 
-Tests validate that your change works as intended and also document
-concisely what is being changed. Ideally, your new tests fail
-prior to your change, and succeed once it has been applied. You may
-find this simpler to achieve if you write the tests first.
+Tests validate that your change works as intended and document concisely what
+changed. Ideally your new tests fail before your change and succeed after.
+Writing tests first is often the simplest way to get there.
 
-If you're spiking some code that's experimental and not being used to support
-production features, exceptions can be made to requirements for tests.
-Note that tests will still be required in order to ship the feature, and it's
-strongly encouraged to think about tests early in the process, as adding
-tests later will become progressively more difficult.
+If you're spiking experimental code that isn't supporting production
+features, the test requirement can be relaxed. Tests will still be required
+before the feature ships, and it's easier to add them while the design is
+fresh.
 
-If you're not sure how to approach writing tests for your change, ask for help
-in [#element-dev](https://matrix.to/#/#element-dev:matrix.org).
+Not sure how to test a change? Ask in
+[`#blackout-dev:theblackout.app`](https://matrix.to/#/#blackout-dev:theblackout.app).
 
 ## Code style
 
-Element Web aims to target TypeScript/ES6. All new files should be written in
-TypeScript and existing files should use ES6 principles where possible.
+Blackout targets TypeScript / ES2022. All new files should be TypeScript;
+existing files should use modern ECMAScript idioms where practical.
 
-Members should not be exported as a default export in general - it causes problems
-with the architecture of the SDK (index file becomes less clear) and could
-introduce naming problems (as default exports get aliased upon import). In
-general, avoid using `export default`.
+Avoid `export default` — it makes index files less clear and can cause
+naming drift since default exports are aliased on import. Use named exports.
 
-The remaining code style is documented in [code_style.md](./code_style.md).
-Contributors are encouraged to it and follow the principles set out there.
+The rest of the code style is in [`code_style.md`](./code_style.md).
 
-Please ensure your changes match the cosmetic style of the existing project,
-and **_never_** mix cosmetic and functional changes in the same commit, as it
-makes it horribly hard to review otherwise.
+Don't mix cosmetic and functional changes in the same commit — it makes
+review much harder.
 
-## Shared Components
+## Shared components
 
-When creating new UI components, consider whether they should be added to the shared components package (`packages/shared-components`) rather than directly in the main `src/` directory. Components should be placed in shared components if they:
+When adding UI components, consider whether they belong in
+`packages/shared-components` rather than directly under `src/`. Add them to
+shared components if they:
 
-- Are reusable across different parts of the application
-- Could potentially be used by other Element projects (Element Desktop, Aurora, Element modules...)
-- Follow established patterns and don't have tight coupling to specific application logic
+- Are reusable across different parts of the application,
+- Could be reused by other Blackout surfaces (desktop wrapper, mobile, etc.),
+- Follow established patterns and aren't tightly coupled to specific
+  application logic.
 
-For more details, see the [shared components README](./packages/shared-components/README.md).
+See [`packages/shared-components/README.md`](./packages/shared-components/README.md)
+for more.
 
 ## Attribution
 
-Everyone who contributes anything to Matrix is welcome to be listed in the
-AUTHORS.rst file for the project in question. Please feel free to include a
-change to AUTHORS.rst in your pull request to list yourself and a short
-description of the area(s) you've worked on. Also, we sometimes have swag to
-give away to contributors - if you feel that Matrix-branded apparel is missing
-from your life, please mail us your shipping address to matrix at matrix.org
-and we'll try to fix it :)
+Everyone who contributes is welcome to add themselves to
+[`AUTHORS.rst`](AUTHORS.rst) with a short note about the area(s) they've
+worked on. Feel free to include the AUTHORS update in your PR.
 
-# Review expectations
+## Review expectations
 
-See https://github.com/element-hq/element-meta/wiki/Review-process
+Most PRs get a first response within 48 hours during normal operation, and
+within 6 hours during the V1 test flight window. Reviewers will work with you
+to land your change — expect a few rounds of discussion, especially for
+larger changes. If a PR is sitting without a response longer than that, ping
+in [`#blackout-dev:theblackout.app`](https://matrix.to/#/#blackout-dev:theblackout.app).
 
-# Merge Strategy
+## Merge strategy
 
-The preferred method for merging pull requests is squash merging to keep the
-commit history trim, but it is up to the discretion of the team member merging
-the change. We do not support rebase merges due to `allchange` being unable to
-handle them. When merging make sure to leave the default commit title, or
-at least leave the PR number at the end in brackets like by default.
-When stacking pull requests, you may wish to do the following:
+The preferred method is **squash merge** to keep history trim. The merger
+chooses on a case-by-case basis. We do not support rebase merges because
+`allchange` cannot handle them. When merging, leave the default commit title
+(or at minimum, leave the PR number at the end in brackets).
 
-1. Branch from develop to your branch (branch1), push commits onto it and open a pull request
-2. Branch from your base branch (branch1) to your work branch (branch2), push commits and open a pull request configuring the base to be branch1, saying in the description that it is based on your other PR.
-3. Merge the first PR using a merge commit otherwise your stacked PR will need a rebase. Github will automatically adjust the base branch of your other PR to be develop.
+When stacking pull requests:
 
-[1]: https://github.com/gotwarlost/istanbul/blob/master/ignoring-code-for-coverage.md
+1. Branch from `develop` to your branch (`branch1`), push commits, open a PR.
+2. Branch from `branch1` to your work branch (`branch2`), open a PR with
+   `base: branch1`. Note in the description that it stacks on your other PR.
+3. Merge the first PR with a **merge commit** rather than squash, otherwise
+   the stacked PR will need a rebase. GitHub will automatically adjust the
+   base branch of the second PR to `develop`.
 
-# Decoding Stack Traces
+## Conduct
 
-Element Web has crashed and given you an obfuscated stack trace? Don't panic:
-use the [Decoder Ring](https://app.element.io/decoder-ring/) (or /decoder-ring/
-on any Element Web deploy). It is somewhat of a manual process, but it should
-tell you what lines the stack trace corresponds to from the source maps.
+Participation in the project — code, issues, discussions, hosted-instance
+chat, and the Coliseum Coalition — is governed by
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).

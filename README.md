@@ -1,17 +1,34 @@
-[![Chat](https://img.shields.io/matrix/element-web:matrix.org?logo=matrix)](https://matrix.to/#/#element-web:matrix.org)
-![Tests](https://github.com/element-hq/element-web/actions/workflows/tests.yaml/badge.svg)
-![Static Analysis](https://github.com/element-hq/element-web/actions/workflows/static_analysis.yaml/badge.svg)
+[![Chat (devs)](https://img.shields.io/matrix/blackout-dev:theblackout.app?label=chat%20(devs)&logo=matrix)](https://matrix.to/#/#blackout-dev:theblackout.app)
+[![Chat (testers)](https://img.shields.io/matrix/welcome:theblackout.app?label=chat%20(testers)&logo=matrix)](https://matrix.to/#/#welcome:theblackout.app)
 
-# Blackout Monorepo (Web + Desktop + Mobile)
+# Blackout
 
-This repository is a pnpm/turborepo monorepo built from an Element Web fork, with additional governance and steganography-focused capabilities.
+Federated, end-to-end-encrypted communication platform built on the Matrix
+protocol — with first-class governance, mutual aid, steganography, deaddrop
+encrypted messaging, LiveKit-based voice and video, and post-quantum hybrid
+encryption (X25519 + ML-KEM-768). This repository is a pnpm/turborepo
+monorepo containing web, Tauri desktop, Capacitor mobile, a Synapse-derived
+homeserver, and a Node/Hono API server.
+
+## For testers (no setup required)
+
+- Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)** — sign up and you're in.
+- See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
+- During the **96-hour V1 Test Flight**, open the Coliseum Coalition once
+  you're signed in — eight challenges, each a real area we want stress-tested.
+  Briefs: [`docs/coliseum/`](docs/coliseum/README.md).
+- Report what you find via [Issues](https://github.com/Blackmarket-coa/blackout/issues/new/choose) or [Discussions](https://github.com/Blackmarket-coa/blackout/discussions).
+- Pick a role (Scout / Operator / Builder / Signal / Federation Team) in [`CONTRIBUTOR_ROLES.md`](CONTRIBUTOR_ROLES.md).
 
 ## What this repo contains
 
-- Upstream Element Web application architecture.
-- Desktop app wrapper: `blackout-desktop` (Tauri)
-- Mobile app wrapper: `blackout-mobile` (Capacitor)
+- Web client (`apps/blackout-client`) — Matrix-protocol web app with Blackout's feature plugins.
+- Desktop wrapper: `blackout-desktop` (Tauri)
+- Mobile wrapper: `blackout-mobile` (Capacitor)
 - Mobile native workspace: `mobile/` (shared auth/session, native bridge contracts, and core surface controllers)
+- API server (`packages/api`) — Hono-based runtime delegated to by `apps/blackout-server`.
+- Homeserver (`apps/blackout-server`) — Synapse-derived; see deployment assets under `deploy/` and `infra/`.
+- Coalition + governance primitives (`packages/core/src/coalition/`, `packages/core/src/governance/`).
 - Blackout governance-focused features and rollout documentation.
 - A steganography subsystem with test coverage and developer tooling.
 
@@ -403,7 +420,7 @@ Only allow new app-local implementations when those packages cannot satisfy requ
 
 ## Security notes (hosting)
 
-Do **not** host Element Web on the same domain as your homeserver.
+Do **not** host the Blackout web client on the same domain as your homeserver.
 
 Recommended response headers:
 
@@ -412,7 +429,8 @@ Recommended response headers:
 - `X-Content-Type-Options: nosniff`
 - `X-XSS-Protection: 1; mode=block`
 
-See details in this issue: <https://github.com/element-hq/element-web/issues/1977>
+See [`SECURITY.md`](SECURITY.md) for the full disclosure process and
+[`THREAT_MODEL.md`](THREAT_MODEL.md) for trust boundaries.
 
 ---
 
@@ -432,10 +450,12 @@ Also set `Cache-Control: no-cache` for `/` so clients revalidate on reload after
 
 ## Running as desktop app
 
-You can run this client via Element Desktop (Electron wrapper).
+Blackout ships a Tauri desktop wrapper in `blackout-desktop/`.
 
-- Prebuilt app: <https://element.io/get-started>
-- Build instructions: <https://github.com/element-hq/element-desktop>
+- Prebuilt releases: <https://github.com/Blackmarket-coa/blackout/releases>
+- Local dev: `pnpm desktop:dev`
+- Production build: `pnpm desktop:build`
+- Signing-chain verification (per-OS): see `blackout-desktop/docs/signing-verification.md` (under construction; tracked in launch-prep seeded issues)
 - Desktop config overrides: `docs/config.md#desktop-app-configuration`
 
 ---
@@ -449,19 +469,31 @@ You can run this client via Element Desktop (Electron wrapper).
 
 ## Module system
 
-Element Web can be extended at runtime via modules.
+Blackout is extended at runtime via the feature-plugin registry. Each plugin
+is a self-contained module loaded by the client runtime; the chat,
+governance, forum, deaddrop, moderation, and steganography surfaces are
+themselves plugins built on this registry.
 
-- Module API: <https://github.com/element-hq/element-modules/tree/main/packages/element-web-module-api>
+- Plugin authoring: see the in-tree plugins under `apps/blackout-client/src/app/features/` for working examples.
 - Configuration: `docs/config.md#modules`
+- Discussions for new plugin ideas live in the [Plugin Ideas Discussion category](https://github.com/Blackmarket-coa/blackout/discussions/new?category=plugin-ideas).
 
 ---
 
 ## Issue triage
 
-Issues are triaged by community and the Web App Team.
+Issues are triaged by maintainers and `role:operator` contributors during
+the V1 Test Flight. The full label scheme lives in
+[`.github/labels.yml`](.github/labels.yml). Key dimensions:
 
-- Process: <https://github.com/element-hq/element-meta/wiki/Triage-process>
-- Labels: <https://github.com/element-hq/element-meta/wiki/Issue-labelling>
+- `T-*` — type of work (Defect, Enhancement, Task, etc.)
+- `severity:*` — defect severity (critical → papercut)
+- `surface:*` — web / desktop / mobile / server
+- `area:*` — subsystem (coalition, governance, mutual-aid, steganography, deaddrop, livekit, federation, voice-video, performance, onboarding, e2ee)
+- `challenge:*` — Coliseum challenge linkage (during the test flight)
+- `H{N}-{N}` — test-flight cohort timestamp
+
+Contributor workflow expectations are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
@@ -469,15 +501,17 @@ Issues are triaged by community and the Web App Team.
 
 Copyright (c) 2014-2017 OpenMarket Ltd  
 Copyright (c) 2017 Vector Creations Ltd  
-Copyright (c) 2017-2025 New Vector Ltd
+Copyright (c) 2017-2025 New Vector Ltd  
+Copyright (c) 2024-2026 Black Market Coalition
 
 Licensed under one of:
 
-1. GNU Affero General Public License v3 (or later), or
-2. GNU General Public License v3 (or later), or
-3. Element Commercial License (paid, by agreement)
+1. GNU Affero General Public License v3 (or later) — see [`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0)
+2. GNU General Public License v3 (or later) — see [`LICENSE-GPL-3.0`](LICENSE-GPL-3.0)
+3. Blackout Commercial License (paid, by agreement) — see [`LICENSE-COMMERCIAL`](LICENSE-COMMERCIAL)
 
-See `LICENSE` and `LICENSE-GPL-3.0` for details.
+Upstream Element/Matrix copyrights are preserved per the project's AGPL/GPL
+inheritance.
 
 ---
 

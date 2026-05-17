@@ -1,0 +1,47 @@
+title: "[Governance] "
+labels: ["governance-poll"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              For polls that should drive on-chain (well, on-Coalition) governance proposals.
+              Mirrors the `co.bmc.coalition` proposal types: binary, multiple-choice, ranked, or consent.
+    - type: textarea
+      id: question
+      attributes:
+          label: The question
+          description: One clear question. If it can't be stated in one sentence, it probably needs more than one proposal.
+      validations:
+          required: true
+    - type: dropdown
+      id: type
+      attributes:
+          label: Proposal type
+          options:
+              - "Binary (yes / no)"
+              - "Multiple choice"
+              - "Ranked"
+              - "Consent (sociocratic default)"
+      validations:
+          required: true
+    - type: textarea
+      id: options
+      attributes:
+          label: Options (for multi-choice / ranked)
+          description: One per line.
+      validations:
+          required: false
+    - type: input
+      id: quorum
+      attributes:
+          label: Suggested quorum
+          placeholder: e.g. 30 voters, or 50% of role:operator
+      validations:
+          required: false
+    - type: input
+      id: deadline
+      attributes:
+          label: Suggested deadline
+          placeholder: e.g. end of H72
+      validations:
+          required: false

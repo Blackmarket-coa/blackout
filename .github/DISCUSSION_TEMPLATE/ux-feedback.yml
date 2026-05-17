@@ -1,0 +1,34 @@
+title: "[UX] "
+labels: ["ux-feedback"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              For "this could be better" feedback. Lower bar than the
+              [Onboarding confusion issue template](https://github.com/Blackmarket-coa/blackout/issues/new?template=onboarding-confusion.yml) —
+              that one is for blockers; this is for friction, polish, and suggestions.
+    - type: dropdown
+      id: surface
+      attributes:
+          label: Surface
+          options:
+              - "Web"
+              - "Desktop"
+              - "Mobile"
+              - "Cross-surface"
+      validations:
+          required: true
+    - type: textarea
+      id: current
+      attributes:
+          label: Current flow
+          description: What does the app do today? Screenshots welcome.
+      validations:
+          required: true
+    - type: textarea
+      id: suggested
+      attributes:
+          label: Suggested flow
+          description: What would work better? Sketches welcome.
+      validations:
+          required: true
