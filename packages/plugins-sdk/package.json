@@ -1,0 +1,24 @@
+{
+  "name": "@blackout/plugins-sdk",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Authoring SDK consumed by code-plugin bundles running inside the Blackout sandbox iframe",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@blackout/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

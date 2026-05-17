@@ -45,6 +45,7 @@ export type {
   PluginArtifactKind,
   PluginCapability,
   PluginManifest,
+  PluginProtocolVersion,
   PluginSignatureEnvelope,
   SignedPluginBundle,
   PluginEventType,

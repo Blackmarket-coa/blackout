@@ -20,13 +20,17 @@ const baseManifest: PluginManifest = {
 
 const record = (
     overrides: Partial<InstalledPluginRecord> & { manifest?: Partial<PluginManifest> } = {}
-): InstalledPluginRecord => ({
-    entitlementId: overrides.entitlementId ?? `ent.${overrides.manifest?.id ?? baseManifest.id}`,
-    manifest: { ...baseManifest, ...(overrides.manifest ?? {}) },
-    status: (overrides.status ?? 'enabled') as InstalledPluginStatus,
-    installedAt: '2026-05-17T00:00:00Z',
-    lastError: overrides.lastError,
-});
+): InstalledPluginRecord => {
+    const manifest = { ...baseManifest, ...(overrides.manifest ?? {}) };
+    return {
+        entitlementId: overrides.entitlementId ?? `ent.${manifest.id}`,
+        manifest,
+        status: (overrides.status ?? 'enabled') as InstalledPluginStatus,
+        installedAt: '2026-05-17T00:00:00Z',
+        lastError: overrides.lastError,
+        grantedCapabilities: overrides.grantedCapabilities ?? [...manifest.capabilities],
+    };
+};
 
 describe('installedPluginPanelsAtom', () => {
     it('returns an empty list when nothing is installed', () => {
@@ -71,6 +75,54 @@ describe('installedPluginPanelsAtom', () => {
             record({ status: 'pending', manifest: { id: 'p2', pinnedNav: { label: 'P2' } } }),
             record({ status: 'error', manifest: { id: 'p3', pinnedNav: { label: 'P3' } } }),
             record({ status: 'enabled', manifest: { id: 'p4' } }),
+        ]);
+        expect(store.get(installedPluginPanelsAtom)).toEqual([]);
+    });
+
+    it('maps rightPanel and mobileTab manifest fields to ShellPanelEntries', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [
+            record({
+                manifest: {
+                    id: 'com.example.surfaces',
+                    rightPanel: { id: 'main', label: 'Right', order: 5 },
+                    mobileTab: { id: 'tab', label: 'Tab' },
+                },
+            }),
+        ]);
+
+        const entries = store.get(installedPluginPanelsAtom);
+        expect(entries).toEqual(
+            expect.arrayContaining([
+                {
+                    id: 'plugin.com.example.surfaces.rightPanel.main',
+                    kind: 'right-panel',
+                    label: 'Right',
+                    to: '/plugins/com.example.surfaces',
+                    order: 5,
+                },
+                {
+                    id: 'plugin.com.example.surfaces.mobileTab.tab',
+                    kind: 'mobile-tab',
+                    label: 'Tab',
+                    to: '/plugins/com.example.surfaces',
+                    order: 100,
+                },
+            ]),
+        );
+    });
+
+    it('skips rightPanel and mobileTab entries when the plugin is disabled', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [
+            record({
+                status: 'disabled',
+                manifest: {
+                    id: 'p.disabled',
+                    rightPanel: { id: 'r', label: 'R' },
+                    mobileTab: { id: 't', label: 'T' },
+                },
+            }),
         ]);
         expect(store.get(installedPluginPanelsAtom)).toEqual([]);
     });
