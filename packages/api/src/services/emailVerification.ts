@@ -2,27 +2,27 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/store';
 import type { EmailVerificationTokenRecord, UserRecord } from '../db/types';
 
-const VERIFICATION_TOKEN_BYTES = 32;
-const DEFAULT_TTL_SECONDS = 60 * 60 * 24; // 24h
-const DEFAULT_RESEND_COOLDOWN_SECONDS = 60;
+const VERIFY_TOKEN_BYTES = 32;
+const DEFAULT_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+const DEFAULT_THROTTLE_WINDOW_SECONDS = 60 * 15; // 15 minutes
+const DEFAULT_THROTTLE_MAX = 5;
 
 const sha256 = (input: string): string => createHash('sha256').update(input).digest('hex');
 
-const ttlSeconds = (): number => {
-  const fromEnv = Number.parseInt(process.env.EMAIL_VERIFICATION_TTL_SECONDS ?? '', 10);
-  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_TTL_SECONDS;
+const numberFromEnv = (key: string, fallback: number): number => {
+  const parsed = Number.parseInt(process.env[key] ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const cooldownSeconds = (): number => {
-  const fromEnv = Number.parseInt(process.env.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS ?? '', 10);
-  return Number.isFinite(fromEnv) && fromEnv >= 0 ? fromEnv : DEFAULT_RESEND_COOLDOWN_SECONDS;
-};
+const ttlSeconds = (): number => numberFromEnv('EMAIL_VERIFICATION_TTL_SECONDS', DEFAULT_TTL_SECONDS);
+const throttleWindowSeconds = (): number =>
+  numberFromEnv('EMAIL_VERIFICATION_THROTTLE_WINDOW_SECONDS', DEFAULT_THROTTLE_WINDOW_SECONDS);
+const throttleMax = (): number => numberFromEnv('EMAIL_VERIFICATION_THROTTLE_MAX', DEFAULT_THROTTLE_MAX);
 
 const hashOptional = (value?: string): string | undefined => (value ? sha256(value) : undefined);
 
-export interface IssueVerificationTokenInput {
+export interface IssueEmailVerificationInput {
   userId: string;
-  email: string;
   ip?: string;
   userAgent?: string;
 }

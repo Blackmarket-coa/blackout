@@ -9,6 +9,7 @@ export interface UserRecord {
   reputationTier: 'member' | 'vendor' | 'coordinator' | 'arbiter';
   pubkeyEd25519: string;
   createdAt: string;
+  /** ISO timestamp the user verified the email on file. Unset = unverified. */
   /** ISO 8601 timestamp when the email was confirmed via a verification link. */
   emailVerifiedAt?: string;
 }
@@ -24,6 +25,26 @@ export interface PasswordResetTokenRecord {
   userAgentHash?: string;
 }
 
+export interface AccountDeletionTokenRecord {
+  id: UUID;
+  userId: UUID;
+  tokenHash: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+  ipHash?: string;
+  userAgentHash?: string;
+}
+
+export interface EmailVerificationTokenRecord {
+  id: UUID;
+  userId: UUID;
+  /** Email address being verified — captured at issuance so a stale token
+   *  cannot promote a different address even if the user has since changed it. */
+  email: string;
+  tokenHash: string;
+  expiresAt: string;
+  consumedAt?: string;
 export interface EmailVerificationTokenRecord {
   id: UUID;
   userId: UUID;

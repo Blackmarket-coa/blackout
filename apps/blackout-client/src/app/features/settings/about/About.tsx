@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, IconButton, Icon, Icons, Scroll, Button, config, toRem } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -7,12 +7,15 @@ import { SettingTile } from '../../../components/setting-tile';
 import BrandSVG from '../../../../../public/res/svg/cinny.svg';
 import { clearCacheAndReload } from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { IssueReportDialog } from './IssueReportDialog';
+import { trackSettingsInteraction } from '../settingsTelemetry';
 
 type AboutProps = {
   requestClose: () => void;
 };
 export function About({ requestClose }: AboutProps) {
   const mx = useMatrixClient();
+  const [issueReportOpen, setIssueReportOpen] = useState(false);
 
   return (
     <Page>
@@ -62,14 +65,15 @@ export function About({ requestClose }: AboutProps) {
                       size="300"
                       radii="300"
                       before={<Icon src={Icons.Code} size="100" filled />}
+                      onClick={() => trackSettingsInteraction('about', 'source_code_link', 'follow')}
                     >
                       <Text size="B300">Source Code</Text>
                     </Button>
                     <Button
-                      as="a"
-                      href="https://github.com/Blackmarket-coa/blackout/issues"
-                      rel="noreferrer noopener"
-                      target="_blank"
+                      onClick={() => {
+                        trackSettingsInteraction('about', 'issue_report', 'open_dialog');
+                        setIssueReportOpen(true);
+                      }}
                       variant="Primary"
                       fill="Soft"
                       size="300"
@@ -94,7 +98,10 @@ export function About({ requestClose }: AboutProps) {
                     description="Clear all your locally stored data and reload from server."
                     after={
                       <Button
-                        onClick={() => clearCacheAndReload(mx)}
+                        onClick={() => {
+                          trackSettingsInteraction('about', 'clear_cache', 'invoke');
+                          clearCacheAndReload(mx);
+                        }}
                         variant="Secondary"
                         fill="Soft"
                         size="300"
@@ -239,6 +246,7 @@ export function About({ requestClose }: AboutProps) {
           </PageContent>
         </Scroll>
       </Box>
+      <IssueReportDialog open={issueReportOpen} onClose={() => setIssueReportOpen(false)} />
     </Page>
   );
 }

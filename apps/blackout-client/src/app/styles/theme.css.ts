@@ -50,6 +50,13 @@ const exposeSemanticCustomProperties = (selector: string) => {
         '--danger': themeVars.status.danger,
         '--warning': themeVars.status.warning,
         '--success': themeVars.status.success,
+        // `accent-*` aliases — multiple feature surfaces (deaddrop, stego,
+        // monetization, account-lifecycle dialogs) consume these names. Keep
+        // them in sync with the canonical status tokens so the components
+        // theme correctly instead of falling back to their hardcoded color.
+        '--accent-danger': themeVars.status.danger,
+        '--accent-warning': themeVars.status.warning,
+        '--accent-success': themeVars.status.success,
     } as Record<string, string>);
 };
 

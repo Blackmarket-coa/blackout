@@ -18,6 +18,12 @@ import { consumePasswordResetToken, issuePasswordResetToken } from '../services/
 import {
   consumeEmailVerificationToken,
   issueEmailVerificationToken,
+} from '../services/emailVerification';
+import {
+  confirmAccountDeletion,
+  exportUserData,
+  requestAccountDeletion,
+} from '../services/accountLifecycle';
   markVerificationTokenSent,
 } from '../services/emailVerification';
 import { getMailer } from '../services/mailer';
@@ -39,6 +45,8 @@ auth.use('/password/change', authRateLimit);
 auth.use('/token/refresh', authRateLimit);
 auth.use('/email/verify/request', authRateLimit);
 auth.use('/email/verify/confirm', authRateLimit);
+auth.use('/account/delete/request', authRateLimit);
+auth.use('/account/delete/confirm', authRateLimit);
 
 const buildVerificationLink = (token: string): string => {
   const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
@@ -136,6 +144,25 @@ auth.post('/register', async (c) => {
 
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
 
+  // Fire the email-verification flow at registration. Failures are logged but
+  // never block sign-up — the user can request a fresh verification email
+  // later via /email/verify/request.
+  const verification = issueEmailVerificationToken({
+    userId: user.id,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  if (verification.kind === 'ok') {
+    try {
+      await getMailer().send({
+        to: user.email,
+        subject: 'Verify your Blackout email',
+        text: `Use this token to verify your email: ${verification.token}\n\nIt expires in 24 hours. If you did not create this account, ignore this email.`,
+        kind: 'email_verification',
+      });
+    } catch (err) {
+      log.warn('email_verification_mail_failed', { error: String(err) });
+    }
   // Mint and dispatch the verification email. Registration succeeds even
   // if the dispatch fails — the caller can retry through
   // POST /auth/email/verify/request. Failures are logged but not surfaced
@@ -412,6 +439,149 @@ auth.post('/password/reset/confirm', async (c) => {
     case 'invalid':
     default:
       return c.json({ code: 'reset_token_invalid', message: 'Reset token invalid' }, 400);
+  }
+});
+
+const emailVerifyConfirmSchema = z.object({ token: z.string().min(1) });
+
+auth.post('/email/verify/request', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to verify email');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const outcome = issueEmailVerificationToken({
+    userId: user.sub,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+
+  switch (outcome.kind) {
+    case 'ok': {
+      try {
+        await getMailer().send({
+          to: outcome.user.email,
+          subject: 'Verify your Blackout email',
+          text: `Use this token to verify your email: ${outcome.token}\n\nIt expires in 24 hours. If you did not request this, ignore this email.`,
+          kind: 'email_verification',
+        });
+      } catch (err) {
+        log.warn('email_verification_mail_failed', { error: String(err) });
+        // Do not surface mail-transport failures to the caller — the response
+        // shape stays uniform so a polling client can't infer transport state.
+      }
+      return c.json({ ok: true }, 202);
+    }
+    case 'already_verified':
+      return c.json({ ok: true, alreadyVerified: true });
+    case 'throttled':
+      return c.json({ code: 'too_many_requests', message: 'Too many verification requests. Try again later.' }, 429);
+    case 'unknown_user':
+    default:
+      return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  }
+});
+
+auth.post('/email/verify/confirm', async (c) => {
+  const parsed = await readJsonBody(c, emailVerifyConfirmSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const outcome = consumeEmailVerificationToken(parsed.token);
+  switch (outcome.kind) {
+    case 'ok':
+      return c.json({ ok: true, userId: outcome.user.id, emailVerifiedAt: outcome.user.emailVerifiedAt });
+    case 'expired':
+      return c.json({ code: 'verify_token_expired', message: 'Verification token expired' }, 410);
+    case 'consumed':
+      return c.json({ code: 'verify_token_consumed', message: 'Verification token already used' }, 410);
+    case 'email_changed':
+      return c.json(
+        { code: 'verify_token_email_changed', message: 'Email address has changed; request a new verification.' },
+        409,
+      );
+    case 'invalid':
+    default:
+      return c.json({ code: 'verify_token_invalid', message: 'Verification token invalid' }, 400);
+  }
+});
+
+// --- Account lifecycle: data export + deletion ---
+
+auth.get('/account/export', (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to export account data');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const data = exportUserData(user.sub);
+  if (!data) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  // Use a stable filename hint so the client can save it directly.
+  c.header(
+    'content-disposition',
+    `attachment; filename="blackout-export-${user.sub}-${data.exportedAt}.json"`,
+  );
+  return c.json(data);
+});
+
+auth.post('/account/delete/request', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to delete account');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const issued = requestAccountDeletion({
+    userId: user.sub,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  if (!issued) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+
+  try {
+    await getMailer().send({
+      to: issued.user.email,
+      subject: 'Confirm Blackout account deletion',
+      text: `You (or someone with access to your account) requested account deletion.\n\nUse this token to confirm deletion: ${issued.token}\n\nIt expires in 30 minutes. If this was not you, change your password immediately and ignore this email — no data has been deleted.`,
+      kind: 'account_deletion',
+    });
+  } catch (err) {
+    log.warn('account_deletion_mail_failed', { error: String(err) });
+  }
+  return c.json({ ok: true, expiresAt: issued.expiresAt }, 202);
+});
+
+const accountDeleteConfirmSchema = z.object({ token: z.string().min(1) });
+
+auth.post('/account/delete/confirm', async (c) => {
+  const userOrResp = requireUser(c, 'Sign in required to delete account');
+  if (userOrResp instanceof Response) return userOrResp;
+  const user = userOrResp;
+
+  const parsed = await readJsonBody(c, accountDeleteConfirmSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const outcome = confirmAccountDeletion(parsed.token, user.sub);
+  switch (outcome.kind) {
+    case 'ok':
+      // After deletion the JWT still cryptographically validates — denylist
+      // it so the holder can't replay until expiry.
+      if (user.jti && user.exp) {
+        db.revokeSession({
+          jti: user.jti,
+          userId: user.sub,
+          expiresAt: new Date(user.exp * 1000).toISOString(),
+          reason: 'account_deleted',
+        });
+      }
+      return c.json({ ok: true });
+    case 'expired':
+      return c.json({ code: 'delete_token_expired', message: 'Deletion token expired' }, 410);
+    case 'consumed':
+      return c.json({ code: 'delete_token_consumed', message: 'Deletion token already used' }, 410);
+    case 'user_mismatch':
+      return c.json(
+        { code: 'delete_token_user_mismatch', message: 'Deletion token does not belong to the authenticated user' },
+        403,
+      );
+    case 'invalid':
+    default:
+      return c.json({ code: 'delete_token_invalid', message: 'Deletion token invalid' }, 400);
   }
 });
 
