@@ -1,0 +1,65 @@
+name: Coliseum finding
+description: A finding from attempting a Coliseum challenge during the V1 test flight.
+labels: [coliseum, T-Coliseum-Finding, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              See [`docs/coliseum/`](https://github.com/Blackmarket-coa/blackout/blob/develop/docs/coliseum/README.md) for the challenge index.
+
+              **One finding per issue.** If you broke three things, file three issues — that helps us triage and recognize each finding distinctly.
+    - type: dropdown
+      id: challenge
+      attributes:
+          label: Which challenge?
+          options:
+              - "01 — Onboarding (challenge:onboarding)"
+              - "02 — Voice (challenge:voice)"
+              - "03 — Mobile (challenge:mobile)"
+              - "04 — Federation (challenge:federation)"
+              - "05 — Steganography (challenge:stego)"
+              - "06 — Governance (challenge:governance)"
+              - "07 — Performance (challenge:performance)"
+              - "08 — Deaddrop (challenge:deaddrop)"
+      validations:
+          required: true
+    - type: textarea
+      id: finding
+      attributes:
+          label: What did you find?
+          value: |
+              #### What you attempted
+
+              #### What you observed
+
+              #### Why it matters (briefly)
+      validations:
+          required: true
+    - type: textarea
+      id: evidence
+      attributes:
+          label: Evidence
+          description: Screenshots, video, log snippets, event IDs. Anything that helps a maintainer reproduce.
+      validations:
+          required: false
+    - type: dropdown
+      id: severity
+      attributes:
+          label: Suggested severity
+          description: Maintainers may re-classify on triage.
+          options:
+              - "papercut (visible, fixable, low risk)"
+              - "low"
+              - "medium"
+              - "high"
+              - "critical (data risk, sign-in broken, or hosted instance affected)"
+      validations:
+          required: true
+    - type: input
+      id: aid-post
+      attributes:
+          label: Aid post link (if you flagged this in the Coliseum Coalition)
+          description: Paste the URL or event ID of the mutual-aid post you opened in-app.
+          placeholder: matrix.to/#/!coliseum:theblackout.app/$evt
+      validations:
+          required: false

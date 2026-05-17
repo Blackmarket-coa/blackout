@@ -1,18 +1,20 @@
-name: Bug report for the Element desktop app (not in a browser)
-description: File a bug report if you are using the desktop Element application.
-labels: [T-Defect, A-Electron]
+name: Bug report (Blackout desktop)
+description: File a bug for the Blackout Tauri desktop app (not the web client).
+labels: [T-Defect, surface:desktop, needs-triage]
 body:
     - type: markdown
       attributes:
           value: |
-              Thanks for taking the time to fill out this bug report!
+              Thanks for taking the time to file a bug.
 
-              Please report security issues by email to security@matrix.org
+              **Security vulnerabilities do not go here.** File those via
+              [Security Advisories](https://github.com/Blackmarket-coa/blackout/security/advisories/new) —
+              see [`SECURITY.md`](https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md).
     - type: textarea
       id: reproduction-steps
       attributes:
           label: Steps to reproduce
-          description: Please attach screenshots, videos or logs if you can.
+          description: Attach screenshots, videos, or logs if you can.
           placeholder: Tell us what you see!
           value: |
               1. Where are you starting? What can you see?
@@ -35,40 +37,66 @@ body:
       id: os
       attributes:
           label: Operating system
-          placeholder: Windows, macOS, Ubuntu, Arch Linux…
+          placeholder: Windows 11, macOS 14, Ubuntu 24.04…
       validations:
-          required: false
+          required: true
     - type: input
       id: version
       attributes:
-          label: Application version
-          description: You can find the version information in Settings -> Help & About.
-          placeholder: e.g. Element version 1.7.34, olm version 3.2.3
+          label: App version
+          description: Find it in Settings → Help & About.
+          placeholder: e.g. Blackout desktop 1.0.0-beta.3
+      validations:
+          required: false
+    - type: input
+      id: tauri-version
+      attributes:
+          label: Tauri runtime version
+          description: From the About dialog or `Help → About`.
+          placeholder: e.g. Tauri 2.0.0
       validations:
           required: false
     - type: input
       id: source
       attributes:
-          label: How did you install the app?
-          description: Where did you install the app from? Please give a link or a description.
-          placeholder: e.g. From https://element.io/get-started
+          label: Install source
+          description: Where did you install from? Link or describe the artifact.
+          placeholder: e.g. GitHub releases v1.0.0-beta.3 (.dmg), Flathub, sideloaded
+      validations:
+          required: true
+    - type: dropdown
+      id: keychain
+      attributes:
+          label: OS keychain backend (if known)
+          options:
+              - "macOS Keychain"
+              - "Windows Credential Manager"
+              - "Linux Secret Service / KWallet / GNOME Keyring"
+              - "Unknown"
+      validations:
+          required: false
+    - type: dropdown
+      id: signing
+      attributes:
+          label: Did install warn about an unsigned / untrusted build?
+          options:
+              - "No (signature verified)"
+              - "Yes (warned, proceeded anyway)"
+              - "Yes (blocked by OS)"
+              - "Don't remember"
       validations:
           required: false
     - type: input
       id: homeserver
       attributes:
           label: Homeserver
-          description: |
-              Which server is your account registered on? If it is a local or non-public homeserver, please tell us what is the homeserver implementation (ex: Synapse/Dendrite/etc.) and the version.
-          placeholder: e.g. matrix.org or Synapse 1.50.0rc1
+          placeholder: e.g. matrix.theblackout.app
       validations:
           required: false
     - type: dropdown
       id: rageshake
       attributes:
           label: Will you send logs?
-          description: |
-              Did you know that you can send a /rageshake command from your application to submit logs for this issue? Trigger the defect, then type `/rageshake` into the message input area followed by a description of the problem and send the command. You will be able to add a link to this defect report and submit anonymous logs to the developers.
           options:
               - "Yes"
               - "No"

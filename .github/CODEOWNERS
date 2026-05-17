@@ -1,40 +1,64 @@
-*                         @element-hq/element-web-reviewers
-/.github/workflows/**     @element-hq/element-web-team
-/package.json             @element-hq/element-web-team
-/yarn.lock                @element-hq/element-web-team
+# Blackout CODEOWNERS
+#
+# Catch-all routes to the maintainer team. Domain teams below auto-assign on
+# PRs that touch their paths. Teams must exist under the Blackmarket-coa org
+# for assignment to take effect; GitHub will warn (not block) on unresolved
+# teams in the meantime.
 
-/src/SecurityManager.ts                                                 @element-hq/element-crypto-web-reviewers
-/test/SecurityManager-test.ts                                           @element-hq/element-crypto-web-reviewers
-/src/async-components/views/dialogs/security/                           @element-hq/element-crypto-web-reviewers
-/src/components/views/dialogs/security/                                 @element-hq/element-crypto-web-reviewers
-/test/components/views/dialogs/security/                                @element-hq/element-crypto-web-reviewers
-/src/stores/SetupEncryptionStore.ts                                     @element-hq/element-crypto-web-reviewers
-/test/stores/SetupEncryptionStore-test.ts                               @element-hq/element-crypto-web-reviewers
-/src/components/views/settings/tabs/user/EncryptionUserSettingsTab.tsx  @element-hq/element-crypto-web-reviewers
-/src/components/views/settings/encryption/                              @element-hq/element-crypto-web-reviewers
-/test/unit-tests/components/views/settings/encryption/                  @element-hq/element-crypto-web-reviewers
-/src/components/views/dialogs/devtools/Crypto.tsx                       @element-hq/element-crypto-web-reviewers
-/playwright/e2e/crypto/                                                 @element-hq/element-crypto-web-reviewers
-/playwright/e2e/settings/encryption-user-tab/                           @element-hq/element-crypto-web-reviewers
-/packages/shared-components/src/crypto/                                 @element-hq/element-crypto-web-reviewers
+*                                                                       @Blackmarket-coa/blackout-maintainers
 
+# CI, build, and release infra
+/.github/workflows/**                                                   @Blackmarket-coa/ci-reviewers
+/tools/ci/**                                                            @Blackmarket-coa/ci-reviewers
+/package.json                                                           @Blackmarket-coa/blackout-maintainers
+/pnpm-lock.yaml                                                         @Blackmarket-coa/blackout-maintainers
+/pnpm-workspace.yaml                                                    @Blackmarket-coa/blackout-maintainers
+/turbo.json                                                             @Blackmarket-coa/blackout-maintainers
 
-/src/models/Call.ts                       @element-hq/element-call-reviewers
-/src/call-types.ts                        @element-hq/element-call-reviewers
-/src/components/views/voip                @element-hq/element-call-reviewers
-/playwright/e2e/voip/element-call.spec.ts @element-hq/element-call-reviewers
+# Security-sensitive surfaces
+/SECURITY.md                                                            @Blackmarket-coa/security-reviewers
+/THREAT_MODEL.md                                                        @Blackmarket-coa/security-reviewers
+/docs/security/                                                         @Blackmarket-coa/security-reviewers
+/src/SecurityManager.ts                                                 @Blackmarket-coa/security-reviewers
+/src/async-components/views/dialogs/security/                           @Blackmarket-coa/security-reviewers
+/src/components/views/dialogs/security/                                 @Blackmarket-coa/security-reviewers
+/src/stores/SetupEncryptionStore.ts                                     @Blackmarket-coa/security-reviewers
+/src/components/views/settings/tabs/user/EncryptionUserSettingsTab.tsx  @Blackmarket-coa/security-reviewers
+/src/components/views/settings/encryption/                              @Blackmarket-coa/security-reviewers
+/src/components/views/dialogs/devtools/Crypto.tsx                       @Blackmarket-coa/security-reviewers
+/packages/shared-components/src/crypto/                                 @Blackmarket-coa/security-reviewers
+/playwright/e2e/crypto/                                                 @Blackmarket-coa/security-reviewers
+/playwright/e2e/settings/encryption-user-tab/                           @Blackmarket-coa/security-reviewers
+/src/steganography/                                                     @Blackmarket-coa/stego-reviewers
 
-# Ignore translations as those will be updated by GHA for Localazy download
+# Coalition + governance primitives
+/packages/core/src/coalition/                                           @Blackmarket-coa/coalition-reviewers
+/packages/core/src/governance/                                          @Blackmarket-coa/governance-reviewers
+
+# App surfaces
+/apps/blackout-client/                                                  @Blackmarket-coa/client-reviewers
+/apps/blackout-server/                                                  @Blackmarket-coa/server-reviewers
+/blackout-mobile/                                                       @Blackmarket-coa/mobile-reviewers
+/mobile/                                                                @Blackmarket-coa/mobile-reviewers
+/blackout-desktop/                                                      @Blackmarket-coa/desktop-reviewers
+
+# Voice / video call paths
+/src/models/Call.ts                                                     @Blackmarket-coa/client-reviewers
+/src/call-types.ts                                                      @Blackmarket-coa/client-reviewers
+/src/components/views/voip                                              @Blackmarket-coa/client-reviewers
+/playwright/e2e/voip/                                                   @Blackmarket-coa/client-reviewers
+
+# Migration guardrail (read-only reference tree)
+/_port/**                                                               @Blackmarket-coa/blackout-maintainers
+/tools/ci/check-no-port-changes.mjs                                     @Blackmarket-coa/blackout-maintainers
+/.github/workflows/port-guard.yml                                       @Blackmarket-coa/blackout-maintainers
+
+# Translations (updated by Localazy GHA; leave unassigned for catch-all)
 /src/i18n/strings
 /packages/shared-components/src/i18n/strings
-/src/i18n/strings/en_EN.json                             @element-hq/element-web-reviewers
-/packages/shared-components/src/i18n/strings/en_EN.json  @element-hq/element-web-reviewers
+/src/i18n/strings/en_EN.json                                            @Blackmarket-coa/blackout-maintainers
+/packages/shared-components/src/i18n/strings/en_EN.json                 @Blackmarket-coa/blackout-maintainers
 
-# Ignore the synapse & mas plugins as this is updated by GHA for docker image updating
+# Updated by Synapse / MAS image automation
 /playwright/testcontainers/synapse.ts
 /playwright/testcontainers/mas.ts
-
-
-/_port/**                 @element-hq/element-web-team
-/tools/ci/check-no-port-changes.mjs @element-hq/element-web-team
-/.github/workflows/port-guard.yml   @element-hq/element-web-team

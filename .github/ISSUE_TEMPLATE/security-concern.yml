@@ -1,0 +1,49 @@
+name: Security concern (non-vulnerability)
+description: Tracker/telemetry concerns, key-handling UX concerns, threat-model gaps. For exploitable vulnerabilities use Security Advisories instead.
+labels: [T-Security-Concern, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              **STOP.** If this is an exploitable vulnerability (works against a current build, has a reproducer), use
+              [Security Advisories](https://github.com/Blackmarket-coa/blackout/security/advisories/new) instead.
+              See [`SECURITY.md`](https://github.com/Blackmarket-coa/blackout/blob/develop/SECURITY.md) for the full disclosure policy.
+
+              This template is for things like:
+              - Tracker / telemetry concerns ("the app is sending data to X")
+              - Key-handling UX concerns ("the cross-signing dialog is confusing in a way that risks user error")
+              - Threat-model gaps you want discussed in public ("the model says X but the implementation does Y")
+              - Privacy concerns that aren't exploitable
+    - type: checkboxes
+      id: confirm
+      attributes:
+          label: Confirmation
+          options:
+              - label: "I confirm this is **not** an exploitable vulnerability. For exploitable issues I have read SECURITY.md and will use the Advisories flow."
+                required: true
+    - type: textarea
+      id: concern
+      attributes:
+          label: The concern
+          value: |
+              #### What did you observe?
+
+              #### Why is it a concern?
+
+              #### What would good look like?
+      validations:
+          required: true
+    - type: input
+      id: threat-model-section
+      attributes:
+          label: Relevant THREAT_MODEL.md section (if any)
+          placeholder: e.g. "§3 boundary 4" or "A9"
+      validations:
+          required: false
+    - type: textarea
+      id: evidence
+      attributes:
+          label: Evidence
+          description: Screenshots, network traces, code references. Avoid pasting working exploit payloads.
+      validations:
+          required: false

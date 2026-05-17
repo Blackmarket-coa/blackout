@@ -1,5 +1,14 @@
 blank_issues_enabled: false
 contact_links:
-    - name: Questions & support
-      url: https://matrix.to/#/#element-web:matrix.org
-      about: Please ask and answer questions here.
+    - name: Tester questions & orientation
+      url: https://matrix.to/#/#welcome:theblackout.app
+      about: New to Blackout? Start here. See TESTERS.md in the repo root for the 5-minute orientation.
+    - name: Developer & contributor chat
+      url: https://matrix.to/#/#blackout-dev:theblackout.app
+      about: Ask code, architecture, and contribution questions here.
+    - name: Discussions (ideas, roadmap, plugins, governance)
+      url: https://github.com/Blackmarket-coa/blackout/discussions
+      about: For open-ended discussion, feature ideas, and roadmap input.
+    - name: Report a security vulnerability
+      url: https://github.com/Blackmarket-coa/blackout/security/advisories/new
+      about: Do NOT open a public issue for vulnerabilities. Use Security Advisories. See SECURITY.md for the full disclosure policy.

@@ -1,0 +1,45 @@
+title: "[Plugin idea] "
+labels: ["plugin-idea"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Blackout's feature-plugin registry is documented in `README.md`. Use this discussion to propose plugins, gather signal, and identify capability gaps before opening an issue.
+    - type: input
+      id: plugin-name
+      attributes:
+          label: Plugin name
+          placeholder: e.g. blackout-plugin-ical-export
+      validations:
+          required: true
+    - type: dropdown
+      id: surface
+      attributes:
+          label: Primary surface
+          options:
+              - "Web"
+              - "Desktop"
+              - "Mobile"
+              - "Server / API"
+              - "Cross-surface"
+      validations:
+          required: true
+    - type: textarea
+      id: capability
+      attributes:
+          label: What does it do?
+          value: |
+              #### One-sentence pitch
+
+              #### Detailed behavior
+
+              #### Why it should be a plugin (not core)
+      validations:
+          required: true
+    - type: textarea
+      id: sdk-gaps
+      attributes:
+          label: Capability gaps in `@blackout/sdk` (if any)
+          description: What can't the SDK do today that this plugin would need?
+      validations:
+          required: false

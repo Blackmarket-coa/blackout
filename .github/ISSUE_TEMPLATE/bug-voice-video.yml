@@ -1,0 +1,83 @@
+name: Bug report (voice / video / screen share)
+description: File a bug for calls, voice rooms, video, or screen share.
+labels: [T-Defect, area:voice-video, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Call bugs are sensitive to network and codec details. The more context you can paste, the faster we triage. See `THREAT_MODEL.md` §3 boundary 3 if your report involves media encryption.
+    - type: dropdown
+      id: call-type
+      attributes:
+          label: Call type
+          options:
+              - "1:1 voice"
+              - "1:1 video"
+              - "Group call (≤8 participants)"
+              - "Group call (>8 participants)"
+              - "Townhall / livestream"
+              - "Screen share"
+      validations:
+          required: true
+    - type: input
+      id: participant-count
+      attributes:
+          label: Participants at the moment of the fault
+          placeholder: e.g. 3
+      validations:
+          required: true
+    - type: dropdown
+      id: surface
+      attributes:
+          label: Surface
+          options:
+              - "Web"
+              - "Desktop"
+              - "Mobile (iOS)"
+              - "Mobile (Android)"
+      validations:
+          required: true
+    - type: dropdown
+      id: network
+      attributes:
+          label: Network at the time
+          options:
+              - "Wired"
+              - "Wi-Fi"
+              - "Cellular (LTE/4G)"
+              - "Cellular (5G)"
+              - "VPN"
+              - "Mixed (other party on different network)"
+      validations:
+          required: true
+    - type: textarea
+      id: what-broke
+      attributes:
+          label: What broke
+          value: |
+              #### Symptom (no audio, dropped, echo, frozen video, etc.)
+
+              #### Steps that produced it
+
+              #### Did it recover? How?
+      validations:
+          required: true
+    - type: textarea
+      id: console
+      attributes:
+          label: Browser / app console snippet (if available)
+          description: Paste any relevant errors (WebRTC ICE failures, codec messages, LiveKit warnings).
+          render: text
+      validations:
+          required: false
+    - type: dropdown
+      id: media-encryption
+      attributes:
+          label: Did the media-encryption indicator show as expected?
+          description: Refs THREAT_MODEL.md §3 boundary 3.
+          options:
+              - "Yes — indicator was green / expected state"
+              - "No — indicator showed a warning or was missing"
+              - "Didn't notice / not applicable"
+      validations:
+          required: false

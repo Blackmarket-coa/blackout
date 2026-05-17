@@ -1,0 +1,48 @@
+name: Onboarding confusion
+description: First-run friction — anything that confused you, made you give up, or made you wonder "what do I do here?". Lower bar than a bug; we want all of these during the V1 test flight.
+labels: [T-Onboarding, area:onboarding, severity:papercut, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              No bug needed. If something felt off, slow, unclear, or missing — write it down here. We'll triage. These reports drive the first wave of polish work.
+    - type: dropdown
+      id: surface
+      attributes:
+          label: Where were you?
+          options:
+              - "Hosted instance at matrix.theblackout.app"
+              - "Desktop app"
+              - "Mobile app"
+              - "Self-hosted instance"
+      validations:
+          required: true
+    - type: textarea
+      id: where
+      attributes:
+          label: Where did you give up (or get stuck)?
+          description: Describe the screen, button, or step. A screenshot helps a lot.
+          placeholder: e.g. "Right after creating an account, on the welcome screen"
+      validations:
+          required: true
+    - type: textarea
+      id: expected
+      attributes:
+          label: What did you expect to happen?
+          placeholder: e.g. "I expected a list of rooms or a 'find people' button"
+      validations:
+          required: true
+    - type: textarea
+      id: actual
+      attributes:
+          label: What did the app say (or not say)?
+          description: Quote the UI text if you can; a screenshot is even better.
+      validations:
+          required: false
+    - type: input
+      id: workaround
+      attributes:
+          label: Did you find a workaround?
+          placeholder: e.g. "Searched the wiki / asked in #welcome / gave up"
+      validations:
+          required: false

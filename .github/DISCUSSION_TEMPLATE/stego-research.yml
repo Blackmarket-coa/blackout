@@ -1,0 +1,41 @@
+title: "[Stego] "
+labels: ["stego-research"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              For public research and discussion of the steganography subsystem (`src/steganography/*`).
+              Carriers, capacity, detection, robustness. Refs `THREAT_MODEL.md` boundaries where relevant.
+    - type: dropdown
+      id: carrier
+      attributes:
+          label: Carrier type
+          options:
+              - "Text"
+              - "Emoji"
+              - "Image"
+              - "Audio"
+              - "Other"
+      validations:
+          required: true
+    - type: textarea
+      id: claim
+      attributes:
+          label: Claim or observation
+          description: What did you find or want to discuss?
+      validations:
+          required: true
+    - type: textarea
+      id: repro
+      attributes:
+          label: How to reproduce
+          description: Inputs, parameters, what to look for in the output.
+      validations:
+          required: false
+    - type: input
+      id: threat-model
+      attributes:
+          label: Relevant THREAT_MODEL.md boundary (if any)
+          placeholder: e.g. "boundary 4"
+      validations:
+          required: false

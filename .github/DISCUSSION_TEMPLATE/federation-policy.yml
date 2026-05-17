@@ -1,0 +1,36 @@
+title: "[Federation] "
+labels: ["federation-policy"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              For inter-homeserver policy discussions: who joins the coalition, what is required of peer homeservers, how to handle policy disagreements. Refs
+              [`docs/operations/runbooks/independent-org-to-coalition-onboarding.md`](https://github.com/Blackmarket-coa/blackout/blob/develop/docs/operations/runbooks/independent-org-to-coalition-onboarding.md).
+    - type: input
+      id: homeserver
+      attributes:
+          label: Homeserver domain
+          description: Either yours (for an onboarding ask) or the one the policy concerns.
+      validations:
+          required: true
+    - type: textarea
+      id: ask
+      attributes:
+          label: The policy ask
+          description: What policy change, clarification, or onboarding step are you raising?
+      validations:
+          required: true
+    - type: textarea
+      id: blast-radius
+      attributes:
+          label: Blast radius
+          description: If adopted, who is affected? Just your peer? All federated peers? Hosted instance users?
+      validations:
+          required: false
+    - type: input
+      id: threat-model
+      attributes:
+          label: THREAT_MODEL.md implication (if any)
+          placeholder: e.g. "trust boundary 5"
+      validations:
+          required: false

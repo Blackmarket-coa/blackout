@@ -1,0 +1,104 @@
+name: Bug report (Blackout mobile)
+description: File a bug for the Blackout iOS or Android app.
+labels: [T-Defect, surface:mobile, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for filing a mobile bug. Mobile reports are especially valuable during the V1 test flight.
+
+              **Security vulnerabilities do not go here.** File those via
+              [Security Advisories](https://github.com/Blackmarket-coa/blackout/security/advisories/new).
+    - type: dropdown
+      id: platform
+      attributes:
+          label: Platform
+          options:
+              - "iOS"
+              - "Android"
+      validations:
+          required: true
+    - type: input
+      id: os-version
+      attributes:
+          label: OS version
+          placeholder: e.g. iOS 17.4, Android 14
+      validations:
+          required: true
+    - type: input
+      id: device
+      attributes:
+          label: Device
+          placeholder: e.g. iPhone 14 Pro, Pixel 7, Samsung Galaxy S23
+      validations:
+          required: false
+    - type: dropdown
+      id: install-source
+      attributes:
+          label: Install source
+          options:
+              - "TestFlight"
+              - "App Store"
+              - "Google Play"
+              - "F-Droid"
+              - "Sideloaded APK"
+              - "Local dev build"
+      validations:
+          required: true
+    - type: input
+      id: app-version
+      attributes:
+          label: App version + build
+          description: Find it in Settings → Help & About.
+          placeholder: e.g. 1.0.0-beta.3 (build 142)
+      validations:
+          required: true
+    - type: textarea
+      id: reproduction-steps
+      attributes:
+          label: Steps to reproduce
+          value: |
+              1.
+              2.
+              3.
+      validations:
+          required: true
+    - type: textarea
+      id: result
+      attributes:
+          label: Outcome
+          value: |
+              #### Expected
+
+              #### Actual
+      validations:
+          required: true
+    - type: dropdown
+      id: repro-web
+      attributes:
+          label: Does it reproduce on web?
+          description: Helps isolate mobile-only issues from cross-platform ones.
+          options:
+              - "No — mobile only"
+              - "Yes — also on web"
+              - "Didn't try"
+      validations:
+          required: true
+    - type: input
+      id: room-id
+      attributes:
+          label: Room / den / Coalition ID (optional)
+          description: If the bug happens in a specific room, paste the room ID or alias.
+          placeholder: e.g. !abcdef:theblackout.app
+      validations:
+          required: false
+    - type: dropdown
+      id: rageshake
+      attributes:
+          label: Will you send logs?
+          description: Use Settings → Help & About → Send debug logs.
+          options:
+              - "Yes"
+              - "No"
+      validations:
+          required: true
