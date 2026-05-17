@@ -13,6 +13,7 @@ import {
   IconButton,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
+import { stopPropagation } from '../utils/keyboard';
 
 export type UIAFlowOverlayProps = {
   currentStep: number;
@@ -26,10 +27,25 @@ export function UIAFlowOverlay({
   children,
   onCancel,
 }: UIAFlowOverlayProps) {
+  const stepLabelId = React.useId();
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
-      <FocusTrap focusTrapOptions={{ initialFocus: false, escapeDeactivates: false }}>
-        <Box style={{ height: '100%' }} direction="Column" grow="Yes" gap="400">
+      <FocusTrap
+        focusTrapOptions={{
+          initialFocus: false,
+          escapeDeactivates: stopPropagation,
+          onDeactivate: onCancel,
+        }}
+      >
+        <Box
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={stepLabelId}
+          style={{ height: '100%' }}
+          direction="Column"
+          grow="Yes"
+          gap="400"
+        >
           <Box grow="Yes" direction="Column" alignItems="Center" justifyContent="Center">
             {children}
           </Box>
@@ -41,7 +57,9 @@ export function UIAFlowOverlay({
             gap="200"
           >
             <Chip as="div" radii="Pill" outlined>
-              <Text as="span" size="T300">{`Step ${currentStep}/${stepCount}`}</Text>
+              <Text id={stepLabelId} as="span" size="T300">
+                {`Step ${currentStep}/${stepCount}`}
+              </Text>
             </Chip>
             <TooltipProvider
               tooltip={
