@@ -124,6 +124,15 @@ Evidence anchors:
   `legacy/blackout-web/src/app.ts:315` + `closeComposerPanels()`
   (also tracked as item #2 — Closed — in
   [`../usability-improvements.md`](../usability-improvements.md)).
+- Focus-return on close (row 6) is delegated to
+  `focus-trap-react`'s default `returnFocusOnDeactivate: true`. The
+  six self-contained dialogs (`ProfileModal`, `CreatePostModal`,
+  `HideMessageDialog`, `AttachProductDialog`,
+  `EmbeddedCheckoutOverlay`, `TimeoutDialog`) wrap their `role="dialog"`
+  root in `<FocusTrap>`; `Reactions.tsx` / `Message.tsx` no longer
+  override the default to `false`. JSDOM tests pin the behaviour via
+  `tests/unit/features/steganography/HideMessageDialog.test.tsx`
+  ("returns focus to the trigger element after close").
 
 ### D. Plugin integration audit
 
@@ -146,6 +155,17 @@ Evidence anchors:
 - Host plugin runtime under `apps/blackout-client/src/app/plugins/`
   (composer, navigation, right-panel, shell, custom-emoji, theme,
   matrix-adapters).
+- Discoverable-surface protocol (row 3): `PluginManifest` carries
+  optional `homepageCard` and `pinnedNav` fields
+  (`packages/blackout-protocol/src/plugins/index.ts`). Installed
+  records with `pinnedNav` flow through
+  `apps/blackout-client/src/app/features/monetization/install/installedPluginPanelsAtom.ts`
+  into `RegistrySidebarList` as `kind: 'sidebar'` panels. PluginsView
+  surfaces the declared surfaces per install via a "Surfaces:" line
+  (`plugin-surfaces-<id>` testid). `homepageCard` rendering is
+  deferred until a home/landing surface lands;
+  `right-panel`/`mobile-tab` plugin contributions are a future
+  protocol slice.
 
 ### E. Visual hierarchy audit
 

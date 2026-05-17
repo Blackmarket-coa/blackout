@@ -150,7 +150,6 @@ export const MessageAllReactionItem = as<
           <FocusTrap
             focusTrapOptions={{
               initialFocus: false,
-              returnFocusOnDeactivate: false,
               onDeactivate: () => handleClose(),
               clickOutsideDeactivates: true,
               escapeDeactivates: stopPropagation,

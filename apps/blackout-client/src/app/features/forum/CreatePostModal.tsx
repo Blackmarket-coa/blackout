@@ -1,9 +1,11 @@
 import { useId, useMemo, useState } from 'react';
+import FocusTrap from 'focus-trap-react';
 import { Descendant, Editor, Transforms, createEditor } from 'slate';
 import { Editable, Slate, withReact } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { useLegacySendMessageAdapter as useSendMessage } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
+import { stopPropagation } from '../../utils/keyboard';
 import type { ForumTag } from './useForum';
 
 const toBody = (value: Descendant[]): string => {
@@ -75,6 +77,14 @@ export const CreatePostModal = ({
     };
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                onDeactivate: onClose,
+                clickOutsideDeactivates: true,
+                escapeDeactivates: stopPropagation,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div
             role="dialog"
             aria-modal="true"
@@ -231,6 +241,7 @@ export const CreatePostModal = ({
                 </div>
             </div>
         </div>
+        </FocusTrap>
     );
 };
 

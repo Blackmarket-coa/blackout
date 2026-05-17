@@ -40,6 +40,31 @@ export interface PluginManifest {
     sha256: string;
     /** Optional description for end users. */
     description?: string;
+    /**
+     * Optional discoverable card the plugin author wants surfaced on the
+     * host's home / landing surface. `href` is advisory only — the host
+     * routes the click to `/plugins/<id>` until a code-plugin entrypoint
+     * registers an in-app route.
+     */
+    homepageCard?: {
+        title: string;
+        summary?: string;
+        iconUrl?: string;
+        href?: string;
+    };
+    /**
+     * Optional sidebar / nav rail entry the plugin author wants pinned.
+     * The host materializes this into a `ShellPanelEntry` of kind
+     * `sidebar`. Lower `order` renders first; `href` is advisory and the
+     * host routes to `/plugins/<id>` until code-plugin entrypoint loading
+     * is wired.
+     */
+    pinnedNav?: {
+        label: string;
+        iconUrl?: string;
+        href?: string;
+        order?: number;
+    };
 }
 
 export interface PluginSignatureEnvelope {
