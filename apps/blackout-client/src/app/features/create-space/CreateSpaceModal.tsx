@@ -31,6 +31,7 @@ type CreateSpaceModalProps = {
 function CreateSpaceModal({ state }: CreateSpaceModalProps) {
   const { spaceId } = state;
   const closeDialog = useCloseCreateSpaceModal();
+  const titleId = React.useId();
 
   const allJoinedRooms = useAllJoinedRoomsSet();
   const getRoom = useGetRoom(allJoinedRooms);
@@ -48,7 +49,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
               escapeDeactivates: stopPropagation,
             }}
           >
-            <Modal size="300" flexHeight>
+            <Modal size="300" flexHeight role="dialog" aria-modal aria-labelledby={titleId}>
               <Box direction="Column">
                 <Header
                   size="500"
@@ -59,7 +60,9 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
                   }}
                 >
                   <Box grow="Yes">
-                    <Text size="H4">New {BLACKOUT_TERMS.canopy.title}</Text>
+                    <Text id={titleId} size="H4">
+                      New {BLACKOUT_TERMS.canopy.title}
+                    </Text>
                   </Box>
                   <Box shrink="No">
                     <IconButton size="300" radii="300" onClick={closeDialog}>
