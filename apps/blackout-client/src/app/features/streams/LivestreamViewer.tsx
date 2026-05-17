@@ -1,6 +1,10 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LIVE_PATH, CREATOR_STOREFRONT_PATH } from '../../pages/paths';
+import {
+    LIVE_PATH,
+    CREATOR_STOREFRONT_PATH,
+    buildCommunitiesPath,
+} from '../../pages/paths';
 import {
     buildOwncastPlaylistUrl,
     fetchOwncastOrigin,
@@ -60,6 +64,20 @@ const tipRowStyle: CSSProperties = {
     alignItems: 'center',
     justifyContent: 'flex-end',
     borderTop: '1px solid var(--border-default, #374151)',
+};
+
+const chatCtaStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: '1px solid var(--accent-primary, #1ABC9C)',
+    color: 'var(--accent-primary, #1ABC9C)',
+    background: 'transparent',
+    textDecoration: 'none',
+    fontWeight: 600,
+    fontSize: 13,
 };
 
 const breadcrumbStyle: CSSProperties = {
@@ -128,10 +146,14 @@ const PlayerPane = ({
 
 /**
  * `/live/:streamId` viewer. Renders the stream metadata, an Owncast
- * embed (live or replay), and a TipButton context-bound to the stream.
- * The Matrix den chat overlay + product shelf are deferred to the next
- * viewer iteration — both depend on a stream→den association on the
- * `StreamRecord` that doesn't exist yet (server-side TODO).
+ * embed (live or replay), a "Join den chat" CTA when the stream is
+ * associated with a den, and a TipButton context-bound to the stream.
+ * The breadcrumb's creator link doubles as a product-shelf entry into
+ * the creator's storefront.
+ *
+ * The fully embedded chat overlay (Matrix room mounted in-page next to
+ * the player) is a larger workstream-D scope item; this viewer surfaces
+ * the association as a deep link into the den for now.
  */
 export const LivestreamViewer = (): JSX.Element => {
     const { streamId } = useParams<{ streamId: string }>();
@@ -214,6 +236,16 @@ export const LivestreamViewer = (): JSX.Element => {
             </header>
             <PlayerPane stream={stream} origin={origin} />
             <div style={tipRowStyle} data-testid="livestream-tip-row">
+                {stream.denId ? (
+                    <Link
+                        to={buildCommunitiesPath(null, stream.denId)}
+                        style={chatCtaStyle}
+                        data-testid="livestream-den-chat-link"
+                        data-den-id={stream.denId}
+                    >
+                        Join den chat
+                    </Link>
+                ) : null}
                 <Suspense fallback={null}>
                     <TipButtonLazy
                         recipientUserId={stream.creatorId}

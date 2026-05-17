@@ -19,13 +19,12 @@ For the source-of-truth triage with tier/owner detail see
 ### Livestream den chat overlay
 - **Where:** `/live/:streamId` viewer
   (`apps/blackout-client/src/app/features/streams/LivestreamViewer.tsx`)
-- **State:** Viewer, Owncast embed, and TipButton work. Matrix den chat
-  overlay + product shelf are deferred.
-- **Blocker:** Server schema. `StreamRecord` needs a stream→den
-  association before the client can wire the overlay; a migration under
-  `packages/api/src/db/migrations/` is required.
-- **Workaround:** Use the den's regular chat room out-of-band during a
-  livestream.
+- **State:** Viewer, Owncast embed, TipButton, and a "Join den chat" CTA
+  (deep-links into the associated den) all ship. A stream→den association
+  is now part of `StreamRecord.denId` and round-trips through
+  `PUT /v1/streaming/streams/:streamId/metadata`. A fully embedded chat
+  overlay (Matrix room mounted next to the player) is deferred to
+  Workstream D scope; the deep link is the beta-shippable interim.
 
 ### Playbook Q1 icons
 - **Where:** Q1 ("How many of us are in this den?") in the playbook

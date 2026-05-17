@@ -440,6 +440,12 @@ export interface StreamRecord {
   allowedSubscriberIds: UUID[];
   latencyProfile: 'normal' | 'low';
   replayPointer?: string;
+  /**
+   * Optional den (Matrix room) the stream is associated with. When set,
+   * the LivestreamViewer surfaces a CTA into that den's chat so viewers
+   * can join the conversation without leaving the viewer route.
+   */
+  denId?: UUID;
   createdAt: string;
   updatedAt: string;
 }
