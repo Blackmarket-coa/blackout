@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { Provider, createStore } from 'jotai';
 import { userIdAtom } from '../../../../src/app/state/auth';
 import { GovernanceDashboard } from '../../../../src/app/features/governance/GovernanceDashboard';
@@ -116,7 +117,7 @@ vi.mock('../../../../src/app/features/governance/useProposals', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const renderDashboard = () => {
+const renderDashboard = (initialUrl = '/governance') => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
@@ -125,9 +126,11 @@ const renderDashboard = () => {
 
     act(() => {
         root.render(
-            <Provider store={store}>
-                <GovernanceDashboard roomId="!room:example.org" />
-            </Provider>,
+            <MemoryRouter initialEntries={[initialUrl]}>
+                <Provider store={store}>
+                    <GovernanceDashboard roomId="!room:example.org" />
+                </Provider>
+            </MemoryRouter>,
         );
     });
 
@@ -161,45 +164,35 @@ describe('GovernanceDashboard sections', () => {
         document.body.innerHTML = '';
     });
 
-    it('renders Active and Past sections via tabs', () => {
-        const container = renderDashboard();
+    it('renders Active section by default', () => {
+        const container = renderDashboard('/governance');
 
         expect(container.textContent).toContain('Active Proposals');
         expect(container.textContent).toContain('card:Enable feature A');
+    });
 
-        const pastTab = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Past',
-        ) as HTMLButtonElement;
-        act(() => pastTab.click());
+    it('renders Past section when tab=past', () => {
+        const container = renderDashboard('/governance?tab=past');
 
         expect(container.textContent).toContain('Past Proposals');
         expect(container.textContent).toContain('card:Retire feature B');
     });
 
-    it('renders Create and Results sections', () => {
-        const container = renderDashboard();
+    it('renders Create section at /governance/new', () => {
+        const container = renderDashboard('/governance/new');
 
-        const createTab = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Create',
-        ) as HTMLButtonElement;
-        act(() => createTab.click());
         expect(container.querySelector('[data-testid="proposal-creator"]')).toBeTruthy();
+    });
 
-        const resultsTab = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Results',
-        ) as HTMLButtonElement;
-        act(() => resultsTab.click());
+    it('renders Results section when tab=results', () => {
+        const container = renderDashboard('/governance?tab=results');
+
         expect(container.textContent).toContain('Computed status: active');
         expect(container.textContent).toContain('Computed status: passed');
     });
 
     it('renders My Votes using latest vote per proposal and opens ProposalDetail', () => {
-        const container = renderDashboard();
-
-        const myVotesTab = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'My Votes',
-        ) as HTMLButtonElement;
-        act(() => myVotesTab.click());
+        const container = renderDashboard('/governance?tab=my-votes');
 
         expect(container.textContent).toContain('My Votes');
         expect(container.textContent).toContain('Your vote: yes');

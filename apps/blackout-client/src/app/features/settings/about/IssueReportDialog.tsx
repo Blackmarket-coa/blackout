@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { API_BASE_URL } from '../../../sdk/client';
+import { createAuthorizedApiClient } from '../../../sdk/client';
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import { trackSettingsInteraction } from '../settingsTelemetry';
 
@@ -119,18 +119,11 @@ export const IssueReportDialog: React.FC<IssueReportDialogProps> = ({ open, onCl
                 ...context,
             };
             const token = readBlackoutApiToken();
-            const headers: HeadersInit = { 'content-type': 'application/json' };
-            if (token) (headers as Record<string, string>).authorization = `Bearer ${token}`;
-            const res = await fetch(`${API_BASE_URL}/v1/diagnostics/issue-report`, {
+            const json = (await createAuthorizedApiClient(token)({
                 method: 'POST',
-                headers,
-                body: JSON.stringify(body),
-            });
-            if (!res.ok) {
-                const detail = await res.text().catch(() => '');
-                throw new Error(`HTTP ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ''}`);
-            }
-            const json = (await res.json()) as { reportId: string };
+                path: '/v1/diagnostics/issue-report',
+                body,
+            })) as { reportId: string };
             setStatus({ kind: 'sent', reportId: json.reportId });
             trackSettingsInteraction('about', 'issue_report', 'success');
         } catch (err) {

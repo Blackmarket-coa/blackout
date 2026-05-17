@@ -45,6 +45,7 @@ import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
 import diagnosticsRoutes from './routes/diagnostics';
+import bugReportRoutes from './routes/bugReport';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';

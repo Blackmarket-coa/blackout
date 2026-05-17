@@ -22,6 +22,7 @@ vi.mock('react-router-dom', async () => {
         useLocation: () => ({ pathname: '/', search: '' }),
         useNavigate: () => vi.fn(),
         useParams: () => ({}),
+        useSearchParams: () => [new URLSearchParams(''), vi.fn()] as const,
         Link: ({ children, ...rest }: React.ComponentProps<'a'>) => <a {...rest}>{children}</a>,
     };
 });
