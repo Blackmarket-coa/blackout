@@ -49,11 +49,6 @@ For the source-of-truth triage with tier/owner detail see
     **disabled** via their `*_ENABLED` env vars; do not enable them in
     production until real adapters are implemented.
 
-### Desktop deep links
-- **Mobile:** Capacitor wrapper handles both `matrix://` and `blackout://`.
-- **Desktop:** Tauri wrapper handles `matrix://` only. `blackout://`
-  deep links must be opened in the web app for now.
-
 ### Notification click-to-room routing
 - The notification subsystem ships across web/mobile/desktop, but
   end-to-end routing (notification tap → land on the right room/thread)
