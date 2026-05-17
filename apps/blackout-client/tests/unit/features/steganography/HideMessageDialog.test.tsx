@@ -48,4 +48,54 @@ describe('HideMessageDialog advanced gating', () => {
 
         root.unmount();
     });
+
+    it('closes on Escape (audit C row)', async () => {
+        const onClose = vi.fn();
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <HideMessageDialog open onClose={onClose} onEncoded={() => undefined} />
+                </Provider>,
+            );
+            await Promise.resolve();
+        });
+
+        await act(async () => {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+            await Promise.resolve();
+        });
+
+        expect(onClose).toHaveBeenCalled();
+
+        root.unmount();
+    });
+
+    it('exposes role=dialog with an accessible name (audit C row)', async () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <HideMessageDialog open onClose={() => undefined} onEncoded={() => undefined} />
+                </Provider>,
+            );
+            await Promise.resolve();
+        });
+
+        const dialog = container.querySelector('[role="dialog"]') as HTMLElement | null;
+        expect(dialog).toBeTruthy();
+        expect(dialog?.getAttribute('aria-modal')).toBe('true');
+        const labelledBy = dialog?.getAttribute('aria-labelledby');
+        expect(labelledBy).toBeTruthy();
+        const label = labelledBy ? document.getElementById(labelledBy) : null;
+        expect(label?.textContent).toContain('Steganography');
+
+        root.unmount();
+    });
 });
