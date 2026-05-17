@@ -92,3 +92,5 @@ deploy/docker/production/.cloudflared/
 !*.sops.env
 .pnpm-store
 apps/blackout-client/docs/release/staging-signoff.report.json
+# Transient release-gate evidence captures (per-run logs)
+/tmp/
