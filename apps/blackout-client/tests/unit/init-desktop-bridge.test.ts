@@ -69,6 +69,75 @@ describe('initDesktopBridge', () => {
         globalThis.removeEventListener('blackout:native-event', handlerStop);
     });
 
+    it('extracts deep-link URLs from single-instance argv tuples', async () => {
+        const tauri = buildTauriMock();
+        (globalThis as { __TAURI__?: unknown }).__TAURI__ = tauri.bridge;
+
+        await initDesktopBridge();
+
+        const seen: string[] = [];
+        const listener = ((event: Event) => {
+            const detail = (event as CustomEvent<{ type?: string; url?: string }>).detail;
+            if (detail?.type === 'deep_link_opened' && typeof detail.url === 'string') {
+                seen.push(detail.url);
+            }
+        }) as EventListener;
+        globalThis.addEventListener('blackout:native-event', listener);
+
+        const handlers = tauri.listeners.get('single-instance') ?? [];
+        expect(handlers.length).toBe(1);
+
+        // Rust tuple `(argv, cwd)` serialized form: argv is nested, cwd
+        // is a sibling string. Only argv entries with a registered
+        // scheme are forwarded.
+        handlers[0]({
+            payload: [
+                ['blackout', 'blackout://room/!a:srv', '--ignored=flag'],
+                '/home/user',
+            ],
+        });
+
+        // Flat-list variant (some single-instance versions emit argv directly).
+        handlers[0]({
+            payload: ['blackout', 'matrix://open?roomId=!b:srv'],
+        });
+
+        // Object-shape variant.
+        handlers[0]({
+            payload: { argv: ['blackout', 'blackout://room/!c:srv'] },
+        });
+
+        expect(seen).toEqual([
+            'blackout://room/!a:srv',
+            'matrix://open?roomId=!b:srv',
+            'blackout://room/!c:srv',
+        ]);
+
+        globalThis.removeEventListener('blackout:native-event', listener);
+    });
+
+    it('ignores non-deep-link argv from single-instance events', async () => {
+        const tauri = buildTauriMock();
+        (globalThis as { __TAURI__?: unknown }).__TAURI__ = tauri.bridge;
+
+        await initDesktopBridge();
+
+        const seen: string[] = [];
+        const listener = ((event: Event) => {
+            const detail = (event as CustomEvent<{ type?: string }>).detail;
+            if (detail?.type === 'deep_link_opened') seen.push('deep_link_opened');
+        }) as EventListener;
+        globalThis.addEventListener('blackout:native-event', listener);
+
+        const handlers = tauri.listeners.get('single-instance') ?? [];
+        handlers[0]({
+            payload: [['blackout', '--hidden', '/path/to/file'], '/cwd'],
+        });
+
+        expect(seen).toEqual([]);
+        globalThis.removeEventListener('blackout:native-event', listener);
+    });
+
     it('forwards unread_count_changed events to the Tauri set_unread_count command', async () => {
         const tauri = buildTauriMock();
         (globalThis as { __TAURI__?: unknown }).__TAURI__ = tauri.bridge;

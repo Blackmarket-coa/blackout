@@ -16,6 +16,12 @@ export interface StreamSummary {
     visibility: StreamVisibility;
     latencyProfile: 'normal' | 'low';
     replayPointer?: string;
+    /**
+     * Matrix den (room) the stream is associated with, if any. The
+     * LivestreamViewer surfaces a CTA into the den chat when this is
+     * set so viewers can talk while watching.
+     */
+    denId?: string;
     updatedAt: string;
 }
 
