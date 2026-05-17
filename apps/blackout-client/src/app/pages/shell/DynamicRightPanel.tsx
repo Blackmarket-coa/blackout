@@ -3,10 +3,10 @@ import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router-dom';
 import { rightPanelDescriptorAtom } from '../../state/navigation';
 import { buildFeatureRegistry } from '../../core/features/buildRegistry';
-import { defaultFeatureFlags } from '../../core/features/featureFlags';
+import { defaultFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
 import { useCapabilityContext } from '../../core/features/capabilityContext';
 import { composeShellPanels, selectPanelsByKind } from '../../core/features/composition';
-import type { FeatureFlags, ShellPanelEntry } from '../../core/features/types';
+import type { ShellPanelEntry } from '../../core/features/types';
 import { RightPanelTabBar } from './RightPanelTabBar';
 
 const firstSegment = (pathname: string): string => {
