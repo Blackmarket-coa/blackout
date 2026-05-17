@@ -155,6 +155,8 @@ export const bootstrapMailer = (): { provider: string; ok: boolean; reason?: str
   setMailer(new ConsoleMailer());
   log.info('mailer:bootstrap', { provider: 'console', ok: true });
   return { provider: 'console', ok: true };
+};
+
 const buildResendFromEnv = async (env: NodeJS.ProcessEnv): Promise<Mailer> => {
   const apiKey = env.MAIL_RESEND_API_KEY;
   const from = env.MAIL_FROM_ADDRESS;

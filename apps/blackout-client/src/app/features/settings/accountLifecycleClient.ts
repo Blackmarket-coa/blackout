@@ -1,4 +1,4 @@
-import { API_BASE_URL, createAuthorizedApiClient } from '../../sdk/client';
+import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
 const ACCOUNT_BASE = '/v1/auth/account';
@@ -38,12 +38,10 @@ export interface AccountExport {
 
 /** Fetch the user's data export and trigger a JSON download in the browser. */
 export async function downloadAccountExport(token: string | null = readBlackoutApiToken()): Promise<AccountExport> {
-  const headers: HeadersInit = token ? { authorization: `Bearer ${token}` } : {};
-  const res = await fetch(`${API_BASE_URL}${ACCOUNT_BASE}/export`, { headers });
-  if (!res.ok) {
-    throw new Error(`account_export_failed:${res.status}`);
-  }
-  const data = (await res.json()) as AccountExport;
+  const data = (await createAuthorizedApiClient(token)({
+    method: 'GET',
+    path: `${ACCOUNT_BASE}/export`,
+  })) as AccountExport;
   // Best-effort browser download; safe-no-op if running outside a browser
   // (e.g. unit tests using node fetch).
   if (typeof document !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {

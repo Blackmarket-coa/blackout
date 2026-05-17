@@ -268,6 +268,8 @@ class InMemoryDb {
       }
     }
     return count;
+  }
+
   listEmailVerificationTokensForUser(userId: string): EmailVerificationTokenRecord[] {
     return [...this.emailVerificationTokens.values()].filter((t) => t.userId === userId);
   }
