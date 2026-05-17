@@ -360,24 +360,136 @@ composer / notifications manifest-order assertions were updated to
 include the `live-interaction.bundle` plugin added after the tests were
 quarantined. `tests/unit/features/navigation/QuickSwitcher.test.tsx` was
 un-quarantined 2026-05-07 once `buildQuickSwitcherIndex` /
-`rankQuickSwitcherResults` were implemented. The remaining 7 are
-quarantined in `apps/blackout-client/vitest.config.ts`'s `exclude` list
-pending feature-level fixes:
+`rankQuickSwitcherResults` were implemented.
+
+### 2026-05-13 cleanup — 5 of 8 cleared
+
+On `claude/check-production-readiness-SaDjy` (commit
+`<this commit>`):
+
+- **Retired** (3 files deleted, dropped from exclude list):
+  - `tests/unit/utils/room.test.ts` — tested 8 helper functions
+    (`getRoomName`, `getRoomAvatar`, `getRoomTopic`, `isDM`,
+    `getRoomType`, `getJoinedMembers`, `getPowerLevel`, `canDoAction`).
+    Only `isSpace` actually exists in `src/app/utils/room.ts`; the
+    other 8 were a planned API that never landed. There is no
+    underlying behaviour to validate.
+  - `tests/unit/parity/baselineResetSnapshotParity.test.tsx` and
+    `tests/unit/parity/monetizationLayoutParity.test.tsx` — parity
+    snapshots against `shellLayoutPlugin.isEnabled === false` /
+    `hasLegacyFallbackEnabled === false` paths, i.e. the legacy
+    Cinny shell archived 2026-05-01 in `legacy/blackout-web`. The
+    comparison target no longer ships; the snapshots are meaningless.
+- **Fixed** (1 file un-quarantined):
+  - `tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx`
+    — the manifest now intentionally double-registers the
+    monetization route catalog (once as a "suite" SKU bundling all
+    8 routes, once per per-SKU customization). The route-assertion
+    flatmap therefore yielded 16 entries vs the test's expected 8.
+    Test now deduplicates via `new Set(...)` and asserts the unique
+    catalog (`apps/blackout-client/tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx:108-127`).
+- **Coverage gates wired and ratcheted** (`apps/blackout-client/vitest.config.ts`):
+  - Added `@vitest/coverage-v8` to `devDependencies` and a
+    `test:coverage` script. The previous thresholds (60/55/60/60) had
+    never been enforced because neither the dep nor a `--coverage`
+    invocation existed.
+  - Thresholds reset to a no-regression floor matching current
+    actual coverage (~19.6/60.08/26.06/19.6): **statements 18 /
+    branches 58 / functions 25 / lines 18**.
+  - CI: `.github/workflows/ci.yml`'s `unit-tests` job now runs
+    `pnpm --filter @blackout/client run test:coverage` so the floor
+    is enforced on every PR.
+
+The remaining 3 are still quarantined pending Workstream A Port 1
+(ClientLayout adapter shape + render contract):
 
 | File | Failure mode | Likely fix |
 | --- | --- | --- |
-| `tests/unit/utils/room.test.ts` | Imports util fns from `src/app/utils/room` that aren't exported | Restore exports or rewrite the test |
 | `tests/unit/features/moderation/draupnir/DraupnirNavigation.test.tsx` | Asserts a "Moderation" nav link the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
-| `tests/unit/pages/client/ClientLayout.test.tsx` | Asserts elements the modern shell does not render yet | Refresh after Workstream A Port 1 lands |
-| `tests/unit/features/settings/SettingsPage.test.tsx` | vanilla-extract test setup: "Styles were unable to be assigned to a file" | Vanilla-extract vitest config; tracked under Workstream B |
-| `tests/unit/features/monetization/monetizationRegistrySafetyMatrix.test.tsx` | Expected 7 customizations, got 15 | Refresh expected-count after registry settles |
+| `tests/unit/pages/client/ClientLayout.test.tsx` | Asserts elements the modern shell does not render yet (current run errors at `client.getRoom is not a function` + `room.currentState?.getStateEvents(...)?.getContent`) | Refresh after Workstream A Port 1 lands |
 | `tests/unit/features/room/RoomView.layout.test.tsx` | Test environment / assertion drift | Refresh after Workstream A Port 1 lands |
-| `tests/unit/parity/baselineResetSnapshotParity.test.tsx` | Parity test against legacy shell behavior | Likely retire post-archive |
-| `tests/unit/parity/monetizationLayoutParity.test.tsx` | Parity test against legacy shell behavior | Likely retire post-archive |
 
 Adding to or removing from the exclude list **must** be paired with a
 matching update here. The vitest config has a `// see deferred-bodies-schedule`
 pointer to keep the two in sync.
+
+### 2026-05-13 cleanup — last 3 un-quarantined; 7 scenario `it.skip`s remain
+
+On `claude/check-production-readiness-SaDjy`:
+
+All three remaining file-level quarantine entries were lifted by
+refreshing the matrix-client mocks against the current adapter surface
+(`getAccountData`, `removeListener`, `getRoom`, `getRoomPushRule`,
+`getCrypto`, `getHomeserverUrl`, `getLiveTimeline().getState()`,
+non-empty feature `customizations`, `m.room.create` state event,
+`getSender`/`getRelation` on MatrixEvent mocks). A shared helper
+`apps/blackout-client/tests/helpers/fakeMatrixClient.ts` exposes
+`createFakeMatrixClient` + `createFakeRoom` for future tests.
+
+After the refresh:
+
+- `DraupnirNavigation.test.tsx`: 1/1 cases pass.
+- `RoomView.layout.test.tsx`: 1/1 cases pass (also needed
+  `flushSync` + a `QuestSheet` mock).
+- `ClientLayout.test.tsx`: 10 of 17 cases pass. Seven cases remain
+  `it.skip` with inline explanations, all blocked on either:
+  - a richer `QuickSwitcher` test stub that simulates the
+    `<input placeholder="Search rooms, …">` + Enter/Escape/Arrow
+    handlers (5 cases: open-switcher, arrow-nav, queues-slash,
+    validation-message, /leave + /join), or
+  - assertion updates against UI shape drift (1 case:
+    threads/pins/search "Close" text), or
+  - a rewrite against the post-Workstream-B settings drawer
+    (1 case: mobile room organization).
+
+The vitest config exclude list is now empty (header comment updated
+accordingly). Coverage thresholds ratcheted to the new floor
+(statements/lines 23 / branches 62 / functions 27) against current
+actual ~23.78 / 63.80 / 27.47 measured across **843 tests / 147
+files** (up from 831 / 144 before this work).
+
+Open follow-up: when un-skipping the 7 ClientLayout cases above,
+also bump the vitest threshold floors to track the new actual
+coverage measurement.
+
+### 2026-05-13 cleanup — sixth follow-up — 7 `it.skip`s cleared
+
+On `claude/prepare-deployment-Xj8R7`:
+
+The 7 remaining `it.skip` cases in `ClientLayout.test.tsx` were
+all cleared. Diagnosis showed the original skip comments were
+misleading — the QuickSwitcher cases were failing on a stale
+placeholder selector (the real component renders
+`Search rooms, spaces, DMs, members, settings, actions`), not on
+a missing behavioural stub, and the "settings drawer no longer
+renders Room organization" comment was wrong (only the aria-label
+changed when terminology migrated to "Den"). Approach:
+
+1. Four stable `data-testid` attributes were added in source —
+   `right-panel` and `mobile-den-organization` on
+   `apps/blackout-client/src/app/pages/client/ClientLayout.tsx`
+   and `quick-switcher-input` on
+   `apps/blackout-client/src/app/features/navigation/QuickSwitcher.tsx`.
+2. The 9 stale `input[placeholder="…"]` selectors in the test
+   file were replaced with `[data-testid="quick-switcher-input"]`.
+3. The terminology-driven assertion strings (`Select a room`,
+   `All rooms`) were rewritten as regex matches against the
+   actual live strings (`Select a den`, `All dens`).
+4. The threads/pins/search test was rewritten to (a) seed
+   `makeRoom({ timelineEvents })` so the live
+   `useLegacyRoomTimelineAdapter` surfaces events to the
+   right-panel renderer, (b) scope row-button find to
+   `[data-testid="right-panel"] button` so it cannot match the
+   rail's `Threads` toggle, and (c) assert aside unmount via the
+   testid rather than absence of the literal `Close` substring.
+
+Result: `ClientLayout.test.tsx` is **17 passed, 0 skipped**. No
+behavioural stub for `QuickSwitcher` was needed — the real
+component renders fine under the existing test provider. No
+`useCapabilityContext` mock was needed either. The vitest
+threshold floors did not change because the un-skipped tests
+exercise paths already covered by the surrounding passing
+suite.
 
 ## Open scope questions for the next session
 

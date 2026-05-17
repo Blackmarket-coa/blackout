@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import {
     buildSpaceGroups,
+    findThreadRoot,
     getMentionInboxItems,
     getPinnedEvents,
     getThreadEvents,
+    getThreadRootEventId,
+    getThreadRootIds,
     getUnreadMarkerEventId,
     groupMembersByPresence,
+    groupThreadReplies,
     searchEvents,
 } from '../../../../src/app/features/right-panel/rightPanelUtils';
 
@@ -200,5 +204,146 @@ describe('rightPanelUtils', () => {
         expect(items[0]?.unread).toBe(true);
         expect(items[1]?.eventId).toBe('$mention-a');
         expect(items[1]?.unread).toBe(false);
+    });
+});
+
+const threadEvent = ({
+    id,
+    rootEventId,
+    body = '',
+}: {
+    id: string;
+    rootEventId?: string;
+    body?: string;
+}): MatrixEvent =>
+    ({
+        getId: () => id,
+        getTs: () => 0,
+        getType: () => 'm.room.message',
+        getContent: () =>
+            rootEventId
+                ? {
+                      body,
+                      'm.relates_to': { rel_type: 'm.thread', event_id: rootEventId },
+                  }
+                : { body },
+    }) as unknown as MatrixEvent;
+
+describe('rightPanelUtils — thread-tree helpers (Workstream C)', () => {
+    describe('getThreadRootEventId', () => {
+        it('returns the relation event_id for a thread reply', () => {
+            const reply = threadEvent({ id: '$reply', rootEventId: '$root' });
+            expect(getThreadRootEventId(reply)).toBe('$root');
+        });
+
+        it('returns null for events with no relation', () => {
+            const event = threadEvent({ id: '$plain' });
+            expect(getThreadRootEventId(event)).toBeNull();
+        });
+
+        it('returns null for non-thread relations (m.replace, m.annotation, etc.)', () => {
+            const annotation = {
+                getId: () => '$annotation',
+                getTs: () => 0,
+                getType: () => 'm.reaction',
+                getContent: () => ({
+                    'm.relates_to': {
+                        rel_type: 'm.annotation',
+                        event_id: '$target',
+                        key: '👍',
+                    },
+                }),
+            } as unknown as MatrixEvent;
+            expect(getThreadRootEventId(annotation)).toBeNull();
+        });
+
+        it('returns null when event_id is missing or non-string', () => {
+            const noEventId = {
+                getId: () => '$bad',
+                getTs: () => 0,
+                getType: () => 'm.room.message',
+                getContent: () => ({
+                    'm.relates_to': { rel_type: 'm.thread' },
+                }),
+            } as unknown as MatrixEvent;
+            const numericEventId = {
+                getId: () => '$bad2',
+                getTs: () => 0,
+                getType: () => 'm.room.message',
+                getContent: () => ({
+                    'm.relates_to': { rel_type: 'm.thread', event_id: 42 },
+                }),
+            } as unknown as MatrixEvent;
+            expect(getThreadRootEventId(noEventId)).toBeNull();
+            expect(getThreadRootEventId(numericEventId)).toBeNull();
+        });
+    });
+
+    describe('getThreadRootIds', () => {
+        it('returns the unique set of root ids in first-occurrence order', () => {
+            const events = [
+                threadEvent({ id: '$r1', rootEventId: '$rootA' }),
+                threadEvent({ id: '$r2', rootEventId: '$rootB' }),
+                threadEvent({ id: '$r3', rootEventId: '$rootA' }),
+                threadEvent({ id: '$plain' }),
+                threadEvent({ id: '$r4', rootEventId: '$rootC' }),
+            ];
+            expect(getThreadRootIds(events)).toEqual(['$rootA', '$rootB', '$rootC']);
+        });
+
+        it('returns an empty array when no thread replies are present', () => {
+            const events = [threadEvent({ id: '$a' }), threadEvent({ id: '$b' })];
+            expect(getThreadRootIds(events)).toEqual([]);
+        });
+    });
+
+    describe('groupThreadReplies', () => {
+        it('groups replies by root event id, preserving input order', () => {
+            const events = [
+                threadEvent({ id: '$r1', rootEventId: '$rootA', body: 'A1' }),
+                threadEvent({ id: '$r2', rootEventId: '$rootB', body: 'B1' }),
+                threadEvent({ id: '$r3', rootEventId: '$rootA', body: 'A2' }),
+                threadEvent({ id: '$plain' }),
+            ];
+
+            const groups = groupThreadReplies(events);
+            expect(groups.size).toBe(2);
+            expect(groups.get('$rootA')?.map((e) => e.getId())).toEqual(['$r1', '$r3']);
+            expect(groups.get('$rootB')?.map((e) => e.getId())).toEqual(['$r2']);
+        });
+
+        it('drops non-thread events silently', () => {
+            const events = [
+                threadEvent({ id: '$plain1' }),
+                threadEvent({ id: '$plain2' }),
+            ];
+            expect(groupThreadReplies(events).size).toBe(0);
+        });
+
+        it('returns an empty map for an empty input', () => {
+            expect(groupThreadReplies([]).size).toBe(0);
+        });
+    });
+
+    describe('findThreadRoot', () => {
+        it('returns the matching event when present in the window', () => {
+            const root = threadEvent({ id: '$rootA', body: 'root message' });
+            const events = [
+                threadEvent({ id: '$r1', rootEventId: '$rootA' }),
+                root,
+                threadEvent({ id: '$r2', rootEventId: '$rootA' }),
+            ];
+            expect(findThreadRoot(events, '$rootA')).toBe(root);
+        });
+
+        it('returns null when the root is not in the window (panel hasn\'t loaded it yet)', () => {
+            const events = [threadEvent({ id: '$r1', rootEventId: '$missing' })];
+            expect(findThreadRoot(events, '$missing')).toBeNull();
+        });
+
+        it('returns null for an empty rootEventId', () => {
+            const events = [threadEvent({ id: '$rootA' })];
+            expect(findThreadRoot(events, '')).toBeNull();
+        });
     });
 });

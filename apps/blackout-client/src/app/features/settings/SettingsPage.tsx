@@ -25,6 +25,10 @@ const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
 const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
 const DeveloperSettings = lazy(() => import('./DeveloperSettings'));
 const AboutSettings = lazy(() => import('./AboutSettings'));
+const BugReportSettings = lazy(() => import('./BugReportSettings'));
+const CharacterSheetSection = lazy(() =>
+    import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet })),
+);
 
 interface SettingsSection {
     id: SettingsSectionId;
@@ -81,6 +85,18 @@ const sections: SettingsSection[] = [
         label: 'Developer',
         summary: 'Developer mode, diagnostics bundle export',
         component: DeveloperSettings,
+    },
+    {
+        id: 'bug-report',
+        label: 'Report a bug',
+        summary: 'File a public GitHub issue with optional diagnostics',
+        component: BugReportSettings,
+    },
+    {
+        id: 'character-sheet',
+        label: 'Character sheet',
+        summary: 'Your first playbook, roles you carry, and your quest log',
+        component: CharacterSheetSection,
     },
     {
         id: 'about',

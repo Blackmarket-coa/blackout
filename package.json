@@ -48,6 +48,8 @@
     "contracts:generate": "pnpm --filter @blackout/contracts generate",
     "contracts:check": "node tools/ci/check-contracts-generated.mjs",
     "guard:call-config": "node tools/ci/check-call-config.mjs",
+    "guard:ops-artifacts": "node tools/ci/check-ops-artifacts.mjs",
+    "guard:audit-clean": "pnpm audit --prod --audit-level moderate",
     "probe:calls:synthetic": "node tools/ci/synthetic-call-probe.mjs",
     "guard:auth-secrets": "node tools/ci/check-auth-secrets.mjs",
     "guard:cors-allowlist": "node tools/ci/check-cors-allowlist.mjs",
@@ -78,14 +80,17 @@
     "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs",
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
-    "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment"
+    "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
     "@electric-sql/pglite": "^0.3.9",
-    "@playwright/test": "^1.56.1"
+    "@playwright/test": "^1.58.2",
+    "yaml": "^2.6.1"
   },
   "pnpm": {
     "overrides": {
@@ -99,6 +104,7 @@
       "lodash@4.17.23": "4.18.0",
       "picomatch@4.0.3": "4.0.4",
       "postcss@8.5.8": "8.5.10",
+      "sanitize-html@2.12.1": "2.17.4",
       "serialize-javascript@6.0.2": "7.0.5",
       "uuid@10.0.0": "14.0.0",
       "uuid@11.1.0": "14.0.0",

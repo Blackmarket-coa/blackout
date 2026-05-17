@@ -55,7 +55,9 @@ Once a `needs-review` row has been resolved, edit the row in place to
 
 | Date | Project | Advisory ID | URL | Classification | BMC patch | Reviewer |
 |------|---------|-------------|-----|----------------|-----------|----------|
-| _(empty)_ | | | | | | |
+| 2026-05-12 | fast-uri (devDep: vite-plugin-pwa → workbox-build → ajv) | GHSA-v39h-62p7-jpjc | https://github.com/advisories/GHSA-v39h-62p7-jpjc | accepted | none — `pnpm audit --prod` excludes; resolves when vite-plugin-pwa upgrades to a workbox-build with patched ajv | Release Eng |
+| 2026-05-12 | fast-uri (devDep: vite-plugin-pwa → workbox-build → ajv) | GHSA-q3j6-qgpj-74h6 | https://github.com/advisories/GHSA-q3j6-qgpj-74h6 | accepted | none — same devDep chain as v39h advisory; resolves when vite-plugin-pwa upgrades to fast-uri >= 3.1.1 | Release Eng |
+| 2026-05-12 | @babel/plugin-transform-modules-systemjs (devDep: vite-plugin-pwa → workbox-build → @babel/preset-env) | GHSA-fv7c-fp4j-7gwp | https://github.com/advisories/GHSA-fv7c-fp4j-7gwp | accepted | none — `pnpm audit --prod` excludes; resolves when vite-plugin-pwa upgrades to a workbox-build with patched @babel/preset-env | Release Eng |
 
 The table is initialised empty. The aggregation job
 ([`AI_SECURITY_WORKFLOW.md` §Aggregation](AI_SECURITY_WORKFLOW.md))

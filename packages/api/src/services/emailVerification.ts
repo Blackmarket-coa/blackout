@@ -28,21 +28,44 @@ export interface IssueEmailVerificationInput {
 }
 
 export type IssueOutcome =
-  | { kind: 'ok'; token: string; user: UserRecord; record: EmailVerificationTokenRecord }
-  | { kind: 'unknown_user' }
-  | { kind: 'already_verified' }
-  | { kind: 'throttled' };
+  | { kind: 'ok'; token: string; record: EmailVerificationTokenRecord; user: UserRecord }
+  | { kind: 'already_verified'; user: UserRecord }
+  | { kind: 'user_missing' }
+  | { kind: 'email_mismatch' }
+  | { kind: 'cooldown'; retryAfterSeconds: number };
 
-export const issueEmailVerificationToken = (input: IssueEmailVerificationInput): IssueOutcome => {
+/**
+ * Mints a fresh verification token for a user, revoking any outstanding
+ * tokens to prevent stockpiling. A cooldown bounds how often a caller can
+ * trigger this so a hostile loop cannot exhaust the upstream mail provider.
+ */
+export const issueEmailVerificationToken = (input: IssueVerificationTokenInput): IssueOutcome => {
   const user = db.getUserById(input.userId);
-  if (!user) return { kind: 'unknown_user' };
-  if (user.emailVerifiedAt) return { kind: 'already_verified' };
+  if (!user) return { kind: 'user_missing' };
+  if (user.emailVerifiedAt) return { kind: 'already_verified', user };
+  if (user.email.toLowerCase() !== input.email.toLowerCase()) return { kind: 'email_mismatch' };
 
-  const since = new Date(Date.now() - throttleWindowSeconds() * 1000);
-  const recent = db.countActiveEmailVerificationTokensForUser(user.id, since);
-  if (recent >= throttleMax()) return { kind: 'throttled' };
+  const existing = db.listEmailVerificationTokensForUser(user.id);
+  const cooldown = cooldownSeconds();
+  if (cooldown > 0) {
+    const mostRecentSent = existing
+      .filter((t) => t.sentAt && !t.consumedAt && !t.revokedReason)
+      .map((t) => Date.parse(t.sentAt as string))
+      .filter((n) => Number.isFinite(n))
+      .reduce((max, ts) => (ts > max ? ts : max), 0);
+    if (mostRecentSent > 0) {
+      const elapsedMs = Date.now() - mostRecentSent;
+      const retryAfterSeconds = Math.ceil((cooldown * 1000 - elapsedMs) / 1000);
+      if (retryAfterSeconds > 0) {
+        return { kind: 'cooldown', retryAfterSeconds };
+      }
+    }
+  }
 
-  const token = randomBytes(VERIFY_TOKEN_BYTES).toString('base64url');
+  // Revoke any prior outstanding tokens so only the latest is consumable.
+  db.revokeEmailVerificationTokensForUser(user.id, 'superseded');
+
+  const token = randomBytes(VERIFICATION_TOKEN_BYTES).toString('base64url');
   const record = db.createEmailVerificationToken({
     id: randomUUID(),
     userId: user.id,
@@ -52,35 +75,40 @@ export const issueEmailVerificationToken = (input: IssueEmailVerificationInput):
     ipHash: hashOptional(input.ip),
     userAgentHash: hashOptional(input.userAgent),
   });
-  return { kind: 'ok', token, user, record };
+  return { kind: 'ok', token, record, user };
 };
+
+export const markVerificationTokenSent = (id: string): EmailVerificationTokenRecord | undefined =>
+  db.markEmailVerificationTokenSent(id);
 
 export type ConsumeOutcome =
   | { kind: 'ok'; user: UserRecord }
   | { kind: 'invalid' }
   | { kind: 'expired' }
   | { kind: 'consumed' }
+  | { kind: 'revoked' }
   | { kind: 'email_changed' };
 
+/**
+ * Redeems a verification token. The token is pinned to the email that was
+ * current at issue time; if the user has since changed their email the
+ * token is rejected so a stale link cannot validate a new address.
+ */
 export const consumeEmailVerificationToken = (presentedToken: string): ConsumeOutcome => {
   const record = db.findEmailVerificationTokenByHash(sha256(presentedToken));
   if (!record) return { kind: 'invalid' };
   if (record.consumedAt) return { kind: 'consumed' };
+  if (record.revokedReason) return { kind: 'revoked' };
   if (new Date(record.expiresAt).getTime() <= Date.now()) return { kind: 'expired' };
 
   const user = db.getUserById(record.userId);
   if (!user) return { kind: 'invalid' };
+  if (user.email.toLowerCase() !== record.email.toLowerCase()) return { kind: 'email_changed' };
 
-  // If the address on the user record no longer matches the address the token
-  // was issued for, refuse — a stale token must not promote a different email.
-  if (user.email.toLowerCase() !== record.email.toLowerCase()) {
-    return { kind: 'email_changed' };
-  }
-
+  db.consumeEmailVerificationToken(record.id);
   const updated = db.markUserEmailVerified(user.id);
   if (!updated) return { kind: 'invalid' };
-  db.consumeEmailVerificationToken(record.id);
   return { kind: 'ok', user: updated };
 };
 
-export const __test__ = { sha256 };
+export const __test__ = { sha256, ttlSeconds, cooldownSeconds };

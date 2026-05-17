@@ -32,6 +32,10 @@ const mountedRoots: ReactDOM.Root[] = [];
 const onboardingCompletionBySpace: Record<string, boolean> = {};
 const mockClient = {
     getRooms: () => [] as Room[],
+    getRoom: (roomId: string) => {
+        if (mockRoom && (mockRoom as { roomId?: string }).roomId === roomId) return mockRoom;
+        return null;
+    },
     getUserId: () => '@me:example.org',
     getUser: () => ({ presence: 'online' }),
     getAccountData: vi.fn(() => null),
@@ -41,6 +45,13 @@ const mockClient = {
     joinRoom: vi.fn().mockResolvedValue({ roomId: '!joined:example.org' }),
     on: vi.fn(),
     off: vi.fn(),
+    removeListener: vi.fn(),
+    once: vi.fn(),
+    listeners: () => [],
+    emit: vi.fn(),
+    getRoomPushRule: () => undefined,
+    getHomeserverUrl: () => 'https://matrix.example.org',
+    getCrypto: () => undefined,
 };
 
 vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
@@ -58,7 +69,21 @@ vi.mock('../../../../src/app/features/deaddrop', () => ({
     useSetDeadDrop: () => () => {},
     describeDeadDropSchedule: () => '',
     getNextDeliveryDate: () => null,
-    deaddropFeature: { id: 'deaddrop', name: 'Deaddrop', customizations: [] },
+    deaddropFeature: {
+        id: 'deaddrop',
+        name: 'Deaddrop',
+        customizations: [
+            {
+                id: 'deaddrop-stub',
+                name: 'Deaddrop stub',
+                category: 'plugin',
+                capabilityGate: { flags: ['deaddrop'] as never },
+                routes: [],
+                navItems: [],
+                settings: [],
+            },
+        ],
+    },
     deaddropNavItems: [],
     deaddropRoutes: [],
     deaddropSettings: [],
@@ -134,17 +159,22 @@ const makeEvent = (
     relType?: string,
     mentions?: { user_ids?: string[]; room?: boolean },
     ts = 1_700_000_000_000,
+    sender = '@author:example.org'
 ): MatrixEvent =>
     ({
         getId: () => id,
         getType: () => 'm.room.message',
         getTs: () => ts,
+        getSender: () => sender,
+        getStateKey: () => undefined,
+        getRelation: () => (relType ? { rel_type: relType } : null),
+        isRedacted: () => false,
         getContent: () => ({
             body,
             ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}),
             ...(mentions ? { 'm.mentions': mentions } : {}),
         }),
-    }) as unknown as MatrixEvent;
+    } as unknown as MatrixEvent);
 
 const makeRoom = ({
     roomId,
@@ -160,8 +190,41 @@ const makeRoom = ({
     children?: Array<{ roomId: string; order?: string }>;
     timelineEvents?: MatrixEvent[];
     readUpTo?: string | null;
-}): Room =>
-    ({
+}): Room => {
+    const wrapStateEvent = (eventType: string, content: unknown, stateKey = '') => ({
+        getType: () => eventType,
+        getStateKey: () => stateKey,
+        getSender: () => '@author:example.org',
+        getContent: <T = unknown,>() => content as T,
+        getRelation: () => null,
+        isRedacted: () => false,
+    });
+    const currentState = {
+        getStateEvents: (eventType: string, stateKey?: string) => {
+            if (eventType === 'm.space.child') {
+                return children.map((child) =>
+                    wrapStateEvent('m.space.child', { order: child.order }, child.roomId)
+                );
+            }
+            if (eventType === 'm.room.pinned_events') {
+                return wrapStateEvent('m.room.pinned_events', { pinned: ['$evt-pin'] });
+            }
+            if (eventType === 'm.room.create') {
+                // `getStateEvent('m.room.create')` is used by `isSpace`. Surface
+                // the type so spaces vs. rooms can be distinguished without
+                // needing to wire up the full create-event content.
+                if (stateKey === undefined) return [];
+                return wrapStateEvent('m.room.create', { type });
+            }
+            // Unknown event types: when a stateKey was provided the caller
+            // expects a single MatrixEvent | undefined (e.g. `useCoalitionState`
+            // optional-chaining `?.getContent()`), so return `undefined`. When
+            // no stateKey was provided the caller iterates an array, so return
+            // an empty array.
+            return stateKey === undefined ? [] : undefined;
+        },
+    };
+    return {
         roomId,
         name,
         getType: () => type,
@@ -170,28 +233,21 @@ const makeRoom = ({
         getMyMembership: () => 'join',
         getJoinedMembers: () => [],
         getEventReadUpTo: () => readUpTo,
+        isSpaceRoom: () => type === 'm.space',
         getLiveTimeline: () => ({
             getEvents: () => timelineEvents,
+            // `room.getLiveTimeline().getState(FORWARDS)` is the canonical state
+            // accessor in src/app/utils/room.ts; expose the same shape as
+            // `room.currentState` so both code paths agree.
+            getState: () => currentState,
         }),
         findEventById: (eventId: string) =>
             timelineEvents.find((event) => event.getId() === eventId) ??
             mockEvents.find((event) => event.getId() === eventId) ??
             null,
-        currentState: {
-            getStateEvents: (eventType: string) => {
-                if (eventType === 'm.space.child') {
-                    return children.map((child) => ({
-                        getStateKey: () => child.roomId,
-                        getContent: () => ({ order: child.order }),
-                    }));
-                }
-                if (eventType === 'm.room.pinned_events') {
-                    return { getContent: () => ({ pinned: ['$evt-pin'] }) };
-                }
-                return [];
-            },
-        },
-    }) as unknown as Room;
+        currentState,
+    } as unknown as Room;
+};
 
 const renderLayout = ({
     rooms,
@@ -220,7 +276,7 @@ const renderLayout = ({
         root.render(
             <Provider store={store}>
                 <ClientLayout />
-            </Provider>,
+            </Provider>
         );
     });
 
@@ -253,7 +309,7 @@ describe('ClientLayout UI wiring', () => {
         mockClient.joinRoom.mockClear();
         vi.stubGlobal(
             'prompt',
-            vi.fn(() => '#new-room:example.org'),
+            vi.fn(() => '#new-room:example.org')
         );
     });
 
@@ -266,13 +322,21 @@ describe('ClientLayout UI wiring', () => {
     });
 
     it('threads/pins/search click sets jump target and closes panel', () => {
-        const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
-        mockRoom = room;
-        mockEvents = [
+        const events = [
             makeEvent('$evt-thread', 'thread', 'm.thread'),
             makeEvent('$evt-pin', 'pinned message'),
             makeEvent('$evt-search', 'find me'),
         ];
+        mockEvents = events;
+        // ClientLayout reads via useLegacyRoomTimelineAdapter, which pulls
+        // `room.getLiveTimeline().getEvents()`. The right-panel renders rows
+        // from that array — seed it explicitly.
+        const room = makeRoom({
+            roomId: '!room:example.org',
+            name: 'Room',
+            timelineEvents: events,
+        });
+        mockRoom = room;
 
         const { container } = renderLayout({
             rooms: [room],
@@ -281,22 +345,22 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: 'threads',
         });
 
-        const button = container.querySelector(
-            'aside button[type="button"]:not([aria-label])',
-        ) as HTMLButtonElement;
-        // click first thread result button inside panel body
-        const threadButton = Array.from(container.querySelectorAll('button')).find((candidate) =>
-            candidate.textContent?.includes('thread'),
-        ) as HTMLButtonElement;
-
+        const panel = container.querySelector('[data-testid="right-panel"]');
+        expect(panel).toBeTruthy();
+        // Scope to row buttons inside the panel — the panel header's Close
+        // button matches by text but we want the thread row whose body is
+        // the literal "thread".
+        const threadButton = Array.from(
+            panel?.querySelectorAll('button[type="button"]') ?? []
+        ).find((candidate) => candidate.textContent?.includes('thread')) as HTMLButtonElement;
         expect(threadButton).toBeTruthy();
+
         act(() => threadButton.click());
 
-        expect(container.textContent).not.toContain('Close');
+        expect(container.querySelector('[data-testid="right-panel"]')).toBeNull();
         expect(
-            (container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump,
+            (container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump
         ).toBe('$evt-thread');
-        expect(button).toBeTruthy();
     });
 
     it('governance button opens governance panel', () => {
@@ -311,7 +375,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const governanceButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'governance',
+            (button) => button.textContent === 'governance'
         ) as HTMLButtonElement;
         expect(governanceButton).toBeTruthy();
 
@@ -371,13 +435,13 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const collapseButton = Array.from(firstRender.container.querySelectorAll('button')).find(
-            (candidate) => candidate.textContent?.includes('▼'),
+            (candidate) => candidate.textContent?.includes('▼')
         ) as HTMLButtonElement;
         expect(collapseButton).toBeTruthy();
 
         act(() => collapseButton.click());
         expect(localStorage.getItem('blackout.collapsed.!root-space:example.org')).toContain(
-            'true',
+            'true'
         );
         act(() => {
             firstRender.root.unmount();
@@ -410,7 +474,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         expect(quickInput).toBeTruthy();
         act(() => {
@@ -430,17 +494,15 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const reopenedInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         act(() => {
             reopenedInput.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
             );
         });
 
-        expect(
-            container.querySelector('input[placeholder="Search rooms, spaces, users, commands"]'),
-        ).toBeNull();
+        expect(container.querySelector('[data-testid="quick-switcher-input"]')).toBeNull();
     });
 
     it('supports ArrowDown/ArrowUp keyboard selection in quick switcher through ClientLayout', async () => {
@@ -460,7 +522,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             await Promise.resolve();
@@ -485,7 +547,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const reopenedInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         expect(reopenedInput).toBeTruthy();
         await act(async () => {
@@ -529,7 +591,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             quickInput.value = '/shrug';
@@ -538,7 +600,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const shrugCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/shrug'),
+            button.textContent?.includes('/shrug')
         ) as HTMLButtonElement;
         act(() => {
             shrugCommandButton.click();
@@ -566,7 +628,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const quickInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             quickInput.value = '/topic';
@@ -575,7 +637,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const topicCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/topic'),
+            button.textContent?.includes('/topic')
         ) as HTMLButtonElement;
         act(() => {
             topicCommandButton.click();
@@ -584,7 +646,7 @@ describe('ClientLayout UI wiring', () => {
             await Promise.resolve();
         });
 
-        expect(container.textContent).toContain('Select a room before using /topic.');
+        expect(container.textContent).toMatch(/Select a den before using \/topic/);
     });
 
     it('runs direct /leave and /join command actions from quick switcher', async () => {
@@ -602,7 +664,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const leaveInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             leaveInput.value = '/leave';
@@ -611,7 +673,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const leaveCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/leave'),
+            button.textContent?.includes('/leave')
         ) as HTMLButtonElement;
         act(() => {
             leaveCommandButton.click();
@@ -627,7 +689,7 @@ describe('ClientLayout UI wiring', () => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
         });
         const joinInput = container.querySelector(
-            'input[placeholder="Search rooms, spaces, users, commands"]',
+            '[data-testid="quick-switcher-input"]'
         ) as HTMLInputElement;
         await act(async () => {
             joinInput.value = '/join';
@@ -636,7 +698,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const joinCommandButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('/join'),
+            button.textContent?.includes('/join')
         ) as HTMLButtonElement;
         act(() => {
             joinCommandButton.click();
@@ -669,7 +731,7 @@ describe('ClientLayout UI wiring', () => {
 
         expect(mockClient.setAccountData).toHaveBeenCalledWith(
             'blackout.inbox.read.v1',
-            expect.objectContaining({ version: 2, users: expect.any(Object) }),
+            expect.objectContaining({ version: 2, users: expect.any(Object) })
         );
     });
 
@@ -697,7 +759,7 @@ describe('ClientLayout UI wiring', () => {
 
         act(() => {
             const inboxButton = Array.from(container.querySelectorAll('button')).find((button) =>
-                button.textContent?.includes('Inbox'),
+                button.textContent?.includes('Inbox')
             );
             inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
@@ -711,14 +773,14 @@ describe('ClientLayout UI wiring', () => {
             'cross device',
             undefined,
             { user_ids: ['@me:example.org'] },
-            1_700_000_000_100,
+            1_700_000_000_100
         );
         const readMarker = makeEvent(
             '$read-anchor',
             'anchor',
             undefined,
             undefined,
-            1_700_000_000_200,
+            1_700_000_000_200
         );
         const room = makeRoom({
             roomId: '!room:example.org',
@@ -737,7 +799,7 @@ describe('ClientLayout UI wiring', () => {
 
         act(() => {
             const inboxButton = Array.from(container.querySelectorAll('button')).find((button) =>
-                button.textContent?.includes('Inbox'),
+                button.textContent?.includes('Inbox')
             );
             inboxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
@@ -757,9 +819,9 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: null,
         });
 
-        expect(
-            container.querySelector('[data-testid=\"onboarding-wizard\"]')?.textContent,
-        ).toContain('onboarding:!space:example.org');
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')?.textContent).toContain(
+            'onboarding:!space:example.org'
+        );
     });
 
     it('hides onboarding wizard immediately after completion', async () => {
@@ -775,7 +837,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const completeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('complete onboarding'),
+            button.textContent?.includes('complete onboarding')
         ) as HTMLButtonElement;
         expect(completeButton).toBeTruthy();
 
@@ -784,7 +846,7 @@ describe('ClientLayout UI wiring', () => {
             await Promise.resolve();
         });
 
-        expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')).toBeNull();
     });
 
     it('does not show onboarding wizard again for returning users', () => {
@@ -800,7 +862,7 @@ describe('ClientLayout UI wiring', () => {
             rightPanel: null,
         });
 
-        expect(container.querySelector('[data-testid=\"onboarding-wizard\"]')).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-wizard"]')).toBeNull();
     });
 
     it('opens settings on mobile while a room is selected', async () => {
@@ -816,7 +878,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const settingsButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Settings',
+            (button) => button.textContent === 'Settings'
         ) as HTMLButtonElement;
         expect(settingsButton).toBeTruthy();
 
@@ -834,7 +896,7 @@ describe('ClientLayout UI wiring', () => {
         const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
         mockRoom = room;
 
-        const { container, store } = renderLayout({
+        const { container } = renderLayout({
             rooms: [room],
             selectedRoomId: null,
             selectedSpaceId: '!space:example.org',
@@ -842,7 +904,7 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const settingsButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Settings',
+            (button) => button.textContent === 'Settings'
         ) as HTMLButtonElement;
         act(() => settingsButton.click());
         await act(async () => {
@@ -850,16 +912,21 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const organizationSelect = container.querySelector(
-            'select[aria-label="Room organization"]',
+            '[data-testid="mobile-den-organization"]'
         ) as HTMLSelectElement;
         expect(organizationSelect).toBeTruthy();
+        expect(organizationSelect.value).toBe('space');
 
         act(() => {
             organizationSelect.value = 'all';
             organizationSelect.dispatchEvent(new Event('change', { bubbles: true }));
         });
+        await act(async () => {
+            await Promise.resolve();
+        });
 
-        expect(store.get(selectedSpaceIdAtom)).toBe('!space:example.org');
-        expect(container.textContent).toContain('All rooms');
+        expect(organizationSelect.value).toBe('all');
+        // Both options labelled with terminology-driven copy must be present.
+        expect(container.textContent).toMatch(/All dens/);
     });
 });

@@ -94,6 +94,50 @@ describe('LivestreamViewer', () => {
         expect(container.querySelector('[data-testid="livestream-player-offline"]')).not.toBeNull();
     });
 
+    it('surfaces a "Join den chat" link when the stream is associated with a den', async () => {
+        fetchStreamMock.mockResolvedValue({
+            id: 'stream-d',
+            creatorId: 'creator-d',
+            state: 'live',
+            title: 'Den-bound',
+            tags: [],
+            visibility: 'public',
+            latencyProfile: 'normal',
+            denId: '!den:blackout.coop',
+            updatedAt: '2025-02-02T00:00:00Z',
+        });
+        fetchOwncastOriginMock.mockResolvedValue({ origin: 'https://owncast.example.com' });
+
+        const { container } = await mountViewer('stream-d');
+        const link = container.querySelector<HTMLAnchorElement>(
+            '[data-testid="livestream-den-chat-link"]'
+        );
+        expect(link).not.toBeNull();
+        expect(link?.getAttribute('data-den-id')).toBe('!den:blackout.coop');
+        expect(link?.getAttribute('href')).toContain(
+            encodeURIComponent('!den:blackout.coop')
+        );
+    });
+
+    it('omits the den chat link when the stream has no den association', async () => {
+        fetchStreamMock.mockResolvedValue({
+            id: 'stream-no-den',
+            creatorId: 'creator-x',
+            state: 'live',
+            title: 'Lone',
+            tags: [],
+            visibility: 'public',
+            latencyProfile: 'normal',
+            updatedAt: '2025-02-03T00:00:00Z',
+        });
+        fetchOwncastOriginMock.mockResolvedValue({ origin: 'https://owncast.example.com' });
+
+        const { container } = await mountViewer('stream-no-den');
+        expect(
+            container.querySelector('[data-testid="livestream-den-chat-link"]')
+        ).toBeNull();
+    });
+
     it('shows the error region with a link back to the directory on fetch failure', async () => {
         fetchStreamMock.mockRejectedValue(new Error('not_found'));
         // The component calls fetchOwncastOrigin() in parallel; mock it

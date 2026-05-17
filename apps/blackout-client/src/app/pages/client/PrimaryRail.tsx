@@ -1,6 +1,7 @@
 import React, { type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RegistrySidebarList } from '../../core/features/RegistrySidebarList';
+import { ThreadUnreadBadgeMount } from '../../features/auth-threads';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 type PrimaryRailProps = {
@@ -50,11 +51,14 @@ export const PrimaryRail = ({
         >
             {homeButton}
 
-            <RegistrySidebarList
-                kind="sidebar"
-                mode="rail"
-                activePath={location.pathname}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+                <RegistrySidebarList
+                    kind="sidebar"
+                    mode="rail"
+                    activePath={location.pathname}
+                />
+                <ThreadUnreadBadgeMount />
+            </div>
 
             <div
                 role="separator"

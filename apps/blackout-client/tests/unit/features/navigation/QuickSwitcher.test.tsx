@@ -221,3 +221,177 @@ describe('QuickSwitcher ranking model', () => {
         expect(settings.length).toBeGreaterThan(0);
     });
 });
+
+describe('QuickSwitcher recent-messages source (Workstream F closing pass)', () => {
+    it('omits Messages entries when no messages are supplied', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const index = buildQuickSwitcherIndex(rooms);
+        expect(index.some((entry) => entry.category === 'Messages')).toBe(false);
+    });
+
+    it('indexes each message with preview/subtitle/jump targets', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const messages = [
+            {
+                id: '$evt-1',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'Ship the registry rewire today',
+                sender: '@alice:example.org',
+                timestamp: 100,
+            },
+            {
+                id: '$evt-2',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'See you at standup',
+                sender: '@bob:example.org',
+                timestamp: 200,
+            },
+        ];
+
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const messageEntries = index.filter((entry) => entry.category === 'Messages');
+
+        expect(messageEntries).toHaveLength(2);
+        expect(messageEntries[0]?.id).toBe('message-$evt-1');
+        expect(messageEntries[0]?.title).toBe('Ship the registry rewire today');
+        expect(messageEntries[0]?.subtitle).toBe('In General · @alice:example.org');
+        expect(messageEntries[0]?.jumpRoomId).toBe('!room:example.org');
+        expect(messageEntries[0]?.jumpEventId).toBe('$evt-1');
+        expect(messageEntries[0]?.lastActive).toBe(100);
+    });
+
+    it('omits the sender suffix from the subtitle when sender is undefined', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const messages = [
+            {
+                id: '$evt-anon',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'Anonymous note',
+                timestamp: 50,
+            },
+        ];
+
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const entry = index.find((e) => e.category === 'Messages');
+        expect(entry?.subtitle).toBe('In General');
+    });
+
+    it('truncates long previews with a trailing ellipsis', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const longText = 'a'.repeat(200);
+        const messages = [
+            {
+                id: '$evt-long',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: longText,
+                timestamp: 0,
+            },
+        ];
+
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const entry = index.find((e) => e.category === 'Messages');
+        expect(entry?.title).toMatch(/…$/);
+        expect(entry?.title?.length).toBeLessThanOrEqual(140);
+    });
+
+    it('skips messages whose preview collapses to empty whitespace', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const messages = [
+            {
+                id: '$blank',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: '   \n\t   ',
+                timestamp: 0,
+            },
+            {
+                id: '$real',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'Real content',
+                timestamp: 10,
+            },
+        ];
+
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const messageEntries = index.filter((entry) => entry.category === 'Messages');
+        expect(messageEntries.map((e) => e.id)).toEqual(['message-$real']);
+    });
+
+    it('collapses internal whitespace in the preview', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const messages = [
+            {
+                id: '$ws',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: '  hello\n\n  world  ',
+                timestamp: 0,
+            },
+        ];
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const entry = index.find((e) => e.category === 'Messages');
+        expect(entry?.title).toBe('hello world');
+    });
+
+    it('ranks the most recent matching message first via lastActive tie-breaker', () => {
+        const rooms = [makeRoom({ roomId: '!room:example.org', name: 'General' })];
+        const messages = [
+            {
+                id: '$older',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'standup notes from last week',
+                timestamp: 100,
+            },
+            {
+                id: '$newer',
+                roomId: '!room:example.org',
+                roomName: 'General',
+                preview: 'standup notes from today',
+                timestamp: 999,
+            },
+        ];
+
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+        const ranked = rankQuickSwitcherResults(index, 'standup');
+        const messageRanked = ranked.filter((entry) => entry.category === 'Messages');
+        expect(messageRanked[0]?.id).toBe('message-$newer');
+        expect(messageRanked[1]?.id).toBe('message-$older');
+    });
+
+    it('matches the search query against both preview and room name', () => {
+        const rooms = [makeRoom({ roomId: '!eng:example.org', name: 'Engineering' })];
+        const messages = [
+            {
+                id: '$by-room',
+                roomId: '!eng:example.org',
+                roomName: 'Engineering',
+                preview: 'something unrelated',
+                timestamp: 0,
+            },
+            {
+                id: '$by-preview',
+                roomId: '!eng:example.org',
+                roomName: 'Engineering',
+                preview: 'release the registry rewire',
+                timestamp: 0,
+            },
+        ];
+        const index = buildQuickSwitcherIndex(rooms, [], undefined, messages);
+
+        const byRoom = rankQuickSwitcherResults(index, 'engineer').filter(
+            (e) => e.category === 'Messages',
+        );
+        expect(byRoom.length).toBeGreaterThan(0);
+
+        const byPreview = rankQuickSwitcherResults(index, 'registry').filter(
+            (e) => e.category === 'Messages',
+        );
+        expect(byPreview.map((e) => e.id)).toContain('message-$by-preview');
+    });
+});

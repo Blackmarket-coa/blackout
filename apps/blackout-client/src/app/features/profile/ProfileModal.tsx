@@ -1,8 +1,10 @@
-import React, { type ReactNode } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { CharacterSheet } from '../character-sheet/CharacterSheet';
+import { useCanViewSheet } from '../character-sheet/useCanViewSheet';
 
 interface ProfileModalProps {
     open: boolean;
@@ -87,6 +89,9 @@ export const ProfileModal = ({
     onAddFriend,
     onBlock,
 }: ProfileModalProps) => {
+    const [viewingSheet, setViewingSheet] = useState(false);
+    const canViewSheet = useCanViewSheet(profile.userId);
+
     if (!open) return null;
 
     const hasBio = profile.profile.bio && profile.profile.bio.trim().length > 0;
@@ -388,6 +393,25 @@ export const ProfileModal = ({
                         </>
                     )}
 
+                    {/* Inline character sheet — opens when the viewer has access. */}
+                    {viewingSheet && (
+                        <div
+                            data-testid="profile-modal-sheet"
+                            style={{
+                                marginTop: 4,
+                                marginBottom: 12,
+                                border: `1px solid ${dc.divider}`,
+                                borderRadius: 6,
+                                background: dc.panelBg,
+                                overflow: 'hidden',
+                                maxHeight: 360,
+                                overflowY: 'auto',
+                            }}
+                        >
+                            <CharacterSheet userId={profile.userId} />
+                        </div>
+                    )}
+
                     {/* Footer buttons */}
                     <div
                         style={{
@@ -397,6 +421,14 @@ export const ProfileModal = ({
                             marginTop: 4,
                         }}
                     >
+                        {canViewSheet && (
+                            <DcButton
+                                variant="secondary"
+                                onClick={() => setViewingSheet((prev) => !prev)}
+                            >
+                                {viewingSheet ? 'Hide sheet' : 'View character sheet'}
+                            </DcButton>
+                        )}
                         {onBlock && (
                             <DcButton variant="danger" onClick={() => onBlock(profile.userId)}>
                                 Block

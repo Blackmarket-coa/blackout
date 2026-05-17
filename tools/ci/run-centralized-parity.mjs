@@ -5,6 +5,7 @@ const commands = [
   ['pnpm', ['lint']],
   ['pnpm', ['test']],
   ['pnpm', ['build']],
+  ['pnpm', ['guard:ops-artifacts']],
   ['node', ['tools/ci/run-smoke-aligned-checks.mjs']],
 ];
 

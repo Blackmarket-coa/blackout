@@ -1,0 +1,60 @@
+groups:
+  - name: auth
+    rules:
+      - alert: AuthFailureRateHigh
+        expr: |
+          sum(rate(auth_failures_total[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total{route=~"/v1/auth/(login|register|token/refresh)"}[5m])), 0.001)
+          > 0.20
+        for: 10m
+        labels:
+          severity: warning
+          surface: auth
+        annotations:
+          summary: Authentication failure ratio above 20% for 10 minutes.
+          runbook: docs/operations/runbooks/auth-secret-rotation-and-rollover.md
+          description: |
+            Sustained failure ratio on /v1/auth/{login,register,token/refresh}. Check for
+            credential-stuffing, a broken upstream identity provider, or a recently rotated
+            secret that didn't propagate.
+
+      - alert: RefreshTokenReuseSpike
+        expr: increase(refresh_token_reuses_total[15m]) > 5
+        for: 15m
+        labels:
+          severity: critical
+          surface: auth
+        annotations:
+          summary: Refresh-token reuse detected (potential token theft).
+          runbook: docs/operations/runbooks/auth-secret-rotation-and-rollover.md
+          description: |
+            Multiple refresh-token reuse detections within 15m. The reuse-detection logic
+            automatically revokes the affected family; verify whether a wider compromise is in
+            play before re-enabling sessions.
+
+      - alert: AuthLoginLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{route="/v1/auth/login"}[10m]))
+          ) > 1.5
+        for: 15m
+        labels:
+          severity: warning
+          surface: auth
+        annotations:
+          summary: /v1/auth/login p95 latency above 1.5s for 15 minutes.
+          description: Likely scrypt CPU saturation or DB contention.
+
+      - alert: RateLimitHitsHigh
+        expr: increase(rate_limit_hits_total{bucket="auth"}[10m]) > 200
+        for: 10m
+        labels:
+          severity: warning
+          surface: auth
+        annotations:
+          summary: Auth rate-limiter rejecting a high volume of requests.
+          description: |
+            Common cause is credential stuffing. Cross-check geo/IP distribution and consider a
+            short-term WAF policy. Customer impact is also possible if a client retry loop is
+            misbehaving.

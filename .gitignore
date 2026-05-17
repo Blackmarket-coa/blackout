@@ -57,6 +57,13 @@ storybook-static
 # Workspace package build outputs
 /apps/blackout-gov/dist
 
+# Playwright e2e reports / artifacts (run-time output)
+/apps/blackout-client/playwright-report
+/apps/blackout-client/test-results
+
+# Vitest coverage reports (run-time output of `pnpm test:coverage`)
+/apps/blackout-client/coverage
+
 # Archived legacy shells (moved from apps/ on 2026-05-01)
 /legacy/blackout-web/dist
 /legacy/blackout-web/test-results
@@ -74,6 +81,7 @@ storybook-static
 
 # API local data
 /packages/api/.blackout
+/.blackout
 
 # Cloudflare tunnel credentials
 deploy/docker/production/.cloudflared/

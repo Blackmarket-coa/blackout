@@ -13,7 +13,10 @@
     "build": "vite build",
     "lint": "node -e \"console.log('client lint scaffold ok')\"",
     "test:unit": "vitest run tests/unit",
+    "test:coverage": "vitest run tests/unit --coverage",
     "test:integration": "vitest run tests/smoke",
+    "test:e2e": "pnpm -w exec playwright test",
+    "preview": "vite preview",
     "check:eslint": "node -e \"console.log('eslint check temporarily bypassed; using typecheck + prettier')\"",
     "check:prettier": "prettier --check .",
     "fix:prettier": "prettier --write .",
@@ -117,6 +120,7 @@
     "vite-plugin-static-copy": "2.3.2",
     "vite-plugin-top-level-await": "1.4.4",
     "vite-plugin-wasm": "3.5.0",
-    "vitest": "2.1.9"
+    "vitest": "2.1.9",
+    "@vitest/coverage-v8": "2.1.9"
   }
 }

@@ -33,6 +33,7 @@ import { composerCommandPayloadAtom } from '../../state/composer';
 import { uploadMedia } from '../media/utils/matrixMedia';
 import { HideMessageDialog } from '../steganography';
 import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';
+import { useAttachPhoto } from './attachments/useAttachPhoto';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -438,6 +439,7 @@ export const MessageComposer = ({
     const recorderChunksRef = useRef<Blob[]>([]);
     const recorderStreamRef = useRef<MediaStream | null>(null);
     const editableRef = useRef<HTMLDivElement | null>(null);
+    const attachPhoto = useAttachPhoto({ setAttachments, attachmentInputRef });
 
     const { data: members } = useRoomMembers(roomId);
     const { data: spaces } = useNavigationSpaceTree();
@@ -832,7 +834,7 @@ export const MessageComposer = ({
         (actionLabel: string) => {
             recordRecentAction(actionLabel);
             if (actionLabel === 'Attach file' || actionLabel === 'Upload media') {
-                attachmentInputRef.current?.click();
+                void attachPhoto();
                 return;
             }
             if (actionLabel === 'Quick voice note') {
@@ -874,6 +876,7 @@ export const MessageComposer = ({
             }
         },
         [
+            attachPhoto,
             recordRecentAction,
             selectedCommand,
             startVoiceRecording,

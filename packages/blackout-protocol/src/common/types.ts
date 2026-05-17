@@ -32,7 +32,16 @@ export type BlackoutEventName =
     | 'blackout.deadman.switch.triggered'
     | 'blackout.deadman.switch.cancelled'
     | 'blackout.deaddrop.share.submitted'
-    | 'blackout.deaddrop.audit';
+    | 'blackout.deaddrop.audit'
+    | 'blackout.den.playbook.set'
+    | 'blackout.governance.round.opened'
+    | 'blackout.governance.round.closed'
+    | 'blackout.governance.role.set'
+    | 'blackout.den.composted'
+    | 'blackout.den.document.upserted'
+    | 'blackout.user.quests'
+    | 'blackout.user.sheet.sharing'
+    | 'blackout.user.sheet.shared';
 
 export type EventEnvelope<TName extends BlackoutEventName, TPayload> = {
     event: TName;

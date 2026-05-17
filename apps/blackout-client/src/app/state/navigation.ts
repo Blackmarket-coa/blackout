@@ -19,6 +19,7 @@ export type RightPanelType =
     | 'soundboard'
     | 'numbers_station'
     | 'stage_channels'
+    | 'notifications'
     | null;
 
 /**
@@ -40,6 +41,14 @@ export const sidebarVisibleAtom = atom<boolean>(true);
  * Active right-side panel in the room view.
  */
 export const rightPanelAtom = atom<RightPanelType>(null);
+
+/**
+ * Root event id of the thread currently focused inside the `threads`
+ * right-panel slot. When `null`, the slot renders the flat list of
+ * thread starters; when set, it renders the `ThreadPanel` tree for
+ * that root.
+ */
+export const activeThreadRootIdAtom = atom<string | null>(null);
 
 /**
  * Optional event to focus when opening a room timeline.

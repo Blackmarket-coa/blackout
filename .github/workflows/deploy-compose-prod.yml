@@ -81,6 +81,18 @@ jobs:
           '
           EOSSH
 
+      - name: Post-deploy verification (canary)
+        env:
+          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+        run: |
+          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+            exit 0
+          fi
+          node tools/ci/post-deploy-verify.mjs
+
   promote:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'promote'
     runs-on: ubuntu-latest
@@ -108,6 +120,18 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.canary.yml rm -f app_canary || true
           docker compose exec -T reverse-proxy caddy reload --config /etc/caddy/Caddyfile
           EOSSH
+
+      - name: Post-deploy verification (promote)
+        env:
+          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+        run: |
+          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+            exit 0
+          fi
+          node tools/ci/post-deploy-verify.mjs
 
       - name: Trigger backup verification
         if: success()
@@ -144,6 +168,18 @@ jobs:
           docker compose -f docker-compose.yml ps
           docker compose -f docker-compose.yml exec -T app wget -q -O- http://127.0.0.1:3000/health
           EOSSH
+
+      - name: Post-deploy verification (full rollout)
+        env:
+          POST_DEPLOY_BASE_URL: ${{ secrets.PROD_PUBLIC_URL }}
+          POST_DEPLOY_BEARER: ${{ secrets.POST_DEPLOY_BEARER }}
+          POST_DEPLOY_EXPECTED_VERSION: ${{ github.event.inputs.image_tag }}
+        run: |
+          if [ -z "$POST_DEPLOY_BASE_URL" ]; then
+            echo "PROD_PUBLIC_URL secret not set; skipping post-deploy verify."
+            exit 0
+          fi
+          node tools/ci/post-deploy-verify.mjs
 
       - name: Trigger backup verification
         if: success()

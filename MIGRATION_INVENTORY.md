@@ -1,5 +1,15 @@
 # MIGRATION_INVENTORY.md
 
+> **Status (2026-05-13): historical / archival.** This file captures the
+> original Phase 0 inventory that informed the monorepo's current shape.
+> The active forward-looking sequencing now lives in
+> [`docs/architecture/deferred-bodies-schedule-2026-05-01.md`](docs/architecture/deferred-bodies-schedule-2026-05-01.md)
+> (Workstreams A–F). Phase 0 preservation artifacts under `audit/phase0/`
+> and the regeneration script `scripts/migration/phase0_audit.sh` remain
+> canonical for traceability. See
+> [`docs/audits/unfinished_items_review_2026_05.md`](docs/audits/unfinished_items_review_2026_05.md)
+> §"Decisions log" (T6-01) for the reconciliation decision.
+
 Phase 0 deliverable for the Blackout monorepo migration.
 
 ## 0. Preservation snapshot status

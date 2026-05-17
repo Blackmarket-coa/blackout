@@ -16,6 +16,7 @@ import { RoomInput } from './RoomInput';
 import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollowing';
 import { Page } from '../../components/page';
 import { RoomViewHeader } from './RoomViewHeader';
+import { QuestSheet } from '../quests/QuestSheet';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { editableActiveElement } from '../../utils/dom';
 import { settingsAtom } from '../../state/compat-settings';
@@ -95,6 +96,9 @@ export function RoomView({ room, eventId }: { room: Room; eventId?: string }) {
     <Page ref={roomViewRef}>
       <RoomViewHeader />
       <Box grow="Yes" direction="Column">
+        <div style={{ padding: `0 ${config.space.S400}` }}>
+          <QuestSheet />
+        </div>
         <RoomTimeline
           key={roomId}
           roomId={roomId}

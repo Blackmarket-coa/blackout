@@ -19,9 +19,19 @@ export type ClientConfig = {
 
   hashRouter?: HashRouterConfig;
 
-  // Rageshake (matrix-org/rageshake) bug-report receiver. When set,
-  // the in-app "submit debug logs" flow posts crash/diagnostic bundles here.
+  // @deprecated — superseded by the server-side /bug-report endpoint on the
+  // Blackout API, which forwards to rageshake + GitHub. Still read for
+  // back-compat with legacy installs; new code should not consume it.
   bugReportEndpointUrl?: string;
+
+  // Self-hosted Sentry / GlitchTip DSN for client-side crash capture.
+  // Empty disables Sentry. The server-side Sentry → GitHub integration is
+  // configured in Sentry's UI; this just hands events to that pipeline.
+  sentryDsn?: string;
+
+  // Base URL of the Blackout API. The client POSTs bug reports to
+  // `${blackoutApiBaseUrl}/bug-report`. When unset, defaults to same-origin.
+  blackoutApiBaseUrl?: string;
 
   // Self-hosted matrix-dimension integration manager URL (optional). Consumed
   // by the room "manage integrations" surface to deep-link into Dimension.

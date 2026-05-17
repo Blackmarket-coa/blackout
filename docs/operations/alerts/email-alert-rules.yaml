@@ -1,0 +1,80 @@
+groups:
+  - name: email-delivery
+    rules:
+      - alert: MailSendFailureRateHigh
+        expr: |
+          sum(rate(mail_send_failures_total[10m]))
+          /
+          clamp_min(sum(rate(mail_send_attempts_total[10m])), 0.001)
+          > 0.10
+        for: 15m
+        labels:
+          severity: critical
+          surface: email
+        annotations:
+          summary: Transactional mail provider failing >10% of sends.
+          description: |
+            Outbound mail is degraded. Check provider status (Resend), API key validity, and
+            DNS/SPF/DKIM/DMARC records. Verification flow + password reset both depend on this
+            transport; sustained failure is a user-visible launch blocker.
+
+      - alert: MailRetriesExhausted
+        expr: increase(mail_send_failures_total{reason="retries_exhausted"}[15m]) > 5
+        for: 15m
+        labels:
+          severity: warning
+          surface: email
+        annotations:
+          summary: Mail sends exhausting all retry attempts.
+          description: |
+            More than five sends have failed after exhausting their retry budget in the last
+            15 minutes. This is a leading indicator before the failure-rate alert fires; check
+            for upstream throttling.
+
+      - alert: EmailVerificationConsumeFailuresHigh
+        expr: |
+          sum(rate(email_verification_tokens_consumed_total{outcome=~"invalid|expired|revoked|email_changed"}[15m]))
+          /
+          clamp_min(sum(rate(email_verification_tokens_consumed_total[15m])), 0.001)
+          > 0.40
+        for: 30m
+        labels:
+          severity: warning
+          surface: email
+        annotations:
+          summary: "More than 40% of email-verification redemptions are failing."
+          description: |
+            Either the verification link is being rewritten by upstream mail rendering, the
+            TTL is too short for the audience, or an automated client is brute-forcing tokens.
+            Cross-check with provider bounce/spam reports.
+
+      - alert: MailSendDurationHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, provider) (rate(mail_send_duration_seconds_bucket[10m]))
+          ) > 5
+        for: 15m
+        labels:
+          severity: warning
+          surface: email
+        annotations:
+          summary: p95 mail-send wall-clock above 5s.
+          description: |
+            Slow provider responses inflate registration latency since the verification email
+            is fired inline. If sustained, consider moving the dispatch into a worker queue.
+
+      - alert: MailFailoverActive
+        expr: mail_failover_primary_active == 0
+        for: 10m
+        labels:
+          severity: warning
+          surface: email
+        annotations:
+          summary: Mailer auto-failover routed to SMTP fallback.
+          description: |
+            The resend → smtp circuit breaker tripped because the primary transport exceeded
+            MAIL_FAILOVER_FAILURE_THRESHOLD consecutive failures. The breaker will probe
+            primary again after MAIL_FAILOVER_COOLDOWN_MS. If this fires repeatedly the
+            primary provider is in a sustained outage — check Resend status, API key
+            validity, and DNS records, and consider extending the cooldown or pinning
+            MAIL_PROVIDER=smtp until the upstream incident resolves.

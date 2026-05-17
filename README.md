@@ -24,6 +24,10 @@ Key areas:
 - Steganography code: `src/steganography/*`
 - Feature and rollout documentation: `docs/*`
 
+For beta testers:
+
+- [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) — features deferred for beta, deduped against testing reports
+
 For security context, start with:
 
 - [`THREAT_MODEL.md`](THREAT_MODEL.md) — top-level adversary model, trust boundaries, accepted residual risks

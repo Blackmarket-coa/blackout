@@ -5,6 +5,7 @@ import { isKeyHotkey } from 'is-hotkey';
 import { RoomView } from './RoomView';
 import { MembersDrawer } from './MembersDrawer';
 import { RoomRightPanelHost } from './RoomRightPanelHost';
+import { NotificationsBottomSheet } from '../notifications/components/NotificationsBottomSheet';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/compat-settings';
@@ -50,6 +51,9 @@ export function Room() {
         )}
         {screenSize === ScreenSize.Desktop && (
           <RoomRightPanelHost room={room} />
+        )}
+        {screenSize !== ScreenSize.Desktop && (
+          <NotificationsBottomSheet roomId={room.roomId} />
         )}
       </Box>
     </PowerLevelsContextProvider>

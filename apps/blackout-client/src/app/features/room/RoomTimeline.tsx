@@ -11,6 +11,8 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import { useSetAtom } from 'jotai';
+import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -31,6 +33,11 @@ import { Reactions } from './Reactions';
 import { ProfileModal } from '../profile/ProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
 import { roomViewLayoutRhythm } from './roomViewLayoutContract';
+import {
+    ROUND_OPENED_EVENT_TYPE,
+    type RoundOpenedPayload,
+} from '@blackout/protocol';
+import { RoundCard } from '../rounds/RoundCard';
 
 const ROW_ESTIMATE = 88;
 const OVERSCAN = 10;
@@ -446,12 +453,33 @@ const ReplyPreview = ({ event }: { event: MatrixEvent }) => {
 
 const ThreadIndicator = ({ event }: { event: MatrixEvent }) => {
     const relation = getRelation(event);
+    const setActiveThreadRoot = useSetAtom(activeThreadRootIdAtom);
+    const setRightPanel = useSetAtom(rightPanelAtom);
     if (relation?.rel_type !== 'm.thread') return null;
     const threadRoot = typeof relation.event_id === 'string' ? relation.event_id : null;
+    const handleOpen = threadRoot
+        ? () => {
+              setActiveThreadRoot(threadRoot);
+              setRightPanel('threads');
+          }
+        : undefined;
     return (
-        <div style={styles.pill}>
+        <button
+            type="button"
+            data-testid="thread-indicator"
+            data-thread-root={threadRoot ?? ''}
+            onClick={handleOpen}
+            disabled={!handleOpen}
+            style={{
+                ...styles.pill,
+                cursor: handleOpen ? 'pointer' : 'default',
+                background: 'transparent',
+                color: 'inherit',
+                font: 'inherit',
+            }}
+        >
             🧵 Thread reply{threadRoot ? ` · ${threadRoot.slice(0, 10)}…` : ''}
-        </div>
+        </button>
     );
 };
 
@@ -499,6 +527,24 @@ const MessageBubble = ({
 
     if (isStateEvent(event)) {
         return <div style={styles.stateEvent}>{resolveStateCopy(event, room)}</div>;
+    }
+
+    if (event.getType() === ROUND_OPENED_EVENT_TYPE) {
+        const payload = event.getContent<RoundOpenedPayload>();
+        if (payload && typeof payload.roundId === 'string') {
+            return (
+                <article style={styles.messageRow} data-event-id={event.getId() ?? undefined}>
+                    <div />
+                    <RoundCard
+                        roomId={roomId}
+                        eventId={event.getId() ?? ''}
+                        payload={payload}
+                        senderId={sender}
+                        room={room}
+                    />
+                </article>
+            );
+        }
     }
 
     const sticker = getMsgType(event) === 'm.sticker' || event.getType() === 'm.sticker';

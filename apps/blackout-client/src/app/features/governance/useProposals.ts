@@ -9,6 +9,13 @@ import {
     type GovernanceVotePayload,
 } from '@blackout/protocol';
 import { createGovernanceMatrixActions } from '@blackout/sdk';
+import {
+    deriveConsentStatus,
+    isConsentKey,
+    tallyConsent,
+    type ConsentReaction,
+    type ConsentTally,
+} from '../../../lib/bmc-core/consent';
 
 export type ProposalOption = GovernanceProposalOption;
 export type ProposalContent = GovernanceProposalPayload;
@@ -18,6 +25,7 @@ export type VoteContent = GovernanceVotePayload;
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useCompleteQuest } from '../quests/useQuests';
 import {
     GOVERNANCE_SCHEMA_VERSION,
     normalizeProposalEventContent,
@@ -208,17 +216,158 @@ export const useCastVote = (roomId: string) => {
     );
 };
 
+/**
+ * Hook: read `m.reaction` events that target a proposal and carry one of the
+ * three consent keys. Returns the rows in newest-first order, with optional
+ * notes lifted from the `co.bmc.consent.note` content field (concerns and
+ * objections write a note alongside the reaction so the tally can surface
+ * the reason without an extra round-trip).
+ *
+ * Redacted reactions are dropped so the tally reflects the live state.
+ */
+export const useConsentReactions = (
+    proposalId: string | null,
+    roomId: string,
+): { data: ConsentReaction[]; loading: boolean; error: unknown } => {
+    const timeline = useRoomTimeline(roomId);
+
+    return useMemo(() => {
+        if (!proposalId) {
+            return { data: [], loading: timeline.loading, error: timeline.error };
+        }
+
+        const reactions: ConsentReaction[] = [];
+        for (const event of timeline.data) {
+            if (event.getType() !== 'm.reaction' || event.isRedacted()) continue;
+            const content = event.getContent<Record<string, unknown>>();
+            const relates = content['m.relates_to'];
+            if (!relates || typeof relates !== 'object') continue;
+            const rel = relates as Record<string, unknown>;
+            if (rel.rel_type !== 'm.annotation' || rel.event_id !== proposalId) continue;
+            const key = rel.key;
+            if (!isConsentKey(key)) continue;
+            const reactorId = event.getSender();
+            if (!reactorId) continue;
+            const note =
+                typeof content['co.bmc.consent.note'] === 'string'
+                    ? (content['co.bmc.consent.note'] as string)
+                    : undefined;
+            reactions.push({
+                reactorId,
+                key,
+                eventId: event.getId() ?? `${event.getTs()}-${reactorId}`,
+                timestamp: event.getTs(),
+                note,
+            });
+        }
+        reactions.sort((a, b) => b.timestamp - a.timestamp);
+        return { data: reactions, loading: timeline.loading, error: timeline.error };
+    }, [proposalId, timeline.data, timeline.loading, timeline.error]);
+};
+
+/**
+ * Hook: send a consent reaction (🌱 / 🌾 / 🪨) targeting a proposal. Accepts
+ * an optional note for concerns and objections; the note is carried in
+ * `co.bmc.consent.note` on the same `m.reaction` event so a single round-trip
+ * captures stance + reason.
+ */
+export const useCastConsent = (roomId: string) => {
+    const client = useMatrixClient();
+    const completeQuest = useCompleteQuest();
+    return useCallback(
+        async ({
+            proposalEventId,
+            key,
+            note,
+        }: {
+            proposalEventId: string;
+            key: ConsentReaction['key'];
+            note?: string;
+        }) => {
+            const content: Record<string, unknown> = {
+                'm.relates_to': {
+                    rel_type: 'm.annotation',
+                    event_id: proposalEventId,
+                    key,
+                },
+            };
+            if (note && note.trim().length > 0) {
+                content['co.bmc.consent.note'] = note.trim();
+            }
+            await client.sendEvent(roomId, 'm.reaction' as never, content as never);
+            // J3 auto-completion: any consent reaction (🌱/🌾/🪨) ticks the
+            // first-consent quest. Idempotent.
+            void completeQuest('first-consent', roomId);
+        },
+        [client, completeQuest, roomId],
+    );
+};
+
+export interface ProposalResultVote {
+    proposal: ProposalModel;
+    voteCount: number;
+    quorumReached: boolean;
+    expired: boolean;
+    computedStatus: ProposalStatus;
+    optionResults: Array<{ optionId: string; count: number }>;
+    leadingOptionId: string | null;
+    /** Discriminator so renderers can branch without re-checking `proposal.type`. */
+    kind: 'vote';
+}
+
+export interface ProposalResultConsent {
+    proposal: ProposalModel;
+    tally: ConsentTally;
+    expired: boolean;
+    quorumReached: boolean;
+    computedStatus: ProposalStatus;
+    kind: 'consent';
+}
+
+export type ProposalResultData = ProposalResultVote | ProposalResultConsent;
+
 export const useProposalResult = (proposalId: string, roomId: string) => {
     const proposals = useProposals(roomId);
     const votes = useVotes(proposalId, roomId);
+    const consentReactions = useConsentReactions(proposalId, roomId);
 
     return useMemo(() => {
         const proposal = proposals.data.find((item) => item.proposalEventId === proposalId) ?? null;
         if (!proposal) {
             return {
-                data: null,
-                loading: proposals.loading || votes.loading,
-                error: proposals.error ?? votes.error,
+                data: null as ProposalResultData | null,
+                loading: proposals.loading || votes.loading || consentReactions.loading,
+                error: proposals.error ?? votes.error ?? consentReactions.error,
+            };
+        }
+
+        const now = Date.now();
+        const deadlineTs = Date.parse(proposal.deadline);
+        const expired = Number.isFinite(deadlineTs) ? now >= deadlineTs : false;
+
+        if (proposal.type === 'consent') {
+            const tally = tallyConsent(consentReactions.data);
+            const quorumReached = tally.consents >= proposal.quorum;
+            let computedStatus: ProposalStatus = proposal.status;
+            if (proposal.status === 'active') {
+                computedStatus = deriveConsentStatus({
+                    tally,
+                    quorum: proposal.quorum,
+                    deadlineMs: deadlineTs,
+                    nowMs: now,
+                });
+            }
+            return {
+                data: {
+                    proposal,
+                    tally,
+                    expired,
+                    quorumReached,
+                    computedStatus,
+                    kind: 'consent',
+                } satisfies ProposalResultConsent,
+                loading: proposals.loading || consentReactions.loading,
+                error: proposals.error ?? consentReactions.error,
             };
         }
 
@@ -240,9 +389,6 @@ export const useProposalResult = (proposalId: string, roomId: string) => {
 
         const voteCount = votes.data.length;
         const quorumReached = voteCount >= proposal.quorum;
-        const now = Date.now();
-        const deadlineTs = Date.parse(proposal.deadline);
-        const expired = Number.isFinite(deadlineTs) ? now >= deadlineTs : false;
 
         const ranked = [...byOption.entries()].sort((a, b) => b[1] - a[1]);
         const top = ranked[0];
@@ -261,7 +407,8 @@ export const useProposalResult = (proposalId: string, roomId: string) => {
                 computedStatus,
                 optionResults: ranked.map(([optionId, count]) => ({ optionId, count })),
                 leadingOptionId: top?.[0] ?? null,
-            },
+                kind: 'vote',
+            } satisfies ProposalResultVote,
             loading: proposals.loading || votes.loading,
             error: proposals.error ?? votes.error,
         };
@@ -273,6 +420,9 @@ export const useProposalResult = (proposalId: string, roomId: string) => {
         votes.data,
         votes.error,
         votes.loading,
+        consentReactions.data,
+        consentReactions.error,
+        consentReactions.loading,
     ]);
 };
 

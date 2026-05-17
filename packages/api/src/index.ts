@@ -56,6 +56,7 @@ import { initErrorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
 import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
+import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 
 const securityPreflight = runSecurityPreflight();
@@ -163,6 +164,13 @@ app.route('/discord-compat/webhooks', discordCompatWebhookExecuteRoutes);
 // room transaction we're registered to receive.
 app.route('/_matrix/app/v1', matrixAppserviceRoutes);
 
+// User-facing bug report intake. Mounted top-level (outside /v1) so
+// anonymous reports work without the v1 auth middleware. Validates with
+// zod, rate-limited at BUG_REPORT_RATE_LIMIT_MAX/hour/IP, dual-forwards
+// to a rageshake-compatible receiver (raw logs) and GitHub (sanitized
+// issue body).
+app.route('/bug-report', bugReportRoutes);
+
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 
 app.get('/metrics', (c) => {
@@ -196,6 +204,16 @@ if (shouldListen) {
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
   bootstrapMailer();
+
+  // Resolve the outbound mail transport. Production refuses to start
+  // without an explicit MAIL_PROVIDER (see services/mailer.ts), so this
+  // throw will surface in the process supervisor.
+  initMailerFromEnv().catch((err) => {
+    log.warn('mailer init failed', { error: String(err) });
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
+  });
 
   // Resume any persisted Twitch chat bridges so they survive a redeploy.
   // Gated on an opt-in env var so the auto-restart doesn't surprise local

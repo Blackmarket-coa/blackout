@@ -24,9 +24,16 @@ import {
   exportUserData,
   requestAccountDeletion,
 } from '../services/accountLifecycle';
+  markVerificationTokenSent,
+} from '../services/emailVerification';
 import { getMailer } from '../services/mailer';
 import { log } from '../telemetry/logger';
-import { authFailuresTotal, refreshTokenReusesTotal } from '../telemetry/metrics';
+import {
+  authFailuresTotal,
+  emailVerificationTokensConsumedTotal,
+  emailVerificationTokensIssuedTotal,
+  refreshTokenReusesTotal,
+} from '../telemetry/metrics';
 
 const auth = new Hono();
 
@@ -40,6 +47,34 @@ auth.use('/email/verify/request', authRateLimit);
 auth.use('/email/verify/confirm', authRateLimit);
 auth.use('/account/delete/request', authRateLimit);
 auth.use('/account/delete/confirm', authRateLimit);
+
+const buildVerificationLink = (token: string): string => {
+  const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
+  return `${base}/auth/verify-email?token=${encodeURIComponent(token)}`;
+};
+
+const dispatchVerificationEmail = async (
+  email: string,
+  token: string,
+  tokenId: string,
+): Promise<{ ok: boolean; reason?: string }> => {
+  const link = buildVerificationLink(token);
+  try {
+    await getMailer().send({
+      to: email,
+      subject: 'Confirm your Blackout email address',
+      text:
+        `Confirm your email address to finish setting up your Blackout account:\n\n${link}\n\n` +
+        `The link expires in 24 hours. If you did not create an account, ignore this email.`,
+      kind: 'email_verification',
+    });
+    markVerificationTokenSent(tokenId);
+    return { ok: true };
+  } catch (err) {
+    log.warn('email_verification_mail_failed', { error: String(err) });
+    return { ok: false, reason: 'mail_send_failed' };
+  }
+};
 
 const registerSchema = z.object({
   username: z.string().min(1),
@@ -128,6 +163,21 @@ auth.post('/register', async (c) => {
     } catch (err) {
       log.warn('email_verification_mail_failed', { error: String(err) });
     }
+  // Mint and dispatch the verification email. Registration succeeds even
+  // if the dispatch fails — the caller can retry through
+  // POST /auth/email/verify/request. Failures are logged but not surfaced
+  // because the user is already past the credential-check step.
+  const issued = issueEmailVerificationToken({
+    userId: user.id,
+    email: user.email,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  let emailVerificationSent = false;
+  if (issued.kind === 'ok') {
+    emailVerificationTokensIssuedTotal.inc({ outcome: 'register' });
+    const dispatch = await dispatchVerificationEmail(user.email, issued.token, issued.record.id);
+    emailVerificationSent = dispatch.ok;
   }
 
   return c.json(
@@ -135,10 +185,87 @@ auth.post('/register', async (c) => {
       token: session.access.token,
       refreshToken: session.refresh.token,
       userId: user.id,
+      emailVerificationSent,
       matrix,
     },
     201,
   );
+});
+
+const emailVerifyRequestSchema = z.object({ email: z.string().min(1).optional() });
+
+auth.post('/email/verify/request', async (c) => {
+  const parsed = await readJsonBody(c, emailVerifyRequestSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const presentedUser = requireUser(c, 'Sign in required to request a verification email');
+  if (presentedUser instanceof Response) return presentedUser;
+
+  const userRecord = db.getUserById(presentedUser.sub);
+  if (!userRecord) {
+    return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  }
+
+  // If the caller supplied an email, require it to match — prevents a
+  // logged-in attacker from triggering verification mails to an arbitrary
+  // address.
+  const target = parsed.email ?? userRecord.email;
+  const issued = issueEmailVerificationToken({
+    userId: userRecord.id,
+    email: target,
+    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+    userAgent: c.req.header('user-agent'),
+  });
+  switch (issued.kind) {
+    case 'ok': {
+      emailVerificationTokensIssuedTotal.inc({ outcome: 'resend' });
+      const dispatch = await dispatchVerificationEmail(target, issued.token, issued.record.id);
+      if (!dispatch.ok) {
+        return c.json({ code: 'mail_send_failed', message: 'Could not send verification email' }, 502);
+      }
+      return c.json({ ok: true });
+    }
+    case 'already_verified':
+      emailVerificationTokensIssuedTotal.inc({ outcome: 'already_verified' });
+      return c.json({ code: 'already_verified', message: 'Email already verified' }, 409);
+    case 'email_mismatch':
+      return c.json({ code: 'email_mismatch', message: 'Email does not match account' }, 400);
+    case 'cooldown':
+      emailVerificationTokensIssuedTotal.inc({ outcome: 'cooldown' });
+      c.header('retry-after', String(issued.retryAfterSeconds));
+      return c.json(
+        { code: 'cooldown', message: 'Verification email recently sent; please wait.' },
+        429,
+      );
+    case 'user_missing':
+    default:
+      return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  }
+});
+
+const emailVerifyConfirmSchema = z.object({ token: z.string().min(1) });
+
+auth.post('/email/verify/confirm', async (c) => {
+  const parsed = await readJsonBody(c, emailVerifyConfirmSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const outcome = consumeEmailVerificationToken(parsed.token);
+  emailVerificationTokensConsumedTotal.inc({ outcome: outcome.kind });
+  switch (outcome.kind) {
+    case 'ok':
+      return c.json({ ok: true, userId: outcome.user.id, emailVerifiedAt: outcome.user.emailVerifiedAt });
+    case 'expired':
+      return c.json({ code: 'token_expired', message: 'Verification token expired' }, 410);
+    case 'consumed':
+      return c.json({ code: 'token_consumed', message: 'Verification token already used' }, 410);
+    case 'revoked':
+      return c.json({ code: 'token_revoked', message: 'Verification token revoked' }, 410);
+    case 'email_changed':
+      return c.json({ code: 'email_changed', message: 'Email address changed since this link was issued' }, 410);
+    case 'invalid':
+    default:
+      return c.json({ code: 'token_invalid', message: 'Verification token invalid' }, 400);
+  }
 });
 
 auth.post('/login', async (c) => {

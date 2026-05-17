@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useCastVote, useProposalResult, useVotes } from './useProposals';
+import { ConsentTally } from './ConsentTally';
+import { useDenPlaybook } from '../playbook/usePlaybook';
 
 export const ProposalDetail = ({
     roomId,
@@ -15,13 +17,19 @@ export const ProposalDetail = ({
     const castVote = useCastVote(roomId);
     const result = useProposalResult(proposalId, roomId);
     const votes = useVotes(proposalId, roomId);
+    const playbook = useDenPlaybook(roomId);
+    const rehearsal = playbook?.mode === 'trial';
 
     const [selectedChoices, setSelectedChoices] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
     const proposal = result.data?.proposal;
-    const optionResults = result.data?.optionResults ?? [];
-    const maxCount = Math.max(1, ...optionResults.map((option) => option.count));
+    const optionResults =
+        result.data && result.data.kind === 'vote' ? result.data.optionResults : [];
+    const maxCount = Math.max(
+        1,
+        ...optionResults.map((option) => option.count),
+    );
 
     const myVote = useMemo(
         () => votes.data.find((vote) => vote.voterId === currentUserId) ?? null,
@@ -32,6 +40,61 @@ export const ProposalDetail = ({
         return (
             <section style={{ padding: 12, color: 'var(--text-secondary)' }}>
                 Proposal not found.
+            </section>
+        );
+    }
+
+    // Consent proposals replace the vote/options/results sections with the
+    // three-reaction ConsentTally. Description and header stay shared so the
+    // surface reads consistently between proposal types.
+    if (proposal.type === 'consent') {
+        return (
+            <section style={{ display: 'grid', gap: 12 }}>
+                <header style={{ display: 'grid', gap: 4 }}>
+                    <h2 style={{ margin: 0 }}>
+                        {proposal.title}
+                        {rehearsal && (
+                            <span
+                                data-testid="proposal-rehearsal-badge"
+                                style={{
+                                    marginLeft: 8,
+                                    fontSize: 11,
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    background: 'rgba(214, 154, 46, 0.18)',
+                                    color: '#8a6b1f',
+                                    border: '1px solid rgba(214, 154, 46, 0.4)',
+                                    verticalAlign: 'middle',
+                                }}
+                            >
+                                Rehearsal
+                            </span>
+                        )}
+                    </h2>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                        Status: {result.data?.computedStatus} · Consent process
+                        {rehearsal ? ' · trial — results visible but not binding' : ''}
+                    </div>
+                </header>
+
+                <article
+                    style={{
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        background: 'var(--bg-surface)',
+                        padding: 12,
+                    }}
+                >
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', font: 'inherit' }}>
+                        {proposal.description}
+                    </pre>
+                </article>
+
+                <ConsentTally
+                    roomId={roomId}
+                    proposalId={proposal.proposalEventId}
+                    quorum={proposal.quorum}
+                />
             </section>
         );
     }
@@ -71,7 +134,8 @@ export const ProposalDetail = ({
             <header style={{ display: 'grid', gap: 4 }}>
                 <h2 style={{ margin: 0 }}>{proposal.title}</h2>
                 <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                    Status: {result.data?.computedStatus} • Votes: {result.data?.voteCount ?? 0}/
+                    Status: {result.data?.computedStatus} • Votes:{' '}
+                    {result.data && result.data.kind === 'vote' ? result.data.voteCount : 0}/
                     {proposal.quorum}
                 </div>
             </header>

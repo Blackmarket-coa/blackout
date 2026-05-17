@@ -8,6 +8,7 @@ import { resolveShellMode } from './modeRouter';
 import { BottomTabBar } from './BottomTabBar';
 import { MobileTopBar } from './MobileTopBar';
 import { DynamicRightPanel } from './DynamicRightPanel';
+import { WorkspaceTabBar } from './WorkspaceTabBar';
 
 const ROOT_STYLE: CSSProperties = {
     display: 'flex',
@@ -88,6 +89,7 @@ export const AppShell = () => {
             {mobile ? <MobileTopBar /> : null}
             <div style={mobile ? BODY_MOBILE_STYLE : BODY_DESKTOP_STYLE}>
                 <main style={mobile ? OUTLET_MOBILE_STYLE : OUTLET_DESKTOP_STYLE}>
+                    {mobile ? null : <WorkspaceTabBar />}
                     <Outlet />
                 </main>
                 {mobile ? null : <DynamicRightPanel />}

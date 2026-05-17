@@ -268,6 +268,17 @@ class InMemoryDb {
       }
     }
     return count;
+  listEmailVerificationTokensForUser(userId: string): EmailVerificationTokenRecord[] {
+    return [...this.emailVerificationTokens.values()].filter((t) => t.userId === userId);
+  }
+
+  markEmailVerificationTokenSent(id: string): EmailVerificationTokenRecord | undefined {
+    const existing = this.emailVerificationTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.sentAt) return existing;
+    const updated: EmailVerificationTokenRecord = { ...existing, sentAt: nowIso() };
+    this.emailVerificationTokens.set(id, updated);
+    return updated;
   }
 
   consumeEmailVerificationToken(id: string): EmailVerificationTokenRecord | undefined {
@@ -279,10 +290,22 @@ class InMemoryDb {
     return updated;
   }
 
-  markUserEmailVerified(id: string, at: string = nowIso()): UserRecord | undefined {
+  revokeEmailVerificationTokensForUser(userId: string, reason: string): number {
+    let revoked = 0;
+    for (const [id, record] of this.emailVerificationTokens) {
+      if (record.userId === userId && !record.consumedAt && !record.revokedReason) {
+        this.emailVerificationTokens.set(id, { ...record, revokedReason: reason });
+        revoked += 1;
+      }
+    }
+    return revoked;
+  }
+
+  markUserEmailVerified(id: string, verifiedAt: string = nowIso()): UserRecord | undefined {
     const user = this.users.get(id);
     if (!user) return undefined;
-    const updated: UserRecord = { ...user, emailVerifiedAt: at };
+    if (user.emailVerifiedAt) return user;
+    const updated: UserRecord = { ...user, emailVerifiedAt: verifiedAt };
     this.users.set(id, updated);
     return updated;
   }
@@ -290,7 +313,7 @@ class InMemoryDb {
   deleteExpiredEmailVerificationTokens(now: Date = new Date()): number {
     let removed = 0;
     for (const [id, record] of this.emailVerificationTokens) {
-      if (new Date(record.expiresAt).getTime() < now.getTime()) {
+      if (new Date(record.expiresAt).getTime() < now.getTime() && !record.consumedAt) {
         this.emailVerificationTokens.delete(id);
         removed += 1;
       }

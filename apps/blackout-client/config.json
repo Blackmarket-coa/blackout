@@ -37,6 +37,8 @@
   },
 
   "bugReportEndpointUrl": "https://matrix.theblackout.app/rageshake/api/submit",
+  "blackoutApiBaseUrl": "",
+  "sentryDsn": "",
 
   "integrationsUrl": "https://matrix.theblackout.app/dimension/api/v1/scalar",
   "integrationsUiUrl": "https://matrix.theblackout.app/dimension/element"

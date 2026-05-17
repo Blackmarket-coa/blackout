@@ -242,4 +242,52 @@ export const refreshTokenReusesTotal = new Counter(
   'Refresh-token reuse detections (potential token theft)',
 );
 
+export const mailSendAttemptsTotal = new Counter(
+  'mail_send_attempts_total',
+  'Outbound transactional mail send attempts (each retry increments).',
+  ['provider', 'kind'],
+);
+
+export const mailSendFailuresTotal = new Counter(
+  'mail_send_failures_total',
+  'Outbound transactional mail sends that exhausted retries or hit a non-retryable error.',
+  ['provider', 'kind', 'reason'],
+);
+
+export const mailSendDurationSeconds = new Histogram(
+  'mail_send_duration_seconds',
+  'Wall-clock duration of an outbound transactional mail send (including retries).',
+  [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  ['provider', 'kind', 'outcome'],
+);
+
+export const emailVerificationTokensIssuedTotal = new Counter(
+  'email_verification_tokens_issued_total',
+  'Email verification tokens minted.',
+  ['outcome'],
+);
+
+export const emailVerificationTokensConsumedTotal = new Counter(
+  'email_verification_tokens_consumed_total',
+  'Email verification token redemption attempts.',
+  ['outcome'],
+);
+
+export const marketplaceWebhooksTotal = new Counter(
+  'marketplace_webhooks_total',
+  'Marketplace webhook deliveries grouped by provider and outcome.',
+  ['provider', 'outcome'],
+);
+
+export const mailFailoverStateChangesTotal = new Counter(
+  'mail_failover_state_changes_total',
+  'Transitions of the mailer failover breaker between closed/half-open/open.',
+  ['from', 'to'],
+);
+
+export const mailFailoverPrimaryActive = new Gauge(
+  'mail_failover_primary_active',
+  'Set to 1 when the primary mailer (resend) is the currently-routed transport, 0 when failed over to the fallback (smtp).',
+);
+
 export const __test__ = { Registry };

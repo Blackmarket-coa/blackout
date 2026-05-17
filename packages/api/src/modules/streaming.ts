@@ -34,6 +34,7 @@ const streamMetadataSchema = z.object({
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
   latencyProfile: z.enum(['normal', 'low']).optional(),
+  denId: z.string().min(1).nullable().optional(),
 });
 
 const streamAccessSchema = z.object({
@@ -140,12 +141,17 @@ function createStreamingRouter() {
     if (parsed instanceof Response) return parsed;
 
     const stream = ensureStream(streamId, parsed.creatorId);
+    // `denId === null` clears the association; `undefined` leaves it
+    // untouched. Anything else is the new den id.
+    const nextDenId =
+      parsed.denId === undefined ? stream.denId : parsed.denId ?? undefined;
     const updated = db.upsertStream({
       ...stream,
       title: parsed.title,
       category: parsed.category,
       tags: parsed.tags ?? stream.tags,
       latencyProfile: parsed.latencyProfile ?? stream.latencyProfile,
+      denId: nextDenId,
     });
     return c.json(updated);
   });
@@ -216,6 +222,7 @@ function createStreamingRouter() {
         visibility: stream.visibility,
         latencyProfile: stream.latencyProfile,
         replayPointer: stream.replayPointer,
+        denId: stream.denId,
         updatedAt: stream.updatedAt,
       })),
     });
@@ -245,6 +252,7 @@ function createStreamingRouter() {
       visibility: stream.visibility,
       latencyProfile: stream.latencyProfile,
       replayPointer: stream.replayPointer,
+      denId: stream.denId,
       updatedAt: stream.updatedAt,
     });
   });
