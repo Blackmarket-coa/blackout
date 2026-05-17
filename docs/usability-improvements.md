@@ -3,6 +3,7 @@
 > Source: hands-on usability testing session (April 2026)
 > Status: **Active** — prioritized and ready for implementation
 > Active execution plan: `docs/active-workstreams-2026-04-05.md` (created 2026-04-05) for slice-by-slice delivery and verification.
+> See also: [`docs/audits/ux-reliability-audit-2026-05-17.md`](./audits/ux-reliability-audit-2026-05-17.md) (framework) and [`docs/audits/accessibility-audit-2026-05-17.md`](./audits/accessibility-audit-2026-05-17.md) (WCAG 2.2 AA checklist) — this tracker holds defects; those documents hold the rubric used to surface them.
 >
 > Note (2026-05): The orphan repo-level regression tests under `test/mobile-regression/` were removed in the dead-code purge. The `apps/blackout-web/...` evidence anchors below describe the pre-archive surface; those files now live in `legacy/blackout-web/...` (parity reference) until canonical equivalents in `apps/blackout-client/` take over.
 
