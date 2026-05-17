@@ -1,6 +1,6 @@
 import { type CSSProperties } from 'react';
-import { useLocation } from 'react-router-dom';
-import { resolveShellMode, SHELL_MODE_TITLES } from './modeRouter';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { isShellModeRoot, resolveShellMode, SHELL_MODE_TITLES } from './modeRouter';
 
 const TOP_BAR_STYLE: CSSProperties = {
     position: 'sticky',
@@ -34,6 +34,17 @@ const ACTIONS_STYLE: CSSProperties = {
     gap: 8,
 };
 
+const BACK_BUTTON_STYLE: CSSProperties = {
+    background: 'transparent',
+    color: 'inherit',
+    border: 'none',
+    padding: 4,
+    margin: 0,
+    cursor: 'pointer',
+    fontSize: 20,
+    lineHeight: 1,
+};
+
 export type MobileTopBarProps = {
     /**
      * Optional override; when supplied, takes precedence over the
@@ -62,12 +73,27 @@ export type MobileTopBarProps = {
  */
 export const MobileTopBar = ({ title, trailing, leading }: MobileTopBarProps) => {
     const location = useLocation();
+    const navigate = useNavigate();
     const mode = resolveShellMode(location.pathname);
     const resolvedTitle = title ?? SHELL_MODE_TITLES[mode];
+    const showDefaultBack = leading === undefined && !isShellModeRoot(location.pathname);
+    const resolvedLeading = showDefaultBack ? (
+        <button
+            type="button"
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+            data-testid="mobile-top-bar-back"
+            style={BACK_BUTTON_STYLE}
+        >
+            ‹
+        </button>
+    ) : (
+        leading
+    );
 
     return (
         <header style={TOP_BAR_STYLE} data-shell-region="mobile-top-bar" data-shell-mode={mode}>
-            <div style={ACTIONS_STYLE}>{leading}</div>
+            <div style={ACTIONS_STYLE}>{resolvedLeading}</div>
             <h1 style={TITLE_STYLE} data-testid="mobile-top-bar-title">
                 {resolvedTitle}
             </h1>

@@ -40,6 +40,31 @@ export const isShellPathActive = (pathname: string, to: string): boolean => {
     return pathname === normalized || pathname.startsWith(`${normalized}/`);
 };
 
+const SHELL_ROOT_PATHS = new Set<string>([
+    '/',
+    '/home',
+    '/explore',
+    '/topics',
+    '/communities',
+    '/live',
+    '/market',
+    '/creator',
+    '/messages',
+    '/inbox',
+    '/direct',
+    '/events',
+]);
+
+/**
+ * True when `pathname` is the bare root of a shell mode (e.g. `/` or
+ * `/communities`). Used by MobileTopBar to decide whether to auto-show
+ * a Back affordance: roots don't need one, leaf views do.
+ */
+export const isShellModeRoot = (pathname: string): boolean => {
+    const normalized = pathname.replace(/\/+$/, '') || '/';
+    return SHELL_ROOT_PATHS.has(normalized);
+};
+
 /**
  * Title shown in the mode-aware top bar. Kept here so the mapping is the
  * single source of truth across MobileTopBar, AppShell tests, and any
