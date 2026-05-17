@@ -6,25 +6,25 @@ This matrix maps tracker gates to in-repo artifacts so completion status can be 
 
 - Day 0-30: `deploy/kubernetes/phase4/element-ha.yaml`, `deploy/kubernetes/phase6/redis-ha.yaml`, `docs/operations/slo_error_budget_policy.md`.
 - Day 31-60: `docs/runbooks/distributed_self_healing_operations.md`, `.github/workflows/dr-backup-verification.yml`, `deploy/kubernetes/phase6/federation-alerts.yaml`.
-- Day 61-90: `deploy/kubernetes/phase6/second-region-dr-footprint.yaml`, `deploy/kubernetes/phase6/scaleout-automation.yaml`, `docs/operations/game_day_exercises.md`, `docs/operations/evidence/2026-02-20-operator-onboarding-signoff.md`.
+- Day 61-90: `deploy/kubernetes/phase6/second-region-dr-footprint.yaml`, `deploy/kubernetes/phase6/scaleout-automation.yaml`, `docs/operations/game_day_exercises.md`, `docs/operations/evidence/2026-02-20-operator-onboarding-signoff.md` (aggregate; not refreshed 2026-05-17 — pinned to 02-20 until at least two underlying cluster-only items refresh; see `docs/operations/evidence/2026-05-17-stale-evidence-triage.md`).
 
 ## B) Reliability and architecture
 
-- App/ingress/cache/DB no-SPOF: `docs/operations/evidence/2026-02-20-no-spof-topology-review.md`.
-- Chaos restart verification: `scripts/operations/chaos_restart_verification.sh`, `docs/operations/evidence/2026-02-20-chaos-restart-verification.md`.
-- Rollback verification: `scripts/operations/rollback_verification.sh`, `docs/operations/evidence/2026-02-20-rollback-verification.md`.
+- App/ingress/cache/DB no-SPOF: `docs/operations/evidence/2026-02-20-no-spof-topology-review.md` (refreshed 2026-05-17: `docs/operations/evidence/2026-05-17-no-spof-topology-review.md`).
+- Chaos restart verification: `scripts/operations/chaos_restart_verification.sh`, `docs/operations/evidence/2026-02-20-chaos-restart-verification.md` (not refreshed 2026-05-17 — cluster-only; see `docs/operations/evidence/2026-05-17-stale-evidence-triage.md`).
+- Rollback verification: `scripts/operations/rollback_verification.sh`, `docs/operations/evidence/2026-02-20-rollback-verification.md` (not refreshed 2026-05-17 — cluster-only; see triage).
 
 ## C) Data protection and recovery
 
 - Postgres replication + WAL backup baseline: `deploy/kubernetes/phase6/postgres-dr-baseline.yaml`.
 - PITR verification workflow: `.github/workflows/dr-backup-verification.yml`.
-- Drill evidence: `docs/operations/evidence/2026-02-20-postgres-drill-validation.md`.
+- Drill evidence: `docs/operations/evidence/2026-02-20-postgres-drill-validation.md` (refreshed 2026-05-17: `docs/operations/evidence/2026-05-17-postgres-drill-validation.md`).
 
 ## D) Federation and observability
 
 - Dashboard: `docs/operations/dashboards/federation_resilience_dashboard.json`.
 - Alerts + runbook mapping: `deploy/kubernetes/phase6/federation-alerts.yaml`.
-- Outage recovery evidence: `docs/operations/evidence/2026-02-20-federation-backlog-recovery-drill.md`.
+- Outage recovery evidence: `docs/operations/evidence/2026-02-20-federation-backlog-recovery-drill.md` (not refreshed 2026-05-17 — requires live federation peers; see `docs/operations/evidence/2026-05-17-stale-evidence-triage.md`).
 
 ## E) Security and incident operations
 
@@ -42,6 +42,6 @@ This matrix maps tracker gates to in-repo artifacts so completion status can be 
 
 ## G) Blackout rollout runbook execution
 
-- Checklist execution evidence: `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md`.
+- Checklist execution evidence: `docs/operations/evidence/2026-02-20-blackout-rollout-runbook-checklist.md` (refreshed 2026-05-17: `docs/operations/evidence/2026-05-17-blackout-rollout-runbook-checklist.md`).
 - Adoption telemetry dashboard: `docs/operations/dashboards/blackout_module_adoption_dashboard.json`.
 - Degraded-state support note: `docs/operations/blackout_degraded_state_support_note.md`.
