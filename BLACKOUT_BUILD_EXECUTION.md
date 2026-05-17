@@ -1,5 +1,16 @@
 # BLACKOUT_BUILD_PLAN Execution Log
 
+> **STATUS — 2026-05-10:** the deployment-checklist failures recorded later
+> in this document (TypeScript errors in `apps/blackout-client`, missing
+> `railway`/`vercel`/`eas` CLIs) are **stale**. Verified `pnpm install`
+> + `pnpm --filter @blackout/client build` and `pnpm --filter @blackout/client
+> typecheck` both pass cleanly; the original failure was caused by an empty
+> `node_modules` in the audit environment, not a code defect. The CLI gaps
+> are environment-only, not a code issue. Treat the historical Phase 0–6
+> entries below as a record of work; consult
+> `docs/rollout-readiness-status.md` and `docs/project_completion_tracker.md`
+> for the current readiness picture.
+
 ## Phase 0: Foundation Setup
 - ✅ Verified monorepo already configured with `apps/*` and `packages/*` workspaces.
 - ✅ Added plan-aligned package scaffolds:

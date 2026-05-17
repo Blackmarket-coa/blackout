@@ -44,7 +44,7 @@ import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
-import bugReportRoutes from './routes/bugReport';
+import diagnosticsRoutes from './routes/diagnostics';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';
@@ -54,6 +54,7 @@ import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
 import { initErrorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
+import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
@@ -148,6 +149,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/coliseum`, coliseumRoutes);
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
   app.route(`${root}/key-transparency`, keyTransparencyRoutes);
+  app.route(`${root}/diagnostics`, diagnosticsRoutes);
   registerFeatureModules(app, root);
 }
 
@@ -201,6 +203,7 @@ if (shouldListen) {
   // bare-bones deployments.
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
+  bootstrapMailer();
 
   // Resolve the outbound mail transport. Production refuses to start
   // without an explicit MAIL_PROVIDER (see services/mailer.ts), so this

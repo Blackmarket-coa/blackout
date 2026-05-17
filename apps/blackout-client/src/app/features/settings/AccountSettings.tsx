@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MiniProfile, ProfileEditor, ProfileModal, myProfileAtom } from '../profile';
+import { trackSettingsInteraction } from './settingsTelemetry';
 
 const AccountSettings = () => {
     const profile = useAtomValue(myProfileAtom);
@@ -27,7 +28,13 @@ const AccountSettings = () => {
             </section>
 
             <section style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setOpenPreview(true)}>
+                <button
+                    type="button"
+                    onClick={() => {
+                        trackSettingsInteraction('account', 'preview_profile_card', 'open');
+                        setOpenPreview(true);
+                    }}
+                >
                     Preview Profile Card
                 </button>
             </section>
@@ -35,7 +42,10 @@ const AccountSettings = () => {
             <ProfileModal
                 open={openPreview}
                 profile={profile}
-                onClose={() => setOpenPreview(false)}
+                onClose={() => {
+                    trackSettingsInteraction('account', 'preview_profile_card', 'close');
+                    setOpenPreview(false);
+                }}
                 onAddFriend={(userId) => void userId}
                 onBlock={(userId) => void userId}
                 onStartDm={(userId) => void userId}

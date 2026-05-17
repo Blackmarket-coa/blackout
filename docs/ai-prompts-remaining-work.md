@@ -1,5 +1,12 @@
 # Blackout Deployment-Readiness — AI Prompt Pack
 
+> **STATUS — 2026-05-10: PARTIALLY STALE.** The "39 open markers" reference
+> below is wrong; `docs/unfinished-code-checklist.md` is now at 0 markers
+> and the codebase has 1 remaining (non-blocking) TODO. Prompts 1–3
+> baseline gates pass; Prompts 4–7 still apply but should be re-scoped
+> against the current `DEPLOYMENT_READINESS_PLAN.md` rather than the
+> legacy 39-marker inventory. Treat this as historical guidance.
+
 This document provides copy/paste AI prompts focused on the remaining work to get this repository to a **deployment-ready, evidence-backed** state.
 
 ## Source trackers used
@@ -8,7 +15,7 @@ This document provides copy/paste AI prompts focused on the remaining work to ge
 - `docs/rollout-readiness-status.md` (work-order and go/no-go evidence model).
 - `docs/blackout_centralized_release_readiness_gate.md` (residual risk register and sign-off).
 - `docs/project_completion_tracker.md` (post-rollout backlog + readiness criterion).
-- `docs/unfinished-code-checklist.md` (open marker inventory: 39).
+- `docs/unfinished-code-checklist.md` (open marker inventory: ~~39~~ **0** as of 2026-05-10).
 
 ## Prompt usage contract
 

@@ -3,6 +3,7 @@ import { useAtom } from 'jotai';
 import { privacySettingsAtom, type DmPermission } from './settingsAtoms';
 import { trackSettingsInteraction } from './settingsTelemetry';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { DataRetentionSection } from './DataRetentionSection';
 
 const dmOptions: Array<{ value: DmPermission; label: string }> = [
     { value: 'everyone', label: 'Everyone' },
@@ -112,6 +113,8 @@ export const PrivacySettings = () => {
                 />
                 Typing indicator visibility
             </label>
+
+            <DataRetentionSection />
         </div>
     );
 };
