@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
+import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 
 const POWER_EVENT = 'm.room.power_levels';
 const TIMEOUT_EVENT = 'co.bmc.timeout';
@@ -92,6 +93,9 @@ export const TimeoutDialog = ({
     const [reason, setReason] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const titleId = useId();
+
+    useDismissOnOutsideOrEscape(open && !saving, null, onClose);
 
     const durationMs =
         preset === 'custom' ? Math.max(1, customMinutes) * 60 * 1000 : PRESET_TO_MS[preset];
@@ -182,6 +186,9 @@ export const TimeoutDialog = ({
 
     return (
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 40 }}
             onClick={onClose}
         >
@@ -196,10 +203,33 @@ export const TimeoutDialog = ({
                     padding: 12,
                     display: 'grid',
                     gap: 10,
+                    position: 'relative',
                 }}
                 onClick={(event) => event.stopPropagation()}
             >
-                <h3 style={{ margin: 0 }}>Timeout user</h3>
+                <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={onClose}
+                    disabled={saving}
+                    style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        fontSize: 22,
+                        lineHeight: 1,
+                        cursor: 'pointer',
+                        padding: 4,
+                    }}
+                >
+                    ×
+                </button>
+                <h3 id={titleId} style={{ margin: 0 }}>
+                    Timeout user
+                </h3>
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
                     {targetUserId}
                 </p>

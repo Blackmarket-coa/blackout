@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useDismissOnOutsideOrEscape } from '../../room/useDismissOnOutsideOrEscape';
 
 export interface EmbeddedCheckoutEvent {
     type: 'checkout.completed' | 'checkout.cancelled' | 'checkout.error';
@@ -51,6 +52,11 @@ export function EmbeddedCheckoutOverlay(props: EmbeddedCheckoutOverlayProps) {
         window.addEventListener('message', handler);
         return () => window.removeEventListener('message', handler);
     }, [expectedOrigin, onCancelled, onCompleted, onError, sessionId]);
+
+    const cancelFromEscape = useCallback(() => {
+        onCancelled({ type: 'checkout.cancelled', sessionId, reason: 'escape' });
+    }, [onCancelled, sessionId]);
+    useDismissOnOutsideOrEscape(true, null, cancelFromEscape);
 
     return (
         <div
