@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import FocusTrap from 'focus-trap-react';
 import { useDismissOnOutsideOrEscape } from '../../room/useDismissOnOutsideOrEscape';
 
 export interface EmbeddedCheckoutEvent {
@@ -59,6 +60,13 @@ export function EmbeddedCheckoutOverlay(props: EmbeddedCheckoutOverlayProps) {
     useDismissOnOutsideOrEscape(true, null, cancelFromEscape);
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                escapeDeactivates: false,
+                clickOutsideDeactivates: false,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div
             role="dialog"
             aria-modal="true"
@@ -134,5 +142,6 @@ export function EmbeddedCheckoutOverlay(props: EmbeddedCheckoutOverlayProps) {
                 />
             </div>
         </div>
+        </FocusTrap>
     );
 }

@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import FocusTrap from 'focus-trap-react';
 import { decodeMessageFromImage } from './SteganographyDecoder';
 import { encodeMessageInImage, getSteganographyCapacity } from './SteganographyEncoder';
 import { stegoEnterprisePolicyAtom, stegoSettingsAtom } from './stegoAtoms';
@@ -11,6 +12,7 @@ import {
 } from './stegoPolicyLifecycle';
 import { openStegoUpgradeFlow, trackStegoBaselineUsage } from './stegoTelemetry';
 import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
+import { stopPropagation } from '../../utils/keyboard';
 
 interface HideMessageDialogProps {
     open: boolean;
@@ -74,6 +76,14 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
     if (!open) return null;
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                onDeactivate: onClose,
+                clickOutsideDeactivates: true,
+                escapeDeactivates: stopPropagation,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div
             role="dialog"
             aria-modal="true"
@@ -560,6 +570,7 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                 ) : null}
             </div>
         </div>
+        </FocusTrap>
     );
 };
 

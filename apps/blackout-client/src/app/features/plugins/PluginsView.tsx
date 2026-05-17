@@ -33,6 +33,16 @@ const describeCapabilities = (capabilities: readonly PluginCapability[]): string
     return capabilities.map((cap) => CAPABILITY_LABELS[cap] ?? cap).join(' · ');
 };
 
+const describeSurfaces = (manifest: {
+    homepageCard?: unknown;
+    pinnedNav?: unknown;
+}): string | null => {
+    const parts: string[] = [];
+    if (manifest.homepageCard) parts.push('home card');
+    if (manifest.pinnedNav) parts.push('pinned nav');
+    return parts.length === 0 ? null : parts.join(' · ');
+};
+
 type PluginRow = {
     moduleId: string;
     name: string;
@@ -257,6 +267,18 @@ export const PluginsView = () => {
                                 >
                                     Permissions: {describeCapabilities(record.manifest.capabilities)}
                                 </small>
+                                {describeSurfaces(record.manifest) ? (
+                                    <small
+                                        data-testid={`plugin-surfaces-${record.manifest.id}`}
+                                        style={{
+                                            display: 'block',
+                                            color: 'var(--text-muted)',
+                                            fontSize: 11,
+                                        }}
+                                    >
+                                        Surfaces: {describeSurfaces(record.manifest)}
+                                    </small>
+                                ) : null}
                                 {record.lastError ? (
                                     <div
                                         style={{

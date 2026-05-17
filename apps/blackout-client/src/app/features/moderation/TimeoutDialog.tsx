@@ -1,8 +1,10 @@
 import { useEffect, useId, useMemo, useState } from 'react';
+import FocusTrap from 'focus-trap-react';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
+import { stopPropagation } from '../../utils/keyboard';
 
 const POWER_EVENT = 'm.room.power_levels';
 const TIMEOUT_EVENT = 'co.bmc.timeout';
@@ -185,6 +187,14 @@ export const TimeoutDialog = ({
     };
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                onDeactivate: onClose,
+                clickOutsideDeactivates: true,
+                escapeDeactivates: stopPropagation,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div
             role="dialog"
             aria-modal="true"
@@ -304,6 +314,7 @@ export const TimeoutDialog = ({
                 {error ? <div style={{ fontSize: 12, color: 'var(--danger)' }}>{error}</div> : null}
             </div>
         </div>
+        </FocusTrap>
     );
 };
 

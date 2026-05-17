@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import FocusTrap from 'focus-trap-react';
 import type { MarketplaceProviderId, NormalizedListing } from '@blackout/core';
 import {
     fetchListings,
@@ -7,6 +8,7 @@ import {
 } from '../../features/monetization/marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../../features/monetization/marketplace/useMarketplaceAuth';
 import { useDismissOnOutsideOrEscape } from '../../features/room/useDismissOnOutsideOrEscape';
+import { stopPropagation } from '../../utils/keyboard';
 import {
     PRODUCT_ATTACHMENTS_EVENT_TYPE,
     buildProductAttachmentsEvent,
@@ -210,6 +212,14 @@ export const AttachProductDialog = ({
     };
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                onDeactivate: onClose,
+                clickOutsideDeactivates: true,
+                escapeDeactivates: stopPropagation,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div role="dialog" aria-modal="true" aria-label="Attach product" style={overlayStyle}>
             <div style={dialogStyle} data-testid="attach-product-dialog">
                 <header
@@ -296,6 +306,7 @@ export const AttachProductDialog = ({
                 </div>
             </div>
         </div>
+        </FocusTrap>
     );
 };
 
