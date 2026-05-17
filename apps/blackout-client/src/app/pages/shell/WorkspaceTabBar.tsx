@@ -1,17 +1,41 @@
 import { type CSSProperties } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { RegistryTabBar } from '../../core/features/RegistryTabBar';
 import type { ShellPanelEntry } from '../../core/features/types';
 
 const WORKSPACE_TAB_BAR_STYLE: CSSProperties = {
     borderBottom: '1px solid var(--border-default, #374151)',
     background: 'var(--bg-nav, #1f2937)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '0 12px',
+};
+
+const HOME_LINK_STYLE: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '8px 10px',
+    color: 'var(--text-secondary, #cbd5e1)',
+    textDecoration: 'none',
+    fontSize: 13,
+    fontWeight: 500,
+    borderRadius: 6,
+};
+
+const HOME_LINK_ACTIVE_STYLE: CSSProperties = {
+    ...HOME_LINK_STYLE,
+    color: 'var(--text-primary, #f8fafc)',
+    background: 'var(--bg-hover, rgba(255,255,255,0.06))',
 };
 
 const firstSegment = (pathname: string): string => {
     const match = pathname.match(/^\/([^/?#]+)/);
     return match ? match[1] : '';
 };
+
+const isHomeActive = (pathname: string): boolean =>
+    pathname === '/' || pathname.startsWith('/home');
 
 /**
  * Desktop workspace tab bar. Reads `kind: 'workspace'` panels from the
@@ -31,15 +55,26 @@ const firstSegment = (pathname: string): string => {
 export const WorkspaceTabBar = () => {
     const location = useLocation();
     const segment = firstSegment(location.pathname);
-    if (!segment) return null;
+    const homeActive = isHomeActive(location.pathname);
     return (
         <div style={WORKSPACE_TAB_BAR_STYLE} data-shell-region="workspace-tab-bar">
-            <RegistryTabBar
-                kind="workspace"
-                pathname={location.pathname}
-                filter={(entry: ShellPanelEntry) => firstSegment(entry.to) === segment}
-                data-testid="app-shell-workspace-tab-bar"
-            />
+            <Link
+                to="/"
+                aria-label="Home"
+                aria-current={homeActive ? 'page' : undefined}
+                data-testid="workspace-tab-bar-home"
+                style={homeActive ? HOME_LINK_ACTIVE_STYLE : HOME_LINK_STYLE}
+            >
+                Home
+            </Link>
+            {segment ? (
+                <RegistryTabBar
+                    kind="workspace"
+                    pathname={location.pathname}
+                    filter={(entry: ShellPanelEntry) => firstSegment(entry.to) === segment}
+                    data-testid="app-shell-workspace-tab-bar"
+                />
+            ) : null}
         </div>
     );
 };

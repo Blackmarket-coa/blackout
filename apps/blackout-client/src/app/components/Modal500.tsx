@@ -6,8 +6,9 @@ import { stopPropagation } from '../utils/keyboard';
 type Modal500Props = {
   requestClose: () => void;
   children: ReactNode;
+  ariaLabel?: string;
 };
-export function Modal500({ requestClose, children }: Modal500Props) {
+export function Modal500({ requestClose, children, ariaLabel }: Modal500Props) {
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
       <OverlayCenter>
@@ -19,7 +20,13 @@ export function Modal500({ requestClose, children }: Modal500Props) {
             escapeDeactivates: stopPropagation,
           }}
         >
-          <Modal size="500" variant="Background">
+          <Modal
+            size="500"
+            variant="Background"
+            role="dialog"
+            aria-modal
+            aria-label={ariaLabel ?? 'Dialog'}
+          >
             {children}
           </Modal>
         </FocusTrap>

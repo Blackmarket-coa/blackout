@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { decodeMessageFromImage } from './SteganographyDecoder';
 import { encodeMessageInImage, getSteganographyCapacity } from './SteganographyEncoder';
@@ -10,6 +10,7 @@ import {
     type StegoPolicyLifecycleAction,
 } from './stegoPolicyLifecycle';
 import { openStegoUpgradeFlow, trackStegoBaselineUsage } from './stegoTelemetry';
+import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 
 interface HideMessageDialogProps {
     open: boolean;
@@ -54,6 +55,7 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
     const [decodeError, setDecodeError] = useState<string | null>(null);
 
     const [generatedPassphrase, setGeneratedPassphrase] = useState(() => generatePassphrase(24));
+    const titleId = useId();
 
     const disabled = useMemo(
         () => !sourceImage || !message.trim() || !passphrase.trim() || encoding,
@@ -67,10 +69,15 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
         'archive',
     ];
 
+    useDismissOnOutsideOrEscape(open && !encoding && !decoding, null, onClose);
+
     if (!open) return null;
 
     return (
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 40 }}
             onClick={onClose}
         >
@@ -83,10 +90,33 @@ export const HideMessageDialog = ({ open, onClose, onEncoded }: HideMessageDialo
                     borderRadius: 12,
                     border: '1px solid var(--border-default)',
                     background: 'var(--bg-surface)',
+                    position: 'relative',
                 }}
                 onClick={(event) => event.stopPropagation()}
             >
-                <h3 style={{ marginTop: 0 }}>Steganography Toolbox</h3>
+                <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={onClose}
+                    disabled={encoding || decoding}
+                    style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        fontSize: 22,
+                        lineHeight: 1,
+                        cursor: 'pointer',
+                        padding: 4,
+                    }}
+                >
+                    ×
+                </button>
+                <h3 id={titleId} style={{ marginTop: 0 }}>
+                    Steganography Toolbox
+                </h3>
                 <p style={{ color: 'var(--text-secondary)' }}>
                     Select an action: hide, decrypt, or create a strong passphrase for stego
                     messages.

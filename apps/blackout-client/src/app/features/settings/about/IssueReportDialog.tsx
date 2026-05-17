@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createAuthorizedApiClient } from '../../../sdk/client';
 import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import { trackSettingsInteraction } from '../settingsTelemetry';
+import { useDismissOnOutsideOrEscape } from '../../room/useDismissOnOutsideOrEscape';
 
 const APP_VERSION = '4.10.5';
 
@@ -131,6 +132,8 @@ export const IssueReportDialog: React.FC<IssueReportDialogProps> = ({ open, onCl
             trackSettingsInteraction('about', 'issue_report', 'error');
         }
     };
+
+    useDismissOnOutsideOrEscape(open && status.kind !== 'sending', null, onClose);
 
     if (!open) return null;
 

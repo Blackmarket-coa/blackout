@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Descendant, Editor, Transforms, createEditor } from 'slate';
 import { Editable, Slate, withReact } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { useLegacySendMessageAdapter as useSendMessage } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 import type { ForumTag } from './useForum';
 
 const toBody = (value: Descendant[]): string => {
@@ -39,8 +40,11 @@ export const CreatePostModal = ({
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [sending, setSending] = useState(false);
     const { sendRichText } = useSendMessage(roomId);
+    const titleId = useId();
 
     const editor = useMemo(() => withHistory(withReact(createEditor())), []);
+
+    useDismissOnOutsideOrEscape(open && !sending, null, onClose);
 
     if (!open) return null;
 
@@ -72,6 +76,9 @@ export const CreatePostModal = ({
 
     return (
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 50 }}
             onClick={onClose}
         >
@@ -84,10 +91,33 @@ export const CreatePostModal = ({
                     borderRadius: 12,
                     background: 'var(--bg-surface)',
                     padding: 12,
+                    position: 'relative',
                 }}
                 onClick={(event) => event.stopPropagation()}
             >
-                <h3 style={{ marginTop: 0 }}>Create New Post</h3>
+                <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={onClose}
+                    disabled={sending}
+                    style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        fontSize: 22,
+                        lineHeight: 1,
+                        cursor: 'pointer',
+                        padding: 4,
+                    }}
+                >
+                    ×
+                </button>
+                <h3 id={titleId} style={{ marginTop: 0 }}>
+                    Create New Post
+                </h3>
 
                 <label style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>

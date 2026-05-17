@@ -6,6 +6,7 @@ import {
     type MarketplaceProviderSummary,
 } from '../../features/monetization/marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../../features/monetization/marketplace/useMarketplaceAuth';
+import { useDismissOnOutsideOrEscape } from '../../features/room/useDismissOnOutsideOrEscape';
 import {
     PRODUCT_ATTACHMENTS_EVENT_TYPE,
     buildProductAttachmentsEvent,
@@ -187,6 +188,8 @@ export const AttachProductDialog = ({
             cancelled = true;
         };
     }, [open, query, token]);
+
+    useDismissOnOutsideOrEscape(open, null, onClose);
 
     if (!open) return null;
 

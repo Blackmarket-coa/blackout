@@ -1,10 +1,11 @@
-import React, { useState, type ReactNode } from 'react';
+import React, { useId, useState, type ReactNode } from 'react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CharacterSheet } from '../character-sheet/CharacterSheet';
 import { useCanViewSheet } from '../character-sheet/useCanViewSheet';
+import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
 
 interface ProfileModalProps {
     open: boolean;
@@ -91,6 +92,9 @@ export const ProfileModal = ({
 }: ProfileModalProps) => {
     const [viewingSheet, setViewingSheet] = useState(false);
     const canViewSheet = useCanViewSheet(profile.userId);
+    const titleId = useId();
+
+    useDismissOnOutsideOrEscape(open, null, onClose);
 
     if (!open) return null;
 
@@ -99,6 +103,9 @@ export const ProfileModal = ({
 
     return (
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             style={{
                 position: 'fixed',
                 inset: 0,
@@ -119,9 +126,31 @@ export const ProfileModal = ({
                     overflow: 'hidden',
                     boxShadow: '0 8px 16px rgba(0,0,0,0.24), 0 2px 4px rgba(0,0,0,0.18)',
                     fontFamily: 'Whitney, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                    position: 'relative',
                 }}
                 onClick={(event) => event.stopPropagation()}
             >
+                <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={onClose}
+                    style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        zIndex: 1,
+                        background: 'rgba(0,0,0,0.4)',
+                        border: 'none',
+                        color: '#fff',
+                        fontSize: 20,
+                        lineHeight: 1,
+                        cursor: 'pointer',
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                    }}
+                >
+                    ×
+                </button>
                 {/* Banner */}
                 <div
                     style={{
@@ -222,6 +251,7 @@ export const ProfileModal = ({
                     {/* Name block */}
                     <div style={{ marginBottom: 12 }}>
                         <h2
+                            id={titleId}
                             style={{
                                 margin: '0 0 2px',
                                 fontSize: 20,
