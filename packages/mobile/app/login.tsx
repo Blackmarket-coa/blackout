@@ -2,12 +2,18 @@ import { useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { buildApiUrl, getApiConfigValidationError } from '../components/apiConfig';
 import { setSession } from '../components/session';
+import RegisterScreen from './register';
 
 export default function LoginScreen() {
   const configError = useMemo(() => getApiConfigValidationError(), []);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(configError);
+
+  if (mode === 'register') {
+    return <RegisterScreen onSwitchToLogin={() => setMode('login')} />;
+  }
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: 16, gap: 8 }}>
@@ -49,6 +55,11 @@ export default function LoginScreen() {
         }}
       >
         <Text style={{ color: '#fff' }}>Sign In</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => setMode('register')} style={{ paddingVertical: 8 }}>
+        <Text style={{ color: '#1a6e3a', textAlign: 'center' }}>
+          New to Blackout? Create an account
+        </Text>
       </TouchableOpacity>
     </View>
   );
