@@ -6,7 +6,9 @@
  * marketplace provider.
  */
 
-export const PLUGINS_PROTOCOL_VERSION = 1;
+export const PLUGINS_PROTOCOL_VERSION = 2;
+
+export type PluginProtocolVersion = 1 | 2;
 
 export type PluginArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
 
@@ -25,6 +27,12 @@ export interface PluginManifest {
     /** Human-readable label shown in Plugins view. */
     name: string;
     version: string;
+    /**
+     * Protocol version this manifest targets. Missing or `1` is treated as v1
+     * (the `rightPanel` / `mobileTab` surface fields are ignored). `2` opts
+     * into the v2 surface registration fields.
+     */
+    protocolVersion?: PluginProtocolVersion;
     artifactKind: PluginArtifactKind;
     /** Marketplace listing this manifest was published with. */
     listing: {
@@ -63,6 +71,28 @@ export interface PluginManifest {
         label: string;
         iconUrl?: string;
         href?: string;
+        order?: number;
+    };
+    /**
+     * Optional right-panel entry (v2+). The host materializes this into a
+     * `ShellPanelEntry` of kind `right-panel`. Until a code-plugin
+     * entrypoint registers an in-app route, the host routes clicks to
+     * `/plugins/<id>`.
+     */
+    rightPanel?: {
+        id: string;
+        label: string;
+        iconUrl?: string;
+        order?: number;
+    };
+    /**
+     * Optional mobile-tab entry (v2+). The host materializes this into a
+     * `ShellPanelEntry` of kind `mobile-tab`.
+     */
+    mobileTab?: {
+        id: string;
+        label: string;
+        iconUrl?: string;
         order?: number;
     };
 }

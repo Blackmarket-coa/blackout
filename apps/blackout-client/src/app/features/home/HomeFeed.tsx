@@ -5,6 +5,7 @@ import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
+import { PluginCardRail } from './PluginCardRail';
 import {
     buildHomeFeed,
     groupHomeFeedByBucket,
@@ -165,6 +166,7 @@ export const HomeFeed = (): JSX.Element => {
                 <p style={subtitleStyle}>Latest activity from your {BLACKOUT_TERMS.den.plural}.</p>
             </header>
             <TopicChipBar />
+            <PluginCardRail />
             {items.length === 0 ? (
                 <div style={emptyStateStyle} data-testid="home-feed-empty">
                     <strong>No activity yet.</strong>
