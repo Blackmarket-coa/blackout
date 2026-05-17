@@ -74,6 +74,17 @@ Workstream A (Ports 1–5) is closed; B–F remain post-beta scope.
 
 ## Operational
 
+### Release signoff
+The CI release gate
+(`tools/ci/check-blackout-client-release-gate.mjs`) requires a populated
+`apps/blackout-client/docs/release/staging-signoff.report.json`. The
+generator at `tools/ci/generate-staging-signoff.mjs`
+(`pnpm release:generate-signoff`) emits the canonical shape from current
+HEAD; the three `manualVerification.*` flags require human attestation
+on real Tauri/Capacitor builds and are left `false` by default. Full
+workflow in
+[`docs/operations/runbooks/staging-signoff.md`](docs/operations/runbooks/staging-signoff.md).
+
 ### Phase 0 archive push
 The historical Element-fork archive branch (`archive/element-web-fork`)
 and tag (`v0-element-fork`) exist locally but have not been pushed to

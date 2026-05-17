@@ -78,6 +78,8 @@
     "ci:smoke:blackout-client": "node tools/ci/run-blackout-client-smoke-matrix.mjs",
     "guard:blackout-client-release-gate": "node tools/ci/check-blackout-client-release-gate.mjs",
     "test:guard:blackout-client-release-gate": "node --test tools/ci/check-blackout-client-release-gate.test.mjs",
+    "release:generate-signoff": "node tools/ci/generate-staging-signoff.mjs",
+    "test:release:generate-signoff": "node --test tools/ci/generate-staging-signoff.test.mjs",
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
     "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment",
