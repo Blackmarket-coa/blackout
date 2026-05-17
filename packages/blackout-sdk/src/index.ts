@@ -45,6 +45,8 @@ export type {
   PluginArtifactKind,
   PluginCapability,
   PluginManifest,
+  PluginPinnedNavSpec,
+  PluginHomepageCardSpec,
   PluginSignatureEnvelope,
   SignedPluginBundle,
   PluginEventType,

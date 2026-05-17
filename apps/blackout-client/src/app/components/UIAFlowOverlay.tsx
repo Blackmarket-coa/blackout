@@ -35,6 +35,7 @@ export function UIAFlowOverlay({
           initialFocus: false,
           escapeDeactivates: stopPropagation,
           onDeactivate: onCancel,
+          returnFocusOnDeactivate: true,
         }}
       >
         <Box

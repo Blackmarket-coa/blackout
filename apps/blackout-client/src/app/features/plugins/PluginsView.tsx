@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import type { PluginCapability } from '@blackout/protocol';
 import { capabilityContextAtom } from '../../core/features/capabilityContext';
@@ -47,6 +47,21 @@ export const PluginsView = () => {
     const installed = useAtomValue(installedPluginsAtom);
     const [allPlugins, setAllPlugins] = useState(() => getAllFeaturePlugins());
     useEffect(() => subscribeFeaturePlugins(setAllPlugins), []);
+
+    // The pendingToggle confirmation overlay is hand-rolled (no FocusTrap),
+    // so capture the trigger when it opens and restore focus on close.
+    const toggleTriggerRef = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        if (pendingToggle) {
+            toggleTriggerRef.current = document.activeElement as HTMLElement | null;
+            return;
+        }
+        const target = toggleTriggerRef.current;
+        if (target && typeof target.focus === 'function') {
+            target.focus();
+        }
+        toggleTriggerRef.current = null;
+    }, [pendingToggle]);
 
     const rows = useMemo<PluginRow[]>(
         () =>

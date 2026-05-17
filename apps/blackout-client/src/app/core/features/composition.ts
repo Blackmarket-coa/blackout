@@ -1,5 +1,6 @@
 import {
     getFeatureModulePluginOrder,
+    isRuntimeModuleAllowedId,
     type FeatureModuleId,
     type FeatureModulePluginId,
 } from './manifest';
@@ -24,7 +25,10 @@ export const assertFeatureModulesRegistered = (
     const allowed = new Set(registeredFeatureModuleIds);
 
     for (const module of modules) {
-        if (!allowed.has(module.feature.id as FeatureModuleId)) {
+        if (
+            !allowed.has(module.feature.id as FeatureModuleId) &&
+            !isRuntimeModuleAllowedId(module.feature.id)
+        ) {
             throw new Error(
                 `[feature-registry] ${source} module "${module.feature.id}" is not registered in featureModuleManifest.`
             );
@@ -67,8 +71,11 @@ export const composeFeatureRoutes = (
     context?: CapabilityGateContext
 ): FeatureRoute[] =>
     registry.flatMap((feature) =>
-        resolveFeatureCustomizations(feature, context).flatMap(
-            (customization) => customization.routes ?? []
+        resolveFeatureCustomizations(feature, context).flatMap((customization) =>
+            (customization.routes ?? []).map((route) => ({
+                ...route,
+                pluginId: route.pluginId ?? feature.id,
+            }))
         )
     );
 

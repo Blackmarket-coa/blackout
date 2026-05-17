@@ -1,9 +1,10 @@
-import { createElement, type ComponentType, type CSSProperties } from 'react';
+import { createElement, useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { buildFeatureRegistry } from './buildRegistry';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
 import { composeShellPanels, selectPanelsByKind } from './composition';
+import { getAllFeaturePlugins, subscribeFeaturePlugins } from './plugins';
 import type { ShellPanelEntry, ShellPanelKind } from './types';
 import { isShellPathActive } from '../../pages/shell/modeRouter';
 
@@ -99,7 +100,9 @@ export const RegistryTabBar = ({
 }: RegistryTabBarProps): JSX.Element | null => {
     const ctx = useCapabilityContext();
     const flags = (ctx.flags ?? {}) as Record<string, boolean>;
-    const registry = buildFeatureRegistry(registryForContext(flags));
+    const [plugins, setPlugins] = useState(() => getAllFeaturePlugins());
+    useEffect(() => subscribeFeaturePlugins(setPlugins), []);
+    const registry = buildFeatureRegistry(registryForContext(flags), plugins);
     const panels = selectPanelsByKind(composeShellPanels(registry, ctx), kind);
     const visible = filter ? panels.filter(filter) : panels;
 

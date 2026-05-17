@@ -1,8 +1,9 @@
-import React, { createElement } from 'react';
+import React, { createElement, useEffect, useState } from 'react';
 import { buildFeatureRegistry } from './buildRegistry';
 import { composeFeatureSettings } from './composition';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
+import { getAllFeaturePlugins, subscribeFeaturePlugins } from './plugins';
 
 type RegistrySettingsListProps = {
     /** Optional filter — only sections whose label matches the predicate render. */
@@ -20,8 +21,11 @@ type RegistrySettingsListProps = {
  */
 export function RegistrySettingsList({ filter, className }: RegistrySettingsListProps) {
     const ctx = useCapabilityContext();
+    const [plugins, setPlugins] = useState(() => getAllFeaturePlugins());
+    useEffect(() => subscribeFeaturePlugins(setPlugins), []);
     const registry = buildFeatureRegistry(
-        { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags
+        { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags,
+        plugins
     );
     const sections = composeFeatureSettings(registry, ctx).filter((entry) =>
         filter ? filter(entry.section) : true

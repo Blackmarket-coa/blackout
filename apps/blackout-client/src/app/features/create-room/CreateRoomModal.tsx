@@ -47,6 +47,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
               clickOutsideDeactivates: true,
               onDeactivate: closeDialog,
               escapeDeactivates: stopPropagation,
+              returnFocusOnDeactivate: true,
             }}
           >
             <Modal size="300" flexHeight role="dialog" aria-modal aria-labelledby={titleId}>

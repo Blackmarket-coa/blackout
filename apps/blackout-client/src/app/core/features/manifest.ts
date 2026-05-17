@@ -64,8 +64,42 @@ export const runtimePluginManifest = [
 
 export type RuntimePluginId = typeof runtimePluginManifest[number];
 
+/**
+ * In-memory allowlist for ids contributed by marketplace-installed plugins
+ * at runtime. Static feature-module / plugin ids must still appear in the
+ * compile-time manifests above; this set only relaxes the assert for
+ * dynamic plugins that come through `registerDynamicFeaturePlugin`.
+ *
+ * Insertion order is preserved so dynamic plugins sort deterministically
+ * after the static `featureModulePluginManifest` entries.
+ */
+const runtimeModuleAllowlist = new Map<string, number>();
+let runtimeModuleAllowlistNextIndex = 0;
+
+export const addRuntimeModuleAllowedId = (id: string): void => {
+    if (!runtimeModuleAllowlist.has(id)) {
+        runtimeModuleAllowlist.set(id, runtimeModuleAllowlistNextIndex);
+        runtimeModuleAllowlistNextIndex += 1;
+    }
+};
+
+export const removeRuntimeModuleAllowedId = (id: string): void => {
+    runtimeModuleAllowlist.delete(id);
+};
+
+export const isRuntimeModuleAllowedId = (id: string): boolean =>
+    runtimeModuleAllowlist.has(id);
+
+export const _resetRuntimeModuleAllowlistForTest = (): void => {
+    runtimeModuleAllowlist.clear();
+    runtimeModuleAllowlistNextIndex = 0;
+};
+
 export const assertFeatureModuleIdAllowed = (featureId: string): void => {
-    if (!featureModuleManifest.includes(featureId as FeatureModuleId)) {
+    if (
+        !featureModuleManifest.includes(featureId as FeatureModuleId) &&
+        !runtimeModuleAllowlist.has(featureId)
+    ) {
         throw new Error(
             `[feature-manifest] Unknown feature module id "${featureId}". Add it to featureModuleManifest first.`
         );
@@ -73,7 +107,10 @@ export const assertFeatureModuleIdAllowed = (featureId: string): void => {
 };
 
 export const assertFeatureModulePluginIdAllowed = (pluginId: string): void => {
-    if (!featureModulePluginManifest.includes(pluginId as FeatureModulePluginId)) {
+    if (
+        !featureModulePluginManifest.includes(pluginId as FeatureModulePluginId) &&
+        !runtimeModuleAllowlist.has(pluginId)
+    ) {
         throw new Error(
             `[feature-manifest] Unknown feature module plugin id "${pluginId}". Add it to featureModulePluginManifest first.`
         );
@@ -82,7 +119,10 @@ export const assertFeatureModulePluginIdAllowed = (pluginId: string): void => {
 
 export const getFeatureModulePluginOrder = (pluginId: string): number => {
     assertFeatureModulePluginIdAllowed(pluginId);
-    return featureModulePluginManifest.indexOf(pluginId as FeatureModulePluginId);
+    const staticIndex = featureModulePluginManifest.indexOf(pluginId as FeatureModulePluginId);
+    if (staticIndex !== -1) return staticIndex;
+    const dynamicIndex = runtimeModuleAllowlist.get(pluginId);
+    return featureModulePluginManifest.length + (dynamicIndex ?? 0);
 };
 
 export const assertRuntimePluginIdAllowed = (pluginId: string): void => {

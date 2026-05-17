@@ -1,9 +1,10 @@
-import React, { createElement, useRef } from 'react';
+import React, { createElement, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { buildFeatureRegistry } from './buildRegistry';
 import { composeShellPanels, selectPanelsByKind } from './composition';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
+import { getAllFeaturePlugins, subscribeFeaturePlugins } from './plugins';
 import type { ShellPanelKind } from './types';
 
 export type RegistrySidebarMode = 'list' | 'rail';
@@ -58,8 +59,11 @@ export function RegistrySidebarList({
     activePath,
 }: RegistrySidebarListProps) {
     const ctx = useCapabilityContext();
+    const [plugins, setPlugins] = useState(() => getAllFeaturePlugins());
+    useEffect(() => subscribeFeaturePlugins(setPlugins), []);
     const registry = buildFeatureRegistry(
-        { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags
+        { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags,
+        plugins
     );
     const panels = selectPanelsByKind(composeShellPanels(registry, ctx), kind);
     const itemsRef = useRef<Array<HTMLAnchorElement | null>>([]);

@@ -4,6 +4,12 @@ import type { FeatureFlags } from './featureFlags';
 export type FeatureRoute = {
     path: string;
     component: ComponentType;
+    /**
+     * Owning feature/plugin id. Populated by `composeFeatureRoutes` (never
+     * authored on a manifest) so the host can label per-route ErrorBoundary
+     * fallbacks with the failing plugin.
+     */
+    pluginId?: string;
 };
 
 export type FeatureNavItem = {

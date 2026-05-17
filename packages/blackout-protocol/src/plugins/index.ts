@@ -6,7 +6,7 @@
  * marketplace provider.
  */
 
-export const PLUGINS_PROTOCOL_VERSION = 1;
+export const PLUGINS_PROTOCOL_VERSION = 2;
 
 export type PluginArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
 
@@ -18,6 +18,29 @@ export type PluginCapability =
     | 'storage.read'
     | 'storage.write'
     | 'http.fetch';
+
+/**
+ * Spatial declaration: pinned sidebar entry contributed by an installed
+ * plugin. The host materializes this as a `kind: 'sidebar'` shell panel
+ * in the high-order band (>= 1000) so it sorts below core nav.
+ */
+export interface PluginPinnedNavSpec {
+    label: string;
+    to: string;
+    order?: number;
+}
+
+/**
+ * Spatial declaration: home-page card contributed by an installed
+ * plugin. The host renders this directly inside the home feed; it is
+ * not currently a shell-panel surface.
+ */
+export interface PluginHomepageCardSpec {
+    title: string;
+    subtitle?: string;
+    to: string;
+    order?: number;
+}
 
 export interface PluginManifest {
     /** Stable identifier; reverse-DNS recommended (`com.example.fancy-stickers`). */
@@ -40,6 +63,10 @@ export interface PluginManifest {
     sha256: string;
     /** Optional description for end users. */
     description?: string;
+    /** Optional pinned sidebar nav entry contributed by this plugin. */
+    pinnedNav?: PluginPinnedNavSpec;
+    /** Optional home-page card contributed by this plugin. */
+    homepageCard?: PluginHomepageCardSpec;
 }
 
 export interface PluginSignatureEnvelope {
