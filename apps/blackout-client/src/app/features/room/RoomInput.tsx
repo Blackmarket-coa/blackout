@@ -619,6 +619,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                         variant="SurfaceVariant"
                                         size="300"
                                         radii="300"
+                                        aria-label="Cancel reply"
+                                        title="Cancel reply"
                                     >
                                         <Icon src={Icons.Cross} size="50" />
                                     </IconButton>
@@ -656,6 +658,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             variant="SurfaceVariant"
                             size="300"
                             radii="300"
+                            aria-label="Attach file"
+                            title="Attach file"
                         >
                             <Icon src={Icons.PlusCircle} />
                         </IconButton>
@@ -667,6 +671,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                 size="300"
                                 radii="300"
                                 onClick={() => setToolbar(!toolbar)}
+                                aria-label={
+                                    toolbar
+                                        ? 'Hide formatting toolbar'
+                                        : 'Show formatting toolbar'
+                                }
+                                title={
+                                    toolbar
+                                        ? 'Hide formatting toolbar'
+                                        : 'Show formatting toolbar'
+                                }
                             >
                                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
                             </IconButton>
@@ -709,6 +723,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                         {!expressionControlVisibility.hideGifBtn && (
                                             <IconButton
                                                 aria-pressed={emojiBoardTab === EmojiBoardTab.Gif}
+                                                aria-label="Insert GIF"
+                                                title="Insert GIF"
                                                 onClick={() => setEmojiBoardTab(EmojiBoardTab.Gif)}
                                                 variant="SurfaceVariant"
                                                 size="300"
@@ -725,6 +741,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                                 aria-pressed={
                                                     emojiBoardTab === EmojiBoardTab.Sticker
                                                 }
+                                                aria-label="Insert sticker"
+                                                title="Insert sticker"
                                                 onClick={() =>
                                                     setEmojiBoardTab(EmojiBoardTab.Sticker)
                                                 }
@@ -746,6 +764,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                                     ? !!emojiBoardTab
                                                     : emojiBoardTab === EmojiBoardTab.Emoji
                                             }
+                                            aria-label="Insert emoji"
+                                            title="Insert emoji"
                                             onClick={() => setEmojiBoardTab(EmojiBoardTab.Emoji)}
                                             variant="SurfaceVariant"
                                             size="300"
@@ -769,6 +789,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                 variant="SurfaceVariant"
                                 size="300"
                                 radii="300"
+                                aria-label="Send message"
+                                title="Send message"
                             >
                                 <Icon src={Icons.Send} />
                             </IconButton>

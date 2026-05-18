@@ -130,6 +130,7 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
         : isValidTab(tabFromQuery)
             ? tabFromQuery
             : 'active';
+    const showDiagnostics = searchParams.get('diagnostics') === '1';
     const diagnostics = useGovernanceDiagnostics(roomId, selectedProposalId ?? undefined);
 
     const activeProposals = useMemo(
@@ -177,25 +178,28 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
             </header>
 
 
-            <section
-                style={{
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 12,
-                    background: 'var(--bg-surface)',
-                    padding: 12,
-                    display: 'grid',
-                    gap: 4,
-                }}
-            >
-                <strong style={{ fontSize: 13 }}>Governance event diagnostics</strong>
-                <small style={{ color: 'var(--text-secondary)' }}>
-                    Invalid proposals: {diagnostics.invalidProposalEvents} • Migrated proposals:{' '}
-                    {diagnostics.migratedProposalEvents} • Invalid votes:{' '}
-                    {diagnostics.invalidVoteEvents} • Migrated votes:{' '}
-                    {diagnostics.migratedVoteEvents} • Duplicate votes dropped:{' '}
-                    {diagnostics.duplicateVoteEventsDropped}
-                </small>
-            </section>
+            {showDiagnostics ? (
+                <section
+                    data-testid="governance-diagnostics"
+                    style={{
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 12,
+                        background: 'var(--bg-surface)',
+                        padding: 12,
+                        display: 'grid',
+                        gap: 4,
+                    }}
+                >
+                    <strong style={{ fontSize: 13 }}>Governance event diagnostics</strong>
+                    <small style={{ color: 'var(--text-secondary)' }}>
+                        Invalid proposals: {diagnostics.invalidProposalEvents} • Migrated
+                        proposals: {diagnostics.migratedProposalEvents} • Invalid votes:{' '}
+                        {diagnostics.invalidVoteEvents} • Migrated votes:{' '}
+                        {diagnostics.migratedVoteEvents} • Duplicate votes dropped:{' '}
+                        {diagnostics.duplicateVoteEventsDropped}
+                    </small>
+                </section>
+            ) : null}
 
             {selectedProposalId ? (
                 <section
@@ -233,14 +237,38 @@ export const GovernanceDashboard = ({ roomId }: { roomId: string }) => {
             {!selectedProposalId && activeTab === 'active' ? (
                 <section style={{ display: 'grid', gap: 8 }}>
                     <h3 style={{ margin: 0 }}>Active Proposals</h3>
-                    {activeProposals.map((proposal) => (
-                        <ProposalCard
+                    {activeProposals.length > 0 ? (
+                        <div
+                            data-testid="governance-primary-action-hint"
+                            style={{
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                                padding: '2px 4px',
+                            }}
+                        >
+                            Start here: review the top proposal.
+                        </div>
+                    ) : null}
+                    {activeProposals.map((proposal, idx) => (
+                        <div
                             key={proposal.proposalEventId}
-                            roomId={roomId}
-                            proposal={proposal}
-                            currentUserId={currentUserId}
-                            onOpen={setSelectedProposalId}
-                        />
+                            style={
+                                idx === 0
+                                    ? {
+                                          outline: '2px solid var(--accent-primary)',
+                                          outlineOffset: 2,
+                                          borderRadius: 12,
+                                      }
+                                    : undefined
+                            }
+                        >
+                            <ProposalCard
+                                roomId={roomId}
+                                proposal={proposal}
+                                currentUserId={currentUserId}
+                                onOpen={setSelectedProposalId}
+                            />
+                        </div>
                     ))}
                     {!proposals.loading && activeProposals.length === 0 ? (
                         <div style={{ color: 'var(--text-secondary)', padding: 8 }}>

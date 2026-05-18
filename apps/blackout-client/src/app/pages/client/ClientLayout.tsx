@@ -74,8 +74,53 @@ const BASE_RIGHT_PANELS: Exclude<RightPanelType, null>[] = [
     'threads',
     'pins',
     'search',
+    'notifications',
     'governance',
 ];
+
+const RIGHT_PANEL_LABELS: Record<Exclude<RightPanelType, null>, string> = {
+    members: 'Members',
+    threads: 'Threads',
+    pins: 'Pins',
+    search: 'Search',
+    notifications: 'Notifications',
+    governance: 'Governance',
+    monetization: 'Monetization',
+    roles: 'Roles',
+    townhall_sfu: 'Townhall SFU',
+    widget_shell_layouts: 'Widget layouts',
+    media_pipeline: 'Media pipeline',
+    media_spoilers: 'Media spoilers',
+    media_codeblocks: 'Code blocks',
+    media_link_previews: 'Link previews',
+    element_call: 'Element call',
+    matrix_widget_compat: 'Widget compat',
+    soundboard: 'Soundboard',
+    numbers_station: 'Numbers station',
+    stage_channels: 'Stage channels',
+};
+
+const RIGHT_PANEL_TOOLTIPS: Record<Exclude<RightPanelType, null>, string> = {
+    members: 'Show members of this den',
+    threads: 'Show threads in this den',
+    pins: 'Show pinned messages',
+    search: 'Search messages in this den',
+    notifications: 'Show notifications for this den',
+    governance: 'Open the governance dashboard for this den',
+    monetization: 'Open monetization tools for this den',
+    roles: 'Manage roles for this den',
+    townhall_sfu: 'Open the townhall SFU widget',
+    widget_shell_layouts: 'Open widget shell layouts',
+    media_pipeline: 'Open the media pipeline widget',
+    media_spoilers: 'Open the media spoilers widget',
+    media_codeblocks: 'Open the code blocks widget',
+    media_link_previews: 'Open the link previews widget',
+    element_call: 'Open Element Call',
+    matrix_widget_compat: 'Open the Matrix widget compatibility shim',
+    soundboard: 'Open the soundboard',
+    numbers_station: 'Open the numbers station broadcast surface',
+    stage_channels: 'Open stage channels',
+};
 
 const roomKindIcon = (room: Room): string => {
     const type = room.getType?.() ?? '';
@@ -1703,9 +1748,15 @@ export const ClientLayout = () => {
                                   key={panel}
                                   type="button"
                                   onClick={() => setRightPanel(panel)}
+                                  aria-label={RIGHT_PANEL_TOOLTIPS[panel]}
+                                  title={RIGHT_PANEL_TOOLTIPS[panel]}
+                                  aria-pressed={rightPanel === panel}
                                   style={{
                                       border: '1px solid var(--border-default)',
-                                      background: 'var(--bg-input)',
+                                      background:
+                                          rightPanel === panel
+                                              ? 'var(--accent-muted, var(--bg-input))'
+                                              : 'var(--bg-input)',
                                       color: 'var(--text-primary)',
                                       borderRadius: 8,
                                       padding: '4px 8px',
@@ -1713,7 +1764,7 @@ export const ClientLayout = () => {
                                       whiteSpace: 'nowrap',
                                   }}
                               >
-                                  {panel}
+                                  {RIGHT_PANEL_LABELS[panel]}
                               </button>
                           ))
                         : null}

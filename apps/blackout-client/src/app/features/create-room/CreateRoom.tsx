@@ -137,17 +137,6 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
 
   return (
     <Box as="form" onSubmit={handleSubmit} grow="Yes" direction="Column" gap="500">
-      <Box direction="Column" gap="100">
-        <Text size="L400">Access</Text>
-        <CreateRoomKindSelector
-          value={kind}
-          onSelect={setKind}
-          canRestrict={allowRestricted}
-          disabled={disabled}
-          getIcon={getCreateRoomKindToIcon}
-          targetLabel={BLACKOUT_TERMS.den.singular}
-        />
-      </Box>
       <Box shrink="No" direction="Column" gap="100">
         <Text size="L400">Name</Text>
         <Input
@@ -162,32 +151,50 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
           disabled={disabled}
         />
       </Box>
-      <Box shrink="No" direction="Column" gap="100">
-        <Text size="L400">Topic (Optional)</Text>
-        <TextArea
-          name="topicTextAria"
-          size="500"
-          variant="SurfaceVariant"
-          radii="400"
-          disabled={disabled}
-        />
+
+      <Box justifyContent="End">
+        <Chip
+          radii="Pill"
+          before={<Icon src={advance ? Icons.ChevronTop : Icons.ChevronBottom} size="50" />}
+          onClick={() => setAdvance(!advance)}
+          type="button"
+        >
+          <Text size="T200">Advanced options</Text>
+        </Chip>
       </Box>
 
-      {kind === CreateRoomKind.Public && <CreateRoomAliasInput disabled={disabled} />}
+      {advance && (
+        <Box direction="Column" gap="100">
+          <Text size="L400">Access</Text>
+          <CreateRoomKindSelector
+            value={kind}
+            onSelect={setKind}
+            canRestrict={allowRestricted}
+            disabled={disabled}
+            getIcon={getCreateRoomKindToIcon}
+            targetLabel={BLACKOUT_TERMS.den.singular}
+          />
+        </Box>
+      )}
+      {advance && (
+        <Box shrink="No" direction="Column" gap="100">
+          <Text size="L400">Topic (Optional)</Text>
+          <TextArea
+            name="topicTextAria"
+            size="500"
+            variant="SurfaceVariant"
+            radii="400"
+            disabled={disabled}
+          />
+        </Box>
+      )}
 
+      {advance && kind === CreateRoomKind.Public && <CreateRoomAliasInput disabled={disabled} />}
+
+      {advance && (
       <Box shrink="No" direction="Column" gap="100">
         <Box gap="200" alignItems="End">
           <Text size="L400">Options</Text>
-          <Box grow="Yes" justifyContent="End">
-            <Chip
-              radii="Pill"
-              before={<Icon src={advance ? Icons.ChevronTop : Icons.ChevronBottom} size="50" />}
-              onClick={() => setAdvance(!advance)}
-              type="button"
-            >
-              <Text size="T200">Advanced Options</Text>
-            </Chip>
-          </Box>
         </Box>
         {allowAdditionalCreators && (
           <SequenceCard
@@ -224,7 +231,7 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
                 }
               />
             </SequenceCard>
-            {advance && (allowKnock || allowKnockRestricted) && (
+            {(allowKnock || allowKnockRestricted) && (
               <SequenceCard
                 style={{ padding: config.space.S300 }}
                 variant="SurfaceVariant"
@@ -267,15 +274,14 @@ export function CreateRoomForm({ defaultKind, space, onCreate }: CreateRoomFormP
             }
           />
         </SequenceCard>
-        {advance && (
-          <RoomVersionSelector
-            versions={roomVersions?.available ? Object.keys(roomVersions.available) : ['1']}
-            value={selectedRoomVersion}
-            onChange={handleRoomVersionChange}
-            disabled={disabled}
-          />
-        )}
+        <RoomVersionSelector
+          versions={roomVersions?.available ? Object.keys(roomVersions.available) : ['1']}
+          value={selectedRoomVersion}
+          onChange={handleRoomVersionChange}
+          disabled={disabled}
+        />
       </Box>
+      )}
 
       {error && (
         <Box style={{ color: color.Critical.Main }} alignItems="Center" gap="200">

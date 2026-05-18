@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Text, IconButton, Icon, Icons, Scroll } from 'folds';
+import React, { useState } from 'react';
+import { Box, Chip, Text, IconButton, Icon, Icons, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { MatrixId } from './MatrixId';
 import { Profile } from './Profile';
@@ -17,10 +17,20 @@ import { WidgetAlertTokens } from '../widget-alerts';
 import { SimulcastDestinations } from '../simulcast-destinations';
 import { IntegrationsHealth } from '../integrations-health';
 
+type AccountTab = 'identity' | 'bridges' | 'health';
+
+const TABS: ReadonlyArray<{ id: AccountTab; label: string }> = [
+  { id: 'identity', label: 'Identity' },
+  { id: 'bridges', label: 'Bridges & webhooks' },
+  { id: 'health', label: 'Health' },
+];
+
 type AccountProps = {
   requestClose: () => void;
 };
 export function Account({ requestClose }: AccountProps) {
+  const [tab, setTab] = useState<AccountTab>('identity');
+
   return (
     <Page>
       <PageHeader outlined={false}>
@@ -40,22 +50,51 @@ export function Account({ requestClose }: AccountProps) {
       <Box grow="Yes">
         <Scroll hideTrack visibility="Hover">
           <PageContent>
+            <Box
+              role="tablist"
+              aria-label="Account sections"
+              direction="Row"
+              gap="200"
+              style={{ paddingBottom: 12, flexWrap: 'wrap' }}
+            >
+              {TABS.map((entry) => (
+                <Chip
+                  key={entry.id}
+                  variant={tab === entry.id ? 'Primary' : 'SurfaceVariant'}
+                  radii="Pill"
+                  outlined
+                  role="tab"
+                  aria-selected={tab === entry.id}
+                  onClick={() => setTab(entry.id)}
+                >
+                  <Text size="B300">{entry.label}</Text>
+                </Chip>
+              ))}
+            </Box>
             <Box direction="Column" gap="700">
-              <Profile />
-              <MatrixId />
-              <ContactInformation />
-              <LinkedAccounts />
-              <TwitchChatBridges />
-              <YoutubeChatBridges />
-              <KickChatBridges />
-              <DiscordCompatWebhooks />
-              <OutboundEventWebhooks />
-              <TwitchIrcBotTokens />
-              <ObsWsPasswords />
-              <WidgetAlertTokens />
-              <SimulcastDestinations />
-              <IntegrationsHealth />
-              <IgnoredUserList />
+              {tab === 'identity' && (
+                <>
+                  <Profile />
+                  <MatrixId />
+                  <ContactInformation />
+                  <LinkedAccounts />
+                  <IgnoredUserList />
+                </>
+              )}
+              {tab === 'bridges' && (
+                <>
+                  <TwitchChatBridges />
+                  <YoutubeChatBridges />
+                  <KickChatBridges />
+                  <DiscordCompatWebhooks />
+                  <OutboundEventWebhooks />
+                  <TwitchIrcBotTokens />
+                  <ObsWsPasswords />
+                  <WidgetAlertTokens />
+                  <SimulcastDestinations />
+                </>
+              )}
+              {tab === 'health' && <IntegrationsHealth />}
             </Box>
           </PageContent>
         </Scroll>

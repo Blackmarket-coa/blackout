@@ -376,7 +376,9 @@ describe('ClientLayout UI wiring', () => {
         });
 
         const governanceButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'governance'
+            (button) =>
+                button.getAttribute('aria-label') ===
+                'Open the governance dashboard for this den'
         ) as HTMLButtonElement;
         expect(governanceButton).toBeTruthy();
 

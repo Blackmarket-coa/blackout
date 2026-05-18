@@ -293,6 +293,8 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                     size="300"
                     radii="300"
                     onClick={() => setToolbar(!toolbar)}
+                    aria-label={toolbar ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
+                    title={toolbar ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
                   >
                     <Icon size="400" src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
                   </IconButton>
@@ -323,6 +325,8 @@ export const MessageEditor = as<'div', MessageEditorProps>(
                       >
                         <IconButton
                           aria-pressed={anchor !== undefined}
+                          aria-label="Insert emoji"
+                          title="Insert emoji"
                           onClick={
                             ((evt) =>
                               setAnchor(
