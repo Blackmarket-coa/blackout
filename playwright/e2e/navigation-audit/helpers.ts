@@ -30,6 +30,8 @@ export const expectHomeButtonVisible = async (page: Page): Promise<void> => {
     const candidates = [
         '[data-testid="primary-rail-home"]',
         '[data-testid="bottom-tab-home"]',
+        '[data-testid="workspace-tab-bar-home"]',
+        '[data-panel-id="shell.home"]',
         'a[href="/home"]',
         'a[href="/home/"]',
         '[aria-label="Home"]',

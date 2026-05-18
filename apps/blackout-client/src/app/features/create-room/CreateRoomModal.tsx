@@ -50,7 +50,14 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
               returnFocusOnDeactivate: true,
             }}
           >
-            <Modal size="300" flexHeight role="dialog" aria-modal aria-labelledby={titleId}>
+            <Modal
+              size="300"
+              flexHeight
+              role="dialog"
+              aria-modal
+              aria-labelledby={titleId}
+              data-testid="modal-createRoom"
+            >
               <Box direction="Column">
                 <Header
                   size="500"

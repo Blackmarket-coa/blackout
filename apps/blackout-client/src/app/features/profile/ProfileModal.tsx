@@ -116,6 +116,7 @@ export const ProfileModal = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
+            data-testid="modal-profile"
             style={{
                 position: 'fixed',
                 inset: 0,

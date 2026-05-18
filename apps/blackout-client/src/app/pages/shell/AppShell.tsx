@@ -2,6 +2,9 @@ import { useEffect, type CSSProperties } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
 import { shellModeAtom } from '../../state/navigation';
+import { createSpaceModalAtom } from '../../state/createSpaceModal';
+import { createRoomModalAtom } from '../../state/createRoomModal';
+import { searchModalAtom } from '../../state/searchModal';
 import { isMobileViewport } from '../client/layoutMetrics';
 import { useViewportWidth } from '../../hooks/useViewportWidth';
 import { resolveShellMode } from './modeRouter';
@@ -71,6 +74,9 @@ const OUTLET_MOBILE_STYLE: CSSProperties = {
 export const AppShell = () => {
     const location = useLocation();
     const setShellMode = useSetAtom(shellModeAtom);
+    const setCreateSpaceModal = useSetAtom(createSpaceModalAtom);
+    const setCreateRoomModal = useSetAtom(createRoomModalAtom);
+    const setSearchModal = useSetAtom(searchModalAtom);
     const viewportWidth = useViewportWidth();
     const mobile = isMobileViewport(viewportWidth);
 
@@ -78,6 +84,45 @@ export const AppShell = () => {
     useEffect(() => {
         setShellMode(mode);
     }, [mode, setShellMode]);
+
+    // Dev-only bridge so the navigation audit (tools/audit-navigation/crawl-web.ts
+    // and playwright/e2e/navigation-audit/modal-closure.spec.ts) can open
+    // every registered modal deterministically. Production builds never
+    // see this — `import.meta.env.DEV` is statically dead-code-eliminated.
+    useEffect(() => {
+        if (!import.meta.env.DEV) return undefined;
+        const win = window as unknown as {
+            __openModal?: (name: string) => void;
+            __closeModal?: (name: string) => void;
+        };
+        const open: Record<string, () => void> = {
+            createSpace: () => setCreateSpaceModal({}),
+            createRoom: () => setCreateRoomModal({}),
+            search: () => setSearchModal(true),
+        };
+        const close: Record<string, () => void> = {
+            createSpace: () => setCreateSpaceModal(undefined),
+            createRoom: () => setCreateRoomModal(undefined),
+            search: () => setSearchModal(false),
+        };
+        win.__openModal = (name) => {
+            const opener = open[name];
+            if (!opener) {
+                // eslint-disable-next-line no-console
+                console.warn(`__openModal: no opener wired for "${name}"`);
+                return;
+            }
+            opener();
+        };
+        win.__closeModal = (name) => {
+            const closer = close[name];
+            if (closer) closer();
+        };
+        return () => {
+            delete win.__openModal;
+            delete win.__closeModal;
+        };
+    }, [setCreateSpaceModal, setCreateRoomModal, setSearchModal]);
 
     return (
         <div
