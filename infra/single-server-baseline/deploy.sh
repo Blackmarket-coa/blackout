@@ -16,8 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 INFRA_DIR="${INFRA_DIR:-/opt/blackout-infra}"
 
-echo "==> Pulling latest code in $REPO_DIR..."
-cd "$REPO_DIR" && git pull origin develop
+echo "==> Syncing $REPO_DIR to origin/develop..."
+cd "$REPO_DIR" && git fetch origin develop && git reset --hard origin/develop
 
 echo "==> Building images..."
 cd "$REPO_DIR" && docker build -f apps/blackout-client/Dockerfile -t blackout-frontend:stable .
