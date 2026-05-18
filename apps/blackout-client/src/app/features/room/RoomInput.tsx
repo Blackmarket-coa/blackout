@@ -543,9 +543,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 } as any);
                 // Best-effort Tenor share registration (TOS requirement).
                 registerTenorShare(item.id, query || undefined).catch(() => undefined);
-            } catch {
-                // Swallow — failures here shouldn't crash the composer.
-                // The user can retry from the picker.
+            } catch (err) {
+                // Surface to the devtools console so failures aren't silent
+                // (e.g. CSP blocking the binary proxy, homeserver upload
+                // refusal). User-facing toast feedback is tracked as a
+                // follow-up — no toast primitive exists in the composer
+                // today, so the existing sticker/GIF handlers above also
+                // swallow without UI feedback.
+                // eslint-disable-next-line no-console
+                console.warn('tenor: failed to send GIF', err);
             }
         };
 

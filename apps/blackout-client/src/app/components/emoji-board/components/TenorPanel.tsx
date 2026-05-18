@@ -74,6 +74,8 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                     onDisabled?.();
                     return;
                 }
+                // eslint-disable-next-line no-console
+                console.warn('tenor: load failed', err);
                 setState({
                     kind: 'error',
                     message: 'Could not load GIFs. Check your connection and try again.',
