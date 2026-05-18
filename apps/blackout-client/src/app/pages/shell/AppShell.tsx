@@ -85,16 +85,19 @@ export const AppShell = () => {
         setShellMode(mode);
     }, [mode, setShellMode]);
 
-    // Dev-only bridge so the navigation audit (tools/audit-navigation/crawl-web.ts
+    // Bridge so the navigation audit (tools/audit-navigation/crawl-web.ts
     // and playwright/e2e/navigation-audit/modal-closure.spec.ts) can open
-    // every registered modal deterministically. Production builds never
-    // see this — `import.meta.env.DEV` is statically dead-code-eliminated.
+    // every registered modal deterministically. Enabled in dev builds and
+    // whenever the audit driver sets `window.__BLACKOUT_AUDIT__ = true`
+    // via Playwright's `addInitScript`, so the same wiring works against
+    // `vite preview` production bundles.
     useEffect(() => {
-        if (!import.meta.env.DEV) return undefined;
         const win = window as unknown as {
+            __BLACKOUT_AUDIT__?: boolean;
             __openModal?: (name: string) => void;
             __closeModal?: (name: string) => void;
         };
+        if (!import.meta.env.DEV && win.__BLACKOUT_AUDIT__ !== true) return undefined;
         const open: Record<string, () => void> = {
             createSpace: () => setCreateSpaceModal({}),
             createRoom: () => setCreateRoomModal({}),

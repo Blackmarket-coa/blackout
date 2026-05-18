@@ -21,6 +21,16 @@ export const setViewport = async (page: Page, name: ViewportName): Promise<void>
 };
 
 /**
+ * Returns true when the client is rendering its bootstrap auth gate
+ * (`<main data-shell="bootstrap">`) rather than the AppShell. The
+ * navigation-audit specs use this to skip route-level invariants that
+ * only apply once a real Matrix session exists — the gate's own
+ * invariants are exercised by the aggregate crawler run.
+ */
+export const isBootstrapGated = async (page: Page): Promise<boolean> =>
+    (await page.locator('[data-shell="bootstrap"]').count()) > 0;
+
+/**
  * Asserts an AppShell-rendered Home affordance is present and visible.
  * Tolerates the three places we add Home: the desktop PrimaryRail (via
  * testid or its slotted `homeButton`), the mobile BottomTabBar, and any
@@ -31,6 +41,7 @@ export const expectHomeButtonVisible = async (page: Page): Promise<void> => {
         '[data-testid="primary-rail-home"]',
         '[data-testid="bottom-tab-home"]',
         '[data-testid="workspace-tab-bar-home"]',
+        '[data-testid="bootstrap-home"]',
         '[data-panel-id="shell.home"]',
         'a[href="/home"]',
         'a[href="/home/"]',

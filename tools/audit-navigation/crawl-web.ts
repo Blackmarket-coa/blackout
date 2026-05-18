@@ -334,16 +334,54 @@ const run = async (): Promise<number> => {
     try {
         browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
+        // Surface the audit sentinel before any app code runs so AppShell's
+        // dev-bridge effect picks it up on first render. Matches the gate
+        // in `apps/blackout-client/src/app/pages/shell/AppShell.tsx`.
+        await context.addInitScript(() => {
+            (window as unknown as { __BLACKOUT_AUDIT__: boolean }).__BLACKOUT_AUDIT__ = true;
+        });
         const page = await context.newPage();
 
-        for (const route of WEB_ROUTES) {
-            let routeClean = true;
+        // Detect the bootstrap auth gate once. When the client renders
+        // `<main data-shell="bootstrap">` it means no Matrix session is
+        // available, so every route in WEB_ROUTES collapses to the same
+        // signed-out screen. Emit a single aggregate finding instead of
+        // 42 × 3 duplicates, then audit the gate itself for the same
+        // invariants (it still needs a Home affordance, no overflow, etc.).
+        await visit(page, buildUrl(baseUrl, '/home/'), VIEWPORTS[2]);
+        const gateMounted = await page
+            .locator('[data-shell="bootstrap"]')
+            .first()
+            .isVisible()
+            .catch(() => false);
+
+        if (gateMounted) {
+            findings.push({
+                category: 'home-button',
+                severity: 'warning',
+                route: '*',
+                message:
+                    'Bootstrap auth gate intercepted every route — audit running against the signed-out shell. Audit the gate, not the AppShell, until a test session is wired.',
+            });
             for (const viewport of VIEWPORTS) {
-                const routeFindings = await auditRoute(page, route, viewport, baseUrl);
-                if (routeFindings.length > 0) routeClean = false;
-                findings.push(...routeFindings);
+                const gateRoute: WebRoute = {
+                    id: 'bootstrap-gate',
+                    path: '/home/',
+                    mode: 'other',
+                };
+                const gateFindings = await auditRoute(page, gateRoute, viewport, baseUrl);
+                findings.push(...gateFindings);
             }
-            if (routeClean) cleanRoutes.push(route.path);
+        } else {
+            for (const route of WEB_ROUTES) {
+                let routeClean = true;
+                for (const viewport of VIEWPORTS) {
+                    const routeFindings = await auditRoute(page, route, viewport, baseUrl);
+                    if (routeFindings.length > 0) routeClean = false;
+                    findings.push(...routeFindings);
+                }
+                if (routeClean) cleanRoutes.push(route.path);
+            }
         }
 
         findings.push(...(await auditModals(page, baseUrl)));
