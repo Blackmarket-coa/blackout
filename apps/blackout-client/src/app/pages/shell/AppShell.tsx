@@ -12,6 +12,8 @@ import { BottomTabBar } from './BottomTabBar';
 import { MobileTopBar } from './MobileTopBar';
 import { DynamicRightPanel } from './DynamicRightPanel';
 import { WorkspaceTabBar } from './WorkspaceTabBar';
+import { DialogHost } from '../../shell/DialogHost';
+import { getModalCloser, getModalOpener } from '../../shell/modalOpenerRegistry';
 
 const ROOT_STYLE: CSSProperties = {
     display: 'flex',
@@ -94,11 +96,11 @@ export const AppShell = () => {
     useEffect(() => {
         const win = window as unknown as {
             __BLACKOUT_AUDIT__?: boolean;
-            __openModal?: (name: string) => void;
+            __openModal?: (name: string, args?: Record<string, unknown>) => void;
             __closeModal?: (name: string) => void;
         };
         if (!import.meta.env.DEV && win.__BLACKOUT_AUDIT__ !== true) return undefined;
-        const open: Record<string, () => void> = {
+        const open: Record<string, (args?: Record<string, unknown>) => void> = {
             createSpace: () => setCreateSpaceModal({}),
             createRoom: () => setCreateRoomModal({}),
             search: () => setSearchModal(true),
@@ -108,17 +110,17 @@ export const AppShell = () => {
             createRoom: () => setCreateRoomModal(undefined),
             search: () => setSearchModal(false),
         };
-        win.__openModal = (name) => {
-            const opener = open[name];
+        win.__openModal = (name, args) => {
+            const opener = open[name] ?? getModalOpener(name);
             if (!opener) {
                 // eslint-disable-next-line no-console
                 console.warn(`__openModal: no opener wired for "${name}"`);
                 return;
             }
-            opener();
+            opener(args);
         };
         win.__closeModal = (name) => {
-            const closer = close[name];
+            const closer = close[name] ?? getModalCloser(name);
             if (closer) closer();
         };
         return () => {
@@ -143,6 +145,7 @@ export const AppShell = () => {
                 {mobile ? null : <DynamicRightPanel />}
             </div>
             {mobile ? <BottomTabBar /> : null}
+            <DialogHost />
         </div>
     );
 };

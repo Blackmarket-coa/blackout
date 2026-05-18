@@ -10,10 +10,14 @@ import { defineConfig, devices } from '@playwright/test';
  */
 const PORT = Number.parseInt(process.env.E2E_PORT ?? '4173', 10);
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
+const storageStatePath =
+    process.env.BLACKOUT_AUDIT_STORAGE_STATE ??
+    'audit/navigation/.playwright-state/storageState.json';
 
 export default defineConfig({
     testDir: 'playwright/e2e/navigation-audit',
     outputDir: 'audit/navigation/playwright-results',
+    globalSetup: './playwright/e2e/navigation-audit/global-setup.ts',
     reporter: process.env.CI
         ? [['github'], ['list']]
         : [['list'], ['html', { outputFolder: 'audit/navigation/playwright-html', open: 'never' }]],
@@ -25,6 +29,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
         trace: 'on-first-retry',
         video: 'retain-on-failure',
+        storageState: storageStatePath,
     },
     projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
     webServer: {
