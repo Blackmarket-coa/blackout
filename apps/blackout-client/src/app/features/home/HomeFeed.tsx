@@ -5,7 +5,7 @@ import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
-import { PluginCardRail } from './PluginCardRail';
+import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
 import {
     buildHomeFeed,
     groupHomeFeedByBucket,
@@ -155,9 +155,22 @@ const HomeFeedCard = ({ item }: { item: HomeFeedItem }): JSX.Element => (
  */
 export const HomeFeed = (): JSX.Element => {
     const rooms = useAtomValue(joinedRoomsAtom);
+    const installed = useAtomValue(installedPluginsAtom);
 
     const items = useMemo(() => buildHomeFeed(rooms, Date.now()), [rooms]);
     const groups = useMemo(() => groupHomeFeedByBucket(items), [items]);
+
+    const pluginCards = useMemo(
+        () =>
+            installed
+                .filter((r) => r.status === 'enabled' && r.manifest.homepageCard)
+                .sort(
+                    (a, b) =>
+                        (a.manifest.homepageCard?.order ?? 0) -
+                        (b.manifest.homepageCard?.order ?? 0)
+                ),
+        [installed]
+    );
 
     return (
         <section style={layoutStyle} data-shell-region="home-feed">
@@ -166,7 +179,34 @@ export const HomeFeed = (): JSX.Element => {
                 <p style={subtitleStyle}>Latest activity from your {BLACKOUT_TERMS.den.plural}.</p>
             </header>
             <TopicChipBar />
-            <PluginCardRail />
+            {pluginCards.length > 0 ? (
+                <section
+                    style={sectionStyle}
+                    data-shell-region="home-plugin-cards"
+                    data-testid="home-plugin-cards"
+                >
+                    <header style={sectionLabelStyle}>Plugins</header>
+                    {pluginCards.map((record) => {
+                        const card = record.manifest.homepageCard!;
+                        return (
+                            <Link
+                                key={record.manifest.id}
+                                to={card.to}
+                                style={cardStyle}
+                                data-testid="home-plugin-card"
+                                data-plugin-id={record.manifest.id}
+                            >
+                                <span style={cardBodyStyle}>
+                                    <span style={cardTitleStyle}>{card.title}</span>
+                                    {card.subtitle ? (
+                                        <span style={cardSubtitleStyle}>{card.subtitle}</span>
+                                    ) : null}
+                                </span>
+                            </Link>
+                        );
+                    })}
+                </section>
+            ) : null}
             {items.length === 0 ? (
                 <div style={emptyStateStyle} data-testid="home-feed-empty">
                     <strong>No activity yet.</strong>

@@ -18,6 +18,7 @@ export function Modal500({ requestClose, children, ariaLabel }: Modal500Props) {
             clickOutsideDeactivates: true,
             onDeactivate: requestClose,
             escapeDeactivates: stopPropagation,
+            returnFocusOnDeactivate: true,
           }}
         >
           <Modal

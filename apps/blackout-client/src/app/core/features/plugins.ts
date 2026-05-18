@@ -1,3 +1,7 @@
+import {
+    addRuntimeModuleAllowedId,
+    removeRuntimeModuleAllowedId,
+} from './manifest';
 import type { FeatureModulePlugin } from './types';
 
 /**
@@ -31,12 +35,24 @@ function notify(): void {
 }
 
 export function registerDynamicFeaturePlugin(plugin: FeatureModulePlugin): void {
+    addRuntimeModuleAllowedId(plugin.id);
+    for (const module of plugin.modules) {
+        addRuntimeModuleAllowedId(module.feature.id);
+    }
     dynamicPlugins.set(plugin.id, plugin);
     notify();
 }
 
 export function unregisterDynamicFeaturePlugin(pluginId: string): void {
-    if (dynamicPlugins.delete(pluginId)) notify();
+    const existing = dynamicPlugins.get(pluginId);
+    if (!dynamicPlugins.delete(pluginId)) return;
+    removeRuntimeModuleAllowedId(pluginId);
+    if (existing) {
+        for (const module of existing.modules) {
+            removeRuntimeModuleAllowedId(module.feature.id);
+        }
+    }
+    notify();
 }
 
 export function listDynamicFeaturePlugins(): FeatureModulePlugin[] {

@@ -4,16 +4,34 @@ import { buildFeatureRegistry } from './buildRegistry';
 import { composeFeatureRoutes } from './composition';
 import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
+import { getAllFeaturePlugins } from './plugins';
+import { PluginRouteBoundary } from './PluginRouteBoundary';
 import type { CapabilityGateContext } from './capabilityGate';
+import type { FeatureRoute } from './types';
 
 /**
  * Builds a registry from the context's `flags` so runtime capability +
  * flag changes (env-driven toggles, dev overrides) also re-include
  * features that were filtered out at module-load time. Feature flags not
- * supplied fall back to `defaultFeatureFlags`.
+ * supplied fall back to `defaultFeatureFlags`. The dynamic plugin
+ * registry is consulted so marketplace-installed plugins contribute
+ * routes alongside the static ones.
  */
 const registryForContext = (context: CapabilityGateContext) =>
-    buildFeatureRegistry({ ...defaultFeatureFlags, ...(context.flags ?? {}) } as FeatureFlags);
+    buildFeatureRegistry(
+        { ...defaultFeatureFlags, ...(context.flags ?? {}) } as FeatureFlags,
+        getAllFeaturePlugins()
+    );
+
+/**
+ * Wraps a route's element in `PluginRouteBoundary` so a crashing plugin
+ * is contained to its own destination instead of blanking the shell.
+ */
+const renderRouteElement = (route: FeatureRoute) => (
+    <PluginRouteBoundary pluginId={route.pluginId ?? route.path}>
+        {createElement(route.component)}
+    </PluginRouteBoundary>
+);
 
 /**
  * Hook returning a `<Route>` element array ready to splice into an
@@ -32,7 +50,7 @@ export const useRegistryRouteElements = () => {
         createElement(Route, {
             key: route.path,
             path: route.path,
-            element: createElement(route.component),
+            element: renderRouteElement(route),
         })
     );
 };
@@ -47,7 +65,7 @@ export function RegistryRouteList() {
     const objects: RouteObject[] = composeFeatureRoutes(registryForContext(ctx), ctx).map(
         (route) => ({
             path: route.path,
-            element: createElement(route.component),
+            element: renderRouteElement(route),
         })
     );
     return useRoutes(objects);
@@ -64,6 +82,6 @@ export const buildRegistryRouteObjects = (
     const routes = composeFeatureRoutes(registryForContext(context), context);
     return routes.map((route) => ({
         path: route.path,
-        element: createElement(route.component),
+        element: renderRouteElement(route),
     }));
 };

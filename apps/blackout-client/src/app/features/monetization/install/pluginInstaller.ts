@@ -4,7 +4,10 @@ import {
     registerDynamicFeaturePlugin,
     unregisterDynamicFeaturePlugin,
 } from '../../../core/features/plugins';
-import type { FeatureModulePlugin } from '../../../core/features/types';
+import type {
+    FeatureModulePlugin,
+    ShellPanelEntry,
+} from '../../../core/features/types';
 import type {
     InstalledPluginRecord,
     InstalledPluginStatus,
@@ -36,10 +39,47 @@ function base64ToBytes(base64: string): Uint8Array {
     return out;
 }
 
+/**
+ * Reserved high-order band so installed-plugin pinned-nav entries sort
+ * below core nav (which uses orders < 1000). Individual plugins can pick
+ * their own offset inside the band via `pinnedNav.order`.
+ */
+const PINNED_NAV_ORDER_BAND = 1000;
+
+function buildPanelsFromManifest(manifest: PluginManifest): ShellPanelEntry[] {
+    const panels: ShellPanelEntry[] = [];
+    if (manifest.pinnedNav) {
+        panels.push({
+            id: `${manifest.id}.pinned-nav`,
+            kind: 'sidebar',
+            label: manifest.pinnedNav.label,
+            to: manifest.pinnedNav.to,
+            order: manifest.pinnedNav.order ?? PINNED_NAV_ORDER_BAND,
+        });
+    }
+    return panels;
+}
+
 function manifestPluginToFeatureModulePlugin(manifest: PluginManifest): FeatureModulePlugin {
+    const panels = buildPanelsFromManifest(manifest);
     return {
         id: manifest.id,
-        modules: [],
+        modules: [
+            {
+                feature: {
+                    id: manifest.id,
+                    name: manifest.name,
+                    customizations: [
+                        {
+                            id: `${manifest.id}-installed`,
+                            name: manifest.name,
+                            category: 'visual/layout plugin',
+                            panels,
+                        },
+                    ],
+                },
+            },
+        ],
     };
 }
 
