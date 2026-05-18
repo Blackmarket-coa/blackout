@@ -53,6 +53,7 @@ import { LifecycleSyncBroker } from './platform/LifecycleSyncBroker';
 import { NativeBridgeListener } from './platform/NativeBridgeListener';
 import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
+import { ConfirmProvider } from './app/components/confirm-dialog';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -133,10 +134,10 @@ const DevCapabilitySeeder = () => {
 };
 
 const RouterRoot = () => (
-    <>
+    <ConfirmProvider>
         <NativeBridgeListener />
         <Outlet />
-    </>
+    </ConfirmProvider>
 );
 
 const buildAppRouter = (capabilityContext: {

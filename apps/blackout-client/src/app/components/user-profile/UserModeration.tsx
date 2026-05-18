@@ -1,6 +1,9 @@
 import { Box, Button, color, config, Icon, Icons, Spinner, Text, Input } from 'folds';
 import React, { useCallback, useRef } from 'react';
 import { useRoom } from '../../hooks/useRoom';
+import { useConfirm } from '../confirm-dialog';
+import { formatMatrixError } from '../../utils/matrixError';
+import { getMemberDisplayName } from '../../utils/room';
 import { CutoutCard } from '../cutout-card';
 import { SettingTile } from '../setting-tile';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
@@ -218,6 +221,8 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
   const mx = useMatrixClient();
   const room = useRoom();
   const reasonInputRef = useRef<HTMLInputElement>(null);
+  const confirm = useConfirm();
+  const displayName = getMemberDisplayName(room, userId) ?? userId;
 
   const getReason = useCallback((): string | undefined => {
     const reason = reasonInputRef.current?.value.trim() || undefined;
@@ -238,6 +243,36 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
       await mx.ban(room.roomId, userId, getReason());
     }, [mx, room, userId, getReason])
   );
+
+  const confirmKick = useCallback(async () => {
+    const confirmed = await confirm({
+      title: 'Kick user?',
+      description: (
+        <>
+          Kick <strong>{displayName}</strong> from this {room.isSpaceRoom() ? 'canopy' : 'den'}?
+          They can rejoin if they have an invite or the room is public.
+        </>
+      ),
+      confirmLabel: 'Kick',
+    });
+    if (!confirmed) return;
+    kick();
+  }, [confirm, kick, displayName, room]);
+
+  const confirmBan = useCallback(async () => {
+    const confirmed = await confirm({
+      title: 'Ban user?',
+      description: (
+        <>
+          Ban <strong>{displayName}</strong> from this {room.isSpaceRoom() ? 'canopy' : 'den'}?
+          They will not be able to rejoin until you unban them.
+        </>
+      ),
+      confirmLabel: 'Ban',
+    });
+    if (!confirmed) return;
+    ban();
+  }, [confirm, ban, displayName, room]);
 
   const [inviteState, invite] = useAsyncCallback<undefined, Error, []>(
     useCallback(async () => {
@@ -267,12 +302,12 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
           />
           {kickState.status === AsyncStatus.Error && (
             <Text style={{ color: color.Critical.Main }} className={BreakWord} size="T200">
-              <b>{kickState.error.message}</b>
+              <b>{formatMatrixError(kickState.error, "Couldn't kick this user.")}</b>
             </Text>
           )}
           {banState.status === AsyncStatus.Error && (
             <Text style={{ color: color.Critical.Main }} className={BreakWord} size="T200">
-              <b>{banState.error.message}</b>
+              <b>{formatMatrixError(banState.error, "Couldn't ban this user.")}</b>
             </Text>
           )}
           {inviteState.status === AsyncStatus.Error && (
@@ -316,7 +351,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
                   <Icon size="50" src={Icons.ArrowLeft} />
                 )
               }
-              onClick={kick}
+              onClick={() => void confirmKick()}
               disabled={disabled}
             >
               <Text size="B300">Kick</Text>
@@ -336,7 +371,7 @@ export function UserModeration({ userId, canKick, canBan, canInvite }: UserModer
                   <Icon size="50" src={Icons.Prohibited} />
                 )
               }
-              onClick={ban}
+              onClick={() => void confirmBan()}
               disabled={disabled}
             >
               <Text size="B300">Ban</Text>

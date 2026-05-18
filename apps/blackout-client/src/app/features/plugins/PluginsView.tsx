@@ -25,6 +25,7 @@ import {
     uninstallPlugin,
 } from '../monetization/install/pluginInstaller';
 import { remountSandbox } from '../monetization/install/sandbox/sandboxRegistry';
+import { useConfirm } from '../../components/confirm-dialog';
 
 const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(
     Object.values(runtimePluginFeatureFlags),
@@ -287,6 +288,7 @@ export const PluginsView = () => {
     const [ctx, setCtx] = useAtom(capabilityContextAtom);
     const [pendingToggle, setPendingToggle] = useState<keyof FeatureFlags | null>(null);
     const [installed, setInstalled] = useAtom(installedPluginsAtom);
+    const confirm = useConfirm();
     const [pendingInstall, setPendingInstall] = useAtom(pendingPluginInstallAtom);
     const setInstalledList = useSetAtom(installedPluginsAtom);
     const [allPlugins, setAllPlugins] = useState(() => getAllFeaturePlugins());
@@ -387,7 +389,19 @@ export const PluginsView = () => {
         }
     };
 
-    const removePlugin = (record: InstalledPluginRecord) => {
+    const removePlugin = async (record: InstalledPluginRecord) => {
+        const confirmed = await confirm({
+            title: 'Uninstall plugin?',
+            description: (
+                <>
+                    Are you sure you want to uninstall{' '}
+                    <strong>{record.manifest.name || record.manifest.id}</strong>?
+                    This removes its data and disables the feature for this account.
+                </>
+            ),
+            confirmLabel: 'Uninstall',
+        });
+        if (!confirmed) return;
         uninstallPlugin(record);
         setInstalled((prev) =>
             prev.filter((r) => r.entitlementId !== record.entitlementId),
@@ -551,7 +565,7 @@ export const PluginsView = () => {
                                         </span>
                                         <button
                                             type="button"
-                                            onClick={() => removePlugin(record)}
+                                            onClick={() => void removePlugin(record)}
                                             data-testid={`plugin-remove-${record.manifest.id}`}
                                             style={{
                                                 marginLeft: 'auto',

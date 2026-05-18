@@ -105,12 +105,9 @@ export const AppShell = () => {
         // atom on every invocation and re-render children unnecessarily.
         const CREATE_SPACE_PAYLOAD = Object.freeze({}) as { spaceId?: string };
         const CREATE_ROOM_PAYLOAD = Object.freeze({}) as { spaceId?: string };
-        const open: Record<string, () => void> = {
+        const open: Record<string, (args?: Record<string, unknown>) => void> = {
             createSpace: () => setCreateSpaceModal(CREATE_SPACE_PAYLOAD),
             createRoom: () => setCreateRoomModal(CREATE_ROOM_PAYLOAD),
-        const open: Record<string, (args?: Record<string, unknown>) => void> = {
-            createSpace: () => setCreateSpaceModal({}),
-            createRoom: () => setCreateRoomModal({}),
             search: () => setSearchModal(true),
         };
         const close: Record<string, () => void> = {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { useConfirm } from '../../components/confirm-dialog';
 import {
     archiveCreatorListing,
     fetchCreatorProviders,
@@ -122,6 +123,7 @@ export const CreatorListings = (): JSX.Element => {
     const [error, setError] = useState<string | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [onboardingProvider, setOnboardingProvider] = useState<string | null>(null);
+    const confirm = useConfirm();
 
     const refresh = useCallback(async () => {
         setError(null);
@@ -154,7 +156,16 @@ export const CreatorListings = (): JSX.Element => {
     };
 
     const handleArchive = async (listing: CreatorListingView) => {
-        const confirmation = window.confirm(`Archive "${listing.title}"?`);
+        const confirmation = await confirm({
+            title: 'Archive listing?',
+            description: (
+                <>
+                    Archive <strong>{listing.title}</strong>? It will be hidden from buyers and
+                    removed from your active listings.
+                </>
+            ),
+            confirmLabel: 'Archive',
+        });
         if (!confirmation) return;
         setBusyId(listing.id);
         try {

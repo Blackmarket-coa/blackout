@@ -37,6 +37,7 @@ import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegac
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { formatMatrixError } from '../../utils/matrixError';
 import { buildCommunitiesPath, COMMUNITIES_PATH } from '../paths';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
@@ -517,9 +518,10 @@ export const ClientLayout = () => {
                 setComposerCommandStatus(`Left ${BLACKOUT_TERMS.den.singular} ${selectedRoomId}.`);
             } catch (error) {
                 setComposerCommandStatus(
-                    error instanceof Error
-                        ? `Failed to leave ${BLACKOUT_TERMS.den.singular}: ${error.message}`
-                        : `Failed to leave ${BLACKOUT_TERMS.den.singular}.`
+                    `Failed to leave ${BLACKOUT_TERMS.den.singular}: ${formatMatrixError(
+                        error,
+                        'please try again.'
+                    )}`
                 );
             }
             return;
@@ -542,9 +544,10 @@ export const ClientLayout = () => {
                 setComposerCommandStatus(`Joined ${joined.roomId ?? roomAlias.trim()}.`);
             } catch (error) {
                 setComposerCommandStatus(
-                    error instanceof Error
-                        ? `Failed to join ${BLACKOUT_TERMS.den.singular}: ${error.message}`
-                        : `Failed to join ${BLACKOUT_TERMS.den.singular}.`
+                    `Failed to join ${BLACKOUT_TERMS.den.singular}: ${formatMatrixError(
+                        error,
+                        'please try again.'
+                    )}`
                 );
             }
             return;
