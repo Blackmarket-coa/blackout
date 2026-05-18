@@ -1,0 +1,41 @@
+# Activates the Hono-based blackout-api service on top of docker-compose.yml.
+#
+# Copy to docker-compose.override.yml to enable. Requires BLACKOUT_DB_PASSWORD
+# and JWT_SECRET_PRIMARY in .env (see .env.example). Adjust CORS_ALLOWED_ORIGINS
+# to the frontend host(s) that will call this API.
+
+services:
+
+  api:
+    image: blackout-api:hono
+    environment:
+      DATABASE_URL: "postgres://blackout:${BLACKOUT_DB_PASSWORD}@postgres:5432/blackout_api"
+      MATRIX_HOMESERVER: "http://synapse:8008"
+      JWT_SECRET_PRIMARY: "${JWT_SECRET_PRIMARY}"
+      MAIL_PROVIDER: "console"
+      CORS_ALLOWED_ORIGINS: "https://chat.theblackout.app"
+      CORS_ALLOW_CREDENTIALS: "true"
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+
+  api-migrate:
+    image: blackout-api:hono
+    container_name: blackout-api-migrate
+    restart: "no"
+    working_dir: /app
+    command: ["pnpm", "--filter", "@blackout/api", "migrate:up"]
+    environment:
+      DATABASE_URL: "postgres://blackout:${BLACKOUT_DB_PASSWORD}@postgres:5432/blackout_api"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
