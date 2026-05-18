@@ -2,3 +2,4 @@
 *-report.md
 playwright-results/
 playwright-html/
+.playwright-state/

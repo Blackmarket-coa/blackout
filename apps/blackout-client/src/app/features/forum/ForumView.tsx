@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { MatrixEvent, RoomMember } from 'matrix-js-sdk';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import {
@@ -8,6 +8,7 @@ import {
 import { CreatePostModal } from './CreatePostModal';
 import { ForumPost } from './ForumPost';
 import { useForumPosts, useForumSettings, type ForumPostModel } from './useForum';
+import { useRegisterModalOpener } from '../../shell/modalOpenerRegistry';
 
 type SortMode = 'hot' | 'new' | 'top';
 type TopWindow = 'day' | 'week' | 'month';
@@ -150,6 +151,10 @@ export const ForumView = ({ roomId }: { roomId: string }) => {
     const [activeTag, setActiveTag] = useState<string | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+    const openCreatePostFromAudit = useCallback(() => setCreateOpen(true), []);
+    const closeCreatePostFromAudit = useCallback(() => setCreateOpen(false), []);
+    useRegisterModalOpener('createPost', openCreatePostFromAudit, closeCreatePostFromAudit);
 
     const memberMap = useMemo(() => {
         const map = new Map<string, RoomMember>();

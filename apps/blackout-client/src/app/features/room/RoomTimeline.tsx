@@ -32,6 +32,7 @@ import {
 import { Reactions } from './Reactions';
 import { ProfileModal } from '../profile/ProfileModal';
 import type { MemberProfile } from '../profile/profileTypes';
+import { useRegisterModalOpener } from '../../shell/modalOpenerRegistry';
 import { roomViewLayoutRhythm } from './roomViewLayoutContract';
 import {
     ROUND_OPENED_EVENT_TYPE,
@@ -672,6 +673,18 @@ export const RoomTimeline = ({
         }),
         [room]
     );
+    const openProfileFromAudit = useCallback(
+        (args?: Record<string, unknown>) => {
+            const userId =
+                typeof args?.userId === 'string' && args.userId.length > 0
+                    ? args.userId
+                    : '@audit:example.com';
+            setProfileTarget(buildProfile(userId));
+        },
+        [buildProfile]
+    );
+    const closeProfileFromAudit = useCallback(() => setProfileTarget(null), []);
+    useRegisterModalOpener('profile', openProfileFromAudit, closeProfileFromAudit);
 
     const items = useMemo(() => buildTimelineItems(events, unreadEventId), [events, unreadEventId]);
 
