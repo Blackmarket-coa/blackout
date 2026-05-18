@@ -1,0 +1,4 @@
+*-report.json
+*-report.md
+playwright-results/
+playwright-html/

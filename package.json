@@ -88,7 +88,8 @@
     "audit:navigation": "tsx tools/audit-navigation/crawl-web.ts && tsx tools/audit-navigation/audit-mobile.ts",
     "audit:navigation:web": "tsx tools/audit-navigation/crawl-web.ts",
     "audit:navigation:mobile": "tsx tools/audit-navigation/audit-mobile.ts",
-    "test:e2e:navigation": "playwright test --config=playwright.navigation-audit.config.ts"
+    "test:e2e:navigation": "playwright test --config=playwright.navigation-audit.config.ts",
+    "test:e2e:state-explosion": "playwright test --config=playwright.state-explosion.config.ts"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
