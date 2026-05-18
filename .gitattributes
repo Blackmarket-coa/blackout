@@ -1,0 +1,3 @@
+# Visual regression baselines: binary, never normalize line endings.
+apps/blackout-client/tests/e2e/__screenshots__/** binary
+playwright/e2e/launch-smoke/__screenshots__/** binary

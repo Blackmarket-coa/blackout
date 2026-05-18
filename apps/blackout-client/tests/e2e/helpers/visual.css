@@ -1,0 +1,33 @@
+/*
+ * Injected by Playwright's toHaveScreenshot() at snapshot time (configured
+ * via expect.toHaveScreenshot.stylePath in playwright.config.ts). The rules
+ * here neutralise sources of non-determinism that would otherwise cause
+ * flaky pixel diffs:
+ *   - kill CSS animations and transitions (caret blink, sidebar slides);
+ *   - hide volatile, time-dependent surfaces tagged by feature code;
+ *   - pin web-font rendering so first-paint snapshots don't capture FOUT.
+ *
+ * Only add selectors here for surfaces that are unavoidably non-deterministic.
+ * Prefer fixing flake at the source (data-testid mask in the spec) when
+ * possible.
+ */
+
+*,
+*::before,
+*::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+[data-volatile='timestamp'],
+[data-testid$='-last-seen'],
+[data-testid$='-timestamp'] {
+  visibility: hidden !important;
+}
+
+html {
+  font-display: block;
+}

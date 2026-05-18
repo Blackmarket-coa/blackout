@@ -1,0 +1,141 @@
+name: Visual regression
+
+# Pixel-diff gate for the Blackout web client. Lives in a separate workflow
+# (not ci.yml) so a visual-only failure doesn't block the unrelated e2e-smoke
+# canary, and so the manual baseline-update path has a clean dispatch UI.
+#
+# Two triggers:
+#   - pull_request: runs the visual matrix against committed baselines and
+#     fails the job on drift. Diff PNGs + the Playwright HTML report upload
+#     as artifacts on failure.
+#   - workflow_dispatch (input pr_number): checks out the PR head branch,
+#     re-runs with --update-snapshots, commits the regenerated baselines
+#     back to that branch under the github-actions[bot] identity, and pushes.
+#
+# Both jobs run inside the pinned mcr.microsoft.com/playwright image so
+# baselines are byte-stable across machines and contributors never need
+# Docker installed locally to interact with this suite.
+
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number whose branch should receive regenerated baselines'
+        required: true
+        type: string
+
+concurrency:
+  group: visual-regression-${{ github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  diff:
+    name: Visual diff (mobile × tablet × desktop × light/dark)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-jammy
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace dependencies for the client bundle
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
+      - name: Build @blackout/client
+        run: pnpm --filter @blackout/client run build
+      - name: Run visual regression suite
+        env:
+          CI: "1"
+        run: pnpm e2e:visual
+      - name: Upload Playwright report + diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: visual-regression-report
+          path: |
+            apps/blackout-client/playwright-report
+            apps/blackout-client/tests/e2e/__screenshots__
+          if-no-files-found: ignore
+
+  update-baselines:
+    name: Regenerate baselines and push to PR branch
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: read
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-jammy
+      options: --user 1001
+    steps:
+      - name: Resolve PR head branch
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(context.payload.inputs.pr_number),
+            });
+            core.setOutput('ref', pr.head.ref);
+            core.setOutput('sha', pr.head.sha);
+            core.setOutput('repo_full_name', pr.head.repo.full_name);
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          repository: ${{ steps.pr.outputs.repo_full_name }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace dependencies for the client bundle
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
+      - name: Build @blackout/client
+        run: pnpm --filter @blackout/client run build
+      - name: Regenerate baselines
+        env:
+          CI: "1"
+        run: pnpm e2e:visual:update
+      - name: Commit and push regenerated baselines
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/blackout-client/tests/e2e/__screenshots__
+          if git diff --cached --quiet; then
+            echo "No baseline changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(visual): regenerate baselines via workflow_dispatch (PR #${{ github.event.inputs.pr_number }})"
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"${{ steps.pr.outputs.ref }}"; then
+              exit 0
+            fi
+            sleep $((2 ** attempt))
+          done
+          echo "Failed to push baselines after 4 attempts" >&2
+          exit 1
