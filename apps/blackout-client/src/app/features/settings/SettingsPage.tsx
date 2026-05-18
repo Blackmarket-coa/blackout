@@ -37,6 +37,35 @@ interface SettingsSection {
     component: LazyExoticComponent<ComponentType>;
 }
 
+interface SettingsGroup {
+    id: string;
+    label: string;
+    sectionIds: SettingsSectionId[];
+}
+
+const groups: SettingsGroup[] = [
+    {
+        id: 'identity',
+        label: 'Account & identity',
+        sectionIds: ['account', 'character-sheet', 'about'],
+    },
+    {
+        id: 'look-feel',
+        label: 'Look & feel',
+        sectionIds: ['appearance', 'accessibility', 'keybinds'],
+    },
+    {
+        id: 'privacy-notifications',
+        label: 'Privacy & notifications',
+        sectionIds: ['privacy', 'notifications', 'voice-video'],
+    },
+    {
+        id: 'help-advanced',
+        label: 'Help & advanced',
+        sectionIds: ['developer', 'bug-report'],
+    },
+];
+
 const sections: SettingsSection[] = [
     {
         id: 'account',
@@ -154,36 +183,68 @@ export const SettingsPage = () => {
                 }}
             >
                 <h2 style={{ marginTop: 0, marginBottom: 10 }}>Settings</h2>
-                <nav style={{ display: 'grid', gap: settingsLayoutMetrics.itemGapPx }}>
-                    {sections.map((section) => (
-                        <button
-                            key={section.id}
-                            type="button"
-                            onClick={() => {
-                                setActiveSection(section.id);
-                                trackSettingsInteraction('settings', 'navigate-section', section.id);
-                            }}
-                            style={{
-                                textAlign: 'left',
-                                border:
-                                    activeSection === section.id
-                                        ? '1px solid var(--accent-primary)'
-                                        : '1px solid var(--border-default)',
-                                borderRadius: 8,
-                                padding: `8px ${settingsLayoutMetrics.sectionGapPx}px`,
-                                background:
-                                    activeSection === section.id
-                                        ? 'var(--bg-surface)'
-                                        : 'var(--bg-input)',
-                                color: 'var(--text-primary)',
-                                display: 'grid',
-                                gap: 2,
-                            }}
-                        >
-                            <strong>{section.label}</strong>
-                            <small style={{ opacity: 0.8 }}>{section.summary}</small>
-                        </button>
-                    ))}
+                <nav style={{ display: 'grid', gap: settingsLayoutMetrics.sectionGapPx }}>
+                    {groups.map((group) => {
+                        const groupSections = group.sectionIds
+                            .map((id) => sections.find((s) => s.id === id))
+                            .filter((s): s is SettingsSection => Boolean(s));
+                        if (groupSections.length === 0) return null;
+                        return (
+                            <div
+                                key={group.id}
+                                style={{
+                                    display: 'grid',
+                                    gap: settingsLayoutMetrics.itemGapPx,
+                                }}
+                            >
+                                <div
+                                    role="presentation"
+                                    style={{
+                                        fontSize: 11,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: 0.5,
+                                        opacity: 0.7,
+                                        padding: `0 4px`,
+                                    }}
+                                >
+                                    {group.label}
+                                </div>
+                                {groupSections.map((section) => (
+                                    <button
+                                        key={section.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveSection(section.id);
+                                            trackSettingsInteraction(
+                                                'settings',
+                                                'navigate-section',
+                                                section.id,
+                                            );
+                                        }}
+                                        style={{
+                                            textAlign: 'left',
+                                            border:
+                                                activeSection === section.id
+                                                    ? '1px solid var(--accent-primary)'
+                                                    : '1px solid var(--border-default)',
+                                            borderRadius: 8,
+                                            padding: `8px ${settingsLayoutMetrics.sectionGapPx}px`,
+                                            background:
+                                                activeSection === section.id
+                                                    ? 'var(--bg-surface)'
+                                                    : 'var(--bg-input)',
+                                            color: 'var(--text-primary)',
+                                            display: 'grid',
+                                            gap: 2,
+                                        }}
+                                    >
+                                        <strong>{section.label}</strong>
+                                        <small style={{ opacity: 0.8 }}>{section.summary}</small>
+                                    </button>
+                                ))}
+                            </div>
+                        );
+                    })}
                 </nav>
             </aside>
 
