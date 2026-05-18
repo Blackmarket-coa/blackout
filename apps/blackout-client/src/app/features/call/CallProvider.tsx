@@ -192,6 +192,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const activeDeviceStreamRef = useRef<{ getTracks: () => Array<{ stop: () => void }> } | null>(
         null,
     );
+    const pendingJoinRef = useRef<{ roomId: string; promise: Promise<void> } | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -282,50 +283,69 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     const joinCall = useCallback(
         async (nextRoomId: string, options: JoinCallOptions = {}) => {
-            if (roomId && roomId !== nextRoomId) {
-                await leaveCall();
+            // A second join for the same room while the first is still
+            // negotiating returns the same promise; otherwise rapid clicks
+            // on the join button would spawn parallel matrixRTC sessions,
+            // each grabbing its own MediaStream and racing setLocalMediaStream.
+            const inFlight = pendingJoinRef.current;
+            if (inFlight && inFlight.roomId === nextRoomId) {
+                return inFlight.promise;
             }
 
-            setRoomId(nextRoomId);
+            const run = async (): Promise<void> => {
+                if (roomId && roomId !== nextRoomId) {
+                    await leaveCall();
+                }
 
-            const mode = options.mode ?? 'symmetric';
-            setE2ee({ mode, status: 'pending', reason: 'starting session' });
+                setRoomId(nextRoomId);
 
-            const matrixRtc = getSessionStarter(client).matrixRTC;
-            if (!matrixRtc?.startRoomSession) {
-                setFocusStatus('degraded');
-                setFocusReason('matrixRTC startRoomSession unavailable');
-                setE2ee({
-                    mode,
-                    status: 'unavailable',
-                    reason: 'matrixRTC unavailable; media-plane E2EE could not be negotiated',
-                });
-                setJoined(true);
-                return;
-            }
+                const mode = options.mode ?? 'symmetric';
+                setE2ee({ mode, status: 'pending', reason: 'starting session' });
 
-            try {
-                const sessionOptions = buildRtcSessionOptions(mode, focusUrl);
-                const session = await matrixRtc.startRoomSession(nextRoomId, sessionOptions);
+                const matrixRtc = getSessionStarter(client).matrixRTC;
+                if (!matrixRtc?.startRoomSession) {
+                    setFocusStatus('degraded');
+                    setFocusReason('matrixRTC startRoomSession unavailable');
+                    setE2ee({
+                        mode,
+                        status: 'unavailable',
+                        reason: 'matrixRTC unavailable; media-plane E2EE could not be negotiated',
+                    });
+                    setJoined(true);
+                    return;
+                }
 
-                await session.joinRoomSession?.();
-                activeSessionRef.current = session;
-                setJoined(true);
-                setE2ee({
-                    mode,
-                    status: mode === 'off' ? 'disabled' : 'active',
-                    reason:
-                        mode === 'off'
-                            ? 'E2EE disabled by caller; DTLS-SRTP only'
-                            : 'per-call media keys negotiated',
-                });
-            } catch (error) {
-                setFocusStatus('degraded');
-                const reason = error instanceof Error ? error.message : 'session start failed';
-                setFocusReason(reason);
-                setE2ee({ mode, status: 'unavailable', reason });
-                setJoined(true);
-            }
+                try {
+                    const sessionOptions = buildRtcSessionOptions(mode, focusUrl);
+                    const session = await matrixRtc.startRoomSession(nextRoomId, sessionOptions);
+
+                    await session.joinRoomSession?.();
+                    activeSessionRef.current = session;
+                    setJoined(true);
+                    setE2ee({
+                        mode,
+                        status: mode === 'off' ? 'disabled' : 'active',
+                        reason:
+                            mode === 'off'
+                                ? 'E2EE disabled by caller; DTLS-SRTP only'
+                                : 'per-call media keys negotiated',
+                    });
+                } catch (error) {
+                    setFocusStatus('degraded');
+                    const reason = error instanceof Error ? error.message : 'session start failed';
+                    setFocusReason(reason);
+                    setE2ee({ mode, status: 'unavailable', reason });
+                    setJoined(true);
+                }
+            };
+
+            const promise = run().finally(() => {
+                if (pendingJoinRef.current?.promise === promise) {
+                    pendingJoinRef.current = null;
+                }
+            });
+            pendingJoinRef.current = { roomId: nextRoomId, promise };
+            return promise;
         },
         [client, focusUrl, leaveCall, roomId],
     );

@@ -24,10 +24,19 @@ export function mountSandbox(
     bundleBytes: Uint8Array,
     grantedCapabilities: readonly PluginCapability[],
 ): PluginSandbox {
-    unmountSandbox(manifest.id);
+    // Build the new sandbox first, then destroy the old one. If
+    // buildSandbox throws (bundle decode failure, iframe insertion
+    // rejected) the previously-mounted sandbox stays alive instead of
+    // leaving the plugin in a torn-down limbo. Building before tearing
+    // down also prevents a flicker where consumers observe a brief
+    // "no sandbox" window between mount calls.
+    const previous = sandboxes.get(manifest.id);
     const sandbox = buildSandbox(manifest, bundleBytes, grantedCapabilities);
     sandboxes.set(manifest.id, sandbox);
     bundleCache.set(manifest.id, bundleBytes);
+    if (previous) {
+        previous.destroy();
+    }
     return sandbox;
 }
 
