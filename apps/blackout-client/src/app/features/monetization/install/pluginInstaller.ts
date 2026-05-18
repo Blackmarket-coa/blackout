@@ -53,7 +53,7 @@ function buildPanelsFromManifest(manifest: PluginManifest): ShellPanelEntry[] {
             id: `${manifest.id}.pinned-nav`,
             kind: 'sidebar',
             label: manifest.pinnedNav.label,
-            to: manifest.pinnedNav.to,
+            to: manifest.pinnedNav.to ?? `/plugins/${encodeURIComponent(manifest.id)}`,
             order: manifest.pinnedNav.order ?? PINNED_NAV_ORDER_BAND,
         });
     }

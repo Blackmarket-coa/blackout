@@ -28,7 +28,8 @@ export type PluginCapability =
  */
 export interface PluginPinnedNavSpec {
     label: string;
-    to: string;
+    iconUrl?: string;
+    to?: string;
     order?: number;
 }
 
@@ -40,7 +41,8 @@ export interface PluginPinnedNavSpec {
 export interface PluginHomepageCardSpec {
     title: string;
     subtitle?: string;
-    to: string;
+    iconUrl?: string;
+    to?: string;
     order?: number;
 }
 
@@ -77,12 +79,7 @@ export interface PluginManifest {
      * routes the click to `/plugins/<id>` until a code-plugin entrypoint
      * registers an in-app route.
      */
-    homepageCard?: {
-        title: string;
-        summary?: string;
-        iconUrl?: string;
-        href?: string;
-    };
+    homepageCard?: PluginHomepageCardSpec;
     /**
      * Optional sidebar / nav rail entry the plugin author wants pinned.
      * The host materializes this into a `ShellPanelEntry` of kind
@@ -90,12 +87,7 @@ export interface PluginManifest {
      * host routes to `/plugins/<id>` until code-plugin entrypoint loading
      * is wired.
      */
-    pinnedNav?: {
-        label: string;
-        iconUrl?: string;
-        href?: string;
-        order?: number;
-    };
+    pinnedNav?: PluginPinnedNavSpec;
     /**
      * Optional right-panel entry (v2+). The host materializes this into a
      * `ShellPanelEntry` of kind `right-panel`. Until a code-plugin
