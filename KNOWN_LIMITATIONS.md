@@ -77,8 +77,8 @@ Workstream A (Ports 1–5) is closed; B–F remain post-beta scope.
 ### Invite-only registration during the Test Flight
 Signup at `matrix.theblackout.app` is gated by one-time tokens issued
 by a maintainer (`m.login.registration_token`). Testers request a token
-via the GitHub Discussions "Invitations" category; the homeserver-side
-mechanics are documented in
+by opening an [Invite request issue](https://github.com/Blackmarket-coa/blackout/issues/new?template=invite-request.yml);
+the homeserver-side mechanics are documented in
 [`infra/single-server-baseline/synapse/ENABLE_REGISTRATION.md`](infra/single-server-baseline/synapse/ENABLE_REGISTRATION.md),
 with `mint-invite-token.sh` next to it as the issuing helper.
 

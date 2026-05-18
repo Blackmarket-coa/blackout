@@ -18,9 +18,10 @@ registration token from a maintainer. Tokens are cheap to issue, so
 don't be shy about asking.
 
 1. **Request an invite token** by opening an
-   [Invitation request discussion](https://github.com/Blackmarket-coa/blackout/discussions/new?category=invitations)
+   [Invite request issue](https://github.com/Blackmarket-coa/blackout/issues/new?template=invite-request.yml)
    (or DM a maintainer listed in [`.github/CODEOWNERS`](.github/CODEOWNERS)).
-   A maintainer will reply with a token string like `abc123…`.
+   The form asks for a Matrix handle to DM the token to — the token
+   itself is never posted in the issue thread.
 2. Open **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**
    in any modern browser (Firefox, Chrome, Edge, Safari).
 3. Click **Create account** and paste the token when the signup form
