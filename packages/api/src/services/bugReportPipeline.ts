@@ -26,6 +26,10 @@ export interface BugReportDiagnostics {
   readonly userAgent: string;
   readonly platform: string;
   readonly consoleTail: readonly string[];
+  readonly currentPath?: string;
+  readonly buildChannel?: string;
+  readonly lastError?: string | null;
+  readonly featureFlagsFingerprint?: string;
 }
 
 export interface BugReportInput {
@@ -97,6 +101,14 @@ const buildGithubBody = (
     lines.push(`- Client version: \`${d.clientVersion}\``);
     lines.push(`- Platform: \`${d.platform}\``);
     lines.push(`- User-Agent: \`${d.userAgent}\``);
+    if (typeof d.currentPath === 'string') lines.push(`- Path: \`${d.currentPath}\``);
+    if (typeof d.buildChannel === 'string') lines.push(`- Build channel: \`${d.buildChannel}\``);
+    if (typeof d.featureFlagsFingerprint === 'string') {
+      lines.push(`- Feature flags: \`${d.featureFlagsFingerprint}\``);
+    }
+    if (typeof d.lastError === 'string' && d.lastError.length > 0) {
+      lines.push(`- Last captured error: \`${d.lastError.slice(0, 500)}\``);
+    }
     if (d.consoleTail.length > 0) {
       lines.push('');
       lines.push('<details><summary>Console tail (last 50)</summary>');

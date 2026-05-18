@@ -1,4 +1,4 @@
-import React, { useMemo, useState, type ChangeEvent } from 'react';
+import React, { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useAtomValue } from 'jotai';
 import { Box, Text, Switch, Button, Input, Scroll } from 'folds';
 import { Page, PageContent, PageHeader } from '../../components/page';
@@ -7,11 +7,15 @@ import { SettingTile } from '../../components/setting-tile';
 import { SequenceCardStyle } from './styles.css';
 import { userIdAtom } from '../../state/auth';
 import { collectDiagnostics } from '../../lib/diagnostics/collect';
+import { consumeCrashHandoff } from '../../components/crashHandoffStore';
 import { trackSettingsInteraction } from './settingsTelemetry';
 import {
   emptyDraft,
   buildBugReportPayload,
   isPayloadSubmittable,
+  readDraftFromSession,
+  writeDraftToSession,
+  clearDraftFromSession,
   type BugReportCategory,
   type BugReportDraft,
   type BugReportSeverity,
@@ -61,11 +65,59 @@ const SelectInline = <T extends string>({
   </select>
 );
 
+// Build the initial draft: prefer an in-memory crash handoff (one-shot, set by
+// CrashBoundary when "Report this" is clicked), then fall back to a stashed
+// session draft, finally to empty. The handoff wins because the crash details
+// are time-sensitive and we want them prefilled even if a stale draft exists.
+const buildInitialDraft = (): BugReportDraft => {
+  const handoff = consumeCrashHandoff();
+  if (handoff) {
+    const summary = handoff.message.slice(0, 140) || 'unhandled error';
+    const components = handoff.componentStack.trim();
+    const stack = handoff.stack.trim();
+    const body = [
+      'The app crashed and rendered the fallback screen.',
+      '',
+      '**What I was doing:** _please describe the steps that led here_',
+      '',
+      '## Captured error',
+      '```',
+      `${summary}`,
+      stack ? stack.slice(0, 3_000) : '(no stack)',
+      '```',
+      components ? '\n## Component stack\n```\n' + components.slice(0, 2_000) + '\n```' : '',
+    ]
+      .join('\n')
+      .slice(0, 8_000);
+    return {
+      ...emptyDraft(),
+      title: `Crash: ${summary}`.slice(0, 140),
+      description: body,
+      category: 'other',
+      severity: 'high',
+    };
+  }
+  return readDraftFromSession() ?? emptyDraft();
+};
+
 export function BugReportSettings() {
   const userId = useAtomValue(userIdAtom);
-  const [draft, setDraft] = useState<BugReportDraft>(emptyDraft);
+  const [draft, setDraft] = useState<BugReportDraft>(buildInitialDraft);
   const [showPreview, setShowPreview] = useState(false);
   const [state, submit] = useBugReportSubmission();
+
+  // Persist draft text to sessionStorage as the user types. Consent toggles
+  // (`includeDiagnostics`, `includeMatrixIdHash`) are intentionally NOT
+  // persisted by `writeDraftToSession`.
+  useEffect(() => {
+    writeDraftToSession(draft);
+  }, [draft]);
+
+  // Clear the persisted draft once a submit succeeds so reopening the form
+  // starts blank.
+  useEffect(() => {
+    if (state.status === AsyncStatus.Success) clearDraftFromSession();
+  }, [state.status]);
 
   const diagnostics = useMemo(
     () => (draft.includeDiagnostics ? collectDiagnostics() : null),
@@ -89,7 +141,16 @@ export function BugReportSettings() {
   };
 
   if (state.status === AsyncStatus.Success) {
-    return <SuccessView response={state.data} payload={payload} onReset={() => setDraft(emptyDraft())} />;
+    return (
+      <SuccessView
+        response={state.data}
+        payload={payload}
+        onReset={() => {
+          clearDraftFromSession();
+          setDraft(emptyDraft());
+        }}
+      />
+    );
   }
 
   return (

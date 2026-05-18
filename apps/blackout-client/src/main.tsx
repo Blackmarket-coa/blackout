@@ -54,6 +54,7 @@ import { NativeBridgeListener } from './platform/NativeBridgeListener';
 import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 import { ConfirmProvider } from './app/components/confirm-dialog';
+import { CrashBoundary } from './app/components/CrashBoundary';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -333,17 +334,19 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
         <JotaiProvider>
             <ThemeProvider>
-                <RuntimeSettingsBridge />
-                <DevCapabilitySeeder />
-                <MatrixBootstrapper />
-                <NotificationTokenBroker />
-                <UnreadCountBroadcaster />
-                <LifecycleSyncBroker />
-                <QueryClientProvider client={queryClient}>
-                    <RegistryFetcherProvider fetchers={registryFetchers}>
-                        <BootstrapStatus />
-                    </RegistryFetcherProvider>
-                </QueryClientProvider>
+                <CrashBoundary>
+                    <RuntimeSettingsBridge />
+                    <DevCapabilitySeeder />
+                    <MatrixBootstrapper />
+                    <NotificationTokenBroker />
+                    <UnreadCountBroadcaster />
+                    <LifecycleSyncBroker />
+                    <QueryClientProvider client={queryClient}>
+                        <RegistryFetcherProvider fetchers={registryFetchers}>
+                            <BootstrapStatus />
+                        </RegistryFetcherProvider>
+                    </QueryClientProvider>
+                </CrashBoundary>
             </ThemeProvider>
         </JotaiProvider>
     </React.StrictMode>

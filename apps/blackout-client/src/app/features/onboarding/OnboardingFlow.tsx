@@ -46,6 +46,13 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
     const [firstContributionPrompt, setFirstContributionPrompt] = useState('');
     const [loading, setLoading] = useState(true);
     const [done, setDone] = useState(false);
+    // Bumping `restartKey` re-runs the load effect so a restart re-fires
+    // telemetry and re-reads the (now-empty) snapshot without a page reload.
+    const [restartKey, setRestartKey] = useState(0);
+    // When the snapshot's role is 'creator' but completion hasn't been
+    // marked yet, the user has been handed off to the dedicated creator
+    // wizard. Show a handoff panel rather than restarting role-select.
+    const [creatorHandoff, setCreatorHandoff] = useState(false);
 
     const currentStep = ONBOARDING_STEP_SEQUENCE[stepIndex];
     const featuredChannels = welcome.data.featuredChannels.map((channel) => channel.roomId);
@@ -66,6 +73,11 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             setSelectedChannels(snapshot.selectedChannels);
             setFirstContributionPrompt(snapshot.firstContributionPrompt ?? '');
             setDone(snapshot.completed);
+            // Hand-off state: user previously chose 'creator' but neither the
+            // creator wizard nor a "switch back to member" has marked the
+            // member flow done. Show a small terminal panel so they can
+            // resume the creator wizard or return to role selection.
+            setCreatorHandoff(snapshot.role === 'creator' && !snapshot.completed);
             setLoading(false);
             trackOnboardingStarted(spaceId, snapshot.startedAt);
             trackOnboardingStepViewed(
@@ -79,13 +91,31 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
         return () => {
             mounted = false;
         };
-    }, [progress, spaceId]);
+    }, [progress, spaceId, restartKey]);
 
     const elapsedMs = useMemo(() => Date.now() - startedAt, [startedAt, stepIndex]);
 
     if (loading) {
         return <p style={{ color: 'var(--text-secondary)' }}>Loading onboarding progress…</p>;
     }
+
+    // Reset all local state and re-run the load effect via `restartKey`. No
+    // page reload — `progress.reset()` writes the fresh snapshot to
+    // localStorage synchronously before the effect re-reads, so the next
+    // render sees a clean slate.
+    const restartFlow = async () => {
+        await progress.reset();
+        setStepIndex(0);
+        setRole(undefined);
+        setCommunityIntent(undefined);
+        setSelectedChannels([]);
+        setFirstContributionPrompt('');
+        setDone(false);
+        setCreatorHandoff(false);
+        setStartedAt(Date.now());
+        setLoading(true);
+        setRestartKey((key) => key + 1);
+    };
 
     if (done) {
         return (
@@ -97,9 +127,59 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button
                         type="button"
-                        onClick={() => void progress.reset().then(() => window.location.reload())}
+                        data-testid="onboarding-restart"
+                        onClick={() => void restartFlow()}
                     >
                         Restart onboarding
+                    </button>
+                    {onClose ? (
+                        <button type="button" onClick={onClose}>
+                            Close
+                        </button>
+                    ) : null}
+                </div>
+            </section>
+        );
+    }
+
+    if (creatorHandoff) {
+        return (
+            <section
+                data-testid="onboarding-creator-handoff"
+                style={{
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 12,
+                    padding: 16,
+                    display: 'grid',
+                    gap: 12,
+                }}
+            >
+                <header style={{ display: 'grid', gap: 6 }}>
+                    <strong>You're set up as a creator</strong>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                        Continue the creator wizard to finish payout setup, or switch back to
+                        the member flow.
+                    </span>
+                </header>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                        type="button"
+                        data-testid="onboarding-creator-continue"
+                        onClick={() => navigate(ONBOARDING_CREATOR_PATH)}
+                    >
+                        Continue creator setup
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="onboarding-switch-to-member"
+                        onClick={async () => {
+                            await progress.savePatch({ role: undefined, stepIndex: 0 });
+                            setRole(undefined);
+                            setStepIndex(0);
+                            setCreatorHandoff(false);
+                        }}
+                    >
+                        Switch back to member flow
                     </button>
                     {onClose ? (
                         <button type="button" onClick={onClose}>
@@ -124,11 +204,12 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             // Hand off to the dedicated creator-onboarding wizard. The
             // member flow stays under this component; the creator path
             // is owned by the `onboarding-creator` feature module
-            // (PR 7) and lives at `/onboarding/creator`.
-            await progress.markCompleted(false);
-            trackOnboardingCompleted(spaceId, Date.now(), Date.now() - startedAt, false);
-            setDone(true);
-            onCompleted?.(false);
+            // (PR 7) and lives at `/onboarding/creator`. The creator
+            // wizard is responsible for calling markCompleted when its
+            // own steps are done; until then this component renders a
+            // handoff panel (role='creator' + completed=false) so the
+            // user can resume or switch back.
+            setCreatorHandoff(true);
             navigate(ONBOARDING_CREATOR_PATH);
             return;
         }
@@ -200,6 +281,27 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
                     Step {stepIndex + 1} of {ONBOARDING_STEP_SEQUENCE.length}
                 </span>
+                <div
+                    aria-hidden="true"
+                    data-testid="onboarding-progress-bar"
+                    style={{
+                        height: 6,
+                        borderRadius: 999,
+                        background: 'var(--bg-input)',
+                        overflow: 'hidden',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: `${
+                                ((stepIndex + 1) / ONBOARDING_STEP_SEQUENCE.length) * 100
+                            }%`,
+                            height: '100%',
+                            background: 'var(--accent-primary)',
+                            transition: 'width 200ms ease',
+                        }}
+                    />
+                </div>
             </header>
 
             {currentStep === 'choose_role' ? (
