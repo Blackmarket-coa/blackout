@@ -139,24 +139,57 @@ export function queryDialog(container: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Assert that the dialog wires focus-trap-react. JSDOM's tabbable
- * detection is brittle when the first focusable element is a `<button>`
- * (focus-trap may land focus on `body` instead of moving it inside the
- * trap), so this check accepts either: (a) focus has moved inside the
- * dialog, or (b) the dialog renders at least one focusable element
- * (button / textarea / input / select / a[href] / [tabindex]). Both
- * signal the trap is wired; focus-trap-react's own suite covers the
- * runtime behaviour.
+ * Probe that an active focus-trap-react trap is wired around the
+ * dialog. focus-trap-react attaches a document-level `focusin`
+ * listener and snaps any focus event whose target lives outside the
+ * trap back onto a node inside it. We exercise that contract directly:
+ * focus an outsider element, dispatch focusin, and assert focus has
+ * been pulled back into the dialog.
+ *
+ * Failure mode: if `<FocusTrap>` is removed from the dialog (or
+ * mis-wired), `document.activeElement` stays on the outsider button
+ * and the expectation fails. That is the regression boundary this
+ * probe pins; a tabbable-presence check alone would silently stay
+ * green.
+ *
+ * JSDOM caveat: `.focus()` does not always emit a `focusin` event in
+ * jsdom, so we dispatch one explicitly. The trap's listener consumes
+ * it identically to the browser path.
  */
 export function expectFocusTrapWired(dialog: HTMLElement): void {
-    const focusInside = dialog.contains(document.activeElement);
+    const outsider = document.createElement('button');
+    outsider.type = 'button';
+    outsider.textContent = 'focus-trap probe';
+    document.body.appendChild(outsider);
+    try {
+        outsider.focus();
+        outsider.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+        expect(
+            dialog.contains(document.activeElement),
+            'focus did not return into the dialog — focus-trap-react is not wired',
+        ).toBe(true);
+    } finally {
+        outsider.remove();
+    }
+}
+
+/**
+ * Soft fallback used by row 4 of dialogs that intentionally do NOT
+ * wire `<FocusTrap>` — they rely on Escape + visible Close affordances
+ * for dismissal. Use this in place of `expectFocusTrapWired` only when
+ * the dialog source has no `<FocusTrap>` wrapper; the call site MUST
+ * cite the source line that confirms the trap is absent so the
+ * weaker contract is auditable. The presence of a focusable control
+ * is the minimum a11y floor: a dialog with no tabbable element strands
+ * keyboard users.
+ */
+export function expectFocusableContent(dialog: HTMLElement): void {
     const focusableSelector =
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    const hasFocusable = dialog.querySelector(focusableSelector) !== null;
     expect(
-        focusInside || hasFocusable,
-        'dialog has no focusable elements and focus did not move inside it',
-    ).toBe(true);
+        dialog.querySelector(focusableSelector),
+        'dialog has no focusable controls — keyboard users would be stranded',
+    ).not.toBeNull();
 }
 
 /**
