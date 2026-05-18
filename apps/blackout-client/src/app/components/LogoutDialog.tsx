@@ -9,6 +9,7 @@ import {
   useDeviceVerificationStatus,
   VerificationStatus,
 } from '../hooks/useDeviceVerificationStatus';
+import { formatMatrixError } from '../utils/matrixError';
 
 type LogoutDialogProps = {
   handleClose: () => void;
@@ -66,7 +67,10 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
           <Text priority="400">You’re about to log out. Are you sure?</Text>
           {logoutState.status === AsyncStatus.Error && (
             <Text style={{ color: color.Critical.Main }} size="T300">
-              Failed to logout! {logoutState.error.message}
+              {formatMatrixError(
+                logoutState.error,
+                "Couldn't sign you out. Please try again.",
+              )}
             </Text>
           )}
           <Box direction="Column" gap="200">

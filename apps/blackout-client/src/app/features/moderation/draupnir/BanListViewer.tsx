@@ -5,6 +5,7 @@ import {
     type DraupnirBanEntry,
     type DraupnirClientConfig,
 } from './DraupnirClient';
+import { useConfirm } from '../../../components/confirm-dialog';
 
 const formatEntity = (entry: DraupnirBanEntry): string => {
     if (entry.entityType === 'user') return `User: ${entry.value}`;
@@ -18,6 +19,7 @@ export const BanListViewer = ({ config }: { config?: DraupnirClientConfig }) => 
     const snapshot = useDraupnirSnapshot(config);
     const [busyValue, setBusyValue] = useState<string | null>(null);
     const [filter, setFilter] = useState('');
+    const confirm = useConfirm();
 
     const filtered = useMemo(() => {
         const q = filter.toLowerCase().trim();
@@ -32,6 +34,18 @@ export const BanListViewer = ({ config }: { config?: DraupnirClientConfig }) => 
 
     const unban = async (entry: DraupnirBanEntry) => {
         if (!snapshot) return;
+
+        const confirmed = await confirm({
+            title: 'Unban entry?',
+            description: (
+                <>
+                    Are you sure you want to unban <strong>{formatEntity(entry)}</strong>?
+                </>
+            ),
+            confirmLabel: 'Unban',
+            variant: 'Critical',
+        });
+        if (!confirmed) return;
 
         setBusyValue(entry.value);
         try {

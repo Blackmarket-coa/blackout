@@ -1,6 +1,7 @@
 import { type DragEvent, useMemo, useState } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useManageRoles, type RoleDefinition } from './useRoles';
+import { useConfirm } from '../../components/confirm-dialog';
 
 const AVAILABLE_PERMISSIONS = [
     'send_messages',
@@ -35,6 +36,7 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
     const [draft, setDraft] = useState<Omit<RoleDefinition, 'position'>>(emptyDraft);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [saving, setSaving] = useState(false);
+    const confirm = useConfirm();
 
     const orderedRoles = useMemo(() => [...roles].sort((a, b) => a.position - b.position), [roles]);
 
@@ -288,9 +290,21 @@ export const RoleEditor = ({ roomId }: { roomId: string }) => {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    const confirmed = window.confirm(`Delete role "${role.name}"?`);
-                                    if (!confirmed) return;
-                                    void deleteRole(role.position);
+                                    void (async () => {
+                                        const confirmed = await confirm({
+                                            title: 'Delete role?',
+                                            description: (
+                                                <>
+                                                    Are you sure you want to delete the role{' '}
+                                                    <strong>{role.name}</strong>? Members assigned
+                                                    to this role will lose its permissions.
+                                                </>
+                                            ),
+                                            confirmLabel: 'Delete',
+                                        });
+                                        if (!confirmed) return;
+                                        void deleteRole(role.position);
+                                    })();
                                 }}
                                 style={{
                                     border: '1px solid var(--border-default)',
