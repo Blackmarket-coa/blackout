@@ -13,10 +13,13 @@ import {
 } from '../../src/platform/native-bridge-contract';
 import { LifecycleSyncBroker } from '../../src/platform/LifecycleSyncBroker';
 
-const mountBroker = (store: ReturnType<typeof createStore>) => {
+const liveRoots: ReactDOM.Root[] = [];
+
+const mountBroker = (_store: ReturnType<typeof createStore>) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
+    liveRoots.push(root);
     return { container, root };
 };
 
@@ -30,7 +33,15 @@ describe('LifecycleSyncBroker', () => {
     });
 
     afterEach(() => {
-        // jsdom resets between tests
+        // Unmount any brokers mounted in this test so their visibility
+        // listeners are removed — otherwise leftover brokers from prior
+        // tests stack their own resume_sync dispatches into the
+        // subsequent test's listener.
+        for (const root of liveRoots.splice(0)) {
+            act(() => {
+                root.unmount();
+            });
+        }
     });
 
     it('calls retryImmediately on the matrix client when resume_sync arrives', async () => {
@@ -82,47 +93,111 @@ describe('LifecycleSyncBroker', () => {
     });
 
     it('re-emits resume_sync when document becomes visible (Page Visibility fallback)', async () => {
-        const retryImmediately = vi.fn();
-        const store = createStore();
-        store.set(matrixClientAtom, { retryImmediately } as unknown as Parameters<typeof store.set>[1]);
+        vi.useFakeTimers();
+        try {
+            const retryImmediately = vi.fn();
+            const store = createStore();
+            store.set(matrixClientAtom, { retryImmediately } as unknown as Parameters<typeof store.set>[1]);
 
-        // Start in the hidden state so the visibilitychange transition is observable.
-        Object.defineProperty(document, 'visibilityState', {
-            configurable: true,
-            value: 'hidden',
-        });
+            // Start in the hidden state so the visibilitychange transition is observable.
+            Object.defineProperty(document, 'visibilityState', {
+                configurable: true,
+                value: 'hidden',
+            });
 
-        const seen: NativeBridgeEvent[] = [];
-        const stop = listenForNativeBridgeEvents((event) => seen.push(event));
+            const seen: NativeBridgeEvent[] = [];
+            const stop = listenForNativeBridgeEvents((event) => seen.push(event));
 
-        const { root } = mountBroker(store);
+            const { root } = mountBroker(store);
 
-        await act(async () => {
-            root.render(
-                <JotaiProvider store={store}>
-                    <LifecycleSyncBroker />
-                </JotaiProvider>
-            );
-            await Promise.resolve();
-        });
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <LifecycleSyncBroker />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
 
-        // Now flip to visible and fire the event.
-        Object.defineProperty(document, 'visibilityState', {
-            configurable: true,
-            value: 'visible',
-        });
+            // Now flip to visible and fire the event.
+            Object.defineProperty(document, 'visibilityState', {
+                configurable: true,
+                value: 'visible',
+            });
 
-        await act(async () => {
-            document.dispatchEvent(new Event('visibilitychange'));
-            await Promise.resolve();
-        });
+            await act(async () => {
+                document.dispatchEvent(new Event('visibilitychange'));
+                vi.advanceTimersByTime(500);
+                await Promise.resolve();
+            });
 
-        stop();
+            stop();
 
-        const resumeEvents = seen.filter((e) => e.type === 'resume_sync');
-        expect(resumeEvents.length).toBeGreaterThanOrEqual(1);
-        expect(resumeEvents[0]).toEqual({ type: 'resume_sync', source: 'web' });
-        expect(retryImmediately).toHaveBeenCalled();
+            const resumeEvents = seen.filter((e) => e.type === 'resume_sync');
+            expect(resumeEvents.length).toBeGreaterThanOrEqual(1);
+            expect(resumeEvents[0]).toEqual({ type: 'resume_sync', source: 'web' });
+            expect(retryImmediately).toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('coalesces a burst of visibility flaps into a single resume_sync', async () => {
+        vi.useFakeTimers();
+        try {
+            const retryImmediately = vi.fn();
+            const store = createStore();
+            store.set(matrixClientAtom, { retryImmediately } as unknown as Parameters<typeof store.set>[1]);
+
+            Object.defineProperty(document, 'visibilityState', {
+                configurable: true,
+                value: 'hidden',
+            });
+
+            const seen: NativeBridgeEvent[] = [];
+            const stop = listenForNativeBridgeEvents((event) => seen.push(event));
+
+            const { root } = mountBroker(store);
+
+            await act(async () => {
+                root.render(
+                    <JotaiProvider store={store}>
+                        <LifecycleSyncBroker />
+                    </JotaiProvider>
+                );
+                await Promise.resolve();
+            });
+
+            await act(async () => {
+                for (let i = 0; i < 6; i += 1) {
+                    Object.defineProperty(document, 'visibilityState', {
+                        configurable: true,
+                        value: 'visible',
+                    });
+                    document.dispatchEvent(new Event('visibilitychange'));
+                    Object.defineProperty(document, 'visibilityState', {
+                        configurable: true,
+                        value: 'hidden',
+                    });
+                    document.dispatchEvent(new Event('visibilitychange'));
+                }
+                Object.defineProperty(document, 'visibilityState', {
+                    configurable: true,
+                    value: 'visible',
+                });
+                document.dispatchEvent(new Event('visibilitychange'));
+                vi.advanceTimersByTime(500);
+                await Promise.resolve();
+            });
+
+            stop();
+
+            const resumeEvents = seen.filter((e) => e.type === 'resume_sync');
+            expect(resumeEvents).toHaveLength(1);
+            expect(retryImmediately).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('does not emit resume_sync when document becomes hidden', async () => {
