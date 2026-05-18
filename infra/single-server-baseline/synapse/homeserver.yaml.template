@@ -65,6 +65,12 @@ media_retention:
 # .env.example to supply the default value at render time.
 enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
 enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
+# Invite-only signup gate. When true, /_matrix/client/v3/register adds
+# m.login.registration_token to the flows; the client surfaces a token
+# field and refuses to create the account without one. Tokens are
+# minted via the Synapse Admin API — see
+# infra/single-server-baseline/synapse/ENABLE_REGISTRATION.md.
+registration_requires_token: ${SYNAPSE_REGISTRATION_REQUIRES_TOKEN}
 registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
 form_secret: "${SYNAPSE_FORM_SECRET}"

@@ -238,7 +238,7 @@ Expected: `200`/`204` (or `404` for `/healthz` if coturn metrics disabled).
 
 - [ ] Confirm host firewall allows only required ingress: `80/tcp`, `443/tcp`, TURN (`3478/tcp+udp`, `5349/tcp`, relay UDP range).
 - [ ] Deploy latest Nginx config with rate-limit zones and admin API deny rule.
-- [ ] Confirm Synapse launch posture matches intended registration posture (open by default, or explicitly disabled for invite-only cohorts).
+- [ ] Confirm Synapse launch posture matches intended registration posture (open by default, or explicitly disabled for invite-only cohorts). For the invite-only / one-time-token flow see [`synapse/ENABLE_REGISTRATION.md`](synapse/ENABLE_REGISTRATION.md).
 - [ ] Set and store strong unique secrets in `.env` for DB/Redis/Synapse/TURN.
 - [ ] Execute secret rotation procedure (generate new secrets, update templates, restart impacted services, revoke old material).
 - [ ] Install weekly TLS expiry alert via systemd timer or cron (21-day warning threshold).
