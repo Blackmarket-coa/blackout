@@ -34,7 +34,23 @@ function isTestLikeFile(file) {
   );
 }
 
+// Files where multiple `path:` literals at the same value are expected
+// (audit tooling re-enumerates app routes; client SDKs share a resource
+// path across multiple HTTP methods).
+const SCAN_SKIP_PREFIXES = [
+  'tools/audit-navigation/',
+  'packages/blackout-sdk/',
+];
+
+function shouldSkipFile(file) {
+  if (!textExtensions.has(extname(file)) || isTestLikeFile(file)) return true;
+  return SCAN_SKIP_PREFIXES.some((prefix) => file.startsWith(prefix));
+}
+
 function collectRoutePathLiterals(files) {
+  // Track unique (path, file) pairs so multiple same-path entries inside one
+  // file (e.g. different HTTP methods on the same resource) don't count as
+  // duplicates — only collisions across distinct files do.
   const routeLiterals = new Map();
 
   const patterns = [
@@ -43,7 +59,7 @@ function collectRoutePathLiterals(files) {
   ];
 
   for (const file of files) {
-    if (!textExtensions.has(extname(file)) || isTestLikeFile(file)) continue;
+    if (shouldSkipFile(file)) continue;
 
     const content = readFileSync(file, 'utf8');
     for (const pattern of patterns) {
@@ -51,15 +67,15 @@ function collectRoutePathLiterals(files) {
         const value = match[2]?.trim();
         if (!value || !value.startsWith('/')) continue;
 
-        const occurrences = routeLiterals.get(value) ?? [];
-        occurrences.push(file);
-        routeLiterals.set(value, occurrences);
+        const filesForPath = routeLiterals.get(value) ?? new Set();
+        filesForPath.add(file);
+        routeLiterals.set(value, filesForPath);
       }
     }
   }
 
   return [...routeLiterals.entries()]
-    .map(([path, occurrences]) => ({ path, occurrences }))
+    .map(([path, filesForPath]) => ({ path, occurrences: [...filesForPath] }))
     .filter(({ occurrences }) => occurrences.length > 1);
 }
 

@@ -36,7 +36,6 @@ import './app/styles/theme.css.ts';
 import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
-import { DraupnirRoutePage } from './app/features/moderation/draupnir';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -184,10 +183,6 @@ const buildAppRouter = (capabilityContext: {
         {
             path: '/',
             element: homeElement,
-        },
-        {
-            path: '/moderation/draupnir',
-            element: <DraupnirRoutePage />,
         },
         ...authRedirectRoutes,
         ...registryRoutes,
