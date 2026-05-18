@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { createClient, type MatrixError } from 'matrix-js-sdk';
 import { autoDiscovery, specVersions } from '../../../cs-api';
 import type { ResolvedHomeserver } from './types';
 
@@ -39,6 +41,50 @@ export const defaultHomeserverFromConfig = (cfg: RuntimeClientConfig): string =>
     } catch {
         return FALLBACK_HOMESERVER_URL;
     }
+};
+
+/**
+ * State of the homeserver's `/register` endpoint. `unknown` is the
+ * initial value while the probe is in flight; `available` covers both
+ * 200 (no auth required) and 401 with UIA flows; `disabled` is the
+ * server explicitly rejecting registration with 403.
+ */
+export type RegistrationAvailability = 'unknown' | 'available' | 'disabled' | 'error';
+
+export const useRegistrationAvailability = (
+    server: ResolvedHomeserver | null
+): RegistrationAvailability => {
+    const [state, setState] = useState<RegistrationAvailability>('unknown');
+
+    useEffect(() => {
+        if (!server) {
+            setState('unknown');
+            return;
+        }
+        let cancelled = false;
+        setState('unknown');
+        const mx = createClient({ baseUrl: server.baseUrl });
+        mx.registerRequest({})
+            .then(() => {
+                if (!cancelled) setState('available');
+            })
+            .catch((err: MatrixError) => {
+                if (cancelled) return;
+                if (err.httpStatus === 401) {
+                    setState('available');
+                } else if (err.httpStatus === 403) {
+                    setState('disabled');
+                } else {
+                    setState('error');
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [server?.baseUrl]);
+
+    return state;
 };
 
 export const resolveHomeserver = async (rawInput: string): Promise<ResolvedHomeserver> => {

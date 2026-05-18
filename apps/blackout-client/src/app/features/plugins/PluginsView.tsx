@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
-import type { PluginCapability } from '@blackout/protocol';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import type { PluginCapability, PluginManifest } from '@blackout/protocol';
 import { capabilityContextAtom } from '../../core/features/capabilityContext';
 import { coreFeatureModules } from '../../core/features/coreModules';
 import {
@@ -12,7 +12,19 @@ import {
     runtimePluginFeatureFlags,
     type FeatureFlags,
 } from '../../core/features/featureFlags';
-import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import {
+    installedPluginsAtom,
+    type InstalledPluginRecord,
+} from '../monetization/install/installedPluginsAtom';
+import {
+    pendingPluginInstallAtom,
+    type PendingPluginInstall,
+} from '../monetization/install/pendingPluginInstallAtom';
+import {
+    installEntitlement,
+    uninstallPlugin,
+} from '../monetization/install/pluginInstaller';
+import { remountSandbox } from '../monetization/install/sandbox/sandboxRegistry';
 
 const RUNTIME_FLAG_KEYS = new Set<keyof FeatureFlags>(
     Object.values(runtimePluginFeatureFlags),
@@ -28,9 +40,40 @@ const CAPABILITY_LABELS: Record<PluginCapability, string> = {
     'http.fetch': 'Make network requests',
 };
 
+const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
+    'shell.panel.read':
+        'Lets the plugin see which panels and tabs are currently mounted in the app shell.',
+    'shell.panel.write':
+        'Lets the plugin add or modify panels in the app shell (sidebar, mobile tabs, right panel).',
+    'message.read':
+        'Lets the plugin read the contents of messages in dens you have joined.',
+    'message.compose':
+        'Lets the plugin draft and send messages on your behalf in dens you have joined.',
+    'storage.read':
+        'Lets the plugin read values it has previously stored in your local browser.',
+    'storage.write':
+        'Lets the plugin store data in your local browser. Data stays on this device.',
+    'http.fetch':
+        'Lets the plugin make outbound network requests. Use caution — the plugin can talk to any URL.',
+};
+
 const describeCapabilities = (capabilities: readonly PluginCapability[]): string => {
     if (capabilities.length === 0) return 'No special permissions';
     return capabilities.map((cap) => CAPABILITY_LABELS[cap] ?? cap).join(' · ');
+};
+
+const describeSurfaces = (manifest: {
+    homepageCard?: unknown;
+    pinnedNav?: unknown;
+    rightPanel?: unknown;
+    mobileTab?: unknown;
+}): string | null => {
+    const parts: string[] = [];
+    if (manifest.homepageCard) parts.push('home card');
+    if (manifest.pinnedNav) parts.push('pinned nav');
+    if (manifest.rightPanel) parts.push('right panel');
+    if (manifest.mobileTab) parts.push('mobile tab');
+    return parts.length === 0 ? null : parts.join(' · ');
 };
 
 type PluginRow = {
@@ -41,10 +84,211 @@ type PluginRow = {
     runtime: boolean;
 };
 
+const chipBaseStyle: React.CSSProperties = {
+    border: '1px solid var(--border-default)',
+    borderRadius: 999,
+    padding: '2px 10px',
+    fontSize: 11,
+    cursor: 'pointer',
+};
+
+const InstallApprovalDialog = ({
+    pending,
+    onApprove,
+    onCancel,
+}: {
+    pending: PendingPluginInstall;
+    onApprove: (granted: PluginCapability[]) => Promise<void> | void;
+    onCancel: () => void;
+}) => {
+    const manifest = pending.bundle.manifest;
+    const declared = manifest.capabilities;
+    const [selected, setSelected] = useState<Set<PluginCapability>>(
+        () => new Set(declared),
+    );
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const toggle = (cap: PluginCapability) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(cap)) next.delete(cap);
+            else next.add(cap);
+            return next;
+        });
+    };
+
+    const handleApprove = async () => {
+        setSubmitting(true);
+        setError(null);
+        try {
+            await onApprove(declared.filter((cap) => selected.has(cap)));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+            setSubmitting(false);
+        }
+    };
+
+    const surfaces = describeSurfaces(manifest);
+
+    return (
+        <div
+            role="alertdialog"
+            aria-labelledby="plugin-install-title"
+            aria-describedby="plugin-install-desc"
+            data-testid="plugin-install-dialog"
+            style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,.5)',
+                display: 'grid',
+                placeItems: 'center',
+                zIndex: 100,
+            }}
+            onClick={() => {
+                if (!submitting) onCancel();
+            }}
+        >
+            <div
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: 12,
+                    padding: 20,
+                    maxWidth: 520,
+                    width: 'min(520px, calc(100vw - 32px))',
+                    color: 'var(--text-primary)',
+                }}
+            >
+                <h3 id="plugin-install-title" style={{ marginTop: 0 }}>
+                    Install {manifest.name}?
+                </h3>
+                <p
+                    id="plugin-install-desc"
+                    style={{ color: 'var(--text-muted)', marginTop: 0 }}
+                >
+                    <code>{manifest.id}@{manifest.version}</code> from{' '}
+                    {manifest.listing.providerId}
+                </p>
+                {manifest.description ? (
+                    <p style={{ marginTop: 8 }}>{manifest.description}</p>
+                ) : null}
+
+                <h4 style={{ marginTop: 16, marginBottom: 4 }}>Permissions</h4>
+                {declared.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>
+                        This plugin requests no special permissions.
+                    </p>
+                ) : (
+                    <ul
+                        style={{ listStyle: 'none', padding: 0, margin: 0 }}
+                        data-testid="plugin-install-permissions"
+                    >
+                        {declared.map((cap) => (
+                            <li
+                                key={cap}
+                                style={{
+                                    display: 'flex',
+                                    gap: 10,
+                                    alignItems: 'flex-start',
+                                    padding: '6px 0',
+                                    borderBottom: '1px solid var(--border-default)',
+                                }}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selected.has(cap)}
+                                    onChange={() => toggle(cap)}
+                                    aria-label={CAPABILITY_LABELS[cap]}
+                                    data-testid={`plugin-install-perm-${cap}`}
+                                    style={{ marginTop: 3 }}
+                                />
+                                <span style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <strong style={{ fontSize: 13 }}>
+                                        {CAPABILITY_LABELS[cap]}
+                                    </strong>
+                                    <small style={{ color: 'var(--text-muted)' }}>
+                                        {CAPABILITY_DESCRIPTIONS[cap]}
+                                    </small>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                {surfaces ? (
+                    <>
+                        <h4 style={{ marginTop: 16, marginBottom: 4 }}>Surfaces</h4>
+                        <p
+                            style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}
+                            data-testid="plugin-install-surfaces"
+                        >
+                            This plugin will appear in: {surfaces}.
+                        </p>
+                    </>
+                ) : null}
+
+                {error ? (
+                    <p
+                        style={{ color: 'var(--danger, #b3261e)', marginTop: 12 }}
+                        role="alert"
+                    >
+                        {error}
+                    </p>
+                ) : null}
+
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: 8,
+                        justifyContent: 'flex-end',
+                        marginTop: 20,
+                    }}
+                >
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={submitting}
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 6,
+                            padding: '6px 14px',
+                            background: 'var(--bg-input)',
+                            color: 'var(--text-primary)',
+                            cursor: submitting ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleApprove}
+                        disabled={submitting}
+                        data-testid="plugin-install-approve"
+                        style={{
+                            border: '1px solid var(--accent-primary)',
+                            borderRadius: 6,
+                            padding: '6px 14px',
+                            background: 'var(--accent-primary)',
+                            color: 'var(--bg-surface)',
+                            cursor: submitting ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {submitting ? 'Installing…' : 'Approve & install'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const PluginsView = () => {
     const [ctx, setCtx] = useAtom(capabilityContextAtom);
     const [pendingToggle, setPendingToggle] = useState<keyof FeatureFlags | null>(null);
-    const installed = useAtomValue(installedPluginsAtom);
+    const [installed, setInstalled] = useAtom(installedPluginsAtom);
+    const [pendingInstall, setPendingInstall] = useAtom(pendingPluginInstallAtom);
+    const setInstalledList = useSetAtom(installedPluginsAtom);
     const [allPlugins, setAllPlugins] = useState(() => getAllFeaturePlugins());
     useEffect(() => subscribeFeaturePlugins(setAllPlugins), []);
 
@@ -99,6 +343,55 @@ export const PluginsView = () => {
         if (!pendingToggle) return;
         applyToggle(pendingToggle, false);
         setPendingToggle(null);
+    };
+
+    const handleApproveInstall = async (granted: PluginCapability[]) => {
+        if (!pendingInstall) return;
+        const bundle = pendingInstall.bundle;
+        const result = await installEntitlement(pendingInstall.entitlement, {
+            fetchSignedBundle: async () => bundle,
+            approvedCapabilities: granted,
+        });
+        setInstalledList((prev) => {
+            const next = prev.filter(
+                (r) => r.entitlementId !== result.record.entitlementId,
+            );
+            next.push(result.record);
+            return next;
+        });
+        setPendingInstall(null);
+    };
+
+    const toggleCapability = (
+        record: InstalledPluginRecord,
+        capability: PluginCapability,
+    ) => {
+        const granted = new Set(record.grantedCapabilities);
+        if (granted.has(capability)) granted.delete(capability);
+        else granted.add(capability);
+        const nextGranted = record.manifest.capabilities.filter((cap) =>
+            granted.has(cap),
+        );
+        const nextRecord: InstalledPluginRecord = {
+            ...record,
+            grantedCapabilities: nextGranted,
+        };
+        setInstalled((prev) =>
+            prev.map((r) => (r.entitlementId === record.entitlementId ? nextRecord : r)),
+        );
+        if (
+            nextRecord.manifest.artifactKind === 'code_plugin' &&
+            nextRecord.status === 'enabled'
+        ) {
+            remountSandbox(nextRecord.manifest, nextGranted);
+        }
+    };
+
+    const removePlugin = (record: InstalledPluginRecord) => {
+        uninstallPlugin(record);
+        setInstalled((prev) =>
+            prev.filter((r) => r.entitlementId !== record.entitlementId),
+        );
     };
 
     return (
@@ -226,67 +519,146 @@ export const PluginsView = () => {
                     </p>
                 ) : (
                     <ul style={{ paddingLeft: 20 }}>
-                        {installed.map((record) => (
-                            <li key={record.entitlementId} style={{ padding: '6px 0' }}>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                    <strong>{record.manifest.name}</strong>
-                                    <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                        {record.manifest.id}@{record.manifest.version}
-                                    </code>
-                                    <span
-                                        aria-label={
-                                            record.lastError
-                                                ? `${record.status} (with error)`
-                                                : record.status
-                                        }
-                                        style={{
-                                            fontSize: 11,
-                                            padding: '1px 6px',
-                                            borderRadius: 999,
-                                            background: record.lastError
-                                                ? 'var(--danger, #b3261e)'
-                                                : record.status === 'enabled'
-                                                  ? 'var(--accent-primary, #4ECDC4)'
-                                                  : 'var(--text-muted, #888)',
-                                            color: '#fff',
-                                        }}
-                                    >
-                                        {record.lastError ? '⚠ ' : ''}
-                                        {record.status}
-                                    </span>
-                                </div>
-                                <small style={{ color: 'var(--text-muted)' }}>
-                                    {record.manifest.artifactKind} ·{' '}
-                                    {record.manifest.listing.providerId}
-                                    {record.manifest.listing.publicSlug
-                                        ? ` · /${record.manifest.listing.publicSlug}`
-                                        : ''}
-                                </small>
-                                <small
-                                    data-testid={`plugin-permissions-${record.manifest.id}`}
-                                    style={{
-                                        display: 'block',
-                                        color: 'var(--text-muted)',
-                                        fontSize: 11,
-                                    }}
-                                >
-                                    Permissions: {describeCapabilities(record.manifest.capabilities)}
-                                </small>
-                                {record.lastError ? (
-                                    <div
-                                        style={{
-                                            color: 'var(--danger, #b3261e)',
-                                            fontSize: 12,
-                                        }}
-                                    >
-                                        {record.lastError}
+                        {installed.map((record) => {
+                            const grantedSet = new Set(record.grantedCapabilities);
+                            return (
+                                <li key={record.entitlementId} style={{ padding: '6px 0' }}>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <strong>{record.manifest.name}</strong>
+                                        <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                            {record.manifest.id}@{record.manifest.version}
+                                        </code>
+                                        <span
+                                            aria-label={
+                                                record.lastError
+                                                    ? `${record.status} (with error)`
+                                                    : record.status
+                                            }
+                                            style={{
+                                                fontSize: 11,
+                                                padding: '1px 6px',
+                                                borderRadius: 999,
+                                                background: record.lastError
+                                                    ? 'var(--danger, #b3261e)'
+                                                    : record.status === 'enabled'
+                                                      ? 'var(--accent-primary, #4ECDC4)'
+                                                      : 'var(--text-muted, #888)',
+                                                color: '#fff',
+                                            }}
+                                        >
+                                            {record.lastError ? '⚠ ' : ''}
+                                            {record.status}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removePlugin(record)}
+                                            data-testid={`plugin-remove-${record.manifest.id}`}
+                                            style={{
+                                                marginLeft: 'auto',
+                                                border: '1px solid var(--danger, #b3261e)',
+                                                background: 'transparent',
+                                                color: 'var(--danger, #b3261e)',
+                                                borderRadius: 6,
+                                                padding: '2px 10px',
+                                                fontSize: 11,
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            Remove
+                                        </button>
                                     </div>
-                                ) : null}
-                            </li>
-                        ))}
+                                    <small style={{ color: 'var(--text-muted)' }}>
+                                        {record.manifest.artifactKind} ·{' '}
+                                        {record.manifest.listing.providerId}
+                                        {record.manifest.listing.publicSlug
+                                            ? ` · /${record.manifest.listing.publicSlug}`
+                                            : ''}
+                                    </small>
+                                    <small
+                                        data-testid={`plugin-permissions-${record.manifest.id}`}
+                                        style={{
+                                            display: 'block',
+                                            color: 'var(--text-muted)',
+                                            fontSize: 11,
+                                            marginTop: 4,
+                                        }}
+                                    >
+                                        Permissions: {describeCapabilities(record.manifest.capabilities)}
+                                    </small>
+                                    {record.manifest.capabilities.length > 0 ? (
+                                        <div
+                                            data-testid={`plugin-capability-chips-${record.manifest.id}`}
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: 6,
+                                                marginTop: 6,
+                                            }}
+                                        >
+                                            {record.manifest.capabilities.map((cap) => {
+                                                const granted = grantedSet.has(cap);
+                                                return (
+                                                    <button
+                                                        key={cap}
+                                                        type="button"
+                                                        onClick={() => toggleCapability(record, cap)}
+                                                        aria-pressed={granted}
+                                                        title={CAPABILITY_DESCRIPTIONS[cap]}
+                                                        data-testid={`plugin-cap-${record.manifest.id}-${cap}`}
+                                                        style={{
+                                                            ...chipBaseStyle,
+                                                            background: granted
+                                                                ? 'var(--accent-primary)'
+                                                                : 'var(--bg-input)',
+                                                            color: granted
+                                                                ? 'var(--bg-surface)'
+                                                                : 'var(--text-primary)',
+                                                        }}
+                                                    >
+                                                        {CAPABILITY_LABELS[cap] ?? cap}
+                                                        {granted ? '' : ' (revoked)'}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : null}
+                                    {describeSurfaces(record.manifest) ? (
+                                        <small
+                                            data-testid={`plugin-surfaces-${record.manifest.id}`}
+                                            style={{
+                                                display: 'block',
+                                                color: 'var(--text-muted)',
+                                                fontSize: 11,
+                                                marginTop: 4,
+                                            }}
+                                        >
+                                            Surfaces: {describeSurfaces(record.manifest)}
+                                        </small>
+                                    ) : null}
+                                    {record.lastError ? (
+                                        <div
+                                            style={{
+                                                color: 'var(--danger, #b3261e)',
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            {record.lastError}
+                                        </div>
+                                    ) : null}
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
             </div>
+
+            {pendingInstall ? (
+                <InstallApprovalDialog
+                    pending={pendingInstall}
+                    onApprove={handleApproveInstall}
+                    onCancel={() => setPendingInstall(null)}
+                />
+            ) : null}
 
             {pendingToggle ? (
                 <div

@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react';
-import { defaultHomeserverFromConfig, loadClientConfig, resolveHomeserver } from './homeserver';
+import { useEffect, useRef, useState } from 'react';
+import {
+    defaultHomeserverFromConfig,
+    loadClientConfig,
+    resolveHomeserver,
+    useRegistrationAvailability,
+} from './homeserver';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 import { ResetPasswordForm } from './ResetPasswordForm';
@@ -9,14 +14,28 @@ import type { AuthTab, ResolvedHomeserver } from './types';
 
 const FALLBACK_HOMESERVER_HOST = 'matrix.theblackout.app';
 
+const TAB_PATHS: Record<AuthTab, string> = {
+    login: '/login',
+    register: '/register',
+    reset: '/reset-password',
+};
+
+const tabFromPathname = (pathname: string): AuthTab => {
+    if (pathname.startsWith('/register')) return 'register';
+    if (pathname.startsWith('/reset-password')) return 'reset';
+    return 'login';
+};
+
 const initialTab = (): AuthTab => {
     try {
         const params = new URLSearchParams(window.location.search);
+        // An SSO callback always lands on the login tab regardless of which
+        // path it returned to, so the token can be consumed.
         if (params.get('loginToken')) return 'login';
+        return tabFromPathname(window.location.pathname);
     } catch {
-        // ignore
+        return 'login';
     }
-    return 'login';
 };
 
 const tabLabel: Record<AuthTab, string> = {
@@ -28,7 +47,39 @@ const tabLabel: Record<AuthTab, string> = {
 export const LoginPage = () => {
     const [server, setServer] = useState<ResolvedHomeserver | null>(null);
     const [bootstrapError, setBootstrapError] = useState<string | null>(null);
-    const [tab, setTab] = useState<AuthTab>(initialTab());
+    const [tab, setTabState] = useState<AuthTab>(initialTab());
+    // Captured once at mount so the "signups disabled" notice still renders
+    // after we `replaceState` the URL back to /login.
+    const startedOnRegisterRef = useRef(initialTab() === 'register');
+    const registrationAvailability = useRegistrationAvailability(server);
+
+    // Keep the URL in sync with the active tab so links to `/register` work
+    // and users can copy/share the active surface. `replaceState` avoids
+    // adding history entries for every tab click.
+    const setTab = (next: AuthTab) => {
+        setTabState(next);
+        try {
+            const targetPath = TAB_PATHS[next];
+            if (window.location.pathname !== targetPath) {
+                const url = new URL(window.location.href);
+                url.pathname = targetPath;
+                window.history.replaceState(null, '', url.toString());
+            }
+        } catch {
+            // history API unavailable (tests, embedded webviews) — ignore.
+        }
+    };
+
+    // When `/register` was requested but the homeserver rejects signups,
+    // fall back to the login tab + show an inline notice rather than
+    // letting the user fill out a form that will never succeed.
+    const registrationDisabled = registrationAvailability === 'disabled';
+    useEffect(() => {
+        if (tab === 'register' && registrationDisabled) {
+            setTab('login');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [registrationDisabled]);
 
     useEffect(() => {
         let cancelled = false;
@@ -85,7 +136,11 @@ export const LoginPage = () => {
         );
     }
 
-    const tabs: AuthTab[] = ['login', 'register', 'reset'];
+    const tabs: AuthTab[] = registrationDisabled
+        ? ['login', 'reset']
+        : ['login', 'register', 'reset'];
+    const showRegistrationDisabledNotice =
+        registrationDisabled && startedOnRegisterRef.current;
 
     return (
         <div style={{ display: 'grid', gap: 16 }}>
@@ -96,6 +151,23 @@ export const LoginPage = () => {
                     setTab('login');
                 }}
             />
+            {showRegistrationDisabledNotice ? (
+                <p
+                    role="status"
+                    data-testid="registration-disabled-notice"
+                    style={{
+                        margin: 0,
+                        fontSize: 13,
+                        color: 'var(--text-secondary, #94a3b8)',
+                        border: '1px solid var(--border-default, #374151)',
+                        borderRadius: 6,
+                        padding: '8px 10px',
+                    }}
+                >
+                    New signups are disabled on {server.serverName}. Sign in below if you
+                    already have an account.
+                </p>
+            ) : null}
             <div style={tabBarStyle} role="tablist">
                 {tabs.map((t) => (
                     <button
@@ -113,7 +185,7 @@ export const LoginPage = () => {
             {tab === 'login' ? (
                 <LoginForm
                     server={server}
-                    canRegister={true}
+                    canRegister={!registrationDisabled}
                     onSwitchTab={(next) => setTab(next)}
                 />
             ) : null}

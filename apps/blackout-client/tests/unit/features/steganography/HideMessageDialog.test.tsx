@@ -25,7 +25,7 @@ describe('HideMessageDialog advanced gating', () => {
             root.render(
                 <Provider store={createStore()}>
                     <HideMessageDialog open onClose={() => undefined} onEncoded={() => undefined} />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -35,7 +35,7 @@ describe('HideMessageDialog advanced gating', () => {
         expect((advancedSelect as HTMLSelectElement).disabled).toBe(true);
 
         const upgradeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-            button.textContent?.includes('Upgrade for Advanced'),
+            button.textContent?.includes('Upgrade for Advanced')
         );
         expect(upgradeButton).toBeTruthy();
 
@@ -59,7 +59,7 @@ describe('HideMessageDialog advanced gating', () => {
             root.render(
                 <Provider store={createStore()}>
                     <HideMessageDialog open onClose={onClose} onEncoded={() => undefined} />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -83,7 +83,7 @@ describe('HideMessageDialog advanced gating', () => {
             root.render(
                 <Provider store={createStore()}>
                     <HideMessageDialog open onClose={() => undefined} onEncoded={() => undefined} />
-                </Provider>,
+                </Provider>
             );
             await Promise.resolve();
         });
@@ -95,6 +95,38 @@ describe('HideMessageDialog advanced gating', () => {
         expect(labelledBy).toBeTruthy();
         const label = labelledBy ? document.getElementById(labelledBy) : null;
         expect(label?.textContent).toContain('Steganography');
+
+        root.unmount();
+    });
+
+    it('traps focus inside the dialog on open so returnFocus fires on close (audit C row 6)', async () => {
+        // focus-trap-react's default `returnFocusOnDeactivate: true` is the
+        // contract this slice delivers. We verify the trap actually
+        // activated by asserting focus moved inside the dialog; once
+        // activated, focus-trap-react's unmount path returns focus to the
+        // previously focused element (asserting that side directly is
+        // fragile under JSDOM, so the audit row's full behaviour is
+        // pinned by focus-trap-react's own tests + our e2e pass).
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+
+        await act(async () => {
+            root.render(
+                <Provider store={createStore()}>
+                    <HideMessageDialog
+                        open
+                        onClose={() => undefined}
+                        onEncoded={() => undefined}
+                    />
+                </Provider>
+            );
+            await Promise.resolve();
+        });
+
+        const dialog = container.querySelector('[role="dialog"]');
+        expect(dialog).toBeTruthy();
+        expect(dialog?.contains(document.activeElement)).toBe(true);
 
         root.unmount();
     });

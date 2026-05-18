@@ -1,4 +1,5 @@
 import React, { useId, useState, type ReactNode } from 'react';
+import FocusTrap from 'focus-trap-react';
 import { mdToHtml, sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import AvatarDecoration from './AvatarDecoration';
 import type { MemberProfile } from './profileTypes';
@@ -6,6 +7,7 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CharacterSheet } from '../character-sheet/CharacterSheet';
 import { useCanViewSheet } from '../character-sheet/useCanViewSheet';
 import { useDismissOnOutsideOrEscape } from '../room/useDismissOnOutsideOrEscape';
+import { stopPropagation } from '../../utils/keyboard';
 
 interface ProfileModalProps {
     open: boolean;
@@ -102,6 +104,14 @@ export const ProfileModal = ({
     const hasConnections = (profile.profile.connections ?? []).length > 0;
 
     return (
+        <FocusTrap
+            focusTrapOptions={{
+                onDeactivate: onClose,
+                clickOutsideDeactivates: true,
+                escapeDeactivates: stopPropagation,
+                tabbableOptions: { displayCheck: 'none' },
+            }}
+        >
         <div
             role="dialog"
             aria-modal="true"
@@ -471,6 +481,7 @@ export const ProfileModal = ({
                 </div>
             </div>
         </div>
+        </FocusTrap>
     );
 };
 

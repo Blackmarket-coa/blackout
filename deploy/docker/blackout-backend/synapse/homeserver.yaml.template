@@ -78,6 +78,8 @@ enable_registration: ${SYNAPSE_ENABLE_REGISTRATION}
 # leaves those expressions as literal text. Use plain ${VAR} and provide the
 # default in .env.example so the rendered yaml always carries a real boolean.
 enable_registration_without_verification: ${SYNAPSE_ENABLE_REGISTRATION_WITHOUT_VERIFICATION}
+# Invite-only signup gate; tokens minted via the Synapse Admin API.
+registration_requires_token: ${SYNAPSE_REGISTRATION_REQUIRES_TOKEN}
 password_config:
   enabled: ${SYNAPSE_PASSWORD_AUTH_ENABLED}
 

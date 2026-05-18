@@ -1,4 +1,6 @@
 import React, { createElement, useEffect, useRef, useState } from 'react';
+import React, { createElement, useMemo, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { Link } from 'react-router-dom';
 import { buildFeatureRegistry } from './buildRegistry';
 import { composeShellPanels, selectPanelsByKind } from './composition';
@@ -6,6 +8,8 @@ import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
 import { getAllFeaturePlugins, subscribeFeaturePlugins } from './plugins';
 import type { ShellPanelKind } from './types';
+import type { ShellPanelEntry, ShellPanelKind } from './types';
+import { installedPluginPanelsAtom } from '../../features/monetization/install/installedPluginPanelsAtom';
 
 export type RegistrySidebarMode = 'list' | 'rail';
 
@@ -65,7 +69,25 @@ export function RegistrySidebarList({
         { ...defaultFeatureFlags, ...(ctx.flags ?? {}) } as FeatureFlags,
         plugins
     );
-    const panels = selectPanelsByKind(composeShellPanels(registry, ctx), kind);
+    const registryPanels = selectPanelsByKind(composeShellPanels(registry, ctx), kind);
+    const installedPluginPanels = useAtomValue(installedPluginPanelsAtom);
+
+    const panels = useMemo<ShellPanelEntry[]>(() => {
+        if (kind !== 'sidebar' || installedPluginPanels.length === 0) {
+            return registryPanels;
+        }
+        const merged = [...registryPanels, ...installedPluginPanels];
+        return merged
+            .map((entry, insertion) => ({ entry, insertion }))
+            .sort((left, right) => {
+                const leftOrder = left.entry.order ?? Number.POSITIVE_INFINITY;
+                const rightOrder = right.entry.order ?? Number.POSITIVE_INFINITY;
+                if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+                return left.insertion - right.insertion;
+            })
+            .map(({ entry }) => entry);
+    }, [kind, registryPanels, installedPluginPanels]);
+
     const itemsRef = useRef<Array<HTMLAnchorElement | null>>([]);
 
     if (panels.length === 0) return null;

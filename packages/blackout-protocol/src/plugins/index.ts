@@ -8,6 +8,8 @@
 
 export const PLUGINS_PROTOCOL_VERSION = 2;
 
+export type PluginProtocolVersion = 1 | 2;
+
 export type PluginArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
 
 export type PluginCapability =
@@ -48,6 +50,12 @@ export interface PluginManifest {
     /** Human-readable label shown in Plugins view. */
     name: string;
     version: string;
+    /**
+     * Protocol version this manifest targets. Missing or `1` is treated as v1
+     * (the `rightPanel` / `mobileTab` surface fields are ignored). `2` opts
+     * into the v2 surface registration fields.
+     */
+    protocolVersion?: PluginProtocolVersion;
     artifactKind: PluginArtifactKind;
     /** Marketplace listing this manifest was published with. */
     listing: {
@@ -63,10 +71,53 @@ export interface PluginManifest {
     sha256: string;
     /** Optional description for end users. */
     description?: string;
-    /** Optional pinned sidebar nav entry contributed by this plugin. */
-    pinnedNav?: PluginPinnedNavSpec;
-    /** Optional home-page card contributed by this plugin. */
-    homepageCard?: PluginHomepageCardSpec;
+    /**
+     * Optional discoverable card the plugin author wants surfaced on the
+     * host's home / landing surface. `href` is advisory only — the host
+     * routes the click to `/plugins/<id>` until a code-plugin entrypoint
+     * registers an in-app route.
+     */
+    homepageCard?: {
+        title: string;
+        summary?: string;
+        iconUrl?: string;
+        href?: string;
+    };
+    /**
+     * Optional sidebar / nav rail entry the plugin author wants pinned.
+     * The host materializes this into a `ShellPanelEntry` of kind
+     * `sidebar`. Lower `order` renders first; `href` is advisory and the
+     * host routes to `/plugins/<id>` until code-plugin entrypoint loading
+     * is wired.
+     */
+    pinnedNav?: {
+        label: string;
+        iconUrl?: string;
+        href?: string;
+        order?: number;
+    };
+    /**
+     * Optional right-panel entry (v2+). The host materializes this into a
+     * `ShellPanelEntry` of kind `right-panel`. Until a code-plugin
+     * entrypoint registers an in-app route, the host routes clicks to
+     * `/plugins/<id>`.
+     */
+    rightPanel?: {
+        id: string;
+        label: string;
+        iconUrl?: string;
+        order?: number;
+    };
+    /**
+     * Optional mobile-tab entry (v2+). The host materializes this into a
+     * `ShellPanelEntry` of kind `mobile-tab`.
+     */
+    mobileTab?: {
+        id: string;
+        label: string;
+        iconUrl?: string;
+        order?: number;
+    };
 }
 
 export interface PluginSignatureEnvelope {

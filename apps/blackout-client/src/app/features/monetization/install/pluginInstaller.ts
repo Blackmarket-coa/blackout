@@ -12,12 +12,24 @@ import type {
     InstalledPluginRecord,
     InstalledPluginStatus,
 } from './installedPluginsAtom';
+import { mountSandbox, unmountSandbox } from './sandbox/sandboxRegistry';
 import { verifySignedBundle } from './pluginSignature';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
     onAssetCached?: (manifest: PluginManifest, bytes: Uint8Array) => void;
+    /**
+     * Optional observer fired after a code plugin's sandbox has been
+     * mounted. The host wires sandbox lifecycle automatically via the
+     * sandbox registry; this callback is for tests/telemetry that need to
+     * observe the moment a plugin came online.
+     */
     onCodePluginLoaded?: (manifest: PluginManifest, bytes: Uint8Array) => void;
+    /**
+     * Capability subset the user approved at the install dialog. When
+     * omitted, all manifest-declared capabilities are granted.
+     */
+    approvedCapabilities?: PluginManifest['capabilities'];
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -108,11 +120,16 @@ export async function installEntitlement(
     }
 
     const status: InstalledPluginStatus = 'enabled';
+    const declared = bundle.manifest.capabilities;
+    const grantedCapabilities = ctx.approvedCapabilities
+        ? declared.filter((cap) => ctx.approvedCapabilities!.includes(cap))
+        : [...declared];
     const record: InstalledPluginRecord = {
         entitlementId: entitlement.id,
         manifest: bundle.manifest,
         status,
         installedAt: new Date().toISOString(),
+        grantedCapabilities,
     };
 
     switch (bundle.manifest.artifactKind) {
@@ -124,6 +141,7 @@ export async function installEntitlement(
             registerDynamicFeaturePlugin(manifestPluginToFeatureModulePlugin(bundle.manifest));
             break;
         case 'code_plugin':
+            mountSandbox(bundle.manifest, bundleBytes, grantedCapabilities);
             ctx.onCodePluginLoaded?.(bundle.manifest, bundleBytes);
             break;
         default:
@@ -142,5 +160,8 @@ export function uninstallPlugin(record: InstalledPluginRecord): void {
         record.manifest.artifactKind === 'code_plugin'
     ) {
         unregisterDynamicFeaturePlugin(record.manifest.id);
+    }
+    if (record.manifest.artifactKind === 'code_plugin') {
+        unmountSandbox(record.manifest.id);
     }
 }
