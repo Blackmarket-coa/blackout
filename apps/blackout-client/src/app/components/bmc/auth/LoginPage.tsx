@@ -3,7 +3,7 @@ import {
     defaultHomeserverFromConfig,
     loadClientConfig,
     resolveHomeserver,
-    useRegistrationAvailability,
+    useRegistrationProbe,
 } from './homeserver';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
@@ -51,7 +51,13 @@ export const LoginPage = () => {
     // Captured once at mount so the "signups disabled" notice still renders
     // after we `replaceState` the URL back to /login.
     const startedOnRegisterRef = useRef(initialTab() === 'register');
-    const registrationAvailability = useRegistrationAvailability(server);
+    // The probe POSTs an empty body to /register, which by Matrix UIA spec
+    // is answered with 401 + flow data. Browsers render that 401 in the
+    // network panel, so we only probe once the user actually heads to the
+    // register surface (clicked the tab, or landed on /register directly).
+    const probeServer = tab === 'register' || startedOnRegisterRef.current ? server : null;
+    const registrationProbe = useRegistrationProbe(probeServer);
+    const registrationAvailability = registrationProbe.state;
 
     // Keep the URL in sync with the active tab so links to `/register` work
     // and users can copy/share the active surface. `replaceState` avoids
@@ -190,7 +196,11 @@ export const LoginPage = () => {
                 />
             ) : null}
             {tab === 'register' ? (
-                <RegisterForm server={server} onSwitchTab={(next) => setTab(next)} />
+                <RegisterForm
+                    server={server}
+                    onSwitchTab={(next) => setTab(next)}
+                    probe={registrationProbe}
+                />
             ) : null}
             {tab === 'reset' ? (
                 <ResetPasswordForm server={server} onSwitchTab={(next) => setTab(next)} />

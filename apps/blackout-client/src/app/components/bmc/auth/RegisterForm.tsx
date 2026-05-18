@@ -6,7 +6,6 @@ import {
     type AuthDict,
     type IAuthData,
     type MatrixClient,
-    type MatrixError,
     type UIAFlow,
 } from 'matrix-js-sdk';
 import { registerUser } from '../../../../client/auth';
@@ -31,6 +30,7 @@ import {
     primaryButtonStyle,
 } from './styles';
 import type { ResolvedHomeserver } from './types';
+import type { RegistrationProbe } from './homeserver';
 
 const SUPPORTED_REG_STAGES = [
     AuthType.Dummy,
@@ -54,6 +54,7 @@ const generateClientSecret = (): string => {
 type RegisterFormProps = {
     server: ResolvedHomeserver;
     onSwitchTab: (tab: 'login') => void;
+    probe: RegistrationProbe;
 };
 
 type FormFields = {
@@ -112,13 +113,12 @@ const evaluateFlows = (data: IAuthData | null, error?: string): RegistrationFlow
     };
 };
 
-export const RegisterForm = ({ server, onSwitchTab }: RegisterFormProps) => {
+export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) => {
     const store = useStore();
     const [fields, setFields] = useState<FormFields>(initialFields);
     const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [authData, setAuthData] = useState<IAuthData | null>(null);
-    const [authDataLoading, setAuthDataLoading] = useState(true);
+    const [error, setError] = useState<string | null>(probe.errorMessage);
+    const [authData, setAuthData] = useState<IAuthData | null>(probe.authData);
     const [recaptchaResponse, setRecaptchaResponse] = useState<string | null>(null);
     const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
     const recaptchaWidgetRef = useRef<number | null>(null);
@@ -127,45 +127,20 @@ export const RegisterForm = ({ server, onSwitchTab }: RegisterFormProps) => {
     const emailSendAttemptRef = useRef(1);
     const [emailSent, setEmailSent] = useState(false);
 
-    // Bootstrap: hit the registration endpoint with no auth dict to discover flows.
+    const authDataLoading = probe.state === 'unknown';
+
+    // Mirror the probe result from the parent — the probe is hoisted to
+    // LoginPage so the eager 401 UIA challenge doesn't fire on /login.
     useEffect(() => {
-        let cancelled = false;
-        setAuthDataLoading(true);
-        setError(null);
-        setAuthData(null);
+        setAuthData(probe.authData);
+        setError(probe.errorMessage);
+        if (probe.state === 'unknown') return;
         setRecaptchaResponse(null);
         recaptchaWidgetRef.current = null;
         emailSidRef.current = null;
         emailSendAttemptRef.current = 1;
         setEmailSent(false);
-
-        const mx = createClient({ baseUrl: server.baseUrl });
-        mx.registerRequest({})
-            .then(() => {
-                // Some servers allow no-auth registration; treat as supported.
-                if (cancelled) return;
-                setAuthData({ flows: [{ stages: [AuthType.Dummy] }] } as IAuthData);
-            })
-            .catch((err: MatrixError) => {
-                if (cancelled) return;
-                if (err.httpStatus === 401 && err.data) {
-                    setAuthData(err.data as IAuthData);
-                } else if (err.httpStatus === 403) {
-                    setError('Registration is disabled on this homeserver.');
-                } else if (err.httpStatus === 429) {
-                    setError('Too many registration attempts; please try again later.');
-                } else {
-                    setError(err.message || 'Could not load registration flows.');
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setAuthDataLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [server.baseUrl]);
+    }, [probe.authData, probe.errorMessage, probe.state]);
 
     const flowAvailability = useMemo(
         () => evaluateFlows(authData, error ?? undefined),
