@@ -83,8 +83,11 @@
     "mobile:workspace:build": "pnpm --filter @blackout/mobile build",
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
     "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment",
-    "e2e": "playwright test",
-    "e2e:install": "playwright install --with-deps chromium"
+    "e2e": "playwright test --project=chromium",
+    "e2e:install": "playwright install --with-deps chromium",
+    "e2e:visual": "playwright test apps/blackout-client/tests/e2e/visual.spec.ts",
+    "e2e:visual:authed": "playwright test playwright/e2e/launch-smoke/visual.spec.ts",
+    "e2e:visual:update": "playwright test apps/blackout-client/tests/e2e/visual.spec.ts --update-snapshots"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
