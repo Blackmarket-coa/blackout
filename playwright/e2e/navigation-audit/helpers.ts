@@ -113,19 +113,30 @@ export const expectNoOverflow = async (page: Page): Promise<void> => {
  * `false` when the bridge is unavailable so specs can `test.skip()`
  * rather than fail.
  */
-export const openModal = async (page: Page, name: string): Promise<boolean> => {
+export const openModal = async (
+    page: Page,
+    name: string,
+    args?: Record<string, unknown>
+): Promise<boolean> => {
     const exposed = await page.evaluate(
         () => typeof (window as unknown as { __openModal?: unknown }).__openModal === 'function'
     );
     if (!exposed) return false;
-    return page.evaluate((modalName) => {
-        try {
-            (window as unknown as { __openModal: (n: string) => void }).__openModal(modalName);
-            return true;
-        } catch {
-            return false;
-        }
-    }, name);
+    return page.evaluate(
+        ({ modalName, modalArgs }) => {
+            try {
+                (
+                    window as unknown as {
+                        __openModal: (n: string, a?: Record<string, unknown>) => void;
+                    }
+                ).__openModal(modalName, modalArgs);
+                return true;
+            } catch {
+                return false;
+            }
+        },
+        { modalName: name, modalArgs: args }
+    );
 };
 
 export const assertModalClosed = async (page: Page, name: string): Promise<void> => {

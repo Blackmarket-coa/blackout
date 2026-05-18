@@ -297,6 +297,91 @@ jobs:
           path: apps/blackout-client/playwright-report
           if-no-files-found: ignore
 
+  nav-audit:
+    name: Navigation audit (Playwright + crawler + mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Build workspace dependencies for the client bundle
+        run: |
+          pnpm --filter @blackout/core run build
+          pnpm --filter @blackout/design run build
+      - name: Build @blackout/client
+        run: pnpm --filter @blackout/client run build
+      - name: Install Playwright chromium + system deps
+        run: pnpm e2e:install
+      # TODO(audit): wire a Synapse + MAS service here (composite action)
+      # and export BLACKOUT_E2E_HOMESERVER_URL / LS_AUTH_USERNAME /
+      # LS_AUTH_PASSWORD so global-setup.ts can drive a real login.
+      # Until then the audit gracefully falls back to bootstrap-gate-only
+      # coverage and reports the same single warning + info.
+      - name: Run navigation-audit Playwright suite
+        id: nav_audit_playwright
+        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+        env:
+          CI: "1"
+          BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
+        run: pnpm test:e2e:navigation
+      - name: Run web navigation crawler
+        id: nav_audit_crawler
+        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+        env:
+          BLACKOUT_AUDIT_STORAGE_STATE: audit/navigation/.playwright-state/storageState.json
+        run: |
+          pnpm --filter @blackout/client exec vite preview \
+            --port 4173 --host 127.0.0.1 --strictPort &
+          VITE_PID=$!
+          # Wait for the preview server to accept connections.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm tsx tools/audit-navigation/crawl-web.ts --base http://127.0.0.1:4173
+          STATUS=$?
+          kill $VITE_PID 2>/dev/null || true
+          exit $STATUS
+      - name: Run mobile static auditor
+        id: nav_audit_mobile
+        continue-on-error: ${{ vars.NAVIGATION_AUDIT_REQUIRED != 'true' }}
+        run: pnpm tsx tools/audit-navigation/audit-mobile.ts
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: navigation-audit-reports
+          path: |
+            audit/navigation/web-report.json
+            audit/navigation/web-report.md
+            audit/navigation/mobile-report.json
+            audit/navigation/mobile-report.md
+            audit/navigation/playwright-html/
+            audit/navigation/playwright-results/
+          if-no-files-found: ignore
+      - name: Enforce navigation-audit outcome when required
+        if: vars.NAVIGATION_AUDIT_REQUIRED == 'true'
+        run: |
+          set -e
+          if [ "${{ steps.nav_audit_playwright.outcome }}" != "success" ] \
+             || [ "${{ steps.nav_audit_crawler.outcome }}" != "success" ] \
+             || [ "${{ steps.nav_audit_mobile.outcome }}" != "success" ]; then
+            echo "Navigation audit failed and NAVIGATION_AUDIT_REQUIRED is true."
+            exit 1
+          fi
+
   api-smoke-and-integration:
     name: API smoke + integration (Hono app.fetch)
     runs-on: ubuntu-latest

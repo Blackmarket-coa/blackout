@@ -333,7 +333,14 @@ const run = async (): Promise<number> => {
     let browser: Browser | null = null;
     try {
         browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext();
+        // Reuse the Playwright globalSetup-produced session when available
+        // (set via `BLACKOUT_AUDIT_STORAGE_STATE` env). Falls back to a
+        // fresh context — the gate detection below handles the no-session
+        // case by collapsing 42 × 3 duplicates into one aggregate finding.
+        const storageState = process.env.BLACKOUT_AUDIT_STORAGE_STATE;
+        const context = await browser.newContext(
+            storageState ? { storageState } : undefined
+        );
         // Surface the audit sentinel before any app code runs so AppShell's
         // dev-bridge effect picks it up on first render. Matches the gate
         // in `apps/blackout-client/src/app/pages/shell/AppShell.tsx`.
