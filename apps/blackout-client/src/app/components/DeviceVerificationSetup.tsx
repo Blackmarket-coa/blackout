@@ -70,7 +70,7 @@ function makeUIAAction<T>(
 type SetupVerificationProps = {
   onComplete: (recoveryKey: string) => void;
 };
-function SetupVerification({ onComplete }: SetupVerificationProps) {
+export function SetupVerification({ onComplete }: SetupVerificationProps) {
   const mx = useMatrixClient();
   const alive = useAlive();
 
@@ -227,7 +227,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
 type RecoveryKeyDisplayProps = {
   recoveryKey: string;
 };
-function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
+export function RecoveryKeyDisplay({ recoveryKey }: RecoveryKeyDisplayProps) {
   const [show, setShow] = useState(false);
 
   const handleCopy = () => {
