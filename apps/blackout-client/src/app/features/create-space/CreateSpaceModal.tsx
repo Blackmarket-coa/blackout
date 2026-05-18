@@ -39,7 +39,15 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
 
   return (
     <SpaceProvider value={space ?? null}>
-      <Overlay open backdrop={<OverlayBackdrop />}>
+      <Overlay
+        open
+        backdrop={
+          <OverlayBackdrop
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+          />
+        }
+        style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+      >
         <OverlayCenter>
           <FocusTrap
             focusTrapOptions={{
@@ -47,6 +55,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
               clickOutsideDeactivates: true,
               onDeactivate: closeDialog,
               escapeDeactivates: stopPropagation,
+              returnFocusOnDeactivate: true,
             }}
           >
             <Modal
