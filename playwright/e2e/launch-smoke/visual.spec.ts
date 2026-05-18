@@ -8,9 +8,12 @@ import {
  * Authenticated visual regression coverage for the launch-smoke shell.
  *
  * Same gating as the rest of playwright/e2e/launch-smoke/* — needs a live
- * homeserver and seed users; skipped automatically when neither
- * BLACKOUT_E2E_BASE_URL nor CI is set so a vanilla `pnpm e2e:visual`
- * checkout doesn't fail when the homeserver isn't reachable.
+ * homeserver and seed users. Skipped whenever BLACKOUT_E2E_BASE_URL is
+ * unset (CI included) because the vite preview spun up by
+ * playwright.config.ts only serves the static client bundle — there is no
+ * homeserver to authenticate against, so the signIn flow would always
+ * fail. A dedicated authed workflow can opt-in by exporting
+ * BLACKOUT_E2E_BASE_URL pointing at a live stack.
  *
  * Selectors are deliberately lenient and mirror messaging.spec.ts /
  * auth.spec.ts so we don't drift apart from the existing launch-smoke
@@ -23,7 +26,7 @@ const LS_MEMBER_A_PASSWORD =
   process.env.LS_MEMBER_A_PASSWORD ?? process.env.LS_AUTH_PASSWORD ?? 'change-me';
 
 test.beforeEach(async ({}, testInfo) => {
-  if (!process.env.BLACKOUT_E2E_BASE_URL && !process.env.CI) {
+  if (!process.env.BLACKOUT_E2E_BASE_URL) {
     testInfo.skip(true, 'BLACKOUT_E2E_BASE_URL not set — skipping live-stack visual run.');
   }
 });
