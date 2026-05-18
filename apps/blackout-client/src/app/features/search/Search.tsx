@@ -265,7 +265,14 @@ export function Search({ requestClose }: SearchProps) {
             },
           }}
         >
-          <Modal size="400" style={{ maxHeight: toRem(400), borderRadius: config.radii.R500 }}>
+          <Modal
+            size="400"
+            role="dialog"
+            aria-modal
+            aria-label="Search"
+            data-testid="modal-search"
+            style={{ maxHeight: toRem(400), borderRadius: config.radii.R500 }}
+          >
             <Box
               shrink="No"
               style={{ padding: config.space.S400, paddingBottom: 0 }}

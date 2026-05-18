@@ -735,6 +735,7 @@ export const ClientLayout = () => {
                             }}
                             title="Home"
                             aria-label="Home"
+                            data-testid="primary-rail-home"
                             style={{
                                 width: 40,
                                 height: 40,

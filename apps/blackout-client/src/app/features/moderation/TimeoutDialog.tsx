@@ -199,6 +199,7 @@ export const TimeoutDialog = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
+            data-testid="modal-timeout"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 40 }}
             onClick={onClose}
         >

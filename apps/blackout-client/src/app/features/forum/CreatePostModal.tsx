@@ -89,6 +89,7 @@ export const CreatePostModal = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
+            data-testid="modal-createPost"
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 50 }}
             onClick={onClose}
         >
