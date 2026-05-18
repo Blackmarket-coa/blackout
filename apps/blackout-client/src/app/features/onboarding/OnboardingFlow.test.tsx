@@ -37,16 +37,22 @@ let readSnapshot = {
 };
 const readMock = vi.fn(async () => readSnapshot);
 
+// Stable reference across renders — the production hook memoizes its return
+// value, so the test mock should too. Otherwise the OnboardingFlow effect
+// (whose deps include `progress`) re-fires on every render and clobbers local
+// state set by user interactions.
+const progressApi = {
+    read: readMock,
+    savePatch: savePatchMock,
+    markCompleted: markCompletedMock,
+    reset: resetMock,
+};
+
 vi.mock('./onboardingState', async () => {
     const actual = (await vi.importActual('./onboardingState')) as Record<string, unknown>;
     return {
         ...actual,
-        useOnboardingProgress: () => ({
-            read: readMock,
-            savePatch: savePatchMock,
-            markCompleted: markCompletedMock,
-            reset: resetMock,
-        }),
+        useOnboardingProgress: () => progressApi,
     };
 });
 
@@ -85,6 +91,7 @@ describe('OnboardingFlow choose-role step', () => {
         navigateMock.mockReset();
         savePatchMock.mockClear();
         markCompletedMock.mockClear();
+        resetMock.mockClear();
         readMock.mockClear();
         readSnapshot = {
             stepIndex: 0,
@@ -134,7 +141,7 @@ describe('OnboardingFlow choose-role step', () => {
         expect(markCompletedMock).not.toHaveBeenCalled();
     });
 
-    it('selecting Creator persists role, marks complete, and navigates to /onboarding/creator', async () => {
+    it('selecting Creator persists role and navigates to /onboarding/creator without marking the member flow done', async () => {
         runtimeFeatureFlags.onboardingCreatorPath = true;
         const { container } = await mount();
         const creatorButton = container.querySelector(
@@ -149,7 +156,132 @@ describe('OnboardingFlow choose-role step', () => {
             await flush();
         });
         expect(savePatchMock).toHaveBeenCalledWith({ role: 'creator' });
-        expect(markCompletedMock).toHaveBeenCalledWith(false);
+        // Member-flow completion stays in the hands of the creator wizard, so
+        // the role-select hand-off must NOT call markCompleted.
+        expect(markCompletedMock).not.toHaveBeenCalled();
         expect(navigateMock).toHaveBeenCalledWith('/onboarding/creator');
+    });
+
+    it('mounting with a {role: creator, completed: false} snapshot renders the hand-off panel', async () => {
+        runtimeFeatureFlags.onboardingCreatorPath = true;
+        readSnapshot = {
+            stepIndex: 0,
+            skipped: false,
+            completed: false,
+            startedAt: 0,
+            updatedAt: 0,
+            selectedChannels: [],
+            role: 'creator',
+        } as typeof readSnapshot;
+        const { container } = await mount();
+        expect(
+            container.querySelector('[data-testid="onboarding-creator-handoff"]'),
+        ).not.toBeNull();
+        // Role-select must NOT render when we're in the hand-off state.
+        expect(container.querySelector('[data-testid="onboarding-role-options"]')).toBeNull();
+        expect(
+            container.querySelector('[data-testid="onboarding-creator-continue"]'),
+        ).not.toBeNull();
+        expect(
+            container.querySelector('[data-testid="onboarding-switch-to-member"]'),
+        ).not.toBeNull();
+    });
+
+    it('switching back to the member flow from the hand-off panel resets role to undefined', async () => {
+        runtimeFeatureFlags.onboardingCreatorPath = true;
+        readSnapshot = {
+            stepIndex: 0,
+            skipped: false,
+            completed: false,
+            startedAt: 0,
+            updatedAt: 0,
+            selectedChannels: [],
+            role: 'creator',
+        } as typeof readSnapshot;
+        const { container } = await mount();
+        const switchButton = container.querySelector(
+            '[data-testid="onboarding-switch-to-member"]',
+        ) as HTMLButtonElement | null;
+        expect(switchButton).not.toBeNull();
+        await act(async () => {
+            switchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await flush();
+        });
+        // Second flush picks up state updates queued after the awaited
+        // savePatch() inside the click handler.
+        await act(async () => {
+            await flush();
+        });
+        expect(savePatchMock).toHaveBeenCalledWith({ role: undefined, stepIndex: 0 });
+        // The hand-off panel disappears; role-select reappears.
+        expect(
+            container.querySelector('[data-testid="onboarding-creator-handoff"]'),
+        ).toBeNull();
+        expect(container.querySelector('[data-testid="onboarding-role-options"]')).not.toBeNull();
+    });
+
+    it('restart from the completed view resets progress without a full page reload', async () => {
+        readSnapshot = {
+            stepIndex: 4,
+            skipped: false,
+            completed: true,
+            startedAt: 0,
+            updatedAt: 0,
+            selectedChannels: [],
+        };
+        const reloadSpy = vi.fn();
+        const originalLocation = window.location;
+        // jsdom blocks redefining `window.location.reload` directly on some
+        // versions, so swap the location object for the duration of the test.
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            value: { ...originalLocation, reload: reloadSpy, assign: vi.fn() },
+        });
+        try {
+            const { container } = await mount();
+            const restartButton = container.querySelector(
+                '[data-testid="onboarding-restart"]',
+            ) as HTMLButtonElement | null;
+            expect(restartButton).not.toBeNull();
+            // Set the next snapshot the load-effect will read after reset().
+            readSnapshot = {
+                stepIndex: 0,
+                skipped: false,
+                completed: false,
+                startedAt: Date.now(),
+                updatedAt: Date.now(),
+                selectedChannels: [],
+            };
+            await act(async () => {
+                restartButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                await flush();
+            });
+            await act(async () => {
+                await flush();
+            });
+            expect(resetMock).toHaveBeenCalledTimes(1);
+            expect(reloadSpy).not.toHaveBeenCalled();
+            // After restart, the role-select step renders again.
+            expect(
+                container.querySelector('[data-testid="onboarding-role-options"]'),
+            ).not.toBeNull();
+        } finally {
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                value: originalLocation,
+            });
+        }
+    });
+
+    it('renders a progress bar reflecting the current step', async () => {
+        const { container } = await mount();
+        const bar = container.querySelector(
+            '[data-testid="onboarding-progress-bar"]',
+        ) as HTMLDivElement | null;
+        expect(bar).not.toBeNull();
+        // Inner fill width = (1/5) * 100 = 20%.
+        const fill = bar!.querySelector('div') as HTMLDivElement | null;
+        expect(fill).not.toBeNull();
+        expect(fill!.style.width).toBe('20%');
     });
 });

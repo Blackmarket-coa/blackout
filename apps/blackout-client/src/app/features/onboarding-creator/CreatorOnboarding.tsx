@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { CREATOR_LISTINGS_PATH } from '../../pages/paths';
 import {
@@ -126,6 +126,7 @@ const SOURCE_KINDS: { id: MigrationCreditSourceKind; label: string }[] = [
  * `OnboardingFlow` state machine lands as a follow-up.
  */
 export const CreatorOnboarding = (): JSX.Element => {
+    const navigate = useNavigate();
     const [providers, setProviders] = useState<{ id: string; displayName: string }[]>([]);
     const [credits, setCredits] = useState<MigrationCreditRecord[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -205,6 +206,24 @@ export const CreatorOnboarding = (): JSX.Element => {
                 <p style={subStyle}>
                     Set up your storefront, payout provider, and migration credits.
                 </p>
+                <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    data-testid="creator-onboarding-back"
+                    style={{
+                        marginTop: 4,
+                        alignSelf: 'flex-start',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted, #9ca3af)',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        padding: 0,
+                        textDecoration: 'underline',
+                    }}
+                >
+                    ← Back to member onboarding
+                </button>
             </header>
             <div style={stepperStyle}>
                 {error ? (
