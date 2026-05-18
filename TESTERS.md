@@ -11,12 +11,21 @@ this window become the V1.1 roadmap. No installation required to take part.
 
 ---
 
-## Sign up (3 steps, ~2 minutes)
+## Sign up (4 steps, ~5 minutes)
 
-1. Open **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**
+The V1 Test Flight is **invite-only**: signup needs a one-time
+registration token from a maintainer. Tokens are cheap to issue, so
+don't be shy about asking.
+
+1. **Request an invite token** by opening an
+   [Invitation request discussion](https://github.com/Blackmarket-coa/blackout/discussions/new?category=invitations)
+   (or DM a maintainer listed in [`.github/CODEOWNERS`](.github/CODEOWNERS)).
+   A maintainer will reply with a token string like `abc123…`.
+2. Open **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**
    in any modern browser (Firefox, Chrome, Edge, Safari).
-2. Click **Create account**.
-3. Once you're in, join **[`#welcome:theblackout.app`](https://matrix.to/#/#welcome:theblackout.app)**.
+3. Click **Create account** and paste the token when the signup form
+   asks for one.
+4. Once you're in, join **[`#welcome:theblackout.app`](https://matrix.to/#/#welcome:theblackout.app)**.
 
 That's it. You're on. The rest of this document is what to do next.
 

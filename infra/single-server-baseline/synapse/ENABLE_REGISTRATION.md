@@ -93,6 +93,15 @@ docker exec -it matrix-synapse register_new_matrix_user -a \
 Get an access token by logging in as the admin (any Matrix client will
 do; copy the token from settings → help & about → access token).
 
+The recommended path is `mint-invite-token.sh` in this directory,
+which wraps the admin API and prints just the token string:
+
+```
+ADMIN_ACCESS_TOKEN='syt_…' ./mint-invite-token.sh --uses 1 --expires-in 7d
+```
+
+Or call the API directly:
+
 ```
 ACCESS_TOKEN='syt_…'
 curl -s -X POST https://matrix.theblackout.app/_synapse/admin/v1/registration_tokens/new \
