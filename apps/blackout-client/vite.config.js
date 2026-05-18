@@ -124,8 +124,19 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     copyPublicDir: false,
+    // matrix-sdk (~1.1MB) and react-vendor (~210KB) are split out below for
+    // caching across deploys. The app's main bundle is what's needed for
+    // initial render after that split; gate the limit just above it to still
+    // catch unexpected growth.
+    chunkSizeWarningLimit: 2900,
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] })],
+      output: {
+        manualChunks: {
+          'matrix-sdk': ['matrix-js-sdk', '@matrix-org/matrix-sdk-crypto-wasm'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
     },
   },
 });
