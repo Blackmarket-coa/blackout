@@ -1,0 +1,39 @@
+name: Invite request (V1 Test Flight)
+description: Ask for a one-time signup token for matrix.theblackout.app. Tokens are free during the Test Flight — we just need a handle to DM the token to.
+labels: [T-Task, area:onboarding, needs-triage]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Registration on `matrix.theblackout.app` is invite-only during the 96-hour V1 Test Flight. A maintainer will reply to this issue with confirmation, and **DM the token to the Matrix handle you provide below** — the token string is never posted in this thread.
+
+              **Please don't paste your email address here.** Issues are public. If you don't have a Matrix handle yet, see [matrix.to](https://matrix.to) — any homeserver works, you just need an address we can DM. The Matrix handle you list here is what the token gets sent to; you can create the actual `@you:theblackout.app` account after signup.
+    - type: input
+      id: matrix-handle
+      attributes:
+          label: Matrix handle to DM the token to
+          description: Format `@user:server.example`. We'll send the token here via Matrix DM.
+          placeholder: "@alice:matrix.org"
+      validations:
+          required: true
+    - type: checkboxes
+      id: platforms
+      attributes:
+          label: Which platform(s) do you plan to test on?
+          description: Pick any that apply. Helps us tag your reports.
+          options:
+              - label: "Web (matrix.theblackout.app)"
+              - label: "Desktop app"
+              - label: "Mobile (iOS)"
+              - label: "Mobile (Android)"
+              - label: "Self-hosted / federated peer"
+      validations:
+          required: true
+    - type: textarea
+      id: context
+      attributes:
+          label: Anything we should know?
+          description: Optional. How you heard about Blackout, what you're hoping to try, accessibility needs, etc.
+          placeholder: e.g. "Want to stress-test the Coliseum governance flow"
+      validations:
+          required: false
