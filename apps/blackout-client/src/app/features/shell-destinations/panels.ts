@@ -1,4 +1,5 @@
 import type { ShellPanelEntry } from '../../core/features/types';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import {
     COMMUNITIES_PATH,
     CREATE_PATH,
@@ -33,7 +34,7 @@ export const shellDestinationPanels: ShellPanelEntry[] = [
     {
         id: 'shell.communities',
         kind: 'mobile-tab',
-        label: 'Communities',
+        label: BLACKOUT_TERMS.canopy.titlePlural,
         to: COMMUNITIES_PATH,
         order: 20,
     },
