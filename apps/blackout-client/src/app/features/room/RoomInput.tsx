@@ -89,6 +89,13 @@ import {
     createUploadFamilyObserverAtom,
 } from '../../state/upload';
 import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
+import { API_BASE_URL, fetchAuthorizedBlob } from '../../sdk/client';
+import {
+    buildTenorBinaryUrl,
+    registerTenorShare,
+    type TenorPickerItem,
+} from './tenorClient';
+import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import { safeFile } from '../../utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '../../utils/common';
 import { useSetting } from '../../state/hooks/settings';
@@ -505,6 +512,43 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             } as any);
         };
 
+        const handleTenorGifSelect = async (item: TenorPickerItem, query: string) => {
+            // Pull the binary through the Blackout API proxy so the
+            // browser never contacts Tenor's CDN directly, then upload to
+            // the homeserver and send as a standard m.image. This makes
+            // GIFs behave identically to other image messages (works in
+            // E2EE rooms, receivers never hit Tenor, etc.).
+            try {
+                const token = readBlackoutApiToken();
+                const proxyPath = buildTenorBinaryUrl(item.gif.url, API_BASE_URL);
+                const blob = await fetchAuthorizedBlob(proxyPath, token);
+                const file = new File([blob], `${item.id}.gif`, { type: 'image/gif' });
+                const upload = await mx.uploadContent(file, {
+                    name: file.name,
+                    type: 'image/gif',
+                    includeFilename: false,
+                });
+                const mxc = upload.content_uri;
+                if (!mxc) return;
+                mx.sendMessage(roomId, {
+                    msgtype: MsgType.Image,
+                    body: item.description || 'GIF',
+                    url: mxc,
+                    info: {
+                        mimetype: 'image/gif',
+                        size: blob.size,
+                        w: item.gif.width,
+                        h: item.gif.height,
+                    },
+                } as any);
+                // Best-effort Tenor share registration (TOS requirement).
+                registerTenorShare(item.id, query || undefined).catch(() => undefined);
+            } catch {
+                // Swallow — failures here shouldn't crash the composer.
+                // The user can retry from the picker.
+            }
+        };
+
         return (
             <div ref={ref}>
                 {selectedFiles.length > 0 && (
@@ -707,6 +751,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                                 onCustomEmojiSelect={handleEmoticonSelect}
                                                 onStickerSelect={handleStickerSelect}
                                                 onGifSelect={handleGifSelect}
+                                                onTenorGifSelect={handleTenorGifSelect}
                                                 requestClose={() => {
                                                     setEmojiBoardTab((t) => {
                                                         if (t) {

@@ -39,3 +39,25 @@ export const createAuthorizedApiClient = (token: string | null) =>
             backoffMs: 100,
         },
     });
+
+/**
+ * Authenticated GET that returns a Blob. Used by integrations that need
+ * to pipe a binary response from the Blackout API into a downstream
+ * pipeline (e.g. the Tenor proxy → matrix uploadContent flow).
+ *
+ * Lives in the `sdk/` layer so it sits outside the no-direct-fetch guard
+ * that covers `features/`, `pages/`, `components/`, and `platform/`.
+ */
+export const fetchAuthorizedBlob = async (
+    path: string,
+    token: string | null
+): Promise<Blob> => {
+    const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
+    const headers: Record<string, string> = {};
+    if (token) headers.authorization = `Bearer ${token}`;
+    const res = await fetch(url, { method: 'GET', headers });
+    if (!res.ok) {
+        throw new Error(`Authorized blob fetch failed (${res.status}) for ${path}`);
+    }
+    return await res.blob();
+};
