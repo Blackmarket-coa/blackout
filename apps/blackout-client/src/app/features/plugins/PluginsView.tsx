@@ -57,6 +57,34 @@ const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
         'Lets the plugin make outbound network requests. Use caution — the plugin can talk to any URL.',
 };
 
+const HIGH_RISK_CAPABILITIES = new Set<PluginCapability>([
+    'http.fetch',
+    'message.compose',
+    'storage.write',
+    'shell.panel.write',
+]);
+
+const isHighRisk = (cap: PluginCapability): boolean => HIGH_RISK_CAPABILITIES.has(cap);
+
+const summariseRiskTier = (capabilities: readonly PluginCapability[]): string => {
+    if (capabilities.length === 0) return 'This plugin requests no special permissions.';
+    const flags = {
+        network: capabilities.includes('http.fetch'),
+        compose: capabilities.includes('message.compose'),
+        readMessages: capabilities.includes('message.read'),
+        writeStorage: capabilities.includes('storage.write'),
+        writeShell: capabilities.includes('shell.panel.write'),
+    };
+    const fragments: string[] = [];
+    if (flags.readMessages) fragments.push('read your messages');
+    if (flags.compose) fragments.push('send messages on your behalf');
+    if (flags.network) fragments.push('make network requests');
+    if (flags.writeStorage) fragments.push('store data on this device');
+    if (flags.writeShell) fragments.push('modify the app shell');
+    if (fragments.length === 0) return 'This plugin only requests read-only access to local data.';
+    return `This plugin can ${fragments.join(', ')}.`;
+};
+
 const describeCapabilities = (capabilities: readonly PluginCapability[]): string => {
     if (capabilities.length === 0) return 'No special permissions';
     return capabilities.map((cap) => CAPABILITY_LABELS[cap] ?? cap).join(' · ');
@@ -106,8 +134,13 @@ const InstallApprovalDialog = ({
     const [selected, setSelected] = useState<Set<PluginCapability>>(
         () => new Set(declared),
     );
+    const [showLowRisk, setShowLowRisk] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const highRiskCaps = declared.filter(isHighRisk);
+    const lowRiskCaps = declared.filter((cap) => !isHighRisk(cap));
+    const riskTier = summariseRiskTier(declared);
 
     const toggle = (cap: PluginCapability) => {
         setSelected((prev) => {
@@ -176,16 +209,22 @@ const InstallApprovalDialog = ({
                 ) : null}
 
                 <h4 style={{ marginTop: 16, marginBottom: 4 }}>Permissions</h4>
-                {declared.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>
-                        This plugin requests no special permissions.
-                    </p>
-                ) : (
+                <p
+                    data-testid="plugin-install-risk-tier"
+                    style={{
+                        margin: '0 0 8px 0',
+                        fontSize: 13,
+                        color: 'var(--text-primary)',
+                    }}
+                >
+                    {riskTier}
+                </p>
+                {declared.length === 0 ? null : (
                     <ul
                         style={{ listStyle: 'none', padding: 0, margin: 0 }}
                         data-testid="plugin-install-permissions"
                     >
-                        {declared.map((cap) => (
+                        {highRiskCaps.map((cap) => (
                             <li
                                 key={cap}
                                 style={{
@@ -214,6 +253,65 @@ const InstallApprovalDialog = ({
                                 </span>
                             </li>
                         ))}
+                        {lowRiskCaps.length > 0 && (
+                            <li
+                                style={{
+                                    padding: '6px 0',
+                                    borderBottom: showLowRisk
+                                        ? '1px solid var(--border-default)'
+                                        : 'none',
+                                }}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setShowLowRisk((v) => !v)}
+                                    aria-expanded={showLowRisk}
+                                    data-testid="plugin-install-low-risk-toggle"
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'var(--text-muted)',
+                                        fontSize: 12,
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                    }}
+                                >
+                                    {showLowRisk
+                                        ? `Hide ${lowRiskCaps.length} read-only permission${lowRiskCaps.length === 1 ? '' : 's'}`
+                                        : `Show ${lowRiskCaps.length} read-only permission${lowRiskCaps.length === 1 ? '' : 's'}`}
+                                </button>
+                            </li>
+                        )}
+                        {showLowRisk &&
+                            lowRiskCaps.map((cap) => (
+                                <li
+                                    key={cap}
+                                    style={{
+                                        display: 'flex',
+                                        gap: 10,
+                                        alignItems: 'flex-start',
+                                        padding: '6px 0',
+                                        borderBottom: '1px solid var(--border-default)',
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selected.has(cap)}
+                                        onChange={() => toggle(cap)}
+                                        aria-label={CAPABILITY_LABELS[cap]}
+                                        data-testid={`plugin-install-perm-${cap}`}
+                                        style={{ marginTop: 3 }}
+                                    />
+                                    <span style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <strong style={{ fontSize: 13 }}>
+                                            {CAPABILITY_LABELS[cap]}
+                                        </strong>
+                                        <small style={{ color: 'var(--text-muted)' }}>
+                                            {CAPABILITY_DESCRIPTIONS[cap]}
+                                        </small>
+                                    </span>
+                                </li>
+                            ))}
                     </ul>
                 )}
 
