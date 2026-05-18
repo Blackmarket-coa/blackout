@@ -44,7 +44,7 @@ describe('installedHomepageCardsAtom', () => {
             record({
                 manifest: {
                     id: 'com.example.alpha',
-                    homepageCard: { title: 'Alpha', summary: 'short summary' },
+                    homepageCard: { title: 'Alpha', subtitle: 'short summary' },
                 },
             }),
         ]);
@@ -66,7 +66,7 @@ describe('installedHomepageCardsAtom', () => {
             record({
                 manifest: {
                     id: 'p1',
-                    homepageCard: { title: 'P1', href: '/custom/route' },
+                    homepageCard: { title: 'P1', to: '/custom/route' },
                 },
             }),
         ]);

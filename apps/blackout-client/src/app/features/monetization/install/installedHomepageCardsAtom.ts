@@ -18,9 +18,9 @@ export const installedHomepageCardsAtom = atom<InstalledHomepageCard[]>((get) =>
         cards.push({
             pluginId: record.manifest.id,
             title: card.title,
-            summary: card.summary,
+            summary: card.subtitle,
             iconUrl: card.iconUrl,
-            href: card.href ?? `/plugins/${encodeURIComponent(record.manifest.id)}`,
+            href: card.to ?? `/plugins/${encodeURIComponent(record.manifest.id)}`,
         });
     }
     return cards;

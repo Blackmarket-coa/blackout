@@ -191,7 +191,7 @@ export const HomeFeed = (): JSX.Element => {
                         return (
                             <Link
                                 key={record.manifest.id}
-                                to={card.to}
+                                to={card.to ?? `/plugins/${encodeURIComponent(record.manifest.id)}`}
                                 style={cardStyle}
                                 data-testid="home-plugin-card"
                                 data-plugin-id={record.manifest.id}
