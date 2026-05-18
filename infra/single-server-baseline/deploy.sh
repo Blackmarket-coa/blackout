@@ -22,7 +22,8 @@ cd "$REPO_DIR" && git pull origin develop
 echo "==> Building images..."
 cd "$REPO_DIR" && docker build -f apps/blackout-client/Dockerfile -t blackout-frontend:stable .
 cd "$REPO_DIR" && docker build -f apps/blackout-server/services/blackout-api/Dockerfile -t blackout-api:stable apps/blackout-server/
-cd "$REPO_DIR" && docker tag blackout-api:stable blackout-api:stable-pg
+cd "$SCRIPT_DIR" && docker build -f Dockerfile.blackout-api-pg -t blackout-api:stable-pg .
+cd "$REPO_DIR" && docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono -t blackout-api:hono .
 cd "$REPO_DIR/apps/blackout-server" && DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile -t blackout-synapse:stable .
 
 echo "==> Redeploying from $INFRA_DIR..."
