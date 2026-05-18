@@ -17,6 +17,7 @@ import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-rou
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
+import { PostLoginRecoveryGate } from './app/components/bmc/PostLoginRecoveryGate';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
@@ -220,7 +221,11 @@ const BootstrapStatus = () => {
     );
 
     if (authState === 'logged_in') {
-        return <RouterProvider router={router} />;
+        return (
+            <PostLoginRecoveryGate>
+                <RouterProvider router={router} />
+            </PostLoginRecoveryGate>
+        );
     }
 
     const title =
