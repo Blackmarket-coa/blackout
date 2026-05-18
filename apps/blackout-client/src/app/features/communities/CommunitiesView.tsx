@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
 import { buildCommunitiesPath } from '../../pages/paths';
 
@@ -70,7 +71,9 @@ export const CommunitiesView = () => {
                                 fontSize: 13,
                             }}
                         >
-                            Browse joined {BLACKOUT_TERMS.canopy.plural} or discover new ones.
+                            Browse joined{' '}
+                            <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.plural}</GlossaryTerm>{' '}
+                            or discover new ones.
                         </p>
                     </div>
                 </div>
@@ -120,7 +123,9 @@ export const CommunitiesView = () => {
                     </div>
                 ) : (
                     <small style={{ color: 'var(--text-muted)' }}>
-                        No joined {BLACKOUT_TERMS.canopy.plural} yet — discover one below.
+                        No joined{' '}
+                        <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.plural}</GlossaryTerm>{' '}
+                        yet — discover one below.
                     </small>
                 )}
             </header>

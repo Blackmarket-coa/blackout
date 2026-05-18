@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import { Link } from 'react-router-dom';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
@@ -211,7 +212,9 @@ export const HomeFeed = (): JSX.Element => {
                 <div style={emptyStateStyle} data-testid="home-feed-empty">
                     <strong>No activity yet.</strong>
                     <span>
-                        Join a {BLACKOUT_TERMS.canopy.singular} to start seeing posts in your feed.
+                        Join a{' '}
+                        <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.singular}</GlossaryTerm>{' '}
+                        to start seeing posts in your feed.
                     </span>
                     <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
                         Discover {BLACKOUT_TERMS.canopy.plural}
