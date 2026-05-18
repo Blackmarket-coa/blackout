@@ -287,6 +287,13 @@ export const initClient = (session: StoredSession): Promise<MatrixClient> =>
 
 export const startClient = async (client: MatrixClient): Promise<void> => {
     await startSyncWithRetry(client);
+
+    // Opt-in DevTools-console hook for diagnosing sync state. Enable with
+    //   localStorage.setItem('blackoutDebug', '1')
+    // then reload, and `window.mxClient` exposes the live MatrixClient.
+    if (window.localStorage.getItem('blackoutDebug') === '1') {
+        (window as unknown as { mxClient: MatrixClient }).mxClient = client;
+    }
 };
 
 export const clearLoginData = (): void => {
