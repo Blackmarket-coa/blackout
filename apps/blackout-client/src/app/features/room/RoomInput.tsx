@@ -667,6 +667,16 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                 size="300"
                                 radii="300"
                                 onClick={() => setToolbar(!toolbar)}
+                                aria-label={
+                                    toolbar
+                                        ? 'Hide formatting toolbar'
+                                        : 'Show formatting toolbar'
+                                }
+                                title={
+                                    toolbar
+                                        ? 'Hide formatting toolbar'
+                                        : 'Show formatting toolbar'
+                                }
                             >
                                 <Icon src={toolbar ? Icons.AlphabetUnderline : Icons.Alphabet} />
                             </IconButton>
