@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createClient, type MatrixError } from 'matrix-js-sdk';
+import { AuthType, createClient, type IAuthData, type MatrixError } from 'matrix-js-sdk';
 import { autoDiscovery, specVersions } from '../../../cs-api';
 import type { ResolvedHomeserver } from './types';
 
@@ -51,31 +51,79 @@ export const defaultHomeserverFromConfig = (cfg: RuntimeClientConfig): string =>
  */
 export type RegistrationAvailability = 'unknown' | 'available' | 'disabled' | 'error';
 
-export const useRegistrationAvailability = (
+export type RegistrationProbe = {
+    state: RegistrationAvailability;
+    /**
+     * UIA flow descriptor returned by the homeserver's 401 challenge, or a
+     * synthetic Dummy flow if the server allows no-auth registration. Null
+     * while the probe is in flight, on 403, or on transport error.
+     */
+    authData: IAuthData | null;
+    errorMessage: string | null;
+};
+
+const idleProbe: RegistrationProbe = {
+    state: 'unknown',
+    authData: null,
+    errorMessage: null,
+};
+
+/**
+ * Probes the homeserver's `/register` endpoint to discover available
+ * registration flows. Pass `null` to defer the probe — the Matrix UIA
+ * spec requires a POST with no auth dict, and the homeserver answers with
+ * 401, which browsers surface as a red console error. Callers should only
+ * enable the probe when the user is actually heading to the register UI.
+ */
+export const useRegistrationProbe = (
     server: ResolvedHomeserver | null
-): RegistrationAvailability => {
-    const [state, setState] = useState<RegistrationAvailability>('unknown');
+): RegistrationProbe => {
+    const [probe, setProbe] = useState<RegistrationProbe>(idleProbe);
 
     useEffect(() => {
         if (!server) {
-            setState('unknown');
+            setProbe(idleProbe);
             return;
         }
         let cancelled = false;
-        setState('unknown');
+        setProbe(idleProbe);
         const mx = createClient({ baseUrl: server.baseUrl });
         mx.registerRequest({})
             .then(() => {
-                if (!cancelled) setState('available');
+                if (cancelled) return;
+                setProbe({
+                    state: 'available',
+                    authData: { flows: [{ stages: [AuthType.Dummy] }] } as IAuthData,
+                    errorMessage: null,
+                });
             })
             .catch((err: MatrixError) => {
                 if (cancelled) return;
-                if (err.httpStatus === 401) {
-                    setState('available');
+                if (err.httpStatus === 401 && err.data) {
+                    setProbe({
+                        state: 'available',
+                        authData: err.data as IAuthData,
+                        errorMessage: null,
+                    });
                 } else if (err.httpStatus === 403) {
-                    setState('disabled');
+                    setProbe({
+                        state: 'disabled',
+                        authData: null,
+                        errorMessage: 'Registration is disabled on this homeserver.',
+                    });
+                } else if (err.httpStatus === 429) {
+                    setProbe({
+                        state: 'error',
+                        authData: null,
+                        errorMessage:
+                            'Too many registration attempts; please try again later.',
+                    });
                 } else {
-                    setState('error');
+                    setProbe({
+                        state: 'error',
+                        authData: null,
+                        errorMessage: err.message || 'Could not load registration flows.',
+                    });
                 }
             });
 
@@ -84,7 +132,7 @@ export const useRegistrationAvailability = (
         };
     }, [server?.baseUrl]);
 
-    return state;
+    return probe;
 };
 
 export const resolveHomeserver = async (rawInput: string): Promise<ResolvedHomeserver> => {
