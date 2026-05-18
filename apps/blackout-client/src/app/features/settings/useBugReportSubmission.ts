@@ -39,12 +39,15 @@ export const useBugReportSubmission = (): UseBugReportSubmission => {
 
   const submit = useCallback(
     async (payload: BugReportPayload): Promise<BugReportResponse> => {
-      try {
-        return await client<BugReportResponse>({
+      const callOnce = () =>
+        client<BugReportResponse>({
           method: 'POST',
           path: '/bug-report',
           body: payload,
         });
+
+      try {
+        return await callOnce();
       } catch (err) {
         // The SDK throws on non-2xx. The server returns 502 only when BOTH
         // forwarding legs failed, so surface that as a synthesized "both
@@ -53,7 +56,24 @@ export const useBugReportSubmission = (): UseBugReportSubmission => {
         const e = err as { message?: string; kind?: 'retryable' | 'fatal' };
         const message = e?.message ?? 'request failed';
         if (message.includes('(502)')) return synthesizeFailureResponse(message);
-        const submitError: SubmitError = { message, kind: e?.kind ?? 'fatal' };
+        const kind: 'retryable' | 'fatal' = e?.kind ?? 'fatal';
+
+        // One auto-retry for retryable errors (transient network / 5xx).
+        // Fatal errors (4xx, validation) skip the retry.
+        if (kind === 'retryable') {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          try {
+            return await callOnce();
+          } catch (retryErr) {
+            const r = retryErr as { message?: string; kind?: 'retryable' | 'fatal' };
+            const retryMessage = r?.message ?? message;
+            if (retryMessage.includes('(502)')) return synthesizeFailureResponse(retryMessage);
+            const submitError: SubmitError = { message: retryMessage, kind: r?.kind ?? 'fatal' };
+            throw submitError;
+          }
+        }
+
+        const submitError: SubmitError = { message, kind };
         throw submitError;
       }
     },

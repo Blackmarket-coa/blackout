@@ -18,6 +18,11 @@ const bugReportSchema = z.object({
       userAgent: z.string().max(512),
       platform: z.string().max(64),
       consoleTail: z.array(z.string().max(2_000)).max(50),
+      // Newer clients also send these; older payloads validate without them.
+      currentPath: z.string().max(512).optional(),
+      buildChannel: z.string().max(32).optional(),
+      lastError: z.string().max(2_000).nullable().optional(),
+      featureFlagsFingerprint: z.string().max(64).optional(),
     })
     .optional(),
   screenshotBase64: z.string().max(1_400_000).optional(),
