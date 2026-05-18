@@ -741,6 +741,11 @@ export const ClientLayout = () => {
                     }
                     onPickChannel={(roomId) => openRoom(roomId)}
                     onJoinOrExplore={exploreOrCreate}
+                    joinedCanopies={orderedSpaces}
+                    onPickCanopy={(roomId) => {
+                        setSelectedSpaceId(roomId);
+                        setSelectedRoomId(null);
+                    }}
                 />
             </div>
         );
