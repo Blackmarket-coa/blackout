@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWelcomeContent } from '../welcome/useWelcome';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { ONBOARDING_CREATOR_PATH } from '../../pages/paths';
 import {
     ONBOARDING_STEP_SEQUENCE,
@@ -122,7 +123,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             <section style={{ display: 'grid', gap: 12 }}>
                 <h2 style={{ marginBottom: 0 }}>Onboarding already completed</h2>
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                    You can continue to your community or restart onboarding if needed.
+                    You can continue to your {BLACKOUT_TERMS.canopy.singular} or restart onboarding
+                    if needed.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button
@@ -373,13 +375,19 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             {currentStep === 'community_selection' ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                     <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                        How would you like to get started in this community?
+                        How would you like to get started in this {BLACKOUT_TERMS.canopy.singular}?
                     </p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {(
                             [
-                                { id: 'join', label: 'Join an existing community' },
-                                { id: 'create', label: 'Create a new community' },
+                                {
+                                    id: 'join',
+                                    label: `Join an existing ${BLACKOUT_TERMS.canopy.singular}`,
+                                },
+                                {
+                                    id: 'create',
+                                    label: `Create a new ${BLACKOUT_TERMS.canopy.singular}`,
+                                },
                                 { id: 'browse', label: 'Browse first' },
                             ] as const
                         ).map((option) => {

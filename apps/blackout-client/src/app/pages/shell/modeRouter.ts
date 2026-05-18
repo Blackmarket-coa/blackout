@@ -1,4 +1,5 @@
 import type { ShellMode } from '../../state/navigation';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 /**
  * Derives the active AppShell mode from a pathname. Pure function, no
@@ -72,7 +73,7 @@ export const isShellModeRoot = (pathname: string): boolean => {
  */
 export const SHELL_MODE_TITLES: Record<ShellMode, string> = {
     discovery: 'Home',
-    community: 'Community',
+    community: BLACKOUT_TERMS.canopy.title,
     livestream: 'Live',
     marketplace: 'Market',
     creator: 'Creator',

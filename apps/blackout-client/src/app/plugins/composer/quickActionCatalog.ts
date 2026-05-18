@@ -1,3 +1,5 @@
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+
 interface TimelineMessage {
     msgtype?: string;
     type?: string;
@@ -85,7 +87,7 @@ export const DOMAIN_ACTIONS: Record<DomainId, string[]> = {
     governance: ['Active votes', 'Results', 'Proposals', 'Delegates'],
     trade: ['Marketplace', 'Payments', 'My orders'],
     logistics: ['Tracking', 'Fleet', 'Routing'],
-    discover: ['Coliseum', 'Communities', 'Featured'],
+    discover: ['Coliseum', BLACKOUT_TERMS.canopy.titlePlural, 'Featured'],
 };
 
 export const RADIAL_ACTIONS: RadialAction[] = [
