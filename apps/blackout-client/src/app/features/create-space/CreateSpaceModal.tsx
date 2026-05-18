@@ -49,7 +49,14 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
               escapeDeactivates: stopPropagation,
             }}
           >
-            <Modal size="300" flexHeight role="dialog" aria-modal aria-labelledby={titleId}>
+            <Modal
+              size="300"
+              flexHeight
+              role="dialog"
+              aria-modal
+              aria-labelledby={titleId}
+              data-testid="modal-createSpace"
+            >
               <Box direction="Column">
                 <Header
                   size="500"

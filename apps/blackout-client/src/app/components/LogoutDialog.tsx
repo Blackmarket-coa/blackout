@@ -33,7 +33,7 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
     const ongoingLogout = logoutState.status === AsyncStatus.Loading;
 
     return (
-      <Dialog variant="Surface" ref={ref}>
+      <Dialog variant="Surface" ref={ref} data-testid="modal-logout">
         <Header
           style={{
             padding: `0 ${config.space.S200} 0 ${config.space.S400}`,

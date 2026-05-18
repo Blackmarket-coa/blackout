@@ -46,6 +46,20 @@ const styles = {
     },
 } as const satisfies Record<string, CSSProperties>;
 
+/**
+ * Derives a stable per-tab `data-testid` from the panel id, scoped to
+ * the bar's `kind`. Mobile tabs get `bottom-tab-<slug>` (e.g.
+ * `bottom-tab-home`); workspace tabs get `workspace-tab-<slug>`. The
+ * navigation audit (`tools/audit-navigation/crawl-web.ts`) keys off
+ * these ids to assert Home affordance visibility across viewports.
+ */
+const tabBarItemTestId = (kind: ShellPanelKind, panelId: string): string => {
+    const slug = panelId.startsWith('shell.') ? panelId.slice('shell.'.length) : panelId;
+    if (kind === 'mobile-tab') return `bottom-tab-${slug}`;
+    if (kind === 'workspace') return `workspace-tab-${slug}`;
+    return `tab-${slug}`;
+};
+
 export type RegistryTabBarProps = {
     /**
      * Which `ShellPanelKind` to render. Defaults to `'mobile-tab'`. Reusing
@@ -126,6 +140,7 @@ export const RegistryTabBar = ({
                         aria-current={active ? 'page' : undefined}
                         data-active={active ? 'true' : 'false'}
                         data-panel-id={entry.id}
+                        data-testid={tabBarItemTestId(kind, entry.id)}
                         style={{
                             ...styles.item,
                             ...(itemStyle ?? {}),

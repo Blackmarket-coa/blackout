@@ -244,13 +244,17 @@ const BootstrapStatus = () => {
 
     return (
         <main
+            data-shell="bootstrap"
+            data-bootstrap-state={authState}
             style={{
                 minHeight: '100vh',
                 display: 'grid',
+                gridTemplateRows: '1fr auto',
                 placeItems: 'center',
                 background: 'var(--bg-surface, #111827)',
                 color: 'var(--text-primary, #f8fafc)',
                 padding: 24,
+                gap: 16,
             }}
         >
             <section
@@ -285,6 +289,41 @@ const BootstrapStatus = () => {
                     </button>
                 ) : null}
             </section>
+            <nav
+                aria-label="Bootstrap escape routes"
+                data-shell-region="bootstrap-nav"
+                style={{
+                    display: 'flex',
+                    gap: 16,
+                    fontSize: 13,
+                    color: 'var(--text-secondary, #94a3b8)',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                }}
+            >
+                <a
+                    href="/home"
+                    aria-label="Home"
+                    data-testid="bootstrap-home"
+                    style={{ color: 'inherit' }}
+                >
+                    Home
+                </a>
+                <a
+                    href="https://theblackout.app"
+                    rel="noreferrer"
+                    style={{ color: 'inherit' }}
+                >
+                    About
+                </a>
+                <a
+                    href="https://github.com/Blackmarket-coa/blackout#readme"
+                    rel="noreferrer"
+                    style={{ color: 'inherit' }}
+                >
+                    Help
+                </a>
+            </nav>
         </main>
     );
 };

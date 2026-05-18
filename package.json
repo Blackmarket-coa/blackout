@@ -84,7 +84,11 @@
     "mobile:workspace:test": "pnpm --filter @blackout/mobile test",
     "guard:matrix-sdk-baseline": "pnpm guard:matrix-sdk-version-alignment",
     "e2e": "playwright test",
-    "e2e:install": "playwright install --with-deps chromium"
+    "e2e:install": "playwright install --with-deps chromium",
+    "audit:navigation": "tsx tools/audit-navigation/crawl-web.ts && tsx tools/audit-navigation/audit-mobile.ts",
+    "audit:navigation:web": "tsx tools/audit-navigation/crawl-web.ts",
+    "audit:navigation:mobile": "tsx tools/audit-navigation/audit-mobile.ts",
+    "test:e2e:navigation": "playwright test --config=playwright.navigation-audit.config.ts"
   },
   "devDependencies": {
     "turbo": "^2.8.16",
