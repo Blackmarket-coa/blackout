@@ -39,7 +39,15 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
 
   return (
     <SpaceProvider value={space ?? null}>
-      <Overlay open backdrop={<OverlayBackdrop />}>
+      <Overlay
+        open
+        backdrop={
+          <OverlayBackdrop
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+          />
+        }
+        style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+      >
         <OverlayCenter>
           <FocusTrap
             focusTrapOptions={{

@@ -28,6 +28,7 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { useAlive } from '../../hooks/useAlive';
 import { ErrorCode } from '../../cs-errorcode';
+import { formatMatrixError } from '../../utils/matrixError';
 import {
   AdditionalCreatorInput,
   createRoom,
@@ -259,7 +260,7 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
                 ? `Server rate-limited your request for ${millisecondsToMinutes(
                     (error.data.retry_after_ms as number | undefined) ?? 0
                   )} minutes!`
-                : error.message}
+                : formatMatrixError(error, error.message)}
             </b>
           </Text>
         </Box>
