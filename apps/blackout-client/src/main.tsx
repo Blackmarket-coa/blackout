@@ -19,6 +19,8 @@ import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { PluginEntitlementHydrator } from './app/features/monetization/install/PluginEntitlementHydrator';
 import { PostLoginRecoveryGate } from './app/components/bmc/PostLoginRecoveryGate';
+import { useMatrixClient } from './app/hooks/useMatrixClient';
+import { useBindAllRoomsAtom } from './app/state/rooms';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
@@ -207,6 +209,13 @@ const buildAppRouter = (capabilityContext: {
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
+const RoomsAtomBinder = () => {
+    const mx = useMatrixClient();
+    useBindAllRoomsAtom(mx);
+    return null;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
@@ -224,6 +233,7 @@ const BootstrapStatus = () => {
     if (authState === 'logged_in') {
         return (
             <PostLoginRecoveryGate>
+                <RoomsAtomBinder />
                 <PluginEntitlementHydrator />
                 <RouterProvider router={router} />
             </PostLoginRecoveryGate>

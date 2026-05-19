@@ -12,6 +12,7 @@ import {
     selectedSpaceIdAtom,
 } from '../../../../src/app/state/navigation';
 import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
+import { allRoomsBaseAtom } from '../../../../src/app/state/rooms';
 import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
 vi.mock('react-router-dom', async () => {
@@ -272,6 +273,7 @@ const renderLayout = ({
     store.set(rightPanelAtom, rightPanel);
     store.set(userIdAtom, '@me:example.org');
     store.set(matrixClientAtom, mockClient as never);
+    store.set(allRoomsBaseAtom, rooms as never);
 
     act(() => {
         root.render(
