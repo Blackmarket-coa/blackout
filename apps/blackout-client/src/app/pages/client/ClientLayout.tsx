@@ -36,6 +36,11 @@ import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegacy';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
+import { InviteUserPrompt } from '../../components/invite-user-prompt';
+import { InvitationsManager } from '../../components/invitations';
+import { useRoomCreators } from '../../hooks/useRoomCreators';
+import { useRoomPermissions } from '../../hooks/useRoomPermissions';
+import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { formatMatrixError } from '../../utils/matrixError';
 import { buildCommunitiesPath } from '../paths';
@@ -167,6 +172,7 @@ export const ClientLayout = () => {
     const messageSearchScrollRef = useRef<HTMLDivElement>(null);
     const [lobbyOpen, setLobbyOpen] = useState(false);
     const [attachProductOpen, setAttachProductOpen] = useState(false);
+    const [showGlobalInvitations, setShowGlobalInvitations] = useState(false);
     const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
@@ -780,6 +786,24 @@ export const ClientLayout = () => {
                             }}
                         >
                             🏠
+                        </button>
+                    }
+                    inviteButton={
+                        <button
+                            type="button"
+                            onClick={() => setShowGlobalInvitations(true)}
+                            title="Create an invite link"
+                            aria-label="Create an invite link"
+                            data-testid="primary-rail-invite"
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 10,
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                            }}
+                        >
+                            ✉️
                         </button>
                     }
                     canopyBlock={orderedSpaces.map((space, idx) => (
@@ -1732,6 +1756,7 @@ export const ClientLayout = () => {
                             Coalition
                         </button>
                     ) : null}
+                    <DenInviteButtonsForSelectedRoom roomId={selectedRoomId} />
                     {selectedRoomId
                         ? rightPanels.map((panel) => (
                               <button
@@ -2014,6 +2039,11 @@ export const ClientLayout = () => {
 
             <CreateSpaceModalRenderer />
             <CreateRoomModalRenderer />
+            {showGlobalInvitations ? (
+                <InvitationsManager
+                    requestClose={() => setShowGlobalInvitations(false)}
+                />
+            ) : null}
             {attachProductOpen ? (
                 <Suspense fallback={null}>
                     <AttachProductDialog
@@ -2024,6 +2054,87 @@ export const ClientLayout = () => {
                 </Suspense>
             ) : null}
         </section>
+    );
+};
+
+/**
+ * Resolves the selected room id into a Room and renders the den-level
+ * invite toolbar buttons. Split out so the permission hooks
+ * (`usePowerLevels` etc.) always run against a non-null Room, sidestepping
+ * the rule-of-hooks issue conditional rendering would create at the
+ * parent.
+ */
+const DenInviteButtonsForSelectedRoom: React.FC<{ roomId: string | null }> = ({ roomId }) => {
+    const mx = useMatrixClient();
+    if (!roomId) return null;
+    const room = mx.getRoom(roomId);
+    if (!room) return null;
+    return <DenInviteButtons room={room} />;
+};
+
+const buttonStyle: React.CSSProperties = {
+    border: '1px solid var(--border-default)',
+    background: 'var(--bg-input)',
+    color: 'var(--text-primary)',
+    borderRadius: 8,
+    padding: '4px 8px',
+    fontSize: 13,
+    whiteSpace: 'nowrap',
+};
+
+const DenInviteButtons: React.FC<{ room: Room }> = ({ room }) => {
+    const mx = useMatrixClient();
+    const powerLevels = usePowerLevels(room);
+    const creators = useRoomCreators(room);
+    const permissions = useRoomPermissions(creators, powerLevels);
+    const canInvite = permissions.action('invite', mx.getSafeUserId());
+    const [showInvite, setShowInvite] = useState(false);
+    const [showShareLink, setShowShareLink] = useState(false);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => setShowInvite(true)}
+                disabled={!canInvite}
+                title={canInvite ? 'Invite a user by Matrix ID' : 'You don’t have permission to invite here'}
+                aria-label="Invite a user"
+                style={{
+                    ...buttonStyle,
+                    cursor: canInvite ? 'pointer' : 'not-allowed',
+                    opacity: canInvite ? 1 : 0.5,
+                }}
+            >
+                Invite
+            </button>
+            <button
+                type="button"
+                onClick={() => setShowShareLink(true)}
+                disabled={!canInvite}
+                title={
+                    canInvite
+                        ? 'Create a shareable invite link for this room'
+                        : 'You don’t have permission to invite here'
+                }
+                aria-label="Share an invite link"
+                style={{
+                    ...buttonStyle,
+                    cursor: canInvite ? 'pointer' : 'not-allowed',
+                    opacity: canInvite ? 1 : 0.5,
+                }}
+            >
+                Share link
+            </button>
+            {showInvite && (
+                <InviteUserPrompt room={room} requestClose={() => setShowInvite(false)} />
+            )}
+            {showShareLink && (
+                <InvitationsManager
+                    roomId={room.roomId}
+                    requestClose={() => setShowShareLink(false)}
+                />
+            )}
+        </>
     );
 };
 
