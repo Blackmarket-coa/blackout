@@ -38,7 +38,7 @@ import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { formatMatrixError } from '../../utils/matrixError';
-import { buildCommunitiesPath, COMMUNITIES_PATH } from '../paths';
+import { buildCommunitiesPath } from '../paths';
 import { settingsPageAtom } from '../../features/settings/settingsAtoms';
 import { hasModeratorAccess } from '../../features/moderation/draupnir';
 import {
@@ -181,22 +181,10 @@ export const ClientLayout = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const {
-        roomId: routeRoomId,
         canopyId: routeCanopyId,
         denId: routeDenId,
-    } = useParams<{ roomId?: string; canopyId?: string; denId?: string }>();
+    } = useParams<{ canopyId?: string; denId?: string }>();
     const hasHydratedNavigationRef = useRef(false);
-    /**
-     * The router has two URL shapes for the chat surface — legacy
-     * (`/room/:roomId`) and the canonical AppShell form
-     * (`/communities/:canopyId/dens/:denId`). The writer below picks the
-     * form to emit by inspecting the active pathname so a session that
-     * lands on one form keeps producing that form on subsequent
-     * room/canopy changes. New deep links favor the canopy/den shape.
-     */
-    const isCommunitiesUrlForm =
-        location.pathname === COMMUNITIES_PATH ||
-        location.pathname.startsWith(`${COMMUNITIES_PATH}/`);
 
     const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -306,10 +294,8 @@ export const ClientLayout = () => {
         const nextRightPanel = rightPanels.includes(nextPanelParam as Exclude<RightPanelType, null>)
             ? (nextPanelParam as RightPanelType)
             : null;
-        // Canopy comes from the route param under the AppShell form, and
-        // from the `?space=` query under the legacy form. Both decode the
-        // ids the same way (the route param is URL-encoded, the query is
-        // raw). Sentinel "-" denotes no parent canopy.
+        // Canopy/den come from the route params. Sentinel "-" denotes no
+        // parent canopy (direct rooms / home-roomed entities).
         const decodedRouteCanopy = (() => {
             if (!routeCanopyId) return null;
             if (routeCanopyId === '-') return null;
@@ -328,7 +314,7 @@ export const ClientLayout = () => {
             }
         })();
         const nextSpaceId = decodedRouteCanopy ?? params.get('space');
-        const effectiveRoomId = decodedRouteDen ?? routeRoomId ?? null;
+        const effectiveRoomId = decodedRouteDen ?? null;
         const hasUrlNavigationState = Boolean(
             effectiveRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId
         );
@@ -346,7 +332,6 @@ export const ClientLayout = () => {
     }, [
         location.search,
         rightPanels,
-        routeRoomId,
         routeCanopyId,
         routeDenId,
         setJumpTargetEventId,
@@ -359,19 +344,17 @@ export const ClientLayout = () => {
         if (!hasHydratedNavigationRef.current) return;
 
         const params = new URLSearchParams();
-        // Under the AppShell URL form the canopy is encoded in the path,
-        // not as a query param, so we omit `?space=` to avoid two
-        // sources of truth on the same URL.
-        if (!isCommunitiesUrlForm && selectedSpaceId) {
-            params.set('space', selectedSpaceId);
-        }
         if (rightPanel) params.set('panel', rightPanel);
         if (jumpTargetEventId) params.set('event', jumpTargetEventId);
 
-        const pathname = isCommunitiesUrlForm
+        // The canonical canopy/den path is the only chat-surface URL
+        // shape since PR-10 retired `/room/:roomId`. When no den is
+        // selected we fall back to the bare `/communities` root rather
+        // than `/` so the AppShell stays in community mode.
+        const pathname = selectedRoomId
             ? buildCommunitiesPath(selectedSpaceId, selectedRoomId)
-            : selectedRoomId
-            ? `/room/${encodeURIComponent(selectedRoomId)}`
+            : selectedSpaceId
+            ? buildCommunitiesPath(selectedSpaceId, null)
             : '/';
 
         const search = params.toString();
@@ -381,7 +364,6 @@ export const ClientLayout = () => {
 
         void navigate({ pathname, search: search ? `?${search}` : '' });
     }, [
-        isCommunitiesUrlForm,
         jumpTargetEventId,
         location.pathname,
         location.search,

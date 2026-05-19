@@ -1,18 +1,12 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { runtimeFeatureFlags } from '../app/core/features/featureFlags';
 import { buildCommunitiesPath } from '../app/pages/paths';
 import {
     extractRoomIdFromDeepLinkUrl,
     listenForNativeBridgeEvents,
 } from './native-bridge-contract';
 
-const buildRoomTarget = (roomId: string): string => {
-    if (runtimeFeatureFlags.shellAppShell) {
-        return buildCommunitiesPath(null, roomId);
-    }
-    return `/room/${encodeURIComponent(roomId)}`;
-};
+const buildRoomTarget = (roomId: string): string => buildCommunitiesPath(null, roomId);
 
 export function NativeBridgeListener(): null {
     const navigate = useNavigate();

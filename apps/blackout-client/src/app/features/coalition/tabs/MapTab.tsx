@@ -13,6 +13,7 @@ import {
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
+import { buildCommunitiesPath } from '../../../pages/paths';
 
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
@@ -182,7 +183,7 @@ export function MapTab({ scope }: MapTabProps) {
                         <small style={{ color: 'var(--text-secondary)' }}>{selectedPin.subtitle}</small>
                         {selectedPin.denId ? (
                             <a
-                                href={`/room/${encodeURIComponent(selectedPin.denId)}`}
+                                href={buildCommunitiesPath(null, selectedPin.denId)}
                                 style={{ color: 'var(--accent-primary, #1ABC9C)' }}
                             >
                                 Open associated den →

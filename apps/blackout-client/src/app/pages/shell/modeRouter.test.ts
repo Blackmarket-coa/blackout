@@ -9,10 +9,9 @@ describe('resolveShellMode', () => {
         expect(resolveShellMode('/topics/safety')).toBe('discovery');
     });
 
-    it('maps canopy/den paths and the legacy room form onto community mode', () => {
+    it('maps canopy/den paths onto community mode', () => {
         expect(resolveShellMode('/communities')).toBe('community');
         expect(resolveShellMode('/communities/!c:server/dens/!d:server')).toBe('community');
-        expect(resolveShellMode('/room/!d:server')).toBe('community');
     });
 
     it('maps livestream, marketplace, creator, inbox and events paths onto distinct modes', () => {
