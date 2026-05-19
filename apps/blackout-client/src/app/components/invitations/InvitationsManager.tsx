@@ -75,10 +75,11 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
         try {
             const { invitations } = await listMyInvitations();
             setLoad({ kind: 'loaded', items: invitations });
-        } catch (err) {
+        } catch {
             setLoad({
                 kind: 'error',
-                message: err instanceof Error ? err.message : 'Could not load invitations.',
+                message:
+                    'Could not load your invite links. The invitations service may be unavailable.',
             });
         }
     }, []);
@@ -110,10 +111,12 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
             void refresh();
             form.reset();
         } catch (err) {
-            setCreate({
-                kind: 'error',
-                message: err instanceof Error ? err.message : 'Could not create invitation.',
-            });
+            const raw = err instanceof Error ? err.message : '';
+            const friendly =
+                /not valid JSON|Unexpected token|HTTP_BAD_RESPONSE/i.test(raw)
+                    ? 'Could not create invitation. The invitations service may be unavailable.'
+                    : raw || 'Could not create invitation.';
+            setCreate({ kind: 'error', message: friendly });
         }
     };
 
