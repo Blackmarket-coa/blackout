@@ -38,6 +38,8 @@ import type {
   PasswordResetTokenRecord,
   EmailVerificationTokenRecord,
   AccountDeletionTokenRecord,
+  InvitationTokenRecord,
+  InvitationRedemptionRecord,
   RefreshTokenRecord,
   RevokedSessionRecord,
   LinkedAccountRecord,
@@ -91,6 +93,8 @@ type PersistedState = {
   passwordResetTokens: PasswordResetTokenRecord[];
   emailVerificationTokens: EmailVerificationTokenRecord[];
   accountDeletionTokens: AccountDeletionTokenRecord[];
+  invitationTokens: InvitationTokenRecord[];
+  invitationRedemptions: InvitationRedemptionRecord[];
   refreshTokens: RefreshTokenRecord[];
   revokedSessions: RevokedSessionRecord[];
   linkedAccounts: LinkedAccountRecord[];
@@ -139,6 +143,10 @@ class InMemoryDb {
   passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
   emailVerificationTokens = new Map<string, EmailVerificationTokenRecord>();
   accountDeletionTokens = new Map<string, AccountDeletionTokenRecord>();
+  /** Keyed by token id (a UUID); the hash is a non-primary lookup index. */
+  invitationTokens = new Map<string, InvitationTokenRecord>();
+  /** Keyed by redemption id. */
+  invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
@@ -344,6 +352,72 @@ class InMemoryDb {
     const updated: AccountDeletionTokenRecord = { ...existing, consumedAt: nowIso() };
     this.accountDeletionTokens.set(id, updated);
     return updated;
+  }
+
+  createInvitationToken(
+    input: Omit<InvitationTokenRecord, 'createdAt' | 'useCount'> & { useCount?: number },
+  ): InvitationTokenRecord {
+    const record: InvitationTokenRecord = {
+      ...input,
+      useCount: input.useCount ?? 0,
+      createdAt: nowIso(),
+    };
+    this.invitationTokens.set(record.id, record);
+    return record;
+  }
+
+  getInvitationTokenById(id: string): InvitationTokenRecord | undefined {
+    return this.invitationTokens.get(id);
+  }
+
+  findInvitationTokenByHash(tokenHash: string): InvitationTokenRecord | undefined {
+    return [...this.invitationTokens.values()].find((t) => t.tokenHash === tokenHash);
+  }
+
+  listInvitationTokensByCreator(createdBy: string): InvitationTokenRecord[] {
+    return [...this.invitationTokens.values()]
+      .filter((t) => t.createdBy === createdBy)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** Atomically bump useCount; returns the updated record or undefined when
+   *  the token is gone / already exhausted / revoked / expired. Callers must
+   *  re-check the conditions they care about against the returned record. */
+  incrementInvitationTokenUseCount(id: string): InvitationTokenRecord | undefined {
+    const existing = this.invitationTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.revokedAt) return undefined;
+    if (existing.useCount >= existing.maxUses) return undefined;
+    const updated: InvitationTokenRecord = { ...existing, useCount: existing.useCount + 1 };
+    this.invitationTokens.set(id, updated);
+    return updated;
+  }
+
+  revokeInvitationToken(id: string, reason: string): InvitationTokenRecord | undefined {
+    const existing = this.invitationTokens.get(id);
+    if (!existing) return undefined;
+    if (existing.revokedAt) return existing;
+    const updated: InvitationTokenRecord = {
+      ...existing,
+      revokedAt: nowIso(),
+      revokedReason: reason,
+    };
+    this.invitationTokens.set(id, updated);
+    return updated;
+  }
+
+  createInvitationRedemption(
+    input: Omit<InvitationRedemptionRecord, 'createdAt'>,
+  ): InvitationRedemptionRecord {
+    const record: InvitationRedemptionRecord = { ...input, createdAt: nowIso() };
+    this.invitationRedemptions.set(record.id, record);
+    return record;
+  }
+
+  listInvitationRedemptionsByToken(invitationTokenId: string): InvitationRedemptionRecord[] {
+    return [...this.invitationRedemptions.values()]
+      .filter((r) => r.invitationTokenId === invitationTokenId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   /** Best-effort cascade: drop all per-user auth artifacts so a deleted user
@@ -1741,6 +1815,12 @@ class FileBackedDb extends InMemoryDb {
     this.accountDeletionTokens = new Map(
       (parsed.accountDeletionTokens ?? []).map((row) => [row.id, row])
     );
+    this.invitationTokens = new Map(
+      (parsed.invitationTokens ?? []).map((row) => [row.id, row])
+    );
+    this.invitationRedemptions = new Map(
+      (parsed.invitationRedemptions ?? []).map((row) => [row.id, row])
+    );
     this.refreshTokens = new Map((parsed.refreshTokens ?? []).map((row) => [row.id, row]));
     this.revokedSessions = new Map(
       (parsed.revokedSessions ?? []).map((row) => [row.jti, row])
@@ -1816,6 +1896,8 @@ class FileBackedDb extends InMemoryDb {
       passwordResetTokens: [...this.passwordResetTokens.values()],
       emailVerificationTokens: [...this.emailVerificationTokens.values()],
       accountDeletionTokens: [...this.accountDeletionTokens.values()],
+      invitationTokens: [...this.invitationTokens.values()],
+      invitationRedemptions: [...this.invitationRedemptions.values()],
       refreshTokens: [...this.refreshTokens.values()],
       revokedSessions: [...this.revokedSessions.values()],
       linkedAccounts: [...this.linkedAccounts.values()],
@@ -1902,6 +1984,34 @@ class FileBackedDb extends InMemoryDb {
     const updated = super.consumeAccountDeletionToken(id);
     if (updated) this.persist();
     return updated;
+  }
+
+  override createInvitationToken(
+    input: Omit<InvitationTokenRecord, 'createdAt' | 'useCount'> & { useCount?: number },
+  ): InvitationTokenRecord {
+    const record = super.createInvitationToken(input);
+    this.persist();
+    return record;
+  }
+
+  override incrementInvitationTokenUseCount(id: string): InvitationTokenRecord | undefined {
+    const updated = super.incrementInvitationTokenUseCount(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override revokeInvitationToken(id: string, reason: string): InvitationTokenRecord | undefined {
+    const updated = super.revokeInvitationToken(id, reason);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override createInvitationRedemption(
+    input: Omit<InvitationRedemptionRecord, 'createdAt'>,
+  ): InvitationRedemptionRecord {
+    const record = super.createInvitationRedemption(input);
+    this.persist();
+    return record;
   }
 
   override purgeUserAuthArtifacts(userId: string): void {

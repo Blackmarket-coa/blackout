@@ -33,6 +33,32 @@ export const matrixClient = {
   },
 
   /**
+   * Invite a Matrix user to a room using the bot token. Used by the
+   * invitation-token redemption flow: when an invite is bound to a room,
+   * we issue this call as the bot so the newly-registered account sees
+   * the room in their invites list on first login.
+   */
+  async inviteToRoom(roomId: string, userId: string, reason?: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const response = await fetch(
+      `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/invite`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
+      },
+    );
+    return { ok: response.ok, status: response.status };
+  },
+
+  /**
    * Send an arbitrary Matrix event content into a room. Used by the
    * compatibility bridges (Twitch chat ingress, etc.) which need to ship
    * full event payloads with custom `m.blackout.*` extension fields, not

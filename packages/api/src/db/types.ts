@@ -39,15 +39,6 @@ export interface AccountDeletionTokenRecord {
 export interface EmailVerificationTokenRecord {
   id: UUID;
   userId: UUID;
-  /** Email address being verified — captured at issuance so a stale token
-   *  cannot promote a different address even if the user has since changed it. */
-  email: string;
-  tokenHash: string;
-  expiresAt: string;
-  consumedAt?: string;
-export interface EmailVerificationTokenRecord {
-  id: UUID;
-  userId: UUID;
   /** Email this token was issued for; pinned to detect email-change races. */
   email: string;
   tokenHash: string;
@@ -61,6 +52,45 @@ export interface EmailVerificationTokenRecord {
   createdAt: string;
   ipHash?: string;
   userAgentHash?: string;
+}
+
+/**
+ * Shareable user invitation. The plaintext token is shown to the inviter
+ * exactly once at creation time; only its SHA-256 hash is persisted, so a
+ * DB leak does not yield usable invites. `maxUses` defaults to 1 (single-
+ * use link); set higher for a multi-use code. When `matrixRoomId` is set,
+ * successful redemption auto-invites the new account to that room.
+ */
+export interface InvitationTokenRecord {
+  id: UUID;
+  /** User id of the inviter; revocation is restricted to this account. */
+  createdBy: UUID;
+  tokenHash: string;
+  /** Optional Matrix room id (e.g. `!abc:server`) the redeemer is invited into. */
+  matrixRoomId?: string;
+  /** Free-text label the inviter set for their own bookkeeping. */
+  label?: string;
+  maxUses: number;
+  useCount: number;
+  /** ISO 8601 timestamp after which the token is rejected. Unset = no expiry. */
+  expiresAt?: string;
+  /** ISO 8601 timestamp the inviter revoked the token. */
+  revokedAt?: string;
+  revokedReason?: string;
+  createdAt: string;
+}
+
+/**
+ * Audit row written each time an invitation is successfully redeemed. Lets
+ * an inviter see who joined via each link and feeds the referral ledger.
+ */
+export interface InvitationRedemptionRecord {
+  id: UUID;
+  invitationTokenId: UUID;
+  redeemedByUserId: UUID;
+  /** Whether the room auto-invite succeeded (false if Matrix wasn't configured / errored). */
+  matrixInviteOk?: boolean;
+  createdAt: string;
 }
 
 export interface RefreshTokenRecord {
