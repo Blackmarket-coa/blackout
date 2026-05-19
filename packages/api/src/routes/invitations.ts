@@ -10,15 +10,22 @@ import {
   createInvitation,
   listInvitationsForUser,
   previewInvitation,
+  redeemInvitation,
   revokeInvitation,
 } from '../services/invitations';
 import type { InvitationTokenRecord } from '../db/types';
 
 const invitations = new Hono();
 
-// Token enumeration is cheap to attempt; rate-limit the public preview to
-// blunt brute-force scans without locking out a legitimate landing page.
+// Token enumeration is cheap to attempt; rate-limit the public preview and
+// the authed redeem endpoint to blunt brute-force scans without locking
+// out a legitimate landing page.
 invitations.use('/preview/*', authRateLimit);
+invitations.use('/redeem', authRateLimit);
+
+const redeemSchema = z.object({
+  token: z.string().min(1).max(512),
+});
 
 const createSchema = z.object({
   matrixRoomId: z
@@ -103,6 +110,46 @@ invitations.delete('/:id', (c) => {
       return c.json({ code: 'not_found', message: 'Invitation not found' }, 404);
     case 'forbidden':
       return c.json({ code: 'forbidden', message: 'Only the inviter can revoke this invitation' }, 403);
+  }
+});
+
+/**
+ * Redeem an invitation token as the authenticated caller. Used by the
+ * client invite-landing page after the recipient has signed up (or signed
+ * in to an existing account) via the standard Matrix UIA flow. Pairs with
+ * the `inviteToken` field on `POST /auth/register` for the API-mediated
+ * sign-up path; both ultimately call `redeemInvitation` from the service.
+ */
+invitations.post('/redeem', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+
+  const parsed = await readJsonBody(c, redeemSchema);
+  if (parsed instanceof Response) return parsed;
+
+  const redeemer = db.getUserById(user.sub);
+  if (!redeemer) {
+    return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+  }
+
+  const outcome = await redeemInvitation(parsed.token, redeemer);
+  switch (outcome.kind) {
+    case 'ok':
+      return c.json({
+        ok: true,
+        matrixRoomId: outcome.record.matrixRoomId,
+        matrixInvite: outcome.matrixInvite,
+      });
+    case 'self_redeem':
+      return c.json({ ok: false, reason: 'self_redeem' }, 400);
+    case 'invalid':
+      return c.json({ ok: false, reason: 'invalid' }, 404);
+    case 'revoked':
+      return c.json({ ok: false, reason: 'revoked' }, 410);
+    case 'exhausted':
+      return c.json({ ok: false, reason: 'exhausted' }, 410);
+    case 'expired':
+      return c.json({ ok: false, reason: 'expired' }, 410);
   }
 });
 

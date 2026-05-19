@@ -229,6 +229,90 @@ test('REQUIRE_INVITE_TOKEN closes self-serve registration', async () => {
   }
 });
 
+test('POST /v1/invitations/redeem consumes the token for an authed user', async () => {
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ maxUses: 2 }),
+  });
+  const { token, invitation } = (await create.json()) as {
+    token: string;
+    invitation: { id: string };
+  };
+
+  const redeemer = seedUser();
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200);
+  const body = (await redeem.json()) as { ok: boolean };
+  assert.equal(body.ok, true);
+
+  const after = db.getInvitationTokenById(invitation.id);
+  assert.equal(after?.useCount, 1);
+  const redemptions = db.listInvitationRedemptionsByToken(invitation.id);
+  assert.equal(redemptions.length, 1);
+  assert.equal(redemptions[0]?.redeemedByUserId, redeemer.id);
+});
+
+test('POST /v1/invitations/redeem rejects the creator redeeming their own token', async () => {
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 400);
+  const body = (await redeem.json()) as { ok: boolean; reason: string };
+  assert.equal(body.ok, false);
+  assert.equal(body.reason, 'self_redeem');
+});
+
+test('POST /v1/invitations/redeem surfaces the right reason for each failure', async () => {
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  const { token, invitation } = (await create.json()) as { token: string; invitation: { id: string } };
+
+  // Revoke and confirm the reason surfaces.
+  await app.request(`/v1/invitations/${invitation.id}`, {
+    method: 'DELETE',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const redeemer = seedUser();
+  const revokedAttempt = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(revokedAttempt.status, 410);
+  const revokedBody = (await revokedAttempt.json()) as { reason: string };
+  assert.equal(revokedBody.reason, 'revoked');
+
+  // A completely unknown token should be `invalid` / 404.
+  const bogusAttempt = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token: 'this-is-not-a-real-token' }),
+  });
+  assert.equal(bogusAttempt.status, 404);
+  const bogusBody = (await bogusAttempt.json()) as { reason: string };
+  assert.equal(bogusBody.reason, 'invalid');
+});
+
 test('inviter cannot redeem their own invitation', async () => {
   const inviter = seedUser();
   const create = await app.request('/v1/invitations', {

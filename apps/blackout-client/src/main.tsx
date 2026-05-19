@@ -41,6 +41,10 @@ import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
+import {
+    InviteLandingPage,
+    PendingInviteRedeemer,
+} from './app/components/invite-landing';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -189,6 +193,11 @@ const buildAppRouter = (capabilityContext: {
             path: '/',
             element: homeElement,
         },
+        // Invite landing — handled here for the logged-in case so an
+        // already-signed-in recipient gets the auto-redeem flow. The
+        // logged-out case is intercepted in BootstrapStatus before this
+        // router ever mounts (see below).
+        { path: '/invite/:token', element: <InviteLandingPage /> },
         ...authRedirectRoutes,
         ...registryRoutes,
     ];
@@ -236,9 +245,25 @@ const BootstrapStatus = () => {
             <PostLoginRecoveryGate>
                 <RoomsAtomBinder />
                 <PluginEntitlementHydrator />
+                <PendingInviteRedeemer />
                 <RouterProvider router={router} />
             </PostLoginRecoveryGate>
         );
+    }
+
+    // The router only mounts for logged_in users (see above), so any
+    // unauthenticated request to /invite/:token would otherwise fall
+    // through to the LoginPage card. Render the landing page directly
+    // here so the recipient sees who invited them — they can then choose
+    // "Create account" or "Sign in" and the token-stash → post-login
+    // redemption hook takes over.
+    if (
+        typeof window !== 'undefined' &&
+        window.location.pathname.startsWith('/invite/') &&
+        authState !== 'crypto_initializing' &&
+        authState !== 'crypto_failed'
+    ) {
+        return <InviteLandingPage />;
     }
 
     const title =

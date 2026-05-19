@@ -1,0 +1,390 @@
+import React, {
+    FormEventHandler,
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
+import {
+    Overlay,
+    OverlayBackdrop,
+    OverlayCenter,
+    Box,
+    Header,
+    config,
+    Text,
+    IconButton,
+    Icon,
+    Icons,
+    Input,
+    Button,
+    Spinner,
+    color,
+    Dialog,
+    Scroll,
+} from 'folds';
+import FocusTrap from 'focus-trap-react';
+import { stopPropagation } from '../../utils/keyboard';
+import { BreakWord } from '../../styles/Text.css';
+import { useTimeoutToggle } from '../../hooks/useTimeoutToggle';
+import { useConfirm } from '../confirm-dialog/useConfirm';
+import {
+    CreateInvitationResponse,
+    InvitationWithRedemptions,
+    createInvitation,
+    listMyInvitations,
+    revokeInvitation,
+} from '../../features/invitations/invitationsClient';
+
+type InvitationsManagerProps = {
+    /** Pre-fills the "scope to this room" field when invoked from a room. */
+    roomId?: string;
+    requestClose: () => void;
+};
+
+type LoadStatus =
+    | { kind: 'loading' }
+    | { kind: 'loaded'; items: InvitationWithRedemptions[] }
+    | { kind: 'error'; message: string };
+
+type CreateStatus =
+    | { kind: 'idle' }
+    | { kind: 'submitting' }
+    | { kind: 'created'; response: CreateInvitationResponse }
+    | { kind: 'error'; message: string };
+
+const formatExpiry = (iso?: string): string =>
+    iso ? new Date(iso).toLocaleString() : 'never';
+
+const linkRow: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: config.space.S200,
+    flexWrap: 'wrap',
+};
+
+export function InvitationsManager({ roomId, requestClose }: InvitationsManagerProps) {
+    const confirm = useConfirm();
+    const [load, setLoad] = useState<LoadStatus>({ kind: 'loading' });
+    const [create, setCreate] = useState<CreateStatus>({ kind: 'idle' });
+    const [scopeToRoom, setScopeToRoom] = useState<boolean>(Boolean(roomId));
+    const [copied, triggerCopied] = useTimeoutToggle();
+
+    const refresh = useCallback(async () => {
+        setLoad({ kind: 'loading' });
+        try {
+            const { invitations } = await listMyInvitations();
+            setLoad({ kind: 'loaded', items: invitations });
+        } catch (err) {
+            setLoad({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Could not load invitations.',
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        void refresh();
+    }, [refresh]);
+
+    const handleSubmit: FormEventHandler<HTMLFormElement> = async (evt) => {
+        evt.preventDefault();
+        const form = evt.currentTarget;
+        const fd = new FormData(form);
+        const label = (fd.get('label') as string | null)?.trim() || undefined;
+        const maxUsesRaw = Number(fd.get('maxUses'));
+        const expiresInHoursRaw = Number(fd.get('expiresInHours'));
+
+        setCreate({ kind: 'submitting' });
+        try {
+            const response = await createInvitation({
+                matrixRoomId: scopeToRoom && roomId ? roomId : undefined,
+                label,
+                maxUses: Number.isFinite(maxUsesRaw) && maxUsesRaw > 0 ? maxUsesRaw : 1,
+                expiresInHours:
+                    Number.isFinite(expiresInHoursRaw) && expiresInHoursRaw >= 0
+                        ? expiresInHoursRaw
+                        : 168,
+            });
+            setCreate({ kind: 'created', response });
+            void refresh();
+            form.reset();
+        } catch (err) {
+            setCreate({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Could not create invitation.',
+            });
+        }
+    };
+
+    const copyText = useCallback(
+        async (text: string) => {
+            try {
+                await navigator.clipboard.writeText(text);
+                triggerCopied();
+            } catch {
+                // Clipboard API can be blocked in insecure contexts; the URL
+                // is still selectable on screen.
+            }
+        },
+        [triggerCopied],
+    );
+
+    const requestRevoke = useCallback(
+        async (item: InvitationWithRedemptions) => {
+            await confirm({
+                title: 'Revoke this invitation?',
+                description:
+                    'The link will stop working immediately. Anyone who has not yet used it will see an error message.',
+                confirmLabel: 'Revoke',
+                variant: 'Critical',
+                onConfirm: async () => {
+                    await revokeInvitation(item.id);
+                    await refresh();
+                },
+            });
+        },
+        [confirm, refresh],
+    );
+
+    const rows = load.kind === 'loaded' ? load.items : [];
+
+    const created = create.kind === 'created' ? create.response : null;
+
+    const showScopeToggle = useMemo(() => Boolean(roomId), [roomId]);
+
+    return (
+        <Overlay open backdrop={<OverlayBackdrop />}>
+            <OverlayCenter>
+                <FocusTrap
+                    focusTrapOptions={{
+                        clickOutsideDeactivates: true,
+                        onDeactivate: requestClose,
+                        escapeDeactivates: stopPropagation,
+                    }}
+                >
+                    <Dialog>
+                        <Box grow="Yes" direction="Column">
+                            <Header
+                                size="500"
+                                style={{ padding: `0 ${config.space.S200} 0 ${config.space.S400}` }}
+                            >
+                                <Box grow="Yes">
+                                    <Text size="H4" truncate>
+                                        Shareable invite links
+                                    </Text>
+                                </Box>
+                                <Box shrink="No">
+                                    <IconButton size="300" radii="300" onClick={requestClose}>
+                                        <Icon src={Icons.Cross} />
+                                    </IconButton>
+                                </Box>
+                            </Header>
+
+                            <Scroll size="300" style={{ maxHeight: '70vh' }}>
+                                <Box
+                                    direction="Column"
+                                    style={{ padding: config.space.S400 }}
+                                    gap="400"
+                                >
+                                    <Box
+                                        as="form"
+                                        onSubmit={handleSubmit}
+                                        shrink="No"
+                                        direction="Column"
+                                        gap="300"
+                                    >
+                                        <Text size="L400">Create a link</Text>
+                                        <Box direction="Column" gap="100">
+                                            <Text size="T200">Label (optional)</Text>
+                                            <Input
+                                                size="400"
+                                                name="label"
+                                                placeholder="e.g. launch crew"
+                                                variant="Background"
+                                                autoComplete="off"
+                                                disabled={create.kind === 'submitting'}
+                                            />
+                                        </Box>
+                                        <Box direction="Row" gap="200">
+                                            <Box direction="Column" gap="100" grow="Yes">
+                                                <Text size="T200">Max uses</Text>
+                                                <Input
+                                                    size="400"
+                                                    name="maxUses"
+                                                    type="number"
+                                                    min={1}
+                                                    max={1000}
+                                                    defaultValue={1}
+                                                    variant="Background"
+                                                    disabled={create.kind === 'submitting'}
+                                                />
+                                            </Box>
+                                            <Box direction="Column" gap="100" grow="Yes">
+                                                <Text size="T200">Expires in (hours, 0 = never)</Text>
+                                                <Input
+                                                    size="400"
+                                                    name="expiresInHours"
+                                                    type="number"
+                                                    min={0}
+                                                    defaultValue={168}
+                                                    variant="Background"
+                                                    disabled={create.kind === 'submitting'}
+                                                />
+                                            </Box>
+                                        </Box>
+                                        {showScopeToggle && (
+                                            <Box as="label" alignItems="Center" gap="200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={scopeToRoom}
+                                                    onChange={(e) => setScopeToRoom(e.target.checked)}
+                                                    disabled={create.kind === 'submitting'}
+                                                />
+                                                <Text size="T300">
+                                                    Auto-invite redeemers to this room
+                                                </Text>
+                                            </Box>
+                                        )}
+                                        {create.kind === 'error' && (
+                                            <Text
+                                                size="T200"
+                                                style={{ color: color.Critical.Main }}
+                                                className={BreakWord}
+                                            >
+                                                <b>{create.message}</b>
+                                            </Text>
+                                        )}
+                                        <Button
+                                            type="submit"
+                                            disabled={create.kind === 'submitting'}
+                                            before={
+                                                create.kind === 'submitting' && (
+                                                    <Spinner size="200" variant="Primary" fill="Solid" />
+                                                )
+                                            }
+                                        >
+                                            <Text size="B400">Create link</Text>
+                                        </Button>
+                                    </Box>
+
+                                    {created && (
+                                        <Box
+                                            direction="Column"
+                                            gap="200"
+                                            style={{
+                                                padding: config.space.S300,
+                                                background: 'var(--bg-input, #0f172a)',
+                                                borderRadius: 8,
+                                            }}
+                                        >
+                                            <Text size="L400">Your invite link</Text>
+                                            <Text
+                                                size="T200"
+                                                className={BreakWord}
+                                                style={{
+                                                    fontFamily: 'monospace',
+                                                    userSelect: 'all',
+                                                }}
+                                            >
+                                                {created.url}
+                                            </Text>
+                                            <Box gap="200" style={linkRow}>
+                                                <Button
+                                                    size="300"
+                                                    type="button"
+                                                    onClick={() => void copyText(created.url)}
+                                                >
+                                                    <Text size="B300">
+                                                        {copied ? 'Copied!' : 'Copy link'}
+                                                    </Text>
+                                                </Button>
+                                                <Text size="T200" style={{ opacity: 0.7 }}>
+                                                    This URL is shown once. Save it now.
+                                                </Text>
+                                            </Box>
+                                        </Box>
+                                    )}
+
+                                    <Box direction="Column" gap="200">
+                                        <Text size="L400">Your active links</Text>
+                                        {load.kind === 'loading' && (
+                                            <Text size="T200">Loading…</Text>
+                                        )}
+                                        {load.kind === 'error' && (
+                                            <Text
+                                                size="T200"
+                                                style={{ color: color.Critical.Main }}
+                                            >
+                                                {load.message}
+                                            </Text>
+                                        )}
+                                        {load.kind === 'loaded' && rows.length === 0 && (
+                                            <Text size="T200" style={{ opacity: 0.7 }}>
+                                                You haven&apos;t created any invite links yet.
+                                            </Text>
+                                        )}
+                                        {rows.map((item) => {
+                                            const revoked = Boolean(item.revokedAt);
+                                            return (
+                                                <Box
+                                                    key={item.id}
+                                                    direction="Column"
+                                                    gap="100"
+                                                    style={{
+                                                        padding: config.space.S300,
+                                                        border: '1px solid var(--border-default, #374151)',
+                                                        borderRadius: 8,
+                                                        opacity: revoked ? 0.6 : 1,
+                                                    }}
+                                                >
+                                                    <Box style={linkRow}>
+                                                        <Text size="T300">
+                                                            <b>{item.label ?? '(no label)'}</b>
+                                                        </Text>
+                                                        {item.matrixRoomId && (
+                                                            <Text size="T200" style={{ opacity: 0.7 }}>
+                                                                · room: {item.matrixRoomId}
+                                                            </Text>
+                                                        )}
+                                                    </Box>
+                                                    <Text size="T200" style={{ opacity: 0.7 }}>
+                                                        {item.useCount}/{item.maxUses} used ·{' '}
+                                                        {item.usesRemaining} left · expires{' '}
+                                                        {formatExpiry(item.expiresAt)}
+                                                        {revoked ? ' · revoked' : ''}
+                                                    </Text>
+                                                    {item.redemptions.length > 0 && (
+                                                        <Text size="T200" style={{ opacity: 0.7 }}>
+                                                            Redemptions: {item.redemptions.length}
+                                                        </Text>
+                                                    )}
+                                                    {!revoked && (
+                                                        <Box gap="200" style={linkRow}>
+                                                            <Button
+                                                                size="300"
+                                                                type="button"
+                                                                variant="Critical"
+                                                                onClick={() =>
+                                                                    void requestRevoke(item)
+                                                                }
+                                                            >
+                                                                <Text size="B300">Revoke</Text>
+                                                            </Button>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            );
+                                        })}
+                                    </Box>
+                                </Box>
+                            </Scroll>
+                        </Box>
+                    </Dialog>
+                </FocusTrap>
+            </OverlayCenter>
+        </Overlay>
+    );
+}
+
+export default InvitationsManager;

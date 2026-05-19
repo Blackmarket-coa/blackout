@@ -1,0 +1,1 @@
+export { InvitationsManager } from './InvitationsManager';
