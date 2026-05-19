@@ -26,29 +26,75 @@ export interface CreateInvitationInput {
   expiresInHours?: number;
 }
 
-export interface CreateInvitationResult {
-  token: string;
-  record: InvitationTokenRecord;
-}
+export type CreateInvitationOutcome =
+  | {
+      kind: 'ok';
+      token: string;
+      record: InvitationTokenRecord;
+      /** Synapse registration token. Returned ONCE at create time; the
+       *  HTTP route surfaces it in the URL fragment so the recipient's
+       *  RegisterForm can pre-fill the `m.login.registration_token`
+       *  UIA stage. Never returned from list/preview endpoints. */
+      synapseRegistrationToken: string;
+    }
+  | { kind: 'matrix_mint_failed'; reason: string; detail?: string };
 
-export const createInvitation = (input: CreateInvitationInput): CreateInvitationResult => {
+/**
+ * Create a Blackout invitation AND a matching Synapse registration
+ * token, atomically.
+ *
+ * Order matters: mint the Synapse token first so we never persist a
+ * Blackout invite without its credential. If the local DB write fails
+ * after a successful mint, best-effort revoke the Synapse token so we
+ * don't leak orphaned tokens that Synapse will honor.
+ */
+export const createInvitation = async (
+  input: CreateInvitationInput,
+): Promise<CreateInvitationOutcome> => {
   const maxUses = clampMaxUses(input.maxUses ?? DEFAULT_MAX_USES);
   const ttlHours = clampTtlHours(input.expiresInHours ?? DEFAULT_TTL_HOURS);
-  const expiresAt = ttlHours === 0
-    ? undefined
-    : new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+  const expiresAt =
+    ttlHours === 0
+      ? undefined
+      : new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+
+  const mint = await matrixClient.mintRegistrationToken({
+    usesAllowed: maxUses,
+    expiresAtMs: expiresAt ? Date.parse(expiresAt) : null,
+  });
+  if (!mint.ok) {
+    return {
+      kind: 'matrix_mint_failed',
+      reason: mint.reason,
+      detail: 'detail' in mint ? mint.detail : undefined,
+    };
+  }
 
   const token = randomBytes(INVITATION_TOKEN_BYTES).toString('base64url');
-  const record = db.createInvitationToken({
-    id: randomUUID(),
-    createdBy: input.createdBy,
-    tokenHash: sha256(token),
-    matrixRoomId: input.matrixRoomId,
-    label: input.label,
-    maxUses,
-    expiresAt,
-  });
-  return { token, record };
+  try {
+    const record = db.createInvitationToken({
+      id: randomUUID(),
+      createdBy: input.createdBy,
+      tokenHash: sha256(token),
+      matrixRoomId: input.matrixRoomId,
+      label: input.label,
+      maxUses,
+      expiresAt,
+      synapseRegistrationToken: mint.token,
+      synapseRegistrationTokenExpiresAt:
+        typeof mint.expiresAtMs === 'number'
+          ? new Date(mint.expiresAtMs).toISOString()
+          : undefined,
+    });
+    return { kind: 'ok', token, record, synapseRegistrationToken: mint.token };
+  } catch (err) {
+    // Local persistence failed after a successful mint. Best-effort
+    // revoke so the orphaned Synapse token can't outlive this attempt.
+    void matrixClient.revokeRegistrationToken(mint.token).catch(() => {
+      /* logged by the caller if needed */
+    });
+    throw err;
+  }
 };
 
 export type PreviewOutcome =
@@ -138,16 +184,34 @@ export const redeemInvitation = async (
   return { kind: 'ok', record: updated, matrixInvite };
 };
 
-export const revokeInvitation = (
+/**
+ * Revoke an invitation. The local row is marked revoked first; if a
+ * Synapse registration token was minted with the invite we fire a
+ * best-effort delete against Synapse afterwards. Synapse failure does
+ * not roll back the local revoke (we'd rather have an orphaned Synapse
+ * token sitting around than an "I revoked this and it's still
+ * working" UX bug); the caller is expected to log such cases.
+ */
+export const revokeInvitation = async (
   id: string,
   byUserId: string,
-): { kind: 'ok'; record: InvitationTokenRecord } | { kind: 'not_found' } | { kind: 'forbidden' } => {
+): Promise<
+  | { kind: 'ok'; record: InvitationTokenRecord; synapseRevoke?: { ok: boolean } }
+  | { kind: 'not_found' }
+  | { kind: 'forbidden' }
+> => {
   const existing = db.getInvitationTokenById(id);
   if (!existing) return { kind: 'not_found' };
   if (existing.createdBy !== byUserId) return { kind: 'forbidden' };
   const updated = db.revokeInvitationToken(id, 'revoked_by_creator');
   if (!updated) return { kind: 'not_found' };
-  return { kind: 'ok', record: updated };
+
+  let synapseRevoke: { ok: boolean } | undefined;
+  if (updated.synapseRegistrationToken) {
+    const result = await matrixClient.revokeRegistrationToken(updated.synapseRegistrationToken);
+    synapseRevoke = { ok: result.ok };
+  }
+  return { kind: 'ok', record: updated, synapseRevoke };
 };
 
 export const listInvitationsForUser = (userId: string): InvitationTokenRecord[] =>

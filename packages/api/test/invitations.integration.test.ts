@@ -9,12 +9,50 @@ process.env.JWT_ISSUER = 'blackout-api-test';
 process.env.JWT_AUDIENCE = 'blackout-client-test';
 process.env.AUTH_RATE_LIMIT_MAX = '10000';
 process.env.BLACKOUT_DB_MODE = 'memory';
+// Configure Matrix env so the invitation create path actually invokes
+// the mint code; the fetch stub below decides what Synapse returns.
+process.env.MATRIX_HOMESERVER = process.env.MATRIX_HOMESERVER ?? 'https://matrix.test.local';
+process.env.MATRIX_BOT_TOKEN = process.env.MATRIX_BOT_TOKEN ?? 'syt_test_admin_token';
 
-// Stub Matrix calls so the suite has no network dependency. The
-// invitation flow tolerates `matrix_not_configured`, so we just confirm
-// it doesn't blow up.
-globalThis.fetch = (async () =>
-  new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
+// Tracks outbound fetches so tests can assert the Synapse mint endpoint
+// was hit with the right shape. `setFetchHandler` lets individual tests
+// inject a custom response (e.g. simulate a 500 from Synapse).
+interface FetchCall {
+  url: string;
+  init: RequestInit | undefined;
+  bodyText?: string;
+}
+const fetchCalls: FetchCall[] = [];
+const defaultFetchHandler = (url: string, _init?: RequestInit): Response => {
+  // Synapse registration-token mint: return a deterministic token so
+  // tests can recognize it in subsequent assertions.
+  if (url.includes('/_synapse/admin/v1/registration_tokens/new')) {
+    return new Response(JSON.stringify({ token: 'synapse-test-token-001', uses_allowed: 1 }), {
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    });
+  }
+  // Default: empty JSON 200, which is what the existing tests assumed.
+  return new Response(JSON.stringify({}), {
+    headers: { 'content-type': 'application/json' },
+    status: 200,
+  });
+};
+let fetchHandler: (url: string, init?: RequestInit) => Response | Promise<Response> = defaultFetchHandler;
+const setFetchHandler = (handler: typeof fetchHandler) => {
+  fetchHandler = handler;
+};
+const resetFetchHandler = () => {
+  fetchHandler = defaultFetchHandler;
+  fetchCalls.length = 0;
+};
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const bodyText =
+    init?.body && typeof init.body === 'string' ? init.body : undefined;
+  fetchCalls.push({ url, init, bodyText });
+  return await fetchHandler(url, init);
+}) as typeof fetch;
 
 const { default: app } = await import('../src/index');
 const { signJwt, hashPassword } = await import('../src/services/auth');
@@ -58,7 +96,10 @@ test('POST /v1/invitations issues a single-use token by default', async () => {
   assert.equal(body.invitation.useCount, 0);
   assert.equal(body.invitation.label, 'team launch');
   assert.ok(body.token.length >= 32, 'token should be at least 32 chars');
-  assert.ok(body.url.endsWith(encodeURIComponent(body.token)), 'url should embed the token');
+  assert.ok(
+    body.url.includes(`/invite/${encodeURIComponent(body.token)}`),
+    `url should embed the token in the path, got ${body.url}`,
+  );
 });
 
 test('preview returns inviter and usesRemaining for a valid token', async () => {
@@ -325,4 +366,170 @@ test('inviter cannot redeem their own invitation', async () => {
   const { redeemInvitation } = await import('../src/services/invitations');
   const outcome = await redeemInvitation(token, inviter);
   assert.equal(outcome.kind, 'self_redeem');
+});
+
+test('POST /v1/invitations mints a Synapse registration token with matching limits', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const res = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ maxUses: 5, expiresInHours: 24 }),
+  });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as {
+    token: string;
+    synapseRegistrationToken: string;
+    url: string;
+  };
+  assert.equal(body.synapseRegistrationToken, 'synapse-test-token-001');
+  // URL must embed the Synapse token in the fragment, not the query/path.
+  assert.ok(
+    body.url.includes('#registrationToken=synapse-test-token-001'),
+    `expected fragment in url, got ${body.url}`,
+  );
+  assert.ok(body.url.includes(`/invite/${encodeURIComponent(body.token)}`));
+
+  // Synapse mint call shape: uses_allowed must mirror maxUses, expiry_time
+  // must be a ms-epoch number 24h in the future.
+  const mintCall = fetchCalls.find((c) =>
+    c.url.includes('/_synapse/admin/v1/registration_tokens/new'),
+  );
+  assert.ok(mintCall, 'expected a fetch to the Synapse mint endpoint');
+  assert.equal(mintCall!.init?.method, 'POST');
+  const mintBody = JSON.parse(mintCall!.bodyText ?? '{}') as {
+    uses_allowed: number;
+    expiry_time: number;
+  };
+  assert.equal(mintBody.uses_allowed, 5);
+  assert.ok(typeof mintBody.expiry_time === 'number');
+  const drift = mintBody.expiry_time - (Date.now() + 24 * 60 * 60 * 1000);
+  assert.ok(Math.abs(drift) < 5_000, `expiry should be ~24h out (drift ${drift}ms)`);
+});
+
+test('GET /v1/invitations does NOT leak the Synapse registration token', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  assert.equal(create.status, 201);
+
+  const list = await app.request('/v1/invitations', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(list.status, 200);
+  const body = (await list.json()) as {
+    invitations: Record<string, unknown>[];
+  };
+  for (const row of body.invitations) {
+    assert.ok(
+      !('synapseRegistrationToken' in row),
+      `list row leaked Synapse token: ${JSON.stringify(row)}`,
+    );
+  }
+});
+
+test('POST /v1/invitations returns 503 and writes no row when Synapse mint fails', async () => {
+  resetFetchHandler();
+  setFetchHandler((url) => {
+    if (url.includes('/_synapse/admin/v1/registration_tokens/new')) {
+      return new Response(JSON.stringify({ errcode: 'M_UNKNOWN', error: 'boom' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return defaultFetchHandler(url);
+  });
+
+  const inviter = seedUser();
+  const beforeList = await app.request('/v1/invitations', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const before = ((await beforeList.json()) as { invitations: unknown[] }).invitations.length;
+
+  const res = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  assert.equal(res.status, 503);
+  const body = (await res.json()) as { code: string };
+  assert.equal(body.code, 'matrix_mint_failed');
+
+  const afterList = await app.request('/v1/invitations', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const after = ((await afterList.json()) as { invitations: unknown[] }).invitations.length;
+  assert.equal(after, before, 'no invitation row should be persisted on mint failure');
+});
+
+test('DELETE /v1/invitations/:id revokes the Synapse token best-effort', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  const { invitation } = (await create.json()) as { invitation: { id: string } };
+
+  // Reset the call log to focus on the revoke side-effects.
+  fetchCalls.length = 0;
+
+  const revoke = await app.request(`/v1/invitations/${invitation.id}`, {
+    method: 'DELETE',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(revoke.status, 200);
+  const body = (await revoke.json()) as {
+    synapseRevoke?: { ok: boolean };
+    invitation: { revokedAt?: string };
+  };
+  assert.ok(body.invitation.revokedAt, 'local row should be marked revoked');
+  assert.equal(body.synapseRevoke?.ok, true);
+
+  const synapseDelete = fetchCalls.find((c) =>
+    c.url.includes('/_synapse/admin/v1/registration_tokens/synapse-test-token-001'),
+  );
+  assert.ok(synapseDelete, 'expected DELETE to Synapse for the stored registration token');
+  assert.equal(synapseDelete!.init?.method, 'DELETE');
+});
+
+test('DELETE /v1/invitations/:id revokes locally even if Synapse rejects', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  const { invitation } = (await create.json()) as { invitation: { id: string } };
+
+  setFetchHandler((url, init) => {
+    if (
+      url.includes('/_synapse/admin/v1/registration_tokens/') &&
+      init?.method === 'DELETE'
+    ) {
+      return new Response('nope', { status: 500 });
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const revoke = await app.request(`/v1/invitations/${invitation.id}`, {
+    method: 'DELETE',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(revoke.status, 200);
+  const body = (await revoke.json()) as {
+    synapseRevoke?: { ok: boolean };
+    invitation: { revokedAt?: string };
+  };
+  assert.ok(body.invitation.revokedAt, 'local row should still be marked revoked');
+  assert.equal(body.synapseRevoke?.ok, false);
 });

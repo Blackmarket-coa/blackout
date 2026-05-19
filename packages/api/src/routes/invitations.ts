@@ -39,9 +39,17 @@ const createSchema = z.object({
   expiresInHours: z.number().int().min(0).max(MAX_TTL_HOURS).optional(),
 });
 
-const buildInviteUrl = (token: string): string => {
+/**
+ * Build the shareable invite URL. The Synapse registration token rides
+ * in the URL fragment so it never reaches the server (fragments aren't
+ * sent on HTTP requests). The recipient's browser parses the fragment
+ * on the landing page and stashes it for RegisterForm to pre-fill.
+ */
+const buildInviteUrl = (token: string, synapseRegistrationToken?: string): string => {
   const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
-  return `${base}/invite/${encodeURIComponent(token)}`;
+  const path = `${base}/invite/${encodeURIComponent(token)}`;
+  if (!synapseRegistrationToken) return path;
+  return `${path}#registrationToken=${encodeURIComponent(synapseRegistrationToken)}`;
 };
 
 const publicShape = (record: InvitationTokenRecord) => ({
@@ -63,7 +71,7 @@ invitations.post('/', async (c) => {
   const parsed = await readJsonBody(c, createSchema);
   if (parsed instanceof Response) return parsed;
 
-  const { token, record } = createInvitation({
+  const outcome = await createInvitation({
     createdBy: user.sub,
     matrixRoomId: parsed.matrixRoomId,
     label: parsed.label,
@@ -71,13 +79,29 @@ invitations.post('/', async (c) => {
     expiresInHours: parsed.expiresInHours,
   });
 
+  if (outcome.kind === 'matrix_mint_failed') {
+    return c.json(
+      {
+        code: 'matrix_mint_failed',
+        message:
+          'Could not mint a Matrix registration token. Check that MATRIX_HOMESERVER and MATRIX_BOT_TOKEN are configured and the bot has admin rights.',
+        reason: outcome.reason,
+        detail: outcome.detail,
+      },
+      503,
+    );
+  }
+
   return c.json(
     {
-      invitation: publicShape(record),
+      invitation: publicShape(outcome.record),
       // Plaintext token is returned exactly once; the inviter is responsible
       // for capturing the URL before navigating away.
-      token,
-      url: buildInviteUrl(token),
+      token: outcome.token,
+      // Synapse registration token is also returned exactly once. Embedded
+      // in the URL fragment, never echoed in list/preview responses.
+      synapseRegistrationToken: outcome.synapseRegistrationToken,
+      url: buildInviteUrl(outcome.token, outcome.synapseRegistrationToken),
     },
     201,
   );
@@ -99,13 +123,16 @@ invitations.get('/', (c) => {
   });
 });
 
-invitations.delete('/:id', (c) => {
+invitations.delete('/:id', async (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
-  const outcome = revokeInvitation(c.req.param('id'), user.sub);
+  const outcome = await revokeInvitation(c.req.param('id'), user.sub);
   switch (outcome.kind) {
     case 'ok':
-      return c.json({ invitation: publicShape(outcome.record) });
+      return c.json({
+        invitation: publicShape(outcome.record),
+        synapseRevoke: outcome.synapseRevoke,
+      });
     case 'not_found':
       return c.json({ code: 'not_found', message: 'Invitation not found' }, 404);
     case 'forbidden':

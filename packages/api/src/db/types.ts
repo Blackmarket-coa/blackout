@@ -78,6 +78,21 @@ export interface InvitationTokenRecord {
   revokedAt?: string;
   revokedReason?: string;
   createdAt: string;
+  /**
+   * Matching Synapse registration token (the value Synapse returned from
+   * `POST /_synapse/admin/v1/registration_tokens/new`). Stored plaintext
+   * because the revoke endpoint takes the literal token in the URL path
+   * — we can't hash it and still revoke from Synapse. Synapse itself
+   * stores these tokens in its own DB without hashing, so persisting it
+   * here does not widen the existing trust boundary (anyone with DB
+   * access to either side can already mint Matrix accounts).
+   *
+   * Never returned outside the original `POST /v1/invitations` create
+   * response; the public preview and listing endpoints strip this field.
+   */
+  synapseRegistrationToken?: string;
+  /** Synapse-reported expiry for the registration token (ISO 8601). */
+  synapseRegistrationTokenExpiresAt?: string;
 }
 
 /**

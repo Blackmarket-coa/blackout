@@ -14,6 +14,44 @@ import {
  */
 export const PENDING_INVITE_STORAGE_KEY = 'blackout:pendingInviteToken';
 
+/**
+ * Storage key RegisterForm reads on mount to pre-fill the
+ * `m.login.registration_token` UIA stage. Populated from the URL
+ * fragment by the landing page so a single shareable URL carries both
+ * the Blackout invite id and the Synapse registration token needed to
+ * satisfy `registration_requires_token` during sign-up.
+ */
+export const PENDING_REGISTRATION_TOKEN_STORAGE_KEY = 'blackout:pendingRegistrationToken';
+
+/**
+ * Parse the registration token out of the URL fragment, stash it for
+ * RegisterForm, and strip the fragment from the address bar so a
+ * refresh doesn't re-stash and the token doesn't sit visibly in the
+ * URL after capture.
+ *
+ * Fragment shape produced by the backend's buildInviteUrl():
+ *   /invite/<blackoutToken>#registrationToken=<synapseToken>
+ */
+const capturePendingRegistrationToken = (): void => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return;
+    const params = new URLSearchParams(hash.slice(1));
+    const token = params.get('registrationToken');
+    if (!token) return;
+    try {
+        window.sessionStorage.setItem(PENDING_REGISTRATION_TOKEN_STORAGE_KEY, token);
+    } catch {
+        // sessionStorage can be locked down in some embeds; the user
+        // can still paste the token manually into the register form.
+    }
+    try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch {
+        /* history API may be unavailable in iframes; non-fatal */
+    }
+};
+
 const cardStyle: React.CSSProperties = {
     width: 'min(560px, 100%)',
     border: '1px solid var(--border-default, #374151)',
@@ -87,6 +125,14 @@ export const InviteLandingPage: React.FC = () => {
     const authState = useAtomValue(authStateAtom);
     const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
     const token = tokenFromPath();
+
+    // Step 0: capture the Synapse registration token from the URL
+    // fragment (if any) BEFORE the preview fires. Done once on mount —
+    // the fragment is then stripped from the address bar so the
+    // sensitive value doesn't sit around or get re-stashed on refresh.
+    useEffect(() => {
+        capturePendingRegistrationToken();
+    }, []);
 
     // Step 1: always preview, regardless of auth state. This gives the user a
     // friendly "who invited me?" view even if they're already logged in
