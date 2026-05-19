@@ -172,6 +172,7 @@ export const ClientLayout = () => {
     const messageSearchScrollRef = useRef<HTMLDivElement>(null);
     const [lobbyOpen, setLobbyOpen] = useState(false);
     const [attachProductOpen, setAttachProductOpen] = useState(false);
+    const [showGlobalInvitations, setShowGlobalInvitations] = useState(false);
     const [roomSurface, setRoomSurface] = useState<'timeline' | 'forum' | 'coalition'>('timeline');
     const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
     const [spaceOrder, setSpaceOrder] = useState<string[]>([]);
@@ -785,6 +786,24 @@ export const ClientLayout = () => {
                             }}
                         >
                             🏠
+                        </button>
+                    }
+                    inviteButton={
+                        <button
+                            type="button"
+                            onClick={() => setShowGlobalInvitations(true)}
+                            title="Create an invite link"
+                            aria-label="Create an invite link"
+                            data-testid="primary-rail-invite"
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 10,
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                            }}
+                        >
+                            ✉️
                         </button>
                     }
                     canopyBlock={orderedSpaces.map((space, idx) => (
@@ -2020,6 +2039,11 @@ export const ClientLayout = () => {
 
             <CreateSpaceModalRenderer />
             <CreateRoomModalRenderer />
+            {showGlobalInvitations ? (
+                <InvitationsManager
+                    requestClose={() => setShowGlobalInvitations(false)}
+                />
+            ) : null}
             {attachProductOpen ? (
                 <Suspense fallback={null}>
                     <AttachProductDialog

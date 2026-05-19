@@ -334,6 +334,27 @@ describe('ClientLayout UI wiring', () => {
         vi.unstubAllGlobals();
     });
 
+    it('pins a global "Create an invite link" button to the primary rail', () => {
+        // Verifies the rail-level invite trigger added so users can mint
+        // shareable links from anywhere — not only from inside a Den.
+        const room = makeRoom({
+            roomId: '!room:example.org',
+            name: 'Room',
+        });
+        mockRoom = room;
+        const { container } = renderLayout({
+            rooms: [room],
+            selectedRoomId: '!room:example.org',
+            selectedSpaceId: null,
+            rightPanel: null,
+        });
+        const inviteButton = container.querySelector(
+            '[data-testid="primary-rail-invite"]'
+        );
+        expect(inviteButton).toBeTruthy();
+        expect(inviteButton?.getAttribute('aria-label')).toBe('Create an invite link');
+    });
+
     it('threads/pins/search click sets jump target and closes panel', () => {
         const events = [
             makeEvent('$evt-thread', 'thread', 'm.thread'),
