@@ -59,6 +59,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
             }}
           >
             <Modal
+              variant="Surface"
               size="300"
               flexHeight
               role="dialog"
@@ -68,10 +69,12 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
             >
               <Box direction="Column">
                 <Header
+                  variant="Surface"
                   size="500"
                   style={{
                     padding: config.space.S200,
                     paddingLeft: config.space.S400,
+                    borderBottomWidth: config.borderWidth.B300,
                   }}
                 >
                   <Box grow="Yes">

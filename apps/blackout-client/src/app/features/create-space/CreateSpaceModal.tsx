@@ -59,6 +59,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
             }}
           >
             <Modal
+              variant="Surface"
               size="300"
               flexHeight
               role="dialog"
@@ -68,6 +69,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
             >
               <Box direction="Column">
                 <Header
+                  variant="Surface"
                   size="500"
                   style={{
                     padding: config.space.S200,
