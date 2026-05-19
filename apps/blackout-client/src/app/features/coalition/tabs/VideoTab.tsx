@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useCoalitionFeed, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
+import { buildCommunitiesPath } from '../../../pages/paths';
 
 export interface VideoTabProps {
     scope: CoalitionScopeQuery;
@@ -174,7 +175,7 @@ export function VideoTab({ scope }: VideoTabProps) {
                                 </button>
                                 {item.denId ? (
                                     <a
-                                        href={`/room/${encodeURIComponent(item.denId)}`}
+                                        href={buildCommunitiesPath(null, item.denId)}
                                         style={{
                                             ...reelButtonStyle(false),
                                             textDecoration: 'none',
@@ -200,7 +201,7 @@ export function VideoTab({ scope }: VideoTabProps) {
                                         <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>
                                             Comments live in the linked den.{' '}
                                             <a
-                                                href={`/room/${encodeURIComponent(item.denId)}`}
+                                                href={buildCommunitiesPath(null, item.denId)}
                                                 style={{ color: '#1ABC9C' }}
                                             >
                                                 Open conversation →

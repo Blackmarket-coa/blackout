@@ -26,7 +26,6 @@ export const resolveShellMode = (pathname: string): ShellMode => {
         return 'inbox';
     }
     if (pathname.startsWith('/events')) return 'events';
-    if (pathname.startsWith('/room/')) return 'community';
     return 'other';
 };
 
