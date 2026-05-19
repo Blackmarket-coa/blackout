@@ -214,9 +214,6 @@ export const revokeInvitation = async (
   return { kind: 'ok', record: updated, synapseRevoke };
 };
 
-export const listInvitationsForUser = (userId: string): InvitationTokenRecord[] =>
-  db.listInvitationTokensByCreator(userId);
-
 const evaluateInvitation = (
   record: InvitationTokenRecord,
 ):
@@ -230,6 +227,32 @@ const evaluateInvitation = (
     return { kind: 'expired' };
   }
   return { kind: 'ok' };
+};
+
+export type InvitationListState = 'active' | 'revoked' | 'exhausted' | 'expired';
+
+export interface InvitationListFilters {
+  state?: InvitationListState;
+  label?: string;
+}
+
+// TODO: when pagination lands, push state+label filtering into the DB layer
+// (`db.listInvitationTokensByCreator`) so we don't load the whole set per call.
+export const listInvitationsForUser = (
+  userId: string,
+  filters: InvitationListFilters = {},
+): InvitationTokenRecord[] => {
+  const rows = db.listInvitationTokensByCreator(userId);
+  if (!filters.state && !filters.label) return rows;
+
+  const wantedKind = filters.state === 'active' ? 'ok' : filters.state;
+  const needle = filters.label?.toLowerCase();
+
+  return rows.filter((row) => {
+    if (wantedKind && evaluateInvitation(row).kind !== wantedKind) return false;
+    if (needle && !(row.label ?? '').toLowerCase().includes(needle)) return false;
+    return true;
+  });
 };
 
 const clampMaxUses = (n: number): number => {

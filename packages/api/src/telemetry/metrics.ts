@@ -290,4 +290,22 @@ export const mailFailoverPrimaryActive = new Gauge(
   'Set to 1 when the primary mailer (resend) is the currently-routed transport, 0 when failed over to the fallback (smtp).',
 );
 
+export const invitationsCreatedTotal = new Counter(
+  'invitations_created_total',
+  'Invitation tokens successfully minted, partitioned by whether the link is room-scoped or global.',
+  ['scoped'],
+);
+
+export const invitationsRedeemedTotal = new Counter(
+  'invitations_redeemed_total',
+  'Invitation redemption attempts, partitioned by outcome.',
+  ['outcome'],
+);
+
+export const invitationsMatrixMintFailuresTotal = new Counter(
+  'invitations_matrix_mint_failures_total',
+  'Synapse registration-token mint failures encountered while creating an invitation.',
+  ['reason'],
+);
+
 export const __test__ = { Registry };

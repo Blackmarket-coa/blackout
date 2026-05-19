@@ -14,6 +14,11 @@ import {
   revokeInvitation,
 } from '../services/invitations';
 import type { InvitationTokenRecord } from '../db/types';
+import {
+  invitationsCreatedTotal,
+  invitationsMatrixMintFailuresTotal,
+  invitationsRedeemedTotal,
+} from '../telemetry/metrics';
 
 const invitations = new Hono();
 
@@ -37,6 +42,11 @@ const createSchema = z.object({
   label: z.string().min(1).max(120).optional(),
   maxUses: z.number().int().min(1).max(MAX_USES_CEILING).optional(),
   expiresInHours: z.number().int().min(0).max(MAX_TTL_HOURS).optional(),
+});
+
+const listQuerySchema = z.object({
+  state: z.enum(['active', 'revoked', 'exhausted', 'expired']).optional(),
+  label: z.string().trim().min(1).max(120).optional(),
 });
 
 /**
@@ -80,6 +90,7 @@ invitations.post('/', async (c) => {
   });
 
   if (outcome.kind === 'matrix_mint_failed') {
+    invitationsMatrixMintFailuresTotal.inc({ reason: outcome.reason });
     return c.json(
       {
         code: 'matrix_mint_failed',
@@ -91,6 +102,10 @@ invitations.post('/', async (c) => {
       503,
     );
   }
+
+  invitationsCreatedTotal.inc({
+    scoped: outcome.record.matrixRoomId ? 'room' : 'global',
+  });
 
   return c.json(
     {
@@ -110,12 +125,22 @@ invitations.post('/', async (c) => {
 invitations.get('/', (c) => {
   const user = requireUser(c);
   if (user instanceof Response) return user;
-  const rows = listInvitationsForUser(user.sub);
+
+  const parsedQuery = listQuerySchema.safeParse(c.req.query());
+  if (!parsedQuery.success) {
+    return c.json(
+      { code: 'bad_request', message: 'Invalid list filters', issues: parsedQuery.error.issues },
+      400,
+    );
+  }
+
+  const rows = listInvitationsForUser(user.sub, parsedQuery.data);
   return c.json({
     invitations: rows.map((r) => ({
       ...publicShape(r),
       redemptions: db.listInvitationRedemptionsByToken(r.id).map((red) => ({
         userId: red.redeemedByUserId,
+        username: db.getUserById(red.redeemedByUserId)?.username ?? red.redeemedByUserId,
         matrixInviteOk: red.matrixInviteOk,
         at: red.createdAt,
       })),
@@ -160,6 +185,7 @@ invitations.post('/redeem', async (c) => {
   }
 
   const outcome = await redeemInvitation(parsed.token, redeemer);
+  invitationsRedeemedTotal.inc({ outcome: outcome.kind });
   switch (outcome.kind) {
     case 'ok':
       return c.json({

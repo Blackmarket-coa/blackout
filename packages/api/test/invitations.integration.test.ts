@@ -533,3 +533,270 @@ test('DELETE /v1/invitations/:id revokes locally even if Synapse rejects', async
   assert.ok(body.invitation.revokedAt, 'local row should still be marked revoked');
   assert.equal(body.synapseRevoke?.ok, false);
 });
+
+// --- Listing: filters, validation, redemption username surfacing ----------
+
+test('GET /v1/invitations filters by state (active vs revoked)', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+
+  // Three invites: one we leave active, one we revoke, one with a label.
+  const mk = (body: object) =>
+    app.request('/v1/invitations', {
+      method: 'POST',
+      headers: bearer(inviter.id, inviter.username),
+      body: JSON.stringify(body),
+    });
+  const active = (await (await mk({ label: 'still-here' })).json()) as {
+    invitation: { id: string };
+  };
+  const toRevoke = (await (await mk({ label: 'gone-soon' })).json()) as {
+    invitation: { id: string };
+  };
+  await mk({ label: 'also-here' });
+
+  await app.request(`/v1/invitations/${toRevoke.invitation.id}`, {
+    method: 'DELETE',
+    headers: bearer(inviter.id, inviter.username),
+  });
+
+  const activeRes = await app.request('/v1/invitations?state=active', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(activeRes.status, 200);
+  const activeBody = (await activeRes.json()) as {
+    invitations: Array<{ id: string; revokedAt?: string }>;
+  };
+  assert.ok(
+    activeBody.invitations.some((r) => r.id === active.invitation.id),
+    'active filter should include the un-revoked invite',
+  );
+  assert.ok(
+    !activeBody.invitations.some((r) => r.id === toRevoke.invitation.id),
+    'active filter should NOT include the revoked invite',
+  );
+  for (const r of activeBody.invitations) {
+    assert.equal(r.revokedAt, undefined, 'active rows must not have revokedAt');
+  }
+
+  const revokedRes = await app.request('/v1/invitations?state=revoked', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const revokedBody = (await revokedRes.json()) as {
+    invitations: Array<{ id: string; revokedAt?: string }>;
+  };
+  assert.ok(
+    revokedBody.invitations.some((r) => r.id === toRevoke.invitation.id),
+    'revoked filter should include the revoked invite',
+  );
+  for (const r of revokedBody.invitations) {
+    assert.ok(r.revokedAt, 'revoked rows must have revokedAt set');
+  }
+});
+
+test('GET /v1/invitations filters by label substring, case-insensitive', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const mk = (label: string) =>
+    app.request('/v1/invitations', {
+      method: 'POST',
+      headers: bearer(inviter.id, inviter.username),
+      body: JSON.stringify({ label }),
+    });
+  await mk('Alpha-cohort');
+  await mk('alphabet-team');
+  await mk('Beta-release');
+
+  const aRes = await app.request('/v1/invitations?label=alpha', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const aBody = (await aRes.json()) as { invitations: Array<{ label?: string }> };
+  const aLabels = aBody.invitations.map((r) => r.label);
+  assert.ok(aLabels.includes('Alpha-cohort'), 'should match Alpha-cohort');
+  assert.ok(aLabels.includes('alphabet-team'), 'should match alphabet-team');
+  assert.ok(!aLabels.includes('Beta-release'), 'should not match Beta-release');
+
+  const bRes = await app.request('/v1/invitations?label=beta', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const bBody = (await bRes.json()) as { invitations: Array<{ label?: string }> };
+  assert.deepEqual(
+    bBody.invitations.map((r) => r.label),
+    ['Beta-release'],
+  );
+});
+
+test('GET /v1/invitations rejects unknown state filter with 400', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const res = await app.request('/v1/invitations?state=bogus', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { code: string };
+  assert.equal(body.code, 'bad_request');
+});
+
+test('GET /v1/invitations surfaces the redeemer username on each redemption', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ maxUses: 1 }),
+  });
+  const { token, invitation } = (await create.json()) as {
+    token: string;
+    invitation: { id: string };
+  };
+
+  const redeemer = seedUser({ username: 'bob-redeemer' });
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200);
+
+  const list = await app.request('/v1/invitations', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const body = (await list.json()) as {
+    invitations: Array<{
+      id: string;
+      redemptions: Array<{ userId: string; username: string; at: string }>;
+    }>;
+  };
+  const row = body.invitations.find((r) => r.id === invitation.id);
+  assert.ok(row, 'invite should be present in the list');
+  assert.equal(row!.redemptions.length, 1);
+  assert.equal(row!.redemptions[0]!.username, 'bob-redeemer');
+  assert.equal(row!.redemptions[0]!.userId, redeemer.id);
+  assert.ok(row!.redemptions[0]!.at, 'redemption row should carry a timestamp');
+});
+
+// --- Metrics --------------------------------------------------------------
+
+const readMetric = async (
+  name: string,
+  labels: Record<string, string> = {},
+): Promise<number> => {
+  const res = await app.request('/metrics', { method: 'GET' });
+  const text = await res.text();
+  // Lines look like: invitations_created_total{scoped="global"} 3
+  const labelKey = Object.entries(labels)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}="${v}"`)
+    .join(',');
+  const needle = labelKey ? `${name}{${labelKey}}` : name;
+  for (const line of text.split('\n')) {
+    if (line.startsWith('#')) continue;
+    if (line.startsWith(`${needle} `)) {
+      const value = Number(line.slice(needle.length + 1).trim());
+      return Number.isFinite(value) ? value : 0;
+    }
+  }
+  return 0;
+};
+
+test('metrics: invitations_created_total increments on successful create', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const before = await readMetric('invitations_created_total', { scoped: 'global' });
+  const res = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  assert.equal(res.status, 201);
+  const after = await readMetric('invitations_created_total', { scoped: 'global' });
+  assert.equal(after, before + 1, 'global-scoped create should bump the counter by 1');
+});
+
+test('metrics: invitations_redeemed_total increments per outcome', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ maxUses: 1 }),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  const okBefore = await readMetric('invitations_redeemed_total', { outcome: 'ok' });
+  const redeemer = seedUser();
+  await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  const okAfter = await readMetric('invitations_redeemed_total', { outcome: 'ok' });
+  assert.equal(okAfter, okBefore + 1, 'ok redemption should bump outcome="ok"');
+
+  // Now exhausted: same single-use token, different redeemer.
+  const exhaustedBefore = await readMetric('invitations_redeemed_total', {
+    outcome: 'exhausted',
+  });
+  const second = seedUser();
+  await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(second.id, second.username),
+    body: JSON.stringify({ token }),
+  });
+  const exhaustedAfter = await readMetric('invitations_redeemed_total', {
+    outcome: 'exhausted',
+  });
+  assert.equal(
+    exhaustedAfter,
+    exhaustedBefore + 1,
+    'second redemption should bump outcome="exhausted"',
+  );
+
+  // Unknown token → invalid.
+  const invalidBefore = await readMetric('invitations_redeemed_total', {
+    outcome: 'invalid',
+  });
+  await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(second.id, second.username),
+    body: JSON.stringify({ token: 'not-a-real-token-xyz' }),
+  });
+  const invalidAfter = await readMetric('invitations_redeemed_total', {
+    outcome: 'invalid',
+  });
+  assert.equal(invalidAfter, invalidBefore + 1, 'unknown token should bump outcome="invalid"');
+});
+
+test('metrics: invitations_matrix_mint_failures_total increments on Synapse failure', async () => {
+  resetFetchHandler();
+  setFetchHandler((url) => {
+    if (url.includes('/_synapse/admin/v1/registration_tokens/new')) {
+      return new Response(JSON.stringify({ errcode: 'M_UNKNOWN', error: 'boom' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return defaultFetchHandler(url);
+  });
+
+  const inviter = seedUser();
+  const before = await readMetric('invitations_matrix_mint_failures_total', {
+    reason: 'synapse_rejected',
+  });
+  const res = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  assert.equal(res.status, 503);
+  const after = await readMetric('invitations_matrix_mint_failures_total', {
+    reason: 'synapse_rejected',
+  });
+  assert.equal(after, before + 1, 'mint failure should bump reason="synapse_rejected"');
+});

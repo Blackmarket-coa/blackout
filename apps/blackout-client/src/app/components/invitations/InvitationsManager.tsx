@@ -3,6 +3,7 @@ import React, {
     useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 import {
@@ -55,6 +56,8 @@ type CreateStatus =
 
 const formatExpiry = (iso?: string): string =>
     iso ? new Date(iso).toLocaleString() : 'never';
+
+const formatRedeemedAt = (iso: string): string => new Date(iso).toLocaleString();
 
 const linkRow: React.CSSProperties = {
     display: 'flex',
@@ -153,6 +156,18 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
     const rows = load.kind === 'loaded' ? load.items : [];
 
     const created = create.kind === 'created' ? create.response : null;
+
+    // Auto-copy the one-time URL the first time a creation succeeds. The
+    // ref guards against repeat-firing if the component re-renders with the
+    // same `created` value (e.g., parent state churn). Manual re-copy via
+    // the Copy button still works through the same `copyText` callback.
+    const autoCopiedUrlRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!created) return;
+        if (autoCopiedUrlRef.current === created.url) return;
+        autoCopiedUrlRef.current = created.url;
+        void copyText(created.url);
+    }, [created, copyText]);
 
     const showScopeToggle = useMemo(() => Boolean(roomId), [roomId]);
 
@@ -358,9 +373,21 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
                                                         {revoked ? ' · revoked' : ''}
                                                     </Text>
                                                     {item.redemptions.length > 0 && (
-                                                        <Text size="T200" style={{ opacity: 0.7 }}>
-                                                            Redemptions: {item.redemptions.length}
-                                                        </Text>
+                                                        <Box direction="Column" gap="100">
+                                                            <Text size="T200" style={{ opacity: 0.7 }}>
+                                                                Redemptions: {item.redemptions.length}
+                                                            </Text>
+                                                            {item.redemptions.map((red) => (
+                                                                <Text
+                                                                    key={`${red.userId}-${red.at}`}
+                                                                    size="T200"
+                                                                    style={{ opacity: 0.7 }}
+                                                                >
+                                                                    @{red.username} ·{' '}
+                                                                    {formatRedeemedAt(red.at)}
+                                                                </Text>
+                                                            ))}
+                                                        </Box>
                                                     )}
                                                     {!revoked && (
                                                         <Box gap="200" style={linkRow}>
