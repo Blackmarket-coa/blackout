@@ -12,6 +12,7 @@ import {
     matrixClientAtom,
     userIdAtom,
 } from '../../../../../src/app/state/auth';
+import { allRoomsBaseAtom } from '../../../../../src/app/state/rooms';
 import {
     createFakeMatrixClient,
     createFakeRoom,
@@ -128,6 +129,7 @@ describe('Draupnir moderation navigation', () => {
         const store = createStore();
         store.set(authStateAtom, 'logged_in');
         store.set(matrixClientAtom, mockClient as never);
+        store.set(allRoomsBaseAtom, rooms as never);
         store.set(userIdAtom, '@mod:example.org');
 
         const router = createMemoryRouter(

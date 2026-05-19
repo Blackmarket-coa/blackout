@@ -7,6 +7,7 @@ import { Provider, createStore } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import GlobalMentionsInbox from '../../../../src/app/features/navigation/GlobalMentionsInbox';
 import { matrixClientAtom } from '../../../../src/app/state/auth';
+import { allRoomsBaseAtom } from '../../../../src/app/state/rooms';
 import {
     roomJumpTargetEventIdAtom,
     selectedRoomIdAtom,
@@ -43,6 +44,7 @@ describe('GlobalMentionsInbox integration', () => {
         const root = ReactDOM.createRoot(container);
         const store = createStore();
         store.set(matrixClientAtom, mockClient as never);
+        store.set(allRoomsBaseAtom, [room] as never);
 
         act(() => {
             root.render(
