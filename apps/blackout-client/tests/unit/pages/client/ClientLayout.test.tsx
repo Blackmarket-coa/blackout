@@ -39,6 +39,7 @@ const mockClient = {
         return null;
     },
     getUserId: () => '@me:example.org',
+    getSafeUserId: () => '@me:example.org',
     getUser: () => ({ presence: 'online' }),
     getAccountData: vi.fn(() => null),
     setAccountData: vi.fn().mockResolvedValue(undefined),
@@ -214,9 +215,13 @@ const makeRoom = ({
             if (eventType === 'm.room.create') {
                 // `getStateEvent('m.room.create')` is used by `isSpace`. Surface
                 // the type so spaces vs. rooms can be distinguished without
-                // needing to wire up the full create-event content.
+                // needing to wire up the full create-event content. `room_version`
+                // is pinned to a pre-creators-tracking version so
+                // `useRoomCreators` short-circuits on `creatorsSupported(v)`
+                // before reading `createEvent.event.sender` (which the test's
+                // `wrapStateEvent` does not populate).
                 if (stateKey === undefined) return [];
-                return wrapStateEvent('m.room.create', { type });
+                return wrapStateEvent('m.room.create', { type, room_version: '11' });
             }
             // Unknown event types: when a stateKey was provided the caller
             // expects a single MatrixEvent | undefined (e.g. `useCoalitionState`
@@ -227,6 +232,11 @@ const makeRoom = ({
         },
     };
     return {
+        // `useStateEvent(room, ...)` calls `useStateEventCallback(room.client, ...)`
+        // which subscribes to RoomStateEvent.Events on the client. Expose the
+        // mock client so the den-toolbar invite buttons (and any future hook
+        // that walks `room.client`) don't blow up on `undefined.on`.
+        client: mockClient,
         roomId,
         name,
         getType: () => type,
