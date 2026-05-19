@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import {
     useLegacyRoomAdapter as useRoom,
     useLegacyRoomMembersAdapter as useRoomMembers,
@@ -41,7 +42,7 @@ const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
 
 const defaultWelcome = (spaceName: string): WelcomeContent => ({
     title: `Welcome to ${spaceName}!`,
-    description: 'Introduce your community here.',
+    description: `Introduce your ${BLACKOUT_TERMS.canopy.singular} here.`,
     featuredChannels: [],
 });
 
