@@ -1982,7 +1982,7 @@ export const ClientLayout = () => {
             {onboardingOpen ? (
                 <aside
                     role="dialog"
-                    aria-label="Community onboarding"
+                    aria-label={`${BLACKOUT_TERMS.canopy.title} onboarding`}
                     style={{
                         position: 'fixed',
                         inset: 24,
@@ -2005,7 +2005,7 @@ export const ClientLayout = () => {
                             marginBottom: 12,
                         }}
                     >
-                        <strong>Community onboarding</strong>
+                        <strong>{BLACKOUT_TERMS.canopy.title} onboarding</strong>
                         <button
                             type="button"
                             onClick={() => setOnboardingOpen(false)}

@@ -26,6 +26,7 @@ import { useCloseUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { stopPropagation } from '../../utils/keyboard';
 import { copyToClipboard } from '../../utils/dom';
 import { getExploreServerPath } from '../../pages/pathUtils';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { factoryRoomIdByAtoZ } from '../../utils/sort';
 import { useMutualRooms, useMutualRoomsSupport } from '../../hooks/useMutualRooms';
@@ -99,7 +100,7 @@ export function ServerChip({ server }: { server: string }) {
                   closeProfile();
                 }}
               >
-                <Text size="B300">Explore Community</Text>
+                <Text size="B300">Explore {BLACKOUT_TERMS.canopy.title}</Text>
               </MenuItem>
             </div>
             <Line size="300" />

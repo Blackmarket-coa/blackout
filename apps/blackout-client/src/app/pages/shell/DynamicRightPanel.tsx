@@ -2,6 +2,7 @@ import { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router-dom';
 import { rightPanelDescriptorAtom } from '../../state/navigation';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { buildFeatureRegistry } from '../../core/features/buildRegistry';
 import { defaultFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
 import { useCapabilityContext } from '../../core/features/capabilityContext';
@@ -85,7 +86,7 @@ export const DynamicRightPanel = () => {
         case 'community-info':
             body = (
                 <div>
-                    <h2 style={{ marginTop: 0 }}>Community info</h2>
+                    <h2 style={{ marginTop: 0 }}>{BLACKOUT_TERMS.canopy.title} info</h2>
                     <p>Members, pinned messages, and canopy settings appear here.</p>
                 </div>
             );

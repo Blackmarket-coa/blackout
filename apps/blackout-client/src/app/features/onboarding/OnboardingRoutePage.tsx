@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSpaceLobbyPath } from '../../pages/pathUtils';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { OnboardingFlow } from './OnboardingFlow';
 
 export const OnboardingRoutePage = () => {
@@ -12,7 +13,7 @@ export const OnboardingRoutePage = () => {
 
     return (
         <div style={{ maxWidth: 760, margin: '24px auto', display: 'grid', gap: 12 }}>
-            <h1 style={{ marginBottom: 0 }}>Community onboarding</h1>
+            <h1 style={{ marginBottom: 0 }}>{BLACKOUT_TERMS.canopy.title} onboarding</h1>
             <p style={{ marginTop: 0, color: 'var(--text-secondary)' }}>
                 Complete these steps to personalize your experience.
             </p>
