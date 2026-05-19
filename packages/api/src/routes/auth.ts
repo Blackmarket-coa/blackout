@@ -20,6 +20,7 @@ import {
   issueEmailVerificationToken,
   markVerificationTokenSent,
 } from '../services/emailVerification';
+import { redeemInvitation } from '../services/invitations';
 import {
   confirmAccountDeletion,
   exportUserData,
@@ -79,6 +80,9 @@ const registerSchema = z.object({
   username: z.string().min(1),
   email: z.string().min(1),
   password: z.string().min(1),
+  /** Plaintext invite token from a /v1/invitations link. Optional unless
+   *  REQUIRE_INVITE_TOKEN=1, in which case registration is closed without one. */
+  inviteToken: z.string().min(1).max(512).optional(),
 });
 
 const loginSchema = z.object({
@@ -95,12 +99,22 @@ const issueSession = (userId: string, username: string, userAgent?: string) => {
 auth.post('/register', async (c) => {
   const parsed = await readJsonBody(c, registerSchema);
   if (parsed instanceof Response) return parsed;
-  const { username, email, password } = parsed;
+  const { username, email, password, inviteToken } = parsed;
 
   if (!isAcceptablePassword(password)) {
     return c.json(
       { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
       400,
+    );
+  }
+
+  // Invite-gated mode: when REQUIRE_INVITE_TOKEN=1 the public /register
+  // route is closed unless the caller presents a valid token. We do the
+  // up-front lookup so we never create a user we're about to roll back.
+  if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
+    return c.json(
+      { code: 'invite_required', message: 'Registration requires an invitation token' },
+      403,
     );
   }
 
@@ -141,6 +155,35 @@ auth.post('/register', async (c) => {
     return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix }, 502);
   }
 
+  // Redeem the invitation, if one was presented. Done after Matrix
+  // provisioning so the auto-room-invite can target the freshly-minted
+  // Matrix account. A bad token rolls back the local + Matrix accounts so
+  // the caller can retry with a corrected link.
+  let inviteRedemption:
+    | { ok: true; matrixInvite?: { ok: boolean } }
+    | { ok: false; reason: string }
+    | undefined;
+  if (inviteToken) {
+    const outcome = await redeemInvitation(inviteToken, user);
+    if (outcome.kind === 'ok') {
+      inviteRedemption = { ok: true, matrixInvite: outcome.matrixInvite };
+    } else {
+      db.deleteUser(user.id);
+      return c.json(
+        { code: 'invite_token_invalid', message: 'Invitation token is not usable', reason: outcome.kind },
+        400,
+      );
+    }
+  } else if (process.env.REQUIRE_INVITE_TOKEN === '1') {
+    // Defence in depth: the up-front gate above already rejects this,
+    // but if a future code path skips it we still refuse to issue a session.
+    db.deleteUser(user.id);
+    return c.json(
+      { code: 'invite_required', message: 'Registration requires an invitation token' },
+      403,
+    );
+  }
+
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
 
   // Mint and dispatch the verification email. Registration succeeds even
@@ -167,6 +210,7 @@ auth.post('/register', async (c) => {
       userId: user.id,
       emailVerificationSent,
       matrix,
+      invite: inviteRedemption,
     },
     201,
   );

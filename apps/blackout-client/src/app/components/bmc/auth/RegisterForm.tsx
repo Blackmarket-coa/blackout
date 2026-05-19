@@ -129,6 +129,25 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
 
     const authDataLoading = probe.state === 'unknown';
 
+    // Pre-fill the registration_token field from sessionStorage when
+    // the user arrived via an invite link. The invite landing page
+    // parses the Synapse token out of the URL fragment and stashes it
+    // under `blackout:pendingRegistrationToken`; we read it once here
+    // so the user doesn't have to copy/paste anything. Guarded against
+    // overwriting a value the user might have typed first.
+    useEffect(() => {
+        let stashed: string | null;
+        try {
+            stashed = window.sessionStorage.getItem('blackout:pendingRegistrationToken');
+        } catch {
+            return;
+        }
+        if (!stashed) return;
+        setFields((prev) =>
+            prev.registrationToken ? prev : { ...prev, registrationToken: stashed! },
+        );
+    }, []);
+
     // Mirror the probe result from the parent — the probe is hoisted to
     // LoginPage so the eager 401 UIA challenge doesn't fire on /login.
     useEffect(() => {
@@ -339,6 +358,16 @@ export const RegisterForm = ({ server, onSwitchTab, probe }: RegisterFormProps) 
                 });
 
                 if (outcome.status === 'success') {
+                    // Clear the invite-stashed registration token now
+                    // that it has served its purpose. Single-use Synapse
+                    // tokens are spent at this point anyway, but tidying
+                    // up sessionStorage avoids stale prefill on a future
+                    // visit to this form.
+                    try {
+                        window.sessionStorage.removeItem('blackout:pendingRegistrationToken');
+                    } catch {
+                        /* non-fatal */
+                    }
                     return;
                 }
 
