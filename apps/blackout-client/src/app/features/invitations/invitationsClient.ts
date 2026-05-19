@@ -17,8 +17,16 @@ export interface InvitationRecord {
 
 export interface InvitationRedemptionSummary {
     userId: string;
+    username: string;
     matrixInviteOk?: boolean;
     at: string;
+}
+
+export type InvitationListState = 'active' | 'revoked' | 'exhausted' | 'expired';
+
+export interface InvitationListFilters {
+    state?: InvitationListState;
+    label?: string;
 }
 
 export interface InvitationWithRedemptions extends InvitationRecord {
@@ -90,10 +98,20 @@ export const createInvitation = (
 ): Promise<CreateInvitationResponse> =>
     callJson('POST', INVITATIONS_BASE, input, token);
 
+const buildListPath = (filters?: InvitationListFilters): string => {
+    if (!filters) return INVITATIONS_BASE;
+    const params = new URLSearchParams();
+    if (filters.state) params.set('state', filters.state);
+    if (filters.label) params.set('label', filters.label);
+    const qs = params.toString();
+    return qs ? `${INVITATIONS_BASE}?${qs}` : INVITATIONS_BASE;
+};
+
 export const listMyInvitations = (
+    filters?: InvitationListFilters,
     token: string | null = readBlackoutApiToken(),
 ): Promise<ListInvitationsResponse> =>
-    callJson('GET', INVITATIONS_BASE, undefined, token);
+    callJson('GET', buildListPath(filters), undefined, token);
 
 export const revokeInvitation = (
     id: string,
