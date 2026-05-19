@@ -58,6 +58,7 @@ import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 import { ConfirmProvider } from './app/components/confirm-dialog';
 import { CrashBoundary } from './app/components/CrashBoundary';
+import { ClientConfigLoader } from './app/hooks/ClientConfigLoader';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -346,19 +347,21 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
         <JotaiProvider>
             <ThemeProvider>
-                <CrashBoundary>
-                    <RuntimeSettingsBridge />
-                    <DevCapabilitySeeder />
-                    <MatrixBootstrapper />
-                    <NotificationTokenBroker />
-                    <UnreadCountBroadcaster />
-                    <LifecycleSyncBroker />
-                    <QueryClientProvider client={queryClient}>
-                        <RegistryFetcherProvider fetchers={registryFetchers}>
-                            <BootstrapStatus />
-                        </RegistryFetcherProvider>
-                    </QueryClientProvider>
-                </CrashBoundary>
+                <ClientConfigLoader>
+                    <CrashBoundary>
+                        <RuntimeSettingsBridge />
+                        <DevCapabilitySeeder />
+                        <MatrixBootstrapper />
+                        <NotificationTokenBroker />
+                        <UnreadCountBroadcaster />
+                        <LifecycleSyncBroker />
+                        <QueryClientProvider client={queryClient}>
+                            <RegistryFetcherProvider fetchers={registryFetchers}>
+                                <BootstrapStatus />
+                            </RegistryFetcherProvider>
+                        </QueryClientProvider>
+                    </CrashBoundary>
+                </ClientConfigLoader>
             </ThemeProvider>
         </JotaiProvider>
     </React.StrictMode>
