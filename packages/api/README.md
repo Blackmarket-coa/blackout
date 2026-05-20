@@ -23,6 +23,29 @@ and mount a named volume on `/data/blackout` — otherwise invitations,
 accounts, and everything else in the store will disappear the next time
 `docker compose up -d` recreates the api service.
 
+### Single-writer requirement for the JSON store
+
+`FileBackedDb` hydrates from disk **once** at process start and then
+overwrites the entire file on every mutation with its in-memory
+snapshot. There is no merge step. Running a second Node process (for
+example `scripts/bootstrap-admin.ts`) against the same store file
+while the api is live silently loses one side's writes: whichever
+process calls `persist()` last wins.
+
+If you need to seed data with a one-off script, stop the api first:
+
+```
+sudo docker compose stop api
+sudo docker compose run --rm \
+  -w /app/packages/api \
+  -e BU=<username> -e BE=<email> -e BP=<password> \
+  api pnpm exec tsx scripts/bootstrap-admin.ts
+sudo docker compose up -d api
+```
+
+The api now starts with the seeded state in its in-memory map and
+won't overwrite it on the next mutation.
+
 ## Voice rooms (LiveKit)
 
 The API exposes a LiveKit-compatible voice room lifecycle under `/v1/voice`.
