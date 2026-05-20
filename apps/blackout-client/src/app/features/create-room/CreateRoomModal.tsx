@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   Box,
   config,
@@ -37,7 +38,7 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
   const getRoom = useGetRoom(allJoinedRooms);
   const space = spaceId ? getRoom(spaceId) : undefined;
 
-  return (
+  const overlay = (
     <SpaceProvider value={space ?? null}>
       <Overlay
         open
@@ -107,6 +108,9 @@ function CreateRoomModal({ state }: CreateRoomModalProps) {
       </Overlay>
     </SpaceProvider>
   );
+
+  if (typeof document === 'undefined') return overlay;
+  return createPortal(overlay, document.body);
 }
 
 export function CreateRoomModalRenderer() {
