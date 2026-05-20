@@ -43,7 +43,7 @@ function CreateSpaceModal({ state }: CreateSpaceModalProps) {
         open
         backdrop={
           <OverlayBackdrop
-            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.5)' }}
           />
         }
         style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
