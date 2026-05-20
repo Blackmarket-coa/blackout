@@ -5,9 +5,9 @@ CONFIG_PATH="/data/homeserver.yaml"
 TEMPLATE_PATH="/templates/homeserver.yaml.template"
 PORT="${PORT:-8008}"
 
-# Prefer an explicit SERVER_NAME, then Railway-style SYNAPSE_SERVER_NAME, and
-# finally a localhost default so container boot doesn't immediately crash-loop
-# when only DB/redis secrets are wired.
+# Prefer an explicit SERVER_NAME, then SYNAPSE_SERVER_NAME, and finally a
+# localhost default so container boot doesn't immediately crash-loop when
+# only DB/redis secrets are wired.
 SERVER_NAME="${SERVER_NAME:-${SYNAPSE_SERVER_NAME:-localhost}}"
 export SERVER_NAME
 PROFILE_INPUT="$(echo "${BLACKOUT_PROFILE:-}" | tr '[:upper:]' '[:lower:]')"

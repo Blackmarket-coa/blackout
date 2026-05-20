@@ -19,7 +19,6 @@ const requiredPaths = [
   'packages/blackout-sdk/package.json',
   'packages/blackout-sdk/src/index.ts',
   'infra/cloudflare/README.md',
-  'infra/railway/README.md',
   'infra/docker',
   'infra/env',
   '.github/workflows/ci.yml',

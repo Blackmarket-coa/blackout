@@ -19,7 +19,7 @@ function sendJson(res, statusCode, payload) {
 }
 
 function resolvePublicBaseUrl() {
-  const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  const publicDomain = process.env.PUBLIC_DOMAIN?.trim();
   if (publicDomain) {
     return `https://${publicDomain}`;
   }
@@ -108,9 +108,9 @@ const server = http.createServer((req, res) => {
       ok: true,
       service: "blackout-monorepo",
       deployment: {
-        provider: process.env.RAILWAY_PUBLIC_DOMAIN ? "railway" : "local",
-        environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? null,
-        service: process.env.RAILWAY_SERVICE_NAME ?? null,
+        provider: process.env.PUBLIC_DOMAIN ? "self-hosted" : "local",
+        environment: process.env.DEPLOY_ENVIRONMENT ?? null,
+        service: process.env.SERVICE_NAME ?? null,
       },
       calls: readCallHealth(),
     });

@@ -30,13 +30,6 @@ jobs:
       - name: Build production bundle
         run: pnpm --filter @blackout/client run build
 
-      - name: Deploy to Railway
-        if: env.DEPLOY_PROVIDER == 'railway'
-        run: npx -y @railway/cli up --service "$RAILWAY_SERVICE"
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
-
       - name: Deploy to Vercel
         if: env.DEPLOY_PROVIDER == 'vercel'
         run: |
