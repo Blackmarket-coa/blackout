@@ -7,11 +7,27 @@ import { createClientQueries, createFetchApiClient, createMediaClient } from '@b
  * pasted into OBS — can construct an absolute URL without re-reading the
  * import.meta.env shape themselves.
  */
-export const API_BASE_URL =
-    (typeof import.meta !== 'undefined' &&
-        (import.meta as { env?: { VITE_BLACKOUT_API_BASE_URL?: string } }).env
-            ?.VITE_BLACKOUT_API_BASE_URL) ||
-    '';
+const viteEnv =
+    typeof import.meta !== 'undefined'
+        ? (
+              import.meta as {
+                  env?: { VITE_API_BASE_URL?: string; PROD?: boolean };
+              }
+          ).env
+        : undefined;
+
+if (viteEnv?.PROD && !viteEnv.VITE_API_BASE_URL) {
+    // Warn (not error) so the e2e smoke gate — which fails on console.error
+    // — stays green when the bundle is built without a base URL (CI, local
+    // preview). Operators still see this in DevTools when they deploy a
+    // misconfigured bundle.
+    // eslint-disable-next-line no-console
+    console.warn(
+        '[blackout] VITE_API_BASE_URL is not set. The client will issue same-origin requests and likely receive SPA HTML instead of JSON. See apps/blackout-client/.env.example.',
+    );
+}
+
+export const API_BASE_URL = viteEnv?.VITE_API_BASE_URL ?? '';
 
 const apiClient = createFetchApiClient({
     baseUrl: API_BASE_URL,

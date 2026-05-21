@@ -1,5 +1,8 @@
-const homeserver = () => process.env.MATRIX_HOMESERVER;
+const homeserver = () =>
+  process.env.MATRIX_HOMESERVER ?? process.env.MATRIX_HOMESERVER_URL;
 const botToken = () => process.env.MATRIX_BOT_TOKEN;
+const homeserverDomain = () =>
+  (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
 
 export const matrixClient = {
   async registerUser(username: string, password: string) {
@@ -10,7 +13,7 @@ export const matrixClient = {
       return { ok: false as const, reason: 'matrix_not_configured' as const };
     }
 
-    const response = await fetch(`${hs}/_synapse/admin/v2/users/@${encodeURIComponent(username)}:blackout.local`, {
+    const response = await fetch(`${hs}/_synapse/admin/v2/users/@${encodeURIComponent(username)}:${homeserverDomain()}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,

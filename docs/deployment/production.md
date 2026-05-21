@@ -7,8 +7,13 @@
 - `PORT`
 - `DATABASE_URL`
 - `REDIS_URL`
-- `JWT_SECRET`
-- `CORS_ORIGIN`
+- `JWT_SECRET_PRIMARY` — HS256 signing key for auth tokens. Generate with `openssl rand -hex 32`.
+- `CORS_ALLOWED_ORIGINS` — comma-separated list of browser origins permitted to call the API (e.g. `https://theblackout.app,https://chat.theblackout.app`).
+- `PUBLIC_APP_URL` — externally-reachable HTTPS origin used to build invite URLs and other absolute links.
+- `MATRIX_HOMESERVER` — internal Synapse URL (e.g. `http://synapse:8008`).
+- `MATRIX_HOMESERVER_DOMAIN` — server-name suffix for MXIDs; must equal Synapse's `server_name`.
+- `MATRIX_BOT_TOKEN` — admin access token used for registration, room invites, and registration-token minting.
+- `INTERNAL_METRICS_TOKEN` — bearer required to scrape `/metrics`; the endpoint returns 503 if unset in production.
 - `NODE_ENV=production`
 
 ### Client
