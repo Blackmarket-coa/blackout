@@ -94,7 +94,7 @@ const queryClient = new QueryClient();
 
 /**
  * Production fetcher bag — built once at boot from the canonical
- * `ApiClient`. The base URL is read from `import.meta.env.VITE_BLACKOUT_API_BASE`
+ * `ApiClient`. The base URL is read from `import.meta.env.VITE_API_BASE_URL`
  * when present; otherwise calls go through the page's relative URL
  * (matches the existing dev proxy setup). Hydration token wiring is
  * deferred to a future bootstrap pass; the headers slot is open for it.
@@ -102,7 +102,7 @@ const queryClient = new QueryClient();
 const apiBaseUrl =
     typeof import.meta !== 'undefined'
         ? (import.meta as { env?: Record<string, string | undefined> }).env
-              ?.VITE_BLACKOUT_API_BASE ?? undefined
+              ?.VITE_API_BASE_URL ?? undefined
         : undefined;
 const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
 const registryFetchers = buildRegistryFetchers(apiClient);

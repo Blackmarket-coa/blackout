@@ -5,6 +5,9 @@ import { readJsonBody } from '../middleware/validate';
 
 const federation = new Hono();
 
+const homeserverDomain = () =>
+  (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
+
 const createLinkSchema = z.object({
   sourceCommunityId: z.string().min(1),
   targetCommunityId: z.string().min(1),
@@ -22,7 +25,7 @@ federation.post('/links', async (c) => {
     sourceCommunityId,
     targetCommunityId,
     linkType,
-    matrixBridgeRoomId: matrixBridgeRoomId ?? `!bridge-${sourceCommunityId}-${targetCommunityId}:blackout.local`,
+    matrixBridgeRoomId: matrixBridgeRoomId ?? `!bridge-${sourceCommunityId}-${targetCommunityId}:${homeserverDomain()}`,
     isActive: true,
   });
 
