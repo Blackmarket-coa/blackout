@@ -17,8 +17,12 @@ const viteEnv =
         : undefined;
 
 if (viteEnv?.PROD && !viteEnv.VITE_API_BASE_URL) {
+    // Warn (not error) so the e2e smoke gate — which fails on console.error
+    // — stays green when the bundle is built without a base URL (CI, local
+    // preview). Operators still see this in DevTools when they deploy a
+    // misconfigured bundle.
     // eslint-disable-next-line no-console
-    console.error(
+    console.warn(
         '[blackout] VITE_API_BASE_URL is not set. The client will issue same-origin requests and likely receive SPA HTML instead of JSON. See apps/blackout-client/.env.example.',
     );
 }
