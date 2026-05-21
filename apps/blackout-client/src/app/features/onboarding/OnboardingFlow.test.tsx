@@ -284,4 +284,59 @@ describe('OnboardingFlow choose-role step', () => {
         expect(fill).not.toBeNull();
         expect(fill!.style.width).toBe('20%');
     });
+
+    it('omits the developer-tools step when the flag is off', async () => {
+        runtimeFeatureFlags.onboardingDeveloperStep = false;
+        readSnapshot = {
+            stepIndex: 4,
+            skipped: false,
+            completed: false,
+            startedAt: 0,
+            updatedAt: 0,
+            selectedChannels: [],
+        };
+        const { container } = await mount();
+        // Last visible step is first_contribution (stepIndex 4 of 5). The
+        // developer-tools section must not render.
+        expect(container.querySelector('[data-testid="onboarding-developer-step"]')).toBeNull();
+        const bar = container.querySelector(
+            '[data-testid="onboarding-progress-bar"]',
+        ) as HTMLDivElement | null;
+        const fill = bar!.querySelector('div') as HTMLDivElement | null;
+        // (5/5) * 100 = 100%.
+        expect(fill!.style.width).toBe('100%');
+    });
+
+    it('renders the developer-tools step with file paths and doc links when flag is on', async () => {
+        runtimeFeatureFlags.onboardingDeveloperStep = true;
+        readSnapshot = {
+            stepIndex: 5,
+            skipped: false,
+            completed: false,
+            startedAt: 0,
+            updatedAt: 0,
+            selectedChannels: [],
+        };
+        try {
+            const { container } = await mount();
+            expect(
+                container.querySelector('[data-testid="onboarding-developer-step"]'),
+            ).not.toBeNull();
+            const files = container.querySelector(
+                '[data-testid="onboarding-developer-file-paths"]',
+            );
+            expect(files).not.toBeNull();
+            expect(files!.querySelectorAll('li').length).toBeGreaterThan(0);
+            const docLinks = container.querySelector(
+                '[data-testid="onboarding-developer-doc-links"]',
+            );
+            expect(docLinks).not.toBeNull();
+            expect(docLinks!.querySelectorAll('a').length).toBeGreaterThan(0);
+            expect(
+                container.querySelector('[data-testid="onboarding-developer-bundle"]'),
+            ).not.toBeNull();
+        } finally {
+            runtimeFeatureFlags.onboardingDeveloperStep = false;
+        }
+    });
 });
