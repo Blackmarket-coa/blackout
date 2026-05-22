@@ -3,3 +3,6 @@ export * from './onboardingTelemetry';
 export * from './OnboardingFlow';
 export * from './OnboardingRoutePage';
 export * from './OnboardingAnalyticsPage';
+export * from './homeTourState';
+export * from './homeTourSteps';
+export * from './HomeTourOverlay';

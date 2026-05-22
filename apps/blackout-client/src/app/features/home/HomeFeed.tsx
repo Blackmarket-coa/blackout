@@ -7,6 +7,10 @@ import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
+import { useHomeTour } from '../onboarding/homeTourState';
+import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import {
     buildHomeFeed,
     groupHomeFeedByBucket,
@@ -157,6 +161,8 @@ const HomeFeedCard = ({ item }: { item: HomeFeedItem }): JSX.Element => (
 export const HomeFeed = (): JSX.Element => {
     const rooms = useAtomValue(joinedRoomsAtom);
     const installed = useAtomValue(installedPluginsAtom);
+    const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
+    const homeTour = useHomeTour();
 
     const items = useMemo(() => buildHomeFeed(rooms, Date.now()), [rooms]);
     const groups = useMemo(() => groupHomeFeedByBucket(items), [items]);
@@ -173,11 +179,41 @@ export const HomeFeed = (): JSX.Element => {
         [installed]
     );
 
+    const showReplay =
+        tourEnabled &&
+        (homeTour.state.status === 'completed' || homeTour.state.status === 'dismissed');
+
     return (
         <section style={layoutStyle} data-shell-region="home-feed">
-            <header style={headerStyle}>
+            <header style={headerStyle} data-testid="home-feed-header">
                 <h1 style={titleStyle}>Home</h1>
                 <p style={subtitleStyle}>Latest activity from your {BLACKOUT_TERMS.den.plural}.</p>
+                {showReplay ? (
+                    <button
+                        type="button"
+                        data-testid="home-tour-replay"
+                        onClick={() => {
+                            void (async () => {
+                                await homeTour.reset();
+                                trackOnboardingTourStarted(Date.now());
+                                await homeTour.start();
+                            })();
+                        }}
+                        style={{
+                            width: 'fit-content',
+                            marginTop: 4,
+                            fontSize: 12,
+                            background: 'transparent',
+                            color: 'var(--accent-primary, #3b82f6)',
+                            border: '1px solid var(--border-default, #374151)',
+                            borderRadius: 8,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Replay homepage tour
+                    </button>
+                ) : null}
             </header>
             <TopicChipBar />
             {pluginCards.length > 0 ? (
@@ -232,6 +268,7 @@ export const HomeFeed = (): JSX.Element => {
                     ))}
                 </div>
             )}
+            {tourEnabled ? <HomeTourOverlay /> : null}
         </section>
     );
 };

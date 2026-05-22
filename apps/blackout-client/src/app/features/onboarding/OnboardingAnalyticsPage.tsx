@@ -48,6 +48,38 @@ export const OnboardingAnalyticsPage = () => {
                     ) : null}
                 </ul>
             </section>
+
+            <section data-testid="onboarding-tour-summary">
+                <h2 style={{ marginBottom: 6 }}>Homepage tour</h2>
+                <dl
+                    style={{
+                        margin: 0,
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: 8,
+                    }}
+                >
+                    <dt>Tours started</dt>
+                    <dd style={{ margin: 0 }}>{summary.tour.started}</dd>
+                    <dt>Tours completed</dt>
+                    <dd style={{ margin: 0 }}>{summary.tour.completed}</dd>
+                    <dt>Tours skipped</dt>
+                    <dd style={{ margin: 0 }}>{summary.tour.skipped}</dd>
+                    <dt>Debug bundle downloads</dt>
+                    <dd style={{ margin: 0 }}>{summary.tour.debugBundleDownloads}</dd>
+                </dl>
+                <h3 style={{ marginBottom: 4, marginTop: 12 }}>Tour drop-off by step</h3>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {Object.entries(summary.tour.dropOffByStep).map(([step, count]) => (
+                        <li key={step}>
+                            {step}: {count}
+                        </li>
+                    ))}
+                    {Object.keys(summary.tour.dropOffByStep).length === 0 ? (
+                        <li>No tour drop-off events tracked yet.</li>
+                    ) : null}
+                </ul>
+            </section>
         </div>
     );
 };
