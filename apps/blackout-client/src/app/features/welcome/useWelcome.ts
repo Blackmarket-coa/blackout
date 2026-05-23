@@ -50,6 +50,25 @@ const defaultOnboarding: OnboardingContent = {
     steps: [],
 };
 
+/**
+ * Fallback onboarding shown to brand-new users accepting an invite when the
+ * canopy hasn't configured its own `co.bmc.onboarding` content. Used by
+ * `OnboardingPage` (the full-page invite entry) only — NOT by the in-app
+ * `ClientLayout` modal, which stays opt-in so existing users in unconfigured
+ * canopies aren't interrupted.
+ */
+export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
+    {
+        type: 'rules',
+        title: 'Welcome to Blackout',
+        content:
+            "You're in. Blackout is an end-to-end-encrypted, community-run space.\n\n" +
+            'Dens are channels inside a community. Be decent, respect each other, and ' +
+            'keep things constructive — communities set their own rules on top of these.',
+        requireAccept: false,
+    },
+];
+
 const parseFeaturedChannels = (value: unknown): FeaturedChannel[] => {
     if (!Array.isArray(value)) return [];
 

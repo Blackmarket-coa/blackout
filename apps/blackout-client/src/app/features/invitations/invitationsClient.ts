@@ -78,7 +78,14 @@ export type InvitationRedeemFailureReason =
     | 'self_redeem';
 
 export type InvitationRedeemResponse =
-    | { ok: true; matrixRoomId?: string; matrixInvite?: { ok: boolean } }
+    | {
+          ok: true;
+          matrixRoomId?: string;
+          matrixInvite?: { ok: boolean };
+          /** Parent space (canopy) of the invited room, resolved server-side so
+           *  the client can route into onboarding without waiting for sync. */
+          canopyId?: string;
+      }
     | { ok: false; reason: InvitationRedeemFailureReason };
 
 const callJson = <T>(

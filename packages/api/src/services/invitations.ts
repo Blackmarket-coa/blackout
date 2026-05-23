@@ -127,7 +127,15 @@ export const previewInvitation = (presentedToken: string): PreviewOutcome => {
 };
 
 export type RedeemOutcome =
-  | { kind: 'ok'; record: InvitationTokenRecord; matrixInvite?: { ok: boolean } }
+  | {
+      kind: 'ok';
+      record: InvitationTokenRecord;
+      matrixInvite?: { ok: boolean };
+      /** Parent space (canopy) of the invited room, resolved server-side so
+       *  the client can route the recipient into onboarding without waiting
+       *  for their own Matrix sync to populate the space hierarchy. */
+      canopyId?: string;
+    }
   | { kind: 'invalid' }
   | { kind: 'revoked' }
   | { kind: 'exhausted' }
@@ -165,6 +173,7 @@ export const redeemInvitation = async (
   }
 
   let matrixInvite: { ok: boolean } | undefined;
+  let canopyId: string | undefined;
   if (updated.matrixRoomId) {
     const result = await matrixClient.inviteToRoom(
       updated.matrixRoomId,
@@ -172,6 +181,12 @@ export const redeemInvitation = async (
       'Invitation link redeemed',
     );
     matrixInvite = { ok: result.ok };
+
+    // Best-effort: resolve the invited room's canopy so the client can route
+    // the recipient straight into onboarding. A failure here just means the
+    // client falls back to its local space-hierarchy resolution.
+    const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);
+    if (parent.ok) canopyId = parent.canopyId;
   }
 
   db.createInvitationRedemption({
@@ -181,7 +196,7 @@ export const redeemInvitation = async (
     matrixInviteOk: matrixInvite?.ok,
   });
 
-  return { kind: 'ok', record: updated, matrixInvite };
+  return { kind: 'ok', record: updated, matrixInvite, canopyId };
 };
 
 /**

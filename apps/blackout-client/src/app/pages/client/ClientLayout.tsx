@@ -23,6 +23,7 @@ import {
 } from '../../features/deaddrop';
 import MessageComposer from '../../features/room/MessageComposer';
 import RoomTimeline from '../../features/room/RoomTimeline';
+import { RoomInviteAcceptGate } from '../../features/room/RoomInviteAcceptGate';
 import ForumView from '../../features/forum/ForumView';
 import CoalitionView from '../../features/coalition/CoalitionView';
 import { useCoalitionStateForRoom } from '../../features/coalition/useCoalitionState';
@@ -651,6 +652,7 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
+                        <RoomInviteAcceptGate roomId={selectedRoomId}>
                         {coalitionEnabled &&
                         coalitionDenState.enabled &&
                         roomSurface === 'coalition' ? (
@@ -684,6 +686,7 @@ export const ClientLayout = () => {
                                 }}
                             />
                         )}
+                        </RoomInviteAcceptGate>
                     </section>
 
                     {deadDrop.data.enabled ? (

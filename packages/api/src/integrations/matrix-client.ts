@@ -187,6 +187,58 @@ export const matrixClient = {
   },
 
   /**
+   * Resolve the parent space (canopy) of a room using the bot token, so the
+   * invite-redemption flow can tell the client which canopy to onboard the
+   * recipient into without waiting for their own Matrix sync to populate the
+   * space hierarchy. Reads the room's full state and returns:
+   *   - the room id itself if it IS a space (`m.room.create` `type: m.space`);
+   *   - else the first `m.space.parent` whose `content.via` is non-empty
+   *     (canonical parent per MSC1772);
+   *   - else `undefined`.
+   */
+  async getRoomParentSpace(roomId: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const };
+    }
+    const state = (await response.json()) as Array<{
+      type: string;
+      state_key?: string;
+      content?: Record<string, unknown>;
+    }>;
+    if (!Array.isArray(state)) {
+      return { ok: true as const, canopyId: undefined };
+    }
+
+    const create = state.find((e) => e.type === 'm.room.create');
+    if (create?.content?.type === 'm.space') {
+      return { ok: true as const, canopyId: roomId };
+    }
+
+    const parent = state.find(
+      (e) =>
+        e.type === 'm.space.parent' &&
+        typeof e.state_key === 'string' &&
+        Array.isArray((e.content as { via?: unknown } | undefined)?.via) &&
+        ((e.content as { via?: unknown[] }).via?.length ?? 0) > 0,
+    );
+    return { ok: true as const, canopyId: parent?.state_key };
+  },
+
+  /**
    * Send an arbitrary Matrix event content into a room. Used by the
    * compatibility bridges (Twitch chat ingress, etc.) which need to ship
    * full event payloads with custom `m.blackout.*` extension fields, not
