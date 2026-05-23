@@ -5,7 +5,6 @@ import { OnboardingWizard } from './OnboardingWizard';
 import { useOnboardingContent } from './useWelcome';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { mDirectAtom } from '../../state/mDirectList';
 import { resolvePostAcceptancePath } from '../../components/invite-landing/postAcceptanceRoute';
 
 const pageStyle: React.CSSProperties = {
@@ -26,7 +25,6 @@ export const OnboardingPage: React.FC = () => {
     const navigate = useNavigate();
     const mx = useMatrixClient();
     const roomToParents = useAtomValue(roomToParentsAtom);
-    const mDirects = useAtomValue(mDirectAtom);
 
     const spaceId = params.spaceIdOrAlias ? decodeURIComponent(params.spaceIdOrAlias) : '';
     const roomId = search.get('room') ?? undefined;
@@ -34,12 +32,10 @@ export const OnboardingPage: React.FC = () => {
 
     const goToRoom = useCallback(() => {
         const path = roomId
-            ? resolvePostAcceptancePath(mx, roomToParents, mDirects, roomId, {
-                  skipOnboarding: true,
-              })
+            ? resolvePostAcceptancePath(mx, roomToParents, roomId, { skipOnboarding: true })
             : '/';
         navigate(path, { replace: true });
-    }, [mx, roomToParents, mDirects, roomId, navigate]);
+    }, [mx, roomToParents, roomId, navigate]);
 
     // If the space has no onboarding configured (or it's disabled), the wizard
     // renders nothing — don't strand the user on a blank page, just proceed.
