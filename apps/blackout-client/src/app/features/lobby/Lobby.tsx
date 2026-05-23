@@ -35,8 +35,8 @@ import { makeLobbyCategoryId } from '../../state/closedLobbyCategories';
 import { useCategoryHandler } from '../../hooks/useCategoryHandler';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { allRoomsAtom } from '../../state/room-list/roomList';
-import { getCanonicalAliasOrRoomId, rateLimitedActions } from '../../utils/matrix';
-import { getSpaceRoomPath } from '../../pages/pathUtils';
+import { rateLimitedActions } from '../../utils/matrix';
+import { buildCommunitiesPath } from '../../pages/paths';
 import { StateEvent } from '../../../types/matrix/room';
 import { CanDropCallback, useDnDMonitor } from './DnD';
 import { ASCIILexicalTable, orderKeys } from '../../utils/ASCIILexicalTable';
@@ -419,8 +419,7 @@ export function Lobby({ onOpenRoom }: LobbyProps = {}) {
       onOpenRoom(rId);
       return;
     }
-    const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
-    navigate(getSpaceRoomPath(pSpaceIdOrAlias, getCanonicalAliasOrRoomId(mx, rId)));
+    navigate(buildCommunitiesPath(space.roomId, rId));
   };
 
   const togglePinToSidebar = useCallback(

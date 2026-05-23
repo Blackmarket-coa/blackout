@@ -1,7 +1,14 @@
 import React, { type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type { ColiseumCitation } from '@blackout/core';
-import { getHomeRoomPath } from '../../pages/pathUtils';
+import { buildCommunitiesPath } from '../../pages/paths';
+
+/** Open a cited room (unknown canopy) under the `-` no-canopy sentinel, with
+ *  an optional `?event=` to focus the cited message. */
+const citationRoomPath = (roomId: string, eventId?: string): string => {
+    const base = buildCommunitiesPath(null, roomId);
+    return eventId ? `${base}?event=${encodeURIComponent(eventId)}` : base;
+};
 
 export interface ColiseumCitationChipProps {
     citation: ColiseumCitation;
@@ -51,7 +58,7 @@ export function ColiseumCitationChip({ citation }: ColiseumCitationChipProps) {
     switch (citation.kind) {
         case 'live':
             return (
-                <Link to={getHomeRoomPath(citation.roomId, citation.eventId)} style={chipStyle}>
+                <Link to={citationRoomPath(citation.roomId, citation.eventId)} style={chipStyle}>
                     <span aria-hidden>{glyph}</span>
                     <span>{label}</span>
                 </Link>

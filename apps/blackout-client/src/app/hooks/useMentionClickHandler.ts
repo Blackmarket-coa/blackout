@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useRoomNavigate } from './useRoomNavigate';
 import { useMatrixClient } from './useMatrixClient';
 import { isRoomId, isUserId } from '../utils/matrix';
-import { getHomeRoomPath, withSearchParam } from '../pages/pathUtils';
-import { _RoomSearchParams } from '../pages/paths';
+import { buildCommunitiesPath } from '../pages/paths';
 import { useOpenUserRoomProfile } from '../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from './useSpace';
 
@@ -35,10 +34,16 @@ export const useMentionClickHandler = (roomId: string): ReactEventHandler<HTMLEl
         return;
       }
 
+      // A room we're not joined to (no parent canopy known) → open under the
+      // `-` no-canopy sentinel. Carry event/viaServers as query params.
       const viaServers = target.getAttribute('data-mention-via') || undefined;
-      const path = getHomeRoomPath(mentionId, eventId);
+      const params = new URLSearchParams();
+      if (eventId) params.set('event', eventId);
+      if (viaServers) params.set('viaServers', viaServers);
+      const qs = params.toString();
+      const base = buildCommunitiesPath(null, mentionId);
 
-      navigate(viaServers ? withSearchParam<_RoomSearchParams>(path, { viaServers }) : path);
+      navigate(qs ? `${base}?${qs}` : base);
     },
     [mx, navigate, navigateRoom, navigateSpace, roomId, space, openProfile]
   );

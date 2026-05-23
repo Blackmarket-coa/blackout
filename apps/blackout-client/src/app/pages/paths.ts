@@ -46,7 +46,6 @@ export const HOME_PATH = '/home/';
 export const HOME_CREATE_PATH = `/home/${_CREATE_PATH}`;
 export const HOME_JOIN_PATH = `/home/${_JOIN_PATH}`;
 export const HOME_SEARCH_PATH = `/home/${_SEARCH_PATH}`;
-export const HOME_ROOM_PATH = `/home/${_ROOM_PATH}`;
 
 export const LEGACY_DIRECT_PATH = '/direct/';
 export type DirectCreateSearchParams = {
@@ -61,7 +60,6 @@ export const DIRECT_PATH = `/messages/${_LOCKED_IN_PATH}`;
 export const SPACE_PATH = '/:spaceIdOrAlias/';
 export const SPACE_LOBBY_PATH = `/:spaceIdOrAlias/${_LOBBY_PATH}`;
 export const SPACE_SEARCH_PATH = `/:spaceIdOrAlias/${_SEARCH_PATH}`;
-export const SPACE_ROOM_PATH = `/:spaceIdOrAlias/${_ROOM_PATH}`;
 
 /**
  * Canonical canopy/den routing for the AppShell. A canopy is a Matrix space;
