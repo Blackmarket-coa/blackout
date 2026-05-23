@@ -63,8 +63,30 @@ export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
         title: 'Welcome to Blackout',
         content:
             "You're in. Blackout is an end-to-end-encrypted, community-run space.\n\n" +
-            'Dens are channels inside a community. Be decent, respect each other, and ' +
-            'keep things constructive — communities set their own rules on top of these.',
+            'No central feed and no ads — just communities (canopies) and the channels ' +
+            'inside them (dens). What you join is what you see.',
+        requireAccept: false,
+    },
+    {
+        type: 'rules',
+        title: 'House rules',
+        content:
+            'A few ground rules that apply everywhere on Blackout:\n\n' +
+            '• Be decent — no harassment, hate, or targeted abuse.\n' +
+            '• Respect consent and privacy; don’t share others’ private info.\n' +
+            '• No spam, scams, or illegal marketplace activity.\n\n' +
+            'Each community sets its own rules on top of these — check the den’s pinned posts.',
+        requireAccept: true,
+    },
+    {
+        type: 'rules',
+        title: 'Getting around',
+        content:
+            'Quick orientation:\n\n' +
+            '• The left rail lists the dens you can post in.\n' +
+            '• Type in the composer at the bottom; messages are end-to-end encrypted.\n' +
+            '• Use the top bar for members, pins, search, and notifications.\n\n' +
+            "That’s it — finish up and you’ll drop straight into the den.",
         requireAccept: false,
     },
 ];
