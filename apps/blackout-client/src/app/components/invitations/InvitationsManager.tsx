@@ -38,6 +38,9 @@ import {
     revokeInvitation,
 } from '../../features/invitations/invitationsClient';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useAtomValue } from 'jotai';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { resolveParentSpace } from '../invite-landing/postAcceptanceRoute';
 
 type InvitationsManagerProps = {
     /** Pre-fills the "scope to this room" field when invoked from a room. */
@@ -70,6 +73,7 @@ const linkRow: React.CSSProperties = {
 
 export function InvitationsManager({ roomId, requestClose }: InvitationsManagerProps) {
     const mx = useMatrixClient();
+    const roomToParents = useAtomValue(roomToParentsAtom);
     const confirm = useConfirm();
     const [load, setLoad] = useState<LoadStatus>({ kind: 'loading' });
     const [create, setCreate] = useState<CreateStatus>({ kind: 'idle' });
@@ -106,14 +110,20 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
 
         setCreate({ kind: 'submitting' });
         try {
-            // For a room-scoped link, invite the BlackOut bot into the den first.
-            // Only the creator (here) has the power to add the bot to a private
-            // room; the server then force-joins it so it can admit redeemers.
-            // Best-effort — the bot may already be a member/invited.
+            // For a room-scoped link, invite the BlackOut bot into the CANOPY
+            // (the den's parent space). Dens are `restricted` to their canopy,
+            // so the bot must be a canopy member to admit redeemers — adding it
+            // to the den alone doesn't satisfy the restricted rule. Only the
+            // creator (here) can add the bot to the invite-only canopy; the
+            // server then force-joins it. Falls back to the den when there's no
+            // canopy. Best-effort — the bot may already be a member/invited.
             if (targetRoom) {
                 try {
                     const { userId } = await getBotUserId();
-                    if (userId) await mx.invite(targetRoom, userId);
+                    if (userId) {
+                        const canopyId = resolveParentSpace(mx, roomToParents, targetRoom);
+                        await mx.invite(canopyId ?? targetRoom, userId);
+                    }
                 } catch {
                     /* bot already in/invited, or invite raced; server force-join is the net */
                 }

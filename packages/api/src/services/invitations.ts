@@ -87,19 +87,23 @@ export const createInvitation = async (
           ? new Date(mint.expiresAtMs).toISOString()
           : undefined,
     });
-    // For a room-scoped invite, ensure the bot is a member of the den so it
-    // can admit redeemers later. The creator's client invites the bot before
-    // calling this endpoint (only the creator has the power to); here we
-    // force-join the bot — valid now that it holds that invite. Without this,
-    // the bot has no presence in a private member-created den and redemption
-    // can't admit anyone. Best-effort: a failure just means redemption falls
-    // back to its own admit attempt.
+    // For a room-scoped invite, ensure the bot is a member of the CANOPY (the
+    // den's parent space). Dens are created `restricted` to their canopy, so a
+    // bot must belong to the canopy to admit redeemers — putting it in the den
+    // alone doesn't satisfy the restricted rule. The creator's client invites
+    // the bot to the canopy before calling this (only the creator has power);
+    // here we force-join it, valid now that it holds that invite. Falls back to
+    // the den itself when there's no canopy (orphan den / den is a space).
+    // Best-effort: a failure just means redemption falls back to its own admit.
     if (record.matrixRoomId) {
       const botUserId = await matrixClient.botUserId();
       if (botUserId) {
-        const joined = await matrixClient.adminJoinUserToRoom(record.matrixRoomId, botUserId);
+        const parent = await matrixClient.getRoomParentSpace(record.matrixRoomId);
+        const target = parent.ok && parent.canopyId ? parent.canopyId : record.matrixRoomId;
+        const joined = await matrixClient.adminJoinUserToRoom(target, botUserId);
         if (!joined.ok) {
           log.warn('invite.create.bot_join_failed', {
+            target,
             roomId: record.matrixRoomId,
             botUserId,
             status: 'status' in joined ? joined.status : undefined,
@@ -200,11 +204,40 @@ export const redeemInvitation = async (
   if (updated.matrixRoomId) {
     const matrixUserId = matrixUserIdFor(redeemer.username);
 
-    // Force-join via the Synapse admin API first: this works even for
-    // member-created dens where the bot has no membership/invite power (a
-    // plain invite would 403, stranding the redeemer at "not in room"). Fall
-    // back to a bot invite only if the admin join fails (e.g. the bot IS a
-    // room member but admin join is unavailable).
+    // Resolve the canopy (parent space) FIRST: dens are created `restricted`
+    // to their canopy, so the redeemer must be admitted to the CANOPY before
+    // the den is joinable. A Synapse admin-join does NOT bypass the restricted
+    // rule — membership in the canopy is what unlocks the den.
+    const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);
+    if (parent.ok) {
+      canopyId = parent.canopyId;
+    } else {
+      log.warn('invite.redeem.canopy_unresolved', {
+        roomId: updated.matrixRoomId,
+        status: 'status' in parent ? parent.status : undefined,
+        reason: 'reason' in parent ? parent.reason : undefined,
+      });
+    }
+
+    // 1) Admit the redeemer to the canopy (the bot was force-joined to the
+    //    canopy at link-creation, so it can invite/admit here). Skipped when
+    //    the den has no distinct canopy (orphan den, or the den is the space).
+    let canopyJoin: Awaited<ReturnType<typeof matrixClient.adminJoinUserToRoom>> | undefined;
+    if (canopyId && canopyId !== updated.matrixRoomId) {
+      canopyJoin = await matrixClient.adminJoinUserToRoom(canopyId, matrixUserId);
+      if (!canopyJoin.ok) {
+        log.warn('invite.redeem.canopy_join_failed', {
+          canopyId,
+          userId: matrixUserId,
+          status: 'status' in canopyJoin ? canopyJoin.status : undefined,
+          reason: 'reason' in canopyJoin ? canopyJoin.reason : undefined,
+          detail: 'detail' in canopyJoin ? canopyJoin.detail : undefined,
+        });
+      }
+    }
+
+    // 2) Admit to the den itself — now allowed by the restricted rule once the
+    //    redeemer is in the canopy. Fall back to a bot invite if admin-join fails.
     const join = await matrixClient.adminJoinUserToRoom(updated.matrixRoomId, matrixUserId);
     let invite: Awaited<ReturnType<typeof matrixClient.inviteToRoom>> | undefined;
     if (join.ok) {
@@ -218,14 +251,16 @@ export const redeemInvitation = async (
       matrixInvite = { ok: invite.ok };
     }
 
-    // Diagnostic: redemption survives Matrix failure, but if we couldn't admit
-    // the redeemer to the room they'll be stranded at "not in room". Log the
-    // exact Synapse status/body for both the admin-join and the invite fallback
-    // so the failure mode (e.g. bot not a member of a private den) is visible.
+    // Redemption survives Matrix failure, but if we couldn't admit the redeemer
+    // they'll be stranded. Log the exact Synapse status/body for each step so
+    // the failure mode (e.g. bot not a member of the canopy) is visible.
     if (!matrixInvite.ok) {
       log.warn('invite.redeem.matrix_admit_failed', {
         roomId: updated.matrixRoomId,
+        canopyId,
         userId: matrixUserId,
+        canopyJoinStatus: canopyJoin && 'status' in canopyJoin ? canopyJoin.status : undefined,
+        canopyJoinDetail: canopyJoin && 'detail' in canopyJoin ? canopyJoin.detail : undefined,
         adminJoinStatus: 'status' in join ? join.status : undefined,
         adminJoinReason: 'reason' in join ? join.reason : undefined,
         adminJoinDetail: 'detail' in join ? join.detail : undefined,
@@ -236,21 +271,9 @@ export const redeemInvitation = async (
     } else {
       log.info('invite.redeem.matrix_admitted', {
         roomId: updated.matrixRoomId,
+        canopyId,
+        canopyJoined: canopyJoin?.ok,
         via: join.ok ? 'admin_join' : 'invite',
-      });
-    }
-
-    // Best-effort: resolve the invited room's canopy so the client can route
-    // the recipient straight into onboarding. A failure here just means the
-    // client falls back to its local space-hierarchy resolution.
-    const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);
-    if (parent.ok) {
-      canopyId = parent.canopyId;
-    } else {
-      log.warn('invite.redeem.canopy_unresolved', {
-        roomId: updated.matrixRoomId,
-        status: 'status' in parent ? parent.status : undefined,
-        reason: 'reason' in parent ? parent.reason : undefined,
       });
     }
   }

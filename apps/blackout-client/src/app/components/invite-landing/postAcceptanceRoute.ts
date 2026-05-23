@@ -28,7 +28,7 @@ export const isHomeTourComplete = (mx: MatrixClient): boolean => {
  * approach as `useRoomNavigate`: orphan parents → best guess. Returns
  * `undefined` when none can be determined (orphan room / direct message).
  */
-const resolveParentSpace = (
+export const resolveParentSpace = (
     mx: MatrixClient,
     roomToParents: RoomToParents,
     roomId: string,

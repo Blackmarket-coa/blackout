@@ -850,14 +850,21 @@ test('POST /v1/invitations/redeem force-joins the redeemer and returns the paren
   assert.equal(body.ok, true);
   assert.equal(body.canopyId, canopyId, 'redeem should surface the resolved parent canopy');
 
-  // The redeemer is force-joined via the Synapse admin join endpoint (which
-  // works for member-created dens where the bot can't invite).
+  // The redeemer is admitted to the CANOPY first (restricted dens require
+  // canopy membership), then to the den.
+  const canopyJoinCall = fetchCalls.find(
+    (c) =>
+      c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(canopyId)}`) &&
+      c.init?.method === 'POST',
+  );
+  assert.ok(canopyJoinCall, 'expected the redeemer to be admin-joined to the canopy');
+
   const joinCall = fetchCalls.find(
     (c) =>
       c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) &&
       c.init?.method === 'POST',
   );
-  assert.ok(joinCall, 'expected a Synapse admin join POST for the room-scoped invite');
+  assert.ok(joinCall, 'expected a Synapse admin join POST for the den');
 
   // Admin join succeeded, so no fallback bot invite should have been issued.
   const inviteCall = fetchCalls.find(
@@ -1109,6 +1116,63 @@ test('GET /v1/invitations/:id/matrix-status reports bot membership + join result
   assert.equal(body.botUserId, botUserId);
   assert.equal(body.botInRoom, true, 'bot should be reported as a member');
   assert.equal(body.botJoinAttempt.ok, true, 'force-join should report ok against the stub');
+
+  resetFetchHandler();
+});
+
+test('GET /v1/invitations/:id/matrix-status reports canopy membership for a restricted den', async () => {
+  resetFetchHandler();
+  const roomId = '!den-canopy-status:server';
+  const canopyId = '!canopy-status:server';
+  const inviter = seedUser();
+
+  const botRes = await app.request('/v1/matrix/bot', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const { userId: botUserId } = (await botRes.json()) as { userId: string };
+
+  setFetchHandler((url, init) => {
+    // Den resolves to the canopy via admin state.
+    if (url.includes(`/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`)) {
+      return new Response(
+        JSON.stringify({
+          state: [{ type: 'm.space.parent', state_key: canopyId, content: { via: ['server'] } }],
+        }),
+        { headers: { 'content-type': 'application/json' }, status: 200 },
+      );
+    }
+    // Bot is a member of the canopy.
+    if (url.includes(`/_synapse/admin/v1/rooms/${encodeURIComponent(canopyId)}/members`)) {
+      return new Response(JSON.stringify({ members: [botUserId], total: 1 }), {
+        headers: { 'content-type': 'application/json' },
+        status: 200,
+      });
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  const { invitation } = (await create.json()) as { invitation: { id: string } };
+
+  const status = await app.request(`/v1/invitations/${invitation.id}/matrix-status`, {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(status.status, 200);
+  const body = (await status.json()) as {
+    canopyId?: string;
+    canopy?: { canopyId: string; botInCanopy?: boolean; joinAttempt: { ok: boolean } };
+  };
+  assert.equal(body.canopyId, canopyId);
+  assert.ok(body.canopy, 'expected a canopy diagnostic block');
+  assert.equal(body.canopy?.canopyId, canopyId);
+  assert.equal(body.canopy?.botInCanopy, true, 'bot should be reported as a canopy member');
+  assert.equal(body.canopy?.joinAttempt.ok, true);
 
   resetFetchHandler();
 });

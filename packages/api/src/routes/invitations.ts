@@ -153,6 +153,31 @@ invitations.get('/:id/matrix-status', async (c) => {
   // Re-run the force-join so the response carries the exact Synapse outcome.
   const join = await matrixClient.adminJoinUserToRoom(roomId, botUserId);
   const parent = await matrixClient.getRoomParentSpace(roomId);
+  const canopyId = parent.ok ? parent.canopyId : undefined;
+
+  // Dens are `restricted` to their canopy, so what actually matters is whether
+  // the bot is in the CANOPY (and can be admitted to it). Probe that too.
+  let canopy:
+    | {
+        canopyId: string;
+        botInCanopy?: boolean;
+        joinAttempt: { ok: boolean; status?: number; reason?: string; detail?: string };
+      }
+    | undefined;
+  if (canopyId && canopyId !== roomId) {
+    const canopyMembers = await matrixClient.getRoomMembers(canopyId);
+    const canopyJoin = await matrixClient.adminJoinUserToRoom(canopyId, botUserId);
+    canopy = {
+      canopyId,
+      botInCanopy: canopyMembers.ok ? canopyMembers.members.includes(botUserId) : undefined,
+      joinAttempt: {
+        ok: canopyJoin.ok,
+        status: 'status' in canopyJoin ? canopyJoin.status : undefined,
+        reason: 'reason' in canopyJoin ? canopyJoin.reason : undefined,
+        detail: 'detail' in canopyJoin ? canopyJoin.detail : undefined,
+      },
+    };
+  }
 
   return c.json({
     scoped: 'room',
@@ -171,7 +196,8 @@ invitations.get('/:id/matrix-status', async (c) => {
       reason: 'reason' in join ? join.reason : undefined,
       detail: 'detail' in join ? join.detail : undefined,
     },
-    canopyId: parent.ok ? parent.canopyId : undefined,
+    canopyId,
+    canopy,
   });
 });
 
