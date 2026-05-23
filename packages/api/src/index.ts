@@ -6,6 +6,7 @@ import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
 import authRoutes from './routes/auth';
 import invitationRoutes from './routes/invitations';
 import messageRoutes from './routes/messages';
+import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
 import channelRoutes from './routes/channels';
 import entitlementRoutes from './routes/entitlements';
@@ -119,6 +120,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/invitations`, invitationRoutes);
   app.route(`${root}/matrix`, matrixRoutes);
   app.route(`${root}/messages`, messageRoutes);
+  app.route(`${root}/scheduled-messages`, scheduledMessageRoutes);
   app.route(`${root}/federation`, federationRoutes);
   app.route(`${root}/channels`, channelRoutes);
   app.route(`${root}/entitlements`, entitlementRoutes);
@@ -284,6 +286,29 @@ if (shouldListen) {
       startStreamlabsScheduler(intervalMs);
       log.info('streamlabs_donation_scheduler_started', { intervalMs });
     });
+  }
+
+  // Scheduled-message dispatcher. Delivers messages whose deliverAt has
+  // passed into their Matrix room, so a scheduled send fires even when the
+  // author's client is closed. On by default (it backs a first-party
+  // feature, not an optional integration); set
+  // BLACKOUT_SCHEDULED_MESSAGES_DISPATCH=0 to disable, or
+  // BLACKOUT_SCHEDULED_MESSAGES_DISPATCH_INTERVAL_SECONDS for a custom cadence.
+  if (process.env.BLACKOUT_SCHEDULED_MESSAGES_DISPATCH !== '0') {
+    const intervalSeconds = Number.parseInt(
+      process.env.BLACKOUT_SCHEDULED_MESSAGES_DISPATCH_INTERVAL_SECONDS ?? '',
+      10,
+    );
+    const intervalMs =
+      Number.isFinite(intervalSeconds) && intervalSeconds > 0
+        ? intervalSeconds * 1000
+        : undefined;
+    void import('./services/scheduledMessageDispatcher').then(
+      ({ startScheduledMessageDispatcher }) => {
+        startScheduledMessageDispatcher(intervalMs);
+        log.info('scheduled_message_dispatcher_started', { intervalMs });
+      },
+    );
   }
 
   const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
