@@ -183,7 +183,15 @@ export const matrixClient = {
         body: JSON.stringify(reason ? { user_id: userId, reason } : { user_id: userId }),
       },
     );
-    return { ok: response.ok, status: response.status };
+    let detail: string | undefined;
+    if (!response.ok) {
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+    }
+    return { ok: response.ok, status: response.status, detail };
   },
 
   /**
@@ -220,7 +228,15 @@ export const matrixClient = {
     } catch (error) {
       return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
     }
-    return { ok: response.ok, status: response.status };
+    let detail: string | undefined;
+    if (!response.ok) {
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+    }
+    return { ok: response.ok, status: response.status, detail };
   },
 
   /**
