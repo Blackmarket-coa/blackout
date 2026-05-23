@@ -39,6 +39,7 @@ const auth = new Hono();
 
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
+auth.use('/matrix/exchange', authRateLimit);
 auth.use('/password/reset/request', authRateLimit);
 auth.use('/password/reset/confirm', authRateLimit);
 auth.use('/password/change', authRateLimit);
@@ -308,6 +309,64 @@ auth.post('/login', async (c) => {
 
   const session = issueSession(user!.id, user!.username, c.req.header('user-agent'));
   return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user!.id });
+});
+
+// Matrix localpart per the spec's historical grammar: lowercase alnum plus
+// a small set of separators. We bound the length so a hostile homeserver
+// response can't be used to wedge an oversized username into the store.
+const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
+
+/**
+ * Bridge a live Matrix session into a Blackout API JWT. The client sends
+ * its Matrix access token (in `x-matrix-access-token`, NOT `Authorization`,
+ * so it doesn't collide with the JWT bearer path in authMiddleware); we
+ * validate it against the homeserver via whoami, then look up or
+ * auto-provision the matching Blackout user and issue a session. This is
+ * what lets users who signed up through the Matrix UI use `/v1/*` features
+ * like invitations and marketplace entitlements.
+ */
+auth.post('/matrix/exchange', async (c) => {
+  const matrixToken = c.req.header('x-matrix-access-token') ?? '';
+  if (!matrixToken) {
+    return c.json({ code: 'matrix_token_missing', message: 'Missing Matrix access token' }, 401);
+  }
+
+  const whoami = await matrixClient.whoami(matrixToken);
+  if (!whoami.ok) {
+    if (whoami.reason === 'matrix_not_configured') {
+      return c.json(
+        { code: 'matrix_not_configured', message: 'Matrix homeserver is not configured' },
+        503,
+      );
+    }
+    authFailuresTotal.inc({ reason: 'matrix_token_invalid' });
+    return c.json({ code: 'matrix_token_invalid', message: 'Matrix access token is not valid' }, 401);
+  }
+
+  const localpart = whoami.userId.replace(/^@/, '').split(':')[0] ?? '';
+  if (!MATRIX_LOCALPART_RE.test(localpart)) {
+    return c.json({ code: 'matrix_user_invalid', message: 'Unsupported Matrix user id' }, 400);
+  }
+
+  let user = db.findUserByUsername(localpart);
+  if (!user) {
+    // Auto-provision: the Matrix account already exists (whoami just
+    // confirmed it), so there's no second account to create — we only
+    // need a Blackout-side row to hang sessions, invitations, and
+    // entitlements off of. Mirrors the register flow minus the Matrix call.
+    user = db.createUser({
+      id: crypto.randomUUID(),
+      username: localpart,
+      email: '',
+      passwordHash: '',
+      reputationScore: 0,
+      reputationTier: 'member',
+      pubkeyEd25519: crypto.randomUUID().replace(/-/g, ''),
+    });
+  }
+
+  const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+  return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user.id });
 });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
