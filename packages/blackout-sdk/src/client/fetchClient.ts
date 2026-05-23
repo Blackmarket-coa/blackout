@@ -7,6 +7,14 @@ export type FetchApiClientOptions = {
     fetchFn?: typeof fetch;
     defaultHeaders?: HeadersInit;
     defaultRetry?: RetryPolicy;
+    /**
+     * Non-2xx statuses whose JSON body should be resolved to the caller
+     * instead of throwing. Use for endpoints that report *expected* outcomes
+     * with a typed body and a 4xx status (e.g. invitation preview/redeem
+     * returning `{ok:false,reason}` with 410). Transport errors and other
+     * statuses still throw.
+     */
+    resolveOnStatuses?: number[];
 };
 
 const resolveUrl = (path: string, baseUrl?: string): string => {
@@ -20,8 +28,15 @@ export const createFetchApiClient = ({
     fetchFn = fetch,
     defaultHeaders,
     defaultRetry,
+    resolveOnStatuses,
 }: FetchApiClientOptions = {}): ApiClient => {
-    const request = async <TResponse>({ method, path, body, retry }: ApiRequest): Promise<TResponse> => {
+    const request = async <TResponse>({
+        method,
+        path,
+        body,
+        retry,
+        signal,
+    }: ApiRequest): Promise<TResponse> => {
         const { response, retryable } = await fetchWithRetry(
             () =>
                 fetchFn(resolveUrl(path, baseUrl), {
@@ -32,11 +47,12 @@ export const createFetchApiClient = ({
                         ...defaultHeaders,
                     },
                     body: body ? JSON.stringify(body) : undefined,
+                    signal,
                 }),
             retry ?? defaultRetry,
         );
 
-        if (response.ok) {
+        if (response.ok || (resolveOnStatuses?.includes(response.status) ?? false)) {
             // A 2xx whose body isn't JSON almost always means the request
             // never reached the API — typically a SPA host serving
             // index.html as a fallback for an unproxied path, or an edge

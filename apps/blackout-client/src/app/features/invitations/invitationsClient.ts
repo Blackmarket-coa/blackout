@@ -1,3 +1,4 @@
+import { createFetchApiClient } from '@blackout/sdk';
 import { createAuthorizedApiClient, API_BASE_URL } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 
@@ -95,53 +96,33 @@ const callJson = <T>(
 /**
  * Statuses the preview/redeem endpoints use to report *expected* invitation
  * outcomes (invalid / revoked / exhausted / expired / self_redeem). The server
- * returns a typed JSON body ({valid|ok: false, reason}) with these, so we read
- * the body and resolve it instead of throwing — that's what lets the landing
+ * returns a typed JSON body ({valid|ok: false, reason}) with these, so the SDK
+ * client resolves the body instead of throwing — that's what lets the landing
  * page show a specific reason rather than a generic failure. See
  * `packages/api/src/routes/invitations.ts`.
  */
-const INVITATION_OUTCOME_STATUSES = new Set([400, 404, 410]);
+const INVITATION_OUTCOME_STATUSES = [400, 404, 410];
 
 /**
- * Fetch wrapper for the preview/redeem endpoints. Unlike the shared SDK client
- * (which throws on any non-2xx and hides the body), this surfaces the typed
- * outcome body for the documented business-failure statuses and supports an
- * AbortSignal so callers can apply a timeout to an otherwise-hung request.
- * Rejects only on transport errors, aborts, or unexpected statuses (e.g. 401,
- * 5xx).
+ * SDK client for the preview/redeem endpoints. Unlike the default client
+ * (which throws on any non-2xx and hides the body), this resolves the typed
+ * outcome body for the documented business-failure statuses, and the request
+ * accepts an AbortSignal so callers can time out an otherwise-hung request.
+ * Still rejects on transport errors, aborts, or unexpected statuses (401, 5xx).
  */
-const invitationFetch = async <T>(
+const invitationFetch = <T>(
     method: 'GET' | 'POST',
     path: string,
     body: unknown,
     token: string | null,
     signal?: AbortSignal,
-): Promise<T> => {
-    const url = API_BASE_URL ? new URL(path, API_BASE_URL).toString() : path;
-    const hasBody = body !== undefined;
-    const response = await fetch(url, {
-        method,
-        headers: {
-            Accept: 'application/json',
-            ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: hasBody ? JSON.stringify(body) : undefined,
-        signal,
-    });
-
-    if (response.ok || INVITATION_OUTCOME_STATUSES.has(response.status)) {
-        try {
-            return (await response.json()) as T;
-        } catch {
-            throw new Error(
-                `Expected JSON from ${path} but got a non-JSON response (${response.status}).`,
-            );
-        }
-    }
-
-    throw new Error(`Request failed (${response.status}) for ${path}`);
-};
+): Promise<T> =>
+    createFetchApiClient({
+        baseUrl: API_BASE_URL,
+        defaultHeaders: token ? { authorization: `Bearer ${token}` } : undefined,
+        defaultRetry: { attempts: 3, backoffMs: 100 },
+        resolveOnStatuses: INVITATION_OUTCOME_STATUSES,
+    })({ method, path, body, signal }) as Promise<T>;
 
 export const createInvitation = (
     input: CreateInvitationInput = {},
