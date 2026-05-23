@@ -41,10 +41,7 @@ import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
-import {
-    InviteLandingPage,
-    PendingInviteRedeemer,
-} from './app/components/invite-landing';
+import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -101,8 +98,8 @@ const queryClient = new QueryClient();
  */
 const apiBaseUrl =
     typeof import.meta !== 'undefined'
-        ? (import.meta as { env?: Record<string, string | undefined> }).env
-              ?.VITE_API_BASE_URL ?? undefined
+        ? (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
+          undefined
         : undefined;
 const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
 const registryFetchers = buildRegistryFetchers(apiClient);
@@ -349,11 +346,7 @@ const BootstrapStatus = () => {
                 >
                     Home
                 </a>
-                <a
-                    href="https://theblackout.app"
-                    rel="noreferrer"
-                    style={{ color: 'inherit' }}
-                >
+                <a href="https://theblackout.app" rel="noreferrer" style={{ color: 'inherit' }}>
                     About
                 </a>
                 <a
@@ -368,26 +361,48 @@ const BootstrapStatus = () => {
     );
 };
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-    <React.StrictMode>
-        <JotaiProvider>
-            <ThemeProvider>
-                <ClientConfigLoader>
-                    <CrashBoundary>
-                        <RuntimeSettingsBridge />
-                        <DevCapabilitySeeder />
-                        <MatrixBootstrapper />
-                        <NotificationTokenBroker />
-                        <UnreadCountBroadcaster />
-                        <LifecycleSyncBroker />
-                        <QueryClientProvider client={queryClient}>
-                            <RegistryFetcherProvider fetchers={registryFetchers}>
-                                <BootstrapStatus />
-                            </RegistryFetcherProvider>
-                        </QueryClientProvider>
-                    </CrashBoundary>
-                </ClientConfigLoader>
-            </ThemeProvider>
-        </JotaiProvider>
-    </React.StrictMode>
-);
+// Playwright regression harness for the PortalModal overlay primitive,
+// mounted before the auth/matrix bootstrap chain so the browser test can
+// drive the overlay layer without spinning up a real Matrix session.
+// Reachable only by explicit navigation to /__dev__/portal-modal; the
+// module is loaded via dynamic import so the static bundle never pays
+// the cost up front.
+const HARNESS_PATH = '/__dev__/portal-modal';
+const harnessActive = typeof window !== 'undefined' && window.location.pathname === HARNESS_PATH;
+
+if (harnessActive) {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./app/dev/PortalModalHarness').then(({ PortalModalHarness }) => {
+        ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+            <React.StrictMode>
+                <ThemeProvider>
+                    <PortalModalHarness />
+                </ThemeProvider>
+            </React.StrictMode>
+        );
+    });
+} else {
+    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+        <React.StrictMode>
+            <JotaiProvider>
+                <ThemeProvider>
+                    <ClientConfigLoader>
+                        <CrashBoundary>
+                            <RuntimeSettingsBridge />
+                            <DevCapabilitySeeder />
+                            <MatrixBootstrapper />
+                            <NotificationTokenBroker />
+                            <UnreadCountBroadcaster />
+                            <LifecycleSyncBroker />
+                            <QueryClientProvider client={queryClient}>
+                                <RegistryFetcherProvider fetchers={registryFetchers}>
+                                    <BootstrapStatus />
+                                </RegistryFetcherProvider>
+                            </QueryClientProvider>
+                        </CrashBoundary>
+                    </ClientConfigLoader>
+                </ThemeProvider>
+            </JotaiProvider>
+        </React.StrictMode>
+    );
+}
