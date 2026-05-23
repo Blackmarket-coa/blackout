@@ -11,6 +11,7 @@ import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
 import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
 import { exchangeMatrixForBlackoutToken } from './blackoutApiSession';
+import { cryptoCallbacks } from './secretStorageKeys';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -226,6 +227,7 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
         cryptoStore,
         timelineSupport: true,
         verificationMethods: ['m.sas.v1'],
+        cryptoCallbacks,
     });
 
     await syncStore.startup();

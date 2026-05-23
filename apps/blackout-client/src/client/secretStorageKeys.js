@@ -19,10 +19,14 @@ export function clearSecretStorageKeys() {
   secretStorageKeys.clear();
 }
 
+/**
+ * @param {{ keys: Record<string, unknown> }} arg
+ * @returns {Promise<[string, Uint8Array<ArrayBuffer>] | null>}
+ */
 async function getSecretStorageKey({ keys }) {
   const keyIds = Object.keys(keys);
   const keyId = keyIds.find(hasPrivateKey);
-  if (!keyId) return undefined;
+  if (!keyId) return null;
   const privateKey = getPrivateKey(keyId);
   return [keyId, privateKey];
 }
