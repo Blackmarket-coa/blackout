@@ -10,6 +10,7 @@ import {
 } from '../../features/invitations/invitationsClient';
 import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
 import { resolvePostAcceptancePath } from './postAcceptanceRoute';
+import { joinDenWithCanopy } from '../../features/room/joinDenWithCanopy';
 
 /**
  * Cap how long the page will sit on a single network step before giving up and
@@ -249,7 +250,8 @@ export const InviteLandingPage: React.FC = () => {
             if (data.matrixRoomId && client) {
                 try {
                     await withTimeout(
-                        Promise.resolve(client.joinRoom(data.matrixRoomId)),
+                        // Join the canopy first so the restricted den is joinable.
+                        joinDenWithCanopy(client, data.matrixRoomId, data.canopyId),
                         STEP_TIMEOUT_MS,
                         controller,
                     );

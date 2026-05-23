@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { authStateAtom, matrixClientAtom } from '../../state/auth';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { redeemInvitation } from '../../features/invitations/invitationsClient';
+import { joinDenWithCanopy } from '../../features/room/joinDenWithCanopy';
 import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
 import { resolvePostAcceptancePath } from './postAcceptanceRoute';
 import { PENDING_INVITE_STORAGE_KEY } from './InviteLandingPage';
@@ -60,7 +61,8 @@ export const usePendingInviteRedeemer = (): void => {
             // This hook lives outside the router, so navigate via location.
             if (data.matrixRoomId && mx) {
                 try {
-                    await mx.joinRoom(data.matrixRoomId);
+                    // Join the canopy first so the restricted den is joinable.
+                    await joinDenWithCanopy(mx, data.matrixRoomId, data.canopyId);
                 } catch {
                     // already-joined / transient; the server invite stands.
                 }
