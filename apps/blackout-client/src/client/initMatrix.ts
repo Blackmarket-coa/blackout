@@ -10,6 +10,7 @@ import { type AccessTokens, type TokenRefreshFunction } from 'matrix-js-sdk/lib/
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
 import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
+import { exchangeMatrixForBlackoutToken } from './blackoutApiSession';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -270,6 +271,10 @@ export const initMatrixFromStoredSession = async (
         const client = await initClientForSession(session);
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
+        // Bridge the Matrix session into a Blackout API JWT so /v1/* features
+        // (invitations, entitlements, …) are authenticated. Fire-and-forget:
+        // chat must not block on the API server being reachable.
+        void exchangeMatrixForBlackoutToken(session);
         return client;
     } catch (error) {
         const normalizedError = normalizeMatrixError(error);

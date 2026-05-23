@@ -31,6 +31,49 @@ export const matrixClient = {
     };
   },
 
+  /**
+   * Validate a *user-supplied* Matrix access token by calling the
+   * homeserver's `whoami` endpoint with it. Unlike the other methods here
+   * this deliberately uses the caller's token, not the bot admin token —
+   * the whole point is to prove the caller holds a live Matrix session and
+   * to learn which user it belongs to. Used by `POST /v1/auth/matrix/exchange`
+   * to bridge a Matrix login into a Blackout API JWT.
+   */
+  async whoami(accessToken: string) {
+    const hs = homeserver();
+    if (!hs) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    if (!accessToken) {
+      return { ok: false as const, reason: 'no_token' as const };
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_matrix/client/v3/account/whoami`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+
+    if (!response.ok) {
+      return { ok: false as const, status: response.status, reason: 'invalid_token' as const };
+    }
+
+    const json = (await response.json()) as { user_id?: string; device_id?: string };
+    if (!json.user_id) {
+      return { ok: false as const, status: response.status, reason: 'no_user_id' as const };
+    }
+
+    return {
+      ok: true as const,
+      status: response.status,
+      userId: json.user_id,
+      deviceId: json.device_id,
+    };
+  },
+
   async sendMessage(roomId: string, content: string) {
     return matrixClient.sendEvent(roomId, { msgtype: 'm.text', body: content });
   },

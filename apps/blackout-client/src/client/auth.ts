@@ -9,6 +9,7 @@ import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom } from '../app/state/auth';
 import { initMatrixFromStoredSession, MatrixInitError, stopMatrixClient } from './initMatrix';
 import { clearSession, getSessionForUser, saveSession, type StoredSession } from './sessionManager';
+import { clearBlackoutApiToken } from './blackoutApiSession';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -339,6 +340,7 @@ export const logout = async (store: AtomStore): Promise<void> => {
         clearSession();
     }
 
+    clearBlackoutApiToken();
     applyLoggedOutAtoms(store);
 };
 
