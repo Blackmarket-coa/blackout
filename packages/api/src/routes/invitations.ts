@@ -14,6 +14,7 @@ import {
   revokeInvitation,
 } from '../services/invitations';
 import type { InvitationTokenRecord } from '../db/types';
+import { matrixClient } from '../integrations/matrix-client';
 import {
   invitationsCreatedTotal,
   invitationsMatrixMintFailuresTotal,
@@ -120,6 +121,58 @@ invitations.post('/', async (c) => {
     },
     201,
   );
+});
+
+/**
+ * Owner-only diagnostic for a room-scoped invite: reports the resolved bot
+ * MXID, whether the bot is actually a member of the den, and the exact Synapse
+ * result of a fresh force-join attempt. Lets us see *why* redeemers can't be
+ * admitted (wrong bot id, 403 reason, bot absent) without server-log access.
+ */
+invitations.get('/:id/matrix-status', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+
+  const record = db.getInvitationTokenById(c.req.param('id'));
+  if (!record || record.createdBy !== user.sub) {
+    return c.json({ code: 'not_found', message: 'Invitation not found' }, 404);
+  }
+  if (!record.matrixRoomId) {
+    return c.json({ scoped: 'global', message: 'This invite is not bound to a den.' });
+  }
+
+  const roomId = record.matrixRoomId;
+  const botUserId = await matrixClient.botUserId();
+  if (!botUserId) {
+    return c.json({ code: 'matrix_not_configured', message: 'Matrix bot is not configured.' }, 503);
+  }
+
+  const members = await matrixClient.getRoomMembers(roomId);
+  const botInRoom = members.ok ? members.members.includes(botUserId) : undefined;
+
+  // Re-run the force-join so the response carries the exact Synapse outcome.
+  const join = await matrixClient.adminJoinUserToRoom(roomId, botUserId);
+  const parent = await matrixClient.getRoomParentSpace(roomId);
+
+  return c.json({
+    scoped: 'room',
+    roomId,
+    botUserId,
+    botInRoom,
+    membersLookup: {
+      ok: members.ok,
+      status: 'status' in members ? members.status : undefined,
+      reason: 'reason' in members ? members.reason : undefined,
+      detail: 'detail' in members ? members.detail : undefined,
+    },
+    botJoinAttempt: {
+      ok: join.ok,
+      status: 'status' in join ? join.status : undefined,
+      reason: 'reason' in join ? join.reason : undefined,
+      detail: 'detail' in join ? join.detail : undefined,
+    },
+    canopyId: parent.ok ? parent.canopyId : undefined,
+  });
 });
 
 invitations.get('/', (c) => {

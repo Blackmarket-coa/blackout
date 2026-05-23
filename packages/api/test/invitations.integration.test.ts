@@ -1060,3 +1060,73 @@ test('POST /v1/invitations does NOT force-join the bot for a global invite', asy
   const anyJoin = fetchCalls.find((c) => c.url.includes('/_synapse/admin/v1/join/'));
   assert.equal(anyJoin, undefined, 'a global invite has no room, so no bot join');
 });
+
+// --- Diagnostic: GET /v1/invitations/:id/matrix-status --------------------
+
+test('GET /v1/invitations/:id/matrix-status reports bot membership + join result', async () => {
+  resetFetchHandler();
+  const roomId = '!den-status:server';
+  const inviter = seedUser();
+
+  // Learn the resolved bot MXID so the members stub can include it.
+  const botRes = await app.request('/v1/matrix/bot', {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  const { userId: botUserId } = (await botRes.json()) as { userId: string };
+
+  setFetchHandler((url, init) => {
+    if (url.includes(`/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/members`)) {
+      return new Response(JSON.stringify({ members: [botUserId], total: 1 }), {
+        headers: { 'content-type': 'application/json' },
+        status: 200,
+      });
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  const { invitation } = (await create.json()) as { invitation: { id: string } };
+
+  const status = await app.request(`/v1/invitations/${invitation.id}/matrix-status`, {
+    method: 'GET',
+    headers: bearer(inviter.id, inviter.username),
+  });
+  assert.equal(status.status, 200);
+  const body = (await status.json()) as {
+    scoped: string;
+    roomId: string;
+    botUserId: string;
+    botInRoom?: boolean;
+    botJoinAttempt: { ok: boolean };
+  };
+  assert.equal(body.scoped, 'room');
+  assert.equal(body.roomId, roomId);
+  assert.equal(body.botUserId, botUserId);
+  assert.equal(body.botInRoom, true, 'bot should be reported as a member');
+  assert.equal(body.botJoinAttempt.ok, true, 'force-join should report ok against the stub');
+
+  resetFetchHandler();
+});
+
+test('GET /v1/invitations/:id/matrix-status is owner-only (404 for a different user)', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: '!den-owner:server' }),
+  });
+  const { invitation } = (await create.json()) as { invitation: { id: string } };
+
+  const other = seedUser();
+  const status = await app.request(`/v1/invitations/${invitation.id}/matrix-status`, {
+    method: 'GET',
+    headers: bearer(other.id, other.username),
+  });
+  assert.equal(status.status, 404);
+});

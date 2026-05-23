@@ -325,6 +325,43 @@ export const matrixClient = {
   },
 
   /**
+   * List a room's members via the Synapse admin API
+   * (`GET /_synapse/admin/v1/rooms/{roomId}/members`). Used by the invite
+   * diagnostic to check whether the bot is actually a member of a den —
+   * works without the bot being in the room (admin powers).
+   */
+  async getRoomMembers(roomId: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/members`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
+    }
+    const body = (await response.json()) as { members?: unknown };
+    const members = Array.isArray(body.members)
+      ? body.members.filter((m): m is string => typeof m === 'string')
+      : [];
+    return { ok: true as const, status: response.status, members };
+  },
+
+  /**
    * Send an arbitrary Matrix event content into a room. Used by the
    * compatibility bridges (Twitch chat ingress, etc.) which need to ship
    * full event payloads with custom `m.blackout.*` extension fields, not
