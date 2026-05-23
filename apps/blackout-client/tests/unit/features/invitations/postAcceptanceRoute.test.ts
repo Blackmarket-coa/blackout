@@ -24,31 +24,30 @@ const makeMx = (opts: {
     }) as unknown as MatrixClient;
 
 const noParents: RoomToParents = new Map();
-const noDirects = new Set<string>();
 
 describe('resolvePostAcceptancePath', () => {
     it('sends account-only invites (no room) home', () => {
         const mx = makeMx({});
-        expect(resolvePostAcceptancePath(mx, noParents, noDirects, undefined)).toBe('/');
+        expect(resolvePostAcceptancePath(mx, noParents, undefined)).toBe('/');
     });
 
     it('routes a brand-new user (space not onboarded) to full-page onboarding carrying the room', () => {
         const room = '!space:server';
         const mx = makeMx({ rooms: { [room]: makeRoom(true) }, completedSpaces: {} });
 
-        const path = resolvePostAcceptancePath(mx, noParents, noDirects, room);
+        const path = resolvePostAcceptancePath(mx, noParents, room);
 
         expect(path.startsWith('/onboarding/')).toBe(true);
         expect(path).toContain(`room=${encodeURIComponent(room)}`);
     });
 
-    it('sends a returning user (space already onboarded) straight into the room', () => {
+    it('sends a returning user (space already onboarded) into the canonical communities route', () => {
         const room = '!space:server';
         const mx = makeMx({ rooms: { [room]: makeRoom(true) }, completedSpaces: { [room]: true } });
 
-        const path = resolvePostAcceptancePath(mx, noParents, noDirects, room);
+        const path = resolvePostAcceptancePath(mx, noParents, room);
 
-        expect(path.startsWith('/onboarding/')).toBe(false);
+        expect(path.startsWith('/communities/')).toBe(true);
         expect(path).toContain(encodeURIComponent(room));
     });
 
@@ -57,25 +56,25 @@ describe('resolvePostAcceptancePath', () => {
         // Not onboarded, but skipOnboarding short-circuits the check.
         const mx = makeMx({ rooms: { [room]: makeRoom(true) }, completedSpaces: {} });
 
-        const path = resolvePostAcceptancePath(mx, noParents, noDirects, room, {
-            skipOnboarding: true,
-        });
+        const path = resolvePostAcceptancePath(mx, noParents, room, { skipOnboarding: true });
 
         expect(path.startsWith('/onboarding/')).toBe(false);
+        expect(path.startsWith('/communities/')).toBe(true);
     });
 
-    it('opens the room directly when no parent space can be resolved', () => {
+    it('opens an orphan room under the no-canopy sentinel', () => {
         const room = '!orphan:server';
         // getRoom → null (not a space) and no parents → space unresolved.
         const mx = makeMx({});
 
-        const path = resolvePostAcceptancePath(mx, noParents, noDirects, room);
+        const path = resolvePostAcceptancePath(mx, noParents, room);
 
         expect(path.startsWith('/onboarding/')).toBe(false);
+        expect(path).toContain('/communities/-/dens/');
         expect(path).toContain(encodeURIComponent(room));
     });
 
-    it('routes a room inside a space into that space context', () => {
+    it('routes a den under its parent canopy', () => {
         const room = '!den:server';
         const space = '!canopy:server';
         const roomToParents: RoomToParents = new Map([[room, new Set([space])]]);
@@ -84,10 +83,10 @@ describe('resolvePostAcceptancePath', () => {
             completedSpaces: { [space]: true },
         });
 
-        const path = resolvePostAcceptancePath(mx, roomToParents, noDirects, room);
+        const path = resolvePostAcceptancePath(mx, roomToParents, room);
 
-        expect(path.startsWith('/onboarding/')).toBe(false);
+        expect(path.startsWith('/communities/')).toBe(true);
+        expect(path).toContain(`/dens/${encodeURIComponent(room)}`);
         expect(path).toContain(encodeURIComponent(space));
-        expect(path).toContain(encodeURIComponent(room));
     });
 });

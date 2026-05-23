@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { authStateAtom, matrixClientAtom } from '../../state/auth';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { mDirectAtom } from '../../state/mDirectList';
 import {
     InvitationPreviewResponse,
     InvitationRedeemResponse,
@@ -149,7 +148,6 @@ export const InviteLandingPage: React.FC = () => {
     const authState = useAtomValue(authStateAtom);
     const mx = useAtomValue(matrixClientAtom);
     const roomToParents = useAtomValue(roomToParentsAtom);
-    const mDirects = useAtomValue(mDirectAtom);
     const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
     // Drives the redeem effect. Kept separate from `phase` on purpose: if the
     // redeem effect depended on a phase-derived flag, moving to 'redeeming'
@@ -168,8 +166,6 @@ export const InviteLandingPage: React.FC = () => {
     mxRef.current = mx;
     const roomToParentsRef = useRef(roomToParents);
     roomToParentsRef.current = roomToParents;
-    const mDirectsRef = useRef(mDirects);
-    mDirectsRef.current = mDirects;
 
     const retry = useCallback(() => {
         setPreviewOk(false);
@@ -264,12 +260,7 @@ export const InviteLandingPage: React.FC = () => {
             }
             if (cancelled) return;
             const dest = client
-                ? resolvePostAcceptancePath(
-                      client,
-                      roomToParentsRef.current,
-                      mDirectsRef.current,
-                      data.matrixRoomId,
-                  )
+                ? resolvePostAcceptancePath(client, roomToParentsRef.current, data.matrixRoomId)
                 : '/';
             window.location.assign(dest);
         };

@@ -1,13 +1,8 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { RoomToParents } from '../../../types/matrix/room';
-import { getCanonicalAliasOrRoomId } from '../../utils/matrix';
 import { getOrphanParents, guessPerfectParent } from '../../utils/room';
-import {
-    getDirectRoomPath,
-    getHomeRoomPath,
-    getOnboardingPath,
-    getSpaceRoomPath,
-} from '../../pages/pathUtils';
+import { getOnboardingPath } from '../../pages/pathUtils';
+import { buildCommunitiesPath } from '../../pages/paths';
 import { ONBOARDING_ACCOUNT_DATA_KEY } from '../../features/welcome/useWelcome';
 
 /**
@@ -29,37 +24,37 @@ export const isOnboardingComplete = (mx: MatrixClient, spaceId: string): boolean
 };
 
 /**
- * Resolve the parent space (canopy) for an invited room. If the room is itself
- * a space, that's the space; otherwise walk the space hierarchy the same way
- * `useRoomNavigate` does (orphan parents → best guess). Returns `undefined`
- * when no space can be determined (e.g. an orphan room).
+ * Resolve the parent space (canopy) of a non-space room using the same
+ * approach as `useRoomNavigate`: orphan parents → best guess. Returns
+ * `undefined` when none can be determined (orphan room / direct message).
  */
-const resolveSpaceId = (
+const resolveParentSpace = (
     mx: MatrixClient,
     roomToParents: RoomToParents,
-    matrixRoomId: string,
+    roomId: string,
 ): string | undefined => {
-    if (mx.getRoom(matrixRoomId)?.isSpaceRoom()) return matrixRoomId;
-    const orphanParents = getOrphanParents(roomToParents, matrixRoomId);
+    const orphanParents = getOrphanParents(roomToParents, roomId);
     if (orphanParents.length === 0) return undefined;
-    return guessPerfectParent(mx, matrixRoomId, orphanParents) ?? orphanParents[0];
+    return guessPerfectParent(mx, roomId, orphanParents) ?? orphanParents[0];
 };
 
-/** Build the in-app URL that opens an invited room (mirrors useRoomNavigate). */
+/**
+ * Build the in-app URL that opens an invited room. Uses the canonical
+ * `/communities/:canopyId/dens/:denId` shell route (`buildCommunitiesPath`),
+ * NOT the legacy `/home/:roomId` helpers — those aren't registered in the
+ * AppShell and 404. A space opens its canopy overview; a den opens under its
+ * parent canopy, or under the `-` no-canopy sentinel when it has none.
+ */
 export const buildRoomPath = (
     mx: MatrixClient,
     roomToParents: RoomToParents,
-    mDirects: Set<string>,
     matrixRoomId: string,
 ): string => {
-    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, matrixRoomId);
-    const orphanParents = getOrphanParents(roomToParents, matrixRoomId);
-    if (orphanParents.length > 0) {
-        const parentSpace = guessPerfectParent(mx, matrixRoomId, orphanParents) ?? orphanParents[0];
-        return getSpaceRoomPath(getCanonicalAliasOrRoomId(mx, parentSpace), roomIdOrAlias);
+    if (mx.getRoom(matrixRoomId)?.isSpaceRoom()) {
+        return buildCommunitiesPath(matrixRoomId, null);
     }
-    if (mDirects.has(matrixRoomId)) return getDirectRoomPath(roomIdOrAlias);
-    return getHomeRoomPath(roomIdOrAlias);
+    const parentSpace = resolveParentSpace(mx, roomToParents, matrixRoomId);
+    return buildCommunitiesPath(parentSpace ?? null, matrixRoomId);
 };
 
 /**
@@ -76,18 +71,19 @@ export const buildRoomPath = (
 export const resolvePostAcceptancePath = (
     mx: MatrixClient,
     roomToParents: RoomToParents,
-    mDirects: Set<string>,
     matrixRoomId: string | undefined,
     options: { skipOnboarding?: boolean } = {},
 ): string => {
     if (!matrixRoomId) return '/';
 
-    if (!options.skipOnboarding) {
-        const spaceId = resolveSpaceId(mx, roomToParents, matrixRoomId);
-        if (spaceId && !isOnboardingComplete(mx, spaceId)) {
-            return `${getOnboardingPath(spaceId)}?room=${encodeURIComponent(matrixRoomId)}`;
-        }
+    const isSpace = mx.getRoom(matrixRoomId)?.isSpaceRoom() === true;
+    const spaceId = isSpace
+        ? matrixRoomId
+        : resolveParentSpace(mx, roomToParents, matrixRoomId);
+
+    if (!options.skipOnboarding && spaceId && !isOnboardingComplete(mx, spaceId)) {
+        return `${getOnboardingPath(spaceId)}?room=${encodeURIComponent(matrixRoomId)}`;
     }
 
-    return buildRoomPath(mx, roomToParents, mDirects, matrixRoomId);
+    return buildRoomPath(mx, roomToParents, matrixRoomId);
 };

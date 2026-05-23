@@ -3,7 +3,6 @@ import { useEffect } from 'react';
 import { useAtomValue } from 'jotai';
 import { authStateAtom, matrixClientAtom } from '../../state/auth';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { mDirectAtom } from '../../state/mDirectList';
 import { redeemInvitation } from '../../features/invitations/invitationsClient';
 import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
 import { resolvePostAcceptancePath } from './postAcceptanceRoute';
@@ -26,7 +25,6 @@ export const usePendingInviteRedeemer = (): void => {
     const authState = useAtomValue(authStateAtom);
     const mx = useAtomValue(matrixClientAtom);
     const roomToParents = useAtomValue(roomToParentsAtom);
-    const mDirects = useAtomValue(mDirectAtom);
 
     useEffect(() => {
         if (authState !== 'logged_in') return;
@@ -66,18 +64,13 @@ export const usePendingInviteRedeemer = (): void => {
                 } catch {
                     // already-joined / transient; the server invite stands.
                 }
-                const dest = resolvePostAcceptancePath(
-                    mx,
-                    roomToParents,
-                    mDirects,
-                    data.matrixRoomId,
-                );
+                const dest = resolvePostAcceptancePath(mx, roomToParents, data.matrixRoomId);
                 window.location.assign(dest);
             }
         })().catch(() => {
             // Swallow: see docblock. The backend logs the failure if needed.
         });
-    }, [authState, mx, roomToParents, mDirects]);
+    }, [authState, mx, roomToParents]);
 };
 
 /**
