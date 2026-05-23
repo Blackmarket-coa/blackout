@@ -71,6 +71,29 @@ describe('RoomInviteAcceptGate', () => {
         expect(container.querySelector('[data-testid="room-content"]')).not.toBeNull();
     });
 
+    it('auto-joins when membership is still unknown (not yet synced)', async () => {
+        membership = null;
+        joinRoom.mockResolvedValue(undefined);
+        const { container } = await mount();
+        await act(async () => {
+            await flush();
+        });
+        expect(joinRoom).toHaveBeenCalledWith('!den:srv');
+        expect(container.querySelector('[data-testid="room-content"]')).not.toBeNull();
+    });
+
+    it('does not auto-join a room the user left, but offers a manual Join button', async () => {
+        membership = 'leave';
+        joinRoom.mockResolvedValue(undefined);
+        const { container } = await mount();
+        expect(joinRoom).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-testid="room-content"]')).toBeNull();
+        const button = Array.from(container.querySelectorAll('button')).find((b) =>
+            /join den/i.test(b.textContent ?? ''),
+        );
+        expect(button).toBeTruthy();
+    });
+
     it('shows a manual Join button after repeated join failures', async () => {
         vi.useFakeTimers();
         joinRoom.mockRejectedValue(new Error('M_FORBIDDEN'));

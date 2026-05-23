@@ -803,22 +803,25 @@ test('metrics: invitations_matrix_mint_failures_total increments on Synapse fail
 
 // --- Canopy resolution: redeeming a room-scoped invite surfaces the parent space
 
-test('POST /v1/invitations/redeem returns the parent canopy id for a room-scoped invite', async () => {
+test('POST /v1/invitations/redeem force-joins the redeemer and returns the parent canopy id', async () => {
   resetFetchHandler();
   const roomId = '!den:server';
   const canopyId = '!canopy:server';
   setFetchHandler((url, init) => {
-    // Resolve the room's parent space via the bot-token state read.
-    if (url.includes(`/rooms/${encodeURIComponent(roomId)}/state`)) {
+    // Canopy resolution via the Synapse admin state endpoint (works even when
+    // the bot is not a room member).
+    if (url.includes(`/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`)) {
       return new Response(
-        JSON.stringify([
-          { type: 'm.room.create', content: { creator: '@bot:server' } },
-          {
-            type: 'm.space.parent',
-            state_key: canopyId,
-            content: { via: ['server'] },
-          },
-        ]),
+        JSON.stringify({
+          state: [
+            { type: 'm.room.create', content: { creator: '@bot:server' } },
+            {
+              type: 'm.space.parent',
+              state_key: canopyId,
+              content: { via: ['server'] },
+            },
+          ],
+        }),
         { headers: { 'content-type': 'application/json' }, status: 200 },
       );
     }
@@ -847,11 +850,64 @@ test('POST /v1/invitations/redeem returns the parent canopy id for a room-scoped
   assert.equal(body.ok, true);
   assert.equal(body.canopyId, canopyId, 'redeem should surface the resolved parent canopy');
 
-  // The bot still invites the redeemer to the scoped room.
+  // The redeemer is force-joined via the Synapse admin join endpoint (which
+  // works for member-created dens where the bot can't invite).
+  const joinCall = fetchCalls.find(
+    (c) =>
+      c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) &&
+      c.init?.method === 'POST',
+  );
+  assert.ok(joinCall, 'expected a Synapse admin join POST for the room-scoped invite');
+
+  // Admin join succeeded, so no fallback bot invite should have been issued.
   const inviteCall = fetchCalls.find(
     (c) => c.url.includes(`/rooms/${encodeURIComponent(roomId)}/invite`) && c.init?.method === 'POST',
   );
-  assert.ok(inviteCall, 'expected an inviteToRoom POST for the room-scoped invite');
+  assert.equal(inviteCall, undefined, 'admin join succeeded; no fallback invite expected');
+
+  resetFetchHandler();
+});
+
+test('POST /v1/invitations/redeem falls back to a bot invite when admin join fails', async () => {
+  resetFetchHandler();
+  const roomId = '!den2:server';
+  setFetchHandler((url, init) => {
+    // Admin join is unavailable / forbidden -> non-2xx.
+    if (url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`)) {
+      return new Response('nope', { status: 403 });
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  fetchCalls.length = 0;
+
+  const redeemer = seedUser();
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200);
+
+  const joinCall = fetchCalls.find(
+    (c) =>
+      c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) &&
+      c.init?.method === 'POST',
+  );
+  assert.ok(joinCall, 'expected the admin join attempt first');
+
+  const inviteCall = fetchCalls.find(
+    (c) => c.url.includes(`/rooms/${encodeURIComponent(roomId)}/invite`) && c.init?.method === 'POST',
+  );
+  assert.ok(inviteCall, 'expected a fallback bot invite after admin join failed');
 
   resetFetchHandler();
 });

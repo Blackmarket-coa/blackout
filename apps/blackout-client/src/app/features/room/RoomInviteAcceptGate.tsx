@@ -24,13 +24,17 @@ const buttonStyle: React.CSSProperties = {
 };
 
 /**
- * Auto-accept an `invite` membership when a room is opened, so an invited
- * recipient can post immediately. The redeem flow already calls `joinRoom`
- * optimistically, but that can race the server-side invite (or be interrupted
- * by the post-redeem navigation/reload), leaving membership at `invite` — and
- * the composer then 403s ("not in room"). This gate is the reliable safety
- * net: it joins on open (retrying while the bot invite syncs) and only renders
- * the room content (`children`) once membership is `join` (or wasn't `invite`).
+ * Gate room content (timeline AND composer) behind a confirmed `join`
+ * membership, so an invited recipient can't hit the composer's 403
+ * ("not in room") before they're actually in the room.
+ *
+ * The redeem flow now force-joins the recipient server-side (Synapse admin
+ * join) and also calls `joinRoom` optimistically, but either can race this
+ * client's `/sync`: until the join surfaces, `getMyMembership()` is `invite`
+ * or still unknown (`null`). This gate joins on open (retrying with backoff
+ * while the membership syncs) and only renders `children` once membership is
+ * `join`. Rooms the user explicitly left/was banned from are NOT auto-rejoined
+ * — they get a manual "Join den" button instead.
  */
 export const RoomInviteAcceptGate: React.FC<{
     roomId: string;
@@ -44,7 +48,7 @@ export const RoomInviteAcceptGate: React.FC<{
     const [retryKey, setRetryKey] = useState(0);
 
     // Track membership transitions (the join below, or a sync that surfaces
-    // the bot invite, flips this).
+    // the server-side join/invite, flips this).
     useEffect(() => {
         setMembership(mx.getRoom(roomId)?.getMyMembership() ?? null);
         const onMyMembership = (room: { roomId: string; getMyMembership: () => string }) => {
@@ -56,10 +60,17 @@ export const RoomInviteAcceptGate: React.FC<{
         };
     }, [mx, roomId]);
 
-    // Auto-join while membership is `invite`, retrying with backoff because the
-    // bot's invite may not have reached this client's /sync yet.
+    const isJoined = membership === 'join';
+    // Auto-join when invited, or when membership is still unknown (`null`) —
+    // the server-side join may not have reached this client's /sync yet, and a
+    // freshly-redeemed account often opens the den before its room list
+    // populates. Don't auto-rejoin rooms the user deliberately left/was banned
+    // from; those only join via the manual button (retryKey > 0).
+    const autoJoinable = membership === 'invite' || membership == null;
+
     useEffect(() => {
-        if (membership !== 'invite') return;
+        if (isJoined) return;
+        if (!autoJoinable && retryKey === 0) return;
         let cancelled = false;
         setFailed(false);
 
@@ -82,31 +93,32 @@ export const RoomInviteAcceptGate: React.FC<{
         return () => {
             cancelled = true;
         };
-    }, [mx, roomId, membership, retryKey]);
+    }, [mx, roomId, isJoined, autoJoinable, retryKey]);
 
     const retry = useCallback(() => {
         setFailed(false);
         setRetryKey((n) => n + 1);
     }, []);
 
-    if (membership === 'invite') {
-        return (
-            <div style={centerStyle}>
-                {failed ? (
-                    <div>
-                        <p style={{ margin: 0 }}>Couldn’t join this den just yet.</p>
-                        <button type="button" style={buttonStyle} onClick={retry}>
-                            Join den
-                        </button>
-                    </div>
-                ) : (
-                    <p style={{ margin: 0, opacity: 0.9 }}>Joining the den…</p>
-                )}
-            </div>
-        );
+    if (isJoined) {
+        return <>{children}</>;
     }
 
-    return <>{children}</>;
+    const joining = (autoJoinable || retryKey > 0) && !failed;
+    return (
+        <div style={centerStyle}>
+            {joining ? (
+                <p style={{ margin: 0, opacity: 0.9 }}>Joining the den…</p>
+            ) : (
+                <div>
+                    <p style={{ margin: 0 }}>Couldn’t join this den just yet.</p>
+                    <button type="button" style={buttonStyle} onClick={retry}>
+                        Join den
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 };
 
 export default RoomInviteAcceptGate;
