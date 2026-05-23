@@ -196,3 +196,12 @@ export const redeemInvitation = (
         token,
         signal,
     );
+
+/**
+ * Fetch the BlackOut bot's Matrix user id. The creator's client invites this
+ * user into a den before creating a room-scoped invite link, so the server can
+ * force-join the bot and the bot can later admit redeemers.
+ */
+export const getBotUserId = (
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ userId: string }> => callJson('GET', '/v1/matrix/bot', undefined, token);

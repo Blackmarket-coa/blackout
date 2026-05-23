@@ -41,6 +41,7 @@ import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
 import obsWsPasswordRoutes from './routes/obsWsPasswords';
 import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
+import matrixRoutes from './routes/matrix';
 import coalitionRoutes from './routes/coalition';
 import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
@@ -116,6 +117,7 @@ if (legacyAliasEnabled) {
 for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
   app.route(`${root}/auth`, authRoutes);
   app.route(`${root}/invitations`, invitationRoutes);
+  app.route(`${root}/matrix`, matrixRoutes);
   app.route(`${root}/messages`, messageRoutes);
   app.route(`${root}/federation`, federationRoutes);
   app.route(`${root}/channels`, channelRoutes);

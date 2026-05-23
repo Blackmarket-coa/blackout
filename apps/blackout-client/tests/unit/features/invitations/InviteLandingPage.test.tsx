@@ -105,7 +105,7 @@ describe('InviteLandingPage', () => {
         }
     });
 
-    it('redeems, joins, and navigates a new user to full-page onboarding (no hang)', async () => {
+    it('redeems, joins, and navigates a new user to the Home tour handoff (no hang)', async () => {
         const space = '!space:server';
         previewInvitationMock.mockResolvedValue({
             valid: true,
@@ -122,7 +122,9 @@ describe('InviteLandingPage', () => {
         expect(ensureBlackoutApiTokenMock).toHaveBeenCalled();
         expect(redeemInvitationMock).toHaveBeenCalledWith('tok123', 'jwt', expect.anything());
         expect(assignMock).toHaveBeenCalledTimes(1);
-        expect(assignMock.mock.calls[0][0].startsWith('/onboarding/')).toBe(true);
+        const dest = assignMock.mock.calls[0][0] as string;
+        expect(dest.startsWith('/?')).toBe(true);
+        expect(new URLSearchParams(dest.slice(2)).get('invite_den')).toBe(space);
     });
 
     it('shows the specific reason for a business failure and does not navigate', async () => {

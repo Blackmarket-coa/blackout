@@ -1,6 +1,10 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+    INVITE_DEN_PARAM,
+    INVITE_CANOPY_PARAM,
+} from '../../components/invite-landing/postAcceptanceRoute';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
@@ -163,6 +167,35 @@ export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    // Invite handoff: a freshly-invited user lands on `/?invite_den=…` so the
+    // Home tour can run first. Kick off the tour, then route them into the den
+    // once it completes/dismisses (or immediately if the tour is off/done).
+    const inviteDen = searchParams.get(INVITE_DEN_PARAM);
+    const inviteCanopy = searchParams.get(INVITE_CANOPY_PARAM);
+    const tourStatus = homeTour.state.status;
+    const tourKickedRef = useRef(false);
+    useEffect(() => {
+        if (!inviteDen) return;
+        const goToDen = () =>
+            navigate(buildCommunitiesPath(inviteCanopy ?? null, inviteDen), { replace: true });
+        if (!tourEnabled) {
+            goToDen();
+            return;
+        }
+        if (tourStatus === 'completed' || tourStatus === 'dismissed') {
+            goToDen();
+            return;
+        }
+        if (tourStatus === 'idle' && !tourKickedRef.current) {
+            tourKickedRef.current = true;
+            trackOnboardingTourStarted(Date.now());
+            void homeTour.start();
+        }
+        // 'running' → wait; the effect re-runs when the status changes.
+    }, [inviteDen, inviteCanopy, tourEnabled, tourStatus, homeTour, navigate]);
 
     const items = useMemo(() => buildHomeFeed(rooms, Date.now()), [rooms]);
     const groups = useMemo(() => groupHomeFeedByBucket(items), [items]);

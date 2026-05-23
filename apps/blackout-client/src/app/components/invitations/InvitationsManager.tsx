@@ -33,9 +33,11 @@ import {
     CreateInvitationResponse,
     InvitationWithRedemptions,
     createInvitation,
+    getBotUserId,
     listMyInvitations,
     revokeInvitation,
 } from '../../features/invitations/invitationsClient';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 
 type InvitationsManagerProps = {
     /** Pre-fills the "scope to this room" field when invoked from a room. */
@@ -67,6 +69,7 @@ const linkRow: React.CSSProperties = {
 };
 
 export function InvitationsManager({ roomId, requestClose }: InvitationsManagerProps) {
+    const mx = useMatrixClient();
     const confirm = useConfirm();
     const [load, setLoad] = useState<LoadStatus>({ kind: 'loading' });
     const [create, setCreate] = useState<CreateStatus>({ kind: 'idle' });
@@ -99,10 +102,24 @@ export function InvitationsManager({ roomId, requestClose }: InvitationsManagerP
         const maxUsesRaw = Number(fd.get('maxUses'));
         const expiresInHoursRaw = Number(fd.get('expiresInHours'));
 
+        const targetRoom = scopeToRoom && roomId ? roomId : undefined;
+
         setCreate({ kind: 'submitting' });
         try {
+            // For a room-scoped link, invite the BlackOut bot into the den first.
+            // Only the creator (here) has the power to add the bot to a private
+            // room; the server then force-joins it so it can admit redeemers.
+            // Best-effort — the bot may already be a member/invited.
+            if (targetRoom) {
+                try {
+                    const { userId } = await getBotUserId();
+                    if (userId) await mx.invite(targetRoom, userId);
+                } catch {
+                    /* bot already in/invited, or invite raced; server force-join is the net */
+                }
+            }
             const response = await createInvitation({
-                matrixRoomId: scopeToRoom && roomId ? roomId : undefined,
+                matrixRoomId: targetRoom,
                 label,
                 maxUses: Number.isFinite(maxUsesRaw) && maxUsesRaw > 0 ? maxUsesRaw : 1,
                 expiresInHours:
