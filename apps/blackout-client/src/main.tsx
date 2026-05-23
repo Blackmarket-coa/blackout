@@ -42,6 +42,8 @@ import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
+import { OnboardingPage } from './app/features/welcome/OnboardingPage';
+import { ONBOARDING_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -195,6 +197,10 @@ const buildAppRouter = (capabilityContext: {
         // logged-out case is intercepted in BootstrapStatus before this
         // router ever mounts (see below).
         { path: '/invite/:token', element: <InviteLandingPage /> },
+        // Full-page onboarding host. Invite acceptance routes brand-new users
+        // here (with the invited room as `?room=`) before dropping them into
+        // the room; otherwise the wizard only ever shows as a ClientLayout modal.
+        { path: ONBOARDING_PATH, element: <OnboardingPage /> },
         ...authRedirectRoutes,
         ...registryRoutes,
     ];

@@ -37,7 +37,7 @@ export interface OnboardingContent {
 
 export const WELCOME_EVENT_TYPE = 'co.bmc.welcome';
 export const ONBOARDING_EVENT_TYPE = 'co.bmc.onboarding';
-const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
+export const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
 
 const defaultWelcome = (spaceName: string): WelcomeContent => ({
     title: `Welcome to ${spaceName}!`,
