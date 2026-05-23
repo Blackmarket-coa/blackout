@@ -175,12 +175,24 @@ export const redeemInvitation = async (
   let matrixInvite: { ok: boolean } | undefined;
   let canopyId: string | undefined;
   if (updated.matrixRoomId) {
-    const result = await matrixClient.inviteToRoom(
-      updated.matrixRoomId,
-      matrixUserIdFor(redeemer.username),
-      'Invitation link redeemed',
-    );
-    matrixInvite = { ok: result.ok };
+    const matrixUserId = matrixUserIdFor(redeemer.username);
+
+    // Force-join via the Synapse admin API first: this works even for
+    // member-created dens where the bot has no membership/invite power (a
+    // plain invite would 403, stranding the redeemer at "not in room"). Fall
+    // back to a bot invite only if the admin join fails (e.g. the bot IS a
+    // room member but admin join is unavailable).
+    const join = await matrixClient.adminJoinUserToRoom(updated.matrixRoomId, matrixUserId);
+    if (join.ok) {
+      matrixInvite = { ok: true };
+    } else {
+      const invite = await matrixClient.inviteToRoom(
+        updated.matrixRoomId,
+        matrixUserId,
+        'Invitation link redeemed',
+      );
+      matrixInvite = { ok: invite.ok };
+    }
 
     // Best-effort: resolve the invited room's canopy so the client can route
     // the recipient straight into onboarding. A failure here just means the

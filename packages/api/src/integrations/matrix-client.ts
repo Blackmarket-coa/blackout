@@ -187,10 +187,52 @@ export const matrixClient = {
   },
 
   /**
-   * Resolve the parent space (canopy) of a room using the bot token, so the
-   * invite-redemption flow can tell the client which canopy to onboard the
-   * recipient into without waiting for their own Matrix sync to populate the
-   * space hierarchy. Reads the room's full state and returns:
+   * Force-join a local user into a room via the Synapse admin API
+   * (`POST /_synapse/admin/v1/join/{roomId}`). Unlike `inviteToRoom`, this
+   * does NOT require the bot to be a member of the room — it leverages the
+   * admin token's elevated powers (Synapse authorizes the join off a local
+   * member already able to invite the target). This is what makes redemption
+   * reliable for *member-created* dens, where the bot has no membership or
+   * invite power and a plain `inviteToRoom` would 403.
+   *
+   * The redeemer is joined directly (not merely invited), so they can post
+   * the instant their client syncs the room — no invite-accept round-trip.
+   */
+  async adminJoinUserToRoom(roomId: string, userId: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    return { ok: response.ok, status: response.status };
+  },
+
+  /**
+   * Resolve the parent space (canopy) of a room so the invite-redemption flow
+   * can tell the client which canopy to onboard the recipient into without
+   * waiting for their own Matrix sync to populate the space hierarchy.
+   *
+   * Uses the Synapse *admin* state endpoint
+   * (`GET /_synapse/admin/v1/rooms/{roomId}/state`) rather than the client
+   * `/state` route, because the bot is typically NOT a member of a
+   * member-created den — the client route would 403, leaving the canopy
+   * unresolved and onboarding skipped. Returns:
    *   - the room id itself if it IS a space (`m.room.create` `type: m.space`);
    *   - else the first `m.space.parent` whose `content.via` is non-empty
    *     (canonical parent per MSC1772);
@@ -205,7 +247,7 @@ export const matrixClient = {
     let response: Response;
     try {
       response = await fetch(
-        `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`,
+        `${hs}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/state`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
     } catch (error) {
@@ -214,11 +256,14 @@ export const matrixClient = {
     if (!response.ok) {
       return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const };
     }
-    const state = (await response.json()) as Array<{
-      type: string;
-      state_key?: string;
-      content?: Record<string, unknown>;
-    }>;
+    const body = (await response.json()) as {
+      state?: Array<{
+        type: string;
+        state_key?: string;
+        content?: Record<string, unknown>;
+      }>;
+    };
+    const state = body.state;
     if (!Array.isArray(state)) {
       return { ok: true as const, canopyId: undefined };
     }

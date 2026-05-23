@@ -643,6 +643,7 @@ export const ClientLayout = () => {
                         ) : null}
                     </header>
 
+                    <RoomInviteAcceptGate roomId={selectedRoomId}>
                     <section
                         style={{
                             border: '1px solid var(--border-default)',
@@ -652,7 +653,6 @@ export const ClientLayout = () => {
                             overflow: 'hidden',
                         }}
                     >
-                        <RoomInviteAcceptGate roomId={selectedRoomId}>
                         {coalitionEnabled &&
                         coalitionDenState.enabled &&
                         roomSurface === 'coalition' ? (
@@ -686,7 +686,6 @@ export const ClientLayout = () => {
                                 }}
                             />
                         )}
-                        </RoomInviteAcceptGate>
                     </section>
 
                     {deadDrop.data.enabled ? (
@@ -696,6 +695,7 @@ export const ClientLayout = () => {
                     )}
 
                     <DeadDropSettings roomId={selectedRoomId} />
+                    </RoomInviteAcceptGate>
                 </div>
             );
         }
