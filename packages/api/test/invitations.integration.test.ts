@@ -1001,3 +1001,62 @@ test('POST /v1/invitations/redeem omits canopyId for a global (account-only) inv
   assert.equal(body.ok, true);
   assert.equal(body.canopyId, undefined, 'a global invite has no room and thus no canopy');
 });
+
+// --- Bot identity + bot-in-den on invite-link creation ---------------------
+
+test('GET /v1/matrix/bot returns the bot user id for an authed caller', async () => {
+  resetFetchHandler();
+  const user = seedUser();
+  const res = await app.request('/v1/matrix/bot', {
+    method: 'GET',
+    headers: bearer(user.id, user.username),
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { userId?: string };
+  assert.ok(typeof body.userId === 'string' && body.userId.startsWith('@'), 'expected an @mxid');
+});
+
+test('GET /v1/matrix/bot requires authentication', async () => {
+  resetFetchHandler();
+  const res = await app.request('/v1/matrix/bot', { method: 'GET' });
+  assert.equal(res.status, 401);
+});
+
+test('POST /v1/invitations force-joins the bot into a room-scoped den', async () => {
+  resetFetchHandler();
+  const roomId = '!den-bot:server';
+  const inviter = seedUser();
+
+  fetchCalls.length = 0;
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  assert.equal(create.status, 201);
+
+  // The bot is force-joined into the den at link-creation time so it can
+  // admit redeemers later.
+  const botJoin = fetchCalls.find(
+    (c) =>
+      c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) &&
+      c.init?.method === 'POST',
+  );
+  assert.ok(botJoin, 'expected a Synapse admin join for the bot at invite creation');
+});
+
+test('POST /v1/invitations does NOT force-join the bot for a global invite', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+
+  fetchCalls.length = 0;
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  assert.equal(create.status, 201);
+
+  const anyJoin = fetchCalls.find((c) => c.url.includes('/_synapse/admin/v1/join/'));
+  assert.equal(anyJoin, undefined, 'a global invite has no room, so no bot join');
+});

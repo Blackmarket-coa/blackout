@@ -19,11 +19,18 @@ vi.mock('focus-trap-react', () => ({
 const listMyInvitationsMock = vi.fn();
 const createInvitationMock = vi.fn();
 const revokeInvitationMock = vi.fn();
+const getBotUserIdMock = vi.fn().mockResolvedValue({ userId: '@blackout:server' });
+const inviteMock = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../../../src/app/features/invitations/invitationsClient', () => ({
     listMyInvitations: (...args: unknown[]) => listMyInvitationsMock(...args),
     createInvitation: (...args: unknown[]) => createInvitationMock(...args),
     revokeInvitation: (...args: unknown[]) => revokeInvitationMock(...args),
+    getBotUserId: (...args: unknown[]) => getBotUserIdMock(...args),
+}));
+
+vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
+    useMatrixClient: () => ({ invite: (...args: unknown[]) => inviteMock(...args) }),
 }));
 
 vi.mock('../../../../src/app/components/confirm-dialog/useConfirm', () => ({

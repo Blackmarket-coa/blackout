@@ -232,7 +232,10 @@ export const defaultFeatureFlags: FeatureFlags = {
     communities: true,
     plugins: true,
     shellAppShell: true,
-    discoveryHomeFeed: false,
+    // HomeFeed is the default `/` surface so the home tour (gated by
+    // onboardingHomeTour below) has a place to run — invited users land here
+    // for the tour before being routed into their den.
+    discoveryHomeFeed: true,
     topics: false,
     marketTab: false,
     productsAttachments: false,
@@ -248,7 +251,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
     onboardingDeveloperStep: false,
-    onboardingHomeTour: false,
+    // On by default: new (incl. invited) users get the Home tour. Env
+    // `BLACKOUT_ONBOARDING_HOME_TOUR=false` can still disable it.
+    onboardingHomeTour: true,
     creatorsDashboard: false,
     federationSelfHost: false,
 };

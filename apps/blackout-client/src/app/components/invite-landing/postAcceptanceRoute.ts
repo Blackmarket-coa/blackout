@@ -1,26 +1,26 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { RoomToParents } from '../../../types/matrix/room';
 import { getOrphanParents, guessPerfectParent } from '../../utils/room';
-import { getOnboardingPath } from '../../pages/pathUtils';
 import { buildCommunitiesPath } from '../../pages/paths';
-import { ONBOARDING_ACCOUNT_DATA_KEY } from '../../features/welcome/useWelcome';
+import { HOME_TOUR_ACCOUNT_DATA_KEY } from '../../features/onboarding/homeTourState';
+
+/** Query params on `/` that tell HomeFeed to run the tour, then open this den. */
+export const INVITE_DEN_PARAM = 'invite_den';
+export const INVITE_CANOPY_PARAM = 'invite_canopy';
 
 /**
- * Read the per-space onboarding-completion flag the wizard writes
- * (`useOnboardingCompletion` in features/welcome/useWelcome.ts). Done off the
- * client directly rather than via the hook because the space id is only known
- * after the room join, and hooks can't take a runtime argument here.
+ * Whether the user has already been through (or dismissed) the Home tour —
+ * read straight off `co.bmc.onboarding.home_tour.v1` account data. Returning
+ * users skip the tour and go straight into the den.
  */
-export const isOnboardingComplete = (mx: MatrixClient, spaceId: string): boolean => {
-    // The completion key is a custom (`co.bmc.*`) account-data type not in the
-    // SDK's typed union; cast as `useOnboardingCompletion` does.
+export const isHomeTourComplete = (mx: MatrixClient): boolean => {
     const accountDataClient = mx as unknown as {
         getAccountData: (type: string) => { getContent: () => unknown } | undefined;
     };
-    const content = accountDataClient.getAccountData(ONBOARDING_ACCOUNT_DATA_KEY)?.getContent() as
-        | { spaces?: Record<string, boolean> }
-        | undefined;
-    return content?.spaces?.[spaceId] === true;
+    const content = accountDataClient
+        .getAccountData(HOME_TOUR_ACCOUNT_DATA_KEY)
+        ?.getContent() as { status?: string } | undefined;
+    return content?.status === 'completed' || content?.status === 'dismissed';
 };
 
 /**
@@ -59,10 +59,10 @@ export const buildRoomPath = (
 
 /**
  * Decide where to send a user right after they accept an invite and join the
- * room. Brand-new users (no onboarding-completion flag for the invited room's
- * space) are sent to the full-page onboarding, carrying the room as `?room=` so
- * onboarding can drop them into it on completion. Returning users — and account
- * -only invites with no room — go straight to the room (or home).
+ * room. Brand-new users (who haven't completed the Home tour) are sent to Home
+ * (`/`) carrying the invited den + canopy as query params, so HomeFeed can run
+ * the tour and then drop them into the den. Returning users — and account-only
+ * invites with no room — go straight to the room (or home).
  *
  * Pure + navigation-agnostic so it works both inside the router
  * (InviteLandingPage) and outside it (the post-login PendingInviteRedeemer),
@@ -76,16 +76,14 @@ export const resolvePostAcceptancePath = (
 ): string => {
     if (!matrixRoomId) return '/';
 
-    // Prefer the server-resolved canopy (from the redeem response): a
-    // brand-new user's local `roomToParents` isn't synced yet, so local
-    // resolution would miss the canopy and skip onboarding.
-    const isSpace = mx.getRoom(matrixRoomId)?.isSpaceRoom() === true;
-    const spaceId =
-        options.canopyId ??
-        (isSpace ? matrixRoomId : resolveParentSpace(mx, roomToParents, matrixRoomId));
-
-    if (!options.skipOnboarding && spaceId && !isOnboardingComplete(mx, spaceId)) {
-        return `${getOnboardingPath(spaceId)}?room=${encodeURIComponent(matrixRoomId)}`;
+    // Brand-new users go through the Home tour first, then into the den. We
+    // hand the den (and the server-resolved canopy) to HomeFeed via query
+    // params; it navigates onward once the tour ends.
+    if (!options.skipOnboarding && !isHomeTourComplete(mx)) {
+        const params = new URLSearchParams();
+        params.set(INVITE_DEN_PARAM, matrixRoomId);
+        if (options.canopyId) params.set(INVITE_CANOPY_PARAM, options.canopyId);
+        return `/?${params.toString()}`;
     }
 
     return buildRoomPath(mx, roomToParents, matrixRoomId);

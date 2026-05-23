@@ -87,6 +87,28 @@ export const createInvitation = async (
           ? new Date(mint.expiresAtMs).toISOString()
           : undefined,
     });
+    // For a room-scoped invite, ensure the bot is a member of the den so it
+    // can admit redeemers later. The creator's client invites the bot before
+    // calling this endpoint (only the creator has the power to); here we
+    // force-join the bot — valid now that it holds that invite. Without this,
+    // the bot has no presence in a private member-created den and redemption
+    // can't admit anyone. Best-effort: a failure just means redemption falls
+    // back to its own admit attempt.
+    if (record.matrixRoomId) {
+      const botUserId = await matrixClient.botUserId();
+      if (botUserId) {
+        const joined = await matrixClient.adminJoinUserToRoom(record.matrixRoomId, botUserId);
+        if (!joined.ok) {
+          log.warn('invite.create.bot_join_failed', {
+            roomId: record.matrixRoomId,
+            botUserId,
+            status: 'status' in joined ? joined.status : undefined,
+            reason: 'reason' in joined ? joined.reason : undefined,
+            detail: 'detail' in joined ? joined.detail : undefined,
+          });
+        }
+      }
+    }
     return { kind: 'ok', token, record, synapseRegistrationToken: mint.token };
   } catch (err) {
     // Local persistence failed after a successful mint. Best-effort

@@ -11,7 +11,8 @@ export interface HomeTourState {
     updatedAt: number;
 }
 
-const ACCOUNT_DATA_KEY = 'co.bmc.onboarding.home_tour.v1';
+export const HOME_TOUR_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.home_tour.v1';
+const ACCOUNT_DATA_KEY = HOME_TOUR_ACCOUNT_DATA_KEY;
 const LOCAL_STORAGE_KEY = 'co.bmc.onboarding.home_tour.local.v1';
 
 const buildDefaultState = (): HomeTourState => ({

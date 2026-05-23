@@ -4,7 +4,32 @@ const botToken = () => process.env.MATRIX_BOT_TOKEN;
 const homeserverDomain = () =>
   (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
 
+// Cache the bot's resolved MXID across calls — `whoami` is a network round-trip
+// and the identity never changes for a given token.
+let botUserIdCache: string | undefined;
+
 export const matrixClient = {
+  /**
+   * Resolve the bot account's own Matrix user id (`@blackout:domain`) by
+   * calling `whoami` with the bot token, cached for the process lifetime.
+   * Exposed so the client can invite the bot into a den (the only actor with
+   * power to do so) before the server force-joins it. Falls back to deriving
+   * `@${MATRIX_BOT_LOCALPART|blackout}:${domain}` if whoami is unavailable.
+   */
+  async botUserId(): Promise<string | undefined> {
+    if (botUserIdCache) return botUserIdCache;
+    const token = botToken();
+    const hs = homeserver();
+    if (!hs || !token) return undefined;
+    const who = await matrixClient.whoami(token);
+    if (who.ok && who.userId) {
+      botUserIdCache = who.userId;
+      return botUserIdCache;
+    }
+    const localpart = (process.env.MATRIX_BOT_LOCALPART ?? 'blackout').replace(/^@+/, '');
+    botUserIdCache = `@${localpart}:${homeserverDomain()}`;
+    return botUserIdCache;
+  },
   async registerUser(username: string, password: string) {
     const hs = homeserver();
     const token = botToken();
