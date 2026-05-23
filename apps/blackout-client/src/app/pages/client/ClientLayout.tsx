@@ -748,7 +748,8 @@ export const ClientLayout = () => {
     return (
         <section
             style={{
-                height: '100vh',
+                height: '100%',
+                minHeight: 0,
                 width: '100%',
                 display: 'grid',
                 gridTemplateColumns: desktop
@@ -898,7 +899,7 @@ export const ClientLayout = () => {
                         display: mobile && selectedRoomId ? 'none' : 'flex',
                         flexDirection: 'column',
                         minHeight: 0,
-                        height: '100vh',
+                        height: '100%',
                     }}
                 >
                     <header
@@ -1258,7 +1259,8 @@ export const ClientLayout = () => {
                     minWidth: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    height: '100vh',
+                    height: '100%',
+                    minHeight: 0,
                     overflow: 'hidden',
                 }}
             >
@@ -1381,7 +1383,8 @@ export const ClientLayout = () => {
                         flex: 1,
                         minHeight: 0,
                         overflowY: 'auto',
-                        paddingTop: 44,
+                        order: mobile ? 1 : 0,
+                        paddingTop: mobile ? 0 : 44,
                     }}
                 >
                     {renderRoomContent()}
@@ -1616,21 +1619,35 @@ export const ClientLayout = () => {
                 ) : null}
 
                 <div
-                    style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        justifyContent: 'flex-end',
-                        alignItems: 'center',
-                        gap: 6,
-                        maxWidth: 'calc(100% - 16px)',
-                        zIndex: 4,
-                        background: 'var(--bg-surface)',
-                        padding: 4,
-                        borderRadius: 10,
-                    }}
+                    style={
+                        mobile
+                            ? {
+                                  display: 'flex',
+                                  flexWrap: 'nowrap',
+                                  overflowX: 'auto',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  width: '100%',
+                                  background: 'var(--bg-surface)',
+                                  padding: 8,
+                                  borderBottom: '1px solid var(--border-default)',
+                              }
+                            : {
+                                  position: 'absolute',
+                                  top: 8,
+                                  right: 8,
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  justifyContent: 'flex-end',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  maxWidth: 'calc(100% - 16px)',
+                                  zIndex: 4,
+                                  background: 'var(--bg-surface)',
+                                  padding: 4,
+                                  borderRadius: 10,
+                              }
+                    }
                 >
                     {canOpenModerationDashboard ? (
                         inRouterContext ? (
