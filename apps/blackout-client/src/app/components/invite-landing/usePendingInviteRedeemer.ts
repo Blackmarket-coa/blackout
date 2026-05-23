@@ -1,8 +1,12 @@
 import type React from 'react';
 import { useEffect } from 'react';
 import { useAtomValue } from 'jotai';
-import { authStateAtom } from '../../state/auth';
+import { authStateAtom, matrixClientAtom } from '../../state/auth';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { mDirectAtom } from '../../state/mDirectList';
 import { redeemInvitation } from '../../features/invitations/invitationsClient';
+import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
+import { resolvePostAcceptancePath } from './postAcceptanceRoute';
 import { PENDING_INVITE_STORAGE_KEY } from './InviteLandingPage';
 
 /**
@@ -20,6 +24,9 @@ import { PENDING_INVITE_STORAGE_KEY } from './InviteLandingPage';
  */
 export const usePendingInviteRedeemer = (): void => {
     const authState = useAtomValue(authStateAtom);
+    const mx = useAtomValue(matrixClientAtom);
+    const roomToParents = useAtomValue(roomToParentsAtom);
+    const mDirects = useAtomValue(mDirectAtom);
 
     useEffect(() => {
         if (authState !== 'logged_in') return;
@@ -41,10 +48,36 @@ export const usePendingInviteRedeemer = (): void => {
             // worth attempting.
         }
 
-        void redeemInvitation(token).catch(() => {
+        const presentedToken = token;
+        void (async () => {
+            // Wait for the Blackout API JWT so the redeem isn't sent
+            // unauthenticated (it races the fire-and-forget token exchange).
+            const apiToken = await ensureBlackoutApiToken();
+            const data = await redeemInvitation(presentedToken, apiToken);
+            if (!data.ok) return;
+
+            // Brand-new users land here straight after sign-up: join the
+            // invited room, then route through full-page onboarding (or into
+            // the room if onboarding was already completed for that space).
+            // This hook lives outside the router, so navigate via location.
+            if (data.matrixRoomId && mx) {
+                try {
+                    await mx.joinRoom(data.matrixRoomId);
+                } catch {
+                    // already-joined / transient; the server invite stands.
+                }
+                const dest = resolvePostAcceptancePath(
+                    mx,
+                    roomToParents,
+                    mDirects,
+                    data.matrixRoomId,
+                );
+                window.location.assign(dest);
+            }
+        })().catch(() => {
             // Swallow: see docblock. The backend logs the failure if needed.
         });
-    }, [authState]);
+    }, [authState, mx, roomToParents, mDirects]);
 };
 
 /**
