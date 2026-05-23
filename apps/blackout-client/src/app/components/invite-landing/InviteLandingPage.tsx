@@ -1,12 +1,36 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { authStateAtom } from '../../state/auth';
+import { authStateAtom, matrixClientAtom } from '../../state/auth';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { mDirectAtom } from '../../state/mDirectList';
 import {
     InvitationPreviewResponse,
     InvitationRedeemResponse,
     previewInvitation,
     redeemInvitation,
 } from '../../features/invitations/invitationsClient';
+import { ensureBlackoutApiToken } from '../../../client/blackoutApiSession';
+import { resolvePostAcceptancePath } from './postAcceptanceRoute';
+
+/**
+ * Cap how long the page will sit on a single network step before giving up and
+ * offering a retry. Without this, a request that never settles (e.g. a
+ * service-worker / same-origin host that holds the connection) leaves the user
+ * staring at "Accepting your invitation…" forever.
+ */
+const STEP_TIMEOUT_MS = 15_000;
+
+/** Reject after `ms`, aborting the paired controller so the fetch is cancelled. */
+const withTimeout = <T,>(promise: Promise<T>, ms: number, controller: AbortController): Promise<T> =>
+    Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+            window.setTimeout(() => {
+                controller.abort();
+                reject(new Error('timed_out'));
+            }, ms);
+        }),
+    ]);
 
 /**
  * Storage key the post-login redeemer hook looks for. Kept here so the
@@ -123,8 +147,35 @@ type Phase = LoadingState | PreviewState | RedeemingState | RedeemedState | Erro
 
 export const InviteLandingPage: React.FC = () => {
     const authState = useAtomValue(authStateAtom);
+    const mx = useAtomValue(matrixClientAtom);
+    const roomToParents = useAtomValue(roomToParentsAtom);
+    const mDirects = useAtomValue(mDirectAtom);
     const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+    // Drives the redeem effect. Kept separate from `phase` on purpose: if the
+    // redeem effect depended on a phase-derived flag, moving to 'redeeming'
+    // would flip that flag, re-run the effect, and its cleanup would abort the
+    // very redeem it just started — stranding the page on "Accepting…".
+    const [previewOk, setPreviewOk] = useState(false);
+    // Bumped by the "Try again" button to re-run preview → redeem after a
+    // timeout or transient failure, without forcing a full page reload.
+    const [attempt, setAttempt] = useState(0);
     const token = tokenFromPath();
+
+    // Read the latest Matrix/space state at use-time without making them effect
+    // dependencies — otherwise a routine sync update mid-redeem would re-run the
+    // effect and abort the in-flight request.
+    const mxRef = useRef(mx);
+    mxRef.current = mx;
+    const roomToParentsRef = useRef(roomToParents);
+    roomToParentsRef.current = roomToParents;
+    const mDirectsRef = useRef(mDirects);
+    mDirectsRef.current = mDirects;
+
+    const retry = useCallback(() => {
+        setPreviewOk(false);
+        setPhase({ kind: 'loading' });
+        setAttempt((n) => n + 1);
+    }, []);
 
     // Step 0: capture the Synapse registration token from the URL
     // fragment (if any) BEFORE the preview fires. Done once on mount —
@@ -143,47 +194,104 @@ export const InviteLandingPage: React.FC = () => {
             return;
         }
         let cancelled = false;
-        previewInvitation(token)
+        const controller = new AbortController();
+        withTimeout(previewInvitation(token, controller.signal), STEP_TIMEOUT_MS, controller)
             .then((data) => {
-                if (!cancelled) setPhase({ kind: 'preview', data });
+                if (cancelled) return;
+                setPhase({ kind: 'preview', data });
+                setPreviewOk(data.valid === true);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
+                const timedOut = err instanceof Error && err.message === 'timed_out';
                 setPhase({
                     kind: 'error',
-                    message: err instanceof Error ? err.message : 'Could not load this invitation.',
+                    message: timedOut
+                        ? 'This is taking longer than expected. Check your connection and try again.'
+                        : err instanceof Error
+                          ? err.message
+                          : 'Could not load this invitation.',
                 });
             });
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [token]);
+    }, [token, attempt]);
 
     // Step 2: once the preview comes back valid AND the user is logged in,
     // auto-redeem. The bare-minimum "logged out" flow stashes the token and
     // sends the user to register/login; redemption happens after sign-in via
     // the PendingInviteRedeemer hook.
-    const isPreviewValid =
-        phase.kind === 'preview' && phase.data.valid === true;
     useEffect(() => {
-        if (!token || authState !== 'logged_in' || !isPreviewValid) return;
+        if (!token || authState !== 'logged_in' || !previewOk) return;
         let cancelled = false;
-        setPhase({ kind: 'redeeming' });
-        redeemInvitation(token)
-            .then((data) => {
-                if (!cancelled) setPhase({ kind: 'redeemed', data });
-            })
-            .catch((err: unknown) => {
-                if (cancelled) return;
-                setPhase({
-                    kind: 'error',
-                    message: err instanceof Error ? err.message : 'Could not redeem this invitation.',
-                });
+        const controller = new AbortController();
+
+        const run = async () => {
+            setPhase({ kind: 'redeeming' });
+            // Wait for the Blackout API JWT before redeeming. Without this the
+            // redeem races the fire-and-forget token exchange and goes out
+            // unauthenticated, 401-ing on a freshly-loaded session.
+            const apiToken = await ensureBlackoutApiToken();
+            if (cancelled) return;
+
+            const data = await withTimeout(
+                redeemInvitation(token, apiToken, controller.signal),
+                STEP_TIMEOUT_MS,
+                controller,
+            );
+            if (cancelled) return;
+            setPhase({ kind: 'redeemed', data });
+
+            if (!data.ok) return;
+
+            const client = mxRef.current;
+
+            // Join the room (best-effort, bounded) then route: brand-new users
+            // go through full-page onboarding, returning users straight in.
+            if (data.matrixRoomId && client) {
+                try {
+                    await withTimeout(
+                        Promise.resolve(client.joinRoom(data.matrixRoomId)),
+                        STEP_TIMEOUT_MS,
+                        controller,
+                    );
+                } catch {
+                    // Join can fail (already-joined, server hiccup); the
+                    // server already sent a Matrix invite, so still navigate.
+                }
+            }
+            if (cancelled) return;
+            const dest = client
+                ? resolvePostAcceptancePath(
+                      client,
+                      roomToParentsRef.current,
+                      mDirectsRef.current,
+                      data.matrixRoomId,
+                  )
+                : '/';
+            window.location.assign(dest);
+        };
+
+        run().catch((err: unknown) => {
+            if (cancelled) return;
+            const timedOut = err instanceof Error && err.message === 'timed_out';
+            setPhase({
+                kind: 'error',
+                message: timedOut
+                    ? 'Accepting your invitation timed out. Check your connection and try again.'
+                    : err instanceof Error
+                      ? err.message
+                      : 'Could not redeem this invitation.',
             });
+        });
+
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [token, authState, isPreviewValid]);
+    }, [token, authState, previewOk, attempt]);
 
     const stashAndNavigate = useCallback(
         (path: '/register' | '/login') => {
@@ -202,7 +310,9 @@ export const InviteLandingPage: React.FC = () => {
 
     return (
         <main data-shell="invite-landing" style={pageStyle}>
-            <section style={cardStyle}>{renderBody(phase, authState, stashAndNavigate)}</section>
+            <section style={cardStyle}>
+                {renderBody(phase, authState, stashAndNavigate, retry)}
+            </section>
         </main>
     );
 };
@@ -211,6 +321,7 @@ const renderBody = (
     phase: Phase,
     authState: string,
     stashAndNavigate: (path: '/register' | '/login') => void,
+    retry: () => void,
 ): React.ReactNode => {
     if (phase.kind === 'loading') {
         return (
@@ -226,9 +337,14 @@ const renderBody = (
             <>
                 <h1 style={{ margin: 0, fontSize: 20 }}>Something went wrong</h1>
                 <p style={{ margin: 0, opacity: 0.9 }}>{phase.message}</p>
-                <a href="/" style={linkStyle}>
-                    Go to home
-                </a>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" onClick={retry} style={buttonStyle}>
+                        Try again
+                    </button>
+                    <a href="/" style={linkStyle}>
+                        Go to home
+                    </a>
+                </div>
             </>
         );
     }
