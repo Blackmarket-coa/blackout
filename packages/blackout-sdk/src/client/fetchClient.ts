@@ -76,6 +76,7 @@ export const createFetchApiClient = ({
             'HTTP_REQUEST_FAILED',
             `Request failed (${response.status}) for ${path}`,
             retryable ? 'retryable' : 'fatal',
+            response.status,
         );
     };
 

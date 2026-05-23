@@ -1,5 +1,5 @@
 import { createFetchApiClient } from '@blackout/sdk';
-import { API_BASE_URL } from '../app/sdk/client';
+import { API_BASE_URL } from '../app/sdk/apiBaseUrl';
 import { restoreActiveSession, type StoredSession } from './sessionManager';
 import { readBlackoutApiToken } from '../app/features/monetization/marketplace/useMarketplaceAuth';
 
