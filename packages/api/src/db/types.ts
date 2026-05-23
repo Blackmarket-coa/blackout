@@ -399,6 +399,25 @@ export interface MessageRecord {
   createdAt: string;
 }
 
+export type ScheduledMessageStatus = 'pending' | 'delivered' | 'failed' | 'cancelled';
+
+export interface ScheduledMessageRecord {
+  id: UUID;
+  /** Blackout user id of the author (resolved from the authenticated session). */
+  userId: UUID;
+  matrixRoomId: string;
+  body: string;
+  formattedBody?: string;
+  /** ISO timestamp the message becomes due for delivery. */
+  deliverAt: string;
+  status: ScheduledMessageStatus;
+  /** Number of delivery attempts the dispatcher has made. */
+  attempts: number;
+  lastError?: string;
+  createdAt: string;
+  deliveredAt?: string;
+}
+
 export interface VoteRecord {
   id: UUID;
   communityId: UUID;

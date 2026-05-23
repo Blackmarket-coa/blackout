@@ -19,7 +19,7 @@ import {
     createEditor,
 } from 'slate';
 import { withHistory } from 'slate-history';
-import { Editable, ReactEditor, Slate, withReact } from 'slate-react';
+import { Editable, ReactEditor, Slate, useSlate, withReact } from 'slate-react';
 import { useAtom } from 'jotai';
 import { useLegacyRoomMembersAdapter as useRoomMembers } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useNavigationSpaceTree } from '../../plugins/navigation';
@@ -34,8 +34,47 @@ import { uploadMedia } from '../media/utils/matrixMedia';
 import { HideMessageDialog } from '../steganography';
 import { useDismissOnOutsideOrEscape } from './useDismissOnOutsideOrEscape';
 import { useAttachPhoto } from './attachments/useAttachPhoto';
+import { resetEditor } from '../../components/editor/utils';
+import { emojis } from '../../plugins/emoji';
+import { EmojiPicker } from './EmojiPicker';
+import { createScheduledMessage } from './scheduledMessagesClient';
 
 const MAX_SUGGESTIONS = 8;
+const MAX_MESSAGE_LENGTH = 8000;
+const DRAFT_STORAGE_PREFIX = 'blackout.draft.';
+
+const loadDraft = (roomId: string): string => {
+    try {
+        return window.localStorage.getItem(`${DRAFT_STORAGE_PREFIX}${roomId}`) ?? '';
+    } catch {
+        return '';
+    }
+};
+
+const saveDraft = (roomId: string, text: string): void => {
+    try {
+        if (text) {
+            window.localStorage.setItem(`${DRAFT_STORAGE_PREFIX}${roomId}`, text);
+        } else {
+            window.localStorage.removeItem(`${DRAFT_STORAGE_PREFIX}${roomId}`);
+        }
+    } catch {
+        // localStorage may be unavailable (private mode); drafts are best-effort.
+    }
+};
+
+// Full emojibase shortcode → unicode lookup, replacing the old 8-entry list.
+const EMOJI_BY_SHORTCODE = new Map<string, string>();
+for (const entry of emojis) {
+    const codes = Array.isArray(entry.shortcodes)
+        ? entry.shortcodes
+        : entry.shortcode
+        ? [entry.shortcode]
+        : [];
+    for (const code of codes) {
+        if (!EMOJI_BY_SHORTCODE.has(code)) EMOJI_BY_SHORTCODE.set(code, entry.unicode);
+    }
+}
 
 type MentionKind = 'user' | 'room' | 'emoji';
 
@@ -87,26 +126,7 @@ interface CommandPreset {
     template: string;
 }
 
-interface ScheduledComposerMessage {
-    roomId: string;
-    body: string;
-    formattedBody: string;
-    deliverAt: string;
-    createdAt: string;
-}
-
 const initialValue: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }];
-
-const EMOJI: Array<{ shortcode: string; emoji: string }> = [
-    { shortcode: 'smile', emoji: '😄' },
-    { shortcode: 'thumbsup', emoji: '👍' },
-    { shortcode: 'heart', emoji: '❤️' },
-    { shortcode: 'fire', emoji: '🔥' },
-    { shortcode: 'tada', emoji: '🎉' },
-    { shortcode: 'wave', emoji: '👋' },
-    { shortcode: 'thinking', emoji: '🤔' },
-    { shortcode: 'eyes', emoji: '👀' },
-];
 
 const COMMAND_PRESETS: CommandPreset[] = [
     { id: 'shrug', label: '/shrug', template: '/shrug' },
@@ -119,13 +139,6 @@ const executeCommandTemplate = (command: CommandPreset, body: string): string =>
     if (command.id === 'tableflip') return `${body}\n(╯°□°）╯︵ ┻━┻`.trim();
     if (command.id === 'topic') return `Topic update request: ${body}`.trim();
     return `${command.template}\n${body}`.trim();
-};
-
-const enqueueScheduledMessage = (message: ScheduledComposerMessage): void => {
-    const key = 'blackout.scheduled_messages';
-    const existing = window.localStorage.getItem(key);
-    const current = existing ? (JSON.parse(existing) as ScheduledComposerMessage[]) : [];
-    window.localStorage.setItem(key, JSON.stringify([...current, message]));
 };
 
 const fuzzyMatch = (term: string, query: string): boolean => {
@@ -166,10 +179,14 @@ const toHtml = (value: CustomElement[]): string => {
         .map((element) => {
             if (element.type === 'mention') {
                 if (element.mentionKind === 'user') {
-                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">${escapeHtml(element.label)}</a>`;
+                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">${escapeHtml(
+                        element.label
+                    )}</a>`;
                 }
                 if (element.mentionKind === 'room') {
-                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">#${escapeHtml(element.label)}</a>`;
+                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">#${escapeHtml(
+                        element.label
+                    )}</a>`;
                 }
                 return escapeHtml(element.label);
             }
@@ -199,8 +216,8 @@ const withMarkdown = (editor: Editor): Editor => {
         const [blockEntry] = Editor.nodes(editor, {
             match: (n) =>
                 SlateElement.isElement(n) &&
-                (((n as { type?: string }).type === 'paragraph') ||
-                    ((n as { type?: string }).type === 'code_block')),
+                ((n as { type?: string }).type === 'paragraph' ||
+                    (n as { type?: string }).type === 'code_block'),
         });
 
         if (!blockEntry) return;
@@ -212,11 +229,9 @@ const withMarkdown = (editor: Editor): Editor => {
         if (text === '\n' && textContent === '```') {
             Transforms.select(editor, Editor.range(editor, path));
             Transforms.delete(editor);
-            Transforms.setNodes(
-                editor,
-                { type: 'code_block' } as any,
-                { match: (n) => SlateElement.isElement(n) && Editor.isBlock(editor, n) },
-            );
+            Transforms.setNodes(editor, { type: 'code_block' } as any, {
+                match: (n) => SlateElement.isElement(n) && Editor.isBlock(editor, n),
+            });
             return;
         }
 
@@ -273,10 +288,10 @@ const withEmoji = (editor: Editor): Editor => {
                     const word = Editor.string(editor, range);
                     if (/^:[a-zA-Z0-9_+-]+:$/.test(word)) {
                         const shortcode = word.slice(1, -1);
-                        const match = EMOJI.find((item) => item.shortcode === shortcode);
+                        const match = EMOJI_BY_SHORTCODE.get(shortcode);
                         if (match) {
                             Transforms.select(editor, range);
-                            Transforms.insertText(editor, match.emoji);
+                            Transforms.insertText(editor, match);
                         }
                     }
                 }
@@ -304,7 +319,7 @@ const withLinks = (editor: Editor): Editor => {
         Transforms.wrapNodes(
             editor,
             { type: 'link', href: word, children: [{ text: word }] } as any,
-            { at: range, split: true, match: (n) => Text.isText(n) },
+            { at: range, split: true, match: (n) => Text.isText(n) }
         );
     };
     return editor;
@@ -391,6 +406,76 @@ const LeafRenderer = ({
     return <span {...attributes}>{content}</span>;
 };
 
+type ComposerMark = 'bold' | 'italic' | 'strike' | 'code';
+
+const FORMAT_MARKS: Array<{
+    mark: ComposerMark;
+    label: string;
+    title: string;
+    style?: Record<string, string | number>;
+}> = [
+    { mark: 'bold', label: 'B', title: 'Bold', style: { fontWeight: 700 } },
+    { mark: 'italic', label: 'I', title: 'Italic', style: { fontStyle: 'italic' } },
+    {
+        mark: 'strike',
+        label: 'S',
+        title: 'Strikethrough',
+        style: { textDecoration: 'line-through' },
+    },
+    { mark: 'code', label: '</>', title: 'Inline code', style: { fontFamily: 'monospace' } },
+];
+
+const isComposerMarkActive = (editor: Editor, mark: ComposerMark): boolean => {
+    const marks = Editor.marks(editor) as Record<string, unknown> | null;
+    return marks ? marks[mark] === true : false;
+};
+
+const FormatMarkButton = ({
+    mark,
+    label,
+    title,
+    style,
+}: {
+    mark: ComposerMark;
+    label: string;
+    title: string;
+    style?: Record<string, string | number>;
+}) => {
+    const editor = useSlate();
+    const active = isComposerMarkActive(editor, mark);
+    return (
+        <button
+            type="button"
+            title={title}
+            aria-label={title}
+            aria-pressed={active}
+            // onMouseDown + preventDefault keeps the editor selection so the
+            // mark toggles the currently selected text instead of losing focus.
+            onMouseDown={(event) => {
+                event.preventDefault();
+                if (isComposerMarkActive(editor, mark)) {
+                    Editor.removeMark(editor, mark);
+                } else {
+                    Editor.addMark(editor, mark, true);
+                }
+            }}
+            style={{
+                minWidth: 28,
+                height: 28,
+                borderRadius: 6,
+                border: '1px solid var(--border-default)',
+                background: active ? 'var(--accent-muted)' : 'var(--bg-input)',
+                color: 'var(--text-primary)',
+                fontSize: 13,
+                cursor: 'pointer',
+                ...style,
+            }}
+        >
+            {label}
+        </button>
+    );
+};
+
 export const MessageComposer = ({
     roomId,
     target,
@@ -401,11 +486,36 @@ export const MessageComposer = ({
     const editor = useMemo(
         () =>
             withLinks(
-                withEmoji(withMentions(withMarkdown(withReact(withHistory(createEditor()))))),
+                withEmoji(withMentions(withMarkdown(withReact(withHistory(createEditor())))))
             ),
-        [],
+        []
     );
-    const [value, setValue] = useState<CustomElement[]>(initialValue);
+    const [value, setValue] = useState<CustomElement[]>(() => {
+        const seed = initialMarkdown ?? loadDraft(roomId);
+        return seed ? [{ type: 'paragraph', children: [{ text: seed }] }] : initialValue;
+    });
+    // Slate's <Slate initialValue> is only read on mount, so setValue alone never
+    // resets the editor's visible content — clear the node tree imperatively.
+    const clearComposer = useCallback(() => {
+        if (!editor.selection) Transforms.select(editor, Editor.start(editor, []));
+        resetEditor(editor);
+        setValue(initialValue);
+        saveDraft(roomId, '');
+    }, [editor, roomId]);
+    // Replace the editor's entire contents with plain text (drafts, quick
+    // actions, edit prefills). Also imperative for the same reason.
+    const setComposerText = useCallback(
+        (text: string) => {
+            if (!editor.selection) Transforms.select(editor, Editor.start(editor, []));
+            resetEditor(editor);
+            if (text) {
+                Transforms.select(editor, Editor.start(editor, []));
+                Transforms.insertText(editor, text);
+            }
+            setValue(editor.children as CustomElement[]);
+        },
+        [editor]
+    );
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [activeIndex, setActiveIndex] = useState(0);
     const [triggerRange, setTriggerRange] = useState<Range | null>(null);
@@ -429,9 +539,11 @@ export const MessageComposer = ({
     const [scheduledEnabled, setScheduledEnabled] = useState(false);
     const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
     const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
+    const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const emojiPickerRef = useRef<HTMLDivElement | null>(null);
     const featureMenuRef = useRef<HTMLDivElement | null>(null);
     const attachmentInputRef = useRef<HTMLInputElement | null>(null);
     const voiceInputRef = useRef<HTMLInputElement | null>(null);
@@ -448,21 +560,44 @@ export const MessageComposer = ({
     const editMessage = useEditMessage(roomId);
     const matrixClient = useMatrixClient();
 
+    const draftRoomRef = useRef(roomId);
+
     useEffect(() => {
         if (!initialMarkdown) return;
-        setValue([{ type: 'paragraph', children: [{ text: initialMarkdown }] }]);
-    }, [initialMarkdown]);
+        setComposerText(initialMarkdown);
+    }, [initialMarkdown, setComposerText]);
 
     useEffect(() => {
         if (!commandPayload) return;
         if (commandPayload.roomId && commandPayload.roomId !== roomId) return;
-        setValue([{ type: 'paragraph', children: [{ text: commandPayload.text }] }]);
+        setComposerText(commandPayload.text);
         setCommandPayload(null);
-    }, [commandPayload, roomId, setCommandPayload]);
+    }, [commandPayload, roomId, setCommandPayload, setComposerText]);
 
-    useDismissOnOutsideOrEscape(featureMenuOpen, featureMenuRef, () =>
-        setFeatureMenuOpen(false),
+    // Persist the draft for whichever room is currently loaded in the editor.
+    useEffect(() => {
+        saveDraft(draftRoomRef.current, toPlainText(value));
+    }, [value]);
+
+    // Switching rooms reuses this component instance, so swap the editor
+    // contents to the destination room's saved draft.
+    useEffect(() => {
+        if (draftRoomRef.current === roomId) return;
+        draftRoomRef.current = roomId;
+        setComposerText(loadDraft(roomId));
+    }, [roomId, setComposerText]);
+
+    const insertEmoji = useCallback(
+        (emoji: string) => {
+            ReactEditor.focus(editor as ReactEditor);
+            Transforms.insertText(editor, emoji);
+            setEmojiPickerOpen(false);
+        },
+        [editor]
     );
+
+    useDismissOnOutsideOrEscape(featureMenuOpen, featureMenuRef, () => setFeatureMenuOpen(false));
+    useDismissOnOutsideOrEscape(emojiPickerOpen, emojiPickerRef, () => setEmojiPickerOpen(false));
     useDismissOnOutsideOrEscape(hideDialogOpen, null, () => setHideDialogOpen(false));
 
     useEffect(() => {
@@ -488,7 +623,7 @@ export const MessageComposer = ({
         setVoiceRecordingSupported(
             typeof window !== 'undefined' &&
                 !!navigator.mediaDevices?.getUserMedia &&
-                typeof MediaRecorder !== 'undefined',
+                typeof MediaRecorder !== 'undefined'
         );
         return () => {
             recorderRef.current?.stop();
@@ -498,7 +633,7 @@ export const MessageComposer = ({
 
     const recordRecentAction = useCallback((actionLabel: string) => {
         setRecentActions((current) =>
-            [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3),
+            [actionLabel, ...current.filter((item) => item !== actionLabel)].slice(0, 3)
         );
     }, []);
 
@@ -517,8 +652,8 @@ export const MessageComposer = ({
             const extension = voiceBlob.type.includes('ogg')
                 ? 'ogg'
                 : voiceBlob.type.includes('mp4')
-                  ? 'm4a'
-                  : 'webm';
+                ? 'm4a'
+                : 'webm';
             const voiceFile = new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, {
                 type: voiceBlob.type,
             });
@@ -546,7 +681,7 @@ export const MessageComposer = ({
             roomIsGovernance
                 ? ['Poll / vote', 'Steganography', 'Slash command']
                 : ['Steganography', 'Poll / vote', 'Slash command'],
-        [roomIsGovernance],
+        [roomIsGovernance]
     );
     const intentSuggestions = useMemo(() => {
         const text = toPlainText(value).toLowerCase();
@@ -577,17 +712,17 @@ export const MessageComposer = ({
                 label: member.name || member.userId,
                 kind: 'user',
             })),
-        [members],
+        [members]
     );
 
     const emojiSuggestions = useMemo<Suggestion[]>(
         () =>
-            EMOJI.map((emoji) => ({
+            emojis.map((emoji) => ({
                 id: emoji.shortcode,
-                label: `${emoji.emoji} :${emoji.shortcode}:`,
+                label: `${emoji.unicode} :${emoji.shortcode}:`,
                 kind: 'emoji',
             })),
-        [],
+        []
     );
 
     const runAutocomplete = useCallback(() => {
@@ -655,8 +790,8 @@ export const MessageComposer = ({
             Transforms.select(editor, triggerRange);
             Transforms.delete(editor);
             if (suggestion.kind === 'emoji') {
-                const emoji = EMOJI.find((item) => item.shortcode === suggestion.id);
-                Transforms.insertText(editor, emoji?.emoji ?? suggestion.label);
+                const emoji = EMOJI_BY_SHORTCODE.get(suggestion.id);
+                Transforms.insertText(editor, emoji ?? suggestion.label);
             } else {
                 const mention: MentionElement = {
                     type: 'mention',
@@ -672,12 +807,13 @@ export const MessageComposer = ({
             setTriggerType(null);
             setSuggestions([]);
         },
-        [editor, triggerRange],
+        [editor, triggerRange]
     );
 
     const sendCurrentMessage = useCallback(async () => {
         const plainBody = toPlainText(value);
         if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
+        if (plainBody.length > MAX_MESSAGE_LENGTH) return;
 
         setSending(true);
         try {
@@ -709,27 +845,31 @@ export const MessageComposer = ({
                 if (signatureEnabled) {
                     content['co.blackout.signature'] = { enabled: true };
                 }
-                if (scheduledEnabled) {
+                if (
+                    scheduledEnabled &&
+                    attachments.length === 0 &&
+                    !voiceAttachment &&
+                    !stegoAttachment
+                ) {
+                    // Hand the message to the server, which persists it and
+                    // delivers it at deliverAt even if this client is closed.
                     const deliverAt = new Date(
-                        Date.now() + scheduleDelayHours * 60 * 60 * 1000,
+                        Date.now() + scheduleDelayHours * 60 * 60 * 1000
                     ).toISOString();
-                    content['co.blackout.schedule'] = { deliver_at: deliverAt };
-                    if (attachments.length === 0 && !voiceAttachment && !stegoAttachment) {
-                        enqueueScheduledMessage({
-                            roomId,
-                            body: bodyToSend,
-                            formattedBody,
-                            deliverAt,
-                            createdAt: new Date().toISOString(),
-                        });
-                        setValue(initialValue);
-                        setAttachments([]);
-                        setVoiceAttachment(null);
-                        setStegoAttachment(null);
-                        onSent?.();
-                        await sendTyping(false);
-                        return;
-                    }
+                    await createScheduledMessage({
+                        matrixRoomId: roomId,
+                        body: bodyToSend,
+                        formattedBody,
+                        deliverAt,
+                    });
+                    clearComposer();
+                    setAttachments([]);
+                    setVoiceAttachment(null);
+                    setStegoAttachment(null);
+                    setScheduledEnabled(false);
+                    onSent?.();
+                    await sendTyping(false);
+                    return;
                 }
                 if (encryptionPresetEnabled) {
                     content['co.blackout.encryption'] = { preset: 'enhanced' };
@@ -777,7 +917,7 @@ export const MessageComposer = ({
                         sendEvent: (
                             rid: string,
                             type: string,
-                            content: Record<string, unknown>,
+                            content: Record<string, unknown>
                         ) => Promise<unknown>;
                     }
                 ).sendEvent(roomId, 'm.room.message', {
@@ -798,7 +938,7 @@ export const MessageComposer = ({
                 });
             }
 
-            setValue(initialValue);
+            clearComposer();
             setAttachments([]);
             setVoiceAttachment(null);
             setStegoAttachment(null);
@@ -809,6 +949,7 @@ export const MessageComposer = ({
         }
     }, [
         attachments,
+        clearComposer,
         commandEnabled,
         editMessage,
         encryptionPresetEnabled,
@@ -868,6 +1009,9 @@ export const MessageComposer = ({
                 return;
             }
             if (actionLabel === 'Scheduled send preset') {
+                // Scheduled delivery is server-side and text-only; attachments
+                // would be sent immediately, so don't offer it alongside them.
+                if (attachments.length > 0 || voiceAttachment || stegoAttachment) return;
                 setScheduledEnabled((active) => !active);
                 return;
             }
@@ -877,13 +1021,16 @@ export const MessageComposer = ({
         },
         [
             attachPhoto,
+            attachments,
             recordRecentAction,
             selectedCommand,
             startVoiceRecording,
+            stegoAttachment,
             stopVoiceRecording,
+            voiceAttachment,
             voiceRecording,
             voiceRecordingSupported,
-        ],
+        ]
     );
 
     const handleKeyDown = useCallback(
@@ -897,7 +1044,7 @@ export const MessageComposer = ({
                 if (event.key === 'ArrowUp') {
                     event.preventDefault();
                     setActiveIndex(
-                        (valuePrev) => (valuePrev - 1 + suggestions.length) % suggestions.length,
+                        (valuePrev) => (valuePrev - 1 + suggestions.length) % suggestions.length
                     );
                     return;
                 }
@@ -921,7 +1068,7 @@ export const MessageComposer = ({
                 await sendCurrentMessage();
             }
         },
-        [activeIndex, selectSuggestion, sendCurrentMessage, suggestions],
+        [activeIndex, selectSuggestion, sendCurrentMessage, suggestions]
     );
 
     const onDropFiles = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -945,6 +1092,9 @@ export const MessageComposer = ({
             return null;
         }
     }, [editor, triggerRange]);
+
+    const plainTextLength = useMemo(() => toPlainText(value).length, [value]);
+    const overLimit = plainTextLength > MAX_MESSAGE_LENGTH;
 
     return (
         <section
@@ -1156,6 +1306,50 @@ export const MessageComposer = ({
                 </div>
 
                 <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        marginBottom: 6,
+                    }}
+                    aria-label="Text formatting"
+                >
+                    {FORMAT_MARKS.map((format) => (
+                        <FormatMarkButton key={format.mark} {...format} />
+                    ))}
+                    <div ref={emojiPickerRef} style={{ position: 'relative', marginLeft: 'auto' }}>
+                        <button
+                            type="button"
+                            aria-label="Insert emoji"
+                            aria-expanded={emojiPickerOpen}
+                            onClick={() => setEmojiPickerOpen((open) => !open)}
+                            style={{
+                                minWidth: 28,
+                                height: 28,
+                                borderRadius: 6,
+                                border: '1px solid var(--border-default)',
+                                background: emojiPickerOpen
+                                    ? 'var(--accent-muted)'
+                                    : 'var(--bg-input)',
+                                cursor: 'pointer',
+                                fontSize: 15,
+                                lineHeight: 1,
+                            }}
+                        >
+                            😊
+                        </button>
+                        {emojiPickerOpen ? (
+                            <EmojiPicker
+                                customEmoji={{}}
+                                recents={[]}
+                                onSelect={insertEmoji}
+                                onClose={() => setEmojiPickerOpen(false)}
+                            />
+                        ) : null}
+                    </div>
+                </div>
+
+                <div
                     ref={editableRef}
                     style={{
                         border: '1px solid var(--border-default)',
@@ -1204,8 +1398,8 @@ export const MessageComposer = ({
                             onChange={(event) =>
                                 setSelectedCommand(
                                     COMMAND_PRESETS.find(
-                                        (preset) => preset.id === event.currentTarget.value,
-                                    ) ?? null,
+                                        (preset) => preset.id === event.currentTarget.value
+                                    ) ?? null
                                 )
                             }
                             style={{
@@ -1253,7 +1447,7 @@ export const MessageComposer = ({
                                     aria-label={`Remove ${file.name}`}
                                     onClick={() =>
                                         setAttachments((current) =>
-                                            current.filter((_, currentIdx) => currentIdx !== idx),
+                                            current.filter((_, currentIdx) => currentIdx !== idx)
                                         )
                                     }
                                     style={{
@@ -1311,7 +1505,7 @@ export const MessageComposer = ({
                                     type="button"
                                     onClick={() =>
                                         setVoteDurationHours((current) =>
-                                            current === 24 ? 48 : 24,
+                                            current === 24 ? 48 : 24
                                         )
                                     }
                                     style={{
@@ -1515,20 +1709,36 @@ export const MessageComposer = ({
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
                         Enter to send · Shift+Enter for newline
                     </span>
-                    <button
-                        type="button"
-                        onClick={() => void sendCurrentMessage()}
-                        disabled={sending}
-                        style={{
-                            border: '1px solid var(--border-default)',
-                            background: 'var(--accent-primary)',
-                            color: 'var(--bg-surface)',
-                            borderRadius: 8,
-                            padding: '6px 10px',
-                        }}
-                    >
-                        {sending ? 'Sending…' : 'Send'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {plainTextLength > MAX_MESSAGE_LENGTH * 0.8 ? (
+                            <span
+                                style={{
+                                    fontSize: 12,
+                                    color: overLimit
+                                        ? 'var(--color-danger, #e5484d)'
+                                        : 'var(--text-muted)',
+                                }}
+                            >
+                                {plainTextLength}/{MAX_MESSAGE_LENGTH}
+                            </span>
+                        ) : null}
+                        <button
+                            type="button"
+                            onClick={() => void sendCurrentMessage()}
+                            disabled={sending || overLimit}
+                            title={overLimit ? 'Message exceeds the maximum length' : undefined}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--accent-primary)',
+                                color: 'var(--bg-surface)',
+                                borderRadius: 8,
+                                padding: '6px 10px',
+                                opacity: sending || overLimit ? 0.6 : 1,
+                            }}
+                        >
+                            {sending ? 'Sending…' : 'Send'}
+                        </button>
+                    </div>
                 </div>
             </Slate>
 

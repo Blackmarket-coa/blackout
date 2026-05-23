@@ -11,6 +11,7 @@ import type {
   MarketplaceProviderIdString,
   MarketplaceWebhookAuditRecord,
   MessageRecord,
+  ScheduledMessageRecord,
   ModerationActionRecord,
   DeadDropRecord,
   DeadmanSwitchRecord,
@@ -65,6 +66,7 @@ type PersistedState = {
   users: UserRecord[];
   channels: ChannelRecord[];
   messages: MessageRecord[];
+  scheduledMessages: ScheduledMessageRecord[];
   votes: VoteRecord[];
   voteEntries: VoteEntryRecord[];
   federationLinks: FederationLinkRecord[];
@@ -115,6 +117,8 @@ class InMemoryDb {
   users = new Map<string, UserRecord>();
   channels = new Map<string, ChannelRecord>();
   messages = new Map<string, MessageRecord>();
+  /** Keyed by scheduled-message id. */
+  scheduledMessages = new Map<string, ScheduledMessageRecord>();
   votes = new Map<string, VoteRecord>();
   voteEntries = new Map<string, VoteEntryRecord>();
   federationLinks = new Map<string, FederationLinkRecord>();
@@ -1132,6 +1136,80 @@ class InMemoryDb {
     return filtered.slice(-limit);
   }
 
+  createScheduledMessage(
+    input: Omit<ScheduledMessageRecord, 'createdAt' | 'status' | 'attempts' | 'deliveredAt' | 'lastError'>,
+  ): ScheduledMessageRecord {
+    const record: ScheduledMessageRecord = {
+      ...input,
+      status: 'pending',
+      attempts: 0,
+      createdAt: nowIso(),
+    };
+    this.scheduledMessages.set(record.id, record);
+    return record;
+  }
+
+  getScheduledMessage(id: string): ScheduledMessageRecord | undefined {
+    return this.scheduledMessages.get(id);
+  }
+
+  listPendingScheduledMessagesForUser(userId: string): ScheduledMessageRecord[] {
+    return [...this.scheduledMessages.values()]
+      .filter((msg) => msg.userId === userId && msg.status === 'pending')
+      .sort((a, b) => (a.deliverAt < b.deliverAt ? -1 : 1));
+  }
+
+  /** Pending messages whose deliverAt is at or before `asOf` (defaults to now). */
+  listDueScheduledMessages(asOf: string = nowIso()): ScheduledMessageRecord[] {
+    return [...this.scheduledMessages.values()]
+      .filter((msg) => msg.status === 'pending' && msg.deliverAt <= asOf)
+      .sort((a, b) => (a.deliverAt < b.deliverAt ? -1 : 1));
+  }
+
+  markScheduledMessageDelivered(id: string): ScheduledMessageRecord | undefined {
+    const record = this.scheduledMessages.get(id);
+    if (!record) return undefined;
+    const updated: ScheduledMessageRecord = {
+      ...record,
+      status: 'delivered',
+      attempts: record.attempts + 1,
+      deliveredAt: nowIso(),
+      lastError: undefined,
+    };
+    this.scheduledMessages.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Record a failed delivery attempt. Stays `pending` (so the dispatcher
+   * retries on a later tick) unless `terminal` is set, which marks it `failed`.
+   */
+  markScheduledMessageFailed(
+    id: string,
+    error: string,
+    options: { terminal?: boolean } = {},
+  ): ScheduledMessageRecord | undefined {
+    const record = this.scheduledMessages.get(id);
+    if (!record) return undefined;
+    const updated: ScheduledMessageRecord = {
+      ...record,
+      status: options.terminal ? 'failed' : 'pending',
+      attempts: record.attempts + 1,
+      lastError: error,
+    };
+    this.scheduledMessages.set(id, updated);
+    return updated;
+  }
+
+  /** Cancel a still-pending scheduled message owned by `userId`. */
+  cancelScheduledMessage(id: string, userId: string): ScheduledMessageRecord | undefined {
+    const record = this.scheduledMessages.get(id);
+    if (!record || record.userId !== userId || record.status !== 'pending') return undefined;
+    const updated: ScheduledMessageRecord = { ...record, status: 'cancelled' };
+    this.scheduledMessages.set(id, updated);
+    return updated;
+  }
+
   createVote(input: Omit<VoteRecord, 'createdAt' | 'startsAt' | 'endsAt'>): VoteRecord {
     const startsAt = nowIso();
     const endsAt = new Date(Date.now() + input.durationHours * 3600 * 1000).toISOString();
@@ -1758,6 +1836,9 @@ class FileBackedDb extends InMemoryDb {
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
     this.channels = new Map(parsed.channels.map((row) => [row.id, row]));
     this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
+    this.scheduledMessages = new Map(
+      (parsed.scheduledMessages ?? []).map((row) => [row.id, row]),
+    );
     this.votes = new Map(parsed.votes.map((row) => [row.id, row]));
     this.voteEntries = new Map(parsed.voteEntries.map((row) => [row.id, row]));
     this.federationLinks = new Map(parsed.federationLinks.map((row) => [row.id, row]));
@@ -1868,6 +1949,7 @@ class FileBackedDb extends InMemoryDb {
       users: [...this.users.values()],
       channels: [...this.channels.values()],
       messages: [...this.messages.values()],
+      scheduledMessages: [...this.scheduledMessages.values()],
       votes: [...this.votes.values()],
       voteEntries: [...this.voteEntries.values()],
       federationLinks: [...this.federationLinks.values()],
@@ -1924,6 +2006,36 @@ class FileBackedDb extends InMemoryDb {
     const created = super.createUser(input);
     this.persist();
     return created;
+  }
+
+  override createScheduledMessage(
+    input: Omit<ScheduledMessageRecord, 'createdAt' | 'status' | 'attempts' | 'deliveredAt' | 'lastError'>,
+  ): ScheduledMessageRecord {
+    const created = super.createScheduledMessage(input);
+    this.persist();
+    return created;
+  }
+
+  override markScheduledMessageDelivered(id: string): ScheduledMessageRecord | undefined {
+    const updated = super.markScheduledMessageDelivered(id);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override markScheduledMessageFailed(
+    id: string,
+    error: string,
+    options: { terminal?: boolean } = {},
+  ): ScheduledMessageRecord | undefined {
+    const updated = super.markScheduledMessageFailed(id, error, options);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override cancelScheduledMessage(id: string, userId: string): ScheduledMessageRecord | undefined {
+    const updated = super.cancelScheduledMessage(id, userId);
+    if (updated) this.persist();
+    return updated;
   }
 
   override deleteUser(id: string): boolean {
