@@ -912,6 +912,74 @@ test('POST /v1/invitations/redeem falls back to a bot invite when admin join fai
   resetFetchHandler();
 });
 
+test('POST /v1/invitations/redeem stays durable when both admin join and invite are forbidden', async () => {
+  // Member-created private den: the bot is not a member, so neither the admin
+  // join nor the bot invite can admit the redeemer. Redemption must still
+  // succeed (the token is consumed) — the recipient is admitted later — and
+  // both Matrix admit paths must have been attempted.
+  resetFetchHandler();
+  const roomId = '!den3:server';
+  setFetchHandler((url, init) => {
+    if (
+      url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) ||
+      url.includes(`/rooms/${encodeURIComponent(roomId)}/invite`)
+    ) {
+      return new Response(
+        JSON.stringify({ errcode: 'M_FORBIDDEN', error: 'not in room' }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  const { token, invitation } = (await create.json()) as {
+    token: string;
+    invitation: { id: string };
+  };
+
+  fetchCalls.length = 0;
+
+  const redeemer = seedUser();
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200, 'redemption survives a Matrix admit failure');
+  const body = (await redeem.json()) as { ok: boolean };
+  assert.equal(body.ok, true);
+
+  // Token was consumed despite the Matrix failure.
+  const after = db.getInvitationTokenById(invitation.id);
+  assert.equal(after?.useCount, 1);
+
+  // Both admit paths attempted (admin join first, then the invite fallback).
+  assert.ok(
+    fetchCalls.some(
+      (c) =>
+        c.url.includes(`/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`) &&
+        c.init?.method === 'POST',
+    ),
+    'expected the admin join attempt',
+  );
+  assert.ok(
+    fetchCalls.some(
+      (c) =>
+        c.url.includes(`/rooms/${encodeURIComponent(roomId)}/invite`) &&
+        c.init?.method === 'POST',
+    ),
+    'expected the invite fallback attempt',
+  );
+
+  resetFetchHandler();
+});
+
 test('POST /v1/invitations/redeem omits canopyId for a global (account-only) invite', async () => {
   resetFetchHandler();
   const inviter = seedUser();

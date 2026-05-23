@@ -206,10 +206,11 @@ export const redeemInvitation = async (
     // back to a bot invite only if the admin join fails (e.g. the bot IS a
     // room member but admin join is unavailable).
     const join = await matrixClient.adminJoinUserToRoom(updated.matrixRoomId, matrixUserId);
+    let invite: Awaited<ReturnType<typeof matrixClient.inviteToRoom>> | undefined;
     if (join.ok) {
       matrixInvite = { ok: true };
     } else {
-      const invite = await matrixClient.inviteToRoom(
+      invite = await matrixClient.inviteToRoom(
         updated.matrixRoomId,
         matrixUserId,
         'Invitation link redeemed',
@@ -217,11 +218,41 @@ export const redeemInvitation = async (
       matrixInvite = { ok: invite.ok };
     }
 
+    // Diagnostic: redemption survives Matrix failure, but if we couldn't admit
+    // the redeemer to the room they'll be stranded at "not in room". Log the
+    // exact Synapse status/body for both the admin-join and the invite fallback
+    // so the failure mode (e.g. bot not a member of a private den) is visible.
+    if (!matrixInvite.ok) {
+      log.warn('invite.redeem.matrix_admit_failed', {
+        roomId: updated.matrixRoomId,
+        userId: matrixUserId,
+        adminJoinStatus: 'status' in join ? join.status : undefined,
+        adminJoinReason: 'reason' in join ? join.reason : undefined,
+        adminJoinDetail: 'detail' in join ? join.detail : undefined,
+        inviteStatus: invite && 'status' in invite ? invite.status : undefined,
+        inviteReason: invite && 'reason' in invite ? invite.reason : undefined,
+        inviteDetail: invite && 'detail' in invite ? invite.detail : undefined,
+      });
+    } else {
+      log.info('invite.redeem.matrix_admitted', {
+        roomId: updated.matrixRoomId,
+        via: join.ok ? 'admin_join' : 'invite',
+      });
+    }
+
     // Best-effort: resolve the invited room's canopy so the client can route
     // the recipient straight into onboarding. A failure here just means the
     // client falls back to its local space-hierarchy resolution.
     const parent = await matrixClient.getRoomParentSpace(updated.matrixRoomId);
-    if (parent.ok) canopyId = parent.canopyId;
+    if (parent.ok) {
+      canopyId = parent.canopyId;
+    } else {
+      log.warn('invite.redeem.canopy_unresolved', {
+        roomId: updated.matrixRoomId,
+        status: 'status' in parent ? parent.status : undefined,
+        reason: 'reason' in parent ? parent.reason : undefined,
+      });
+    }
   }
 
   db.createInvitationRedemption({
