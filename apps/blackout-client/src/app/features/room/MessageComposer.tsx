@@ -406,6 +406,21 @@ export const MessageComposer = ({
         [],
     );
     const [value, setValue] = useState<CustomElement[]>(initialValue);
+    // Slate's <Slate initialValue> is only read on mount, so setValue alone
+    // never resets the editor's visible content. Clear the node tree directly.
+    const resetEditor = useCallback(() => {
+        Transforms.select(editor, {
+            anchor: Editor.start(editor, []),
+            focus: Editor.end(editor, []),
+        });
+        Transforms.delete(editor);
+        Transforms.setNodes(
+            editor,
+            { type: 'paragraph' } as Partial<SlateElement>,
+            { match: (n) => SlateElement.isElement(n) && Editor.isBlock(editor, n) },
+        );
+        setValue(initialValue);
+    }, [editor]);
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [activeIndex, setActiveIndex] = useState(0);
     const [triggerRange, setTriggerRange] = useState<Range | null>(null);
@@ -722,7 +737,7 @@ export const MessageComposer = ({
                             deliverAt,
                             createdAt: new Date().toISOString(),
                         });
-                        setValue(initialValue);
+                        resetEditor();
                         setAttachments([]);
                         setVoiceAttachment(null);
                         setStegoAttachment(null);
@@ -798,7 +813,7 @@ export const MessageComposer = ({
                 });
             }
 
-            setValue(initialValue);
+            resetEditor();
             setAttachments([]);
             setVoiceAttachment(null);
             setStegoAttachment(null);
@@ -814,6 +829,7 @@ export const MessageComposer = ({
         encryptionPresetEnabled,
         matrixClient,
         onSent,
+        resetEditor,
         roomId,
         scheduleDelayHours,
         scheduledEnabled,
