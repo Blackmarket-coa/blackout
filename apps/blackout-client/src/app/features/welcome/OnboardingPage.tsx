@@ -2,7 +2,7 @@ import React, { useCallback, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { OnboardingWizard } from './OnboardingWizard';
-import { useOnboardingContent } from './useWelcome';
+import { DEFAULT_ONBOARDING_STEPS } from './useWelcome';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { resolvePostAcceptancePath } from '../../components/invite-landing/postAcceptanceRoute';
@@ -28,7 +28,6 @@ export const OnboardingPage: React.FC = () => {
 
     const spaceId = params.spaceIdOrAlias ? decodeURIComponent(params.spaceIdOrAlias) : '';
     const roomId = search.get('room') ?? undefined;
-    const onboarding = useOnboardingContent(spaceId);
 
     const goToRoom = useCallback(() => {
         const path = roomId
@@ -37,12 +36,10 @@ export const OnboardingPage: React.FC = () => {
         navigate(path, { replace: true });
     }, [mx, roomToParents, roomId, navigate]);
 
-    // If the space has no onboarding configured (or it's disabled), the wizard
-    // renders nothing — don't strand the user on a blank page, just proceed.
+    // No space in the URL — nothing to onboard against; go straight on.
     useEffect(() => {
-        if (!spaceId || onboarding.loading) return;
-        if (!onboarding.data.enabled) goToRoom();
-    }, [spaceId, onboarding.loading, onboarding.data.enabled, goToRoom]);
+        if (!spaceId) goToRoom();
+    }, [spaceId, goToRoom]);
 
     return (
         <main data-shell="onboarding" style={pageStyle}>
@@ -51,6 +48,7 @@ export const OnboardingPage: React.FC = () => {
                 open
                 onClose={goToRoom}
                 onComplete={goToRoom}
+                fallbackSteps={DEFAULT_ONBOARDING_STEPS}
             />
         </main>
     );

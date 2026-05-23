@@ -72,14 +72,17 @@ export const resolvePostAcceptancePath = (
     mx: MatrixClient,
     roomToParents: RoomToParents,
     matrixRoomId: string | undefined,
-    options: { skipOnboarding?: boolean } = {},
+    options: { skipOnboarding?: boolean; canopyId?: string } = {},
 ): string => {
     if (!matrixRoomId) return '/';
 
+    // Prefer the server-resolved canopy (from the redeem response): a
+    // brand-new user's local `roomToParents` isn't synced yet, so local
+    // resolution would miss the canopy and skip onboarding.
     const isSpace = mx.getRoom(matrixRoomId)?.isSpaceRoom() === true;
-    const spaceId = isSpace
-        ? matrixRoomId
-        : resolveParentSpace(mx, roomToParents, matrixRoomId);
+    const spaceId =
+        options.canopyId ??
+        (isSpace ? matrixRoomId : resolveParentSpace(mx, roomToParents, matrixRoomId));
 
     if (!options.skipOnboarding && spaceId && !isOnboardingComplete(mx, spaceId)) {
         return `${getOnboardingPath(spaceId)}?room=${encodeURIComponent(matrixRoomId)}`;

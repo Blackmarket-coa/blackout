@@ -260,7 +260,9 @@ export const InviteLandingPage: React.FC = () => {
             }
             if (cancelled) return;
             const dest = client
-                ? resolvePostAcceptancePath(client, roomToParentsRef.current, data.matrixRoomId)
+                ? resolvePostAcceptancePath(client, roomToParentsRef.current, data.matrixRoomId, {
+                      canopyId: data.canopyId,
+                  })
                 : '/';
             window.location.assign(dest);
         };

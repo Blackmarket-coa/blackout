@@ -800,3 +800,80 @@ test('metrics: invitations_matrix_mint_failures_total increments on Synapse fail
   });
   assert.equal(after, before + 1, 'mint failure should bump reason="synapse_rejected"');
 });
+
+// --- Canopy resolution: redeeming a room-scoped invite surfaces the parent space
+
+test('POST /v1/invitations/redeem returns the parent canopy id for a room-scoped invite', async () => {
+  resetFetchHandler();
+  const roomId = '!den:server';
+  const canopyId = '!canopy:server';
+  setFetchHandler((url, init) => {
+    // Resolve the room's parent space via the bot-token state read.
+    if (url.includes(`/rooms/${encodeURIComponent(roomId)}/state`)) {
+      return new Response(
+        JSON.stringify([
+          { type: 'm.room.create', content: { creator: '@bot:server' } },
+          {
+            type: 'm.space.parent',
+            state_key: canopyId,
+            content: { via: ['server'] },
+          },
+        ]),
+        { headers: { 'content-type': 'application/json' }, status: 200 },
+      );
+    }
+    return defaultFetchHandler(url, init);
+  });
+
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({ matrixRoomId: roomId }),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  // Focus the call log on the redeem side-effects.
+  fetchCalls.length = 0;
+
+  const redeemer = seedUser();
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200);
+  const body = (await redeem.json()) as { ok: boolean; canopyId?: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.canopyId, canopyId, 'redeem should surface the resolved parent canopy');
+
+  // The bot still invites the redeemer to the scoped room.
+  const inviteCall = fetchCalls.find(
+    (c) => c.url.includes(`/rooms/${encodeURIComponent(roomId)}/invite`) && c.init?.method === 'POST',
+  );
+  assert.ok(inviteCall, 'expected an inviteToRoom POST for the room-scoped invite');
+
+  resetFetchHandler();
+});
+
+test('POST /v1/invitations/redeem omits canopyId for a global (account-only) invite', async () => {
+  resetFetchHandler();
+  const inviter = seedUser();
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(inviter.id, inviter.username),
+    body: JSON.stringify({}),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  const redeemer = seedUser();
+  const redeem = await app.request('/v1/invitations/redeem', {
+    method: 'POST',
+    headers: bearer(redeemer.id, redeemer.username),
+    body: JSON.stringify({ token }),
+  });
+  assert.equal(redeem.status, 200);
+  const body = (await redeem.json()) as { ok: boolean; canopyId?: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.canopyId, undefined, 'a global invite has no room and thus no canopy');
+});

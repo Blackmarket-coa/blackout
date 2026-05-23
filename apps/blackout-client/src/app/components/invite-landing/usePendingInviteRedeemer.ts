@@ -64,7 +64,9 @@ export const usePendingInviteRedeemer = (): void => {
                 } catch {
                     // already-joined / transient; the server invite stands.
                 }
-                const dest = resolvePostAcceptancePath(mx, roomToParents, data.matrixRoomId);
+                const dest = resolvePostAcceptancePath(mx, roomToParents, data.matrixRoomId, {
+                    canopyId: data.canopyId,
+                });
                 window.location.assign(dest);
             }
         })().catch(() => {

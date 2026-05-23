@@ -192,6 +192,7 @@ invitations.post('/redeem', async (c) => {
         ok: true,
         matrixRoomId: outcome.record.matrixRoomId,
         matrixInvite: outcome.matrixInvite,
+        canopyId: outcome.canopyId,
       });
     case 'self_redeem':
       return c.json({ ok: false, reason: 'self_redeem' }, 400);
