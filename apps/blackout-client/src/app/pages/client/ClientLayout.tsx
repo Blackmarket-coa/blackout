@@ -643,7 +643,10 @@ export const ClientLayout = () => {
                         ) : null}
                     </header>
 
-                    <RoomInviteAcceptGate roomId={selectedRoomId}>
+                    <RoomInviteAcceptGate
+                        roomId={selectedRoomId}
+                        canopyId={routeCanopyId ?? selectedSpaceId ?? undefined}
+                    >
                     <section
                         style={{
                             border: '1px solid var(--border-default)',

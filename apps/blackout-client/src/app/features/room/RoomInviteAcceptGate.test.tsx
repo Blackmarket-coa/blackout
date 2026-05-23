@@ -7,12 +7,16 @@ import ReactDOM from 'react-dom/client';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // A controllable Matrix client stub. `membership` is what
-// `getRoom().getMyMembership()` reports; `joinRoom` is supplied per-test.
+// `getRoom(denId).getMyMembership()` reports for the gated den; any other room
+// (e.g. the canopy) reports `null` so the gate joins it. `joinRoom` is supplied
+// per-test and records the order of room ids it was called with.
 let membership: string | null = 'invite';
 const joinRoom = vi.fn();
 const listeners = new Set<(room: { roomId: string; getMyMembership: () => string }) => void>();
 const mx = {
-    getRoom: (_roomId: string) => ({ getMyMembership: () => membership }),
+    getRoom: (roomId: string) => ({
+        getMyMembership: () => (roomId === '!den:srv' ? membership : null),
+    }),
     joinRoom: (roomId: string) => joinRoom(roomId),
     on: (_event: unknown, handler: never) => listeners.add(handler as never),
     off: (_event: unknown, handler: never) => listeners.delete(handler as never),
@@ -79,6 +83,30 @@ describe('RoomInviteAcceptGate', () => {
             await flush();
         });
         expect(joinRoom).toHaveBeenCalledWith('!den:srv');
+        expect(container.querySelector('[data-testid="room-content"]')).not.toBeNull();
+    });
+
+    it('joins the canopy before the den when a canopyId is provided', async () => {
+        membership = null;
+        joinRoom.mockResolvedValue(undefined);
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <RoomInviteAcceptGate roomId="!den:srv" canopyId="!canopy:srv">
+                    <div data-testid="room-content">timeline</div>
+                </RoomInviteAcceptGate>,
+            );
+            await flush();
+        });
+        await act(async () => {
+            await flush();
+        });
+        expect(joinRoom.mock.calls.map((c: unknown[]) => c[0])).toEqual([
+            '!canopy:srv',
+            '!den:srv',
+        ]);
         expect(container.querySelector('[data-testid="room-content"]')).not.toBeNull();
     });
 

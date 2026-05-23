@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RoomEvent } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { joinDenWithCanopy } from './joinDenWithCanopy';
 
 const MAX_ATTEMPTS = 5;
 
@@ -38,8 +39,11 @@ const buttonStyle: React.CSSProperties = {
  */
 export const RoomInviteAcceptGate: React.FC<{
     roomId: string;
+    /** Parent canopy (space) of the den. Joined first so the restricted den
+     *  join can succeed; ignored when absent or equal to the den. */
+    canopyId?: string;
     children: React.ReactNode;
-}> = ({ roomId, children }) => {
+}> = ({ roomId, canopyId, children }) => {
     const mx = useMatrixClient();
     const [membership, setMembership] = useState<string | null>(
         () => mx.getRoom(roomId)?.getMyMembership() ?? null,
@@ -77,7 +81,7 @@ export const RoomInviteAcceptGate: React.FC<{
         void (async () => {
             for (let attempt = 1; attempt <= MAX_ATTEMPTS && !cancelled; attempt += 1) {
                 try {
-                    await mx.joinRoom(roomId);
+                    await joinDenWithCanopy(mx, roomId, canopyId);
                     if (!cancelled) setMembership('join');
                     return;
                 } catch {
@@ -93,7 +97,7 @@ export const RoomInviteAcceptGate: React.FC<{
         return () => {
             cancelled = true;
         };
-    }, [mx, roomId, isJoined, autoJoinable, retryKey]);
+    }, [mx, roomId, canopyId, isJoined, autoJoinable, retryKey]);
 
     const retry = useCallback(() => {
         setFailed(false);
