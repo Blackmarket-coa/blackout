@@ -47,8 +47,8 @@ vi.mock('../profile/profileClient', () => ({
 // here resolves the writable mock atom before any HomeFeed module
 // code runs.
 import HomeFeed from './HomeFeed';
+import { fetchCoalitionFeed } from '../coalition/coalitionClient';
 import { joinedRoomsAtom } from '../../state/rooms';
-import { homeFeedTabAtom } from '../../state/homeFeed';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * ONE_HOUR;
@@ -104,6 +104,16 @@ describe('HomeFeed', () => {
         expect(link?.getAttribute('href')).toBe('/streaming');
     });
 
+    it('surfaces quick-action links to the Coalition and Coliseum destinations', async () => {
+        const { container } = await mountWithRooms([]);
+        const coalition = container.querySelector('[data-testid="home-quick-action-coalition"]');
+        expect(coalition).not.toBeNull();
+        expect(coalition?.getAttribute('href')).toBe('/coalition');
+        const coliseum = container.querySelector('[data-testid="home-quick-action-coliseum"]');
+        expect(coliseum).not.toBeNull();
+        expect(coliseum?.getAttribute('href')).toBe('/coliseum');
+    });
+
     it('renders cards in chronological order with deep links to canopy/den', async () => {
         const now = Date.now();
         const { container } = await mountWithRooms([
@@ -144,43 +154,48 @@ describe('HomeFeed', () => {
         expect(recent?.querySelector('[aria-label="3"]')).not.toBeNull();
     });
 
-    it('renders Following/Discover tabs and a pinned live rail slot', async () => {
+    it('renders the Following section and a pinned live rail slot', async () => {
         const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
-        expect(container.querySelector('[data-testid="home-feed-tabs"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="home-feed-tab-following"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="home-feed-tab-discover"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-following-section"]')).not.toBeNull();
+        // The den is attributed to the viewer, so it lands in Following.
+        expect(
+            container.querySelector('[data-testid="home-feed-card"][data-source="den"]')
+        ).not.toBeNull();
         // No live streams in this fixture, so the rail does not render.
         expect(container.querySelector('[data-testid="home-live-rail"]')).toBeNull();
     });
 
-    it('switching to Discover hides den items that have no joined-canopy attribution', async () => {
-        const store = createStore();
-        store.set(joinedRoomsAtom as never, [fakeRoom({ roomId: '!d:s', name: 'A Den' })] as never);
-        // Default tab is Following → den card visible.
-        const container = document.createElement('div');
-        document.body.appendChild(container);
-        const root = ReactDOM.createRoot(container);
-        await act(async () => {
-            root.render(
-                <JotaiProvider store={store}>
-                    <RouterProvider router={buildRouter()} />
-                </JotaiProvider>
-            );
-            await Promise.resolve();
-        });
-        expect(
-            container.querySelector('[data-testid="home-feed-card"][data-source="den"]')
-        ).not.toBeNull();
+    it('surfaces Discover-only content in a section below Following without duplicating it', async () => {
+        // A coalition item with no joined-canopy attribution is Discover-only.
+        vi.mocked(fetchCoalitionFeed).mockResolvedValueOnce({
+            generatedAt: '',
+            items: [
+                {
+                    id: 'cf1',
+                    kind: 'announcement',
+                    title: 'Coalition Bulletin',
+                    createdAt: new Date().toISOString(),
+                    score: 0.9,
+                    canopyId: null,
+                    denId: null,
+                    tags: [],
+                },
+            ],
+        } as never);
 
-        // Dens still surface in Discover (global stream), so the card stays.
-        await act(async () => {
-            store.set(homeFeedTabAtom as never, 'discover' as never);
-            await Promise.resolve();
-        });
-        expect(
-            container
-                .querySelector('[data-testid="home-feed-tab-discover"]')
-                ?.getAttribute('aria-selected')
-        ).toBe('true');
+        const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
+
+        // The den lives in Following; the coalition bulletin lives in Discover.
+        const discover = container.querySelector('[data-testid="home-discover-section"]');
+        expect(discover).not.toBeNull();
+        expect(discover?.textContent).toContain('Coalition Bulletin');
+
+        // The den card appears once (in Following), never duplicated into Discover.
+        const denCards = container.querySelectorAll(
+            '[data-testid="home-feed-card"][data-source="den"]'
+        );
+        expect(denCards.length).toBe(1);
+        const following = container.querySelector('[data-testid="home-following-section"]');
+        expect(following?.contains(denCards[0])).toBe(true);
     });
 });
