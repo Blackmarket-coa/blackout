@@ -1,5 +1,6 @@
 import React, { ChangeEventHandler, useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Input, Icon, Icons, Scroll, Spinner, Text, config, toRem } from 'folds';
+import { useTranslation } from 'react-i18next';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { mobileOrTablet } from '../../../utils/user-agent';
 import {
@@ -40,10 +41,11 @@ type LoadState =
     | { kind: 'idle' }
     | { kind: 'loading' }
     | { kind: 'loaded'; items: TenorPickerItem[]; next: string | null; query: string }
-    | { kind: 'error'; message: string }
+    | { kind: 'error' }
     | { kind: 'disabled' };
 
 export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
+    const { t } = useTranslation();
     const [query, setQuery] = useState('');
     const [state, setState] = useState<LoadState>({ kind: 'idle' });
     // Track the latest in-flight request so debounced fast typing doesn't
@@ -76,10 +78,7 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 }
                 // eslint-disable-next-line no-console
                 console.warn('tenor: load failed', err);
-                setState({
-                    kind: 'error',
-                    message: 'Could not load GIFs. Check your connection and try again.',
-                });
+                setState({ kind: 'error' });
             }
         },
         [onDisabled]
@@ -150,8 +149,8 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 <Input
                     variant="SurfaceVariant"
                     size="400"
-                    placeholder="Search GIFs on Tenor"
-                    aria-label="Search GIFs on Tenor"
+                    placeholder={t('Features.GifPicker.search_placeholder')}
+                    aria-label={t('Features.GifPicker.search_placeholder')}
                     maxLength={80}
                     value={query}
                     onChange={handleChange}
@@ -165,7 +164,7 @@ export function TenorPanel({ onSelect, onDisabled }: TenorPanelProps) {
                 </Scroll>
             </Box>
             <Text className={TenorAttributionStyle} size="T200">
-                Powered by Tenor
+                {t('Features.GifPicker.attribution')}
             </Text>
         </Box>
     );
@@ -178,6 +177,7 @@ type TenorGridProps = {
 };
 
 function TenorGrid({ state, query, onSelect }: TenorGridProps) {
+    const { t } = useTranslation();
     if (state.kind === 'loading') {
         return (
             <Box
@@ -195,7 +195,7 @@ function TenorGrid({ state, query, onSelect }: TenorGridProps) {
         return (
             <Box className={TenorEmptyStyle} direction="Column" gap="200">
                 <Icon size="600" src={Icons.Warning} />
-                <Text size="T200">{state.message}</Text>
+                <Text size="T200">{t('Features.GifPicker.load_error')}</Text>
             </Box>
         );
     }
@@ -203,7 +203,9 @@ function TenorGrid({ state, query, onSelect }: TenorGridProps) {
         return (
             <Box className={TenorEmptyStyle} direction="Column" gap="200">
                 <Icon size="600" src={Icons.Photo} />
-                <Text size="T200">No GIFs found for "{state.query}".</Text>
+                <Text size="T200">
+                    {t('Features.GifPicker.no_results', { query: state.query })}
+                </Text>
             </Box>
         );
     }

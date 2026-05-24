@@ -56,7 +56,8 @@ describe('tenorClient', () => {
             new BlackoutSdkError(
                 'HTTP_REQUEST_FAILED',
                 'Request failed (503) for /v1/integrations/tenor/search',
-                'fatal'
+                'fatal',
+                503
             )
         );
         await expect(searchTenor('cats')).rejects.toBeInstanceOf(TenorDisabledError);
@@ -66,7 +67,8 @@ describe('tenorClient', () => {
         const err = new BlackoutSdkError(
             'HTTP_REQUEST_FAILED',
             'Request failed (500) for /v1/integrations/tenor/search',
-            'fatal'
+            'fatal',
+            500
         );
         apiCall.mockRejectedValueOnce(err);
         await expect(searchTenor('cats')).rejects.toBe(err);

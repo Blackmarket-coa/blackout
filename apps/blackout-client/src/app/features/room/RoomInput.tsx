@@ -8,6 +8,7 @@ import React, {
     useState,
 } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { useTranslation } from 'react-i18next';
 import { isKeyHotkey } from 'is-hotkey';
 import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
@@ -127,6 +128,7 @@ import { useComposingCheck } from '../../hooks/useComposingCheck';
 import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
 import { applyComposerPayloadToEditor, isComposerPayloadForRoom } from './composerCommandPayload';
 import { getExpressionControlVisibility } from './expressionControls';
+import { useToast } from '../../state/notifications/toast';
 
 interface RoomInputProps {
     editor: Editor;
@@ -139,6 +141,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     ({ editor, fileDropContainerRef, roomId, room }, ref) => {
         const mx = useMatrixClient();
         const useAuthentication = useMediaAuthentication();
+        const { t } = useTranslation();
+        const { showToast } = useToast();
         const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
         const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
         const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -544,14 +548,12 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 // Best-effort Tenor share registration (TOS requirement).
                 registerTenorShare(item.id, query || undefined).catch(() => undefined);
             } catch (err) {
-                // Surface to the devtools console so failures aren't silent
-                // (e.g. CSP blocking the binary proxy, homeserver upload
-                // refusal). User-facing toast feedback is tracked as a
-                // follow-up — no toast primitive exists in the composer
-                // today, so the existing sticker/GIF handlers above also
-                // swallow without UI feedback.
+                // Console for devtools (CSP block, homeserver upload refusal,
+                // expired token) plus a user-facing toast so the failure isn't
+                // silent — the picker has already closed by this point.
                 // eslint-disable-next-line no-console
                 console.warn('tenor: failed to send GIF', err);
+                showToast(t('Features.GifPicker.send_error'), { variant: 'Critical' });
             }
         };
 

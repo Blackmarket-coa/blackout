@@ -35,12 +35,8 @@ export class TenorDisabledError extends Error {
     }
 }
 
-const isHttp503 = (err: unknown): boolean => {
-    if (err instanceof BlackoutSdkError) {
-        return /\b503\b/.test(err.message);
-    }
-    return false;
-};
+const isHttp503 = (err: unknown): boolean =>
+    err instanceof BlackoutSdkError && err.status === 503;
 
 const callJson = async <T>(
     method: 'GET' | 'POST',

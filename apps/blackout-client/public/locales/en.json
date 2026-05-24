@@ -3,5 +3,14 @@
     "RoomCommon": {
       "changed_room_name": " changed den name"
     }
+  },
+  "Features": {
+    "GifPicker": {
+      "search_placeholder": "Search GIFs on Tenor",
+      "attribution": "Powered by Tenor",
+      "no_results": "No GIFs found for \"{{query}}\".",
+      "load_error": "Could not load GIFs. Check your connection and try again.",
+      "send_error": "Could not send GIF. Try again."
+    }
   }
 }

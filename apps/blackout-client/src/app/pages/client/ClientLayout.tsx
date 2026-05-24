@@ -39,6 +39,7 @@ import RightPanelContent from '../../features/right-panel/RightPanelContent';
 import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { InvitationsManager } from '../../components/invitations';
+import { ToastOutlet } from '../../components/toast/ToastOutlet';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
@@ -768,6 +769,8 @@ export const ClientLayout = () => {
                 onClose={() => setQuickOpen(false)}
                 onCommandPicked={(command) => void handleCommandPicked(command)}
             />
+
+            <ToastOutlet />
 
             {desktop || (!mobile && !selectedRoomId) ? (
                 <PrimaryRail
