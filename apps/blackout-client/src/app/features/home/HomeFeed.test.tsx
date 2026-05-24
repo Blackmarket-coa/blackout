@@ -79,6 +79,13 @@ describe('HomeFeed', () => {
         expect(container.querySelector('[data-testid="home-feed-list"]')).toBeNull();
     });
 
+    it('surfaces a quick-action link to the consolidated streaming page', async () => {
+        const { container } = await mountWithRooms([]);
+        const link = container.querySelector('[data-testid="home-quick-action-streaming"]');
+        expect(link).not.toBeNull();
+        expect(link?.getAttribute('href')).toBe('/streaming');
+    });
+
     it('renders cards in chronological order with deep links to canopy/den', async () => {
         const now = Date.now();
         const { container } = await mountWithRooms([

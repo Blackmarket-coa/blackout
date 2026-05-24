@@ -46,6 +46,7 @@ describe('RegistrySidebarList', () => {
             plugins: false,
             coalition: false,
             coliseum: false,
+            streaming: false,
         });
         const { container } = await mount(
             <MemoryRouter>
@@ -182,6 +183,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 plugins: false,
                 coalition: false,
                 coliseum: false,
+                streaming: false,
             },
         });
         expect(objects).toEqual([]);

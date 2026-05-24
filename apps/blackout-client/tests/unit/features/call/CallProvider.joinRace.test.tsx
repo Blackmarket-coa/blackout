@@ -73,7 +73,7 @@ const renderProvider = () => {
 
 describe('CallProvider joinCall race', () => {
     beforeEach(() => {
-        const stubStream = { getTracks: () => [] };
+        const stubStream = { getTracks: () => [], getAudioTracks: () => [], getVideoTracks: () => [] };
         Object.defineProperty(navigator, 'mediaDevices', {
             configurable: true,
             value: { getUserMedia: vi.fn().mockResolvedValue(stubStream) },
