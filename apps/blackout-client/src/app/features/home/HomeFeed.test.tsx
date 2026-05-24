@@ -104,6 +104,16 @@ describe('HomeFeed', () => {
         expect(link?.getAttribute('href')).toBe('/streaming');
     });
 
+    it('surfaces quick-action links to the Coalition and Coliseum destinations', async () => {
+        const { container } = await mountWithRooms([]);
+        const coalition = container.querySelector('[data-testid="home-quick-action-coalition"]');
+        expect(coalition).not.toBeNull();
+        expect(coalition?.getAttribute('href')).toBe('/coalition');
+        const coliseum = container.querySelector('[data-testid="home-quick-action-coliseum"]');
+        expect(coliseum).not.toBeNull();
+        expect(coliseum?.getAttribute('href')).toBe('/coliseum');
+    });
+
     it('renders cards in chronological order with deep links to canopy/den', async () => {
         const now = Date.now();
         const { container } = await mountWithRooms([

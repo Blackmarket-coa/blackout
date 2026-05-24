@@ -7,10 +7,19 @@ import {
 } from '../../components/invite-landing/postAcceptanceRoute';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
-import { COMMUNITIES_PATH, STREAMING_PATH, buildCommunitiesPath } from '../../pages/paths';
+import {
+    COALITION_PATH,
+    COLISEUM_PATH,
+    COMMUNITIES_PATH,
+    EVENTS_PATH,
+    LIVE_PATH,
+    MARKET_PATH,
+    STREAMING_PATH,
+    buildCommunitiesPath,
+} from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
-import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { runtimeFeatureFlags, type FeatureFlags } from '../../core/features/featureFlags';
 import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
@@ -110,6 +119,64 @@ const ctaLinkStyle: CSSProperties = {
     fontWeight: 600,
 };
 
+interface QuickAction {
+    flag: keyof FeatureFlags;
+    to: string;
+    title: string;
+    subtitle: string;
+    testid: string;
+}
+
+/**
+ * Shortcut cards for the major top-level destinations. Each is gated by its
+ * own feature flag so a card only renders when its route is actually mounted
+ * (never a dead link). Order is display priority.
+ */
+const QUICK_ACTIONS: QuickAction[] = [
+    {
+        flag: 'streaming',
+        to: STREAMING_PATH,
+        title: 'Streaming',
+        subtitle: 'Go live, manage connections & integrations',
+        testid: 'home-quick-action-streaming',
+    },
+    {
+        flag: 'coalition',
+        to: COALITION_PATH,
+        title: 'Coalition',
+        subtitle: 'Cross-canopy mutual aid, map & shop',
+        testid: 'home-quick-action-coalition',
+    },
+    {
+        flag: 'coliseum',
+        to: COLISEUM_PATH,
+        title: 'Coliseum',
+        subtitle: 'Debate topics, live verdicts & sources',
+        testid: 'home-quick-action-coliseum',
+    },
+    {
+        flag: 'eventsV1',
+        to: EVENTS_PATH,
+        title: 'Events',
+        subtitle: 'Upcoming events & RSVPs',
+        testid: 'home-quick-action-events',
+    },
+    {
+        flag: 'streamsViewer',
+        to: LIVE_PATH,
+        title: 'Live',
+        subtitle: 'Browse live streams',
+        testid: 'home-quick-action-live',
+    },
+    {
+        flag: 'marketTab',
+        to: MARKET_PATH,
+        title: 'Market',
+        subtitle: 'Browse marketplace listings',
+        testid: 'home-quick-action-market',
+    },
+];
+
 /**
  * Top-level destination mounted at `/` when both `shellAppShell` and
  * `discoveryHomeFeed` flags are on. Renders a unified, client-aggregated
@@ -156,6 +223,8 @@ export const HomeFeed = (): JSX.Element => {
     }, [inviteDen, inviteCanopy, tourEnabled, tourStatus, homeTour, navigate]);
 
     const activeItems = tab === 'following' ? feed.following : feed.discover;
+
+    const quickActions = QUICK_ACTIONS.filter((action) => runtimeFeatureFlags[action.flag]);
 
     const pluginCards = useMemo(
         () =>
@@ -206,25 +275,26 @@ export const HomeFeed = (): JSX.Element => {
                 ) : null}
             </header>
             <TopicChipBar />
-            {runtimeFeatureFlags.streaming ? (
+            {quickActions.length > 0 ? (
                 <section
                     style={sectionStyle}
                     data-shell-region="home-quick-actions"
                     data-testid="home-quick-actions"
                 >
                     <header style={sectionLabelStyle}>Quick actions</header>
-                    <Link
-                        to={STREAMING_PATH}
-                        style={cardStyle}
-                        data-testid="home-quick-action-streaming"
-                    >
-                        <span style={cardBodyStyle}>
-                            <span style={cardTitleStyle}>Streaming</span>
-                            <span style={cardSubtitleStyle}>
-                                Go live, manage connections &amp; integrations
+                    {quickActions.map((action) => (
+                        <Link
+                            key={action.to}
+                            to={action.to}
+                            style={cardStyle}
+                            data-testid={action.testid}
+                        >
+                            <span style={cardBodyStyle}>
+                                <span style={cardTitleStyle}>{action.title}</span>
+                                <span style={cardSubtitleStyle}>{action.subtitle}</span>
                             </span>
-                        </span>
-                    </Link>
+                        </Link>
+                    ))}
                 </section>
             ) : null}
             {pluginCards.length > 0 ? (
