@@ -47,9 +47,17 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         targetTestId: 'topic-chip-bar',
         allowCenterFallback: true,
         filePaths: ['apps/blackout-client/src/app/features/topics/TopicChipBar.tsx'],
-        docLinks: [
-            { label: 'component-roadmap-v1.md', href: '/component-roadmap-v1.md' },
-        ],
+        docLinks: [{ label: 'component-roadmap-v1.md', href: '/component-roadmap-v1.md' }],
+    },
+    {
+        id: 'quick-actions',
+        title: 'Quick actions',
+        body: 'Shortcut cards jump straight to the major destinations — Streaming, Coalition, and Coliseum (plus Events, Live, and Market when those are enabled). Each card is feature-flag gated, so you only ever see links that go somewhere.',
+        targetTestId: 'home-quick-actions',
+        fallbackRegion: 'home-quick-actions',
+        allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
         id: 'plugin-cards',
@@ -62,24 +70,34 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
             'apps/blackout-client/src/app/features/home/PluginCardRail.tsx',
             'apps/blackout-client/src/app/features/monetization/install/installedPluginsAtom.ts',
         ],
-        docLinks: [
-            { label: 'ROADMAP.md', href: '/ROADMAP.md' },
-        ],
+        docLinks: [{ label: 'ROADMAP.md', href: '/ROADMAP.md' }],
     },
     {
         id: 'activity-feed',
-        title: 'Activity feed',
-        body: 'A chronological merge of joined dens, grouped into Today / This week / Earlier. The feed is built by `buildHomeFeed` from a pure data model — no new server endpoint required.',
+        title: 'Following feed',
+        body: 'A unified, ranked feed of activity from the communities and creators you follow — joined dens, livestreams, coalition posts, and coliseum debates merged into one list. Aggregated client-side, so no new server endpoint is required.',
         targetTestId: 'home-feed-list',
-        fallbackRegion: 'home-feed',
+        fallbackRegion: 'home-following',
         allowCenterFallback: true,
         filePaths: [
             'apps/blackout-client/src/app/features/home/HomeFeed.tsx',
-            'apps/blackout-client/src/app/features/home/feedModel.ts',
+            'apps/blackout-client/src/app/features/home/unifiedFeedModel.ts',
+            'apps/blackout-client/src/app/features/home/hooks/useUnifiedFeed.ts',
         ],
-        docLinks: [
-            { label: 'TESTERS.md', href: '/TESTERS.md' },
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
+        id: 'discover-feed',
+        title: 'Discover feed',
+        body: 'Below Following, the Discover section surfaces ranked content you are not following yet — coalitions, coliseum debates, and live streams from across Blackout. It is de-duplicated against Following so nothing shows up twice.',
+        targetTestId: 'home-discover-list',
+        fallbackRegion: 'home-discover',
+        allowCenterFallback: true,
+        filePaths: [
+            'apps/blackout-client/src/app/features/home/HomeFeed.tsx',
+            'apps/blackout-client/src/app/features/home/unifiedFeedModel.ts',
         ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
         id: 'activity-card',
@@ -88,9 +106,7 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         targetTestId: 'home-feed-card',
         allowCenterFallback: true,
         filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
-        docLinks: [
-            { label: 'TESTERS.md', href: '/TESTERS.md' },
-        ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
         id: 'empty-state',
@@ -100,7 +116,10 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         allowCenterFallback: true,
         filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
         docLinks: [
-            { label: 'docs/discord_like_onboarding_execution_plan.md', href: '/docs/discord_like_onboarding_execution_plan.md' },
+            {
+                label: 'docs/discord_like_onboarding_execution_plan.md',
+                href: '/docs/discord_like_onboarding_execution_plan.md',
+            },
         ],
     },
     {
@@ -108,12 +127,20 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         title: 'Quick switcher (Cmd+K / Ctrl+K)',
         body: 'Press Cmd+K (⌘K) on macOS or Ctrl+K on Windows/Linux anywhere in the app to jump to any room, command, or developer tool surface.',
         allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/features/settings/DeveloperSettings.tsx'],
+        docLinks: [{ label: 'developer_guide.md', href: '/developer_guide.md' }],
+    },
+    {
+        id: 'bug-reporting',
+        title: 'Report a problem',
+        body: 'A floating “Report a problem” button is available on every screen. It captures context about what you are looking at and posts the report to the `#bugs` room, so testers can file issues without leaving the app.',
+        targetTestId: 'bug-report-fab',
+        allowCenterFallback: true,
         filePaths: [
-            'apps/blackout-client/src/app/features/settings/DeveloperSettings.tsx',
+            'apps/blackout-client/src/app/features/bug-widget/BugReportFab.tsx',
+            'apps/blackout-client/src/app/features/bug-widget/BugReportWidgetModal.tsx',
         ],
-        docLinks: [
-            { label: 'developer_guide.md', href: '/developer_guide.md' },
-        ],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
     },
     {
         id: 'developer-tools',
