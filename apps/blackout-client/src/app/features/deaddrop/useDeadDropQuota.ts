@@ -12,11 +12,13 @@ import { useMemo } from 'react';
 import {
     DEAD_DROP_ENTITLEMENT_KEYS,
     DEAD_DROP_QUOTAS,
+    buildFullyUnlockedEntitlementPayload,
     type DeadDropQuotas,
     type EntitlementAccessPayload,
     type EntitlementTier,
 } from '@blackout/protocol';
 import { resolveSdkEntitlement } from '@blackout/sdk';
+import { betaUnlockAllEnabled } from '../../core/features/betaUnlock';
 
 export type DeadDropQuotaSnapshot = {
     tier: EntitlementTier;
@@ -46,7 +48,9 @@ const FREE_FALLBACK: EntitlementAccessPayload = {
  * default value below should switch to reading from it.
  */
 export const useDeadDropQuota = (
-    payload: EntitlementAccessPayload = FREE_FALLBACK
+    payload: EntitlementAccessPayload = betaUnlockAllEnabled()
+        ? buildFullyUnlockedEntitlementPayload()
+        : FREE_FALLBACK
 ): DeadDropQuotaSnapshot =>
     useMemo(() => {
         const tier = payload.planState?.tier ?? payload.orgTier ?? 'free';

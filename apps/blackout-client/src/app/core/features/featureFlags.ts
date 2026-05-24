@@ -1,4 +1,5 @@
 import type { RuntimePluginId } from './manifest';
+import { betaUnlockAllEnabledIn } from './betaUnlock';
 
 export type FeatureFlags = {
     governance: boolean;
@@ -390,6 +391,13 @@ export const resolveFeatureFlags = (
     env: Record<string, string | undefined> = {},
     baseFlags: FeatureFlags = defaultFeatureFlags
 ): FeatureFlags => {
+    // Beta override: unlock every feature flag (incl. the monetization suite).
+    if (betaUnlockAllEnabledIn(env)) {
+        return Object.fromEntries(
+            (Object.keys(baseFlags) as (keyof FeatureFlags)[]).map((key) => [key, true])
+        ) as FeatureFlags;
+    }
+
     const mode = parseFeatureMode(env.BLACKOUT_FEATURE_MODE);
 
     if (mode === 'default') {
@@ -868,9 +876,18 @@ export const resolveFeatureFlags = (
     return nextFlags;
 };
 
-const runtimeEnv =
-    typeof process !== 'undefined' && process.env
-        ? (process.env as Record<string, string | undefined>)
-        : {};
+const collectRuntimeEnv = (): Record<string, string | undefined> => {
+    const env: Record<string, string | undefined> = {};
+    if (typeof process !== 'undefined' && process.env) {
+        Object.assign(env, process.env as Record<string, string | undefined>);
+    }
+    try {
+        const meta = (Function('return import.meta')() as { env?: Record<string, string | undefined> }) ?? {};
+        if (meta.env) Object.assign(env, meta.env);
+    } catch {
+        // ignore — `import.meta` is unavailable in some test contexts.
+    }
+    return env;
+};
 
-export const runtimeFeatureFlags = resolveFeatureFlags(runtimeEnv);
+export const runtimeFeatureFlags = resolveFeatureFlags(collectRuntimeEnv());

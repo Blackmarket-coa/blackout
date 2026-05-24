@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
-import { DEAD_DROP_TIER_ENTITLEMENTS, parseEntitlementAccessPayload } from '@blackout/protocol';
+import { DEAD_DROP_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload, parseEntitlementAccessPayload } from '@blackout/protocol';
 import type { MarketplaceProviderId } from '@blackout/core';
 import { getSubscription } from '../services/subscriptions';
 import { requireUser } from '../middleware/require-user';
 import { entitlementForListing } from '../services/entitlementChecks';
+import { betaUnlockAllEnabled } from '../services/betaUnlock';
 
 const VALID_PROVIDER_IDS: MarketplaceProviderId[] = [
   'freeblackmarket',
@@ -25,6 +26,7 @@ const deaddropEntitlementsForTier = (tier: EntitlementTier): EntitlementMap =>
   DEAD_DROP_TIER_ENTITLEMENTS[tier] as EntitlementMap;
 
 function defaultPayload(): EntitlementAccessPayload {
+  if (betaUnlockAllEnabled()) return buildFullyUnlockedEntitlementPayload();
   return {
     deploymentPreset: 'starter',
     deploymentPresetEntitlements: {
@@ -55,6 +57,7 @@ function readPayloadFromHeader(rawHeader: string | undefined): EntitlementAccess
 }
 
 function canonicalPayloadFromSubscription(userId: string): EntitlementAccessPayload {
+  if (betaUnlockAllEnabled()) return buildFullyUnlockedEntitlementPayload();
   const subscription = getSubscription(userId);
   const paid = subscription.entitlementActive;
   const premium = subscription.tier !== 'free';

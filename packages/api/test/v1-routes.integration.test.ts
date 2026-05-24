@@ -215,6 +215,51 @@ test('v1 entitlements returns 400 for invalid payload', async () => {
   assert.equal(response.status, 400);
 });
 
+test('BLACKOUT_BETA_UNLOCK_ALL unlocks all services and reverts when unset', async () => {
+  const { token } = await registerUser();
+
+  // Default (flag unset): a fresh user is free tier and not paid.
+  const free = await app.request('/v1/entitlements/me', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(free.status, 200);
+  const freePlan = ((await json(free)).payload as Record<string, unknown>).planState as Record<string, unknown>;
+  assert.equal(freePlan.tier, 'free');
+  assert.equal(freePlan.isPaid, false);
+
+  process.env.BLACKOUT_BETA_UNLOCK_ALL = 'true';
+  try {
+    const unlocked = await app.request('/v1/entitlements/me', {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(unlocked.status, 200);
+    const payload = (await json(unlocked)).payload as Record<string, unknown>;
+    const plan = payload.planState as Record<string, unknown>;
+    assert.equal(plan.tier, 'enterprise');
+    assert.equal(plan.isPaid, true);
+    const ents = payload.deploymentPresetEntitlements as Record<string, boolean>;
+    assert.equal(ents['features.stego.ephemeral'], true);
+    assert.equal(ents['features.governance.entitlements'], true);
+    assert.equal(ents['features.deaddrop.team.quorumOpen'], true);
+
+    // Per-listing marketplace paywall is also bypassed under the flag.
+    const listing = await app.request('/v1/entitlements/listings/freeblackmarket/listing-123', {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(listing.status, 200);
+    assert.equal((await json(listing)).canAccess, true);
+  } finally {
+    delete process.env.BLACKOUT_BETA_UNLOCK_ALL;
+  }
+
+  // Reversibility: with the flag cleared, the user is free tier again.
+  const reverted = await app.request('/v1/entitlements/me', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const revertedPlan = ((await json(reverted)).payload as Record<string, unknown>).planState as Record<string, unknown>;
+  assert.equal(revertedPlan.tier, 'free');
+});
+
 test('v1 subscriptions checkout + webhook + entitlement state works end-to-end', async () => {
   const { token, userId } = await registerUser();
 
