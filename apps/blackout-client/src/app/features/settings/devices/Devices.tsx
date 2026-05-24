@@ -26,6 +26,7 @@ import {
 } from '../../../hooks/useSecretStorage';
 import { useCrossSigningActive } from '../../../hooks/useCrossSigning';
 import { BackupRestoreTile } from '../../../components/BackupRestore';
+import { MessageRecovery } from './MessageRecovery';
 
 function DevicesPlaceholder() {
   return (
@@ -110,6 +111,7 @@ export function Devices({ requestClose }: DevicesProps) {
                       </>
                     }
                   />
+                  <MessageRecovery />
                 </SequenceCard>
               </Box>
               <Box direction="Column" gap="100">
