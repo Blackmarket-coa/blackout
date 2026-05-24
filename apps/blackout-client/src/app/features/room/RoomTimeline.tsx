@@ -1,5 +1,4 @@
 import {
-    Fragment,
     type CSSProperties,
     type ReactNode,
     memo,
@@ -11,16 +10,15 @@ import {
     useState,
 } from 'react';
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useSetAtom } from 'jotai';
+import { VirtualTile } from '../../components/virtualizer';
 import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
-import {
-    useLegacyRoomTimelineAdapter as useRoomTimeline,
-    useLegacyTimelineScrollAdapter as useTimelineScroll,
-} from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
+import { useLegacyRoomTimelineAdapter as useRoomTimeline } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useLegacyTypingIndicatorAdapter as useTypingIndicator } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
 import {
     AudioMessage as TimelineAudioMessage,
@@ -655,12 +653,12 @@ export const RoomTimeline = ({
     const { data: events, loadMore } = useRoomTimeline(roomId);
     const { data: room } = useRoom(roomId);
     const { data: typingMembers } = useTypingIndicator(roomId);
-    const { position, savePosition } = useTimelineScroll(roomId);
 
     const scrollerRef = useRef<HTMLDivElement | null>(null);
-    const [scrollTop, setScrollTop] = useState(0);
-    const [viewportHeight, setViewportHeight] = useState(600);
     const [isAtBottom, setIsAtBottom] = useState(true);
+    const isAtBottomRef = useRef(true);
+    const initialScrollDoneRef = useRef(false);
+    const backPaginateAnchorRef = useRef<string | null>(null);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
     const buildProfile = useCallback(
         (userId: string): MemberProfile => ({
@@ -688,14 +686,13 @@ export const RoomTimeline = ({
 
     const items = useMemo(() => buildTimelineItems(events, unreadEventId), [events, unreadEventId]);
 
-    const startIndex = Math.max(Math.floor(scrollTop / ROW_ESTIMATE) - OVERSCAN, 0);
-    const endIndex = Math.min(
-        Math.ceil((scrollTop + viewportHeight) / ROW_ESTIMATE) + OVERSCAN,
-        items.length
-    );
-
-    const beforeHeight = startIndex * ROW_ESTIMATE;
-    const afterHeight = Math.max(items.length - endIndex, 0) * ROW_ESTIMATE;
+    const virtualizer = useVirtualizer({
+        count: items.length,
+        getScrollElement: () => scrollerRef.current,
+        estimateSize: () => ROW_ESTIMATE,
+        overscan: OVERSCAN,
+        getItemKey: (index) => items[index]?.id ?? index,
+    });
 
     const getReceipts = useCallback(
         (event: MatrixEvent): ReadReceipt[] => {
@@ -721,31 +718,51 @@ export const RoomTimeline = ({
         const el = scrollerRef.current;
         if (!el) return;
 
-        setScrollTop(el.scrollTop);
-        savePosition(el.scrollTop);
-
         const nearBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < 48;
+        isAtBottomRef.current = nearBottom;
         setIsAtBottom(nearBottom);
 
         if (el.scrollTop < 80 && hasMoreBackPagination) {
+            const firstVisible = virtualizer
+                .getVirtualItems()
+                .find((vItem) => items[vItem.index]?.kind === 'message');
+            backPaginateAnchorRef.current = firstVisible
+                ? (items[firstVisible.index]?.id ?? null)
+                : null;
             await loadMore(40);
         }
-    }, [hasMoreBackPagination, loadMore, savePosition]);
+    }, [hasMoreBackPagination, items, loadMore, virtualizer]);
+
+    // Open the room at the newest message once items are available.
+    useLayoutEffect(() => {
+        initialScrollDoneRef.current = false;
+    }, [roomId]);
 
     useLayoutEffect(() => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        el.scrollTop = position;
-        setScrollTop(position);
-        setViewportHeight(el.clientHeight);
-    }, [position]);
+        if (initialScrollDoneRef.current || items.length === 0) return;
+        virtualizer.scrollToIndex(items.length - 1, { align: 'end' });
+        isAtBottomRef.current = true;
+        setIsAtBottom(true);
+        initialScrollDoneRef.current = true;
+    }, [items.length, virtualizer]);
 
+    // Hold the reading position when older messages are prepended.
+    useLayoutEffect(() => {
+        const anchorId = backPaginateAnchorRef.current;
+        if (!anchorId) return;
+        backPaginateAnchorRef.current = null;
+        const index = items.findIndex((item) => item.id === anchorId);
+        if (index >= 0) {
+            virtualizer.scrollToIndex(index, { align: 'start' });
+        }
+    }, [items, virtualizer]);
+
+    // Stick to the bottom for new messages only when already at the bottom.
     useEffect(() => {
-        const el = scrollerRef.current;
-        if (!el || !isAtBottom) return;
-        el.scrollTop = el.scrollHeight;
-        setScrollTop(el.scrollTop);
-    }, [events.length, isAtBottom]);
+        if (!initialScrollDoneRef.current || !isAtBottomRef.current) return;
+        if (backPaginateAnchorRef.current || items.length === 0) return;
+        virtualizer.scrollToIndex(items.length - 1, { align: 'end' });
+    }, [items.length, virtualizer]);
 
     const lastReceiptRef = useRef<string | null>(null);
     useEffect(() => {
@@ -776,44 +793,35 @@ export const RoomTimeline = ({
             return;
         }
 
-        const nextPos = Math.max(index * ROW_ESTIMATE - ROW_ESTIMATE * 2, 0);
-        const el = scrollerRef.current;
-        if (el) {
-            el.scrollTop = nextPos;
-            setScrollTop(nextPos);
-        }
+        virtualizer.scrollToIndex(index, { align: 'center' });
         onJumpResolved?.(jumpToEventId, true);
-    }, [items, jumpToEventId, onJumpResolved]);
+    }, [items, jumpToEventId, onJumpResolved, virtualizer]);
 
     return (
         <section style={styles.timeline}>
             <div ref={scrollerRef} style={styles.scroller} onScroll={() => void handleScroll()}>
-                <div style={styles.viewport}>
-                    <div style={{ height: beforeHeight }} />
-                    {items.slice(startIndex, endIndex).map((item) => {
+                <div style={{ ...styles.viewport, height: virtualizer.getTotalSize() }}>
+                    {virtualizer.getVirtualItems().map((vItem) => {
+                        const item = items[vItem.index];
+                        if (!item) return null;
+
+                        let content: ReactNode;
                         if (item.kind === 'day') {
-                            return (
-                                <div key={item.id} style={{ ...styles.row, ...styles.dayDivider }}>
+                            content = (
+                                <div style={{ ...styles.row, ...styles.dayDivider }}>
                                     <span style={styles.dividerLabel}>{item.label}</span>
                                 </div>
                             );
-                        }
-
-                        if (item.kind === 'unread') {
-                            return (
-                                <div
-                                    key={item.id}
-                                    style={{ ...styles.row, ...styles.unreadDivider }}
-                                >
+                        } else if (item.kind === 'unread') {
+                            content = (
+                                <div style={{ ...styles.row, ...styles.unreadDivider }}>
                                     <span style={styles.unreadRule} />
                                     <span>New messages</span>
                                     <span style={styles.unreadRule} />
                                 </div>
                             );
-                        }
-
-                        return (
-                            <Fragment key={item.id}>
+                        } else {
+                            content = (
                                 <MessageBubble
                                     event={item.event}
                                     groupedWithPrevious={item.groupedWithPrevious}
@@ -824,10 +832,19 @@ export const RoomTimeline = ({
                                         setProfileTarget(buildProfile(userId))
                                     }
                                 />
-                            </Fragment>
+                            );
+                        }
+
+                        return (
+                            <VirtualTile
+                                key={vItem.key}
+                                virtualItem={vItem}
+                                ref={virtualizer.measureElement}
+                            >
+                                {content}
+                            </VirtualTile>
                         );
                     })}
-                    <div style={{ height: afterHeight }} />
                 </div>
             </div>
 
@@ -836,9 +853,11 @@ export const RoomTimeline = ({
                     type="button"
                     style={styles.jumpButton}
                     onClick={() => {
-                        const el = scrollerRef.current;
-                        if (!el) return;
-                        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                        if (items.length === 0) return;
+                        virtualizer.scrollToIndex(items.length - 1, {
+                            align: 'end',
+                            behavior: 'smooth',
+                        });
                     }}
                 >
                     Jump to latest
