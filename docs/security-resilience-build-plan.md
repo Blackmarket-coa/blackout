@@ -115,6 +115,25 @@ suite via `packages/api/src/middleware/security-headers.ts`. Operator knobs:
   staged rollout.
 - `CSP_REPORT_URI` — endpoint that receives violation reports.
 
+#### Tenor GIF picker (`TENOR_API_KEY` set)
+
+The picker thumbnails load from `https://media.tenor.com` (and the
+geo-balanced `media1`/`media2`/`media3.tenor.com` shards). The full-size
+GIF the user picks is fetched through the `/v1/integrations/tenor/binary`
+proxy and uploaded to the homeserver, so receivers — including in E2EE
+rooms — never hit Tenor; only the sender's picker grid does.
+
+Operator action when enabling the picker on a host that emits its own
+CSP (e.g. nginx in front of `apps/blackout-client`, Netlify `_headers`,
+or a CDN config): add the Tenor CDN suffix to `img-src`:
+
+```
+img-src 'self' data: blob: https://*.tenor.com;
+```
+
+No `connect-src` change is needed — the browser only talks to the
+Blackout API origin.
+
 The static client also emits per-asset Subresource Integrity hashes at build
 time (sha384) via `apps/blackout-client/vite-plugin-sri.ts`.
 

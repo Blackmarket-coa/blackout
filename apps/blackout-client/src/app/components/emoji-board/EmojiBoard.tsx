@@ -49,7 +49,9 @@ import {
     getEmojiItemInfo,
     EmojiGroup,
     EmojiBoardLayout,
+    TenorPanel,
 } from './components';
+import { TenorPickerItem } from '../../features/room/tenorClient';
 import { EmojiBoardTab, EmojiType } from './types';
 import { VirtualTile } from '../virtualizer';
 
@@ -394,6 +396,7 @@ type EmojiBoardProps = {
     onCustomEmojiSelect?: (mxc: string, shortcode: string) => void;
     onStickerSelect?: (mxc: string, shortcode: string, label: string) => void;
     onGifSelect?: (mxc: string, shortcode: string, label: string) => void;
+    onTenorGifSelect?: (item: TenorPickerItem, query: string) => void;
     allowTextCustomEmoji?: boolean;
     addToRecentEmoji?: boolean;
 };
@@ -408,9 +411,11 @@ export function EmojiBoard({
     onCustomEmojiSelect,
     onStickerSelect,
     onGifSelect,
+    onTenorGifSelect,
     allowTextCustomEmoji,
     addToRecentEmoji = true,
 }: EmojiBoardProps) {
+    const [tenorDisabled, setTenorDisabled] = React.useState(false);
     const mx = useMatrixClient();
 
     const emojiTab = tab === EmojiBoardTab.Emoji;
@@ -529,6 +534,14 @@ export function EmojiBoard({
         }
     }, [tab, virtualizer, groups]);
 
+    // Tenor takes over the Gif tab when:
+    //   - the host provides an `onTenorGifSelect` handler, AND
+    //   - the server-side proxy hasn't reported itself disabled (503).
+    // When false (Tenor not wired or 503), we fall back to the existing
+    // user-pack-based Gif grid + "No GIF Packs!" empty state.
+    const tenorActive =
+        tab === EmojiBoardTab.Gif && !!onTenorGifSelect && !tenorDisabled;
+
     return (
         <FocusTrap
             focusTrapOptions={{
@@ -548,13 +561,15 @@ export function EmojiBoard({
                 header={
                     <Box direction="Column" gap="200">
                         {onTabChange && <EmojiBoardTabs tab={tab} onTabChange={onTabChange} />}
-                        <SearchInput
-                            key={tab}
-                            query={result?.query}
-                            onChange={handleOnChange}
-                            allowTextCustomEmoji={allowTextCustomEmoji}
-                            onTextCustomEmojiSelect={handleTextCustomEmojiSelect}
-                        />
+                        {!tenorActive && (
+                            <SearchInput
+                                key={tab}
+                                query={result?.query}
+                                onChange={handleOnChange}
+                                allowTextCustomEmoji={allowTextCustomEmoji}
+                                onTextCustomEmojiSelect={handleTextCustomEmojiSelect}
+                            />
+                        )}
                     </Box>
                 }
                 sidebar={
@@ -573,51 +588,73 @@ export function EmojiBoard({
                     )
                 }
             >
-                <Box grow="Yes">
-                    <EmojiGroupHolder
-                        key={tab}
-                        contentScrollRef={contentScrollRef}
-                        previewAtom={previewAtom}
-                        onGroupItemClick={handleGroupItemClick}
-                    >
-                        {searchedItems && (
-                            <EmojiGroup
-                                id={SEARCH_GROUP_ID}
-                                label={searchedItems.length ? 'Search Results' : 'No Results found'}
-                            >
-                                {searchedItems.map(renderItem)}
-                            </EmojiGroup>
-                        )}
-                        <div
-                            ref={virtualBaseRef}
-                            style={{
-                                position: 'relative',
-                                height: virtualizer.getTotalSize(),
+                {tenorActive ? (
+                    <Box grow="Yes">
+                        <TenorPanel
+                            onSelect={(item, query) => {
+                                onTenorGifSelect?.(item, query);
+                                requestClose();
                             }}
+                            onDisabled={() => setTenorDisabled(true)}
+                        />
+                    </Box>
+                ) : (
+                    <Box grow="Yes">
+                        <EmojiGroupHolder
+                            key={tab}
+                            contentScrollRef={contentScrollRef}
+                            previewAtom={previewAtom}
+                            onGroupItemClick={handleGroupItemClick}
                         >
-                            {vItems.map((vItem) => {
-                                const group = groups[vItem.index];
+                            {searchedItems && (
+                                <EmojiGroup
+                                    id={SEARCH_GROUP_ID}
+                                    label={
+                                        searchedItems.length
+                                            ? 'Search Results'
+                                            : 'No Results found'
+                                    }
+                                >
+                                    {searchedItems.map(renderItem)}
+                                </EmojiGroup>
+                            )}
+                            <div
+                                ref={virtualBaseRef}
+                                style={{
+                                    position: 'relative',
+                                    height: virtualizer.getTotalSize(),
+                                }}
+                            >
+                                {vItems.map((vItem) => {
+                                    const group = groups[vItem.index];
 
-                                return (
-                                    <VirtualTile
-                                        virtualItem={vItem}
-                                        style={{ paddingTop: config.space.S200 }}
-                                        ref={virtualizer.measureElement}
-                                        key={vItem.index}
-                                    >
-                                        <EmojiGroup key={group.id} id={group.id} label={group.name}>
-                                            {group.items.map(renderItem)}
-                                        </EmojiGroup>
-                                    </VirtualTile>
-                                );
-                            })}
-                        </div>
-                        {tab !== EmojiBoardTab.Emoji && groups.length === 0 && (
-                            <NoStickerPacks mode={tab === EmojiBoardTab.Gif ? 'gif' : 'sticker'} />
-                        )}
-                    </EmojiGroupHolder>
-                </Box>
-                <Preview previewAtom={previewAtom} />
+                                    return (
+                                        <VirtualTile
+                                            virtualItem={vItem}
+                                            style={{ paddingTop: config.space.S200 }}
+                                            ref={virtualizer.measureElement}
+                                            key={vItem.index}
+                                        >
+                                            <EmojiGroup
+                                                key={group.id}
+                                                id={group.id}
+                                                label={group.name}
+                                            >
+                                                {group.items.map(renderItem)}
+                                            </EmojiGroup>
+                                        </VirtualTile>
+                                    );
+                                })}
+                            </div>
+                            {tab !== EmojiBoardTab.Emoji && groups.length === 0 && (
+                                <NoStickerPacks
+                                    mode={tab === EmojiBoardTab.Gif ? 'gif' : 'sticker'}
+                                />
+                            )}
+                        </EmojiGroupHolder>
+                    </Box>
+                )}
+                {!tenorActive && <Preview previewAtom={previewAtom} />}
             </EmojiBoardLayout>
         </FocusTrap>
     );

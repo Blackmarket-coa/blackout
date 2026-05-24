@@ -1,323 +1,195 @@
 import React, { MutableRefObject, ReactNode, useEffect, useRef } from 'react';
-
-import Prism from 'prismjs';
-
-import 'prismjs/components/prism-abap.js';
-import 'prismjs/components/prism-abnf.js';
-import 'prismjs/components/prism-actionscript.js';
-import 'prismjs/components/prism-ada.js';
-import 'prismjs/components/prism-agda.js';
-import 'prismjs/components/prism-al.js';
-import 'prismjs/components/prism-antlr4.js';
-import 'prismjs/components/prism-apacheconf.js';
-import 'prismjs/components/prism-apex.js';
-import 'prismjs/components/prism-apl.js';
-import 'prismjs/components/prism-applescript.js';
-import 'prismjs/components/prism-aql.js';
-import 'prismjs/components/prism-arff.js';
-import 'prismjs/components/prism-armasm.js';
-import 'prismjs/components/prism-arturo.js';
-import 'prismjs/components/prism-asciidoc.js';
-import 'prismjs/components/prism-asm6502.js';
-import 'prismjs/components/prism-asmatmel.js';
-import 'prismjs/components/prism-aspnet.js';
-import 'prismjs/components/prism-autohotkey.js';
-import 'prismjs/components/prism-autoit.js';
-import 'prismjs/components/prism-avisynth.js';
-import 'prismjs/components/prism-avro-idl.js';
-import 'prismjs/components/prism-awk.js';
-import 'prismjs/components/prism-bash.js';
-import 'prismjs/components/prism-basic.js';
-import 'prismjs/components/prism-batch.js';
-import 'prismjs/components/prism-bbcode.js';
-import 'prismjs/components/prism-bbj.js';
-import 'prismjs/components/prism-bicep.js';
-import 'prismjs/components/prism-birb.js';
-import 'prismjs/components/prism-bnf.js';
-import 'prismjs/components/prism-bqn.js';
-import 'prismjs/components/prism-brainfuck.js';
-import 'prismjs/components/prism-brightscript.js';
-import 'prismjs/components/prism-bro.js';
-import 'prismjs/components/prism-bsl.js';
-import 'prismjs/components/prism-c.js';
-import 'prismjs/components/prism-cfscript.js';
-import 'prismjs/components/prism-cil.js';
-import 'prismjs/components/prism-cilkc.js';
-import 'prismjs/components/prism-cilkcpp.js';
-import 'prismjs/components/prism-clike.js';
-import 'prismjs/components/prism-clojure.js';
-import 'prismjs/components/prism-cmake.js';
-import 'prismjs/components/prism-cobol.js';
-import 'prismjs/components/prism-coffeescript.js';
-import 'prismjs/components/prism-concurnas.js';
-import 'prismjs/components/prism-cooklang.js';
-import 'prismjs/components/prism-coq.js';
-import 'prismjs/components/prism-cpp.js';
-import 'prismjs/components/prism-csharp.js';
-import 'prismjs/components/prism-cshtml.js';
-import 'prismjs/components/prism-csp.js';
-import 'prismjs/components/prism-css-extras.js';
-import 'prismjs/components/prism-css.js';
-import 'prismjs/components/prism-csv.js';
-import 'prismjs/components/prism-cue.js';
-import 'prismjs/components/prism-cypher.js';
-import 'prismjs/components/prism-d.js';
-import 'prismjs/components/prism-dart.js';
-import 'prismjs/components/prism-dataweave.js';
-import 'prismjs/components/prism-dax.js';
-import 'prismjs/components/prism-dhall.js';
-import 'prismjs/components/prism-diff.js';
-import 'prismjs/components/prism-dns-zone-file.js';
-import 'prismjs/components/prism-docker.js';
-import 'prismjs/components/prism-dot.js';
-import 'prismjs/components/prism-ebnf.js';
-import 'prismjs/components/prism-editorconfig.js';
-import 'prismjs/components/prism-eiffel.js';
-import 'prismjs/components/prism-ejs.js';
-import 'prismjs/components/prism-elixir.js';
-import 'prismjs/components/prism-elm.js';
-import 'prismjs/components/prism-erb.js';
-import 'prismjs/components/prism-erlang.js';
-import 'prismjs/components/prism-etlua.js';
-import 'prismjs/components/prism-excel-formula.js';
-import 'prismjs/components/prism-factor.js';
-import 'prismjs/components/prism-false.js';
-import 'prismjs/components/prism-firestore-security-rules.js';
-import 'prismjs/components/prism-flow.js';
-import 'prismjs/components/prism-fortran.js';
-import 'prismjs/components/prism-fsharp.js';
-import 'prismjs/components/prism-ftl.js';
-import 'prismjs/components/prism-gap.js';
-import 'prismjs/components/prism-gcode.js';
-import 'prismjs/components/prism-gdscript.js';
-import 'prismjs/components/prism-gedcom.js';
-import 'prismjs/components/prism-gettext.js';
-import 'prismjs/components/prism-gherkin.js';
-import 'prismjs/components/prism-git.js';
-import 'prismjs/components/prism-glsl.js';
-import 'prismjs/components/prism-gml.js';
-import 'prismjs/components/prism-gn.js';
-import 'prismjs/components/prism-go-module.js';
-import 'prismjs/components/prism-go.js';
-import 'prismjs/components/prism-gradle.js';
-import 'prismjs/components/prism-graphql.js';
-import 'prismjs/components/prism-groovy.js';
-import 'prismjs/components/prism-haml.js';
-import 'prismjs/components/prism-handlebars.js';
-import 'prismjs/components/prism-haskell.js';
-import 'prismjs/components/prism-haxe.js';
-import 'prismjs/components/prism-hcl.js';
-import 'prismjs/components/prism-hlsl.js';
-import 'prismjs/components/prism-hoon.js';
-import 'prismjs/components/prism-hpkp.js';
-import 'prismjs/components/prism-hsts.js';
-import 'prismjs/components/prism-http.js';
-import 'prismjs/components/prism-ichigojam.js';
-import 'prismjs/components/prism-icon.js';
-import 'prismjs/components/prism-icu-message-format.js';
-import 'prismjs/components/prism-idris.js';
-import 'prismjs/components/prism-iecst.js';
-import 'prismjs/components/prism-ignore.js';
-import 'prismjs/components/prism-inform7.js';
-import 'prismjs/components/prism-ini.js';
-import 'prismjs/components/prism-io.js';
-import 'prismjs/components/prism-j.js';
-import 'prismjs/components/prism-java.js';
-import 'prismjs/components/prism-javadoclike.js';
-import 'prismjs/components/prism-javascript.js';
-import 'prismjs/components/prism-javastacktrace.js';
-import 'prismjs/components/prism-jexl.js';
-import 'prismjs/components/prism-jolie.js';
-import 'prismjs/components/prism-jq.js';
-import 'prismjs/components/prism-js-extras.js';
-import 'prismjs/components/prism-js-templates.js';
-import 'prismjs/components/prism-json.js';
-import 'prismjs/components/prism-json5.js';
-import 'prismjs/components/prism-jsonp.js';
-import 'prismjs/components/prism-jsstacktrace.js';
-import 'prismjs/components/prism-jsx.js';
-import 'prismjs/components/prism-julia.js';
-import 'prismjs/components/prism-keepalived.js';
-import 'prismjs/components/prism-keyman.js';
-import 'prismjs/components/prism-kotlin.js';
-import 'prismjs/components/prism-kumir.js';
-import 'prismjs/components/prism-kusto.js';
-import 'prismjs/components/prism-latex.js';
-import 'prismjs/components/prism-latte.js';
-import 'prismjs/components/prism-less.js';
-import 'prismjs/components/prism-lilypond.js';
-import 'prismjs/components/prism-linker-script.js';
-import 'prismjs/components/prism-liquid.js';
-import 'prismjs/components/prism-lisp.js';
-import 'prismjs/components/prism-livescript.js';
-import 'prismjs/components/prism-llvm.js';
-import 'prismjs/components/prism-log.js';
-import 'prismjs/components/prism-lolcode.js';
-import 'prismjs/components/prism-lua.js';
-import 'prismjs/components/prism-magma.js';
-import 'prismjs/components/prism-makefile.js';
-import 'prismjs/components/prism-markdown.js';
-import 'prismjs/components/prism-markup-templating.js';
-import 'prismjs/components/prism-markup.js';
-import 'prismjs/components/prism-mata.js';
-import 'prismjs/components/prism-matlab.js';
-import 'prismjs/components/prism-maxscript.js';
-import 'prismjs/components/prism-mel.js';
-import 'prismjs/components/prism-mermaid.js';
-import 'prismjs/components/prism-metafont.js';
-import 'prismjs/components/prism-mizar.js';
-import 'prismjs/components/prism-mongodb.js';
-import 'prismjs/components/prism-monkey.js';
-import 'prismjs/components/prism-moonscript.js';
-import 'prismjs/components/prism-n1ql.js';
-import 'prismjs/components/prism-n4js.js';
-import 'prismjs/components/prism-nand2tetris-hdl.js';
-import 'prismjs/components/prism-naniscript.js';
-import 'prismjs/components/prism-nasm.js';
-import 'prismjs/components/prism-neon.js';
-import 'prismjs/components/prism-nevod.js';
-import 'prismjs/components/prism-nginx.js';
-import 'prismjs/components/prism-nim.js';
-import 'prismjs/components/prism-nix.js';
-import 'prismjs/components/prism-nsis.js';
-import 'prismjs/components/prism-objectivec.js';
-import 'prismjs/components/prism-ocaml.js';
-import 'prismjs/components/prism-odin.js';
-import 'prismjs/components/prism-opencl.js';
-import 'prismjs/components/prism-openqasm.js';
-import 'prismjs/components/prism-oz.js';
-import 'prismjs/components/prism-parigp.js';
-import 'prismjs/components/prism-parser.js';
-import 'prismjs/components/prism-pascal.js';
-import 'prismjs/components/prism-pascaligo.js';
-import 'prismjs/components/prism-pcaxis.js';
-import 'prismjs/components/prism-peoplecode.js';
-import 'prismjs/components/prism-perl.js';
-import 'prismjs/components/prism-php-extras.js';
-import 'prismjs/components/prism-php.js';
-import 'prismjs/components/prism-phpdoc.js';
-import 'prismjs/components/prism-plant-uml.js';
-import 'prismjs/components/prism-powerquery.js';
-import 'prismjs/components/prism-powershell.js';
-import 'prismjs/components/prism-processing.js';
-import 'prismjs/components/prism-prolog.js';
-import 'prismjs/components/prism-promql.js';
-import 'prismjs/components/prism-properties.js';
-import 'prismjs/components/prism-protobuf.js';
-import 'prismjs/components/prism-psl.js';
-import 'prismjs/components/prism-pug.js';
-import 'prismjs/components/prism-puppet.js';
-import 'prismjs/components/prism-pure.js';
-import 'prismjs/components/prism-purebasic.js';
-import 'prismjs/components/prism-purescript.js';
-import 'prismjs/components/prism-python.js';
-import 'prismjs/components/prism-q.js';
-import 'prismjs/components/prism-qml.js';
-import 'prismjs/components/prism-qore.js';
-import 'prismjs/components/prism-qsharp.js';
-import 'prismjs/components/prism-r.js';
-import 'prismjs/components/prism-reason.js';
-import 'prismjs/components/prism-regex.js';
-import 'prismjs/components/prism-rego.js';
-import 'prismjs/components/prism-renpy.js';
-import 'prismjs/components/prism-rescript.js';
-import 'prismjs/components/prism-rest.js';
-import 'prismjs/components/prism-rip.js';
-import 'prismjs/components/prism-roboconf.js';
-import 'prismjs/components/prism-robotframework.js';
-import 'prismjs/components/prism-ruby.js';
-import 'prismjs/components/prism-rust.js';
-import 'prismjs/components/prism-sas.js';
-import 'prismjs/components/prism-sass.js';
-import 'prismjs/components/prism-scala.js';
-import 'prismjs/components/prism-scheme.js';
-import 'prismjs/components/prism-scss.js';
-import 'prismjs/components/prism-shell-session.js';
-import 'prismjs/components/prism-smali.js';
-import 'prismjs/components/prism-smalltalk.js';
-import 'prismjs/components/prism-smarty.js';
-import 'prismjs/components/prism-sml.js';
-import 'prismjs/components/prism-solidity.js';
-import 'prismjs/components/prism-solution-file.js';
-import 'prismjs/components/prism-soy.js';
-import 'prismjs/components/prism-splunk-spl.js';
-import 'prismjs/components/prism-sqf.js';
-import 'prismjs/components/prism-sql.js';
-import 'prismjs/components/prism-squirrel.js';
-import 'prismjs/components/prism-stan.js';
-import 'prismjs/components/prism-stata.js';
-import 'prismjs/components/prism-stylus.js';
-import 'prismjs/components/prism-supercollider.js';
-import 'prismjs/components/prism-swift.js';
-import 'prismjs/components/prism-systemd.js';
-import 'prismjs/components/prism-t4-templating.js';
-import 'prismjs/components/prism-t4-vb.js';
-import 'prismjs/components/prism-tap.js';
-import 'prismjs/components/prism-tcl.js';
-import 'prismjs/components/prism-textile.js';
-import 'prismjs/components/prism-toml.js';
-import 'prismjs/components/prism-tremor.js';
-import 'prismjs/components/prism-tsx.js';
-import 'prismjs/components/prism-tt2.js';
-import 'prismjs/components/prism-turtle.js';
-import 'prismjs/components/prism-twig.js';
-import 'prismjs/components/prism-typescript.js';
-import 'prismjs/components/prism-typoscript.js';
-import 'prismjs/components/prism-unrealscript.js';
-import 'prismjs/components/prism-uorazor.js';
-import 'prismjs/components/prism-uri.js';
-import 'prismjs/components/prism-v.js';
-import 'prismjs/components/prism-vala.js';
-import 'prismjs/components/prism-vbnet.js';
-import 'prismjs/components/prism-velocity.js';
-import 'prismjs/components/prism-verilog.js';
-import 'prismjs/components/prism-vhdl.js';
-import 'prismjs/components/prism-vim.js';
-import 'prismjs/components/prism-visual-basic.js';
-import 'prismjs/components/prism-warpscript.js';
-import 'prismjs/components/prism-wasm.js';
-import 'prismjs/components/prism-web-idl.js';
-import 'prismjs/components/prism-wgsl.js';
-import 'prismjs/components/prism-wiki.js';
-import 'prismjs/components/prism-wolfram.js';
-import 'prismjs/components/prism-wren.js';
-import 'prismjs/components/prism-xeora.js';
-import 'prismjs/components/prism-xml-doc.js';
-import 'prismjs/components/prism-xojo.js';
-import 'prismjs/components/prism-xquery.js';
-import 'prismjs/components/prism-yaml.js';
-import 'prismjs/components/prism-yang.js';
-import 'prismjs/components/prism-zig.js';
-import 'prismjs/components/prism-arduino.js';
-
-// Broken:
-//
-// import 'prismjs/components/prism-bison.js';
-// import 'prismjs/components/prism-chaiscript.js';
-// import 'prismjs/components/prism-core.js';
-// import 'prismjs/components/prism-crystal.js';
-// import 'prismjs/components/prism-django.js';
-// import 'prismjs/components/prism-javadoc.js';
-// import 'prismjs/components/prism-jsdoc.js';
-// import 'prismjs/components/prism-plsql.js';
-// import 'prismjs/components/prism-racket.js';
-// import 'prismjs/components/prism-sparql.js';
-// import 'prismjs/components/prism-t4-cs.js';
-
+import { createHighlighterCore, type HighlighterCore } from 'shiki/core';
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import githubLight from 'shiki/themes/github-light.mjs';
+import githubDark from 'shiki/themes/github-dark-default.mjs';
+import langBash from 'shiki/langs/bash.mjs';
+import langC from 'shiki/langs/c.mjs';
+import langCss from 'shiki/langs/css.mjs';
+import langDiff from 'shiki/langs/diff.mjs';
+import langGo from 'shiki/langs/go.mjs';
+import langHtml from 'shiki/langs/html.mjs';
+import langJava from 'shiki/langs/java.mjs';
+import langJs from 'shiki/langs/javascript.mjs';
+import langJson from 'shiki/langs/json.mjs';
+import langJsx from 'shiki/langs/jsx.mjs';
+import langKotlin from 'shiki/langs/kotlin.mjs';
+import langMarkdown from 'shiki/langs/markdown.mjs';
+import langPython from 'shiki/langs/python.mjs';
+import langRuby from 'shiki/langs/ruby.mjs';
+import langRust from 'shiki/langs/rust.mjs';
+import langSql from 'shiki/langs/sql.mjs';
+import langToml from 'shiki/langs/toml.mjs';
+import langTsx from 'shiki/langs/tsx.mjs';
+import langTypescript from 'shiki/langs/typescript.mjs';
+import langYaml from 'shiki/langs/yaml.mjs';
 import './ReactPrism.css';
-// using classNames .prism-dark .prism-light from ReactPrism.css
+
+/**
+ * Code-block syntax highlighter. Render-prop API preserved for back-compat
+ * with existing call sites in `react-custom-html-parser.tsx` and
+ * `text-viewer/TextViewer.tsx` — callers render a `<code ref={ref}
+ * className="language-X">` element and this component asynchronously
+ * replaces its inner HTML with the highlighted output.
+ *
+ * Highlighter: Shiki via a **fine-grained** core highlighter — only the
+ * curated grammars below are bundled (not Shiki's full ~200-language
+ * bundle, which blew the dist size budget), and the JavaScript regex
+ * engine is used instead of the Oniguruma WASM blob (~600 KB saved).
+ * Languages outside the curated set render as plain text rather than
+ * throwing.
+ *
+ * Themes are emitted with `defaultColor: false`, which outputs each token
+ * as `<span style="color:var(--shiki-light); --shiki-dark:#...">`. The
+ * `.prism-light` / `.prism-dark` class on the app root (see useTheme.ts)
+ * selects which CSS variable is consumed; see ReactPrism.css for the
+ * variable-swap rule.
+ */
+
+const THEME_LIGHT = 'github-light';
+const THEME_DARK = 'github-dark-default';
+const SHIKI_THEMES = { light: THEME_LIGHT, dark: THEME_DARK } as const;
+const PLAINTEXT = 'text';
+
+// Curated grammar set. Adding a language here is the ONLY way to widen
+// coverage — keep an eye on the dist size budget (CI: MAX_BUNDLE_KB) since
+// each grammar adds a chunk. Heavy grammars (cpp, emacs-lisp, wolfram) are
+// intentionally excluded; they fall back to plain text.
+const LANGS = [
+    langBash,
+    langC,
+    langCss,
+    langDiff,
+    langGo,
+    langHtml,
+    langJava,
+    langJs,
+    langJson,
+    langJsx,
+    langKotlin,
+    langMarkdown,
+    langPython,
+    langRuby,
+    langRust,
+    langSql,
+    langToml,
+    langTsx,
+    langTypescript,
+    langYaml,
+];
+
+// Canonical grammar names actually loaded above.
+const CANONICAL_LANGS = new Set<string>([
+    'bash',
+    'c',
+    'css',
+    'diff',
+    'go',
+    'html',
+    'java',
+    'javascript',
+    'json',
+    'jsx',
+    'kotlin',
+    'markdown',
+    'python',
+    'ruby',
+    'rust',
+    'sql',
+    'toml',
+    'tsx',
+    'typescript',
+    'yaml',
+]);
+
+// Common short forms → canonical grammar names. Mapped explicitly rather
+// than relying on each grammar's internal alias registration.
+const LANG_ALIASES: Record<string, string> = {
+    sh: 'bash',
+    shell: 'bash',
+    zsh: 'bash',
+    h: 'c',
+    js: 'javascript',
+    ts: 'typescript',
+    py: 'python',
+    rs: 'rust',
+    rb: 'ruby',
+    kt: 'kotlin',
+    yml: 'yaml',
+    md: 'markdown',
+};
+
+const stripLanguagePrefix = (className: string | undefined): string => {
+    if (!className) return '';
+    const match = className.match(/(?:^|\s)language-([\w+-]+)/);
+    return match?.[1]?.toLowerCase() ?? '';
+};
+
+const resolveLanguage = (raw: string): string => {
+    if (!raw) return PLAINTEXT;
+    const canonical = LANG_ALIASES[raw] ?? raw;
+    return CANONICAL_LANGS.has(canonical) ? canonical : PLAINTEXT;
+};
+
+let highlighterPromise: Promise<HighlighterCore> | null = null;
+const getHighlighter = (): Promise<HighlighterCore> => {
+    if (!highlighterPromise) {
+        highlighterPromise = createHighlighterCore({
+            themes: [githubLight, githubDark],
+            langs: LANGS,
+            engine: createJavaScriptRegexEngine({ forgiving: true }),
+        });
+    }
+    return highlighterPromise;
+};
+
+/**
+ * Replace a `<code>` element's contents with Shiki's highlighted output.
+ * Shiki returns a full `<pre><code>...</code></pre>` wrapper; we extract
+ * just the inner `<code>` HTML so the caller's `<pre>` and class names stay.
+ */
+const applyHighlight = async (el: HTMLElement, code: string, lang: string) => {
+    try {
+        const highlighter = await getHighlighter();
+        const html = highlighter.codeToHtml(code, {
+            lang: resolveLanguage(lang),
+            themes: SHIKI_THEMES,
+            defaultColor: false,
+        });
+        const inner = new DOMParser().parseFromString(html, 'text/html').querySelector('code');
+        if (!inner) return;
+        el.innerHTML = inner.innerHTML;
+        el.classList.add('shiki-highlighted');
+    } catch {
+        // Unknown grammar or transient load error — leave the plaintext
+        // contents in place. An unhighlighted code block is still readable.
+    }
+};
 
 export default function ReactPrism({
-  children,
+    children,
 }: {
-  children: (ref: MutableRefObject<null>) => ReactNode;
+    children: (ref: MutableRefObject<null>) => ReactNode;
 }) {
-  const codeRef = useRef<HTMLElement>(null);
+    const codeRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    const el = codeRef.current;
-    if (el) Prism.highlightElement(el);
-  }, []);
+    useEffect(() => {
+        const el = codeRef.current;
+        if (!el) return undefined;
+        const lang = stripLanguagePrefix(el.className);
+        const code = el.textContent ?? '';
+        let cancelled = false;
+        void (async () => {
+            if (cancelled) return;
+            await applyHighlight(el, code, lang);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
-  return <>{children(codeRef as MutableRefObject<null>)}</>;
+    return <>{children(codeRef as MutableRefObject<null>)}</>;
 }
+
+// Re-exported for tests; not part of the rendered component's surface.
+export const __testables = { stripLanguagePrefix, resolveLanguage, applyHighlight };

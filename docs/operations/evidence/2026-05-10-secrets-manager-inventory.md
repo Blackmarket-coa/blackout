@@ -93,6 +93,7 @@ plus webhook secrets where applicable.
 | `PATREON_WEBHOOK_SECRET` | `@blackout/api` env | Patreon webhook HMAC | 90 d | |
 | `STREAMLABS_CLIENT_SECRET` | `@blackout/api` env | Streamlabs donation sync | 90 d | |
 | `DISCORD_CLIENT_SECRET` | `@blackout/api` env | Discord-shape inbound/outbound webhooks, OAuth | 90 d | |
+| `TENOR_API_KEY` | `@blackout/api` env | Tenor GIF picker proxy (`/v1/integrations/tenor`) | 365 d | Free key from `tenor.com/developer/keyregistration`. Optional: when unset, the GIF picker falls back to user-uploaded GIF packs and the proxy returns 503. |
 
 ### FBM integration
 

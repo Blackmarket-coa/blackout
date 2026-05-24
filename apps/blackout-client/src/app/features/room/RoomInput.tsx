@@ -8,6 +8,7 @@ import React, {
     useState,
 } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { useTranslation } from 'react-i18next';
 import { isKeyHotkey } from 'is-hotkey';
 import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
@@ -89,6 +90,13 @@ import {
     createUploadFamilyObserverAtom,
 } from '../../state/upload';
 import { getImageUrlBlob, loadImageElement } from '../../utils/dom';
+import { API_BASE_URL, fetchAuthorizedBlob } from '../../sdk/client';
+import {
+    buildTenorBinaryUrl,
+    registerTenorShare,
+    type TenorPickerItem,
+} from './tenorClient';
+import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import { safeFile } from '../../utils/mimeTypes';
 import { fulfilledPromiseSettledResult } from '../../utils/common';
 import { useSetting } from '../../state/hooks/settings';
@@ -120,6 +128,7 @@ import { useComposingCheck } from '../../hooks/useComposingCheck';
 import { composerCommandPayloadAtom, composerCommandStatusAtom } from '../../state/composer';
 import { applyComposerPayloadToEditor, isComposerPayloadForRoom } from './composerCommandPayload';
 import { getExpressionControlVisibility } from './expressionControls';
+import { useToast } from '../../state/notifications/toast';
 
 interface RoomInputProps {
     editor: Editor;
@@ -132,6 +141,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     ({ editor, fileDropContainerRef, roomId, room }, ref) => {
         const mx = useMatrixClient();
         const useAuthentication = useMediaAuthentication();
+        const { t } = useTranslation();
+        const { showToast } = useToast();
         const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
         const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
         const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -505,6 +516,47 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             } as any);
         };
 
+        const handleTenorGifSelect = async (item: TenorPickerItem, query: string) => {
+            // Pull the binary through the Blackout API proxy so the
+            // browser never contacts Tenor's CDN directly, then upload to
+            // the homeserver and send as a standard m.image. This makes
+            // GIFs behave identically to other image messages (works in
+            // E2EE rooms, receivers never hit Tenor, etc.).
+            try {
+                const token = readBlackoutApiToken();
+                const proxyPath = buildTenorBinaryUrl(item.gif.url, API_BASE_URL);
+                const blob = await fetchAuthorizedBlob(proxyPath, token);
+                const file = new File([blob], `${item.id}.gif`, { type: 'image/gif' });
+                const upload = await mx.uploadContent(file, {
+                    name: file.name,
+                    type: 'image/gif',
+                    includeFilename: false,
+                });
+                const mxc = upload.content_uri;
+                if (!mxc) return;
+                mx.sendMessage(roomId, {
+                    msgtype: MsgType.Image,
+                    body: item.description || 'GIF',
+                    url: mxc,
+                    info: {
+                        mimetype: 'image/gif',
+                        size: blob.size,
+                        w: item.gif.width,
+                        h: item.gif.height,
+                    },
+                } as any);
+                // Best-effort Tenor share registration (TOS requirement).
+                registerTenorShare(item.id, query || undefined).catch(() => undefined);
+            } catch (err) {
+                // Console for devtools (CSP block, homeserver upload refusal,
+                // expired token) plus a user-facing toast so the failure isn't
+                // silent — the picker has already closed by this point.
+                // eslint-disable-next-line no-console
+                console.warn('tenor: failed to send GIF', err);
+                showToast(t('Features.GifPicker.send_error'), { variant: 'Critical' });
+            }
+        };
+
         return (
             <div ref={ref}>
                 {selectedFiles.length > 0 && (
@@ -707,6 +759,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                                 onCustomEmojiSelect={handleEmoticonSelect}
                                                 onStickerSelect={handleStickerSelect}
                                                 onGifSelect={handleGifSelect}
+                                                onTenorGifSelect={handleTenorGifSelect}
                                                 requestClose={() => {
                                                     setEmojiBoardTab((t) => {
                                                         if (t) {
