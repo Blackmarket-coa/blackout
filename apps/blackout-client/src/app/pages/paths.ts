@@ -83,6 +83,13 @@ export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';
 export const LIVE_STREAM_PATH = '/live/:streamId';
 export const STREAMING_PATH = '/streaming';
+
+/** Top-level Coalition and Coliseum destinations (see their feature `routes.ts`). */
+export const COALITION_PATH = '/coalition';
+export const COLISEUM_PATH = '/coliseum';
+
+/** Builds the livestream viewer URL from a stream id. */
+export const buildLivePath = (streamId: string): string => `/live/${encodeURIComponent(streamId)}`;
 export const CREATOR_DASHBOARD_PATH = '/creator';
 export const CREATOR_LISTINGS_PATH = '/creator/listings';
 export const CREATOR_STOREFRONT_PATH = '/creators/:userId';

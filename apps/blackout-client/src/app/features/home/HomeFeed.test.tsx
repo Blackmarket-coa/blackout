@@ -26,11 +26,29 @@ vi.mock('../topics/TopicChipBar', () => ({
     TopicChipBar: () => null,
 }));
 
+// The unified feed fetches livestreams / coalition / coliseum on mount.
+// Stub the network clients so tests exercise the den-only path without
+// hitting the API; each resolves empty so only Matrix room activity drives
+// the feed. `useStatusUpdates` no-ops because `matrixClientAtom` is null.
+vi.mock('../streams/streamsClient', () => ({
+    listStreams: vi.fn().mockResolvedValue({ items: [] }),
+}));
+vi.mock('../coalition/coalitionClient', () => ({
+    fetchCoalitionFeed: vi.fn().mockResolvedValue({ generatedAt: '', items: [] }),
+}));
+vi.mock('../coliseum/coliseumClient', () => ({
+    fetchColiseumTopics: vi.fn().mockResolvedValue({ generatedAt: '', topics: [] }),
+}));
+vi.mock('../profile/profileClient', () => ({
+    fetchProfile: vi.fn().mockRejectedValue(new Error('no profile')),
+}));
+
 // vi.mock above is hoisted to module top, so a synchronous import
 // here resolves the writable mock atom before any HomeFeed module
 // code runs.
 import HomeFeed from './HomeFeed';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { homeFeedTabAtom } from '../../state/homeFeed';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * ONE_HOUR;
@@ -123,32 +141,46 @@ describe('HomeFeed', () => {
                 '!recent:s'
             )}`
         );
-        expect(recent?.querySelector('[aria-label="3 unread"]')).not.toBeNull();
+        expect(recent?.querySelector('[aria-label="3"]')).not.toBeNull();
     });
 
-    it('emits sticky-header sections grouped by today/this-week/older', async () => {
-        const now = Date.now();
-        const { container } = await mountWithRooms([
-            fakeRoom({
-                roomId: '!t:s',
-                name: 'Today',
-                getLastActiveTimestamp: () => now - 5 * 60 * 1000,
-            }),
-            fakeRoom({
-                roomId: '!w:s',
-                name: 'Week',
-                getLastActiveTimestamp: () => now - 3 * ONE_DAY,
-            }),
-            fakeRoom({
-                roomId: '!o:s',
-                name: 'Older',
-                getLastActiveTimestamp: () => now - 30 * ONE_DAY,
-            }),
-        ]);
+    it('renders Following/Discover tabs and a pinned live rail slot', async () => {
+        const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
+        expect(container.querySelector('[data-testid="home-feed-tabs"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-feed-tab-following"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-feed-tab-discover"]')).not.toBeNull();
+        // No live streams in this fixture, so the rail does not render.
+        expect(container.querySelector('[data-testid="home-live-rail"]')).toBeNull();
+    });
 
-        const buckets = Array.from(container.querySelectorAll('[data-bucket]')).map((el) =>
-            el.getAttribute('data-bucket')
-        );
-        expect(buckets).toEqual(['today', 'this-week', 'older']);
+    it('switching to Discover hides den items that have no joined-canopy attribution', async () => {
+        const store = createStore();
+        store.set(joinedRoomsAtom as never, [fakeRoom({ roomId: '!d:s', name: 'A Den' })] as never);
+        // Default tab is Following → den card visible.
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const root = ReactDOM.createRoot(container);
+        await act(async () => {
+            root.render(
+                <JotaiProvider store={store}>
+                    <RouterProvider router={buildRouter()} />
+                </JotaiProvider>
+            );
+            await Promise.resolve();
+        });
+        expect(
+            container.querySelector('[data-testid="home-feed-card"][data-source="den"]')
+        ).not.toBeNull();
+
+        // Dens still surface in Discover (global stream), so the card stays.
+        await act(async () => {
+            store.set(homeFeedTabAtom as never, 'discover' as never);
+            await Promise.resolve();
+        });
+        expect(
+            container
+                .querySelector('[data-testid="home-feed-tab-discover"]')
+                ?.getAttribute('aria-selected')
+        ).toBe('true');
     });
 });

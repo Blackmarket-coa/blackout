@@ -5,7 +5,6 @@ import {
     INVITE_DEN_PARAM,
     INVITE_CANOPY_PARAM,
 } from '../../components/invite-landing/postAcceptanceRoute';
-import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { COMMUNITIES_PATH, STREAMING_PATH, buildCommunitiesPath } from '../../pages/paths';
@@ -15,18 +14,11 @@ import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
-import {
-    buildHomeFeed,
-    groupHomeFeedByBucket,
-    type HomeFeedBucket,
-    type HomeFeedItem,
-} from './feedModel';
-
-const BUCKET_LABELS: Record<HomeFeedBucket, string> = {
-    today: 'Today',
-    'this-week': 'This week',
-    older: 'Earlier',
-};
+import { homeFeedTabAtom } from '../../state/homeFeed';
+import { useUnifiedFeed } from './hooks/useUnifiedFeed';
+import { HomeFeedTabs } from './HomeFeedTabs';
+import { LiveNowRail } from './LiveNowRail';
+import { UnifiedFeedCard } from './UnifiedFeedCard';
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -99,20 +91,6 @@ const cardSubtitleStyle: CSSProperties = {
     color: 'var(--text-muted, #9ca3af)',
 };
 
-const unreadStyle: CSSProperties = {
-    minWidth: 22,
-    height: 22,
-    padding: '0 6px',
-    borderRadius: 999,
-    background: 'var(--accent-primary, #3b82f6)',
-    color: 'var(--text-primary, #f8fafc)',
-    fontSize: 11,
-    fontWeight: 700,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-};
-
 const emptyStateStyle: CSSProperties = {
     margin: '24px 16px',
     padding: '24px 20px',
@@ -132,39 +110,19 @@ const ctaLinkStyle: CSSProperties = {
     fontWeight: 600,
 };
 
-const HomeFeedCard = ({ item }: { item: HomeFeedItem }): JSX.Element => (
-    <Link
-        to={buildCommunitiesPath(item.canopyId, item.denId)}
-        style={cardStyle}
-        data-testid="home-feed-card"
-        data-den-id={item.denId}
-    >
-        <span style={cardBodyStyle}>
-            <span style={cardTitleStyle}>{item.title}</span>
-            <span style={cardSubtitleStyle}>{item.subtitle}</span>
-        </span>
-        {item.unreadCount > 0 ? (
-            <span style={unreadStyle} aria-label={`${item.unreadCount} unread`}>
-                {item.unreadCount > 99 ? '99+' : item.unreadCount}
-            </span>
-        ) : null}
-    </Link>
-);
-
 /**
  * Top-level destination mounted at `/` when both `shellAppShell` and
- * `discoveryHomeFeed` flags are on. Renders a chronologically-merged
- * card list across the user's joined dens, grouped by today /
- * this-week / earlier.
- *
- * Data path:
- *   `joinedRoomsAtom` (Matrix sync) → `buildHomeFeed` (pure) →
- *   `groupHomeFeedByBucket` → render. No new server endpoint required;
- *   the reader still has full data via Matrix /sync.
+ * `discoveryHomeFeed` flags are on. Renders a unified, client-aggregated
+ * feed across dens, livestreams, the coalition feed, coliseum topics, and
+ * profile statuses — split into Following / Discover tabs with a pinned
+ * "Live now" rail. Each source is fetched independently so one failure
+ * degrades gracefully (see `useUnifiedFeed`); no new server endpoint is
+ * required.
  */
 export const HomeFeed = (): JSX.Element => {
-    const rooms = useAtomValue(joinedRoomsAtom);
     const installed = useAtomValue(installedPluginsAtom);
+    const tab = useAtomValue(homeFeedTabAtom);
+    const feed = useUnifiedFeed();
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
     const navigate = useNavigate();
@@ -197,8 +155,7 @@ export const HomeFeed = (): JSX.Element => {
         // 'running' → wait; the effect re-runs when the status changes.
     }, [inviteDen, inviteCanopy, tourEnabled, tourStatus, homeTour, navigate]);
 
-    const items = useMemo(() => buildHomeFeed(rooms, Date.now()), [rooms]);
-    const groups = useMemo(() => groupHomeFeedByBucket(items), [items]);
+    const activeItems = tab === 'following' ? feed.following : feed.discover;
 
     const pluginCards = useMemo(
         () =>
@@ -220,7 +177,7 @@ export const HomeFeed = (): JSX.Element => {
         <section style={layoutStyle} data-shell-region="home-feed">
             <header style={headerStyle} data-testid="home-feed-header">
                 <h1 style={titleStyle}>Home</h1>
-                <p style={subtitleStyle}>Latest activity from your {BLACKOUT_TERMS.den.plural}.</p>
+                <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
                 {showReplay ? (
                     <button
                         type="button"
@@ -298,27 +255,30 @@ export const HomeFeed = (): JSX.Element => {
                     })}
                 </section>
             ) : null}
-            {items.length === 0 ? (
+            <HomeFeedTabs />
+            <LiveNowRail items={feed.liveRail} />
+            {activeItems.length === 0 ? (
                 <div style={emptyStateStyle} data-testid="home-feed-empty">
-                    <strong>No activity yet.</strong>
-                    <span>
-                        Join a{' '}
-                        <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.singular}</GlossaryTerm>{' '}
-                        to start seeing posts in your feed.
-                    </span>
-                    <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
-                        Discover {BLACKOUT_TERMS.canopy.plural}
-                    </Link>
+                    <strong>{feed.loading ? 'Loading your feed…' : 'No activity yet.'}</strong>
+                    {!feed.loading ? (
+                        <>
+                            <span>
+                                Join a{' '}
+                                <GlossaryTerm term="canopy">
+                                    {BLACKOUT_TERMS.canopy.singular}
+                                </GlossaryTerm>{' '}
+                                to start seeing posts in your feed.
+                            </span>
+                            <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
+                                Discover {BLACKOUT_TERMS.canopy.plural}
+                            </Link>
+                        </>
+                    ) : null}
                 </div>
             ) : (
-                <div data-testid="home-feed-list">
-                    {groups.map((group) => (
-                        <section key={group.bucket} style={sectionStyle} data-bucket={group.bucket}>
-                            <header style={sectionLabelStyle}>{BUCKET_LABELS[group.bucket]}</header>
-                            {group.items.map((item) => (
-                                <HomeFeedCard key={item.id} item={item} />
-                            ))}
-                        </section>
+                <div style={sectionStyle} data-testid="home-feed-list">
+                    {activeItems.map((item) => (
+                        <UnifiedFeedCard key={item.id} item={item} />
                     ))}
                 </div>
             )}
