@@ -14,6 +14,8 @@ import { DynamicRightPanel } from './DynamicRightPanel';
 import { WorkspaceTabBar } from './WorkspaceTabBar';
 import { DialogHost } from '../../shell/DialogHost';
 import { getModalCloser, getModalOpener } from '../../shell/modalOpenerRegistry';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { BugReportFab } from '../../features/bug-widget/BugReportFab';
 
 const ROOT_STYLE: CSSProperties = {
     display: 'flex',
@@ -151,6 +153,7 @@ export const AppShell = () => {
             </div>
             {mobile ? <BottomTabBar /> : null}
             <DialogHost />
+            {runtimeFeatureFlags.bugReportWidget ? <BugReportFab /> : null}
         </div>
     );
 };

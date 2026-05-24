@@ -8,6 +8,9 @@ const homeserverDomain = () =>
 // and the identity never changes for a given token.
 let botUserIdCache: string | undefined;
 
+// Alias → room id cache. Room aliases are stable for the process lifetime.
+const roomAliasCache = new Map<string, string>();
+
 export const matrixClient = {
   /**
    * Resolve the bot account's own Matrix user id (`@blackout:domain`) by
@@ -101,6 +104,83 @@ export const matrixClient = {
 
   async sendMessage(roomId: string, content: string) {
     return matrixClient.sendEvent(roomId, { msgtype: 'm.text', body: content });
+  },
+
+  /**
+   * Resolve a room alias (`#bugs:domain`) to its room id (`!abc:domain`) via the
+   * client directory API. Cached for the process lifetime — aliases are stable.
+   * Used by the bug-report widget pipeline to target the `#bugs` room without
+   * hardcoding a room id in deploys that only know the human-readable alias.
+   */
+  async resolveRoomAlias(alias: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const cached = roomAliasCache.get(alias);
+    if (cached) return { ok: true as const, roomId: cached };
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      return { ok: false as const, status: response.status, reason: 'alias_not_found' as const };
+    }
+    const json = (await response.json()) as { room_id?: string };
+    if (!json.room_id) {
+      return { ok: false as const, status: response.status, reason: 'no_room_id' as const };
+    }
+    roomAliasCache.set(alias, json.room_id);
+    return { ok: true as const, status: response.status, roomId: json.room_id };
+  },
+
+  /**
+   * Upload binary content to the homeserver media repository and return the
+   * resulting `mxc://` URI. Used to attach bug-report screenshots / screen
+   * recordings before referencing them from an `m.image` / `m.file` event.
+   */
+  async uploadContent(bytes: Uint8Array, contentType: string, filename?: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const qs = filename ? `?filename=${encodeURIComponent(filename)}` : '';
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_matrix/media/v3/upload${qs}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': contentType,
+        },
+        // undici's fetch accepts a Uint8Array body at runtime; the DOM lib's
+        // BodyInit type is stricter about ArrayBufferLike, so cast locally.
+        body: bytes as unknown as BodyInit,
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'upload_rejected' as const, detail };
+    }
+    const json = (await response.json()) as { content_uri?: string };
+    if (!json.content_uri) {
+      return { ok: false as const, status: response.status, reason: 'no_content_uri' as const };
+    }
+    return { ok: true as const, status: response.status, contentUri: json.content_uri };
   },
 
   /**
@@ -394,6 +474,15 @@ export const matrixClient = {
         body: JSON.stringify(content),
       },
     );
-    return { ok: response.ok, status: response.status };
+    let eventId: string | undefined;
+    if (response.ok) {
+      try {
+        const json = (await response.json()) as { event_id?: string };
+        eventId = json.event_id;
+      } catch {
+        /* response may be empty on some proxies — event id just stays undefined */
+      }
+    }
+    return { ok: response.ok, status: response.status, eventId };
   },
 };
