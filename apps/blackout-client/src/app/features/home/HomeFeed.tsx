@@ -23,9 +23,7 @@ import { runtimeFeatureFlags, type FeatureFlags } from '../../core/features/feat
 import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
-import { homeFeedTabAtom } from '../../state/homeFeed';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
-import { HomeFeedTabs } from './HomeFeedTabs';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
 
@@ -181,14 +179,14 @@ const QUICK_ACTIONS: QuickAction[] = [
  * Top-level destination mounted at `/` when both `shellAppShell` and
  * `discoveryHomeFeed` flags are on. Renders a unified, client-aggregated
  * feed across dens, livestreams, the coalition feed, coliseum topics, and
- * profile statuses — split into Following / Discover tabs with a pinned
- * "Live now" rail. Each source is fetched independently so one failure
+ * profile statuses — stacked as a "Following" section (the viewer's joined
+ * content) above a "Discover" section (everything else, de-duplicated) with a
+ * pinned "Live now" rail. Each source is fetched independently so one failure
  * degrades gracefully (see `useUnifiedFeed`); no new server endpoint is
  * required.
  */
 export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
-    const tab = useAtomValue(homeFeedTabAtom);
     const feed = useUnifiedFeed();
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
@@ -222,7 +220,17 @@ export const HomeFeed = (): JSX.Element => {
         // 'running' → wait; the effect re-runs when the status changes.
     }, [inviteDen, inviteCanopy, tourEnabled, tourStatus, homeTour, navigate]);
 
-    const activeItems = tab === 'following' ? feed.following : feed.discover;
+    const followingItems = feed.following;
+    // Discover sits below Following and only surfaces what isn't already there,
+    // so the two stacked sections never show the same card twice.
+    const followingIds = useMemo(
+        () => new Set(followingItems.map((item) => item.id)),
+        [followingItems]
+    );
+    const discoverItems = useMemo(
+        () => feed.discover.filter((item) => !followingIds.has(item.id)),
+        [feed.discover, followingIds]
+    );
 
     const quickActions = QUICK_ACTIONS.filter((action) => runtimeFeatureFlags[action.flag]);
 
@@ -325,33 +333,45 @@ export const HomeFeed = (): JSX.Element => {
                     })}
                 </section>
             ) : null}
-            <HomeFeedTabs />
             <LiveNowRail items={feed.liveRail} />
-            {activeItems.length === 0 ? (
-                <div style={emptyStateStyle} data-testid="home-feed-empty">
-                    <strong>{feed.loading ? 'Loading your feed…' : 'No activity yet.'}</strong>
-                    {!feed.loading ? (
-                        <>
-                            <span>
-                                Join a{' '}
-                                <GlossaryTerm term="canopy">
-                                    {BLACKOUT_TERMS.canopy.singular}
-                                </GlossaryTerm>{' '}
-                                to start seeing posts in your feed.
-                            </span>
-                            <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
-                                Discover {BLACKOUT_TERMS.canopy.plural}
-                            </Link>
-                        </>
-                    ) : null}
-                </div>
-            ) : (
-                <div style={sectionStyle} data-testid="home-feed-list">
-                    {activeItems.map((item) => (
-                        <UnifiedFeedCard key={item.id} item={item} />
-                    ))}
-                </div>
-            )}
+            <section data-shell-region="home-following" data-testid="home-following-section">
+                <header style={sectionLabelStyle}>Following</header>
+                {followingItems.length === 0 ? (
+                    <div style={emptyStateStyle} data-testid="home-feed-empty">
+                        <strong>{feed.loading ? 'Loading your feed…' : 'No activity yet.'}</strong>
+                        {!feed.loading ? (
+                            <>
+                                <span>
+                                    Join a{' '}
+                                    <GlossaryTerm term="canopy">
+                                        {BLACKOUT_TERMS.canopy.singular}
+                                    </GlossaryTerm>{' '}
+                                    to start seeing posts in your feed.
+                                </span>
+                                <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
+                                    Discover {BLACKOUT_TERMS.canopy.plural}
+                                </Link>
+                            </>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div style={sectionStyle} data-testid="home-feed-list">
+                        {followingItems.map((item) => (
+                            <UnifiedFeedCard key={item.id} item={item} />
+                        ))}
+                    </div>
+                )}
+            </section>
+            {discoverItems.length > 0 ? (
+                <section data-shell-region="home-discover" data-testid="home-discover-section">
+                    <header style={sectionLabelStyle}>Discover</header>
+                    <div style={sectionStyle} data-testid="home-discover-list">
+                        {discoverItems.map((item) => (
+                            <UnifiedFeedCard key={item.id} item={item} />
+                        ))}
+                    </div>
+                </section>
+            ) : null}
             {tourEnabled ? <HomeTourOverlay /> : null}
         </section>
     );
