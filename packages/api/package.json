@@ -12,6 +12,7 @@
     "test": "node -e \"console.log('api test scaffold ok')\"",
     "test:integration": "tsx --test test/**/*.integration.test.ts",
     "test:launch-smoke": "tsx --test test/launch-smoke.integration.test.ts",
+    "provision:rooms": "tsx src/scripts/provisionContributorRooms.ts",
     "migrate": "tsx src/db/migrate.ts up",
     "migrate:up": "tsx src/db/migrate.ts up",
     "migrate:down": "tsx src/db/migrate.ts down",

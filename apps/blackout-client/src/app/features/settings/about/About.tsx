@@ -4,7 +4,7 @@ import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import BrandSVG from '../../../../../public/res/svg/cinny.svg';
+import BrandSVG from '../../../../../public/res/svg/blackout.svg';
 import { clearCacheAndReload } from '../../../../client/initMatrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { IssueReportDialog } from './IssueReportDialog';

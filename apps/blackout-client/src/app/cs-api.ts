@@ -96,6 +96,29 @@ export const autoDiscovery = async (
   return [undefined, content];
 };
 
+export type PublicRoomsResult =
+  | { status: number; ok: true; chunk: Array<Record<string, unknown>> }
+  | { status: number; ok: false };
+
+/**
+ * Unauthenticated public room directory query. Lives in the cs-api layer
+ * (outside the feature/page fetch guard) so the logged-out public directory
+ * can list a homeserver's rooms before a session exists. Returns ok:false on
+ * any non-200 (e.g. 401/403 when the server requires auth to browse).
+ */
+export const publicRooms = async (
+  request: typeof fetch,
+  baseUrl: string,
+  limit = 64
+): Promise<PublicRoomsResult> => {
+  const res = await request(
+    `${trimTrailingSlash(baseUrl)}/_matrix/client/v3/publicRooms?limit=${limit}`
+  );
+  if (!res.ok) return { status: res.status, ok: false };
+  const data = (await res.json()) as { chunk?: Array<Record<string, unknown>> };
+  return { status: res.status, ok: true, chunk: data.chunk ?? [] };
+};
+
 export type SpecVersions = {
   versions: string[];
   unstable_features?: Record<string, boolean>;

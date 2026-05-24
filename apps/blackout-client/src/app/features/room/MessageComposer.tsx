@@ -28,7 +28,10 @@ import {
     useLegacyEditMessageAdapter as useEditMessage,
 } from '../../plugins/matrix-adapters/hooks/useLegacyTimelineAdapter';
 import { useLegacySendTypingAdapter as useSendTyping } from '../../plugins/matrix-adapters/hooks/useLegacyTypingAdapter';
+import { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useStateEvent } from '../../hooks/useStateEvent';
+import { StateEvent } from '../../../types/matrix/room';
 import { composerCommandPayloadAtom } from '../../state/composer';
 import { uploadMedia } from '../media/utils/matrixMedia';
 import { HideMessageDialog } from '../steganography';
@@ -476,6 +479,70 @@ const FormatMarkButton = ({
     );
 };
 
+// Surfaces the current room's end-to-end encryption status next to the
+// composer. Driven by the `m.room.encryption` state event so it stays in sync
+// if encryption is enabled while the room is open. Click toggles a short
+// plain-language explanation.
+const RoomEncryptionIndicator = ({ room }: { room: Room }) => {
+    const encryptionEvent = useStateEvent(room, StateEvent.RoomEncryption);
+    const encrypted = Boolean(encryptionEvent);
+    const [explainOpen, setExplainOpen] = useState(false);
+
+    return (
+        <div style={{ position: 'relative', display: 'inline-flex', marginRight: 8 }}>
+            <button
+                type="button"
+                onClick={() => setExplainOpen((open) => !open)}
+                aria-label={
+                    encrypted
+                        ? 'Room is end-to-end encrypted. Show what this means.'
+                        : 'Room is not encrypted. Show what this means.'
+                }
+                aria-expanded={explainOpen}
+                title={encrypted ? 'End-to-end encrypted' : 'Not encrypted'}
+                style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 999,
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    fontSize: 15,
+                    lineHeight: 1,
+                    opacity: encrypted ? 1 : 0.6,
+                    cursor: 'pointer',
+                }}
+            >
+                {encrypted ? '🔒' : '🔓'}
+            </button>
+            {explainOpen ? (
+                <div
+                    role="tooltip"
+                    style={{
+                        position: 'absolute',
+                        bottom: 38,
+                        left: 0,
+                        width: 240,
+                        zIndex: 5,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-default)',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text-secondary)',
+                        fontSize: 12,
+                        lineHeight: 1.4,
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                    }}
+                >
+                    {encrypted
+                        ? 'End-to-end encrypted. Only people in this room can read these messages — not even the server can.'
+                        : 'Not encrypted. Messages are stored unencrypted on the server. Enable encryption in room settings for private conversations.'}
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
 export const MessageComposer = ({
     roomId,
     target,
@@ -559,6 +626,7 @@ export const MessageComposer = ({
     const { sendRichText, sendMedia } = useSendMessage(roomId);
     const editMessage = useEditMessage(roomId);
     const matrixClient = useMatrixClient();
+    const room = useMemo(() => matrixClient.getRoom?.(roomId) ?? undefined, [matrixClient, roomId]);
 
     const draftRoomRef = useRef(roomId);
 
@@ -1167,6 +1235,7 @@ export const MessageComposer = ({
                             event.currentTarget.value = '';
                         }}
                     />
+                    {room ? <RoomEncryptionIndicator room={room} /> : null}
                     <button
                         type="button"
                         onClick={() => setFeatureMenuOpen((open) => !open)}

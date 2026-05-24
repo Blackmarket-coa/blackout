@@ -77,6 +77,46 @@ const dispatchVerificationEmail = async (
   }
 };
 
+const matrixHomeserverDomain = (): string =>
+  (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
+
+/**
+ * Auto-join a freshly-registered user into the community welcome room so every
+ * new contributor lands somewhere on first login. Best-effort: a configured
+ * room id wins, otherwise we resolve `WELCOME_MATRIX_ROOM_ALIAS`
+ * (default `#welcome:<domain>`). Joins via the Synapse admin API so it works
+ * even though the new account hasn't synced yet. Any failure (including
+ * matrix_not_configured in local/dev) is swallowed — registration already
+ * succeeded and must not roll back over a welcome-room miss.
+ */
+const autoJoinWelcomeRoom = async (username: string): Promise<void> => {
+  const configuredId = process.env.WELCOME_MATRIX_ROOM_ID?.trim();
+  const alias = process.env.WELCOME_MATRIX_ROOM_ALIAS?.trim() || `#welcome:${matrixHomeserverDomain()}`;
+
+  let roomId = configuredId || undefined;
+  if (!roomId) {
+    const resolved = await matrixClient.resolveRoomAlias(alias);
+    if (!resolved.ok || !resolved.roomId) {
+      if (resolved.reason !== 'matrix_not_configured') {
+        log.warn('register.welcome_room.resolve_failed', { alias, reason: resolved.reason });
+      }
+      return;
+    }
+    roomId = resolved.roomId;
+  }
+
+  const userId = `@${username}:${matrixHomeserverDomain()}`;
+  const joined = await matrixClient.adminJoinUserToRoom(roomId, userId);
+  if (!joined.ok && (!('reason' in joined) || joined.reason !== 'matrix_not_configured')) {
+    log.warn('register.welcome_room.join_failed', {
+      roomId,
+      userId,
+      status: 'status' in joined ? joined.status : undefined,
+      reason: 'reason' in joined ? joined.reason : undefined,
+    });
+  }
+};
+
 const registerSchema = z.object({
   username: z.string().min(1),
   email: z.string().min(1),
@@ -184,6 +224,10 @@ auth.post('/register', async (c) => {
       403,
     );
   }
+
+  // Land every new contributor in the community welcome room. Best-effort and
+  // independent of any invite-bound room join above.
+  await autoJoinWelcomeRoom(user.username);
 
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
 

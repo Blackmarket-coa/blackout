@@ -43,6 +43,7 @@ import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
 import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
 import { OnboardingPage } from './app/features/welcome/OnboardingPage';
+import { PublicDirectory } from './app/features/discovery/PublicDirectory';
 import { ONBOARDING_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -269,6 +270,18 @@ const BootstrapStatus = () => {
         return <InviteLandingPage />;
     }
 
+    // Public room directory is browsable without an account. The full router
+    // (which maps /explore onto discovery) only mounts once logged in, so
+    // intercept the logged-out case here and render the standalone, session-less
+    // directory instead of dropping the visitor on the sign-in card.
+    if (
+        typeof window !== 'undefined' &&
+        window.location.pathname.startsWith('/explore') &&
+        authState === 'logged_out'
+    ) {
+        return <PublicDirectory />;
+    }
+
     const title =
         authState === 'crypto_initializing'
             ? 'Initializing secure crypto…'
@@ -351,6 +364,14 @@ const BootstrapStatus = () => {
                     style={{ color: 'inherit' }}
                 >
                     Home
+                </a>
+                <a
+                    href="/explore"
+                    aria-label="Browse public rooms"
+                    data-testid="bootstrap-explore"
+                    style={{ color: 'inherit' }}
+                >
+                    Browse rooms
                 </a>
                 <a href="https://theblackout.app" rel="noreferrer" style={{ color: 'inherit' }}>
                     About
