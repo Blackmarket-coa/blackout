@@ -8,6 +8,7 @@ import {
   MAX_TTL_HOURS,
   MAX_USES_CEILING,
   createInvitation,
+  getOrCreatePersonalInvitation,
   listInvitationsForUser,
   previewInvitation,
   redeemInvitation,
@@ -56,12 +57,17 @@ const listQuerySchema = z.object({
  * sent on HTTP requests). The recipient's browser parses the fragment
  * on the landing page and stashes it for RegisterForm to pre-fill.
  */
+const appBaseUrl = (): string =>
+  (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
+
 const buildInviteUrl = (token: string, synapseRegistrationToken?: string): string => {
-  const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
-  const path = `${base}/invite/${encodeURIComponent(token)}`;
+  const path = `${appBaseUrl()}/invite/${encodeURIComponent(token)}`;
   if (!synapseRegistrationToken) return path;
   return `${path}#registrationToken=${encodeURIComponent(synapseRegistrationToken)}`;
 };
+
+/** Social-media-friendly URL that renders an OG preview (served by `/i/:token`). */
+const buildShareUrl = (token: string): string => `${appBaseUrl()}/i/${encodeURIComponent(token)}`;
 
 const publicShape = (record: InvitationTokenRecord) => ({
   id: record.id,
@@ -69,7 +75,8 @@ const publicShape = (record: InvitationTokenRecord) => ({
   matrixRoomId: record.matrixRoomId,
   maxUses: record.maxUses,
   useCount: record.useCount,
-  usesRemaining: Math.max(0, record.maxUses - record.useCount),
+  unlimited: record.unlimited ?? false,
+  usesRemaining: record.unlimited ? null : Math.max(0, record.maxUses - record.useCount),
   expiresAt: record.expiresAt,
   revokedAt: record.revokedAt,
   createdAt: record.createdAt,
@@ -121,6 +128,37 @@ invitations.post('/', async (c) => {
     },
     201,
   );
+});
+
+/**
+ * Get-or-create the caller's reusable personal share link. Idempotent: the
+ * same stable URL is returned on every call, suitable for a social-media bio.
+ * Returns both the direct invite URL and the OG-preview share URL (`/i/...`).
+ */
+invitations.get('/personal', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
+
+  const outcome = await getOrCreatePersonalInvitation(user.sub);
+  if (outcome.kind === 'matrix_mint_failed') {
+    invitationsMatrixMintFailuresTotal.inc({ reason: outcome.reason });
+    return c.json(
+      {
+        code: 'matrix_mint_failed',
+        message:
+          'Could not mint a Matrix registration token. Check that MATRIX_HOMESERVER and MATRIX_BOT_TOKEN are configured and the bot has admin rights.',
+        reason: outcome.reason,
+        detail: outcome.detail,
+      },
+      503,
+    );
+  }
+
+  return c.json({
+    invitation: publicShape(outcome.record),
+    url: buildInviteUrl(outcome.token, outcome.synapseRegistrationToken),
+    shareUrl: buildShareUrl(outcome.token),
+  });
 });
 
 /**

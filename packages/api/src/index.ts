@@ -5,6 +5,8 @@ import { API_ROOTS } from '@blackout/contracts';
 import { isOriginAllowed, readCorsRuntimeConfig } from './config/cors';
 import authRoutes from './routes/auth';
 import invitationRoutes from './routes/invitations';
+import followRoutes from './routes/follows';
+import shareRoutes from './routes/sharePreview';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
@@ -122,6 +124,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/auth`, authRoutes);
   app.route(`${root}/admin`, adminRoutes);
   app.route(`${root}/invitations`, invitationRoutes);
+  app.route(`${root}/follows`, followRoutes);
   app.route(`${root}/matrix`, matrixRoutes);
   app.route(`${root}/messages`, messageRoutes);
   app.route(`${root}/scheduled-messages`, scheduledMessageRoutes);
@@ -189,6 +192,11 @@ app.route('/bug-report', bugReportRoutes);
 // into the #bugs Matrix room as the bot, with attachment + triage thread +
 // status reaction.
 app.route('/bug-report/widget', widgetReportRoutes);
+
+// Public Open Graph share-preview landing for invite/personal links. Mounted
+// top-level (outside /v1) so social crawlers can fetch it without auth; it
+// returns OG meta tags and redirects humans into the SPA `/invite/:token` flow.
+app.route('/i', shareRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 

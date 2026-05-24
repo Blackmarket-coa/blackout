@@ -12,6 +12,7 @@ import {
     mapDens,
     mapStatuses,
     mapStreams,
+    mapWallPosts,
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
@@ -22,7 +23,7 @@ import {
     type UnifiedFeedSource,
 } from '../unifiedFeedModel';
 import type { RoomLike } from '../feedModel';
-import { useStatusUpdates } from './useStatusUpdates';
+import { useFollowedActivity } from './useFollowedActivity';
 
 const REMOTE_FETCH_LIMIT = 30;
 
@@ -69,7 +70,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
     // when the viewer route isn't mounted.
     const streamsEnabled = flags.streamsViewer;
 
-    const statusEntries = useStatusUpdates(flags.profile);
+    const activity = useFollowedActivity(flags.profile);
 
     const [remote, setRemote] = useState<RemoteState>({
         streams: [],
@@ -125,12 +126,14 @@ export function useUnifiedFeed(): UnifiedFeedResult {
     return useMemo(() => {
         const now = Date.now();
         const denItems = mapDens(rooms as unknown as RoomLike[], now);
-        const statusItems = mapStatuses(statusEntries, now);
+        const statusItems = mapStatuses(activity.statuses, now);
+        const wallItems = mapWallPosts(activity.walls, now);
         const joinedCanopyIds = collectJoinedCanopyIds(rooms as unknown as RoomLike[]);
 
         const combined: UnifiedFeedItem[] = [
             ...denItems,
             ...statusItems,
+            ...wallItems,
             ...remote.streams,
             ...remote.coalition,
             ...remote.coliseum,
@@ -147,5 +150,5 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, statusEntries, remote]);
+    }, [rooms, activity, remote]);
 }

@@ -93,6 +93,22 @@ export interface InvitationTokenRecord {
   synapseRegistrationToken?: string;
   /** Synapse-reported expiry for the registration token (ISO 8601). */
   synapseRegistrationTokenExpiresAt?: string;
+  /**
+   * When true the link never exhausts (`maxUses`/`useCount` are ignored by
+   * the exhaustion check). Used for reusable "personal" / bio share links
+   * that many different people redeem over time.
+   */
+  unlimited?: boolean;
+  /** Marks the single reusable per-user personal share link. */
+  personal?: boolean;
+  /**
+   * Plaintext token, stored ONLY for personal links. Personal links are
+   * public by design (pasted in a social bio), so we keep the plaintext to
+   * return a stable URL on repeated get-or-create calls. They never grant
+   * room access (no `matrixRoomId`); a leak only enables account creation +
+   * a follow, which is exactly the intended public behaviour.
+   */
+  personalToken?: string;
 }
 
 /**
