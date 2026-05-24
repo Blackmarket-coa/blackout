@@ -90,4 +90,12 @@ describe('LiveDirectory', () => {
             container.querySelector('[data-testid="live-directory-error"]')?.textContent
         ).toContain('upstream down');
     });
+
+    it('shows a graceful permission state on 403 instead of the raw error', async () => {
+        const forbiddenError = Object.assign(new Error('Request failed (403)'), { status: 403 });
+        listStreamsMock.mockRejectedValue(forbiddenError);
+        const { container } = await mountDirectory();
+        expect(container.querySelector('[data-testid="live-directory-forbidden"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="live-directory-error"]')).toBeNull();
+    });
 });

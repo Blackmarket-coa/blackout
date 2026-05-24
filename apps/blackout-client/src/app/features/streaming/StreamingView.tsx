@@ -7,6 +7,7 @@ import {
     type StreamingTabId,
 } from '../../state/streaming';
 import StreamingTabStrip from './StreamingTabStrip';
+import StaggeredMount from './StaggeredMount';
 import { LiveDirectory } from '../streams';
 import { LinkedAccounts } from '../settings/linked-accounts';
 import { SimulcastDestinations } from '../settings/simulcast-destinations';
@@ -64,10 +65,12 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                 ) : null}
                 {activeTab === 'broadcast' ? (
                     <div style={sectionStackStyle} data-testid="streaming-tab-broadcast">
-                        <SimulcastDestinations />
-                        <ObsWsPasswords />
-                        <TwitchIrcBotTokens />
-                        <WidgetAlertTokens />
+                        <StaggeredMount>
+                            <SimulcastDestinations />
+                            <ObsWsPasswords />
+                            <TwitchIrcBotTokens />
+                            <WidgetAlertTokens />
+                        </StaggeredMount>
                     </div>
                 ) : null}
                 {activeTab === 'connections' ? (
@@ -77,11 +80,13 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                 ) : null}
                 {activeTab === 'bridges' ? (
                     <div style={sectionStackStyle} data-testid="streaming-tab-bridges">
-                        <TwitchChatBridges />
-                        <YoutubeChatBridges />
-                        <KickChatBridges />
-                        <DiscordCompatWebhooks />
-                        <OutboundEventWebhooks />
+                        <StaggeredMount>
+                            <TwitchChatBridges />
+                            <YoutubeChatBridges />
+                            <KickChatBridges />
+                            <DiscordCompatWebhooks />
+                            <OutboundEventWebhooks />
+                        </StaggeredMount>
                     </div>
                 ) : null}
                 {activeTab === 'health' ? (

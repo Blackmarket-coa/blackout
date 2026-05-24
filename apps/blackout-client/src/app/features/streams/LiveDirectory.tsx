@@ -107,6 +107,7 @@ const StreamCard = ({ stream }: { stream: StreamSummary }): JSX.Element => (
 export const LiveDirectory = (): JSX.Element => {
     const [streams, setStreams] = useState<StreamSummary[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [forbidden, setForbidden] = useState(false);
     const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
@@ -119,7 +120,11 @@ export const LiveDirectory = (): JSX.Element => {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setError(err instanceof Error ? err.message : 'failed to load streams');
+                if ((err as { status?: number } | null)?.status === 403) {
+                    setForbidden(true);
+                } else {
+                    setError(err instanceof Error ? err.message : 'failed to load streams');
+                }
                 setLoaded(true);
             });
         return () => {
@@ -135,7 +140,11 @@ export const LiveDirectory = (): JSX.Element => {
                     Streams from creators across {BLACKOUT_TERMS.canopy.plural} you can join.
                 </p>
             </header>
-            {error ? (
+            {forbidden ? (
+                <p style={emptyStyle} data-testid="live-directory-forbidden">
+                    Streaming isn’t available on your account yet.
+                </p>
+            ) : error ? (
                 <p style={emptyStyle} data-testid="live-directory-error">
                     {error}
                 </p>

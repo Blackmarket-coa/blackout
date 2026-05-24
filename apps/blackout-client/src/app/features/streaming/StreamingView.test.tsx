@@ -85,13 +85,26 @@ describe('StreamingView', () => {
     });
 
     it('switches to Broadcast and mounts the simulcast / OBS / IRC / widget tools', async () => {
-        const { container } = await mountView();
-        await clickTab(container, 'broadcast');
-        expect(container.querySelector('[data-testid="streaming-tab-broadcast"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-simulcast"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-obs"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-irc"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-widget-alerts"]')).not.toBeNull();
+        vi.useFakeTimers();
+        try {
+            const { container } = await mountView();
+            await clickTab(container, 'broadcast');
+            expect(
+                container.querySelector('[data-testid="streaming-tab-broadcast"]')
+            ).not.toBeNull();
+            // Panels mount on a stagger (StaggeredMount) to avoid a request burst;
+            // advance past the schedule so every tool is present.
+            await act(async () => {
+                vi.advanceTimersByTime(2000);
+                await Promise.resolve();
+            });
+            expect(container.querySelector('[data-testid="stub-simulcast"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-obs"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-irc"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-widget-alerts"]')).not.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('switches to Connections and mounts linked accounts', async () => {
@@ -101,13 +114,23 @@ describe('StreamingView', () => {
     });
 
     it('switches to Bridges and mounts every bridge + webhook surface', async () => {
-        const { container } = await mountView();
-        await clickTab(container, 'bridges');
-        expect(container.querySelector('[data-testid="stub-twitch-bridge"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-youtube-bridge"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-kick-bridge"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-discord-webhooks"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="stub-outbound-webhooks"]')).not.toBeNull();
+        vi.useFakeTimers();
+        try {
+            const { container } = await mountView();
+            await clickTab(container, 'bridges');
+            // Bridge/webhook panels mount on a stagger; advance past the schedule.
+            await act(async () => {
+                vi.advanceTimersByTime(2000);
+                await Promise.resolve();
+            });
+            expect(container.querySelector('[data-testid="stub-twitch-bridge"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-youtube-bridge"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-kick-bridge"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-discord-webhooks"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="stub-outbound-webhooks"]')).not.toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('honours the initialTab prop (Health)', async () => {
