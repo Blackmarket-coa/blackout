@@ -52,4 +52,19 @@ describe('resolveFeatureFlags', () => {
         expect(baselineFallback.legacyShellLayout).toBe(true);
         expect(defaultFallback.legacyShellLayout).toBe(true);
     });
+
+    it('enables every feature flag when the beta unlock flag is set', () => {
+        for (const key of ['BLACKOUT_BETA_UNLOCK_ALL', 'VITE_BLACKOUT_BETA_UNLOCK_ALL'] as const) {
+            const flags = resolveFeatureFlags({ [key]: 'true' });
+            expect(Object.values(flags).every((value) => value === true)).toBe(true);
+            // including monetization, which is off by default
+            expect(flags.monetization).toBe(true);
+            expect(flags.monetizationSuite).toBe(true);
+        }
+    });
+
+    it('leaves flags at defaults when the beta unlock flag is absent', () => {
+        const flags = resolveFeatureFlags({});
+        expect(flags).toEqual(defaultFeatureFlags);
+    });
 });

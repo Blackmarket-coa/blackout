@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     DEAD_DROP_QUOTAS,
     DEAD_DROP_TIER_ENTITLEMENTS,
+    buildFullyUnlockedEntitlementPayload,
     type EntitlementAccessPayload,
     type EntitlementTier,
 } from '@blackout/protocol';
@@ -147,5 +148,27 @@ describe('checkDeadDropEntitlements (team / enterprise tiers)', () => {
         const result = checkDeadDropEntitlements(payload, baseInput());
         expect(result.ok).toBe(false);
         if (!result.ok) expect(result.reason).toBe('feature_disabled');
+    });
+});
+
+describe('buildFullyUnlockedEntitlementPayload (beta unlock)', () => {
+    it('passes every gated dead-drop request at enterprise quotas', () => {
+        const result = checkDeadDropEntitlements(
+            buildFullyUnlockedEntitlementPayload(),
+            baseInput({
+                requestPaddingBucket: true,
+                requestCoverSender: true,
+                requestQuorumOpen: true,
+                requestScheduledFlush: true,
+                recipientCount: 1_000_000,
+                payloadBytes: 100 * 1024 * 1024,
+                retentionHours: 24 * 300,
+            })
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.tier).toBe('enterprise');
+            expect(result.quotas).toEqual(DEAD_DROP_QUOTAS.enterprise);
+        }
     });
 });

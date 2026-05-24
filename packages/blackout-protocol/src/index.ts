@@ -35,4 +35,6 @@ export * from './entitlements/types';
 
 export * from './entitlements/schema';
 
+export * from './entitlements/fullyUnlocked';
+
 export * from './plugins';

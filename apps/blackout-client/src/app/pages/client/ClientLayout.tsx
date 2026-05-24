@@ -70,6 +70,7 @@ import { MessageSearch } from '../../features/message-search/MessageSearch';
 import { Lobby } from '../../features/lobby/Lobby';
 import { SpaceProvider } from '../../hooks/useSpace';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { betaUnlockAllEnabled } from '../../core/features/betaUnlock';
 
 const AttachProductDialog = lazy(() =>
     import('../../components/product-attachment/AttachProductDialog').then((module) => ({
@@ -200,7 +201,7 @@ export const ClientLayout = () => {
     const featureEntrypointRegistry = useMemo(
         () =>
             buildFeatureEntrypointRegistry({
-                preset: customization.activePreset,
+                preset: betaUnlockAllEnabled() ? 'sovereignty' : customization.activePreset,
                 flags: {
                     ...customization.features,
                     // Bridge the runtime flag onto the preset gate so the

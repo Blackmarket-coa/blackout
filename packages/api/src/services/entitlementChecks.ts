@@ -1,6 +1,7 @@
 import type { EntitlementKind, MarketplaceProviderId } from '@blackout/core';
 import { db } from '../db/store';
 import type { MarketplaceEntitlementRecord, MarketplaceProviderIdString } from '../db/types';
+import { betaUnlockAllEnabled } from './betaUnlock';
 
 // Status values that count as "the user currently has this" — granted is
 // the happy path, pending is the in-flight grant for slow webhooks. Any
@@ -30,6 +31,10 @@ export function entitlementForListing(
     providerListingId: string,
     sku: string | null = null
 ): EntitlementGate {
+    // Beta override: every paywalled listing is accessible to every user.
+    if (betaUnlockAllEnabled()) {
+        return { canAccess: true, kind: null, entitlementId: null, status: 'granted' };
+    }
     const matches = [...db.marketplaceEntitlements.values()].filter(
         (row) =>
             row.userId === userId &&
