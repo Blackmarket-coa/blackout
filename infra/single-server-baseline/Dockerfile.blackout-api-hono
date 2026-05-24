@@ -1,0 +1,27 @@
+# Hono-based @blackout/api image.
+#
+# Reconstructed from the production-host image (blackout-api:hono) so a
+# fresh-host deploy can produce it reproducibly. pnpm version is pinned via
+# the root package.json's "packageManager" field, so corepack picks it up
+# automatically.
+#
+# Build context: repo root (COPYs top-level lockfile + apps/ + packages/).
+#   docker build -f infra/single-server-baseline/Dockerfile.blackout-api-hono \
+#     -t blackout-api:hono .
+
+FROM node:22.22.3-alpine
+
+WORKDIR /app
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps ./apps
+COPY packages ./packages
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @blackout/api build
+
+EXPOSE 3001
+
+CMD ["pnpm", "--filter", "@blackout/api", "start"]

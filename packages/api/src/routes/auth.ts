@@ -20,6 +20,7 @@ import {
   issueEmailVerificationToken,
   markVerificationTokenSent,
 } from '../services/emailVerification';
+import { redeemInvitation } from '../services/invitations';
 import {
   confirmAccountDeletion,
   exportUserData,
@@ -38,6 +39,7 @@ const auth = new Hono();
 
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
+auth.use('/matrix/exchange', authRateLimit);
 auth.use('/password/reset/request', authRateLimit);
 auth.use('/password/reset/confirm', authRateLimit);
 auth.use('/password/change', authRateLimit);
@@ -79,6 +81,9 @@ const registerSchema = z.object({
   username: z.string().min(1),
   email: z.string().min(1),
   password: z.string().min(1),
+  /** Plaintext invite token from a /v1/invitations link. Optional unless
+   *  REQUIRE_INVITE_TOKEN=1, in which case registration is closed without one. */
+  inviteToken: z.string().min(1).max(512).optional(),
 });
 
 const loginSchema = z.object({
@@ -95,12 +100,22 @@ const issueSession = (userId: string, username: string, userAgent?: string) => {
 auth.post('/register', async (c) => {
   const parsed = await readJsonBody(c, registerSchema);
   if (parsed instanceof Response) return parsed;
-  const { username, email, password } = parsed;
+  const { username, email, password, inviteToken } = parsed;
 
   if (!isAcceptablePassword(password)) {
     return c.json(
       { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
       400,
+    );
+  }
+
+  // Invite-gated mode: when REQUIRE_INVITE_TOKEN=1 the public /register
+  // route is closed unless the caller presents a valid token. We do the
+  // up-front lookup so we never create a user we're about to roll back.
+  if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
+    return c.json(
+      { code: 'invite_required', message: 'Registration requires an invitation token' },
+      403,
     );
   }
 
@@ -141,6 +156,35 @@ auth.post('/register', async (c) => {
     return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix }, 502);
   }
 
+  // Redeem the invitation, if one was presented. Done after Matrix
+  // provisioning so the auto-room-invite can target the freshly-minted
+  // Matrix account. A bad token rolls back the local + Matrix accounts so
+  // the caller can retry with a corrected link.
+  let inviteRedemption:
+    | { ok: true; matrixInvite?: { ok: boolean } }
+    | { ok: false; reason: string }
+    | undefined;
+  if (inviteToken) {
+    const outcome = await redeemInvitation(inviteToken, user);
+    if (outcome.kind === 'ok') {
+      inviteRedemption = { ok: true, matrixInvite: outcome.matrixInvite };
+    } else {
+      db.deleteUser(user.id);
+      return c.json(
+        { code: 'invite_token_invalid', message: 'Invitation token is not usable', reason: outcome.kind },
+        400,
+      );
+    }
+  } else if (process.env.REQUIRE_INVITE_TOKEN === '1') {
+    // Defence in depth: the up-front gate above already rejects this,
+    // but if a future code path skips it we still refuse to issue a session.
+    db.deleteUser(user.id);
+    return c.json(
+      { code: 'invite_required', message: 'Registration requires an invitation token' },
+      403,
+    );
+  }
+
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
 
   // Mint and dispatch the verification email. Registration succeeds even
@@ -167,6 +211,7 @@ auth.post('/register', async (c) => {
       userId: user.id,
       emailVerificationSent,
       matrix,
+      invite: inviteRedemption,
     },
     201,
   );
@@ -264,6 +309,64 @@ auth.post('/login', async (c) => {
 
   const session = issueSession(user!.id, user!.username, c.req.header('user-agent'));
   return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user!.id });
+});
+
+// Matrix localpart per the spec's historical grammar: lowercase alnum plus
+// a small set of separators. We bound the length so a hostile homeserver
+// response can't be used to wedge an oversized username into the store.
+const MATRIX_LOCALPART_RE = /^[a-z0-9._=/+-]{1,255}$/;
+
+/**
+ * Bridge a live Matrix session into a Blackout API JWT. The client sends
+ * its Matrix access token (in `x-matrix-access-token`, NOT `Authorization`,
+ * so it doesn't collide with the JWT bearer path in authMiddleware); we
+ * validate it against the homeserver via whoami, then look up or
+ * auto-provision the matching Blackout user and issue a session. This is
+ * what lets users who signed up through the Matrix UI use `/v1/*` features
+ * like invitations and marketplace entitlements.
+ */
+auth.post('/matrix/exchange', async (c) => {
+  const matrixToken = c.req.header('x-matrix-access-token') ?? '';
+  if (!matrixToken) {
+    return c.json({ code: 'matrix_token_missing', message: 'Missing Matrix access token' }, 401);
+  }
+
+  const whoami = await matrixClient.whoami(matrixToken);
+  if (!whoami.ok) {
+    if (whoami.reason === 'matrix_not_configured') {
+      return c.json(
+        { code: 'matrix_not_configured', message: 'Matrix homeserver is not configured' },
+        503,
+      );
+    }
+    authFailuresTotal.inc({ reason: 'matrix_token_invalid' });
+    return c.json({ code: 'matrix_token_invalid', message: 'Matrix access token is not valid' }, 401);
+  }
+
+  const localpart = whoami.userId.replace(/^@/, '').split(':')[0] ?? '';
+  if (!MATRIX_LOCALPART_RE.test(localpart)) {
+    return c.json({ code: 'matrix_user_invalid', message: 'Unsupported Matrix user id' }, 400);
+  }
+
+  let user = db.findUserByUsername(localpart);
+  if (!user) {
+    // Auto-provision: the Matrix account already exists (whoami just
+    // confirmed it), so there's no second account to create — we only
+    // need a Blackout-side row to hang sessions, invitations, and
+    // entitlements off of. Mirrors the register flow minus the Matrix call.
+    user = db.createUser({
+      id: crypto.randomUUID(),
+      username: localpart,
+      email: '',
+      passwordHash: '',
+      reputationScore: 0,
+      reputationTier: 'member',
+      pubkeyEd25519: crypto.randomUUID().replace(/-/g, ''),
+    });
+  }
+
+  const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+  return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user.id });
 });
 
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });

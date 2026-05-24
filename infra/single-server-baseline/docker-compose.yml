@@ -92,7 +92,32 @@ services:
       - PORT=9000
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Public origin used to build invite URLs, OAuth callbacks, etc.
+      # Must be the externally-reachable HTTPS origin, not the internal
+      # container URL — otherwise invite links point at localhost.
+      - PUBLIC_APP_URL=https://${PRIMARY_DOMAIN}
+      # Origins permitted to call the API from a browser. The chat
+      # subdomain proxies /v1/* to this service (see nginx config), so
+      # both hosts need to be whitelisted.
+      - CORS_ALLOWED_ORIGINS=https://${PRIMARY_DOMAIN},https://chat.${PRIMARY_DOMAIN}
+      - JWT_SECRET_PRIMARY=${JWT_SECRET_PRIMARY}
+      # Internal Synapse listener (admin + client APIs). Both env names
+      # are accepted by matrix-client.ts; keep both to stay tolerant of
+      # the legacy *_URL spelling.
+      - MATRIX_HOMESERVER=http://synapse:8008
       - MATRIX_HOMESERVER_URL=http://synapse:8008
+      # Server-name suffix used when constructing MXIDs against the
+      # admin API. Must equal SYNAPSE_SERVER_NAME below.
+      - MATRIX_HOMESERVER_DOMAIN=${PRIMARY_DOMAIN}
+      - MATRIX_BOT_TOKEN=${MATRIX_BOT_TOKEN}
+      # Prometheus scrape token. The API returns 503 on /metrics when
+      # this is unset in production.
+      - INTERNAL_METRICS_TOKEN=${INTERNAL_METRICS_TOKEN}
+      # File-backed key/value store. Kept on a named volume so invites,
+      # accounts, and other API-owned state survive container restarts.
+      - BLACKOUT_DB_FILE=/var/lib/blackout/store.json
+    volumes:
+      - blackout-api-data:/var/lib/blackout
     depends_on:
       postgres:
         condition: service_healthy
@@ -465,3 +490,5 @@ volumes:
     name: blackout-clickhouse-logs
   cube-data:
     name: blackout-cube-data
+  blackout-api-data:
+    name: blackout-api-data

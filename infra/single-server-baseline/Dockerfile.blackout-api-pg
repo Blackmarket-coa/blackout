@@ -1,0 +1,3 @@
+FROM blackout-api:stable
+
+RUN pip install --no-cache-dir "psycopg[binary]==3.2.9"

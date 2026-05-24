@@ -18,11 +18,10 @@ describe('client shell layout parity', () => {
         expect(clientShellLayoutMetrics.minTouchTargetPx).toBeGreaterThanOrEqual(40);
     });
 
-    it('reproduces the legacy /room/:roomId shape when the canopy is unknown', () => {
+    it('uses the sentinel "-" canopy when the canopy is unknown', () => {
         // The AppShell-canonical canopy/den path with a sentinel "-"
-        // canopy stands in for the legacy "no parent space" room. The
-        // den segment is encoded the same way the legacy /room/:roomId
-        // route encoded :roomId, so deep-link routing parity holds.
+        // canopy stands in for "no parent space" rooms (direct rooms
+        // and home-roomed entities). The den segment is URL-encoded.
         const denId = '!den:server';
         const next = buildCommunitiesPath(null, denId);
         expect(next).toBe(`${COMMUNITIES_PATH}/-/dens/${encodeURIComponent(denId)}`);

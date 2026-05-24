@@ -52,8 +52,9 @@ describe('CreateRoomModal reliability', () => {
         stateMock.mockReset();
     });
 
-    // Folds Overlay portals into document.body, so the dialog is not
-    // inside `mounted.container` — query document.body instead.
+    // The PortalModal primitive portals into document.body, so the
+    // dialog is not inside `mounted.container` — query document.body
+    // instead.
     const findOverlayDialog = () =>
         document.body.querySelector('[role="dialog"]') as HTMLElement | null;
 
@@ -104,12 +105,52 @@ describe('CreateRoomModal reliability', () => {
             const mounted = await renderDialog(<CreateRoomModalRenderer />);
             expect(findOverlayDialog()).not.toBeNull();
             mounted.unmount();
-            // Folds Overlay / focus-trap may register listeners; the
+            // PortalModal / focus-trap may register listeners; the
             // contract is that all are cleaned up on unmount.
             expect(ledger().keydown).toBe(0);
             expect(ledger().pointerdown).toBe(0);
         } finally {
             restore();
+        }
+    });
+
+    it('row 7 — backdrop sits at zIndex 9999, dims the page, and closes on click', async () => {
+        stateMock.mockReturnValue({ spaceId: undefined });
+        const mounted = await renderDialog(<CreateRoomModalRenderer />);
+        try {
+            const backdrop = document.body.querySelector(
+                '[data-testid="modal-createRoom-backdrop"]'
+            ) as HTMLElement | null;
+            expect(backdrop, 'backdrop must render').not.toBeNull();
+
+            const root = backdrop!.parentElement as HTMLElement;
+            expect(root.style.position).toBe('fixed');
+            expect(root.style.zIndex).toBe('9999');
+
+            // Dimmed enough to read the page behind as muted, not invisible.
+            expect(backdrop!.style.background).toMatch(/rgba\(0,\s*0,\s*0,\s*0?\.5\d?\)/);
+            expect(backdrop!.style.pointerEvents).toBe('auto');
+
+            backdrop!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            expect(closeMock).toHaveBeenCalled();
+        } finally {
+            mounted.unmount();
+        }
+    });
+
+    it('row 8 — mousedown on dialog content does NOT bubble to the backdrop', async () => {
+        stateMock.mockReturnValue({ spaceId: undefined });
+        const mounted = await renderDialog(<CreateRoomModalRenderer />);
+        try {
+            const dialog = findOverlayDialog();
+            expect(dialog).not.toBeNull();
+            dialog!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            // Backdrop close handler is on a sibling element; bubbling stops
+            // at the content wrapper so closeMock must not fire from a click
+            // INSIDE the modal.
+            expect(closeMock).not.toHaveBeenCalled();
+        } finally {
+            mounted.unmount();
         }
     });
 

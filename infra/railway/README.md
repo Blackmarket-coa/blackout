@@ -36,8 +36,13 @@ This folder documents Blackout service deployment on Railway.
 - `PORT`
 - `DATABASE_URL`
 - `REDIS_URL`
-- `JWT_SECRET`
-- `CORS_ORIGIN`
+- `JWT_SECRET_PRIMARY` — HS256 signing key for auth tokens.
+- `CORS_ALLOWED_ORIGINS` — comma-separated list of browser origins permitted to call the API.
+- `PUBLIC_APP_URL` — externally-reachable HTTPS origin used to build invite URLs.
+- `MATRIX_HOMESERVER` — Synapse base URL.
+- `MATRIX_HOMESERVER_DOMAIN` — MXID server-name suffix; must equal Synapse's `server_name`.
+- `MATRIX_BOT_TOKEN` — Synapse admin access token.
+- `INTERNAL_METRICS_TOKEN` — bearer required for the `/metrics` scrape.
 - `NODE_ENV`
 
 ## Operational notes

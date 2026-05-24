@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useOnboardingCompletion, useOnboardingContent } from './useWelcome';
+import { useOnboardingCompletion, useOnboardingContent, type OnboardingStep } from './useWelcome';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 
 export const OnboardingWizard = ({
@@ -7,11 +7,16 @@ export const OnboardingWizard = ({
     open,
     onClose,
     onComplete,
+    fallbackSteps,
 }: {
     spaceId: string;
     open: boolean;
     onClose: () => void;
     onComplete?: () => void;
+    /** Steps to show when the canopy has no configured onboarding content.
+     *  When provided, the wizard renders even if `enabled` is false (used by
+     *  the full-page invite entry to always greet brand-new users). */
+    fallbackSteps?: OnboardingStep[];
 }) => {
     const onboarding = useOnboardingContent(spaceId);
     const completion = useOnboardingCompletion(spaceId);
@@ -22,12 +27,15 @@ export const OnboardingWizard = ({
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
     const [completed, setCompleted] = useState(false);
 
-    const steps = onboarding.data.steps;
+    // Prefer the canopy's configured steps; otherwise fall back (invite entry).
+    const usingFallback = !onboarding.data.enabled && (fallbackSteps?.length ?? 0) > 0;
+    const active = onboarding.data.enabled || usingFallback;
+    const steps = onboarding.data.enabled ? onboarding.data.steps : fallbackSteps ?? [];
     const totalSteps = steps.length;
     const activeStep = steps[stepIndex];
 
     useEffect(() => {
-        if (!open || !onboarding.data.enabled) return;
+        if (!open || !active) return;
 
         let mounted = true;
         void completion.readCompletion().then((done) => {
@@ -39,7 +47,7 @@ export const OnboardingWizard = ({
         return () => {
             mounted = false;
         };
-    }, [completion, onboarding.data.enabled, onComplete, open]);
+    }, [completion, active, onComplete, open]);
 
     const canProceed = useMemo(() => {
         if (!activeStep) return true;
@@ -51,7 +59,7 @@ export const OnboardingWizard = ({
         return true;
     }, [activeStep, rulesAccepted]);
 
-    if (!open || !onboarding.data.enabled || completed) return null;
+    if (!open || !active || completed) return null;
 
     const finish = async () => {
         await completion.markCompleted();

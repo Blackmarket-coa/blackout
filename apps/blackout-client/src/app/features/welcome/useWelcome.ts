@@ -37,7 +37,7 @@ export interface OnboardingContent {
 
 export const WELCOME_EVENT_TYPE = 'co.bmc.welcome';
 export const ONBOARDING_EVENT_TYPE = 'co.bmc.onboarding';
-const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
+export const ONBOARDING_ACCOUNT_DATA_KEY = 'co.bmc.onboarding.completed';
 
 const defaultWelcome = (spaceName: string): WelcomeContent => ({
     title: `Welcome to ${spaceName}!`,
@@ -49,6 +49,47 @@ const defaultOnboarding: OnboardingContent = {
     enabled: false,
     steps: [],
 };
+
+/**
+ * Fallback onboarding shown to brand-new users accepting an invite when the
+ * canopy hasn't configured its own `co.bmc.onboarding` content. Used by
+ * `OnboardingPage` (the full-page invite entry) only — NOT by the in-app
+ * `ClientLayout` modal, which stays opt-in so existing users in unconfigured
+ * canopies aren't interrupted.
+ */
+export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
+    {
+        type: 'rules',
+        title: 'Welcome to Blackout',
+        content:
+            "You're in. Blackout is an end-to-end-encrypted, community-run space.\n\n" +
+            'No central feed and no ads — just communities (canopies) and the channels ' +
+            'inside them (dens). What you join is what you see.',
+        requireAccept: false,
+    },
+    {
+        type: 'rules',
+        title: 'House rules',
+        content:
+            'A few ground rules that apply everywhere on Blackout:\n\n' +
+            '• Be decent — no harassment, hate, or targeted abuse.\n' +
+            '• Respect consent and privacy; don’t share others’ private info.\n' +
+            '• No spam, scams, or illegal marketplace activity.\n\n' +
+            'Each community sets its own rules on top of these — check the den’s pinned posts.',
+        requireAccept: true,
+    },
+    {
+        type: 'rules',
+        title: 'Getting around',
+        content:
+            'Quick orientation:\n\n' +
+            '• The left rail lists the dens you can post in.\n' +
+            '• Type in the composer at the bottom; messages are end-to-end encrypted.\n' +
+            '• Use the top bar for members, pins, search, and notifications.\n\n' +
+            "That’s it — finish up and you’ll drop straight into the den.",
+        requireAccept: false,
+    },
+];
 
 const parseFeaturedChannels = (value: unknown): FeaturedChannel[] => {
     if (!Array.isArray(value)) return [];

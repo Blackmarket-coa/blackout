@@ -1,12 +1,20 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+    INVITE_DEN_PARAM,
+    INVITE_CANOPY_PARAM,
+} from '../../components/invite-landing/postAcceptanceRoute';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
+import { useHomeTour } from '../onboarding/homeTourState';
+import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import {
     buildHomeFeed,
     groupHomeFeedByBucket,
@@ -157,6 +165,37 @@ const HomeFeedCard = ({ item }: { item: HomeFeedItem }): JSX.Element => (
 export const HomeFeed = (): JSX.Element => {
     const rooms = useAtomValue(joinedRoomsAtom);
     const installed = useAtomValue(installedPluginsAtom);
+    const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
+    const homeTour = useHomeTour();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+
+    // Invite handoff: a freshly-invited user lands on `/?invite_den=…` so the
+    // Home tour can run first. Kick off the tour, then route them into the den
+    // once it completes/dismisses (or immediately if the tour is off/done).
+    const inviteDen = searchParams.get(INVITE_DEN_PARAM);
+    const inviteCanopy = searchParams.get(INVITE_CANOPY_PARAM);
+    const tourStatus = homeTour.state.status;
+    const tourKickedRef = useRef(false);
+    useEffect(() => {
+        if (!inviteDen) return;
+        const goToDen = () =>
+            navigate(buildCommunitiesPath(inviteCanopy ?? null, inviteDen), { replace: true });
+        if (!tourEnabled) {
+            goToDen();
+            return;
+        }
+        if (tourStatus === 'completed' || tourStatus === 'dismissed') {
+            goToDen();
+            return;
+        }
+        if (tourStatus === 'idle' && !tourKickedRef.current) {
+            tourKickedRef.current = true;
+            trackOnboardingTourStarted(Date.now());
+            void homeTour.start();
+        }
+        // 'running' → wait; the effect re-runs when the status changes.
+    }, [inviteDen, inviteCanopy, tourEnabled, tourStatus, homeTour, navigate]);
 
     const items = useMemo(() => buildHomeFeed(rooms, Date.now()), [rooms]);
     const groups = useMemo(() => groupHomeFeedByBucket(items), [items]);
@@ -173,11 +212,41 @@ export const HomeFeed = (): JSX.Element => {
         [installed]
     );
 
+    const showReplay =
+        tourEnabled &&
+        (homeTour.state.status === 'completed' || homeTour.state.status === 'dismissed');
+
     return (
         <section style={layoutStyle} data-shell-region="home-feed">
-            <header style={headerStyle}>
+            <header style={headerStyle} data-testid="home-feed-header">
                 <h1 style={titleStyle}>Home</h1>
                 <p style={subtitleStyle}>Latest activity from your {BLACKOUT_TERMS.den.plural}.</p>
+                {showReplay ? (
+                    <button
+                        type="button"
+                        data-testid="home-tour-replay"
+                        onClick={() => {
+                            void (async () => {
+                                await homeTour.reset();
+                                trackOnboardingTourStarted(Date.now());
+                                await homeTour.start();
+                            })();
+                        }}
+                        style={{
+                            width: 'fit-content',
+                            marginTop: 4,
+                            fontSize: 12,
+                            background: 'transparent',
+                            color: 'var(--accent-primary, #3b82f6)',
+                            border: '1px solid var(--border-default, #374151)',
+                            borderRadius: 8,
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Replay homepage tour
+                    </button>
+                ) : null}
             </header>
             <TopicChipBar />
             {pluginCards.length > 0 ? (
@@ -232,6 +301,7 @@ export const HomeFeed = (): JSX.Element => {
                     ))}
                 </div>
             )}
+            {tourEnabled ? <HomeTourOverlay /> : null}
         </section>
     );
 };

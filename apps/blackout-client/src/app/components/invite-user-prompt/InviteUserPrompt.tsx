@@ -42,6 +42,7 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { BreakWord } from '../../styles/Text.css';
 import { useAlive } from '../../hooks/useAlive';
+import { InvitationsManager } from '../invitations';
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   limit: 1000,
@@ -58,6 +59,7 @@ type InviteUserProps = {
 export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
   const mx = useMatrixClient();
   const alive = useAlive();
+  const [showInvitationsManager, setShowInvitationsManager] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const directUsers = useDirectUsers();
@@ -281,11 +283,25 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
                 >
                   <Text size="B400">Invite</Text>
                 </Button>
+                <Button
+                  type="button"
+                  variant="Secondary"
+                  fill="Soft"
+                  onClick={() => setShowInvitationsManager(true)}
+                >
+                  <Text size="B400">Share a link instead</Text>
+                </Button>
               </Box>
             </Box>
           </Dialog>
         </FocusTrap>
       </OverlayCenter>
+      {showInvitationsManager && (
+        <InvitationsManager
+          roomId={room.roomId}
+          requestClose={() => setShowInvitationsManager(false)}
+        />
+      )}
     </Overlay>
   );
 }

@@ -12,7 +12,6 @@ export const coliseumFeature: BlackoutFeature = {
             name: 'Coliseum Shell',
             category: 'visual/layout plugin',
             capabilityGate: {
-                allOf: ['coliseum.read'],
                 flags: ['coliseum'],
             },
             routes: coliseumRoutes,

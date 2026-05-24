@@ -6,14 +6,20 @@ export type OnboardingStepId =
     | 'welcome_context'
     | 'community_selection'
     | 'channel_subscription'
-    | 'first_contribution';
+    | 'first_contribution'
+    | 'developer_tools';
 
+// Canonical step order. The trailing `developer_tools` step is beta-only
+// and surfaced through the `onboardingDeveloperStep` flag — `OnboardingFlow`
+// derives a `visibleSteps` array from this constant rather than mutating
+// it, so persisted v3 indexes remain valid when the flag flips.
 export const ONBOARDING_STEP_SEQUENCE: OnboardingStepId[] = [
     'choose_role',
     'welcome_context',
     'community_selection',
     'channel_subscription',
     'first_contribution',
+    'developer_tools',
 ];
 
 export type CommunityIntent = 'join' | 'create' | 'browse';

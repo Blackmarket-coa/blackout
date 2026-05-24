@@ -159,6 +159,20 @@ export type FeatureFlags = {
      */
     onboardingMigrationCredits: boolean;
     /**
+     * Beta-only "For developers & bug hunters" wizard step. When on,
+     * the member onboarding flow shows an extra step that surfaces
+     * Settings → Developer Tools, source-file references for testers,
+     * and a debug-bundle download button.
+     */
+    onboardingDeveloperStep: boolean;
+    /**
+     * Post-wizard guided spotlight tour of the homepage. When on, the
+     * onboarding route navigates to `/` after the wizard completes and
+     * `HomeFeed` mounts `HomeTourOverlay` so new beta users are walked
+     * through each homepage region in place.
+     */
+    onboardingHomeTour: boolean;
+    /**
      * Creator dashboard mode (PR 9). Owns the `/creator` route — a
      * landing page combining the existing earnings dashboard with
      * ambassador / quest / referral status cards from the growth
@@ -218,7 +232,10 @@ export const defaultFeatureFlags: FeatureFlags = {
     communities: true,
     plugins: true,
     shellAppShell: true,
-    discoveryHomeFeed: false,
+    // HomeFeed is the default `/` surface so the home tour (gated by
+    // onboardingHomeTour below) has a place to run — invited users land here
+    // for the tour before being routed into their den.
+    discoveryHomeFeed: true,
     topics: false,
     marketTab: false,
     productsAttachments: false,
@@ -233,6 +250,10 @@ export const defaultFeatureFlags: FeatureFlags = {
     eventsV1: false,
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
+    onboardingDeveloperStep: false,
+    // On by default: new (incl. invited) users get the Home tour. Env
+    // `BLACKOUT_ONBOARDING_HOME_TOUR=false` can still disable it.
+    onboardingHomeTour: true,
     creatorsDashboard: false,
     federationSelfHost: false,
 };
@@ -540,6 +561,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
             nextFlags.onboardingMigrationCredits = false;
         }
+        if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'true') {
+            nextFlags.onboardingDeveloperStep = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'false') {
+            nextFlags.onboardingDeveloperStep = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_HOME_TOUR === 'true') {
+            nextFlags.onboardingHomeTour = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_HOME_TOUR === 'false') {
+            nextFlags.onboardingHomeTour = false;
+        }
         if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
             nextFlags.creatorsDashboard = true;
         }
@@ -755,6 +788,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
         nextFlags.onboardingMigrationCredits = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'true') {
+        nextFlags.onboardingDeveloperStep = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'false') {
+        nextFlags.onboardingDeveloperStep = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_HOME_TOUR === 'true') {
+        nextFlags.onboardingHomeTour = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_HOME_TOUR === 'false') {
+        nextFlags.onboardingHomeTour = false;
     }
     if (env.BLACKOUT_CREATORS_DASHBOARD === 'true') {
         nextFlags.creatorsDashboard = true;

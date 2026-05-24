@@ -6,9 +6,12 @@ import {
     type MatrixClient,
     type MatrixError,
 } from 'matrix-js-sdk';
+import { type AccessTokens, type TokenRefreshFunction } from 'matrix-js-sdk/lib/http-api';
 import { createStore } from 'jotai/vanilla';
 import { authStateAtom, matrixClientAtom, userIdAtom, type AuthState } from '../app/state/auth';
-import { clearSession, restoreActiveSession, type StoredSession } from './sessionManager';
+import { clearSession, restoreActiveSession, saveSession, type StoredSession } from './sessionManager';
+import { exchangeMatrixForBlackoutToken } from './blackoutApiSession';
+import { cryptoCallbacks } from './secretStorageKeys';
 
 type AtomStore = ReturnType<typeof createStore>;
 
@@ -144,6 +147,57 @@ const cleanupStaleStoresForUser = async (
     await Promise.all([...legacyDbs, ...staleDbs].map(deleteIndexedDb));
 };
 
+/**
+ * Returns a matrix-js-sdk TokenRefreshFunction bound to the active session's
+ * baseUrl + userId. The SDK invokes this when an authenticated request comes
+ * back with M_UNKNOWN_TOKEN; if we don't supply it the SDK logs "no refresh
+ * token or refresh function" and forces logout.
+ */
+const buildTokenRefreshFunction = (session: StoredSession): TokenRefreshFunction => {
+    return async (refreshToken: string): Promise<AccessTokens> => {
+        const refreshUrl = new URL('/_matrix/client/v3/refresh', session.baseUrl);
+        const response = await fetch(refreshUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (!response.ok) {
+            throw new MatrixInitError(
+                response.status === 429 ? 'rate_limited' : 'invalid_credentials',
+                `Token refresh failed (${response.status}).`,
+            );
+        }
+        const data = (await response.json()) as {
+            access_token?: string;
+            refresh_token?: string;
+            expires_in_ms?: number;
+        };
+        if (!data.access_token) {
+            throw new MatrixInitError(
+                'invalid_credentials',
+                'Refresh response missing access token.',
+            );
+        }
+
+        const nextRefreshToken = data.refresh_token ?? refreshToken;
+        const expiresAt = data.expires_in_ms ? Date.now() + data.expires_in_ms : undefined;
+        saveSession({
+            baseUrl: session.baseUrl,
+            accessToken: data.access_token,
+            refreshToken: nextRefreshToken,
+            userId: session.userId,
+            deviceId: session.deviceId,
+            expiresAt,
+        });
+
+        return {
+            accessToken: data.access_token,
+            refreshToken: nextRefreshToken,
+            expiry: data.expires_in_ms ? new Date(Date.now() + data.expires_in_ms) : undefined,
+        };
+    };
+};
+
 const initClientForSession = async (session: StoredSession): Promise<MatrixClient> => {
     ensureValidHomeserver(session.baseUrl);
 
@@ -165,10 +219,15 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
         userId: session.userId,
         deviceId: session.deviceId,
         accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        tokenRefreshFunction: session.refreshToken
+            ? buildTokenRefreshFunction(session)
+            : undefined,
         store: syncStore,
         cryptoStore,
         timelineSupport: true,
         verificationMethods: ['m.sas.v1'],
+        cryptoCallbacks,
     });
 
     await syncStore.startup();
@@ -214,6 +273,10 @@ export const initMatrixFromStoredSession = async (
         const client = await initClientForSession(session);
         await startSyncWithRetry(client);
         applyAuthAtoms(store, client, 'logged_in');
+        // Bridge the Matrix session into a Blackout API JWT so /v1/* features
+        // (invitations, entitlements, …) are authenticated. Fire-and-forget:
+        // chat must not block on the API server being reachable.
+        void exchangeMatrixForBlackoutToken(session);
         return client;
     } catch (error) {
         const normalizedError = normalizeMatrixError(error);
@@ -231,6 +294,13 @@ export const initClient = (session: StoredSession): Promise<MatrixClient> =>
 
 export const startClient = async (client: MatrixClient): Promise<void> => {
     await startSyncWithRetry(client);
+
+    // Opt-in DevTools-console hook for diagnosing sync state. Enable with
+    //   localStorage.setItem('blackoutDebug', '1')
+    // then reload, and `window.mxClient` exposes the live MatrixClient.
+    if (window.localStorage.getItem('blackoutDebug') === '1') {
+        (window as unknown as { mxClient: MatrixClient }).mxClient = client;
+    }
 };
 
 export const clearLoginData = (): void => {

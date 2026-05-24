@@ -1,15 +1,16 @@
 import type { BlackoutFeature } from '../../core/features/types';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { communitiesNavItems } from './nav';
 import { communitiesPanels } from './panels';
 import { communitiesRoutes } from './routes';
 
 export const communitiesFeature: BlackoutFeature = {
     id: 'communities',
-    name: 'Communities',
+    name: BLACKOUT_TERMS.canopy.titlePlural,
     customizations: [
         {
             id: 'communities-shell',
-            name: 'Communities Shell',
+            name: `${BLACKOUT_TERMS.canopy.titlePlural} Shell`,
             category: 'visual/layout plugin',
             capabilityGate: {
                 flags: ['communities'],

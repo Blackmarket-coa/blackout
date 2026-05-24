@@ -9,7 +9,6 @@ import {
     HOME_CREATE_PATH,
     HOME_JOIN_PATH,
     HOME_PATH,
-    HOME_ROOM_PATH,
     HOME_SEARCH_PATH,
     LOGIN_PATH,
     INBOX_INVITES_PATH,
@@ -20,7 +19,6 @@ import {
     ROOT_PATH,
     SPACE_LOBBY_PATH,
     SPACE_PATH,
-    SPACE_ROOM_PATH,
     SPACE_SEARCH_PATH,
     CREATE_PATH,
     ONBOARDING_ANALYTICS_PATH,
@@ -103,14 +101,6 @@ export const getHomePath = (): string => HOME_PATH;
 export const getHomeCreatePath = (): string => HOME_CREATE_PATH;
 export const getHomeJoinPath = (): string => HOME_JOIN_PATH;
 export const getHomeSearchPath = (): string => HOME_SEARCH_PATH;
-export const getHomeRoomPath = (roomIdOrAlias: string, eventId?: string): string => {
-    const params = {
-        roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
-        eventId: eventId ? encodeURIComponent(eventId) : null,
-    };
-
-    return generatePath(HOME_ROOM_PATH, params);
-};
 
 export const getDirectPath = (): string => DIRECT_PATH;
 export const getDirectCreatePath = (): string => DIRECT_CREATE_PATH;
@@ -142,20 +132,6 @@ export const getSpaceSearchPath = (spaceIdOrAlias: string): string => {
     };
     return generatePath(SPACE_SEARCH_PATH, params);
 };
-export const getSpaceRoomPath = (
-    spaceIdOrAlias: string,
-    roomIdOrAlias: string,
-    eventId?: string
-): string => {
-    const params = {
-        spaceIdOrAlias: encodeURIComponent(spaceIdOrAlias),
-        roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
-        eventId: eventId ? encodeURIComponent(eventId) : null,
-    };
-
-    return generatePath(SPACE_ROOM_PATH, params);
-};
-
 export const getExplorePath = (): string => EXPLORE_PATH;
 export const getExploreFeaturedPath = (): string => EXPLORE_FEATURED_PATH;
 export const getExploreServerPath = (server: string): string => {

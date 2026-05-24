@@ -19,6 +19,7 @@ import {
     customizationStateFromBundle,
 } from '../../state/customization';
 import { themePreferenceAtom } from '../../state/theme-atoms';
+import { downloadDebugBundle } from './debugBundle';
 
 const DeveloperSettings = () => {
     const [settings, setSettings] = useAtom(developerSettingsAtom);
@@ -36,15 +37,8 @@ const DeveloperSettings = () => {
         null,
     );
 
-    const diagnostics = useMemo(
+    const bundleOptions = useMemo(
         () => ({
-            generatedAt: new Date().toISOString(),
-            url: typeof window !== 'undefined' ? window.location.href : 'unknown',
-            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-            viewport:
-                typeof window !== 'undefined'
-                    ? { width: window.innerWidth, height: window.innerHeight }
-                    : { width: 0, height: 0 },
             settings: {
                 appearance,
                 notifications,
@@ -53,20 +47,12 @@ const DeveloperSettings = () => {
                 voiceVideo,
                 keybinds,
             },
-            localStorage:
-                settings.includeLocalStorageInBundle && typeof window !== 'undefined'
-                    ? Object.fromEntries(
-                          Object.keys(window.localStorage)
-                              .filter((key) => key.startsWith('blackout.'))
-                              .map((key) => [key, window.localStorage.getItem(key)]),
-                      )
-                    : undefined,
-            featureFlags: settings.includeFeatureFlagsInBundle
-                ? {
-                      settingsFramework: true,
-                      developerDiagnostics: settings.diagnosticsEnabled,
-                  }
-                : undefined,
+            includeLocalStorage: settings.includeLocalStorageInBundle,
+            includeFeatureFlags: settings.includeFeatureFlagsInBundle,
+            featureFlags: {
+                settingsFramework: true,
+                developerDiagnostics: settings.diagnosticsEnabled,
+            },
         }),
         [
             accessibility,
@@ -82,13 +68,7 @@ const DeveloperSettings = () => {
     );
 
     const downloadBundle = () => {
-        const blob = new Blob([JSON.stringify(diagnostics, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `blackout-debug-bundle-${Date.now()}.json`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        downloadDebugBundle(bundleOptions);
         setBundleGeneratedAt(new Date().toISOString());
         trackSettingsInteraction('developer', 'download-debug-bundle', true);
     };

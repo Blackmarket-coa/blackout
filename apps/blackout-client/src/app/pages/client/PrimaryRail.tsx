@@ -12,6 +12,13 @@ type PrimaryRailProps = {
      */
     homeButton: ReactNode;
     /**
+     * Optional global "create an invite link" button, pinned directly
+     * below Home so it's reachable from anywhere in the app — not just
+     * from inside a specific Den. Owned by ClientLayout so it can hold
+     * the modal-open state next to the rest of the rail wiring.
+     */
+    inviteButton?: ReactNode;
+    /**
      * The canopy (Matrix space) drag/drop block, owned by ClientLayout so
      * the rail does not reach into space-list state. The rail simply slots
      * it in between the registry-driven system entries and the bottom
@@ -28,6 +35,7 @@ const RAIL_BUTTON_SIZE = 40;
 
 export const PrimaryRail = ({
     homeButton,
+    inviteButton,
     canopyBlock,
     onCreateCanopy,
     avatarButton,
@@ -50,6 +58,7 @@ export const PrimaryRail = ({
             }}
         >
             {homeButton}
+            {inviteButton}
 
             <div style={{ position: 'relative', width: '100%' }}>
                 <RegistrySidebarList

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import type { CoalitionFeedItem } from '@blackout/core';
 import { useCoalitionFeed, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
+import { buildCommunitiesPath } from '../../../pages/paths';
 
 export interface ShopTabProps {
     scope: CoalitionScopeQuery;
@@ -65,7 +66,7 @@ export function ShopTab({ scope }: ShopTabProps) {
                                 ) : null}
                                 {listing.denId ? (
                                     <a
-                                        href={`/room/${encodeURIComponent(listing.denId)}`}
+                                        href={buildCommunitiesPath(null, listing.denId)}
                                         data-testid={`coalition-shop-view-${listing.id}`}
                                         style={{
                                             marginTop: 4,

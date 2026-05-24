@@ -1,7 +1,11 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
+import {
+    roomJumpTargetEventIdAtom,
+    selectedRoomIdAtom,
+    selectedSpaceIdAtom,
+} from '../../state/navigation';
 import { COMMUNITIES_NO_CANOPY_SENTINEL } from '../../pages/paths';
 
 // ClientLayout is a heavy module (it transitively pulls in matrix-js-sdk
@@ -34,13 +38,20 @@ const decodeId = (raw: string | undefined): string | null => {
  */
 export const CommunitiesRoute = () => {
     const { canopyId, denId } = useParams<{ canopyId?: string; denId?: string }>();
+    const [searchParams] = useSearchParams();
     const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
     const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
+    const setRoomJumpTargetEventId = useSetAtom(roomJumpTargetEventIdAtom);
+
+    const jumpEventId = searchParams.get('event');
 
     useEffect(() => {
         setSelectedSpaceId(decodeId(canopyId));
         setSelectedRoomId(decodeId(denId));
-    }, [canopyId, denId, setSelectedRoomId, setSelectedSpaceId]);
+        // `?event=<id>` (set by navigateRoom) focuses a specific message in the
+        // den timeline; ClientLayout reads this atom and feeds RoomTimeline.
+        setRoomJumpTargetEventId(jumpEventId);
+    }, [canopyId, denId, jumpEventId, setSelectedRoomId, setSelectedSpaceId, setRoomJumpTargetEventId]);
 
     return (
         <Suspense fallback={null}>

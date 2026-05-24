@@ -106,7 +106,7 @@ const STREAM_PATH = '/v1/integrations/widgets/alerts/stream';
 
 /**
  * Build the absolute SSE URL a creator pastes into OBS's "browser source".
- * Uses the configured `VITE_BLACKOUT_API_BASE_URL` when set; otherwise
+ * Uses the configured `VITE_API_BASE_URL` when set; otherwise
  * builds a relative URL that the same-origin will resolve.
  *
  * Token is URL-encoded so secrets containing `+`, `=`, or `/` (the

@@ -17,6 +17,10 @@ import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-rou
 import { Provider as JotaiProvider } from 'jotai';
 import { ThemeProvider } from './app/components/ThemeProvider';
 import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
+import { PluginEntitlementHydrator } from './app/features/monetization/install/PluginEntitlementHydrator';
+import { PostLoginRecoveryGate } from './app/components/bmc/PostLoginRecoveryGate';
+import { useMatrixClient } from './app/hooks/useMatrixClient';
+import { useBindAllRoomsAtom } from './app/state/rooms';
 import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
@@ -37,6 +41,9 @@ import './app/i18n';
 import ClientLayout from './app/pages/client/ClientLayout';
 import { AppShell } from './app/pages/shell/AppShell';
 import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
+import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
+import { OnboardingPage } from './app/features/welcome/OnboardingPage';
+import { ONBOARDING_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
 // HomeFeed is gated behind two flags and a small Matrix-tied data path
@@ -54,6 +61,7 @@ import { NotificationTokenBroker } from './platform/NotificationTokenBroker';
 import { UnreadCountBroadcaster } from './platform/UnreadCountBroadcaster';
 import { ConfirmProvider } from './app/components/confirm-dialog';
 import { CrashBoundary } from './app/components/CrashBoundary';
+import { ClientConfigLoader } from './app/hooks/ClientConfigLoader';
 
 enableMapSet();
 document.body.classList.add(configClass, varsClass);
@@ -85,15 +93,15 @@ const queryClient = new QueryClient();
 
 /**
  * Production fetcher bag — built once at boot from the canonical
- * `ApiClient`. The base URL is read from `import.meta.env.VITE_BLACKOUT_API_BASE`
+ * `ApiClient`. The base URL is read from `import.meta.env.VITE_API_BASE_URL`
  * when present; otherwise calls go through the page's relative URL
  * (matches the existing dev proxy setup). Hydration token wiring is
  * deferred to a future bootstrap pass; the headers slot is open for it.
  */
 const apiBaseUrl =
     typeof import.meta !== 'undefined'
-        ? (import.meta as { env?: Record<string, string | undefined> }).env
-              ?.VITE_BLACKOUT_API_BASE ?? undefined
+        ? (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
+          undefined
         : undefined;
 const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
 const registryFetchers = buildRegistryFetchers(apiClient);
@@ -184,6 +192,15 @@ const buildAppRouter = (capabilityContext: {
             path: '/',
             element: homeElement,
         },
+        // Invite landing — handled here for the logged-in case so an
+        // already-signed-in recipient gets the auto-redeem flow. The
+        // logged-out case is intercepted in BootstrapStatus before this
+        // router ever mounts (see below).
+        { path: '/invite/:token', element: <InviteLandingPage /> },
+        // Full-page onboarding host. Invite acceptance routes brand-new users
+        // here (with the invited room as `?room=`) before dropping them into
+        // the room; otherwise the wizard only ever shows as a ClientLayout modal.
+        { path: ONBOARDING_PATH, element: <OnboardingPage /> },
         ...authRedirectRoutes,
         ...registryRoutes,
     ];
@@ -205,6 +222,13 @@ const buildAppRouter = (capabilityContext: {
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
+const RoomsAtomBinder = () => {
+    const mx = useMatrixClient();
+    useBindAllRoomsAtom(mx);
+    return null;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
 const BootstrapStatus = () => {
     const authState = useAtomValue(authStateAtom);
     const cryptoInitError = useAtomValue(cryptoInitErrorAtom);
@@ -220,7 +244,29 @@ const BootstrapStatus = () => {
     );
 
     if (authState === 'logged_in') {
-        return <RouterProvider router={router} />;
+        return (
+            <PostLoginRecoveryGate>
+                <RoomsAtomBinder />
+                <PluginEntitlementHydrator />
+                <PendingInviteRedeemer />
+                <RouterProvider router={router} />
+            </PostLoginRecoveryGate>
+        );
+    }
+
+    // The router only mounts for logged_in users (see above), so any
+    // unauthenticated request to /invite/:token would otherwise fall
+    // through to the LoginPage card. Render the landing page directly
+    // here so the recipient sees who invited them — they can then choose
+    // "Create account" or "Sign in" and the token-stash → post-login
+    // redemption hook takes over.
+    if (
+        typeof window !== 'undefined' &&
+        window.location.pathname.startsWith('/invite/') &&
+        authState !== 'crypto_initializing' &&
+        authState !== 'crypto_failed'
+    ) {
+        return <InviteLandingPage />;
     }
 
     const title =
@@ -306,11 +352,7 @@ const BootstrapStatus = () => {
                 >
                     Home
                 </a>
-                <a
-                    href="https://theblackout.app"
-                    rel="noreferrer"
-                    style={{ color: 'inherit' }}
-                >
+                <a href="https://theblackout.app" rel="noreferrer" style={{ color: 'inherit' }}>
                     About
                 </a>
                 <a
@@ -325,24 +367,48 @@ const BootstrapStatus = () => {
     );
 };
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-    <React.StrictMode>
-        <JotaiProvider>
-            <ThemeProvider>
-                <CrashBoundary>
-                    <RuntimeSettingsBridge />
-                    <DevCapabilitySeeder />
-                    <MatrixBootstrapper />
-                    <NotificationTokenBroker />
-                    <UnreadCountBroadcaster />
-                    <LifecycleSyncBroker />
-                    <QueryClientProvider client={queryClient}>
-                        <RegistryFetcherProvider fetchers={registryFetchers}>
-                            <BootstrapStatus />
-                        </RegistryFetcherProvider>
-                    </QueryClientProvider>
-                </CrashBoundary>
-            </ThemeProvider>
-        </JotaiProvider>
-    </React.StrictMode>
-);
+// Playwright regression harness for the PortalModal overlay primitive,
+// mounted before the auth/matrix bootstrap chain so the browser test can
+// drive the overlay layer without spinning up a real Matrix session.
+// Reachable only by explicit navigation to /__dev__/portal-modal; the
+// module is loaded via dynamic import so the static bundle never pays
+// the cost up front.
+const HARNESS_PATH = '/__dev__/portal-modal';
+const harnessActive = typeof window !== 'undefined' && window.location.pathname === HARNESS_PATH;
+
+if (harnessActive) {
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./app/dev/PortalModalHarness').then(({ PortalModalHarness }) => {
+        ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+            <React.StrictMode>
+                <ThemeProvider>
+                    <PortalModalHarness />
+                </ThemeProvider>
+            </React.StrictMode>
+        );
+    });
+} else {
+    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+        <React.StrictMode>
+            <JotaiProvider>
+                <ThemeProvider>
+                    <ClientConfigLoader>
+                        <CrashBoundary>
+                            <RuntimeSettingsBridge />
+                            <DevCapabilitySeeder />
+                            <MatrixBootstrapper />
+                            <NotificationTokenBroker />
+                            <UnreadCountBroadcaster />
+                            <LifecycleSyncBroker />
+                            <QueryClientProvider client={queryClient}>
+                                <RegistryFetcherProvider fetchers={registryFetchers}>
+                                    <BootstrapStatus />
+                                </RegistryFetcherProvider>
+                            </QueryClientProvider>
+                        </CrashBoundary>
+                    </ClientConfigLoader>
+                </ThemeProvider>
+            </JotaiProvider>
+        </React.StrictMode>
+    );
+}

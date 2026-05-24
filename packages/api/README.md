@@ -7,6 +7,22 @@ This workspace lives at `packages/api` and is the canonical server runtime targe
 
 Use `@blackout/server` in workspace filters and dependency declarations.
 
+## Persistence
+
+The default runtime uses a JSON-backed store (`FileBackedDb` in
+`src/db/store.ts`) controlled by two env vars:
+
+- `BLACKOUT_DB_MODE` — `file` (default, persistent) or `memory` (tests only).
+- `BLACKOUT_DB_FILE` — path to the store file. Default resolves to
+  `./.blackout/data/store.json` relative to the process cwd.
+
+The default path is fine for local dev. In a container the cwd is inside
+the image filesystem, so the file is wiped on every container recreate.
+For production deploys set `BLACKOUT_DB_FILE=/data/blackout/store.json`
+and mount a named volume on `/data/blackout` — otherwise invitations,
+accounts, and everything else in the store will disappear the next time
+`docker compose up -d` recreates the api service.
+
 ## Voice rooms (LiveKit)
 
 The API exposes a LiveKit-compatible voice room lifecycle under `/v1/voice`.

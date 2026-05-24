@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useLegacyRoomNameAdapter as useRoomName } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
 import { useSpaceMemberStats, useWelcomeContent } from './useWelcome';
@@ -9,11 +10,15 @@ export const WelcomeScreen = ({
     onPickChannel,
     onJoinOrExplore,
     actionLabel = `Join ${BLACKOUT_TERMS.canopy.title}`,
+    joinedCanopies,
+    onPickCanopy,
 }: {
     spaceId: string;
     onPickChannel?: (roomId: string) => void;
     onJoinOrExplore?: () => void;
     actionLabel?: string;
+    joinedCanopies?: Room[];
+    onPickCanopy?: (roomId: string) => void;
 }) => {
     const client = useMatrixClient();
     const welcome = useWelcomeContent(spaceId);
@@ -95,6 +100,59 @@ export const WelcomeScreen = ({
                     </div>
                 </div>
             </article>
+
+            {joinedCanopies && joinedCanopies.length > 0 ? (
+                <section
+                    style={{
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 14,
+                        background: 'var(--bg-surface)',
+                        padding: 12,
+                    }}
+                >
+                    <h3 style={{ marginTop: 0 }}>
+                        Your {BLACKOUT_TERMS.canopy.plural}
+                    </h3>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                            gap: 10,
+                        }}
+                    >
+                        {joinedCanopies.map((canopy) => (
+                            <button
+                                key={canopy.roomId}
+                                type="button"
+                                onClick={() => onPickCanopy?.(canopy.roomId)}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    borderRadius: 12,
+                                    background: 'var(--bg-input)',
+                                    color: 'var(--text-primary)',
+                                    textAlign: 'left',
+                                    padding: 10,
+                                    display: 'grid',
+                                    gap: 4,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <strong>{canopy.name || canopy.roomId}</strong>
+                                {canopy.getCanonicalAlias() ? (
+                                    <span
+                                        style={{
+                                            color: 'var(--text-secondary)',
+                                            fontSize: 13,
+                                        }}
+                                    >
+                                        {canopy.getCanonicalAlias()}
+                                    </span>
+                                ) : null}
+                            </button>
+                        ))}
+                    </div>
+                </section>
+            ) : null}
 
             <section
                 style={{

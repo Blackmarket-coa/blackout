@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWelcomeContent } from '../welcome/useWelcome';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { ONBOARDING_CREATOR_PATH } from '../../pages/paths';
+import { downloadDebugBundle } from '../settings/debugBundle';
 import {
     ONBOARDING_STEP_SEQUENCE,
     type CommunityIntent,
@@ -10,12 +12,15 @@ import {
     type OnboardingStepId,
     useOnboardingProgress,
 } from './onboardingState';
+import { useHomeTour } from './homeTourState';
 import {
     trackOnboardingCompleted,
+    trackOnboardingDebugBundleDownloaded,
     trackOnboardingDroppedOff,
     trackOnboardingStarted,
     trackOnboardingStepCompleted,
     trackOnboardingStepViewed,
+    trackOnboardingTourStarted,
 } from './onboardingTelemetry';
 
 type OnboardingFlowProps = {
@@ -30,13 +35,50 @@ const stepLabel: Record<OnboardingStepId, string> = {
     community_selection: 'Community selection',
     channel_subscription: 'Channel subscription',
     first_contribution: 'First contribution prompt',
+    developer_tools: 'For developers & bug hunters',
 };
+
+// Files implementing the developer-tools surfaces the beta step links to.
+const DEVELOPER_STEP_FILE_PATHS = [
+    'apps/blackout-client/src/app/features/settings/developer-tools/DevelopTools.tsx',
+    'apps/blackout-client/src/app/features/settings/developer-tools/AccountData.tsx',
+    'apps/blackout-client/src/app/features/common-settings/developer-tools/DevelopTools.tsx',
+    'apps/blackout-client/src/app/features/common-settings/developer-tools/StateEventEditor.tsx',
+    'apps/blackout-client/src/app/features/common-settings/developer-tools/SendRoomEvent.tsx',
+    'apps/blackout-client/src/app/features/settings/DeveloperSettings.tsx',
+];
+
+const DEVELOPER_STEP_DOC_LINKS: { label: string; href: string }[] = [
+    { label: 'README.md', href: '/README.md' },
+    { label: 'developer_guide.md', href: '/developer_guide.md' },
+    { label: 'TESTERS.md', href: '/TESTERS.md' },
+    { label: 'DISCORD_PARITY_BUILD_PLAN.md', href: '/DISCORD_PARITY_BUILD_PLAN.md' },
+    {
+        label: 'docs/discord_like_onboarding_execution_plan.md',
+        href: '/docs/discord_like_onboarding_execution_plan.md',
+    },
+];
 
 export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlowProps) => {
     const welcome = useWelcomeContent(spaceId);
     const progress = useOnboardingProgress(spaceId);
+    const homeTour = useHomeTour();
     const navigate = useNavigate();
     const creatorPathEnabled = runtimeFeatureFlags.onboardingCreatorPath;
+    const developerStepEnabled = runtimeFeatureFlags.onboardingDeveloperStep;
+    const homeTourEnabled = runtimeFeatureFlags.onboardingHomeTour;
+
+    // Visible steps respect the developer-step flag without mutating the
+    // canonical sequence used for persisted indexes. When the flag is off
+    // the array matches the legacy v3 order so existing snapshots keep
+    // pointing at the same step.
+    const visibleSteps = useMemo<OnboardingStepId[]>(
+        () =>
+            ONBOARDING_STEP_SEQUENCE.filter(
+                (step) => step !== 'developer_tools' || developerStepEnabled
+            ),
+        [developerStepEnabled]
+    );
 
     const [startedAt, setStartedAt] = useState(Date.now());
     const [stepIndex, setStepIndex] = useState(0);
@@ -54,7 +96,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
     // wizard. Show a handoff panel rather than restarting role-select.
     const [creatorHandoff, setCreatorHandoff] = useState(false);
 
-    const currentStep = ONBOARDING_STEP_SEQUENCE[stepIndex];
+    const clampedStepIndex = Math.min(stepIndex, Math.max(0, visibleSteps.length - 1));
+    const currentStep = visibleSteps[clampedStepIndex];
     const featuredChannels = welcome.data.featuredChannels.map((channel) => channel.roomId);
     const suggestedChannels =
         featuredChannels.length > 0 ? featuredChannels : ['#announcements', '#general'];
@@ -64,8 +107,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
         void progress.read().then((snapshot) => {
             if (!mounted) return;
             const initialStep = snapshot.completed
-                ? ONBOARDING_STEP_SEQUENCE.length - 1
-                : snapshot.stepIndex;
+                ? Math.max(0, visibleSteps.length - 1)
+                : Math.min(snapshot.stepIndex, Math.max(0, visibleSteps.length - 1));
             setStartedAt(snapshot.startedAt);
             setStepIndex(initialStep);
             setRole(snapshot.role);
@@ -80,18 +123,21 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             setCreatorHandoff(snapshot.role === 'creator' && !snapshot.completed);
             setLoading(false);
             trackOnboardingStarted(spaceId, snapshot.startedAt);
-            trackOnboardingStepViewed(
-                spaceId,
-                ONBOARDING_STEP_SEQUENCE[initialStep],
-                initialStep,
-                Date.now() - snapshot.startedAt
-            );
+            const stepIdForTelemetry = visibleSteps[initialStep];
+            if (stepIdForTelemetry) {
+                trackOnboardingStepViewed(
+                    spaceId,
+                    stepIdForTelemetry,
+                    initialStep,
+                    Date.now() - snapshot.startedAt
+                );
+            }
         });
 
         return () => {
             mounted = false;
         };
-    }, [progress, spaceId, restartKey]);
+    }, [progress, spaceId, restartKey, visibleSteps]);
 
     const elapsedMs = useMemo(() => Date.now() - startedAt, [startedAt, stepIndex]);
 
@@ -122,7 +168,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             <section style={{ display: 'grid', gap: 12 }}>
                 <h2 style={{ marginBottom: 0 }}>Onboarding already completed</h2>
                 <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                    You can continue to your community or restart onboarding if needed.
+                    You can continue to your {BLACKOUT_TERMS.canopy.singular} or restart onboarding
+                    if needed.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <button
@@ -214,15 +261,27 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             return;
         }
 
-        const nextStepIndex = Math.min(stepIndex + 1, ONBOARDING_STEP_SEQUENCE.length - 1);
+        const nextStepIndex = Math.min(stepIndex + 1, visibleSteps.length - 1);
         await progress.savePatch({ stepIndex: nextStepIndex });
         setStepIndex(nextStepIndex);
         trackOnboardingStepViewed(
             spaceId,
-            ONBOARDING_STEP_SEQUENCE[nextStepIndex],
+            visibleSteps[nextStepIndex],
             nextStepIndex,
             Date.now() - startedAt
         );
+    };
+
+    const finishOnboarding = async () => {
+        const completedAt = Date.now();
+        await progress.markCompleted(false);
+        trackOnboardingCompleted(spaceId, completedAt, completedAt - startedAt, false);
+        setDone(true);
+        if (homeTourEnabled) {
+            trackOnboardingTourStarted(completedAt);
+            await homeTour.start();
+        }
+        onCompleted?.(false);
     };
 
     const continueToNextStep = async () => {
@@ -232,7 +291,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
         }
 
         trackOnboardingStepCompleted(spaceId, currentStep, stepIndex, elapsedMs);
-        const nextStepIndex = Math.min(stepIndex + 1, ONBOARDING_STEP_SEQUENCE.length - 1);
+        const isLast = stepIndex === visibleSteps.length - 1;
+        const nextStepIndex = Math.min(stepIndex + 1, visibleSteps.length - 1);
         await progress.savePatch({
             stepIndex: nextStepIndex,
             communityIntent,
@@ -240,19 +300,15 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             firstContributionPrompt,
         });
 
-        if (stepIndex === ONBOARDING_STEP_SEQUENCE.length - 1) {
-            const completedAt = Date.now();
-            await progress.markCompleted(false);
-            trackOnboardingCompleted(spaceId, completedAt, completedAt - startedAt, false);
-            setDone(true);
-            onCompleted?.(false);
+        if (isLast) {
+            await finishOnboarding();
             return;
         }
 
         setStepIndex(nextStepIndex);
         trackOnboardingStepViewed(
             spaceId,
-            ONBOARDING_STEP_SEQUENCE[nextStepIndex],
+            visibleSteps[nextStepIndex],
             nextStepIndex,
             Date.now() - startedAt
         );
@@ -279,7 +335,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             <header style={{ display: 'grid', gap: 6 }}>
                 <strong>{stepLabel[currentStep]}</strong>
                 <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                    Step {stepIndex + 1} of {ONBOARDING_STEP_SEQUENCE.length}
+                    Step {stepIndex + 1} of {visibleSteps.length}
                 </span>
                 <div
                     aria-hidden="true"
@@ -294,7 +350,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                     <div
                         style={{
                             width: `${
-                                ((stepIndex + 1) / ONBOARDING_STEP_SEQUENCE.length) * 100
+                                ((stepIndex + 1) / visibleSteps.length) * 100
                             }%`,
                             height: '100%',
                             background: 'var(--accent-primary)',
@@ -373,13 +429,19 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             {currentStep === 'community_selection' ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                     <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-                        How would you like to get started in this community?
+                        How would you like to get started in this {BLACKOUT_TERMS.canopy.singular}?
                     </p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {(
                             [
-                                { id: 'join', label: 'Join an existing community' },
-                                { id: 'create', label: 'Create a new community' },
+                                {
+                                    id: 'join',
+                                    label: `Join an existing ${BLACKOUT_TERMS.canopy.singular}`,
+                                },
+                                {
+                                    id: 'create',
+                                    label: `Create a new ${BLACKOUT_TERMS.canopy.singular}`,
+                                },
                                 { id: 'browse', label: 'Browse first' },
                             ] as const
                         ).map((option) => {
@@ -456,6 +518,84 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 </div>
             ) : null}
 
+            {currentStep === 'developer_tools' ? (
+                <div
+                    data-testid="onboarding-developer-step"
+                    style={{ display: 'grid', gap: 10 }}
+                >
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        We're launching beta. If you're a bug hunter or part of a software team,
+                        these references will help you file actionable issues.
+                    </p>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        Open <strong>Settings → Developer Tools</strong> to inspect Matrix events,
+                        edit room state, view account data, copy your access token, and export a
+                        debug bundle.
+                    </p>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                        <small style={{ color: 'var(--text-secondary)' }}>Source files</small>
+                        <ul
+                            data-testid="onboarding-developer-file-paths"
+                            style={{
+                                margin: 0,
+                                padding: '6px 8px',
+                                background: 'var(--bg-input)',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 8,
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                                listStyle: 'none',
+                                display: 'grid',
+                                gap: 4,
+                                overflowWrap: 'anywhere',
+                            }}
+                        >
+                            {DEVELOPER_STEP_FILE_PATHS.map((path) => (
+                                <li key={path}>{path}</li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                        <small style={{ color: 'var(--text-secondary)' }}>Documentation</small>
+                        <div
+                            data-testid="onboarding-developer-doc-links"
+                            style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                        >
+                            {DEVELOPER_STEP_DOC_LINKS.map((link) => (
+                                <a
+                                    key={link.href}
+                                    href={link.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                        fontSize: 12,
+                                        color: 'var(--accent-primary)',
+                                        textDecoration: 'underline',
+                                    }}
+                                >
+                                    {link.label}
+                                </a>
+                            ))}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        data-testid="onboarding-developer-bundle"
+                        onClick={() => {
+                            downloadDebugBundle({
+                                includeLocalStorage: true,
+                                includeFeatureFlags: false,
+                            });
+                            trackOnboardingDebugBundleDownloaded('wizard', 'developer_tools');
+                        }}
+                        style={{ width: 'fit-content' }}
+                    >
+                        Download debug bundle
+                    </button>
+                </div>
+            ) : null}
+
             <footer style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <button
                     type="button"
@@ -464,7 +604,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                         setStepIndex(previousStep);
                         trackOnboardingStepViewed(
                             spaceId,
-                            ONBOARDING_STEP_SEQUENCE[previousStep],
+                            visibleSteps[previousStep],
                             previousStep,
                             Date.now() - startedAt
                         );
@@ -482,7 +622,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                         disabled={!canContinue}
                         onClick={() => void continueToNextStep()}
                     >
-                        {stepIndex === ONBOARDING_STEP_SEQUENCE.length - 1 ? 'Finish' : 'Continue'}
+                        {stepIndex === visibleSteps.length - 1 ? 'Finish' : 'Continue'}
                     </button>
                 </div>
             </footer>

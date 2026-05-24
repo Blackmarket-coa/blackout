@@ -42,13 +42,13 @@ const REGISTRY: BlackoutFeature[] = [
     buildSyntheticFeature(
         'coalition',
         coalitionPanels,
-        { allOf: ['coalition.read'], flags: ['coalition'] },
+        { flags: ['coalition'] },
         ['coalition.read', 'coalition.write'],
     ),
     buildSyntheticFeature(
         'coliseum',
         coliseumPanels,
-        { allOf: ['coliseum.read'], flags: ['coliseum'] },
+        { flags: ['coliseum'] },
         ['coliseum.read', 'coliseum.write'],
     ),
     buildSyntheticFeature(
@@ -134,7 +134,12 @@ describe('primary rail sidebar panel registration', () => {
         expect(sidebar.map((entry) => entry.id)).not.toContain('plugins.sidebar');
     });
 
-    it('hides coalition and coliseum panels when capabilities are missing', () => {
+    it('shows coalition and coliseum panels on the homepage rail regardless of capability grants', () => {
+        // Coalition + Coliseum are flag-gated only (like Communities/Plugins/Home),
+        // so they appear on the rail even before the backend capability fetch
+        // has granted `coalition.read` / `coliseum.read`. The per-route view
+        // still enforces its own capability checks; the rail entry just needs
+        // to be reachable so the user can navigate.
         const sidebar = selectPanelsByKind(
             composeShellPanels(REGISTRY, {
                 capabilities: ['communities.read', 'plugins.read'],
@@ -143,10 +148,23 @@ describe('primary rail sidebar panel registration', () => {
             'sidebar',
         );
         const ids = sidebar.map((entry) => entry.id);
-        expect(ids).not.toContain('coalition.sidebar');
-        expect(ids).not.toContain('coliseum.sidebar');
+        expect(ids).toContain('coalition.sidebar');
+        expect(ids).toContain('coliseum.sidebar');
         expect(ids).toContain('communities.sidebar');
         expect(ids).toContain('plugins.sidebar');
+    });
+
+    it('hides coalition and coliseum panels when their flags are off', () => {
+        const sidebar = selectPanelsByKind(
+            composeShellPanels(REGISTRY, {
+                capabilities: ALL_CAPABILITIES,
+                flags: { ...ALL_FLAGS_ON, coalition: false, coliseum: false },
+            }),
+            'sidebar',
+        );
+        const ids = sidebar.map((entry) => entry.id);
+        expect(ids).not.toContain('coalition.sidebar');
+        expect(ids).not.toContain('coliseum.sidebar');
     });
 
     it('routes each panel to its public path', () => {

@@ -12,6 +12,7 @@ import {
     selectedSpaceIdAtom,
 } from '../../../../src/app/state/navigation';
 import { matrixClientAtom, userIdAtom } from '../../../../src/app/state/auth';
+import { allRoomsBaseAtom } from '../../../../src/app/state/rooms';
 import { composerCommandPayloadAtom } from '../../../../src/app/state/composer';
 
 vi.mock('react-router-dom', async () => {
@@ -38,6 +39,7 @@ const mockClient = {
         return null;
     },
     getUserId: () => '@me:example.org',
+    getSafeUserId: () => '@me:example.org',
     getUser: () => ({ presence: 'online' }),
     getAccountData: vi.fn(() => null),
     setAccountData: vi.fn().mockResolvedValue(undefined),
@@ -213,9 +215,13 @@ const makeRoom = ({
             if (eventType === 'm.room.create') {
                 // `getStateEvent('m.room.create')` is used by `isSpace`. Surface
                 // the type so spaces vs. rooms can be distinguished without
-                // needing to wire up the full create-event content.
+                // needing to wire up the full create-event content. `room_version`
+                // is pinned to a pre-creators-tracking version so
+                // `useRoomCreators` short-circuits on `creatorsSupported(v)`
+                // before reading `createEvent.event.sender` (which the test's
+                // `wrapStateEvent` does not populate).
                 if (stateKey === undefined) return [];
-                return wrapStateEvent('m.room.create', { type });
+                return wrapStateEvent('m.room.create', { type, room_version: '11' });
             }
             // Unknown event types: when a stateKey was provided the caller
             // expects a single MatrixEvent | undefined (e.g. `useCoalitionState`
@@ -226,6 +232,11 @@ const makeRoom = ({
         },
     };
     return {
+        // `useStateEvent(room, ...)` calls `useStateEventCallback(room.client, ...)`
+        // which subscribes to RoomStateEvent.Events on the client. Expose the
+        // mock client so the den-toolbar invite buttons (and any future hook
+        // that walks `room.client`) don't blow up on `undefined.on`.
+        client: mockClient,
         roomId,
         name,
         getType: () => type,
@@ -272,6 +283,7 @@ const renderLayout = ({
     store.set(rightPanelAtom, rightPanel);
     store.set(userIdAtom, '@me:example.org');
     store.set(matrixClientAtom, mockClient as never);
+    store.set(allRoomsBaseAtom, rooms as never);
 
     act(() => {
         root.render(
@@ -320,6 +332,27 @@ describe('ClientLayout UI wiring', () => {
         });
         document.body.innerHTML = '';
         vi.unstubAllGlobals();
+    });
+
+    it('pins a global "Create an invite link" button to the primary rail', () => {
+        // Verifies the rail-level invite trigger added so users can mint
+        // shareable links from anywhere — not only from inside a Den.
+        const room = makeRoom({
+            roomId: '!room:example.org',
+            name: 'Room',
+        });
+        mockRoom = room;
+        const { container } = renderLayout({
+            rooms: [room],
+            selectedRoomId: '!room:example.org',
+            selectedSpaceId: null,
+            rightPanel: null,
+        });
+        const inviteButton = container.querySelector(
+            '[data-testid="primary-rail-invite"]'
+        );
+        expect(inviteButton).toBeTruthy();
+        expect(inviteButton?.getAttribute('aria-label')).toBe('Create an invite link');
     });
 
     it('threads/pins/search click sets jump target and closes panel', () => {
