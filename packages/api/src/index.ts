@@ -50,6 +50,7 @@ import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
 import diagnosticsRoutes from './routes/diagnostics';
 import bugReportRoutes from './routes/bugReport';
+import widgetReportRoutes from './routes/widgetReport';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';
@@ -179,6 +180,13 @@ app.route('/_matrix/app/v1', matrixAppserviceRoutes);
 // to a rageshake-compatible receiver (raw logs) and GitHub (sanitized
 // issue body).
 app.route('/bug-report', bugReportRoutes);
+
+// Global report-widget intake (web + native). Mounted top-level alongside
+// /bug-report so anonymous reports work without the v1 auth middleware.
+// Rate-limited at BUG_REPORT_RATE_LIMIT_MAX/hour/IP; posts a formatted report
+// into the #bugs Matrix room as the bot, with attachment + triage thread +
+// status reaction.
+app.route('/bug-report/widget', widgetReportRoutes);
 
 app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { getSession, subscribeSession, type SessionState } from '../components/session';
+import { BugReportFab } from '../components/BugReportFab';
 import LoginScreen from './login';
 import ChatScreen from './(tabs)/chat';
 
@@ -12,5 +14,14 @@ export default function Layout() {
     return <LoginScreen />;
   }
 
-  return <ChatScreen />;
+  return (
+    <View style={styles.root}>
+      <ChatScreen />
+      <BugReportFab />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});
