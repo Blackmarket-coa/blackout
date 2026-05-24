@@ -8,7 +8,6 @@ import {
 
 const base: AccountPosture = {
     crossSigningReady: true,
-    recoveryConfigured: true,
     currentDeviceVerified: true,
     otherOwnDevices: [],
     members: [],
@@ -44,12 +43,6 @@ describe('summarizePosture', () => {
         expect(v.detail).toMatch(/another verified session/);
     });
 
-    it('warns when recovery is not configured', () => {
-        const v = summarizePosture({ ...base, recoveryConfigured: false });
-        expect(v.severity).toBe('warn');
-        expect(v.actions[0].id).toBe('set_up_recovery');
-    });
-
     it('reports unverified members as info-severity', () => {
         const v = summarizePosture({
             ...base,
@@ -83,10 +76,9 @@ describe('summarizePosture', () => {
         expect(v.headline).toMatch(/2 unverified devices/);
     });
 
-    it('orders critical conditions ahead of recovery and member warnings', () => {
+    it('orders critical conditions ahead of member warnings', () => {
         const v = summarizePosture({
             crossSigningReady: false,
-            recoveryConfigured: false,
             currentDeviceVerified: false,
             otherOwnDevices: [],
             members: [
@@ -103,34 +95,20 @@ describe('summarizePosture', () => {
 
 describe('onboardingBlocked', () => {
     it('blocks when cross-signing is missing under default policy', () => {
-        expect(
-            onboardingBlocked({ crossSigningReady: false, recoveryConfigured: true }),
-        ).toBe(true);
+        expect(onboardingBlocked({ crossSigningReady: false })).toBe(true);
     });
 
-    it('blocks when recovery is missing under default policy', () => {
-        expect(
-            onboardingBlocked({ crossSigningReady: true, recoveryConfigured: false }),
-        ).toBe(true);
-    });
-
-    it('passes through when both are configured', () => {
-        expect(
-            onboardingBlocked({ crossSigningReady: true, recoveryConfigured: true }),
-        ).toBe(false);
+    it('passes through when cross-signing is configured', () => {
+        expect(onboardingBlocked({ crossSigningReady: true })).toBe(false);
     });
 
     it('honors a relaxed policy', () => {
         expect(
-            onboardingBlocked(
-                { crossSigningReady: true, recoveryConfigured: false },
-                { requireCrossSigning: true, requireRecovery: false },
-            ),
+            onboardingBlocked({ crossSigningReady: false }, { requireCrossSigning: false }),
         ).toBe(false);
     });
 
     it('is consistent with DEFAULT_ONBOARDING_POLICY', () => {
         expect(DEFAULT_ONBOARDING_POLICY.requireCrossSigning).toBe(true);
-        expect(DEFAULT_ONBOARDING_POLICY.requireRecovery).toBe(true);
     });
 });

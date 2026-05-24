@@ -19,8 +19,6 @@ export interface MemberSummary {
 export interface AccountPosture {
     /** Whether the local user has set up cross-signing. */
     crossSigningReady: boolean;
-    /** Whether the local user has a key backup / recovery key. */
-    recoveryConfigured: boolean;
     /** Whether the current device is cross-signed-verified. */
     currentDeviceVerified: boolean;
     /** Other own sessions; used for "verify-from-existing-device" UX. */
@@ -40,7 +38,6 @@ export interface PostureVerdict {
 
 export type PostureActionId =
     | 'enable_cross_signing'
-    | 'set_up_recovery'
     | 'verify_current_device'
     | 'review_unverified_members';
 
@@ -56,8 +53,7 @@ const countUnverified = (members: MemberSummary[]) =>
     );
 
 export const summarizePosture = (input: AccountPosture): PostureVerdict => {
-    const { crossSigningReady, recoveryConfigured, currentDeviceVerified, otherOwnDevices, members } =
-        input;
+    const { crossSigningReady, currentDeviceVerified, otherOwnDevices, members } = input;
 
     if (!crossSigningReady) {
         return {
@@ -81,16 +77,6 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
         };
     }
 
-    if (!recoveryConfigured) {
-        return {
-            severity: 'warn',
-            headline: 'No recovery key is set',
-            detail:
-                'Without recovery you will lose your message history if you sign out of every device. Set up a recovery key now.',
-            actions: [{ id: 'set_up_recovery', label: 'Set up recovery' }],
-        };
-    }
-
     const unverifiedCount = countUnverified(members);
     if (unverifiedCount > 0) {
         return {
@@ -104,30 +90,24 @@ export const summarizePosture = (input: AccountPosture): PostureVerdict => {
     return {
         severity: 'ok',
         headline: 'End-to-end encrypted and verified',
-        detail: 'Your device, recovery, and every member in this conversation are verified.',
+        detail: 'Your device and every member in this conversation are verified.',
         actions: [],
     };
 };
 
 /**
  * Onboarding gate. Returns true when the operator policy requires the user
- * to set up cross-signing and recovery before they can send their first
- * encrypted message. Default policy: hard-require both, matching the
- * Element April-2026 verified-device-only norm.
+ * to set up cross-signing before they can send their first encrypted message.
  */
 export interface OnboardingPolicy {
     requireCrossSigning: boolean;
-    requireRecovery: boolean;
 }
 
 export const DEFAULT_ONBOARDING_POLICY: OnboardingPolicy = {
     requireCrossSigning: true,
-    requireRecovery: true,
 };
 
 export const onboardingBlocked = (
-    posture: Pick<AccountPosture, 'crossSigningReady' | 'recoveryConfigured'>,
+    posture: Pick<AccountPosture, 'crossSigningReady'>,
     policy: OnboardingPolicy = DEFAULT_ONBOARDING_POLICY,
-): boolean =>
-    (policy.requireCrossSigning && !posture.crossSigningReady) ||
-    (policy.requireRecovery && !posture.recoveryConfigured);
+): boolean => policy.requireCrossSigning && !posture.crossSigningReady;
