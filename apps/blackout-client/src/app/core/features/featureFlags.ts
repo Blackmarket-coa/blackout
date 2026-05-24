@@ -186,6 +186,13 @@ export type FeatureFlags = {
      * Synapse + media-repo + Owncast stack.
      */
     federationSelfHost: boolean;
+    /**
+     * Global bug-report widget. When on, a floating "Report a problem" button
+     * mounts in the AppShell on every surface; reports post to the `#bugs`
+     * Matrix room via the API. Default on; `BLACKOUT_BUG_REPORT_WIDGET=false`
+     * disables it.
+     */
+    bugReportWidget: boolean;
 };
 
 export type FeatureMode = 'default' | 'baseline' | 'full';
@@ -256,6 +263,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     onboardingHomeTour: true,
     creatorsDashboard: false,
     federationSelfHost: false,
+    bugReportWidget: true,
 };
 
 /**
@@ -597,6 +605,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
             nextFlags.growthQuestsUi = false;
         }
+        if (env.BLACKOUT_BUG_REPORT_WIDGET === 'true') {
+            nextFlags.bugReportWidget = true;
+        }
+        if (env.BLACKOUT_BUG_REPORT_WIDGET === 'false') {
+            nextFlags.bugReportWidget = false;
+        }
         return nextFlags;
     }
 
@@ -824,6 +838,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_GROWTH_QUESTS_UI === 'false') {
         nextFlags.growthQuestsUi = false;
+    }
+    if (env.BLACKOUT_BUG_REPORT_WIDGET === 'true') {
+        nextFlags.bugReportWidget = true;
+    }
+    if (env.BLACKOUT_BUG_REPORT_WIDGET === 'false') {
+        nextFlags.bugReportWidget = false;
     }
 
     applyMonetizationEnvOverrides(env, nextFlags);
