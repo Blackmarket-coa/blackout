@@ -138,7 +138,10 @@ test('personal link is unlimited, never expires, and is stable across calls', as
   assert.equal(firstBody.invitation.unlimited, true);
   assert.equal(firstBody.invitation.usesRemaining, null);
   assert.equal(firstBody.invitation.expiresAt, undefined);
-  assert.ok(firstBody.shareUrl.includes('/i/'), `shareUrl should be the OG link, got ${firstBody.shareUrl}`);
+  assert.ok(
+    firstBody.shareUrl.includes('/v1/i/'),
+    `shareUrl should be the /v1-hosted OG link, got ${firstBody.shareUrl}`,
+  );
 
   // Idempotent: same stable link on the second call.
   const second = await app.request('/v1/invitations/personal', { headers: bearer(owner.id, owner.username) });
@@ -178,17 +181,44 @@ test('signing up via a personal link follows the owner and the link never exhaus
   assert.equal(record?.unlimited, true);
 });
 
-test('GET /i/:token renders Open Graph tags and redirects to the SPA invite route', async () => {
+test('GET /v1/i/:token renders OG tags and redirects carrying the registration token', async () => {
   const owner = seedUser({ username: 'og-owner' });
   const personal = await app.request('/v1/invitations/personal', { headers: bearer(owner.id, owner.username) });
   const { shareUrl } = (await personal.json()) as { shareUrl: string };
   const token = tokenFromShareUrl(shareUrl);
 
-  const og = await app.request(`/i/${encodeURIComponent(token)}`);
+  // The /v1-hosted path is the one shared (reachable without an nginx deploy).
+  const og = await app.request(`/v1/i/${encodeURIComponent(token)}`);
   assert.equal(og.status, 200);
   assert.match(og.headers.get('content-type') ?? '', /text\/html/);
   const html = await og.text();
   assert.match(html, /property="og:title" content="Join og-owner on Blackout"/);
   assert.match(html, /property="og:image"/);
   assert.ok(html.includes(`/invite/${token}`), 'should redirect to the SPA invite route');
+  // Personal link → the redirect must carry the registration token so signup works.
+  assert.match(html, /#registrationToken=/, 'redirect must include the registration token fragment');
+
+  // The pretty top-level /i/<token> still renders the same page (works once nginx is deployed).
+  const pretty = await app.request(`/i/${encodeURIComponent(token)}`);
+  assert.equal(pretty.status, 200);
+});
+
+test('a non-personal invite OG page does not leak a registration token', async () => {
+  const owner = seedUser({ username: 'room-inviter' });
+  const create = await app.request('/v1/invitations', {
+    method: 'POST',
+    headers: bearer(owner.id, owner.username),
+    body: JSON.stringify({ maxUses: 5 }),
+  });
+  const { token } = (await create.json()) as { token: string };
+
+  const og = await app.request(`/v1/i/${encodeURIComponent(token)}`);
+  assert.equal(og.status, 200);
+  const html = await og.text();
+  assert.ok(html.includes(`/invite/${token}`), 'should still redirect to the SPA invite route');
+  assert.doesNotMatch(
+    html,
+    /#registrationToken=/,
+    'non-personal invites must not expose their registration token via the public page',
+  );
 });

@@ -66,8 +66,13 @@ const buildInviteUrl = (token: string, synapseRegistrationToken?: string): strin
   return `${path}#registrationToken=${encodeURIComponent(synapseRegistrationToken)}`;
 };
 
-/** Social-media-friendly URL that renders an OG preview (served by `/i/:token`). */
-const buildShareUrl = (token: string): string => `${appBaseUrl()}/i/${encodeURIComponent(token)}`;
+/**
+ * Social-media-friendly URL that renders an OG preview. Served under `/v1/i/`
+ * so it reaches the API on hosts whose nginx only proxies `/v1/*` (the pretty
+ * top-level `/i/` path needs a dedicated nginx rule that may not be deployed).
+ */
+const buildShareUrl = (token: string): string =>
+  `${appBaseUrl()}/v1/i/${encodeURIComponent(token)}`;
 
 const publicShape = (record: InvitationTokenRecord) => ({
   id: record.id,

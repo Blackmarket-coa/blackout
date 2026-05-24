@@ -125,6 +125,10 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/admin`, adminRoutes);
   app.route(`${root}/invitations`, invitationRoutes);
   app.route(`${root}/follows`, followRoutes);
+  // Share-link OG preview, also under /v1 so it's reachable on hosts whose
+  // nginx only proxies /v1/* to the API (the top-level /i mount below needs a
+  // dedicated nginx rule). Public via the pass-through auth middleware.
+  app.route(`${root}/i`, shareRoutes);
   app.route(`${root}/matrix`, matrixRoutes);
   app.route(`${root}/messages`, messageRoutes);
   app.route(`${root}/scheduled-messages`, scheduledMessageRoutes);

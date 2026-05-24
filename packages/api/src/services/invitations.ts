@@ -136,6 +136,18 @@ export const createInvitation = async (
   }
 };
 
+/**
+ * Returns the Synapse registration token for a **personal** share link so the
+ * public OG page can carry it through to the SPA register flow. Scoped to
+ * `personal` links (public by design) — room invites never expose their token
+ * via the unauthenticated preview page.
+ */
+export const resolvePersonalRegistrationToken = (presentedToken: string): string | undefined => {
+  const record = db.findInvitationTokenByHash(sha256(presentedToken));
+  if (!record || !record.personal || record.revokedAt) return undefined;
+  return record.synapseRegistrationToken;
+};
+
 export type PreviewOutcome =
   | {
       kind: 'ok';
