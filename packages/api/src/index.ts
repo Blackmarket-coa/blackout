@@ -49,6 +49,7 @@ import coliseumRoutes from './routes/coliseum';
 import webauthnRoutes from './routes/webauthn';
 import keyTransparencyRoutes from './routes/keyTransparency';
 import diagnosticsRoutes from './routes/diagnostics';
+import adminRoutes from './routes/admin';
 import bugReportRoutes from './routes/bugReport';
 import widgetReportRoutes from './routes/widgetReport';
 import { authMiddleware } from './middleware/auth';
@@ -119,6 +120,7 @@ if (legacyAliasEnabled) {
 
 for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias] : [API_ROOTS.v1]) {
   app.route(`${root}/auth`, authRoutes);
+  app.route(`${root}/admin`, adminRoutes);
   app.route(`${root}/invitations`, invitationRoutes);
   app.route(`${root}/matrix`, matrixRoutes);
   app.route(`${root}/messages`, messageRoutes);

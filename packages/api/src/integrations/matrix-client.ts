@@ -141,6 +141,62 @@ export const matrixClient = {
   },
 
   /**
+   * Create a room as the server bot, optionally publishing a directory alias.
+   * Used by the contributor-room provisioning script to bootstrap the standing
+   * community rooms (#welcome, #bugs, #governance, …). The bot becomes the
+   * room creator/admin. `aliasLocalpart` is the bare localpart (no leading `#`
+   * or `:domain`) — Synapse derives the full alias from it.
+   */
+  async createRoom(input: {
+    aliasLocalpart?: string;
+    name?: string;
+    topic?: string;
+    visibility?: 'public' | 'private';
+    preset?: 'public_chat' | 'private_chat' | 'trusted_private_chat';
+  }) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const body: Record<string, unknown> = {
+      visibility: input.visibility ?? 'public',
+      preset: input.preset ?? 'public_chat',
+    };
+    if (input.aliasLocalpart) body.room_alias_name = input.aliasLocalpart;
+    if (input.name) body.name = input.name;
+    if (input.topic) body.topic = input.topic;
+
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_matrix/client/v3/createRoom`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'create_rejected' as const, detail };
+    }
+    const json = (await response.json()) as { room_id?: string };
+    if (!json.room_id) {
+      return { ok: false as const, status: response.status, reason: 'no_room_id' as const };
+    }
+    return { ok: true as const, status: response.status, roomId: json.room_id };
+  },
+
+  /**
    * Upload binary content to the homeserver media repository and return the
    * resulting `mxc://` URI. Used to attach bug-report screenshots / screen
    * recordings before referencing them from an `m.image` / `m.file` event.
@@ -439,6 +495,151 @@ export const matrixClient = {
       ? body.members.filter((m): m is string => typeof m === 'string')
       : [];
     return { ok: true as const, status: response.status, members };
+  },
+
+  /**
+   * Admin: list/search Matrix users via the Synapse admin API
+   * (`GET /_synapse/admin/v2/users`). Returns the matching page plus the total
+   * count Synapse reports. Backs the operations console's user lookup.
+   */
+  async listUsers(input: { search?: string; limit?: number } = {}) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const params = new URLSearchParams({
+      from: '0',
+      limit: String(input.limit ?? 50),
+      guests: 'false',
+    });
+    if (input.search?.trim()) params.set('name', input.search.trim());
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_synapse/admin/v2/users?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const };
+    }
+    const json = (await response.json()) as {
+      users?: Array<{ name?: string; displayname?: string | null; deactivated?: boolean; admin?: boolean }>;
+      total?: number;
+    };
+    const users = (json.users ?? []).map((u) => ({
+      userId: u.name ?? '',
+      displayName: u.displayname ?? null,
+      deactivated: Boolean(u.deactivated),
+      admin: Boolean(u.admin),
+    }));
+    return { ok: true as const, status: response.status, users, total: json.total ?? users.length };
+  },
+
+  /**
+   * Admin: a small server-overview snapshot — total users and total rooms —
+   * derived from the Synapse admin list endpoints (we request a single row and
+   * read the `total` Synapse returns). Backs the operations console stats panel.
+   */
+  async serverStats() {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const [usersRes, roomsRes] = await Promise.all([
+        fetch(`${hs}/_synapse/admin/v2/users?from=0&limit=1&guests=false`, { headers }),
+        fetch(`${hs}/_synapse/admin/v1/rooms?from=0&limit=1`, { headers }),
+      ]);
+      if (!usersRes.ok || !roomsRes.ok) {
+        return {
+          ok: false as const,
+          status: usersRes.ok ? roomsRes.status : usersRes.status,
+          reason: 'synapse_rejected' as const,
+        };
+      }
+      const usersJson = (await usersRes.json()) as { total?: number };
+      const roomsJson = (await roomsRes.json()) as { total_rooms?: number };
+      return {
+        ok: true as const,
+        totalUsers: usersJson.total ?? 0,
+        totalRooms: roomsJson.total_rooms ?? 0,
+      };
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+  },
+
+  /**
+   * Admin: deactivate a Matrix account
+   * (`POST /_synapse/admin/v1/deactivate/{userId}`). `erase` requests GDPR
+   * erasure of the user's messages; default false just locks the account.
+   */
+  async deactivateUser(userId: string, erase = false) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_synapse/admin/v1/deactivate/${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ erase }),
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
+    }
+    return { ok: true as const, status: response.status };
+  },
+
+  /**
+   * Admin: purge/delete a room via the async Synapse admin v2 delete endpoint
+   * (`DELETE /_synapse/admin/v2/rooms/{roomId}`). `block` prevents the room
+   * from being re-joined/re-created; `purge` removes its history from the DB.
+   * Returns the `delete_id` Synapse assigns to the background job.
+   */
+  async purgeRoom(roomId: string, opts: { block?: boolean; purge?: boolean } = {}) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_synapse/admin/v2/rooms/${encodeURIComponent(roomId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block: opts.block ?? false, purge: opts.purge ?? true }),
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
+    }
+    const json = (await response.json().catch(() => ({}))) as { delete_id?: string };
+    return { ok: true as const, status: response.status, deleteId: json.delete_id };
   },
 
   /**

@@ -12,7 +12,22 @@ homeserver, and a Node/Hono API server.
 
 ## For testers (no setup required)
 
-- Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)** — sign up and you're in.
+- Hosted instance: **[`https://matrix.theblackout.app`](https://matrix.theblackout.app)**.
+- **Join the beta — no CLI needed:** registration is invite-gated. Open the
+  community invite link, click **Create account**, and the registration token
+  is filled in for you:
+
+  > **Invite link:** `https://matrix.theblackout.app/invite/COMMUNITY_TOKEN`
+  >
+  > _Maintainers: replace `COMMUNITY_TOKEN` above with a multi-use community
+  > invitation minted via the invitations flow (`POST /v1/invitations`, or the
+  > in-app Invitations panel). The link pre-fills the Synapse registration
+  > token, so testers never touch the CLI._
+
+  If the link is exhausted or expired, request a fresh one via the
+  [invite-request issue template](https://github.com/Blackmarket-coa/blackout/issues/new/choose).
+- Browse public rooms before signing up at
+  [`https://matrix.theblackout.app/explore`](https://matrix.theblackout.app/explore).
 - See [`TESTERS.md`](TESTERS.md) for the 5-minute orientation and what to try first.
 - During the **96-hour V1 Test Flight**, open the Coliseum Coalition once
   you're signed in — eight challenges, each a real area we want stress-tested.
