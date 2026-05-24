@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { previewInvitation } from '../services/invitations';
+import { previewInvitation, resolvePersonalRegistrationToken } from '../services/invitations';
 import { getProfile } from '../services/profileStore';
 
 /**
@@ -75,8 +75,15 @@ const renderOgHtml = (f: OgFields): string => {
 share.get('/:token', (c) => {
   const token = c.req.param('token');
   const base = appBaseUrl();
-  const redirectTo = `${base}/invite/${encodeURIComponent(token)}`;
-  const shareUrl = `${base}/i/${encodeURIComponent(token)}`;
+  // Carry the registration token through to the SPA register flow in the URL
+  // fragment (preserved by the meta-refresh + location.replace below; ignored
+  // by crawlers). Only personal links expose it — see resolvePersonalRegistrationToken.
+  const regToken = resolvePersonalRegistrationToken(token);
+  const invitePath = `${base}/invite/${encodeURIComponent(token)}`;
+  const redirectTo = regToken
+    ? `${invitePath}#registrationToken=${encodeURIComponent(regToken)}`
+    : invitePath;
+  const shareUrl = `${base}/v1/i/${encodeURIComponent(token)}`;
   const defaultImage = `${base}/assets/favicon-48x48.png`;
 
   const outcome = previewInvitation(token);
