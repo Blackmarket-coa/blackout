@@ -33,6 +33,7 @@ export const featureModuleManifest = [
     'creators',
     'creators-storefront',
     'streams',
+    'streaming',
     'events',
     'onboarding-creator',
     'creators-dashboard',
