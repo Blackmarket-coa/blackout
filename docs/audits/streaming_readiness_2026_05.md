@@ -84,6 +84,30 @@ Recorded per request; **not addressed in this change**:
 - [ ] `monetization/install/PluginCardRail.tsx` — appears unused by the homepage.
 - [ ] TikTok and Kick **OAuth** flows return 501 (clients show "Coming soon").
 
+## Live production findings (2026-05-24)
+
+The `/streaming` hub is reachable in production (`chat.theblackout.app/streaming`),
+but the deployed console surfaced two runtime issues:
+
+- **`403` on `/v1/streaming/streams` (Live tab).** Server-side capability denial —
+  `/v1/topics` (a pre-existing homepage feature) 403s for the same account, so the
+  root cause is that the `streaming.read` / `topics.read` domain capabilities are not
+  granted to the user. Product intent is that streaming is available to **all** users,
+  so the real fix is **server-side capability provisioning** — *out of scope for the
+  client change tracked here.* Client side, the Live directory and single-stream
+  viewer now degrade gracefully on 403 ("Streaming isn't available on your account
+  yet.") instead of dumping a raw `Request failed (403)` string
+  (`LiveDirectory.tsx`, `LivestreamViewer.tsx`).
+- **`429 Too Many Requests` on the Bridges & Webhooks tab.** The tab mounts five
+  integration panels that each fetch on mount in the same tick; the SDK client's 3×
+  retry multiplies the burst and trips the API rate limiter. **Fixed client-side** by
+  mounting the stacked panels on a stagger (`features/streaming/StaggeredMount.tsx`,
+  applied to the Broadcast and Bridges tabs in `StreamingView.tsx`).
+
+Follow-ups still open: the individual integration panels still render their own raw
+error text (contained, no longer bursting); and the server-side `streaming.read`
+capability grant + any rate-limit tuning are tracked outside this client repo.
+
 ## Verification
 
 - `vitest run src/app/features/streaming src/app/features/home src/app/features/call`

@@ -160,6 +160,7 @@ export const LivestreamViewer = (): JSX.Element => {
     const [stream, setStream] = useState<StreamSummary | null>(null);
     const [origin, setOrigin] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [forbidden, setForbidden] = useState(false);
 
     useEffect(() => {
         if (!streamId) return;
@@ -174,12 +175,30 @@ export const LivestreamViewer = (): JSX.Element => {
             })
             .catch((err) => {
                 if (cancelled) return;
-                setError(err instanceof Error ? err.message : 'failed to load stream');
+                if ((err as { status?: number } | null)?.status === 403) {
+                    setForbidden(true);
+                } else {
+                    setError(err instanceof Error ? err.message : 'failed to load stream');
+                }
             });
         return () => {
             cancelled = true;
         };
     }, [streamId]);
+
+    if (forbidden) {
+        return (
+            <section style={layoutStyle} data-shell-region="livestream-viewer">
+                <p style={errorStyle} data-testid="livestream-viewer-forbidden">
+                    Streaming isn’t available on your account yet.{' '}
+                    <Link to={LIVE_PATH} style={{ color: 'var(--accent-primary, #3b82f6)' }}>
+                        Back to Live
+                    </Link>
+                    .
+                </p>
+            </section>
+        );
+    }
 
     if (error) {
         return (
