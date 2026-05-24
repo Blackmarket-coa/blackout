@@ -35,12 +35,16 @@ describe('resolveLanguage', () => {
         expect(resolveLanguage('md')).toBe('markdown');
     });
 
-    it('returns the raw id verbatim when no alias matches', () => {
+    it('returns canonical names in the curated set verbatim', () => {
         expect(resolveLanguage('go')).toBe('go');
         expect(resolveLanguage('typescript')).toBe('typescript');
-        // Unknown grammars are still forwarded; Shiki will fall back to
-        // plaintext internally and the caller's try/catch swallows it.
-        expect(resolveLanguage('not-a-real-lang')).toBe('not-a-real-lang');
+    });
+
+    it('falls back to plaintext for languages outside the curated set', () => {
+        // Heavy/uncurated grammars (cpp, emacs-lisp, ...) and unknown ids
+        // render as plain text rather than throwing.
+        expect(resolveLanguage('cpp')).toBe('text');
+        expect(resolveLanguage('not-a-real-lang')).toBe('text');
     });
 
     it('uses plaintext fallback for the empty string', () => {
