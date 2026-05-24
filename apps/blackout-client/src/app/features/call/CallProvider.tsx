@@ -189,10 +189,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     });
 
     const activeSessionRef = useRef<MatrixRtcSessionLike | null>(null);
-    const activeDeviceStreamRef = useRef<{ getTracks: () => Array<{ stop: () => void }> } | null>(
-        null,
-    );
+    const activeDeviceStreamRef = useRef<MediaStream | null>(null);
+    const activeDisplayStreamRef = useRef<MediaStream | null>(null);
     const pendingJoinRef = useRef<{ roomId: string; promise: Promise<void> } | null>(null);
+    // Latest mute state read inside the (mute-independent) acquisition effect so a
+    // freshly-acquired track inherits the current toggle without re-acquiring on mute.
+    const mutedRef = useRef(muted);
+    useEffect(() => {
+        mutedRef.current = muted;
+    }, [muted]);
 
     useEffect(() => {
         let mounted = true;
@@ -213,7 +218,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const constraints = {
             audio: preferredAudioDeviceId ? { deviceId: { exact: preferredAudioDeviceId } } : true,
-            video: preferredVideoDeviceId ? { deviceId: { exact: preferredVideoDeviceId } } : false,
+            video: cameraEnabled
+                ? preferredVideoDeviceId
+                    ? { deviceId: { exact: preferredVideoDeviceId } }
+                    : true
+                : false,
         };
 
         let cancelled = false;
@@ -223,6 +232,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 return;
             }
 
+            // Honour the current mute toggle on the freshly-acquired track.
+            stream.getAudioTracks().forEach((track) => {
+                track.enabled = !mutedRef.current;
+            });
+
             const session = activeSessionRef.current;
             if (session?.setAudioInputDevice && preferredAudioDeviceId) {
                 await session.setAudioInputDevice(preferredAudioDeviceId);
@@ -230,7 +244,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             if (session?.setVideoInputDevice && preferredVideoDeviceId) {
                 await session.setVideoInputDevice(preferredVideoDeviceId);
             }
-            if (session?.setLocalMediaStream) {
+            // Don't clobber an active screen-share: the display stream owns the
+            // published media until the user stops sharing.
+            if (session?.setLocalMediaStream && !activeDisplayStreamRef.current) {
                 await session.setLocalMediaStream(stream);
             }
 
@@ -241,7 +257,62 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return () => {
             cancelled = true;
         };
-    }, [joined, preferredAudioDeviceId, preferredVideoDeviceId]);
+    }, [joined, preferredAudioDeviceId, preferredVideoDeviceId, cameraEnabled]);
+
+    // Mute toggle: flip the local audio tracks' `enabled` flag in place so we
+    // don't tear down and re-acquire the device stream just to (un)mute.
+    useEffect(() => {
+        const stream = activeDeviceStreamRef.current;
+        if (!joined || !stream) return;
+        stream.getAudioTracks().forEach((track) => {
+            track.enabled = !muted;
+        });
+    }, [muted, joined]);
+
+    // Screen share: capture the display surface and publish it; restore the
+    // camera/mic device stream when sharing stops (toggle, leave, or the
+    // browser's native "Stop sharing" control firing the track `ended` event).
+    useEffect(() => {
+        if (!joined || !screenSharing) return;
+
+        const mediaDevices = navigator.mediaDevices as
+            | (MediaDevices & { getDisplayMedia?: MediaDevices['getDisplayMedia'] })
+            | undefined;
+        if (!mediaDevices?.getDisplayMedia) {
+            setScreenSharing(false);
+            return;
+        }
+
+        let cancelled = false;
+        void mediaDevices
+            .getDisplayMedia({ video: true })
+            .then((displayStream) => {
+                if (cancelled) {
+                    displayStream.getTracks().forEach((track) => track.stop());
+                    return;
+                }
+                activeDisplayStreamRef.current = displayStream;
+                void activeSessionRef.current?.setLocalMediaStream?.(displayStream);
+                displayStream.getVideoTracks().forEach((track) => {
+                    track.addEventListener('ended', () => setScreenSharing(false), { once: true });
+                });
+            })
+            .catch(() => {
+                // User dismissed the picker (or capture failed): drop back to toggle-off.
+                if (!cancelled) setScreenSharing(false);
+            });
+
+        return () => {
+            cancelled = true;
+            const displayStream = activeDisplayStreamRef.current;
+            if (!displayStream) return;
+            displayStream.getTracks().forEach((track) => track.stop());
+            activeDisplayStreamRef.current = null;
+            if (activeDeviceStreamRef.current) {
+                void activeSessionRef.current?.setLocalMediaStream?.(activeDeviceStreamRef.current);
+            }
+        };
+    }, [screenSharing, joined]);
 
     useEffect(() => {
         const emitter = client as unknown as {
@@ -272,6 +343,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         activeSessionRef.current = null;
         activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
         activeDeviceStreamRef.current = null;
+        activeDisplayStreamRef.current?.getTracks().forEach((track) => track.stop());
+        activeDisplayStreamRef.current = null;
         setJoined(false);
         setRoomId(null);
         setMembership({});

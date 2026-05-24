@@ -8,7 +8,7 @@ import {
 import { joinedRoomsAtom } from '../../state/rooms';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
-import { COMMUNITIES_PATH, buildCommunitiesPath } from '../../pages/paths';
+import { COMMUNITIES_PATH, STREAMING_PATH, buildCommunitiesPath } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
 import { installedPluginsAtom } from '../monetization/install/installedPluginsAtom';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
@@ -249,6 +249,27 @@ export const HomeFeed = (): JSX.Element => {
                 ) : null}
             </header>
             <TopicChipBar />
+            {runtimeFeatureFlags.streaming ? (
+                <section
+                    style={sectionStyle}
+                    data-shell-region="home-quick-actions"
+                    data-testid="home-quick-actions"
+                >
+                    <header style={sectionLabelStyle}>Quick actions</header>
+                    <Link
+                        to={STREAMING_PATH}
+                        style={cardStyle}
+                        data-testid="home-quick-action-streaming"
+                    >
+                        <span style={cardBodyStyle}>
+                            <span style={cardTitleStyle}>Streaming</span>
+                            <span style={cardSubtitleStyle}>
+                                Go live, manage connections &amp; integrations
+                            </span>
+                        </span>
+                    </Link>
+                </section>
+            ) : null}
             {pluginCards.length > 0 ? (
                 <section
                     style={sectionStyle}

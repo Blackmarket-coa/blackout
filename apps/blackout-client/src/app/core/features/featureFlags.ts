@@ -37,6 +37,15 @@ export type FeatureFlags = {
     liveInteractionBundle: boolean;
     coalition: boolean;
     coliseum: boolean;
+    /**
+     * Streaming hub flag. Owns the `/streaming` top-level destination — a
+     * consolidated page (routed like coalition/coliseum) with tabs for the
+     * livestream directory, broadcast tooling (simulcast / OBS-WS / IRC bot /
+     * widget-alert tokens), platform connections (linked accounts), chat
+     * bridges + webhooks, and the integrations-health dashboard. Default on so
+     * the previously-orphaned connection UIs are reachable.
+     */
+    streaming: boolean;
     profile: boolean;
     home: boolean;
     communities: boolean;
@@ -227,6 +236,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     liveInteractionBundle: true,
     coalition: true,
     coliseum: true,
+    streaming: true,
     profile: true,
     home: true,
     communities: true,
@@ -446,6 +456,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_COLISEUM === 'false') {
             nextFlags.coliseum = false;
+        }
+        if (env.BLACKOUT_STREAMING === 'true') {
+            nextFlags.streaming = true;
+        }
+        if (env.BLACKOUT_STREAMING === 'false') {
+            nextFlags.streaming = false;
         }
         if (env.BLACKOUT_PROFILE === 'true') {
             nextFlags.profile = true;

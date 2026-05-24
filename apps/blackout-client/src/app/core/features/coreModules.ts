@@ -28,6 +28,7 @@ import { settingsParityFeature } from '../../features/settings-parity';
 import { shellDestinationsFeature } from '../../features/shell-destinations';
 import { stegoToolkitFeature } from '../../features/stego-toolkit';
 import { streamsFeature } from '../../features/streams';
+import { streamingFeature } from '../../features/streaming';
 import { topicsFeature } from '../../features/topics';
 import type { FeatureModule } from './types';
 
@@ -131,6 +132,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: streamsFeature,
         flag: 'streamsViewer',
+    },
+    {
+        feature: streamingFeature,
+        flag: 'streaming',
     },
     {
         feature: eventsFeature,
