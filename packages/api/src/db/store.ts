@@ -391,7 +391,7 @@ class InMemoryDb {
     const existing = this.invitationTokens.get(id);
     if (!existing) return undefined;
     if (existing.revokedAt) return undefined;
-    if (existing.useCount >= existing.maxUses) return undefined;
+    if (!existing.unlimited && existing.useCount >= existing.maxUses) return undefined;
     const updated: InvitationTokenRecord = { ...existing, useCount: existing.useCount + 1 };
     this.invitationTokens.set(id, updated);
     return updated;

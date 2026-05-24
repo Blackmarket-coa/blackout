@@ -51,11 +51,7 @@ export interface ListInvitationsResponse {
     invitations: InvitationWithRedemptions[];
 }
 
-export type InvitationPreviewFailureReason =
-    | 'invalid'
-    | 'revoked'
-    | 'exhausted'
-    | 'expired';
+export type InvitationPreviewFailureReason = 'invalid' | 'revoked' | 'exhausted' | 'expired';
 
 export type InvitationPreviewResponse =
     | {
@@ -92,7 +88,7 @@ const callJson = <T>(
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
     body: unknown,
-    token: string | null,
+    token: string | null
 ): Promise<T> =>
     createAuthorizedApiClient(token)({
         method,
@@ -122,7 +118,7 @@ const invitationFetch = <T>(
     path: string,
     body: unknown,
     token: string | null,
-    signal?: AbortSignal,
+    signal?: AbortSignal
 ): Promise<T> =>
     createFetchApiClient({
         baseUrl: API_BASE_URL,
@@ -133,9 +129,28 @@ const invitationFetch = <T>(
 
 export const createInvitation = (
     input: CreateInvitationInput = {},
-    token: string | null = readBlackoutApiToken(),
-): Promise<CreateInvitationResponse> =>
-    callJson('POST', INVITATIONS_BASE, input, token);
+    token: string | null = readBlackoutApiToken()
+): Promise<CreateInvitationResponse> => callJson('POST', INVITATIONS_BASE, input, token);
+
+export interface PersonalInviteResponse {
+    invitation: Omit<InvitationRecord, 'usesRemaining'> & {
+        unlimited: boolean;
+        usesRemaining: number | null;
+    };
+    /** Direct invite URL (carries the registration token in the fragment). */
+    url: string;
+    /** Social-media-friendly URL that renders an Open Graph preview (`/i/<token>`). */
+    shareUrl: string;
+}
+
+/**
+ * Get-or-create the caller's reusable personal share link. Idempotent — the
+ * same stable `shareUrl` is returned every call, suitable for a social bio.
+ */
+export const getPersonalInviteLink = (
+    token: string | null = readBlackoutApiToken()
+): Promise<PersonalInviteResponse> =>
+    callJson('GET', `${INVITATIONS_BASE}/personal`, undefined, token);
 
 const buildListPath = (filters?: InvitationListFilters): string => {
     if (!filters) return INVITATIONS_BASE;
@@ -148,13 +163,12 @@ const buildListPath = (filters?: InvitationListFilters): string => {
 
 export const listMyInvitations = (
     filters?: InvitationListFilters,
-    token: string | null = readBlackoutApiToken(),
-): Promise<ListInvitationsResponse> =>
-    callJson('GET', buildListPath(filters), undefined, token);
+    token: string | null = readBlackoutApiToken()
+): Promise<ListInvitationsResponse> => callJson('GET', buildListPath(filters), undefined, token);
 
 export const revokeInvitation = (
     id: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ invitation: InvitationRecord }> =>
     callJson('DELETE', `${INVITATIONS_BASE}/${encodeURIComponent(id)}`, undefined, token);
 
@@ -167,14 +181,14 @@ export const revokeInvitation = (
  */
 export const previewInvitation = (
     presentedToken: string,
-    signal?: AbortSignal,
+    signal?: AbortSignal
 ): Promise<InvitationPreviewResponse> =>
     invitationFetch(
         'GET',
         `${INVITATIONS_BASE}/preview/${encodeURIComponent(presentedToken)}`,
         undefined,
         null,
-        signal,
+        signal
     );
 
 /**
@@ -187,15 +201,9 @@ export const previewInvitation = (
 export const redeemInvitation = (
     presentedToken: string,
     token: string | null = readBlackoutApiToken(),
-    signal?: AbortSignal,
+    signal?: AbortSignal
 ): Promise<InvitationRedeemResponse> =>
-    invitationFetch(
-        'POST',
-        `${INVITATIONS_BASE}/redeem`,
-        { token: presentedToken },
-        token,
-        signal,
-    );
+    invitationFetch('POST', `${INVITATIONS_BASE}/redeem`, { token: presentedToken }, token, signal);
 
 /**
  * Fetch the BlackOut bot's Matrix user id. The creator's client invites this
@@ -203,5 +211,5 @@ export const redeemInvitation = (
  * force-join the bot and the bot can later admit redeemers.
  */
 export const getBotUserId = (
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ userId: string }> => callJson('GET', '/v1/matrix/bot', undefined, token);

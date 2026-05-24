@@ -15,7 +15,7 @@ import {
 import { buildHomeFeed, type RoomLike } from './feedModel';
 import type { StreamSummary } from '../streams/streamsClient';
 
-export type UnifiedFeedSource = 'den' | 'stream' | 'coalition' | 'coliseum' | 'status';
+export type UnifiedFeedSource = 'den' | 'stream' | 'coalition' | 'coliseum' | 'status' | 'wall';
 
 interface UnifiedFeedItemBase {
     /** Unique across sources: `${source}:${rawId}`. */
@@ -58,13 +58,18 @@ export interface StatusFeedItem extends UnifiedFeedItemBase {
     source: 'status';
     emoji?: string;
 }
+export interface WallFeedItem extends UnifiedFeedItemBase {
+    source: 'wall';
+    authorId: string;
+}
 
 export type UnifiedFeedItem =
     | DenFeedItem
     | StreamFeedItem
     | CoalitionFeedCardItem
     | ColiseumFeedCardItem
-    | StatusFeedItem;
+    | StatusFeedItem
+    | WallFeedItem;
 
 /** Lightweight projection of a profile status for the feed. */
 export interface StatusEntry {
@@ -72,6 +77,17 @@ export interface StatusEntry {
     displayName: string;
     text: string;
     emoji?: string;
+}
+
+/** Lightweight projection of a wall post for the feed. */
+export interface WallEntry {
+    id: string;
+    /** Profile the post lives on (the wall owner). */
+    ownerUserId: string;
+    ownerDisplayName: string;
+    body: string;
+    authorId: string;
+    createdAt: string;
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -215,6 +231,27 @@ export const mapStatuses = (entries: readonly StatusEntry[], now: number): Statu
         tags: [],
     }));
 
+const truncate = (value: string, max: number): string =>
+    value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+
+export const mapWallPosts = (entries: readonly WallEntry[], now: number): WallFeedItem[] =>
+    entries.map((entry) => {
+        const timestamp = parseTimestamp(entry.createdAt);
+        return {
+            id: `wall:${entry.id}`,
+            source: 'wall',
+            authorId: entry.authorId,
+            title: entry.ownerDisplayName,
+            subtitle: truncate(entry.body, 140),
+            canopyId: null,
+            denId: null,
+            timestamp,
+            score: clamp01(0.5 * recencyScore(timestamp, now) + 0.15),
+            href: `/creators/${encodeURIComponent(entry.ownerUserId)}`,
+            tags: [],
+        };
+    });
+
 /**
  * Stable merge: sort by score desc, tiebreak by timestamp desc, dedupe by
  * id (first occurrence wins), then slice to `limit`.
@@ -257,6 +294,9 @@ export const partitionFollowing = (
     joinedCanopyIds: ReadonlySet<string>
 ): UnifiedFeedItem[] =>
     items.filter((item) => {
-        if (item.source === 'den' || item.source === 'status') return true;
+        // Den/status/wall items are inherently personal (own + followed authors),
+        // so they always belong in Following.
+        if (item.source === 'den' || item.source === 'status' || item.source === 'wall')
+            return true;
         return item.canopyId !== null && joinedCanopyIds.has(item.canopyId);
     });

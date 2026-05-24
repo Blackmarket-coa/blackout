@@ -8,6 +8,7 @@ const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
     coalition: 'Coalition',
     coliseum: 'Coliseum',
     status: 'Status',
+    wall: 'Post',
 };
 
 const cardStyle: CSSProperties = {

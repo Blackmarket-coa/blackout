@@ -8,6 +8,7 @@ import {
     mapDens,
     mapStatuses,
     mapStreams,
+    mapWallPosts,
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
@@ -100,6 +101,30 @@ describe('mergeAndRank', () => {
         ];
         const ranked = mergeAndRank(items, { limit: 5 });
         expect(ranked.map((i) => i.id)).toEqual(['coalition:high', 'coalition:low']);
+    });
+});
+
+describe('mapWallPosts', () => {
+    it('normalizes wall posts with real timestamps and links to the owner profile', () => {
+        const [item] = mapWallPosts(
+            [
+                {
+                    id: 'p1',
+                    ownerUserId: '@owner:s',
+                    ownerDisplayName: 'Owner',
+                    body: 'hello world',
+                    authorId: '@author:s',
+                    createdAt: new Date(NOW - HOUR).toISOString(),
+                },
+            ],
+            NOW
+        );
+        expect(item.id).toBe('wall:p1');
+        expect(item.source).toBe('wall');
+        expect(item.title).toBe('Owner');
+        expect(item.subtitle).toBe('hello world');
+        expect(item.timestamp).toBe(NOW - HOUR);
+        expect(item.href).toBe(`/creators/${encodeURIComponent('@owner:s')}`);
     });
 });
 

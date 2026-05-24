@@ -29,7 +29,7 @@ vi.mock('../topics/TopicChipBar', () => ({
 // The unified feed fetches livestreams / coalition / coliseum on mount.
 // Stub the network clients so tests exercise the den-only path without
 // hitting the API; each resolves empty so only Matrix room activity drives
-// the feed. `useStatusUpdates` no-ops because `matrixClientAtom` is null.
+// the feed. `useFollowedActivity` no-ops because `matrixClientAtom` is null.
 vi.mock('../streams/streamsClient', () => ({
     listStreams: vi.fn().mockResolvedValue({ items: [] }),
 }));
@@ -41,6 +41,22 @@ vi.mock('../coliseum/coliseumClient', () => ({
 }));
 vi.mock('../profile/profileClient', () => ({
     fetchProfile: vi.fn().mockRejectedValue(new Error('no profile')),
+    fetchWall: vi.fn().mockResolvedValue({ userId: '', posts: [] }),
+    fetchFollowing: vi.fn().mockResolvedValue({ following: [] }),
+    fetchFollowers: vi.fn().mockResolvedValue({ followers: [] }),
+    saveProfile: vi.fn().mockResolvedValue({}),
+    postWall: vi.fn().mockResolvedValue({}),
+    followUser: vi.fn().mockResolvedValue({ ok: true, following: true, created: true }),
+    unfollowUser: vi.fn().mockResolvedValue({ ok: true, following: false, removed: true }),
+}));
+vi.mock('../invitations/invitationsClient', () => ({
+    getPersonalInviteLink: vi
+        .fn()
+        .mockResolvedValue({
+            invitation: {},
+            url: 'https://x/invite/t',
+            shareUrl: 'https://x/i/t',
+        }),
 }));
 
 // vi.mock above is hoisted to module top, so a synchronous import

@@ -3,6 +3,7 @@ import { db } from '../db/store';
 import type { InvitationTokenRecord, UserRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { log } from '../telemetry/logger';
+import { followUser } from './follows';
 
 const INVITATION_TOKEN_BYTES = 32;
 const DEFAULT_MAX_USES = 1;
@@ -21,10 +22,14 @@ export interface CreateInvitationInput {
   createdBy: string;
   matrixRoomId?: string;
   label?: string;
-  /** 1..MAX_USES_CEILING; defaults to 1 (single-use link). */
+  /** 1..MAX_USES_CEILING; defaults to 1 (single-use link). Ignored when `unlimited`. */
   maxUses?: number;
   /** Hours from now until expiry. 0 = never expire. Defaults to 7 days. */
   expiresInHours?: number;
+  /** Reusable-forever link: mints an unlimited Synapse token and never exhausts. */
+  unlimited?: boolean;
+  /** Marks (and persists the plaintext of) the single per-user personal link. */
+  personal?: boolean;
 }
 
 export type CreateInvitationOutcome =
@@ -52,15 +57,17 @@ export type CreateInvitationOutcome =
 export const createInvitation = async (
   input: CreateInvitationInput,
 ): Promise<CreateInvitationOutcome> => {
+  const unlimited = input.unlimited === true;
   const maxUses = clampMaxUses(input.maxUses ?? DEFAULT_MAX_USES);
   const ttlHours = clampTtlHours(input.expiresInHours ?? DEFAULT_TTL_HOURS);
   const expiresAt =
-    ttlHours === 0
+    unlimited || ttlHours === 0
       ? undefined
       : new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
 
   const mint = await matrixClient.mintRegistrationToken({
-    usesAllowed: maxUses,
+    // null = unlimited Synapse registrations, so a reusable bio link keeps working.
+    usesAllowed: unlimited ? null : maxUses,
     expiresAtMs: expiresAt ? Date.parse(expiresAt) : null,
   });
   if (!mint.ok) {
@@ -81,6 +88,11 @@ export const createInvitation = async (
       label: input.label,
       maxUses,
       expiresAt,
+      unlimited: unlimited || undefined,
+      personal: input.personal || undefined,
+      // Personal links are public by design; keep the plaintext so the
+      // get-or-create endpoint can return a stable URL.
+      personalToken: input.personal ? token : undefined,
       synapseRegistrationToken: mint.token,
       synapseRegistrationTokenExpiresAt:
         typeof mint.expiresAtMs === 'number'
@@ -285,7 +297,57 @@ export const redeemInvitation = async (
     matrixInviteOk: matrixInvite?.ok,
   });
 
+  // The redeemer follows the inviter (one-way). Best-effort: a follow failure
+  // must never roll back a durable redemption.
+  try {
+    followUser(redeemer.id, updated.createdBy);
+  } catch (err) {
+    log.warn('invite.redeem.follow_failed', {
+      inviterId: updated.createdBy,
+      redeemerId: redeemer.id,
+      detail: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   return { kind: 'ok', record: updated, matrixInvite, canopyId };
+};
+
+/**
+ * Get-or-create the caller's single reusable personal share link: unlimited
+ * uses, no expiry, no room. Returns the same stable URL on every call (we
+ * persist the plaintext for personal links — see `personalToken`).
+ */
+export const getOrCreatePersonalInvitation = async (
+  userId: string,
+): Promise<
+  | { kind: 'ok'; record: InvitationTokenRecord; token: string; synapseRegistrationToken?: string }
+  | { kind: 'matrix_mint_failed'; reason: string; detail?: string }
+> => {
+  const existing = db
+    .listInvitationTokensByCreator(userId)
+    .find((r) => r.personal && !r.revokedAt && r.personalToken);
+  if (existing?.personalToken) {
+    return {
+      kind: 'ok',
+      record: existing,
+      token: existing.personalToken,
+      synapseRegistrationToken: existing.synapseRegistrationToken,
+    };
+  }
+
+  const outcome = await createInvitation({
+    createdBy: userId,
+    unlimited: true,
+    personal: true,
+    label: 'Personal link',
+  });
+  if (outcome.kind !== 'ok') return outcome;
+  return {
+    kind: 'ok',
+    record: outcome.record,
+    token: outcome.token,
+    synapseRegistrationToken: outcome.synapseRegistrationToken,
+  };
 };
 
 /**
@@ -326,7 +388,7 @@ const evaluateInvitation = (
   | { kind: 'exhausted' }
   | { kind: 'expired' } => {
   if (record.revokedAt) return { kind: 'revoked' };
-  if (record.useCount >= record.maxUses) return { kind: 'exhausted' };
+  if (!record.unlimited && record.useCount >= record.maxUses) return { kind: 'exhausted' };
   if (record.expiresAt && new Date(record.expiresAt).getTime() <= Date.now()) {
     return { kind: 'expired' };
   }

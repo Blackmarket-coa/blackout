@@ -16,6 +16,7 @@ import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { homeFeedTabAtom } from '../../state/homeFeed';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
+import { HomeComposer } from './HomeComposer';
 import { HomeFeedTabs } from './HomeFeedTabs';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
@@ -32,8 +33,17 @@ const layoutStyle: CSSProperties = {
 const headerStyle: CSSProperties = {
     padding: '20px 20px 8px',
     display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    flexWrap: 'wrap',
+};
+
+const headerTitleColStyle: CSSProperties = {
+    display: 'flex',
     flexDirection: 'column',
     gap: 4,
+    minWidth: 0,
 };
 
 const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 700 };
@@ -176,34 +186,37 @@ export const HomeFeed = (): JSX.Element => {
     return (
         <section style={layoutStyle} data-shell-region="home-feed">
             <header style={headerStyle} data-testid="home-feed-header">
-                <h1 style={titleStyle}>Home</h1>
-                <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
-                {showReplay ? (
-                    <button
-                        type="button"
-                        data-testid="home-tour-replay"
-                        onClick={() => {
-                            void (async () => {
-                                await homeTour.reset();
-                                trackOnboardingTourStarted(Date.now());
-                                await homeTour.start();
-                            })();
-                        }}
-                        style={{
-                            width: 'fit-content',
-                            marginTop: 4,
-                            fontSize: 12,
-                            background: 'transparent',
-                            color: 'var(--accent-primary, #3b82f6)',
-                            border: '1px solid var(--border-default, #374151)',
-                            borderRadius: 8,
-                            padding: '4px 8px',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        Replay homepage tour
-                    </button>
-                ) : null}
+                <div style={headerTitleColStyle}>
+                    <h1 style={titleStyle}>Home</h1>
+                    <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
+                    {showReplay ? (
+                        <button
+                            type="button"
+                            data-testid="home-tour-replay"
+                            onClick={() => {
+                                void (async () => {
+                                    await homeTour.reset();
+                                    trackOnboardingTourStarted(Date.now());
+                                    await homeTour.start();
+                                })();
+                            }}
+                            style={{
+                                width: 'fit-content',
+                                marginTop: 4,
+                                fontSize: 12,
+                                background: 'transparent',
+                                color: 'var(--accent-primary, #3b82f6)',
+                                border: '1px solid var(--border-default, #374151)',
+                                borderRadius: 8,
+                                padding: '4px 8px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Replay homepage tour
+                        </button>
+                    ) : null}
+                </div>
+                {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
             </header>
             <TopicChipBar />
             {runtimeFeatureFlags.streaming ? (
