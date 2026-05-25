@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CoalitionFeedItem, CoalitionRankingModel } from '@blackout/core';
 import {
     fetchCoalitionFeed,
+    fetchCoalitionTasks,
     fetchMutualAid,
     fetchSellerLocations,
     fetchSpatialFeed,
@@ -11,6 +12,7 @@ import {
     type NearbyQuery,
     type SellerLocationsResponse,
     type SpatialFeedResponse,
+    type TasksResponse,
 } from '../coalitionClient';
 
 interface FetchState<T> {
@@ -19,12 +21,17 @@ interface FetchState<T> {
     error: string | null;
 }
 
-function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): FetchState<T> {
+interface FetchStateWithRefetch<T> extends FetchState<T> {
+    refetch: () => void;
+}
+
+function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): FetchStateWithRefetch<T> {
     const [state, setState] = useState<FetchState<T>>({
         data: null,
         loading: true,
         error: null,
     });
+    const [tick, setTick] = useState(0);
     const requestId = useRef(0);
 
     useEffect(() => {
@@ -41,9 +48,11 @@ function useAsync<T>(loader: () => Promise<T>, deps: unknown[]): FetchState<T> {
                 setState({ data: null, loading: false, error: message });
             });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, deps);
+    }, [...deps, tick]);
 
-    return state;
+    const refetch = useCallback(() => setTick((value) => value + 1), []);
+
+    return { ...state, refetch };
 }
 
 export type { CoalitionScopeQuery } from '../coalitionClient';
@@ -81,4 +90,8 @@ export function useSellerLocations(nearby?: NearbyQuery) {
         () => fetchSellerLocations(nearby),
         [nearbyKey(nearby)],
     );
+}
+
+export function useCoalitionTasks(scope: CoalitionScopeQuery) {
+    return useAsync<TasksResponse>(() => fetchCoalitionTasks(scope), [scope.denId]);
 }

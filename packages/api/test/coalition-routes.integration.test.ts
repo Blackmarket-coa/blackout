@@ -166,3 +166,39 @@ test('coalition mutual-aid filters by nearby radius', async () => {
     ).json()) as AidResponse;
     assert.ok(near.posts.length >= 2);
 });
+
+test('coalition tasks list, create, and advance status', async () => {
+    type Task = { id: string; status: string; title: string; denId: string };
+    const seeded = (await (
+        await app.request('/v1/coalition/tasks?denId=!demo-aid:server', { headers: authHeader() })
+    ).json()) as { tasks: Task[] };
+    assert.ok(seeded.tasks.length >= 3);
+    assert.ok(seeded.tasks.every((task) => task.denId === '!demo-aid:server'));
+
+    const created = await app.request('/v1/coalition/tasks', {
+        method: 'POST',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ denId: '!demo-aid:server', title: 'Sort donations' }),
+    });
+    assert.equal(created.status, 201);
+    const { task } = (await created.json()) as { task: Task };
+    assert.equal(task.status, 'todo');
+
+    const advanced = await app.request(`/v1/coalition/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'doing' }),
+    });
+    assert.equal(advanced.status, 200);
+    const updated = (await advanced.json()) as { task: Task };
+    assert.equal(updated.task.status, 'doing');
+});
+
+test('coalition task update 404s for unknown task', async () => {
+    const response = await app.request('/v1/coalition/tasks/nope', {
+        method: 'PATCH',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+    });
+    assert.equal(response.status, 404);
+});

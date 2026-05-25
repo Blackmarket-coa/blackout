@@ -2,8 +2,10 @@ import type {
     AidPost,
     CoalitionFeedItem,
     CoalitionRankingModel,
+    CoalitionTask,
     SellerLocation,
     SpatialFeedItem,
+    TaskStatus,
 } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
@@ -67,6 +69,10 @@ function getJson<T>(path: string, token: string | null): Promise<T> {
 
 function postJson<T>(path: string, body: unknown, token: string | null): Promise<T> {
     return createAuthorizedApiClient(token)({ method: 'POST', path, body }) as Promise<T>;
+}
+
+function patchJson<T>(path: string, body: unknown, token: string | null): Promise<T> {
+    return createAuthorizedApiClient(token)({ method: 'PATCH', path, body }) as Promise<T>;
 }
 
 export function fetchCoalitionFeed(
@@ -137,4 +143,43 @@ export function createCoalitionAidPost(
     token: string | null = readBlackoutApiToken(),
 ): Promise<{ post: AidPost }> {
     return postJson<{ post: AidPost }>(`${COALITION_BASE}/mutual-aid`, input, token);
+}
+
+export interface TasksResponse {
+    tasks: CoalitionTask[];
+}
+
+export function fetchCoalitionTasks(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken(),
+): Promise<TasksResponse> {
+    const path = appendQuery(`${COALITION_BASE}/tasks`, { denId: scope.denId });
+    return getJson<TasksResponse>(path, token);
+}
+
+export interface CreateTaskInput {
+    denId: string;
+    title: string;
+    description?: string;
+    assigneeId?: string;
+    proposalEventId?: string;
+}
+
+export function createCoalitionTask(
+    input: CreateTaskInput,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ task: CoalitionTask }> {
+    return postJson<{ task: CoalitionTask }>(`${COALITION_BASE}/tasks`, input, token);
+}
+
+export function updateCoalitionTaskStatus(
+    id: string,
+    status: TaskStatus,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ task: CoalitionTask }> {
+    return patchJson<{ task: CoalitionTask }>(
+        `${COALITION_BASE}/tasks/${encodeURIComponent(id)}`,
+        { status },
+        token,
+    );
 }

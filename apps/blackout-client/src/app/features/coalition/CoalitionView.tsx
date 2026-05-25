@@ -8,6 +8,7 @@ import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
 import ShopTab from './tabs/ShopTab';
+import TasksTab from './tabs/TasksTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
 import AiDenPanel from '../aiden/AiDenPanel';
 
@@ -83,6 +84,7 @@ export function CoalitionView({
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
                 {activeTab === 'map' ? <MapTab scope={scope} /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
+                {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
                 {activeTab === 'documents' && denId ? (
                     <DocumentsTab roomId={denId} />
                 ) : null}

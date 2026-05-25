@@ -5,6 +5,7 @@ import {
     AID_POST_TYPES,
     AID_POST_URGENCY,
     SPATIAL_LAYER_KEYS,
+    TASK_STATUSES,
     isWithinRadiusMeters,
     rankCoalitionFeed,
 } from '@blackout/core';
@@ -16,6 +17,7 @@ import {
     listSpatialItems,
     newAidId,
 } from '../services/coalitionStore';
+import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 
@@ -152,6 +154,51 @@ coalition.get('/seller-locations', (c) => {
         );
     }
     return c.json({ locations });
+});
+
+coalition.get('/tasks', (c) => {
+    const denId = c.req.query('denId');
+    return c.json({ tasks: listTasks({ denId }) });
+});
+
+const createTaskSchema = z.object({
+    denId: z.string().min(1),
+    title: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    assigneeId: z.string().optional(),
+    proposalEventId: z.string().optional(),
+});
+
+coalition.post('/tasks', async (c) => {
+    const user = requireUser(c, 'Sign in to create a task');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createTaskSchema);
+    if (parsed instanceof Response) return parsed;
+    const task = createTask({
+        id: newTaskId(),
+        denId: parsed.denId,
+        title: parsed.title,
+        description: parsed.description,
+        assigneeId: parsed.assigneeId,
+        proposalEventId: parsed.proposalEventId,
+    });
+    return c.json({ task }, 201);
+});
+
+const updateTaskSchema = z.object({
+    status: z.enum(TASK_STATUSES),
+});
+
+coalition.patch('/tasks/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to update a task');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, updateTaskSchema);
+    if (parsed instanceof Response) return parsed;
+    const task = updateTaskStatus(c.req.param('id'), parsed.status);
+    if (!task) {
+        return c.json({ code: 'not_found', message: 'Task not found' }, 404);
+    }
+    return c.json({ task });
 });
 
 export default coalition;

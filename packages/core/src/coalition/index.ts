@@ -3,4 +3,5 @@ export * from './eventStatus';
 export * from './feed';
 export * from './mutualAid';
 export * from './sellerLocation';
+export * from './tasks';
 export * from './events';
