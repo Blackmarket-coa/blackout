@@ -124,3 +124,81 @@ test('coalition seller-locations returns visible vendors', async () => {
     assert.ok(body.locations.length >= 2);
     assert.ok(body.locations.every((location) => location.isVisible));
 });
+
+test('coalition seller-locations filters by nearby radius', async () => {
+    type LocResponse = { locations: Array<{ id: string }> };
+    const all = (await (
+        await app.request('/v1/coalition/seller-locations', { headers: authHeader() })
+    ).json()) as LocResponse;
+
+    // Seeds cluster around (40.7128, -74.006); a far origin with a tight radius
+    // excludes everything.
+    const far = (await (
+        await app.request('/v1/coalition/seller-locations?lat=0&lng=0&radiusKm=1', {
+            headers: authHeader(),
+        })
+    ).json()) as LocResponse;
+    assert.equal(far.locations.length, 0);
+
+    // A generous radius around the cluster returns everything visible.
+    const near = (await (
+        await app.request(
+            '/v1/coalition/seller-locations?lat=40.7128&lng=-74.006&radiusKm=5',
+            { headers: authHeader() },
+        )
+    ).json()) as LocResponse;
+    assert.equal(near.locations.length, all.locations.length);
+});
+
+test('coalition mutual-aid filters by nearby radius', async () => {
+    type AidResponse = { posts: Array<{ id: string }> };
+    const far = (await (
+        await app.request('/v1/coalition/mutual-aid?lat=0&lng=0&radiusKm=1', {
+            headers: authHeader(),
+        })
+    ).json()) as AidResponse;
+    assert.equal(far.posts.length, 0);
+
+    const near = (await (
+        await app.request('/v1/coalition/mutual-aid?lat=40.715&lng=-74.009&radiusKm=10', {
+            headers: authHeader(),
+        })
+    ).json()) as AidResponse;
+    assert.ok(near.posts.length >= 2);
+});
+
+test('coalition tasks list, create, and advance status', async () => {
+    type Task = { id: string; status: string; title: string; denId: string };
+    const seeded = (await (
+        await app.request('/v1/coalition/tasks?denId=!demo-aid:server', { headers: authHeader() })
+    ).json()) as { tasks: Task[] };
+    assert.ok(seeded.tasks.length >= 3);
+    assert.ok(seeded.tasks.every((task) => task.denId === '!demo-aid:server'));
+
+    const created = await app.request('/v1/coalition/tasks', {
+        method: 'POST',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ denId: '!demo-aid:server', title: 'Sort donations' }),
+    });
+    assert.equal(created.status, 201);
+    const { task } = (await created.json()) as { task: Task };
+    assert.equal(task.status, 'todo');
+
+    const advanced = await app.request(`/v1/coalition/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'doing' }),
+    });
+    assert.equal(advanced.status, 200);
+    const updated = (await advanced.json()) as { task: Task };
+    assert.equal(updated.task.status, 'doing');
+});
+
+test('coalition task update 404s for unknown task', async () => {
+    const response = await app.request('/v1/coalition/tasks/nope', {
+        method: 'PATCH',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+    });
+    assert.equal(response.status, 404);
+});

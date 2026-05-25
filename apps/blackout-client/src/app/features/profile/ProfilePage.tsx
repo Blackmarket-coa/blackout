@@ -5,6 +5,7 @@ import AvatarDecoration from './AvatarDecoration';
 import PinnedMediaShelf from './PinnedMediaShelf';
 import ProfileStatusBar from './ProfileStatusBar';
 import ProfileThemeScope from './ProfileThemeScope';
+import ProfileReputation from './ProfileReputation';
 import ProfileWall from './ProfileWall';
 import TopFriendsGrid from './TopFriendsGrid';
 import type { MemberProfile } from './profileTypes';
@@ -134,6 +135,11 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                     </section>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <section style={sectionStyle}>
+                            <h2 style={headingStyle}>Reputation</h2>
+                            <ProfileReputation userId={target.userId} />
+                        </section>
+
                         <section style={sectionStyle}>
                             <h2 style={headingStyle}>Top friends</h2>
                             <TopFriendsGrid topFriends={profileEvent.topFriends} />

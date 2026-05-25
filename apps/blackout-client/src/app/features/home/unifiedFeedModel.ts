@@ -5,17 +5,25 @@
  * partition them client-side. Kept dependency-light (no matrix-js-sdk,
  * no React) so it unit-tests cleanly, mirroring `feedModel.ts`.
  */
-import type { CoalitionFeedItem, ColiseumTopic } from '@blackout/core';
+import type { CoalitionFeedItem, ColiseumTopic, NormalizedListing } from '@blackout/core';
 import {
     buildCommunitiesPath,
     buildLivePath,
     COALITION_PATH,
     COLISEUM_PATH,
+    MARKET_PATH,
 } from '../../pages/paths';
 import { buildHomeFeed, type RoomLike } from './feedModel';
 import type { StreamSummary } from '../streams/streamsClient';
 
-export type UnifiedFeedSource = 'den' | 'stream' | 'coalition' | 'coliseum' | 'status' | 'wall';
+export type UnifiedFeedSource =
+    | 'den'
+    | 'stream'
+    | 'coalition'
+    | 'coliseum'
+    | 'status'
+    | 'wall'
+    | 'marketplace';
 
 interface UnifiedFeedItemBase {
     /** Unique across sources: `${source}:${rawId}`. */
@@ -62,6 +70,11 @@ export interface WallFeedItem extends UnifiedFeedItemBase {
     source: 'wall';
     authorId: string;
 }
+export interface MarketplaceFeedItem extends UnifiedFeedItemBase {
+    source: 'marketplace';
+    priceCents: number;
+    currency: string;
+}
 
 export type UnifiedFeedItem =
     | DenFeedItem
@@ -69,7 +82,8 @@ export type UnifiedFeedItem =
     | CoalitionFeedCardItem
     | ColiseumFeedCardItem
     | StatusFeedItem
-    | WallFeedItem;
+    | WallFeedItem
+    | MarketplaceFeedItem;
 
 /** Lightweight projection of a profile status for the feed. */
 export interface StatusEntry {
@@ -251,6 +265,33 @@ export const mapWallPosts = (entries: readonly WallEntry[], now: number): WallFe
             tags: [],
         };
     });
+
+const formatPrice = (priceCents: number, currency: string): string => {
+    const amount = (priceCents / 100).toFixed(2);
+    return currency.toUpperCase() === 'USD' ? `$${amount}` : `${amount} ${currency.toUpperCase()}`;
+};
+
+export const mapMarketplace = (
+    listings: readonly NormalizedListing[],
+    now: number
+): MarketplaceFeedItem[] =>
+    listings.map((listing) => ({
+        id: `marketplace:${listing.providerId}:${listing.providerListingId}`,
+        source: 'marketplace',
+        priceCents: listing.priceCents,
+        currency: listing.currency,
+        title: listing.title,
+        subtitle: `${formatPrice(listing.priceCents, listing.currency)} · ${listing.category}`,
+        canopyId: null,
+        denId: null,
+        // Listings carry no timestamp; treat as "now" with a modest fixed weight
+        // so they surface in Discover without dominating time-ranked activity.
+        timestamp: now,
+        score: 0.4,
+        href: MARKET_PATH,
+        mediaUrl: listing.mediaUrls[0],
+        tags: listing.tags ?? [],
+    }));
 
 /** Bonus added to an item's score when it matches a viewer-interest tag. */
 const INTEREST_BOOST = 0.15;

@@ -12,6 +12,7 @@ import {
     useSpatialFeed,
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
+import type { NearbyQuery } from '../coalitionClient';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
 
@@ -32,11 +33,36 @@ export function MapTab({ scope }: MapTabProps) {
         () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key)),
     );
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
+    const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
+    const [nearbyError, setNearbyError] = useState<string | null>(null);
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
-    const aidState = useMutualAid(scope);
-    const sellerState = useSellerLocations();
+    const aidState = useMutualAid(scope, nearby);
+    const sellerState = useSellerLocations(nearby);
+
+    const toggleNearby = () => {
+        if (nearby) {
+            setNearby(undefined);
+            setNearbyError(null);
+            return;
+        }
+        if (!navigator.geolocation) {
+            setNearbyError('Location is unavailable on this device.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setNearbyError(null);
+                setNearby({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    radiusKm: 5,
+                });
+            },
+            () => setNearbyError('Could not get your location.'),
+        );
+    };
 
     const spatialItems = spatialState.data?.items ?? [];
     const aidPosts = aidState.data?.posts ?? [];
@@ -99,6 +125,31 @@ export function MapTab({ scope }: MapTabProps) {
                             </button>
                         );
                     })}
+                    <button
+                        type="button"
+                        onClick={toggleNearby}
+                        aria-pressed={Boolean(nearby)}
+                        data-testid="coalition-map-nearby"
+                        title={nearby ? 'Showing activity within 5km' : 'Filter to nearby activity'}
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            background: nearby
+                                ? 'var(--accent-primary, #1ABC9C)'
+                                : 'var(--bg-surface)',
+                            color: nearby ? '#0a1a0f' : 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        📍 Near me{nearby ? ' ✓' : ''}
+                    </button>
+                    {nearbyError ? (
+                        <span style={{ fontSize: 11, color: 'var(--danger)', alignSelf: 'center' }}>
+                            {nearbyError}
+                        </span>
+                    ) : null}
                 </div>
 
                 <div

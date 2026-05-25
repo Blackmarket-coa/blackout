@@ -9,11 +9,12 @@ const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
     coliseum: 'Coliseum',
     status: 'Status',
     wall: 'Post',
+    marketplace: 'Market',
 };
 
 const cardStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '1fr auto',
+    gridTemplateColumns: 'auto 1fr auto',
     alignItems: 'center',
     gap: 12,
     padding: '12px 14px',
@@ -22,6 +23,15 @@ const cardStyle: CSSProperties = {
     background: 'var(--bg-input, #0f172a)',
     color: 'inherit',
     textDecoration: 'none',
+};
+
+const thumbStyle: CSSProperties = {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    objectFit: 'cover',
+    background: 'var(--bg-nav, #1f2937)',
+    flexShrink: 0,
 };
 
 const bodyStyle: CSSProperties = {
@@ -84,6 +94,17 @@ export const UnifiedFeedCard = ({ item }: { item: UnifiedFeedItem }): JSX.Elemen
             data-source={item.source}
             data-den-id={item.denId ?? undefined}
         >
+            {item.mediaUrl ? (
+                <img
+                    src={item.mediaUrl}
+                    alt=""
+                    style={thumbStyle}
+                    loading="lazy"
+                    data-testid="home-feed-card-thumb"
+                />
+            ) : (
+                <span aria-hidden style={{ width: 0 }} />
+            )}
             <span style={bodyStyle}>
                 <span style={sourceTagStyle}>{SOURCE_LABELS[item.source]}</span>
                 <span style={titleStyle}>{item.title}</span>

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { CoalitionFeedItem, ColiseumTopic } from '@blackout/core';
+import type { CoalitionFeedItem, ColiseumTopic, NormalizedListing } from '@blackout/core';
 import type { StreamSummary } from '../streams/streamsClient';
 import type { RoomLike } from './feedModel';
 import {
     mapCoalition,
     mapColiseum,
     mapDens,
+    mapMarketplace,
     mapStatuses,
     mapStreams,
     mapWallPosts,
@@ -91,6 +92,37 @@ describe('mapCoalition / mapColiseum', () => {
         expect(item.id).toBe('coliseum:t');
         expect(item.score).toBe(0.9);
         expect(item.subtitle).toBe('Headline');
+    });
+});
+
+describe('mapMarketplace', () => {
+    const listing = (
+        overrides: Partial<NormalizedListing> & { providerListingId: string }
+    ): NormalizedListing => ({
+        providerId: 'freeblackmarket' as NormalizedListing['providerId'],
+        category: 'plugin-curated' as NormalizedListing['category'],
+        title: overrides.providerListingId,
+        description: '',
+        priceCents: 999,
+        currency: 'USD',
+        sellerId: null,
+        mediaUrls: [],
+        entitlementKind: 'digital_download' as NormalizedListing['entitlementKind'],
+        ...overrides,
+    });
+
+    it('maps listings into Discover-only feed cards with a formatted price', () => {
+        const [item] = mapMarketplace(
+            [listing({ providerListingId: 'p1', priceCents: 1500, mediaUrls: ['https://img/x'] })],
+            NOW
+        );
+        expect(item.source).toBe('marketplace');
+        expect(item.id).toBe('marketplace:freeblackmarket:p1');
+        expect(item.subtitle).toContain('$15.00');
+        expect(item.mediaUrl).toBe('https://img/x');
+        // No canopy → never enters the Following partition.
+        expect(item.canopyId).toBeNull();
+        expect(partitionFollowing([item], new Set())).toEqual([]);
     });
 });
 

@@ -54,3 +54,12 @@ export function isWithinDisplayRadius(
 ): boolean {
     return haversineDistanceMeters(location.coordinates, viewer) <= location.displayRadiusMeters;
 }
+
+/** True when two coordinates are within `radiusMeters` of each other. */
+export function isWithinRadiusMeters(
+    a: SellerCoordinates,
+    b: SellerCoordinates,
+    radiusMeters: number,
+): boolean {
+    return haversineDistanceMeters(a, b) <= radiusMeters;
+}

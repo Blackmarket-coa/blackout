@@ -156,6 +156,40 @@ test('coliseum create argument accepts a valid argument and validates citations'
     );
 });
 
+test('coliseum create argument accepts valid video media and drops malformed media', async () => {
+    const good = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: { ...authHeader('@reeler:server'), 'content-type': 'application/json' },
+        body: JSON.stringify({
+            topicId: 'topic-grid-resilience',
+            stance: 'for',
+            body: 'Watch the co-op crew restore feeders in real time.',
+            media: { kind: 'video', mxc: 'mxc://server/abc123', durationMs: 18000 },
+        }),
+    });
+    assert.equal(good.status, 201);
+    const goodBody = (await good.json()) as {
+        argument: { media?: { kind: string; mxc: string; durationMs?: number } };
+    };
+    assert.equal(goodBody.argument.media?.kind, 'video');
+    assert.equal(goodBody.argument.media?.mxc, 'mxc://server/abc123');
+    assert.equal(goodBody.argument.media?.durationMs, 18000);
+
+    const bad = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: { ...authHeader('@reeler:server'), 'content-type': 'application/json' },
+        body: JSON.stringify({
+            topicId: 'topic-grid-resilience',
+            stance: 'for',
+            body: 'Bad media should be dropped, not rejected.',
+            media: { kind: 'video', mxc: 'not-an-mxc' },
+        }),
+    });
+    assert.equal(bad.status, 201);
+    const badBody = (await bad.json()) as { argument: { media?: unknown } };
+    assert.equal(badBody.argument.media, undefined);
+});
+
 test('coliseum create argument 404s for unknown topic', async () => {
     const response = await app.request('/v1/coliseum/arguments', {
         method: 'POST',

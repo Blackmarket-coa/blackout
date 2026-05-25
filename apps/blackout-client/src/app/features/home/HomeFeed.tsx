@@ -29,11 +29,25 @@ import { useStreak } from './streakState';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
+import type { UnifiedFeedItem } from './unifiedFeedModel';
 import {
     trackHomeSegmentSwitched,
     trackHomeSortChanged,
     type HomeFeedSegment,
 } from './homeFeedTelemetry';
+
+/** Case-insensitive filter over title/subtitle/tags. Empty query is a no-op. */
+function filterFeedByQuery(
+    items: readonly UnifiedFeedItem[],
+    query: string
+): UnifiedFeedItem[] {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return items as UnifiedFeedItem[];
+    return items.filter((item) => {
+        const haystack = [item.title, item.subtitle, ...item.tags].join(' ').toLowerCase();
+        return haystack.includes(trimmed);
+    });
+}
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -305,6 +319,7 @@ export const HomeFeed = (): JSX.Element => {
         [feed.discover, followingIds]
     );
 
+    const [query, setQuery] = useState('');
     // Segmented mode shows one list at a time, so "For You" is the full ranked
     // discover feed (no need to de-dupe against a simultaneously-visible
     // Following section).
@@ -370,6 +385,21 @@ export const HomeFeed = (): JSX.Element => {
                 {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
             </header>
             <TopicChipBar />
+            <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search your feed…"
+                data-testid="home-feed-search"
+                style={{
+                    margin: '8px 16px',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border-default, #374151)',
+                    background: 'var(--bg-input, #0f172a)',
+                    color: 'var(--text-primary, #f8fafc)',
+                }}
+            />
             {segmentsEnabled ? (
                 <div style={controlsRowStyle} data-testid="home-feed-controls">
                     <div style={pillGroupStyle} role="tablist" aria-label="Feed">
@@ -503,7 +533,7 @@ export const HomeFeed = (): JSX.Element => {
                         </div>
                     ) : (
                         <div style={sectionStyle} data-testid="home-feed-list">
-                            {segmentItems.map((item) => (
+                            {filterFeedByQuery(segmentItems, query).map((item) => (
                                 <UnifiedFeedCard key={item.id} item={item} />
                             ))}
                         </div>
@@ -538,7 +568,7 @@ export const HomeFeed = (): JSX.Element => {
                             </div>
                         ) : (
                             <div style={sectionStyle} data-testid="home-feed-list">
-                                {followingItems.map((item) => (
+                                {filterFeedByQuery(followingItems, query).map((item) => (
                                     <UnifiedFeedCard key={item.id} item={item} />
                                 ))}
                             </div>
@@ -551,7 +581,7 @@ export const HomeFeed = (): JSX.Element => {
                         >
                             <header style={sectionLabelStyle}>Discover</header>
                             <div style={sectionStyle} data-testid="home-discover-list">
-                                {discoverItems.map((item) => (
+                                {filterFeedByQuery(discoverItems, query).map((item) => (
                                     <UnifiedFeedCard key={item.id} item={item} />
                                 ))}
                             </div>
