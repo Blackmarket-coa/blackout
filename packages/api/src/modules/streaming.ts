@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/store';
 import type { ClipRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
+import { clipWriteRateLimit } from '../middleware/rate-limit';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
 import { requireDomainCapability, requireAuthenticatedUser } from './authz';
@@ -69,6 +70,23 @@ const clipCreateSchema = z.object({
   visibility: z.enum(['public', 'private', 'member_only']).optional(),
   tags: z.array(z.string()).optional(),
 });
+
+// Partial update: every field optional, but at least one must be present so a
+// no-op PATCH is rejected. creatorId is intentionally not editable (ownership
+// is fixed at creation).
+const clipUpdateSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    mediaPointer: z.string().min(1).optional(),
+    sourceStreamId: z.string().min(1).optional(),
+    thumbnailPointer: z.string().min(1).optional(),
+    durationSeconds: z.number().int().nonnegative().optional(),
+    visibility: z.enum(['public', 'private', 'member_only']).optional(),
+    tags: z.array(z.string()).optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'At least one field must be provided',
+  });
 
 function ensureStream(streamId: string, creatorId: string) {
   return (
@@ -362,7 +380,7 @@ function createStreamingRouter() {
 
   // POST /v1/streaming/clips — create a clip. The body's creatorId must be
   // the caller, and (if set) the source stream must belong to them too.
-  streaming.post('/clips', async (c) => {
+  streaming.post('/clips', clipWriteRateLimit, async (c) => {
     const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
@@ -390,8 +408,34 @@ function createStreamingRouter() {
     return c.json(clipToJson(clip), 201);
   });
 
+  // PATCH /v1/streaming/clips/:clipId — owner-only partial update.
+  streaming.patch('/clips/:clipId', clipWriteRateLimit, async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+
+    const clipId = c.req.param('clipId');
+    const clip = db.getClip(clipId);
+    if (!clip) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
+
+    const subject = requireAuthenticatedUser(c);
+    if (clip.creatorId !== subject) return ownershipForbidden(c);
+
+    const parsed = await readJsonBody(c, clipUpdateSchema);
+    if (parsed instanceof Response) return parsed;
+
+    // Re-pointing a clip at a source stream requires owning that stream too.
+    if (parsed.sourceStreamId) {
+      const sourceStream = db.getStream(parsed.sourceStreamId);
+      if (sourceStream && sourceStream.creatorId !== subject) return ownershipForbidden(c);
+    }
+
+    const updated = db.updateClip(clipId, parsed);
+    if (!updated) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
+    return c.json(clipToJson(updated));
+  });
+
   // DELETE /v1/streaming/clips/:clipId — owner-only.
-  streaming.delete('/clips/:clipId', (c) => {
+  streaming.delete('/clips/:clipId', clipWriteRateLimit, (c) => {
     const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 

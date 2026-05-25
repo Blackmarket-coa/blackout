@@ -1447,6 +1447,22 @@ class InMemoryDb {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const existing = this.clips.get(clipId);
+    if (!existing) return undefined;
+    const record: ClipRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.clips.set(clipId, record);
+    return record;
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -2313,6 +2329,20 @@ class FileBackedDb extends InMemoryDb {
     const created = super.upsertClip(input);
     this.persist();
     return created;
+  }
+
+  override updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const updated = super.updateClip(clipId, patch);
+    if (updated) this.persist();
+    return updated;
   }
 
   override deleteClip(clipId: string): boolean {

@@ -141,3 +141,13 @@ export const authRateLimit = createRateLimit({
   windowMs: 60_000,
   maxRequests: Number.isFinite(authMax) && authMax > 0 ? authMax : 10,
 });
+
+// Mutating clip endpoints (create/update/delete). Reads stay on the global
+// limiter; writes get a tighter per-IP bucket so a single client can't flood
+// the clip store. Override with CLIP_WRITE_RATE_LIMIT_MAX.
+const clipWriteMax = Number.parseInt(process.env.CLIP_WRITE_RATE_LIMIT_MAX ?? '', 10);
+export const clipWriteRateLimit = createRateLimit({
+  bucket: 'clip-write',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(clipWriteMax) && clipWriteMax > 0 ? clipWriteMax : 30,
+});
