@@ -5,7 +5,7 @@ export const streamingPanels: ShellPanelEntry[] = [
     {
         id: 'streaming.sidebar',
         kind: 'sidebar',
-        label: 'Streaming',
+        label: 'Creator Hub',
         to: STREAMING_PATH,
         order: 50,
     },

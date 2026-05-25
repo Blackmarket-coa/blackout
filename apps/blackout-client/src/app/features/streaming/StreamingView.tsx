@@ -1,4 +1,4 @@
-import React, { type CSSProperties, useCallback, useMemo } from 'react';
+import React, { lazy, Suspense, type CSSProperties, useCallback, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import {
     isValidStreamingTab,
@@ -20,6 +20,22 @@ import { KickChatBridges } from '../settings/kick-chat-bridges';
 import { DiscordCompatWebhooks } from '../settings/discord-compat-webhooks';
 import { OutboundEventWebhooks } from '../settings/outbound-event-webhooks';
 import { IntegrationsHealth } from '../settings/integrations-health';
+
+// Hub sections are lazy-loaded so the registry-load path stays
+// jsdom-independent (the clip viewer pulls in Matrix media helpers; the
+// rewards/overview sections pull in the growth/monetization clients).
+const CreatorHubOverview = lazy(() =>
+    import('./sections/CreatorHubOverview').then((mod) => ({ default: mod.CreatorHubOverview }))
+);
+const ClipsDirectory = lazy(() =>
+    import('./sections/ClipsDirectory').then((mod) => ({ default: mod.ClipsDirectory }))
+);
+const CreatorKits = lazy(() =>
+    import('./sections/CreatorKits').then((mod) => ({ default: mod.CreatorKits }))
+);
+const RewardsSection = lazy(() =>
+    import('./sections/RewardsSection').then((mod) => ({ default: mod.RewardsSection }))
+);
 
 const contentStyle: CSSProperties = { minHeight: 0, overflow: 'auto' };
 
@@ -48,7 +64,7 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
         (tab: StreamingTabId) => {
             setTab(tab);
         },
-        [setTab],
+        [setTab]
     );
 
     return (
@@ -58,6 +74,13 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
         >
             <StreamingTabStrip activeTab={activeTab} onSelectTab={handleSelect} />
             <div style={contentStyle}>
+                {activeTab === 'overview' ? (
+                    <div data-testid="streaming-tab-overview">
+                        <Suspense fallback={null}>
+                            <CreatorHubOverview onSelectTab={handleSelect} />
+                        </Suspense>
+                    </div>
+                ) : null}
                 {activeTab === 'live' ? (
                     <div data-testid="streaming-tab-live">
                         <LiveDirectory />
@@ -66,6 +89,27 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                 {activeTab === 'replays' ? (
                     <div data-testid="streaming-tab-replays">
                         <ReplaysDirectory />
+                    </div>
+                ) : null}
+                {activeTab === 'clips' ? (
+                    <div data-testid="streaming-tab-clips">
+                        <Suspense fallback={null}>
+                            <ClipsDirectory />
+                        </Suspense>
+                    </div>
+                ) : null}
+                {activeTab === 'kits' ? (
+                    <div data-testid="streaming-tab-kits">
+                        <Suspense fallback={null}>
+                            <CreatorKits />
+                        </Suspense>
+                    </div>
+                ) : null}
+                {activeTab === 'rewards' ? (
+                    <div data-testid="streaming-tab-rewards">
+                        <Suspense fallback={null}>
+                            <RewardsSection />
+                        </Suspense>
                     </div>
                 ) : null}
                 {activeTab === 'broadcast' ? (

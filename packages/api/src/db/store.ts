@@ -29,6 +29,7 @@ import type {
   StreamRecord,
   StreamSessionRecord,
   StreamModerationRecord,
+  ClipRecord,
   TipRecord,
   CreatorSubscriptionTierRecord,
   CreatorSubscriptionRecord,
@@ -81,6 +82,7 @@ type PersistedState = {
   streams: StreamRecord[];
   streamSessions: StreamSessionRecord[];
   streamModeration: StreamModerationRecord[];
+  clips: ClipRecord[];
   canopyVoiceRooms: CanopyVoiceRoomRecord[];
   voiceRoomParticipants: VoiceRoomParticipantRecord[];
   voiceRoomEvents: VoiceRoomEventRecord[];
@@ -136,6 +138,7 @@ class InMemoryDb {
   streams = new Map<string, StreamRecord>();
   streamSessions = new Map<string, StreamSessionRecord>();
   streamModeration = new Map<string, StreamModerationRecord>();
+  clips = new Map<string, ClipRecord>();
   canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
   voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
   voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
@@ -1431,6 +1434,39 @@ class InMemoryDb {
     return this.streamModeration.get(streamId);
   }
 
+  upsertClip(input: Omit<ClipRecord, 'createdAt' | 'updatedAt'>): ClipRecord {
+    const existing = this.clips.get(input.id);
+    const record: ClipRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? nowIso(),
+      updatedAt: nowIso(),
+    };
+    this.clips.set(record.id, record);
+    return record;
+  }
+
+  getClip(clipId: string): ClipRecord | undefined {
+    return this.clips.get(clipId);
+  }
+
+  deleteClip(clipId: string): boolean {
+    return this.clips.delete(clipId);
+  }
+
+  listClips(options: { creatorId?: string; limit?: number } = {}): ClipRecord[] {
+    const { creatorId, limit } = options;
+    const items = [...this.clips.values()]
+      .filter((clip) => (creatorId ? clip.creatorId === creatorId : true))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return typeof limit === 'number' ? items.slice(0, limit) : items;
+  }
+
+  listClipsBySourceStream(sourceStreamId: string): ClipRecord[] {
+    return [...this.clips.values()]
+      .filter((clip) => clip.sourceStreamId === sourceStreamId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -1910,6 +1946,7 @@ class FileBackedDb extends InMemoryDb {
     this.streams = new Map((parsed.streams ?? []).map((row) => [row.id, row]));
     this.streamSessions = new Map((parsed.streamSessions ?? []).map((row) => [row.id, row]));
     this.streamModeration = new Map((parsed.streamModeration ?? []).map((row) => [row.streamId, row]));
+    this.clips = new Map((parsed.clips ?? []).map((row) => [row.id, row]));
     this.canopyVoiceRooms = new Map((parsed.canopyVoiceRooms ?? []).map((row) => [row.id, row]));
     this.voiceRoomParticipants = new Map((parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row]));
     this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
@@ -2029,6 +2066,7 @@ class FileBackedDb extends InMemoryDb {
       streams: [...this.streams.values()],
       streamSessions: [...this.streamSessions.values()],
       streamModeration: [...this.streamModeration.values()],
+      clips: [...this.clips.values()],
       canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
       voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
       voiceRoomEvents: [...this.voiceRoomEvents.values()],
@@ -2337,6 +2375,18 @@ class FileBackedDb extends InMemoryDb {
     const created = super.upsertStreamModeration(input);
     this.persist();
     return created;
+  }
+
+  override upsertClip(input: Omit<ClipRecord, 'createdAt' | 'updatedAt'>): ClipRecord {
+    const created = super.upsertClip(input);
+    this.persist();
+    return created;
+  }
+
+  override deleteClip(clipId: string): boolean {
+    const deleted = super.deleteClip(clipId);
+    if (deleted) this.persist();
+    return deleted;
   }
 
   override createOrUpdateVoiceRoom(input: {
