@@ -1,11 +1,17 @@
-import React, { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+} from 'react';
 import { useAtom } from 'jotai';
-import type { ColiseumStance, RankedColiseumArgument } from '@blackout/core';
-import {
-    useColiseumTopic,
-    useColiseumVerdict,
-} from '../hooks/useColiseumTopics';
+import type { ColiseumArgumentMedia, ColiseumStance, RankedColiseumArgument } from '@blackout/core';
+import { useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
+import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
+import { uploadMedia } from '../../media/utils/matrixMedia';
 import ColiseumCitationChip from '../ColiseumCitationChip';
 import {
     castColiseumVote as castColiseumVoteDefault,
@@ -17,6 +23,8 @@ import {
 export type DebateTabClient = {
     castColiseumVote: (input: CastColiseumVoteInput) => Promise<unknown>;
     createColiseumArgument: (input: CreateColiseumArgumentInput) => Promise<unknown>;
+    /** Uploads a recorded/picked video and resolves its `mxc://` URI. */
+    uploadArgumentVideo?: (file: File) => Promise<string>;
 };
 
 const defaultClient: DebateTabClient = {
@@ -114,11 +122,15 @@ function ArgumentCard({
             data-coliseum-argument-id={argument.id}
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={stanceTagStyle(argument.stance)}>
-                    {STANCE_LABEL[argument.stance]}
-                </span>
+                <span style={stanceTagStyle(argument.stance)}>{STANCE_LABEL[argument.stance]}</span>
                 {isWinner ? (
-                    <span style={{ fontSize: 12, color: 'var(--accent-primary, #1ABC9C)', fontWeight: 700 }}>
+                    <span
+                        style={{
+                            fontSize: 12,
+                            color: 'var(--accent-primary, #1ABC9C)',
+                            fontWeight: 700,
+                        }}
+                    >
                         🏆 Winner
                     </span>
                 ) : null}
@@ -127,9 +139,7 @@ function ArgumentCard({
                     {Math.round(argument.nuanceScore * 100)}%
                 </span>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {argument.authorId}
-            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{argument.authorId}</div>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>{argument.body}</p>
             {argument.citations.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -179,17 +189,95 @@ function ArgumentCard({
     );
 }
 
+function safeCreateObjectUrl(file: File): string | null {
+    try {
+        if (typeof URL?.createObjectURL !== 'function') return null;
+        return URL.createObjectURL(file);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Best-effort, non-blocking read of a video file's duration. Resolves
+ * `undefined` (rather than rejecting) when metadata can't be loaded — the
+ * field is optional and playback does not depend on it.
+ */
+function readVideoDurationMs(file: File): Promise<number | undefined> {
+    if (typeof document === 'undefined') return Promise.resolve(undefined);
+    const url = safeCreateObjectUrl(file);
+    if (!url) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+        const video = document.createElement('video');
+        let settled = false;
+        const done = (ms?: number) => {
+            if (settled) return;
+            settled = true;
+            URL.revokeObjectURL(url);
+            resolve(ms);
+        };
+        video.preload = 'metadata';
+        video.onloadedmetadata = () =>
+            done(Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined);
+        video.onerror = () => done(undefined);
+        window.setTimeout(() => done(undefined), 8000);
+        video.src = url;
+    });
+}
+
 function ArgumentComposer({
     topicId,
     onCreate,
+    onUploadVideo,
 }: {
     topicId: string;
     onCreate: (input: CreateColiseumArgumentInput) => Promise<void>;
+    onUploadVideo?: (file: File) => Promise<string>;
 }) {
     const [stance, setStance] = useState<ColiseumStance>('for');
     const [body, setBody] = useState('');
     const [pending, setPending] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [videoFile, setVideoFile] = useState<File | null>(null);
+    const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+    const videoDurationRef = useRef<number | undefined>(undefined);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const clearVideo = useCallback(() => {
+        setVideoFile(null);
+        videoDurationRef.current = undefined;
+        setVideoPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+        });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }, []);
+
+    // Revoke the object URL when the component unmounts.
+    useEffect(
+        () => () => {
+            if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+        },
+        [videoPreviewUrl]
+    );
+
+    const onPickVideo = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] ?? null;
+        setError(null);
+        videoDurationRef.current = undefined;
+        setVideoPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return file ? safeCreateObjectUrl(file) : null;
+        });
+        setVideoFile(file);
+        if (file) {
+            // Fire-and-forget; submit uses whatever has resolved by then.
+            void readVideoDurationMs(file).then((ms) => {
+                videoDurationRef.current = ms;
+            });
+        }
+    }, []);
 
     const onSubmit = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -202,15 +290,27 @@ function ArgumentComposer({
             setPending(true);
             setError(null);
             try {
-                await onCreate({ topicId, stance, body: trimmed });
+                let media: ColiseumArgumentMedia | undefined;
+                if (videoFile) {
+                    if (!onUploadVideo) {
+                        throw new Error('Video upload is unavailable right now.');
+                    }
+                    setUploading(true);
+                    const mxc = await onUploadVideo(videoFile);
+                    setUploading(false);
+                    media = { kind: 'video', mxc, durationMs: videoDurationRef.current };
+                }
+                await onCreate({ topicId, stance, body: trimmed, ...(media ? { media } : {}) });
                 setBody('');
+                clearVideo();
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to post argument.');
             } finally {
                 setPending(false);
+                setUploading(false);
             }
         },
-        [body, onCreate, stance, topicId],
+        [body, clearVideo, onCreate, onUploadVideo, stance, topicId, videoFile]
     );
 
     return (
@@ -228,7 +328,9 @@ function ArgumentComposer({
             }}
         >
             <strong style={{ fontSize: 13 }}>Add your argument</strong>
-            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <label
+                style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
+            >
                 Stance
                 <select
                     data-testid="coliseum-debate-composer-stance"
@@ -256,6 +358,66 @@ function ArgumentComposer({
                     color: 'var(--text-primary)',
                 }}
             />
+            {onUploadVideo ? (
+                <div style={{ display: 'grid', gap: 6 }}>
+                    <label
+                        style={{
+                            display: 'grid',
+                            gap: 4,
+                            fontSize: 12,
+                            color: 'var(--text-secondary)',
+                        }}
+                    >
+                        Short video (optional) — record on mobile or attach a clip
+                        <input
+                            ref={fileInputRef}
+                            data-testid="coliseum-debate-composer-video"
+                            type="file"
+                            accept="video/*"
+                            onChange={onPickVideo}
+                        />
+                    </label>
+                    {videoFile ? (
+                        <div
+                            data-testid="coliseum-debate-composer-video-preview"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                fontSize: 12,
+                                color: 'var(--text-secondary)',
+                            }}
+                        >
+                            {videoPreviewUrl ? (
+                                <video
+                                    src={videoPreviewUrl}
+                                    muted
+                                    controls
+                                    style={{ maxHeight: 96, borderRadius: 8 }}
+                                />
+                            ) : null}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {videoFile.name}
+                            </span>
+                            <button
+                                type="button"
+                                data-testid="coliseum-debate-composer-video-remove"
+                                onClick={clearVideo}
+                                style={{
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    border: '1px solid var(--border-default)',
+                                    background: 'transparent',
+                                    color: 'var(--text-primary)',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
             {error ? (
                 <p
                     role="alert"
@@ -279,7 +441,7 @@ function ArgumentComposer({
                     cursor: pending ? 'progress' : 'pointer',
                 }}
             >
-                {pending ? 'Posting…' : 'Post argument'}
+                {uploading ? 'Uploading video…' : pending ? 'Posting…' : 'Post argument'}
             </button>
         </form>
     );
@@ -321,6 +483,13 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
     const { data: verdictData, refetch: refetchVerdict } = useColiseumVerdict(selectedTopicId);
     const [pendingVotes, setPendingVotes] = useState<Record<string, 'up' | 'down' | null>>({});
     const [voteError, setVoteError] = useState<string | null>(null);
+    const mx = useMatrixClientOrNull();
+
+    const uploadVideo = useMemo<((file: File) => Promise<string>) | undefined>(() => {
+        if (client.uploadArgumentVideo) return client.uploadArgumentVideo;
+        if (mx) return (file: File) => uploadMedia(mx, file);
+        return undefined;
+    }, [client, mx]);
 
     const onVote = useCallback(
         async (argumentId: string, direction: 'up' | 'down') => {
@@ -336,7 +505,7 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
                 setPendingVotes((prev) => ({ ...prev, [argumentId]: null }));
             }
         },
-        [client, refetchTopic, refetchVerdict],
+        [client, refetchTopic, refetchVerdict]
     );
 
     const onCreateArgument = useCallback(
@@ -345,7 +514,7 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
             refetchTopic();
             refetchVerdict();
         },
-        [client, refetchTopic, refetchVerdict],
+        [client, refetchTopic, refetchVerdict]
     );
 
     if (!selectedTopicId) {
@@ -405,13 +574,17 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
                     <strong>Community verdict</strong>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
                         Highest cross-cluster consensus among{' '}
-                        {verdictData.verdict.consensusArgumentIds.length} broadly-endorsed
-                        argument{verdictData.verdict.consensusArgumentIds.length === 1 ? '' : 's'}.
+                        {verdictData.verdict.consensusArgumentIds.length} broadly-endorsed argument
+                        {verdictData.verdict.consensusArgumentIds.length === 1 ? '' : 's'}.
                     </div>
                 </section>
             ) : null}
 
-            <ArgumentComposer topicId={selectedTopicId} onCreate={onCreateArgument} />
+            <ArgumentComposer
+                topicId={selectedTopicId}
+                onCreate={onCreateArgument}
+                onUploadVideo={uploadVideo}
+            />
 
             {voteError ? (
                 <div

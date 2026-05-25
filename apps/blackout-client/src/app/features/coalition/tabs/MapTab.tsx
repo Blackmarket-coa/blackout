@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import {
     SPATIAL_LAYER_DEFINITIONS,
     type AidPost,
@@ -16,6 +16,8 @@ import type { NearbyQuery } from '../coalitionClient';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
 
+const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
+
 export interface MapTabProps {
     scope: CoalitionScopeQuery;
 }
@@ -25,12 +27,14 @@ interface PinDetails {
     title: string;
     subtitle: string;
     layer: SpatialLayerKey | 'aid' | 'vendors';
+    latitude: number;
+    longitude: number;
     denId?: string;
 }
 
 export function MapTab({ scope }: MapTabProps) {
     const [activeLayers, setActiveLayers] = useState<Set<SpatialLayerKey>>(
-        () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key)),
+        () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key))
     );
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
     const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
@@ -60,13 +64,19 @@ export function MapTab({ scope }: MapTabProps) {
                     radiusKm: 5,
                 });
             },
-            () => setNearbyError('Could not get your location.'),
+            () => setNearbyError('Could not get your location.')
         );
     };
 
-    const spatialItems = spatialState.data?.items ?? [];
-    const aidPosts = aidState.data?.posts ?? [];
-    const sellerLocations = sellerState.data?.locations ?? [];
+    const pins = useMemo(
+        () =>
+            pinList(
+                spatialState.data?.items ?? [],
+                aidState.data?.posts ?? [],
+                sellerState.data?.locations ?? []
+            ),
+        [spatialState.data, aidState.data, sellerState.data]
+    );
     const myceliumGraph = useMyceliumGraph();
     const myceliumActive = activeLayers.has('mycelium');
 
@@ -80,7 +90,13 @@ export function MapTab({ scope }: MapTabProps) {
     };
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', height: 'min(72vh, 820px)' }}>
+        <div
+            style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 280px',
+                height: 'min(72vh, 820px)',
+            }}
+        >
             <section
                 style={{
                     position: 'relative',
@@ -91,11 +107,39 @@ export function MapTab({ scope }: MapTabProps) {
                 }}
                 data-testid="coalition-map-canvas"
             >
+                <Suspense
+                    fallback={
+                        <div
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                display: 'grid',
+                                placeItems: 'center',
+                                color: 'var(--text-secondary)',
+                                fontSize: 12,
+                            }}
+                        >
+                            Loading map…
+                        </div>
+                    }
+                >
+                    <CoalitionMap
+                        pins={pins}
+                        viewerLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : null}
+                        focusPinId={selectedPin?.id ?? null}
+                        onSelectPin={(id) => {
+                            const pin = pins.find((candidate) => candidate.id === id);
+                            if (pin) setSelectedPin(pin);
+                        }}
+                    />
+                </Suspense>
+
                 <div
                     style={{
                         position: 'absolute',
                         top: 12,
                         left: 12,
+                        zIndex: 2,
                         display: 'flex',
                         gap: 6,
                         flexWrap: 'wrap',
@@ -152,21 +196,6 @@ export function MapTab({ scope }: MapTabProps) {
                     ) : null}
                 </div>
 
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 60,
-                        border: '1px dashed var(--border-default)',
-                        borderRadius: 12,
-                        padding: 12,
-                        color: 'var(--text-secondary)',
-                        fontSize: 12,
-                    }}
-                >
-                    Map preview · attach <code>maplibre-gl</code> to render real tiles. Pin list
-                    shows the current scope.
-                </div>
-
                 {myceliumActive && (
                     <div
                         style={{
@@ -175,6 +204,7 @@ export function MapTab({ scope }: MapTabProps) {
                             display: 'grid',
                             placeItems: 'center',
                             pointerEvents: 'none',
+                            zIndex: 2,
                         }}
                         data-testid="mycelium-overlay-wrap"
                     >
@@ -192,6 +222,8 @@ export function MapTab({ scope }: MapTabProps) {
                                                 ?.memberCount ?? 0
                                         } members`,
                                         layer: 'mycelium',
+                                        latitude: Number.NaN,
+                                        longitude: Number.NaN,
                                         denId: nodeId,
                                     })
                                 }
@@ -200,8 +232,23 @@ export function MapTab({ scope }: MapTabProps) {
                     </div>
                 )}
 
-                <ul style={{ position: 'absolute', bottom: 12, left: 12, right: 12, listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
-                    {pinList(spatialItems, aidPosts, sellerLocations).map((pin) => (
+                <ul
+                    style={{
+                        position: 'absolute',
+                        bottom: 12,
+                        left: 12,
+                        right: 12,
+                        listStyle: 'none',
+                        margin: 0,
+                        padding: 0,
+                        display: 'grid',
+                        gap: 4,
+                        maxHeight: 180,
+                        overflowY: 'auto',
+                        zIndex: 2,
+                    }}
+                >
+                    {pins.map((pin) => (
                         <li key={`${pin.layer}-${pin.id}`}>
                             <button
                                 type="button"
@@ -218,7 +265,13 @@ export function MapTab({ scope }: MapTabProps) {
                                 }}
                             >
                                 <strong style={{ fontSize: 12 }}>{pin.title}</strong>
-                                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
+                                <span
+                                    style={{
+                                        marginLeft: 8,
+                                        fontSize: 11,
+                                        color: 'var(--text-secondary)',
+                                    }}
+                                >
                                     {pin.subtitle}
                                 </span>
                             </button>
@@ -231,7 +284,9 @@ export function MapTab({ scope }: MapTabProps) {
                 {selectedPin ? (
                     <article style={{ display: 'grid', gap: 8 }}>
                         <strong>{selectedPin.title}</strong>
-                        <small style={{ color: 'var(--text-secondary)' }}>{selectedPin.subtitle}</small>
+                        <small style={{ color: 'var(--text-secondary)' }}>
+                            {selectedPin.subtitle}
+                        </small>
                         {selectedPin.denId ? (
                             <a
                                 href={buildCommunitiesPath(null, selectedPin.denId)}
@@ -254,7 +309,7 @@ export function MapTab({ scope }: MapTabProps) {
 function pinList(
     spatial: SpatialFeedItem[],
     aid: AidPost[],
-    sellers: SellerLocation[],
+    sellers: SellerLocation[]
 ): PinDetails[] {
     const pins: PinDetails[] = [];
     for (const item of spatial) {
@@ -263,6 +318,8 @@ function pinList(
             title: item.title,
             subtitle: `${item.layer} · ${item.status}`,
             layer: item.layer,
+            latitude: item.latitude,
+            longitude: item.longitude,
         });
     }
     for (const post of aid) {
@@ -271,6 +328,8 @@ function pinList(
             title: post.title,
             subtitle: `${post.type === 'need' ? 'Need' : 'Offer'} · ${post.urgency}`,
             layer: 'aid',
+            latitude: post.location.latitude,
+            longitude: post.location.longitude,
             denId: post.denId,
         });
     }
@@ -280,6 +339,8 @@ function pinList(
             title: seller.addressLine || seller.sellerId,
             subtitle: `${seller.locationType} · ${seller.city}`,
             layer: 'vendors',
+            latitude: seller.coordinates.latitude,
+            longitude: seller.coordinates.longitude,
         });
     }
     return pins;

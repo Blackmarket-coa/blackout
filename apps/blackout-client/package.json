@@ -64,6 +64,7 @@
     "jotai": "2.6.0",
     "linkify-react": "4.3.2",
     "linkifyjs": "4.3.2",
+    "maplibre-gl": "5.24.0",
     "matrix-js-sdk": "^40.0.0",
     "millify": "6.1.0",
     "pdfjs-dist": "4.9.155",

@@ -5,10 +5,10 @@ import type { ShellPanelEntry } from '../../core/features/types';
 
 const SHELL_DESTINATION_PANEL_IDS = new Set<string>([
     'shell.home',
-    'shell.communities',
-    'shell.create',
-    'shell.market',
-    'shell.inbox',
+    'shell.coalition',
+    'shell.coliseum',
+    'shell.streams',
+    'shell.profile',
 ]);
 
 const BOTTOM_TAB_BAR_STYLE: CSSProperties = {
@@ -22,7 +22,7 @@ const BOTTOM_TAB_BAR_STYLE: CSSProperties = {
 /**
  * Mobile bottom-tab bar. Reads `kind: 'mobile-tab'` panels from the
  * feature registry and filters to the canonical five AppShell destinations
- * (Home / Communities / Create / Market / Inbox) by panel id. Other
+ * (Home / Coalition / Coliseum / Streams / Profile) by panel id. Other
  * features that register mobile-tab entries (e.g. governance for admins)
  * stay registered for legacy surfaces but do not appear in the AppShell
  * bar.
