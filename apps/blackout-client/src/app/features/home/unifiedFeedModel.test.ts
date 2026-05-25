@@ -102,6 +102,34 @@ describe('mergeAndRank', () => {
         const ranked = mergeAndRank(items, { limit: 5 });
         expect(ranked.map((i) => i.id)).toEqual(['coalition:high', 'coalition:low']);
     });
+
+    it('boosts items whose tags match boostTags above higher-scored non-matches', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition([coalition({ id: 'plain', score: 0.6, tags: ['news'] })], NOW),
+            ...mapCoalition([coalition({ id: 'liked', score: 0.5, tags: ['music'] })], NOW),
+        ];
+        const withoutBoost = mergeAndRank(items);
+        expect(withoutBoost.map((i) => i.id)).toEqual(['coalition:plain', 'coalition:liked']);
+
+        const withBoost = mergeAndRank(items, { boostTags: new Set(['music']) });
+        // 0.5 + 0.15 boost = 0.65 > 0.6, so the matching item ranks first.
+        expect(withBoost.map((i) => i.id)).toEqual(['coalition:liked', 'coalition:plain']);
+    });
+
+    it('does not mutate the base score of boosted items', () => {
+        const items = mapCoalition([coalition({ id: 'm', score: 0.5, tags: ['music'] })], NOW);
+        mergeAndRank(items, { boostTags: new Set(['music']) });
+        expect(items[0].score).toBe(0.5);
+    });
+
+    it('leaves ordering unchanged when boostTags is empty', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition([coalition({ id: 'a', score: 0.9, tags: ['x'] })], NOW),
+            ...mapCoalition([coalition({ id: 'b', score: 0.1, tags: ['y'] })], NOW),
+        ];
+        const ranked = mergeAndRank(items, { boostTags: new Set() });
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:a', 'coalition:b']);
+    });
 });
 
 describe('mapWallPosts', () => {

@@ -252,15 +252,36 @@ export const mapWallPosts = (entries: readonly WallEntry[], now: number): WallFe
         };
     });
 
+/** Bonus added to an item's score when it matches a viewer-interest tag. */
+const INTEREST_BOOST = 0.15;
+
+/**
+ * Effective rank score: the item's base score plus a fixed bonus when any of
+ * its tags is in `boostTags`. The base `score` is never mutated, keeping the
+ * helper pure.
+ */
+const effectiveScore = (
+    item: UnifiedFeedItem,
+    boostTags: ReadonlySet<string> | undefined
+): number => {
+    if (!boostTags || boostTags.size === 0) return item.score;
+    return item.tags.some((tag) => boostTags.has(tag))
+        ? clamp01(item.score + INTEREST_BOOST)
+        : item.score;
+};
+
 /**
  * Stable merge: sort by score desc, tiebreak by timestamp desc, dedupe by
- * id (first occurrence wins), then slice to `limit`.
+ * id (first occurrence wins), then slice to `limit`. When `boostTags` is
+ * provided, items whose tags intersect the set rank higher (drives the
+ * onboarding interest picker).
  */
 export const mergeAndRank = (
     items: readonly UnifiedFeedItem[],
-    options: { limit?: number } = {}
+    options: { limit?: number; boostTags?: ReadonlySet<string> } = {}
 ): UnifiedFeedItem[] => {
     const limit = options.limit ?? UNIFIED_FEED_DEFAULT_LIMIT;
+    const { boostTags } = options;
     const seen = new Set<string>();
     const deduped: UnifiedFeedItem[] = [];
     for (const item of items) {
@@ -269,7 +290,9 @@ export const mergeAndRank = (
         deduped.push(item);
     }
     deduped.sort((a, b) => {
-        if (a.score !== b.score) return b.score - a.score;
+        const scoreA = effectiveScore(a, boostTags);
+        const scoreB = effectiveScore(b, boostTags);
+        if (scoreA !== scoreB) return scoreB - scoreA;
         return (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity);
     });
     return deduped.slice(0, limit);

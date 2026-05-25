@@ -24,6 +24,7 @@ import {
 } from '../unifiedFeedModel';
 import type { RoomLike } from '../feedModel';
 import { useFollowedActivity } from './useFollowedActivity';
+import { useDiscoveryInterestTags } from '../discoveryInterests';
 
 const REMOTE_FETCH_LIMIT = 30;
 
@@ -71,6 +72,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
     const streamsEnabled = flags.streamsViewer;
 
     const activity = useFollowedActivity(flags.profile);
+    const boostTags = useDiscoveryInterestTags();
 
     const [remote, setRemote] = useState<RemoteState>({
         streams: [],
@@ -139,8 +141,10 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             ...remote.coliseum,
         ];
 
-        const discover = mergeAndRank(combined);
-        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds));
+        const discover = mergeAndRank(combined, { boostTags });
+        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
+            boostTags,
+        });
         const liveRail = selectLiveRail(discover);
 
         return {
@@ -150,5 +154,5 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, activity, remote]);
+    }, [rooms, activity, remote, boostTags]);
 }

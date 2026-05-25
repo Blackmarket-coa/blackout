@@ -176,6 +176,15 @@ export type FeatureFlags = {
      */
     onboardingDeveloperStep: boolean;
     /**
+     * Familiar-migration onboarding step. When on, the member onboarding
+     * flow gains an interest picker (topic multi-select) and a
+     * find-communities step that seeds default canopy joins, so the Home
+     * "Following" feed is populated on first load. Selected interests are
+     * persisted to `co.bmc.discovery.interests.v1` and boost matching feed
+     * items in `useUnifiedFeed`. Default off.
+     */
+    onboardingInterestPicker: boolean;
+    /**
      * Post-wizard guided spotlight tour of the homepage. When on, the
      * onboarding route navigates to `/` after the wizard completes and
      * `HomeFeed` mounts `HomeTourOverlay` so new beta users are walked
@@ -269,6 +278,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
     onboardingDeveloperStep: false,
+    onboardingInterestPicker: false,
     // On by default: new (incl. invited) users get the Home tour. Env
     // `BLACKOUT_ONBOARDING_HOME_TOUR=false` can still disable it.
     onboardingHomeTour: true,
@@ -527,6 +537,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_TOPICS === 'false') {
             nextFlags.topics = false;
         }
+        if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'true') {
+            nextFlags.onboardingInterestPicker = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
+            nextFlags.onboardingInterestPicker = false;
+        }
         if (env.BLACKOUT_MARKET_TAB === 'true') {
             nextFlags.marketTab = true;
         }
@@ -761,6 +777,12 @@ export const resolveFeatureFlags = (
     if (env.BLACKOUT_TOPICS === 'false') {
         nextFlags.topics = false;
     }
+    if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'true') {
+        nextFlags.onboardingInterestPicker = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
+        nextFlags.onboardingInterestPicker = false;
+    }
     if (env.BLACKOUT_MARKET_TAB === 'true') {
         nextFlags.marketTab = true;
     }
@@ -882,7 +904,9 @@ const collectRuntimeEnv = (): Record<string, string | undefined> => {
         Object.assign(env, process.env as Record<string, string | undefined>);
     }
     try {
-        const meta = (Function('return import.meta')() as { env?: Record<string, string | undefined> }) ?? {};
+        const meta =
+            (Function('return import.meta')() as { env?: Record<string, string | undefined> }) ??
+            {};
         if (meta.env) Object.assign(env, meta.env);
     } catch {
         // ignore — `import.meta` is unavailable in some test contexts.

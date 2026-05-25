@@ -4,18 +4,23 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 export type OnboardingStepId =
     | 'choose_role'
     | 'welcome_context'
+    | 'interest_picker'
+    | 'find_communities'
     | 'community_selection'
     | 'channel_subscription'
     | 'first_contribution'
     | 'developer_tools';
 
-// Canonical step order. The trailing `developer_tools` step is beta-only
-// and surfaced through the `onboardingDeveloperStep` flag — `OnboardingFlow`
-// derives a `visibleSteps` array from this constant rather than mutating
-// it, so persisted v3 indexes remain valid when the flag flips.
+// Canonical step order. The `interest_picker` / `find_communities` steps are
+// gated by `onboardingInterestPicker` and the trailing `developer_tools` step
+// by `onboardingDeveloperStep` — `OnboardingFlow` derives a `visibleSteps`
+// array from this constant rather than mutating it, so a persisted index keeps
+// pointing at a real step when a flag flips.
 export const ONBOARDING_STEP_SEQUENCE: OnboardingStepId[] = [
     'choose_role',
     'welcome_context',
+    'interest_picker',
+    'find_communities',
     'community_selection',
     'channel_subscription',
     'first_contribution',
@@ -35,6 +40,10 @@ export interface OnboardingProgress {
     role?: OnboardingRole;
     communityIntent?: CommunityIntent;
     selectedChannels: string[];
+    /** Topic tags chosen in the interest-picker step. */
+    selectedInterests: string[];
+    /** Canopy ids actually joined in the find-communities step. */
+    seededCanopyIds: string[];
     firstContributionPrompt?: string;
 }
 
@@ -57,6 +66,8 @@ const buildDefaultProgress = (): OnboardingProgress => {
         startedAt: now,
         updatedAt: now,
         selectedChannels: [],
+        selectedInterests: [],
+        seededCanopyIds: [],
     };
 };
 
@@ -85,6 +96,16 @@ const normalizeProgress = (value: unknown): OnboardingProgress => {
         selectedChannels: Array.isArray(entry.selectedChannels)
             ? entry.selectedChannels.filter(
                   (channel): channel is string => typeof channel === 'string'
+              )
+            : [],
+        selectedInterests: Array.isArray(entry.selectedInterests)
+            ? entry.selectedInterests.filter(
+                  (interest): interest is string => typeof interest === 'string'
+              )
+            : [],
+        seededCanopyIds: Array.isArray(entry.seededCanopyIds)
+            ? entry.seededCanopyIds.filter(
+                  (canopyId): canopyId is string => typeof canopyId === 'string'
               )
             : [],
         firstContributionPrompt:
