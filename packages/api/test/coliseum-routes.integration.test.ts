@@ -281,3 +281,81 @@ test('coliseum verdict 404s for unknown topic', async () => {
     });
     assert.equal(response.status, 404);
 });
+
+test('coliseum create argument accepts a valid parentArgumentId (rebuttal)', async () => {
+    const response = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: { ...authHeader('@rebutter:server'), 'content-type': 'application/json' },
+        body: JSON.stringify({
+            topicId: 'topic-grid-resilience',
+            parentArgumentId: 'arg-grid-1',
+            stance: 'against',
+            body: 'The 60% figure excludes the substations that took the longest to restore.',
+        }),
+    });
+    assert.equal(response.status, 201);
+    const body = (await response.json()) as {
+        argument: { id: string; parentArgumentId?: string; topicId: string };
+    };
+    assert.equal(body.argument.parentArgumentId, 'arg-grid-1');
+    assert.equal(body.argument.topicId, 'topic-grid-resilience');
+
+    // Reply shows up in the topic's flat argument list.
+    const detail = await app.request('/v1/coliseum/topics/topic-grid-resilience', {
+        headers: authHeader(),
+    });
+    const detailBody = (await detail.json()) as { arguments: Array<{ id: string }> };
+    assert.ok(detailBody.arguments.some((a) => a.id === body.argument.id));
+});
+
+test('coliseum create argument 404s when parent belongs to another topic', async () => {
+    const response = await app.request('/v1/coliseum/arguments', {
+        method: 'POST',
+        headers: { ...authHeader('@rebutter:server'), 'content-type': 'application/json' },
+        body: JSON.stringify({
+            topicId: 'topic-ai-licensing',
+            parentArgumentId: 'arg-grid-1', // belongs to topic-grid-resilience
+            stance: 'for',
+            body: 'Mismatched parent should 404.',
+        }),
+    });
+    assert.equal(response.status, 404);
+});
+
+test('coliseum reel returns ranked arguments across multiple topics', async () => {
+    const response = await app.request('/v1/coliseum/reel?limit=50', { headers: authHeader() });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+        items: Array<{ id: string; topicId: string; topicTitle: string; score: number }>;
+        nextOffset: number | null;
+    };
+    assert.ok(body.items.length > 0);
+    const topics = new Set(body.items.map((i) => i.topicId));
+    assert.ok(topics.size > 1, 'reel should span more than one topic');
+    for (const item of body.items) {
+        assert.ok(typeof item.topicTitle === 'string' && item.topicTitle.length > 0);
+    }
+    for (let i = 1; i < body.items.length; i += 1) {
+        assert.ok(body.items[i - 1]!.score >= body.items[i]!.score);
+    }
+});
+
+test('coliseum reel respects limit and offset', async () => {
+    const first = await app.request('/v1/coliseum/reel?limit=1&offset=0', { headers: authHeader() });
+    const firstBody = (await first.json()) as {
+        items: Array<{ id: string }>;
+        nextOffset: number | null;
+    };
+    assert.equal(firstBody.items.length, 1);
+    assert.equal(firstBody.nextOffset, 1);
+
+    const second = await app.request('/v1/coliseum/reel?limit=1&offset=1', { headers: authHeader() });
+    const secondBody = (await second.json()) as { items: Array<{ id: string }> };
+    assert.equal(secondBody.items.length, 1);
+    assert.notEqual(firstBody.items[0]!.id, secondBody.items[0]!.id);
+});
+
+test('coliseum reel rejects bad limit', async () => {
+    const response = await app.request('/v1/coliseum/reel?limit=999', { headers: authHeader() });
+    assert.equal(response.status, 400);
+});

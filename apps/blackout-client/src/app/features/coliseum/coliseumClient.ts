@@ -2,6 +2,7 @@ import type {
     ColiseumArgument,
     ColiseumArgumentMedia,
     ColiseumCitation,
+    ColiseumLiveSession,
     ColiseumNewsAnchor,
     ColiseumStance,
     ColiseumTopic,
@@ -9,6 +10,7 @@ import type {
     ColiseumTopicStatus,
     ColiseumVote,
     ColiseumWinnerVerdictResult,
+    PinnedEvidence,
     RankedColiseumArgument,
 } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
@@ -73,7 +75,7 @@ export interface FetchColiseumTopicsOptions {
 export function fetchColiseumTopics(
     scope: ColiseumScopeQuery,
     options: FetchColiseumTopicsOptions = {},
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<ColiseumTopicsResponse> {
     const path = appendQuery(`${COLISEUM_BASE}/topics`, {
         canopyId: scope.canopyId,
@@ -88,21 +90,21 @@ export function fetchColiseumTopics(
 
 export function fetchColiseumTopic(
     topicId: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<ColiseumTopicDetailResponse> {
     return getJson<ColiseumTopicDetailResponse>(
         `${COLISEUM_BASE}/topics/${encodeURIComponent(topicId)}`,
-        token,
+        token
     );
 }
 
 export function fetchColiseumVerdict(
     topicId: string,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<ColiseumVerdictResponse> {
     return getJson<ColiseumVerdictResponse>(
         `${COLISEUM_BASE}/verdict/${encodeURIComponent(topicId)}`,
-        token,
+        token
     );
 }
 
@@ -119,13 +121,15 @@ export interface CreateColiseumTopicInput {
 
 export function createColiseumTopic(
     input: CreateColiseumTopicInput,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<{ topic: ColiseumTopic }> {
     return postJson<{ topic: ColiseumTopic }>(`${COLISEUM_BASE}/topics`, input, token);
 }
 
 export interface CreateColiseumArgumentInput {
     topicId: string;
+    /** When set, this argument rebuts the given argument on the same topic. */
+    parentArgumentId?: string;
     stance: ColiseumStance;
     stanceWeight?: number;
     body: string;
@@ -135,7 +139,7 @@ export interface CreateColiseumArgumentInput {
 
 export function createColiseumArgument(
     input: CreateColiseumArgumentInput,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<ColiseumArgumentResponse> {
     return postJson<ColiseumArgumentResponse>(`${COLISEUM_BASE}/arguments`, input, token);
 }
@@ -148,12 +152,153 @@ export interface CastColiseumVoteInput {
 
 export function castColiseumVote(
     input: CastColiseumVoteInput,
-    token: string | null = readBlackoutApiToken(),
+    token: string | null = readBlackoutApiToken()
 ): Promise<ColiseumVoteResponse> {
     const { argumentId, ...body } = input;
     return postJson<ColiseumVoteResponse>(
         `${COLISEUM_BASE}/arguments/${encodeURIComponent(argumentId)}/vote`,
         body,
-        token,
+        token
+    );
+}
+
+// --- Cross-topic discourse reel (Feature 3) ---
+
+export interface ColiseumReelItem extends RankedColiseumArgument {
+    topicId: string;
+    topicTitle: string;
+}
+
+export interface ColiseumReelResponse {
+    generatedAt: string;
+    items: ColiseumReelItem[];
+    nextOffset: number | null;
+}
+
+export interface FetchColiseumReelOptions {
+    limit?: number;
+    offset?: number;
+}
+
+export function fetchColiseumReel(
+    options: FetchColiseumReelOptions = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<ColiseumReelResponse> {
+    const path = appendQuery(`${COLISEUM_BASE}/reel`, {
+        limit: options.limit !== undefined ? String(options.limit) : undefined,
+        offset: options.offset !== undefined ? String(options.offset) : undefined,
+    });
+    return getJson<ColiseumReelResponse>(path, token);
+}
+
+// --- Live debate sessions (Feature 2) ---
+
+export interface ColiseumLiveSessionResponse {
+    session: ColiseumLiveSession | null;
+}
+
+export interface ColiseumLiveTokenResponse {
+    token: string;
+    expiresAt: string;
+    apiKey: string;
+    roomId: string;
+    canPublish: boolean;
+}
+
+export function fetchColiseumLiveSession(
+    topicId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ColiseumLiveSessionResponse> {
+    return getJson<ColiseumLiveSessionResponse>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(topicId)}`,
+        token
+    );
+}
+
+export function startColiseumLiveSession(
+    input: { topicId: string; roomId: string },
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions`,
+        input,
+        token
+    );
+}
+
+export function requestColiseumSpeak(
+    sessionId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/speak`,
+        {},
+        token
+    );
+}
+
+export function grantColiseumSpeak(
+    sessionId: string,
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/speak/${encodeURIComponent(
+            userId
+        )}/grant`,
+        {},
+        token
+    );
+}
+
+export function revokeColiseumSpeak(
+    sessionId: string,
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/speak/${encodeURIComponent(
+            userId
+        )}/revoke`,
+        {},
+        token
+    );
+}
+
+export function pinColiseumEvidence(
+    sessionId: string,
+    evidence: PinnedEvidence,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    const body =
+        evidence.kind === 'argument'
+            ? { argumentId: evidence.argumentId }
+            : { citation: evidence.citation };
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/pin`,
+        body,
+        token
+    );
+}
+
+export function endColiseumLiveSession(
+    sessionId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<{ session: ColiseumLiveSession }> {
+    return postJson<{ session: ColiseumLiveSession }>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/end`,
+        {},
+        token
+    );
+}
+
+export function fetchColiseumLiveToken(
+    sessionId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ColiseumLiveTokenResponse> {
+    return postJson<ColiseumLiveTokenResponse>(
+        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/token`,
+        {},
+        token
     );
 }

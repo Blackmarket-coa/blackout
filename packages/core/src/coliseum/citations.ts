@@ -36,7 +36,7 @@ export const COLISEUM_CITATION_KINDS: readonly ColiseumCitationKind[] = [
     'proposal',
 ] as const;
 
-const ROOM_ID_RE = /^![^:]+:[^:]+$/;
+export const ROOM_ID_RE = /^![^:]+:[^:]+$/;
 const MXC_RE = /^mxc:\/\/[^/]+\/[A-Za-z0-9_-]+$/;
 const HTTP_URL_RE = /^https?:\/\/[^\s]+$/i;
 
