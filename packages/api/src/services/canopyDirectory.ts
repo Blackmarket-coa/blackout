@@ -1,14 +1,9 @@
+import { db } from '../db/store';
+import type { CanopyDirectoryEntryRecord } from '../db/types';
+
 export type CanopyFederationTier = 'local' | 'zone' | 'global';
 
-export interface CanopyDirectoryEntry {
-    canopyId: string;
-    name: string;
-    summary?: string;
-    federationTier: CanopyFederationTier;
-    indexedAt: string;
-}
-
-const canopies = new Map<string, CanopyDirectoryEntry>();
+export type CanopyDirectoryEntry = CanopyDirectoryEntryRecord;
 
 export interface UpsertCanopyInput {
     canopyId: string;
@@ -18,33 +13,32 @@ export interface UpsertCanopyInput {
 }
 
 export function upsertCanopy(input: UpsertCanopyInput): CanopyDirectoryEntry {
-    const entry: CanopyDirectoryEntry = {
+    return db.upsertCanopyDirectoryEntry({
         canopyId: input.canopyId,
         name: input.name,
         summary: input.summary,
         federationTier: input.federationTier ?? 'local',
-        indexedAt: new Date().toISOString(),
-    };
-    canopies.set(input.canopyId, entry);
-    return entry;
+    });
 }
 
 export function getCanopy(canopyId: string): CanopyDirectoryEntry | null {
-    return canopies.get(canopyId) ?? null;
+    return db.getCanopyDirectoryEntry(canopyId) ?? null;
 }
 
 export function hasCanopy(canopyId: string): boolean {
-    return canopies.has(canopyId);
+    return db.getCanopyDirectoryEntry(canopyId) !== undefined;
 }
 
 export function listCanopies(filter: { federationTier?: CanopyFederationTier } = {}): CanopyDirectoryEntry[] {
-    const all = [...canopies.values()];
+    const all = db.listCanopyDirectoryEntries();
     const filtered = filter.federationTier
         ? all.filter((entry) => entry.federationTier === filter.federationTier)
         : all;
-    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function __resetCanopyDirectoryForTests(): void {
-    canopies.clear();
+    for (const entry of db.listCanopyDirectoryEntries()) {
+        db.canopyDirectoryEntries.delete(entry.canopyId);
+    }
 }
