@@ -4,12 +4,18 @@ import type { InstallScope } from '@blackout/core';
 import type { PluginManifest } from '@blackout/sdk';
 import {
     currentInstallScopeAtom,
+    effectiveInstallScopeAtom,
     installScopesEqual,
     installVisibleInScope,
     installedPluginsAtom,
     installedPluginsForScopeAtom,
+    navigationInstallScopeAtom,
     type InstalledPluginRecord,
 } from '../../../../src/app/features/monetization/install/installedPluginsAtom';
+import {
+    selectedRoomIdAtom,
+    selectedSpaceIdAtom,
+} from '../../../../src/app/state/navigation';
 
 const baseManifest: PluginManifest = {
     id: 'com.example.demo',
@@ -79,6 +85,57 @@ describe('installedPluginsForScopeAtom', () => {
             record('other-den', otherDen),
         ]);
         store.set(currentInstallScopeAtom, den);
+        expect(store.get(installedPluginsForScopeAtom).map((r) => r.manifest.id).sort()).toEqual([
+            'global',
+            'in-den',
+        ]);
+    });
+});
+
+describe('navigationInstallScopeAtom', () => {
+    it('is null with no room or space selected', () => {
+        const store = createStore();
+        expect(store.get(navigationInstallScopeAtom)).toBeNull();
+    });
+
+    it('derives a den scope from the selected room', () => {
+        const store = createStore();
+        store.set(selectedRoomIdAtom, 'den-1');
+        expect(store.get(navigationInstallScopeAtom)).toEqual({ type: 'den', id: 'den-1' });
+    });
+
+    it('falls back to a coalition scope from the selected space', () => {
+        const store = createStore();
+        store.set(selectedSpaceIdAtom, 'canopy-9');
+        expect(store.get(navigationInstallScopeAtom)).toEqual({ type: 'coalition', id: 'canopy-9' });
+    });
+
+    it('prefers the den (room) over the coalition (space) when both are set', () => {
+        const store = createStore();
+        store.set(selectedSpaceIdAtom, 'canopy-9');
+        store.set(selectedRoomIdAtom, 'den-1');
+        expect(store.get(navigationInstallScopeAtom)).toEqual({ type: 'den', id: 'den-1' });
+    });
+});
+
+describe('effectiveInstallScopeAtom', () => {
+    it('uses navigation scope when no explicit override is set', () => {
+        const store = createStore();
+        store.set(selectedRoomIdAtom, 'den-1');
+        expect(store.get(effectiveInstallScopeAtom)).toEqual({ type: 'den', id: 'den-1' });
+    });
+
+    it('lets an explicit override win over navigation', () => {
+        const store = createStore();
+        store.set(selectedRoomIdAtom, 'den-1');
+        store.set(currentInstallScopeAtom, { type: 'creator', id: 'me' });
+        expect(store.get(effectiveInstallScopeAtom)).toEqual({ type: 'creator', id: 'me' });
+    });
+
+    it('drives installedPluginsForScopeAtom straight from navigation', () => {
+        const store = createStore();
+        store.set(installedPluginsAtom, [record('global'), record('in-den', den), record('other', otherDen)]);
+        store.set(selectedRoomIdAtom, 'den-1');
         expect(store.get(installedPluginsForScopeAtom).map((r) => r.manifest.id).sort()).toEqual([
             'global',
             'in-den',

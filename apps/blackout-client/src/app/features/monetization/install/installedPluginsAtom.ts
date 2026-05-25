@@ -2,6 +2,7 @@ import { atom } from 'jotai';
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { InstallScope } from '@blackout/core';
 import type { PluginCapability, PluginManifest } from '@blackout/sdk';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
 
@@ -71,12 +72,34 @@ export const installedPluginByIdAtom = atom((get) => {
 });
 
 /**
- * The scope the shell is currently presenting (a den, coalition, creator
- * surface, or the user's own space). `null` means "no scope filter" — the
- * default, which preserves the pre-Phase-1 behavior of showing every
- * installed plugin everywhere.
+ * Explicit override for the current install scope. `null` (the default) means
+ * "derive it from navigation" via `effectiveInstallScopeAtom`. Set this only
+ * when a surface needs to force a scope that the route can't express (e.g. a
+ * creator-studio panel) or in tests.
  */
 export const currentInstallScopeAtom = atom<InstallScope | null>(null);
+
+/**
+ * Scope inferred from where the shell currently is, using the existing
+ * navigation atoms: an open den (Matrix room) is a `den` scope, otherwise an
+ * open canopy (Matrix space / community) is a `coalition` scope, otherwise
+ * `null` (home / profile / user-global — no filtering).
+ */
+export const navigationInstallScopeAtom = atom<InstallScope | null>((get) => {
+    const denId = get(selectedRoomIdAtom);
+    if (denId) return { type: 'den', id: denId };
+    const coalitionId = get(selectedSpaceIdAtom);
+    if (coalitionId) return { type: 'coalition', id: coalitionId };
+    return null;
+});
+
+/**
+ * The scope plugin surfaces actually filter against: an explicit override when
+ * one is set, otherwise the navigation-derived scope. `null` means no filter.
+ */
+export const effectiveInstallScopeAtom = atom<InstallScope | null>((get) => {
+    return get(currentInstallScopeAtom) ?? get(navigationInstallScopeAtom);
+});
 
 export function installScopesEqual(a: InstallScope | undefined | null, b: InstallScope | undefined | null): boolean {
     if (!a || !b) return false;
@@ -97,9 +120,9 @@ export function installVisibleInScope(
     return installScopesEqual(record.scope, currentScope);
 }
 
-/** Installed plugins visible in the current scope (see `installVisibleInScope`). */
+/** Installed plugins visible in the effective scope (see `installVisibleInScope`). */
 export const installedPluginsForScopeAtom = atom((get) => {
-    const currentScope = get(currentInstallScopeAtom);
+    const currentScope = get(effectiveInstallScopeAtom);
     return get(installedPluginsAtom).filter((record) => installVisibleInScope(record, currentScope));
 });
 
