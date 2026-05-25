@@ -20,8 +20,26 @@ import {
     type ColiseumWinnerVerdictResult,
     type RankedColiseumArgument,
 } from '@blackout/core';
+import { recordReputationEvent } from './reputationStore';
 
 const NOW_ISO = () => new Date().toISOString();
+
+/**
+ * An up-vote endorses the argument's author. Reputation is credited in the
+ * topic's subject area, at most once per (voter, argument) so flipping a vote
+ * never inflates the author's standing.
+ */
+function awardEndorsement(argumentId: string, voterId: string): void {
+    const argument = argumentStore.get(argumentId);
+    if (!argument || argument.authorId === voterId) return;
+    const topic = topicStore.get(argument.topicId);
+    recordReputationEvent({
+        userId: argument.authorId,
+        type: 'argument_endorsed',
+        subject: topic?.category,
+        dedupeKey: `endorse:${voterId}:${argumentId}`,
+    });
+}
 
 interface TopicSeed {
     id: string;
@@ -244,6 +262,9 @@ function seedAll(): void {
     for (const vote of seedVotes) {
         voteStore.set(`${vote.argumentId}::${vote.voterId}::${vote.createdAt}`, vote);
         voteIndex.set(voteKey(vote.argumentId, vote.voterId), vote);
+        if (vote.direction === 'up') {
+            awardEndorsement(vote.argumentId, vote.voterId);
+        }
     }
     const topicIds = new Set([...argumentStore.values()].map((a) => a.topicId));
     for (const topicId of topicIds) {
@@ -390,6 +411,9 @@ export function castVote(input: CastVoteInput, nowMs: number = Date.now()): Cast
     voteIndex.set(indexKey, vote);
     recomputeArgumentScores(argument.topicId, nowMs);
     recomputeTopicHeat(argument.topicId, nowMs);
+    if (vote.direction === 'up') {
+        awardEndorsement(vote.argumentId, vote.voterId);
+    }
     const updated = argumentStore.get(argument.id);
     if (!updated) return null;
     return { vote, argument: updated };
