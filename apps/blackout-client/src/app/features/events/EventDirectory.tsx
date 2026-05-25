@@ -11,6 +11,25 @@ import {
     type RoomWithStateLike,
 } from './eventModel';
 import { EVENT_STATE_TYPE } from './eventSchema';
+import EventCalendar from './EventCalendar';
+
+type EventViewMode = 'list' | 'calendar';
+
+const toggleRowStyle: CSSProperties = {
+    display: 'flex',
+    gap: 6,
+    padding: '0 16px 8px',
+};
+
+const toggleButtonStyle = (active: boolean): CSSProperties => ({
+    border: '1px solid var(--border-default, #374151)',
+    borderRadius: 999,
+    padding: '4px 12px',
+    fontSize: 12,
+    cursor: 'pointer',
+    background: active ? 'var(--accent-primary, #1ABC9C)' : 'var(--bg-surface, #0f172a)',
+    color: active ? '#0a1a0f' : 'var(--text-primary, #f8fafc)',
+});
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -149,6 +168,7 @@ const adaptRoom = (room: {
 export const EventDirectory = (): JSX.Element => {
     const joinedRooms = useAtomValue(joinedRoomsAtom);
     const [now, setNow] = useState(() => Date.now());
+    const [viewMode, setViewMode] = useState<EventViewMode>('list');
 
     useEffect(() => {
         const id = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -178,7 +198,32 @@ export const EventDirectory = (): JSX.Element => {
                     here.
                 </p>
             ) : (
-                <div data-testid="event-directory-list">
+                <>
+                    <div style={toggleRowStyle} role="tablist" aria-label="Event view">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={viewMode === 'list'}
+                            data-testid="event-view-list"
+                            style={toggleButtonStyle(viewMode === 'list')}
+                            onClick={() => setViewMode('list')}
+                        >
+                            List
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={viewMode === 'calendar'}
+                            data-testid="event-view-calendar"
+                            style={toggleButtonStyle(viewMode === 'calendar')}
+                            onClick={() => setViewMode('calendar')}
+                        >
+                            Calendar
+                        </button>
+                    </div>
+                    {viewMode === 'calendar' ? <EventCalendar items={items} /> : null}
+                    {viewMode === 'list' ? (
+                        <div data-testid="event-directory-list">
                     {upcoming.length > 0 ? (
                         <section style={sectionStyle} data-bucket="upcoming">
                             <header style={sectionLabelStyle}>Upcoming</header>
@@ -195,7 +240,9 @@ export const EventDirectory = (): JSX.Element => {
                             ))}
                         </section>
                     ) : null}
-                </div>
+                        </div>
+                    ) : null}
+                </>
             )}
         </section>
     );

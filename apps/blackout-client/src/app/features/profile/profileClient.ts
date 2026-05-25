@@ -1,8 +1,10 @@
+import type { ReputationProfile } from '@blackout/core';
 import { createAuthorizedApiClient } from '../../sdk/client';
 import { readBlackoutApiToken } from '../monetization/marketplace/useMarketplaceAuth';
 import type { BmcProfileEvent, MemberProfile } from './profileTypes';
 
 const PROFILE_BASE = '/v1/profile';
+const REPUTATION_BASE = '/v1/reputation';
 
 export interface SaveProfileInput {
     displayName?: string;
@@ -109,6 +111,22 @@ export function postWall(
     return postJson<WallPost>(
         `${PROFILE_BASE}/${encodeURIComponent(userId)}/wall`,
         { body },
+        token
+    );
+}
+
+export interface FetchReputationResponse {
+    userId: string;
+    generatedAt: string;
+    reputation: ReputationProfile;
+}
+
+export function fetchReputation(
+    userId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<FetchReputationResponse> {
+    return getJson<FetchReputationResponse>(
+        `${REPUTATION_BASE}/${encodeURIComponent(userId)}`,
         token
     );
 }

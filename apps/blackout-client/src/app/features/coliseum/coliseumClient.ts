@@ -1,5 +1,6 @@
 import type {
     ColiseumArgument,
+    ColiseumArgumentMedia,
     ColiseumCitation,
     ColiseumNewsAnchor,
     ColiseumStance,
@@ -129,6 +130,7 @@ export interface CreateColiseumArgumentInput {
     stanceWeight?: number;
     body: string;
     citations?: ColiseumCitation[];
+    media?: ColiseumArgumentMedia;
 }
 
 export function createColiseumArgument(

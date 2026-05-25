@@ -8,7 +8,7 @@ import {
 } from '../../state/streaming';
 import StreamingTabStrip from './StreamingTabStrip';
 import StaggeredMount from './StaggeredMount';
-import { LiveDirectory } from '../streams';
+import { LiveDirectory, ReplaysDirectory } from '../streams';
 import { LinkedAccounts } from '../settings/linked-accounts';
 import { SimulcastDestinations } from '../settings/simulcast-destinations';
 import { ObsWsPasswords } from '../settings/obs-ws-passwords';
@@ -61,6 +61,11 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                 {activeTab === 'live' ? (
                     <div data-testid="streaming-tab-live">
                         <LiveDirectory />
+                    </div>
+                ) : null}
+                {activeTab === 'replays' ? (
+                    <div data-testid="streaming-tab-replays">
+                        <ReplaysDirectory />
                     </div>
                 ) : null}
                 {activeTab === 'broadcast' ? (

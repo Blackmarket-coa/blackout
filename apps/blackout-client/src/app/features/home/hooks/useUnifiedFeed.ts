@@ -6,24 +6,31 @@ import { runtimeFeatureFlags } from '../../../core/features/featureFlags';
 import { listStreams } from '../../streams/streamsClient';
 import { fetchCoalitionFeed } from '../../coalition/coalitionClient';
 import { fetchColiseumTopics } from '../../coliseum/coliseumClient';
+import { fetchListings } from '../../monetization/marketplace/marketplaceClient';
+import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import {
     mapCoalition,
     mapColiseum,
     mapDens,
+    mapMarketplace,
     mapStatuses,
     mapStreams,
     mapWallPosts,
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
+    withSeriesBadges,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
+    type FeedSort,
+    type MarketplaceFeedItem,
     type StreamFeedItem,
     type UnifiedFeedItem,
     type UnifiedFeedSource,
 } from '../unifiedFeedModel';
 import type { RoomLike } from '../feedModel';
 import { useFollowedActivity } from './useFollowedActivity';
+import { useDiscoveryInterestTags } from '../discoveryInterests';
 
 const REMOTE_FETCH_LIMIT = 30;
 
@@ -39,6 +46,7 @@ interface RemoteState {
     streams: StreamFeedItem[];
     coalition: CoalitionFeedCardItem[];
     coliseum: ColiseumFeedCardItem[];
+    marketplace: MarketplaceFeedItem[];
     loading: boolean;
     errorsBySource: Partial<Record<UnifiedFeedSource, string>>;
 }
@@ -62,20 +70,23 @@ const collectJoinedCanopyIds = (rooms: readonly RoomLike[]): Set<string> => {
     return ids;
 };
 
-export function useUnifiedFeed(): UnifiedFeedResult {
+export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
     // by `streamsViewer`. Gate the source on it so we never emit dead links
     // when the viewer route isn't mounted.
     const streamsEnabled = flags.streamsViewer;
+    const marketplaceEnabled = flags.marketTab;
 
     const activity = useFollowedActivity(flags.profile);
+    const boostTags = useDiscoveryInterestTags();
 
     const [remote, setRemote] = useState<RemoteState>({
         streams: [],
         coalition: [],
         coliseum: [],
+        marketplace: [],
         loading: true,
         errorsBySource: {},
     });
@@ -85,15 +96,21 @@ export function useUnifiedFeed(): UnifiedFeedResult {
         setRemote((prev) => ({ ...prev, loading: true }));
         void (async () => {
             const now = Date.now();
-            const [streamsResult, coalitionResult, coliseumResult] = await Promise.allSettled([
-                streamsEnabled ? listStreams({ limit: REMOTE_FETCH_LIMIT }) : Promise.resolve(null),
-                flags.coalition
-                    ? fetchCoalitionFeed({}, { limit: REMOTE_FETCH_LIMIT })
-                    : Promise.resolve(null),
-                flags.coliseum
-                    ? fetchColiseumTopics({}, { limit: REMOTE_FETCH_LIMIT })
-                    : Promise.resolve(null),
-            ]);
+            const [streamsResult, coalitionResult, coliseumResult, marketplaceResult] =
+                await Promise.allSettled([
+                    streamsEnabled
+                        ? listStreams({ limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    flags.coalition
+                        ? fetchCoalitionFeed({}, { limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    flags.coliseum
+                        ? fetchColiseumTopics({}, { limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    marketplaceEnabled
+                        ? fetchListings({}, readBlackoutApiToken())
+                        : Promise.resolve(null),
+                ]);
             if (cancelled) return;
 
             const errorsBySource: Partial<Record<UnifiedFeedSource, string>> = {};
@@ -115,13 +132,26 @@ export function useUnifiedFeed(): UnifiedFeedResult {
                     : [];
             if (coliseumResult.status === 'rejected')
                 errorsBySource.coliseum = errorMessage(coliseumResult.reason);
+            const marketplace =
+                marketplaceResult.status === 'fulfilled' && marketplaceResult.value
+                    ? mapMarketplace(marketplaceResult.value, now)
+                    : [];
+            if (marketplaceResult.status === 'rejected')
+                errorsBySource.marketplace = errorMessage(marketplaceResult.reason);
 
-            setRemote({ streams, coalition, coliseum, loading: false, errorsBySource });
+            setRemote({
+                streams,
+                coalition,
+                coliseum,
+                marketplace,
+                loading: false,
+                errorsBySource,
+            });
         })();
         return () => {
             cancelled = true;
         };
-    }, [streamsEnabled, flags.coalition, flags.coliseum]);
+    }, [streamsEnabled, marketplaceEnabled, flags.coalition, flags.coliseum]);
 
     return useMemo(() => {
         const now = Date.now();
@@ -130,17 +160,23 @@ export function useUnifiedFeed(): UnifiedFeedResult {
         const wallItems = mapWallPosts(activity.walls, now);
         const joinedCanopyIds = collectJoinedCanopyIds(rooms as unknown as RoomLike[]);
 
-        const combined: UnifiedFeedItem[] = [
+        const merged: UnifiedFeedItem[] = [
             ...denItems,
             ...statusItems,
             ...wallItems,
             ...remote.streams,
             ...remote.coalition,
             ...remote.coliseum,
+            ...remote.marketplace,
         ];
+        const combined = flags.seriesTag ? withSeriesBadges(merged) : merged;
 
-        const discover = mergeAndRank(combined);
-        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds));
+        const discover = mergeAndRank(combined, { boostTags, sort, now });
+        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
+            boostTags,
+            sort,
+            now,
+        });
         const liveRail = selectLiveRail(discover);
 
         return {
@@ -150,5 +186,5 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, activity, remote]);
+    }, [rooms, activity, remote, boostTags, sort]);
 }

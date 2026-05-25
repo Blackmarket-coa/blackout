@@ -5,17 +5,25 @@
  * partition them client-side. Kept dependency-light (no matrix-js-sdk,
  * no React) so it unit-tests cleanly, mirroring `feedModel.ts`.
  */
-import type { CoalitionFeedItem, ColiseumTopic } from '@blackout/core';
+import type { CoalitionFeedItem, ColiseumTopic, NormalizedListing } from '@blackout/core';
 import {
     buildCommunitiesPath,
     buildLivePath,
     COALITION_PATH,
     COLISEUM_PATH,
+    MARKET_PATH,
 } from '../../pages/paths';
 import { buildHomeFeed, type RoomLike } from './feedModel';
 import type { StreamSummary } from '../streams/streamsClient';
 
-export type UnifiedFeedSource = 'den' | 'stream' | 'coalition' | 'coliseum' | 'status' | 'wall';
+export type UnifiedFeedSource =
+    | 'den'
+    | 'stream'
+    | 'coalition'
+    | 'coliseum'
+    | 'status'
+    | 'wall'
+    | 'marketplace';
 
 interface UnifiedFeedItemBase {
     /** Unique across sources: `${source}:${rawId}`. */
@@ -62,6 +70,11 @@ export interface WallFeedItem extends UnifiedFeedItemBase {
     source: 'wall';
     authorId: string;
 }
+export interface MarketplaceFeedItem extends UnifiedFeedItemBase {
+    source: 'marketplace';
+    priceCents: number;
+    currency: string;
+}
 
 export type UnifiedFeedItem =
     | DenFeedItem
@@ -69,7 +82,8 @@ export type UnifiedFeedItem =
     | CoalitionFeedCardItem
     | ColiseumFeedCardItem
     | StatusFeedItem
-    | WallFeedItem;
+    | WallFeedItem
+    | MarketplaceFeedItem;
 
 /** Lightweight projection of a profile status for the feed. */
 export interface StatusEntry {
@@ -252,15 +266,96 @@ export const mapWallPosts = (entries: readonly WallEntry[], now: number): WallFe
         };
     });
 
+const formatPrice = (priceCents: number, currency: string): string => {
+    const amount = (priceCents / 100).toFixed(2);
+    return currency.toUpperCase() === 'USD' ? `$${amount}` : `${amount} ${currency.toUpperCase()}`;
+};
+
+export const mapMarketplace = (
+    listings: readonly NormalizedListing[],
+    now: number
+): MarketplaceFeedItem[] =>
+    listings.map((listing) => ({
+        id: `marketplace:${listing.providerId}:${listing.providerListingId}`,
+        source: 'marketplace',
+        priceCents: listing.priceCents,
+        currency: listing.currency,
+        title: listing.title,
+        subtitle: `${formatPrice(listing.priceCents, listing.currency)} · ${listing.category}`,
+        canopyId: null,
+        denId: null,
+        // Listings carry no timestamp; treat as "now" with a modest fixed weight
+        // so they surface in Discover without dominating time-ranked activity.
+        timestamp: now,
+        score: 0.4,
+        href: MARKET_PATH,
+        mediaUrl: listing.mediaUrls[0],
+        tags: listing.tags ?? [],
+    }));
+
+/** Bonus added to an item's score when it matches a viewer-interest tag. */
+const INTEREST_BOOST = 0.15;
+
 /**
- * Stable merge: sort by score desc, tiebreak by timestamp desc, dedupe by
- * id (first occurrence wins), then slice to `limit`.
+ * Feed sort modes, mirroring conventions migrants already know:
+ *   - hot: trending — base score blended with recency (Reddit "Hot").
+ *   - new: strictly newest-first (Reddit "New").
+ *   - top: highest base score regardless of age (Reddit "Top").
+ * Absent → behaves like `top` (pure score desc), the historical default.
+ */
+export type FeedSort = 'hot' | 'new' | 'top';
+
+const HOT_SCORE_WEIGHT = 0.7;
+const HOT_RECENCY_WEIGHT = 0.3;
+
+/**
+ * Effective rank score: the item's base score plus a fixed bonus when any of
+ * its tags is in `boostTags`. The base `score` is never mutated, keeping the
+ * helper pure.
+ */
+const effectiveScore = (
+    item: UnifiedFeedItem,
+    boostTags: ReadonlySet<string> | undefined
+): number => {
+    if (!boostTags || boostTags.size === 0) return item.score;
+    return item.tags.some((tag) => boostTags.has(tag))
+        ? clamp01(item.score + INTEREST_BOOST)
+        : item.score;
+};
+
+/** The value a given sort mode ranks an item by (higher = earlier). */
+const rankValue = (
+    item: UnifiedFeedItem,
+    boostTags: ReadonlySet<string> | undefined,
+    sort: FeedSort | undefined,
+    now: number
+): number => {
+    const score = effectiveScore(item, boostTags);
+    if (sort === 'hot') {
+        return score * HOT_SCORE_WEIGHT + recencyScore(item.timestamp, now) * HOT_RECENCY_WEIGHT;
+    }
+    // 'top' and the historical default rank by score alone.
+    return score;
+};
+
+/**
+ * Stable merge: dedupe by id (first occurrence wins), sort per `sort` mode,
+ * then slice to `limit`. `boostTags` lifts items matching the viewer's
+ * interests (drives the onboarding interest picker). With no `sort`, ordering
+ * is score desc / timestamp desc — the historical default.
  */
 export const mergeAndRank = (
     items: readonly UnifiedFeedItem[],
-    options: { limit?: number } = {}
+    options: {
+        limit?: number;
+        boostTags?: ReadonlySet<string>;
+        sort?: FeedSort;
+        now?: number;
+    } = {}
 ): UnifiedFeedItem[] => {
     const limit = options.limit ?? UNIFIED_FEED_DEFAULT_LIMIT;
+    const { boostTags, sort } = options;
+    const now = options.now ?? Date.now();
     const seen = new Set<string>();
     const deduped: UnifiedFeedItem[] = [];
     for (const item of items) {
@@ -269,11 +364,44 @@ export const mergeAndRank = (
         deduped.push(item);
     }
     deduped.sort((a, b) => {
-        if (a.score !== b.score) return b.score - a.score;
+        if (sort === 'new') {
+            const timeA = a.timestamp ?? -Infinity;
+            const timeB = b.timestamp ?? -Infinity;
+            if (timeA !== timeB) return timeB - timeA;
+            return effectiveScore(b, boostTags) - effectiveScore(a, boostTags);
+        }
+        const rankA = rankValue(a, boostTags, sort, now);
+        const rankB = rankValue(b, boostTags, sort, now);
+        if (rankA !== rankB) return rankB - rankA;
         return (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity);
     });
     return deduped.slice(0, limit);
 };
+
+/** Convention prefix marking a feed item as part of an episodic series. */
+export const SERIES_TAG_PREFIX = 'series:';
+
+/** Returns the series name from a `series:<name>` tag, or null if absent. */
+export const seriesNameFromTags = (tags: readonly string[]): string | null => {
+    for (const tag of tags) {
+        if (tag.toLowerCase().startsWith(SERIES_TAG_PREFIX)) {
+            const name = tag.slice(SERIES_TAG_PREFIX.length).trim();
+            if (name.length > 0) return name;
+        }
+    }
+    return null;
+};
+
+/**
+ * Tags items carrying a `series:<name>` tag with a "SERIES" badge to surface
+ * the episodic/binge loop. Items that already have a badge (LIVE, unread
+ * count, status emoji) keep it — those take priority.
+ */
+export const withSeriesBadges = (items: readonly UnifiedFeedItem[]): UnifiedFeedItem[] =>
+    items.map((item) => {
+        if (item.badge) return item;
+        return seriesNameFromTags(item.tags) ? { ...item, badge: 'SERIES' } : item;
+    });
 
 /** Live streams only, highest-ranked first, capped for the pinned rail. */
 export const selectLiveRail = (

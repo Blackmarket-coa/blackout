@@ -1,13 +1,16 @@
 import React, { useCallback, useMemo } from 'react';
 import { useAtom } from 'jotai';
-import { isValidCoalitionTab, type CoalitionTabId } from '@blackout/core';
+import { aiToolsEnabled, isValidCoalitionTab, type CoalitionTabId } from '@blackout/core';
 import { coalitionTabAtom, COALITION_TAB_ORDER } from '../../state/coalition';
+import { useDenType } from '../../hooks/useDenType';
 import CoalitionTabStrip from './CoalitionTabStrip';
 import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
 import ShopTab from './tabs/ShopTab';
+import TasksTab from './tabs/TasksTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
+import AiDenPanel from '../aiden/AiDenPanel';
 
 export interface CoalitionViewProps {
     /**
@@ -33,11 +36,15 @@ export function CoalitionView({
     onSearch,
 }: CoalitionViewProps) {
     const [storedTab, setTab] = useAtom(coalitionTabAtom);
+    const denType = useDenType(denId ?? null);
+    const isAiDen = aiToolsEnabled(denType);
 
-    const tabs = useMemo<CoalitionTabId[]>(
-        () => (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COALITION_TAB_ORDER),
-        [enabledTabs],
-    );
+    const tabs = useMemo<CoalitionTabId[]>(() => {
+        const base = (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COALITION_TAB_ORDER)
+            .filter((tab) => tab !== 'ai');
+        // The AI tab surfaces only inside AI dens.
+        return isAiDen ? [...base, 'ai'] : base;
+    }, [enabledTabs, isAiDen]);
 
     const activeTab = useMemo<CoalitionTabId>(() => {
         if (isValidCoalitionTab(storedTab) && tabs.includes(storedTab)) return storedTab;
@@ -77,8 +84,12 @@ export function CoalitionView({
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
                 {activeTab === 'map' ? <MapTab scope={scope} /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
+                {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
                 {activeTab === 'documents' && denId ? (
                     <DocumentsTab roomId={denId} />
+                ) : null}
+                {activeTab === 'ai' ? (
+                    <AiDenPanel roomId={denId ?? null} denType={denType} />
                 ) : null}
             </div>
         </section>

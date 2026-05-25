@@ -226,3 +226,53 @@ export const feedList = style({
     flexDirection: 'column',
     gap: 10,
 });
+
+export const searchInput = style({
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '10px 14px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #2E5A42)',
+    background: 'color-mix(in srgb, var(--bg-input) 80%, transparent)',
+    color: 'var(--text-primary, #F7FFF9)',
+    fontSize: 14,
+    selectors: {
+        '&:focus-visible': {
+            outline: 'none',
+            borderColor: 'var(--border-active, #2EF2C5)',
+        },
+    },
+});
+
+export const controlsRow = style({
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+});
+
+export const pillGroup = style({ display: 'inline-flex', gap: 6 });
+
+export const pill = style({
+    padding: '6px 14px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #2E5A42)',
+    background: 'transparent',
+    color: 'var(--text-secondary, #DDF6E6)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'border-color 140ms ease, background 140ms ease',
+    selectors: {
+        '&:hover': { borderColor: 'var(--border-active, #2EF2C5)' },
+    },
+});
+
+export const pillActive = style({
+    borderColor: 'var(--accent-primary, #D7FF3F)',
+    background: 'color-mix(in srgb, var(--accent-primary) 18%, transparent)',
+    color: 'var(--accent-primary, #D7FF3F)',
+});
+
+export const sortPill = style({ padding: '4px 12px', fontSize: 12, fontWeight: 500 });

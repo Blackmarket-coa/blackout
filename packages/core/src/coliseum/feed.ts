@@ -1,4 +1,4 @@
-import { citationDepthScore, type ColiseumCitation } from './citations';
+import { citationDepthScore, type ColiseumArgumentMedia, type ColiseumCitation } from './citations';
 import {
     deriveColiseumTopicStatus,
     type ColiseumTopicStatus,
@@ -46,6 +46,8 @@ export interface ColiseumArgument {
     stanceWeight: number;
     body: string;
     citations: ColiseumCitation[];
+    /** Optional short-form video, enabling the vertical reel presentation. */
+    media?: ColiseumArgumentMedia;
     createdAt: string;
     /** Wilson lower bound on up/(up+down) — 0..1. */
     voteScore: number;

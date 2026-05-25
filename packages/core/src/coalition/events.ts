@@ -1,6 +1,6 @@
 export const COALITION_STATE_EVENT_TYPE = 'co.bmc.coalition' as const;
 
-export const COALITION_TABS = ['chat', 'video', 'map', 'shop', 'documents'] as const;
+export const COALITION_TABS = ['chat', 'video', 'map', 'shop', 'tasks', 'documents', 'ai'] as const;
 export type CoalitionTabId = (typeof COALITION_TABS)[number];
 
 export const DEFAULT_COALITION_TAB: CoalitionTabId = 'chat';

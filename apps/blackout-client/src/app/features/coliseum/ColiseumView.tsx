@@ -5,6 +5,7 @@ import { coliseumTabAtom, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import ColiseumTabStrip from './ColiseumTabStrip';
 import TopicsTab from './tabs/TopicsTab';
 import DebateTab from './tabs/DebateTab';
+import ReelTab from './tabs/ReelTab';
 import LiveTab from './tabs/LiveTab';
 import SourcesTab from './tabs/SourcesTab';
 
@@ -74,6 +75,7 @@ export function ColiseumView({
             <div style={{ minHeight: 0, overflow: 'auto' }}>
                 {activeTab === 'topics' ? <TopicsTab scope={scope} /> : null}
                 {activeTab === 'debate' ? <DebateTab /> : null}
+                {activeTab === 'reel' ? <ReelTab /> : null}
                 {activeTab === 'live' ? <LiveTab /> : null}
                 {activeTab === 'sources' ? <SourcesTab /> : null}
             </div>

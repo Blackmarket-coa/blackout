@@ -1,6 +1,7 @@
 export { streamsFeature } from './manifest';
 export { streamsRoutes } from './routes';
 export { default as LiveDirectory } from './LiveDirectory';
+export { default as ReplaysDirectory } from './ReplaysDirectory';
 export { default as LivestreamViewer } from './LivestreamViewer';
 export {
     listStreams,

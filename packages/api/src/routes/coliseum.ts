@@ -3,7 +3,9 @@ import { z } from 'zod';
 import {
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
+    validateArgumentMedia,
     validateCitations,
+    type ColiseumArgumentMedia,
     type ColiseumCitation,
     type ColiseumTopicStatus,
 } from '@blackout/core';
@@ -125,6 +127,9 @@ const createArgumentSchema = z.object({
     stanceWeight: z.number().min(0).max(1).default(0.5),
     body: z.string().min(1).max(4000),
     citations: z.array(citationSchema).max(16).default([]),
+    // Loose at the boundary; `validateArgumentMedia` enforces the mxc shape and
+    // drops anything malformed rather than rejecting the whole argument.
+    media: z.record(z.string(), z.unknown()).optional(),
 });
 
 coliseum.post('/arguments', async (c) => {
@@ -133,6 +138,8 @@ coliseum.post('/arguments', async (c) => {
     const parsed = await readJsonBody(c, createArgumentSchema);
     if (parsed instanceof Response) return parsed;
     const validatedCitations: ColiseumCitation[] = validateCitations(parsed.citations);
+    const validatedMedia: ColiseumArgumentMedia | undefined =
+        parsed.media !== undefined ? (validateArgumentMedia(parsed.media) ?? undefined) : undefined;
     const created = createArgument({
         id: newArgumentId(),
         topicId: parsed.topicId,
@@ -141,6 +148,7 @@ coliseum.post('/arguments', async (c) => {
         stanceWeight: parsed.stanceWeight,
         body: parsed.body,
         citations: validatedCitations,
+        media: validatedMedia,
     });
     if (!created) {
         return c.json({ code: 'not_found', message: 'Topic not found' }, 404);

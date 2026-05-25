@@ -117,4 +117,76 @@ export const splitEventsByTimeline = (
     past: items.filter((item) => item.startsAtMs < now),
 });
 
+export interface CalendarDay {
+    /** UTC date key, `yyyy-mm-dd`. */
+    date: string;
+    /** Day-of-month (UTC). */
+    day: number;
+    /** True when the cell belongs to the rendered month (vs. spill-over). */
+    inMonth: boolean;
+    events: EventViewItem[];
+}
+
+export interface CalendarMonth {
+    year: number;
+    /** 0-based month, matching `Date.getUTCMonth()`. */
+    month: number;
+    /** Always six rows of seven days, Sunday-first. */
+    weeks: CalendarDay[][];
+}
+
+const DAY_MS = 86_400_000;
+
+const utcDateKey = (ms: number): string => {
+    const date = new Date(ms);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+/**
+ * Bucket events into a Sunday-first 6×7 month grid keyed by UTC day. UTC keeps
+ * the layout deterministic regardless of the runtime timezone (matching the
+ * model's test-friendly, SDK-free posture).
+ */
+export const buildMonthGrid = (
+    items: readonly EventViewItem[],
+    year: number,
+    month: number
+): CalendarMonth => {
+    const byDay = new Map<string, EventViewItem[]>();
+    for (const item of items) {
+        const key = utcDateKey(item.startsAtMs);
+        const bucket = byDay.get(key);
+        if (bucket) bucket.push(item);
+        else byDay.set(key, [item]);
+    }
+
+    const firstOfMonth = Date.UTC(year, month, 1);
+    const startWeekday = new Date(firstOfMonth).getUTCDay();
+    const gridStart = firstOfMonth - startWeekday * DAY_MS;
+
+    const weeks: CalendarDay[][] = [];
+    for (let w = 0; w < 6; w += 1) {
+        const week: CalendarDay[] = [];
+        for (let d = 0; d < 7; d += 1) {
+            const cellMs = gridStart + (w * 7 + d) * DAY_MS;
+            const cell = new Date(cellMs);
+            const key = utcDateKey(cellMs);
+            week.push({
+                date: key,
+                day: cell.getUTCDate(),
+                inMonth: cell.getUTCMonth() === month,
+                events: (byDay.get(key) ?? [])
+                    .slice()
+                    .sort((a, b) => a.startsAtMs - b.startsAtMs),
+            });
+        }
+        weeks.push(week);
+    }
+
+    return { year, month, weeks };
+};
+
 export { EVENT_STATE_TYPE } from './eventSchema';

@@ -20,7 +20,13 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
     video: 'For You',
     map: 'Local',
     shop: 'Shop',
+    tasks: 'Tasks',
     documents: 'Documents',
+    ai: 'AI',
 };
 
-export const COALITION_TAB_ORDER: CoalitionTabId[] = [...COALITION_TABS];
+// `ai` is excluded from the default order; it surfaces only for AI-type dens,
+// appended by CoalitionView.
+export const COALITION_TAB_ORDER: CoalitionTabId[] = [...COALITION_TABS].filter(
+    (tab) => tab !== 'ai',
+);

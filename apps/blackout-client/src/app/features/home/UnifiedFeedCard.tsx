@@ -10,6 +10,7 @@ const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
     coliseum: 'Coliseum',
     status: 'Status',
     wall: 'Post',
+    marketplace: 'Market',
 };
 
 const SOURCE_GLYPH: Record<UnifiedFeedSource, string> = {
@@ -19,6 +20,7 @@ const SOURCE_GLYPH: Record<UnifiedFeedSource, string> = {
     coalition: '📍',
     status: '✦',
     wall: '📝',
+    marketplace: '🛒',
 };
 
 interface UnifiedFeedCardProps {
@@ -29,8 +31,9 @@ interface UnifiedFeedCardProps {
 /**
  * One organic, source-tinted card in the living feed. Each source carries its
  * own accent + glyph (campfire dens, live windows, debate scales, coalition
- * pins, human-energy statuses); dens additionally get a softly flickering
- * "campfire" ring when motion is allowed.
+ * pins, human-energy statuses, market stalls); dens additionally get a softly
+ * flickering "campfire" ring when motion is allowed. When an item has media,
+ * the leading slot shows an inline thumbnail instead of the glyph ring.
  */
 export const UnifiedFeedCard = ({
     item,
@@ -51,9 +54,22 @@ export const UnifiedFeedCard = ({
             data-source={item.source}
             data-den-id={item.denId ?? undefined}
         >
-            <span className={classNames(css.ring, emberRing && css.ringEmber)} aria-hidden="true">
-                {glyph}
-            </span>
+            {item.mediaUrl ? (
+                <img
+                    src={item.mediaUrl}
+                    alt=""
+                    className={css.thumb}
+                    loading="lazy"
+                    data-testid="home-feed-card-thumb"
+                />
+            ) : (
+                <span
+                    className={classNames(css.ring, emberRing && css.ringEmber)}
+                    aria-hidden="true"
+                >
+                    {glyph}
+                </span>
+            )}
             <span className={css.body}>
                 <span className={css.sourceTag}>{SOURCE_LABELS[item.source]}</span>
                 <span className={css.title}>{item.title}</span>

@@ -23,6 +23,7 @@ export const selectedColiseumTopicIdAtom = atomWithStorage<string | null>(
 export const COLISEUM_TAB_LABELS: Record<ColiseumTabId, string> = {
     topics: 'Topics',
     debate: 'Debate',
+    reel: 'Reel',
     live: 'Live',
     sources: 'Sources',
 };

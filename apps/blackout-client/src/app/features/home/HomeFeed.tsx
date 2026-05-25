@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import classNames from 'classnames';
 import { useAtomValue } from 'jotai';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -24,6 +25,13 @@ import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
+import type { FeedSort, UnifiedFeedItem } from './unifiedFeedModel';
+import { useStreak } from './streakState';
+import {
+    trackHomeSegmentSwitched,
+    trackHomeSortChanged,
+    type HomeFeedSegment,
+} from './homeFeedTelemetry';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
@@ -34,6 +42,22 @@ import { useTimeOfDay } from './useTimeOfDay';
 import { useReducedMotion } from './useReducedMotion';
 import { useAmbientSound } from './useAmbientSound';
 import * as css from './HomeFeed.css';
+
+/** Case-insensitive filter over title/subtitle/tags. Empty query is a no-op. */
+function filterFeedByQuery(items: readonly UnifiedFeedItem[], query: string): UnifiedFeedItem[] {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return items as UnifiedFeedItem[];
+    return items.filter((item) => {
+        const haystack = [item.title, item.subtitle, ...item.tags].join(' ').toLowerCase();
+        return haystack.includes(trimmed);
+    });
+}
+
+const FEED_SORTS: { id: FeedSort; label: string }[] = [
+    { id: 'hot', label: 'Hot' },
+    { id: 'new', label: 'New' },
+    { id: 'top', label: 'Top' },
+];
 
 interface QuickAction {
     flag: keyof FeatureFlags;
@@ -119,14 +143,25 @@ const WaveDivider = (): JSX.Element => (
  * `discoveryHomeFeed` flags are on. A solarpunk "living ecosystem" home: an
  * ambient time-of-day backdrop + community-nervous-system canvas behind a
  * two-column layout — a centre living feed (unified across dens, livestreams,
- * the coalition feed, coliseum topics, and profile statuses) beside a
- * right-hand context/spatial-awareness sidebar. Each feed source is fetched
- * independently so one failure degrades gracefully (see `useUnifiedFeed`); no
- * new server endpoint is required.
+ * the coalition feed, coliseum topics, marketplace listings, and profile
+ * statuses) beside a right-hand context/spatial-awareness sidebar. Each feed
+ * source is fetched independently so one failure degrades gracefully (see
+ * `useUnifiedFeed`); no new server endpoint is required.
+ *
+ * When `homeFeedSegments` is on the centre column becomes a single segmented
+ * list (For You / Following) with Hot/New/Top sort; otherwise it stacks the
+ * classic Following + Discover sections. A feed search filters either layout,
+ * and an optional daily-streak chip surfaces in the header.
  */
 export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
-    const feed = useUnifiedFeed();
+    const segmentsEnabled = runtimeFeatureFlags.homeFeedSegments;
+    const streakEnabled = runtimeFeatureFlags.homeStreak;
+    const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
+    const [sort, setSort] = useState<FeedSort>('hot');
+    const [query, setQuery] = useState('');
+    const feed = useUnifiedFeed(segmentsEnabled ? sort : undefined);
+    const streak = useStreak(streakEnabled);
     const atmosphere = useTimeOfDay();
     const reducedMotion = useReducedMotion();
     const ambientSound = useAmbientSound();
@@ -174,6 +209,10 @@ export const HomeFeed = (): JSX.Element => {
         [feed.discover, followingIds]
     );
 
+    // Segmented mode shows one list at a time, so "For You" is the full ranked
+    // discover feed (no de-dupe against a simultaneously-visible Following).
+    const segmentItems = segment === 'following' ? followingItems : feed.discover;
+
     const quickActions = QUICK_ACTIONS.filter((action) => runtimeFeatureFlags[action.flag]);
 
     const pluginCards = useMemo(
@@ -195,6 +234,11 @@ export const HomeFeed = (): JSX.Element => {
     const signalCount = followingItems.length + discoverItems.length;
     const greeting = greetingForHour(new Date().getHours());
 
+    const renderCards = (items: readonly UnifiedFeedItem[]): JSX.Element[] =>
+        filterFeedByQuery(items, query).map((item) => (
+            <UnifiedFeedCard key={item.id} item={item} reducedMotion={reducedMotion} />
+        ));
+
     return (
         <section className={css.root} data-shell-region="home-feed">
             <AmbientBackdrop atmosphere={atmosphere} reducedMotion={reducedMotion} />
@@ -213,6 +257,11 @@ export const HomeFeed = (): JSX.Element => {
                                 {PHASE_ICON[atmosphere.phase]} {atmosphere.label}
                             </span>
                             <span className={css.chip}>🌱 {signalCount} signals nearby</span>
+                            {streakEnabled && streak.count > 0 ? (
+                                <span className={css.chip} data-testid="home-streak-chip">
+                                    <span aria-hidden="true">🔥</span> {streak.count}-day streak
+                                </span>
+                            ) : null}
                         </div>
                         {showReplay ? (
                             <button
@@ -256,6 +305,75 @@ export const HomeFeed = (): JSX.Element => {
                 </div>
                 <div className={css.grid}>
                     <main className={css.centerColumn}>
+                        <input
+                            type="search"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search your feed…"
+                            data-testid="home-feed-search"
+                            className={css.searchInput}
+                        />
+                        {segmentsEnabled ? (
+                            <div className={css.controlsRow} data-testid="home-feed-controls">
+                                <div className={css.pillGroup} role="tablist" aria-label="Feed">
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        data-testid="home-feed-segment-foryou"
+                                        aria-pressed={segment === 'forYou'}
+                                        aria-selected={segment === 'forYou'}
+                                        className={classNames(
+                                            css.pill,
+                                            segment === 'forYou' && css.pillActive
+                                        )}
+                                        onClick={() => {
+                                            setSegment('forYou');
+                                            trackHomeSegmentSwitched('forYou');
+                                        }}
+                                    >
+                                        For You
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        data-testid="home-feed-segment-following"
+                                        aria-pressed={segment === 'following'}
+                                        aria-selected={segment === 'following'}
+                                        className={classNames(
+                                            css.pill,
+                                            segment === 'following' && css.pillActive
+                                        )}
+                                        onClick={() => {
+                                            setSegment('following');
+                                            trackHomeSegmentSwitched('following');
+                                        }}
+                                    >
+                                        Following
+                                    </button>
+                                </div>
+                                <div className={css.pillGroup} aria-label="Sort">
+                                    {FEED_SORTS.map((option) => (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            data-testid={`home-feed-sort-${option.id}`}
+                                            aria-pressed={sort === option.id}
+                                            className={classNames(
+                                                css.pill,
+                                                css.sortPill,
+                                                sort === option.id && css.pillActive
+                                            )}
+                                            onClick={() => {
+                                                setSort(option.id);
+                                                trackHomeSortChanged(option.id);
+                                            }}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
                         {quickActions.length > 0 ? (
                             <section
                                 className={css.section}
@@ -321,65 +439,104 @@ export const HomeFeed = (): JSX.Element => {
                         ) : null}
                         <LiveNowRail items={feed.liveRail} />
                         <WaveDivider />
-                        <section
-                            className={css.section}
-                            data-shell-region="home-following"
-                            data-testid="home-following-section"
-                        >
-                            <header className={css.sectionLabel}>Following</header>
-                            {followingItems.length === 0 ? (
-                                <div className={css.emptyState} data-testid="home-feed-empty">
-                                    <strong>
-                                        {feed.loading ? 'Loading your feed…' : 'No activity yet.'}
-                                    </strong>
-                                    {!feed.loading ? (
-                                        <>
-                                            <span>
-                                                Join a{' '}
-                                                <GlossaryTerm term="canopy">
-                                                    {BLACKOUT_TERMS.canopy.singular}
-                                                </GlossaryTerm>{' '}
-                                                to start seeing posts in your feed.
-                                            </span>
-                                            <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
-                                                Discover {BLACKOUT_TERMS.canopy.plural}
-                                            </Link>
-                                        </>
-                                    ) : null}
-                                </div>
-                            ) : (
-                                <div className={css.feedList} data-testid="home-feed-list">
-                                    {followingItems.map((item) => (
-                                        <UnifiedFeedCard
-                                            key={item.id}
-                                            item={item}
-                                            reducedMotion={reducedMotion}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </section>
-                        {discoverItems.length > 0 ? (
+                        {segmentsEnabled ? (
+                            <section
+                                className={css.section}
+                                data-shell-region="home-feed-segment"
+                                data-testid="home-feed-segment-section"
+                            >
+                                {segmentItems.length === 0 ? (
+                                    <div className={css.emptyState} data-testid="home-feed-empty">
+                                        <strong>
+                                            {feed.loading
+                                                ? 'Loading your feed…'
+                                                : segment === 'following'
+                                                ? 'No activity yet.'
+                                                : 'Nothing to show right now.'}
+                                        </strong>
+                                        {!feed.loading && segment === 'following' ? (
+                                            <>
+                                                <span>
+                                                    Join a{' '}
+                                                    <GlossaryTerm term="canopy">
+                                                        {BLACKOUT_TERMS.canopy.singular}
+                                                    </GlossaryTerm>{' '}
+                                                    to start seeing posts in your feed.
+                                                </span>
+                                                <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
+                                                    Discover {BLACKOUT_TERMS.canopy.plural}
+                                                </Link>
+                                            </>
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <div className={css.feedList} data-testid="home-feed-list">
+                                        {renderCards(segmentItems)}
+                                    </div>
+                                )}
+                            </section>
+                        ) : (
                             <>
-                                <WaveDivider />
                                 <section
                                     className={css.section}
-                                    data-shell-region="home-discover"
-                                    data-testid="home-discover-section"
+                                    data-shell-region="home-following"
+                                    data-testid="home-following-section"
                                 >
-                                    <header className={css.sectionLabel}>Discover</header>
-                                    <div className={css.feedList} data-testid="home-discover-list">
-                                        {discoverItems.map((item) => (
-                                            <UnifiedFeedCard
-                                                key={item.id}
-                                                item={item}
-                                                reducedMotion={reducedMotion}
-                                            />
-                                        ))}
-                                    </div>
+                                    <header className={css.sectionLabel}>Following</header>
+                                    {followingItems.length === 0 ? (
+                                        <div
+                                            className={css.emptyState}
+                                            data-testid="home-feed-empty"
+                                        >
+                                            <strong>
+                                                {feed.loading
+                                                    ? 'Loading your feed…'
+                                                    : 'No activity yet.'}
+                                            </strong>
+                                            {!feed.loading ? (
+                                                <>
+                                                    <span>
+                                                        Join a{' '}
+                                                        <GlossaryTerm term="canopy">
+                                                            {BLACKOUT_TERMS.canopy.singular}
+                                                        </GlossaryTerm>{' '}
+                                                        to start seeing posts in your feed.
+                                                    </span>
+                                                    <Link
+                                                        to={COMMUNITIES_PATH}
+                                                        className={css.ctaLink}
+                                                    >
+                                                        Discover {BLACKOUT_TERMS.canopy.plural}
+                                                    </Link>
+                                                </>
+                                            ) : null}
+                                        </div>
+                                    ) : (
+                                        <div className={css.feedList} data-testid="home-feed-list">
+                                            {renderCards(followingItems)}
+                                        </div>
+                                    )}
                                 </section>
+                                {discoverItems.length > 0 ? (
+                                    <>
+                                        <WaveDivider />
+                                        <section
+                                            className={css.section}
+                                            data-shell-region="home-discover"
+                                            data-testid="home-discover-section"
+                                        >
+                                            <header className={css.sectionLabel}>Discover</header>
+                                            <div
+                                                className={css.feedList}
+                                                data-testid="home-discover-list"
+                                            >
+                                                {renderCards(discoverItems)}
+                                            </div>
+                                        </section>
+                                    </>
+                                ) : null}
                             </>
-                        ) : null}
+                        )}
                     </main>
                     <aside className={css.rightColumn} data-shell-region="home-context">
                         <ContextSidebar feed={feed} atmosphere={atmosphere} />

@@ -40,9 +40,20 @@ export const card = recipe({
             coalition: { vars: { '--card-accent': bmcPalette.solarMint } },
             status: { vars: { '--card-accent': bmcPalette.neonLeaf } },
             wall: { vars: { '--card-accent': bmcPalette.forest } },
+            marketplace: { vars: { '--card-accent': bmcPalette.lightGreen } },
         },
     },
     defaultVariants: { source: 'den' },
+});
+
+export const thumb = style({
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    objectFit: 'cover',
+    flexShrink: 0,
+    border: '1px solid var(--card-accent, var(--border-default, #2E5A42))',
+    background: 'var(--bg-nav, #112619)',
 });
 
 export const ring = style({
