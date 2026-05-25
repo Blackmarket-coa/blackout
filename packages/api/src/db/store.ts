@@ -59,6 +59,10 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  ColiseumTopicRecord,
+  ColiseumArgumentRecord,
+  ColiseumVoteRecord,
+  ColiseumLiveSessionRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
 
@@ -118,6 +122,10 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  coliseumTopics: ColiseumTopicRecord[];
+  coliseumArguments: ColiseumArgumentRecord[];
+  coliseumVotes: ColiseumVoteRecord[];
+  coliseumLiveSessions: ColiseumLiveSessionRecord[];
 };
 
 class InMemoryDb {
@@ -194,6 +202,14 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Coliseum debate topics, keyed by topic id. */
+  coliseumTopics = new Map<string, ColiseumTopicRecord>();
+  /** Coliseum arguments, keyed by argument id. */
+  coliseumArguments = new Map<string, ColiseumArgumentRecord>();
+  /** Coliseum votes, keyed by `${argumentId}::${voterId}` (one vote per pair). */
+  coliseumVotes = new Map<string, ColiseumVoteRecord>();
+  /** Coliseum live debate sessions, keyed by session id. */
+  coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -1910,9 +1926,72 @@ class InMemoryDb {
     this.coalitionAidPosts.set(record.id, record);
     return record;
   }
+
+  // --- Coliseum ---
+
+  private static coliseumVoteKey(argumentId: string, voterId: string): string {
+    return `${argumentId}::${voterId}`;
+  }
+
+  listColiseumTopics(): ColiseumTopicRecord[] {
+    return [...this.coliseumTopics.values()];
+  }
+
+  getColiseumTopic(id: string): ColiseumTopicRecord | undefined {
+    return this.coliseumTopics.get(id);
+  }
+
+  upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    this.coliseumTopics.set(record.id, record);
+    return record;
+  }
+
+  listColiseumArguments(): ColiseumArgumentRecord[] {
+    return [...this.coliseumArguments.values()];
+  }
+
+  getColiseumArgument(id: string): ColiseumArgumentRecord | undefined {
+    return this.coliseumArguments.get(id);
+  }
+
+  upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    this.coliseumArguments.set(record.id, record);
+    return record;
+  }
+
+  /** Bulk upsert so a score recompute persists once rather than per-argument. */
+  upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    for (const record of records) this.coliseumArguments.set(record.id, record);
+  }
+
+  listColiseumVotes(): ColiseumVoteRecord[] {
+    return [...this.coliseumVotes.values()];
+  }
+
+  getColiseumVote(argumentId: string, voterId: string): ColiseumVoteRecord | undefined {
+    return this.coliseumVotes.get(InMemoryDb.coliseumVoteKey(argumentId, voterId));
+  }
+
+  upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    this.coliseumVotes.set(InMemoryDb.coliseumVoteKey(record.argumentId, record.voterId), record);
+    return record;
+  }
+
+  listColiseumLiveSessions(): ColiseumLiveSessionRecord[] {
+    return [...this.coliseumLiveSessions.values()];
+  }
+
+  getColiseumLiveSession(id: string): ColiseumLiveSessionRecord | undefined {
+    return this.coliseumLiveSessions.get(id);
+  }
+
+  upsertColiseumLiveSession(record: ColiseumLiveSessionRecord): ColiseumLiveSessionRecord {
+    this.coliseumLiveSessions.set(record.id, record);
+    return record;
+  }
 }
 
-class FileBackedDb extends InMemoryDb {
+export class FileBackedDb extends InMemoryDb {
   constructor() {
     super();
     this.hydrate();
@@ -2047,6 +2126,22 @@ class FileBackedDb extends InMemoryDb {
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coliseumTopics) {
+      this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumArguments) {
+      this.coliseumArguments = new Map(parsed.coliseumArguments.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumVotes) {
+      this.coliseumVotes = new Map(
+        parsed.coliseumVotes.map((row) => [`${row.argumentId}::${row.voterId}`, row]),
+      );
+    }
+    if (parsed.coliseumLiveSessions) {
+      this.coliseumLiveSessions = new Map(
+        parsed.coliseumLiveSessions.map((row) => [row.id, row]),
+      );
+    }
   }
 
   private snapshot(): PersistedState {
@@ -2102,6 +2197,10 @@ class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      coliseumTopics: [...this.coliseumTopics.values()],
+      coliseumArguments: [...this.coliseumArguments.values()],
+      coliseumVotes: [...this.coliseumVotes.values()],
+      coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
     };
   }
 
@@ -2880,6 +2979,37 @@ class FileBackedDb extends InMemoryDb {
     const created = super.createCoalitionAidPost(input);
     this.persist();
     return created;
+  }
+
+  override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    const saved = super.upsertColiseumTopic(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    const saved = super.upsertColiseumArgument(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    super.upsertColiseumArguments(records);
+    this.persist();
+  }
+
+  override upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    const saved = super.upsertColiseumVote(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumLiveSession(
+    record: ColiseumLiveSessionRecord,
+  ): ColiseumLiveSessionRecord {
+    const saved = super.upsertColiseumLiveSession(record);
+    this.persist();
+    return saved;
   }
 }
 
