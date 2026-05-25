@@ -63,6 +63,7 @@ vi.mock('../invitations/invitationsClient', () => ({
 import HomeFeed from './HomeFeed';
 import { fetchCoalitionFeed } from '../coalition/coalitionClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * ONE_HOUR;
@@ -103,6 +104,7 @@ const mountWithRooms = async (rooms: RoomLike[]) => {
 describe('HomeFeed', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
+        runtimeFeatureFlags.homeFeedSegments = false;
     });
 
     it('renders the empty state when no joined dens are available', async () => {
@@ -211,5 +213,52 @@ describe('HomeFeed', () => {
         expect(denCards.length).toBe(1);
         const following = container.querySelector('[data-testid="home-following-section"]');
         expect(following?.contains(denCards[0])).toBe(true);
+    });
+
+    it('renders For You / Following + sort controls and switches segments when homeFeedSegments is on', async () => {
+        runtimeFeatureFlags.homeFeedSegments = true;
+        vi.mocked(fetchCoalitionFeed).mockResolvedValueOnce({
+            generatedAt: '',
+            items: [
+                {
+                    id: 'cf1',
+                    kind: 'announcement',
+                    title: 'Coalition Bulletin',
+                    createdAt: new Date().toISOString(),
+                    score: 0.9,
+                    canopyId: null,
+                    denId: null,
+                    tags: [],
+                },
+            ],
+        } as never);
+
+        const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
+
+        // Segmented controls render; the stacked sections do not.
+        expect(container.querySelector('[data-testid="home-feed-controls"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-feed-sort-hot"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-following-section"]')).toBeNull();
+        expect(container.querySelector('[data-testid="home-discover-section"]')).toBeNull();
+
+        // For You (default) surfaces the Discover-only coalition bulletin.
+        const section = container.querySelector('[data-testid="home-feed-segment-section"]');
+        expect(section?.textContent).toContain('Coalition Bulletin');
+
+        // Switching to Following drops the unattributed bulletin but keeps the den.
+        const followingBtn = container.querySelector(
+            '[data-testid="home-feed-segment-following"]'
+        ) as HTMLButtonElement;
+        await act(async () => {
+            followingBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await Promise.resolve();
+        });
+        const after = container.querySelector('[data-testid="home-feed-segment-section"]');
+        expect(after?.textContent).not.toContain('Coalition Bulletin');
+        expect(
+            container.querySelector('[data-testid="home-feed-card"][data-source="den"]')
+        ).not.toBeNull();
+
+        runtimeFeatureFlags.homeFeedSegments = false;
     });
 });

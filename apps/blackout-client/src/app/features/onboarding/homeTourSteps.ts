@@ -41,6 +41,16 @@ export const HOME_TOUR_STEPS: HomeTourStep[] = [
         ],
     },
     {
+        id: 'feed-segments',
+        title: 'For You / Following',
+        body: 'Switch between a personalized "For You" feed and posts from communities you follow, and sort by Hot, New, or Top — the same controls you already know from other apps.',
+        targetTestId: 'home-feed-segment-foryou',
+        fallbackRegion: 'home-feed-segment',
+        allowCenterFallback: true,
+        filePaths: ['apps/blackout-client/src/app/features/home/HomeFeed.tsx'],
+        docLinks: [{ label: 'TESTERS.md', href: '/TESTERS.md' }],
+    },
+    {
         id: 'topic-chips',
         title: 'Topic chip bar',
         body: 'Browse by topic. Chips are pulled from the discovery service and link out to topic pages so users can find communities matching their interests.',

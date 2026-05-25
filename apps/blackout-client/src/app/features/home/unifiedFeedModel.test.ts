@@ -130,6 +130,82 @@ describe('mergeAndRank', () => {
         const ranked = mergeAndRank(items, { boostTags: new Set() });
         expect(ranked.map((i) => i.id)).toEqual(['coalition:a', 'coalition:b']);
     });
+
+    it('sorts by newest-first under the "new" mode regardless of score', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'old-high', score: 0.9 }),
+                        createdAt: new Date(NOW - 5 * HOUR).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'new-low', score: 0.1 }),
+                        createdAt: new Date(NOW - HOUR).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+        ];
+        const ranked = mergeAndRank(items, { sort: 'new', now: NOW });
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:new-low', 'coalition:old-high']);
+    });
+
+    it('ranks by score under "top", ignoring recency', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'old-high', score: 0.9 }),
+                        createdAt: new Date(NOW - 5 * HOUR).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'new-low', score: 0.1 }),
+                        createdAt: new Date(NOW - HOUR).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+        ];
+        const ranked = mergeAndRank(items, { sort: 'top', now: NOW });
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:old-high', 'coalition:new-low']);
+    });
+
+    it('lets a fresher item outrank a higher-scored stale one under "hot"', () => {
+        const items: UnifiedFeedItem[] = [
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'stale', score: 0.6 }),
+                        createdAt: new Date(NOW - 6.9 * 24 * HOUR).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+            ...mapCoalition(
+                [
+                    {
+                        ...coalition({ id: 'fresh', score: 0.5 }),
+                        createdAt: new Date(NOW).toISOString(),
+                    },
+                ],
+                NOW
+            ),
+        ];
+        // hot: stale = 0.6*0.7 + ~0*0.3 = 0.42; fresh = 0.5*0.7 + 1*0.3 = 0.65.
+        const ranked = mergeAndRank(items, { sort: 'hot', now: NOW });
+        expect(ranked.map((i) => i.id)).toEqual(['coalition:fresh', 'coalition:stale']);
+    });
 });
 
 describe('mapWallPosts', () => {

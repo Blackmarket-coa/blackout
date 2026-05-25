@@ -18,6 +18,7 @@ import {
     selectLiveRail,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
+    type FeedSort,
     type StreamFeedItem,
     type UnifiedFeedItem,
     type UnifiedFeedSource,
@@ -63,7 +64,7 @@ const collectJoinedCanopyIds = (rooms: readonly RoomLike[]): Set<string> => {
     return ids;
 };
 
-export function useUnifiedFeed(): UnifiedFeedResult {
+export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
@@ -141,9 +142,11 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             ...remote.coliseum,
         ];
 
-        const discover = mergeAndRank(combined, { boostTags });
+        const discover = mergeAndRank(combined, { boostTags, sort, now });
         const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
             boostTags,
+            sort,
+            now,
         });
         const liveRail = selectLiveRail(discover);
 
@@ -154,5 +157,5 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, activity, remote, boostTags]);
+    }, [rooms, activity, remote, boostTags, sort]);
 }

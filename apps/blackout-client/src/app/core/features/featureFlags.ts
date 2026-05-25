@@ -81,6 +81,13 @@ export type FeatureFlags = {
      */
     topics: boolean;
     /**
+     * Familiar feed IA flag. When on, HomeFeed renders a For You / Following
+     * segmented toggle and a Hot / New / Top sort control (TikTok/X + Reddit
+     * conventions) instead of the stacked Following-then-Discover sections.
+     * Sort maps onto `mergeAndRank` in `unifiedFeedModel`. Default off.
+     */
+    homeFeedSegments: boolean;
+    /**
      * Market destination tab flag. When on, the existing
      * `MarketplaceSlice` is mounted as a top-level destination at
      * `/market` (and the AppShell bottom-tab "Market" entry resolves
@@ -264,6 +271,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     // for the tour before being routed into their den.
     discoveryHomeFeed: true,
     topics: false,
+    homeFeedSegments: false,
     marketTab: false,
     productsAttachments: false,
     productsAttachComposer: false,
@@ -543,6 +551,12 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
             nextFlags.onboardingInterestPicker = false;
         }
+        if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'true') {
+            nextFlags.homeFeedSegments = true;
+        }
+        if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
+            nextFlags.homeFeedSegments = false;
+        }
         if (env.BLACKOUT_MARKET_TAB === 'true') {
             nextFlags.marketTab = true;
         }
@@ -782,6 +796,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
         nextFlags.onboardingInterestPicker = false;
+    }
+    if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'true') {
+        nextFlags.homeFeedSegments = true;
+    }
+    if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
+        nextFlags.homeFeedSegments = false;
     }
     if (env.BLACKOUT_MARKET_TAB === 'true') {
         nextFlags.marketTab = true;
