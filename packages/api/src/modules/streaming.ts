@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
-import { requireDomainCapability } from './authz';
+import { requireDomainCapability, requireAuthenticatedUser } from './authz';
+import { isAdminUser } from '../services/auth';
 import { hasActiveCreatorSubscription } from '../services/creatorSubscriptions';
 import { aggregateStreamRevenue, evaluateStreamGoal } from '../services/streamGoals';
 import { dispatchEvent as dispatchOutboundEvent } from '../services/outboundEventWebhooks';
@@ -72,6 +74,35 @@ function ensureStream(streamId: string, creatorId: string) {
   );
 }
 
+const ownershipForbidden = (c: Context) =>
+  c.json({ code: 'forbidden', message: 'You can only manage your own streams' }, 403);
+
+// Streaming.write is granted to every user, so the capability gate alone does
+// not stop one creator from touching another's resources. A creator's id is
+// their user id (`sub`); these helpers enforce that a caller only manages
+// their own streams.
+
+// For create-or-update stream endpoints that carry `creatorId` in the body:
+// the claimed creator must be the caller, and an existing stream must already
+// belong to them. Returns a 403 Response when ownership fails, else null.
+function assertSelfCreator(c: Context, streamId: string, bodyCreatorId: string): Response | null {
+  const subject = requireAuthenticatedUser(c);
+  if (bodyCreatorId !== subject) return ownershipForbidden(c);
+  const existing = db.getStream(streamId);
+  if (existing && existing.creatorId !== subject) return ownershipForbidden(c);
+  return null;
+}
+
+// For endpoints acting on an existing stream: it must exist (404) and belong to
+// the caller (403). Returns the blocking Response, else null.
+function requireStreamOwner(c: Context, streamId: string): Response | null {
+  const subject = requireAuthenticatedUser(c);
+  const stream = db.getStream(streamId);
+  if (!stream) return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
+  if (stream.creatorId !== subject) return ownershipForbidden(c);
+  return null;
+}
+
 function createStreamingRouter() {
   const streaming = new Hono();
 
@@ -87,6 +118,7 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { creatorId } = c.req.param();
+    if (requireAuthenticatedUser(c) !== creatorId) return ownershipForbidden(c);
     const parsed = await readJsonBody(c, streamKeySchema);
     const payload = parsed instanceof Response ? {} : parsed ?? {};
     const current = db.getCreatorStreamAuth(creatorId);
@@ -109,10 +141,14 @@ function createStreamingRouter() {
   });
 
   streaming.get('/creators/:creatorId/stream-key', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // The managed stream key is a publishing secret — gate it on the
+    // creator/admin `streaming.write` capability, not the now-universal
+    // `streaming.read`, so a viewer can't read it and hijack the broadcast.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     const { creatorId } = c.req.param();
+    if (requireAuthenticatedUser(c) !== creatorId) return ownershipForbidden(c);
     const auth = db.getCreatorStreamAuth(creatorId);
     if (!auth) return c.json({ code: 'stream_key_not_found', message: 'No managed stream key found for creator' }, 404);
 
@@ -126,6 +162,8 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const parsed = await readJsonBody(c, streamStateSchema);
     if (parsed instanceof Response) return parsed;
+    const ownerDenied = assertSelfCreator(c, streamId, parsed.creatorId);
+    if (ownerDenied) return ownerDenied;
 
     const stream = ensureStream(streamId, parsed.creatorId);
     const updated = db.upsertStream({ ...stream, state: parsed.state });
@@ -139,6 +177,8 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const parsed = await readJsonBody(c, streamMetadataSchema);
     if (parsed instanceof Response) return parsed;
+    const ownerDenied = assertSelfCreator(c, streamId, parsed.creatorId);
+    if (ownerDenied) return ownerDenied;
 
     const stream = ensureStream(streamId, parsed.creatorId);
     // `denId === null` clears the association; `undefined` leaves it
@@ -163,6 +203,8 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const parsed = await readJsonBody(c, streamAccessSchema);
     if (parsed instanceof Response) return parsed;
+    const ownerDenied = assertSelfCreator(c, streamId, parsed.creatorId);
+    if (ownerDenied) return ownerDenied;
 
     const stream = ensureStream(streamId, parsed.creatorId);
     const updated = db.upsertStream({
@@ -276,10 +318,11 @@ function createStreamingRouter() {
       }
     }
 
+    // The access check is viewer-facing (callers query their own
+    // subscriberId), so it must not echo the creator's full allowlist.
     return c.json({
       streamId,
       visibility: stream.visibility,
-      allowedSubscriberIds: stream.allowedSubscriberIds,
       subscriberId: subscriberId ?? null,
       canAccess,
     });
@@ -292,6 +335,8 @@ function createStreamingRouter() {
     const { streamId } = c.req.param();
     const parsed = await readJsonBody(c, streamSessionSchema);
     if (parsed instanceof Response) return parsed;
+    const ownerDenied = assertSelfCreator(c, streamId, parsed.creatorId);
+    if (ownerDenied) return ownerDenied;
 
     const stream = ensureStream(streamId, parsed.creatorId);
     const session = db.createStreamSession({ id: crypto.randomUUID(), streamId, startedAt: new Date().toISOString(), replayPointer: parsed.replayPointer });
@@ -349,6 +394,11 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const sessionId = c.req.param('sessionId');
+    const existingSession = db.getStreamSession(sessionId);
+    if (!existingSession) return c.json({ code: 'session_not_found', message: 'Session not found' }, 404);
+    const ownerDenied = requireStreamOwner(c, existingSession.streamId);
+    if (ownerDenied) return ownerDenied;
+
     const parsed = await readJsonBody(c, streamSessionPatchSchema);
     const replayPointer = parsed instanceof Response ? undefined : parsed?.replayPointer;
     const session = db.endStreamSession(sessionId, replayPointer);
@@ -411,9 +461,12 @@ function createStreamingRouter() {
   });
 
   streaming.get('/streams/:streamId/sessions', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Creator-private operational history — only the owning creator may read it.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
+    const ownerDenied = requireStreamOwner(c, c.req.param('streamId'));
+    if (ownerDenied) return ownerDenied;
     return c.json(db.listStreamSessions(c.req.param('streamId')));
   });
 
@@ -422,6 +475,8 @@ function createStreamingRouter() {
     if (denied) return denied;
 
     const { streamId } = c.req.param();
+    const ownerDenied = requireStreamOwner(c, streamId);
+    if (ownerDenied) return ownerDenied;
     const parsed = await readJsonBody(c, streamModerationSchema);
     if (parsed instanceof Response) return parsed;
 
@@ -447,23 +502,34 @@ function createStreamingRouter() {
   });
 
   streaming.get('/streams/:streamId/moderation', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Banned-user lists and keyword filters are moderation-integrity data —
+    // only the owning creator may read them.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     const streamId = c.req.param('streamId');
+    const ownerDenied = requireStreamOwner(c, streamId);
+    if (ownerDenied) return ownerDenied;
     return c.json(db.getStreamModeration(streamId) ?? { streamId, slowModeSeconds: 0, bannedUserIds: [], keywordFilters: [] });
   });
 
   streaming.get('/events', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
-    if (denied) return denied;
-
+    // The streaming-wide domain event log spans every creator, so it stays
+    // admin-only even though streaming.write is now universal.
+    const claims = c.get('user') as { sub?: string; username?: string } | null;
+    if (!claims?.sub) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
+    if (!isAdminUser(claims.sub, claims.username ?? '')) {
+      return c.json({ code: 'forbidden', message: 'Admin privileges required' }, 403);
+    }
     return c.json(listDomainEvents('streaming'));
   });
 
   streaming.get('/streams/:streamId/revenue', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Creator earnings — only the owning creator may read them.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
+    const ownerDenied = requireStreamOwner(c, c.req.param('streamId'));
+    if (ownerDenied) return ownerDenied;
     return c.json(aggregateStreamRevenue(c.req.param('streamId')));
   });
 

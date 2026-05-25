@@ -192,7 +192,7 @@ test('GET /v1/streaming/streams/:id/revenue aggregates captured tips and gifts',
 
     const headers = {
         ...headersFor(CREATOR_ID, CREATOR_NAME),
-        'x-blackout-capabilities': 'streaming.read',
+        'x-blackout-capabilities': 'streaming.read,streaming.write',
     };
     const rev = await app.request(`/v1/streaming/streams/${streamId}/revenue`, {
         method: 'GET',

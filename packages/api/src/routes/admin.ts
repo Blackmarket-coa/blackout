@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Context } from 'hono';
 import { matrixClient } from '../integrations/matrix-client';
 import { requireUser } from '../middleware/require-user';
+import { isAdminUser } from '../services/auth';
 import { log } from '../telemetry/logger';
 
 /**
@@ -30,22 +31,14 @@ const admin = new Hono();
  * Server-side admin gate. The client `platform-ops.admin` capability controls
  * UI visibility only — it is NOT authorization. Admin operations are gated here
  * against the `BLACKOUT_ADMIN_USERS` allowlist (comma-separated usernames or
- * full user ids). Layered on top of `requireUser`, so an unauthenticated caller
- * gets 401 and a non-admin gets 403.
+ * full user ids), shared with capability minting via `isAdminUser`. Layered on
+ * top of `requireUser`, so an unauthenticated caller gets 401 and a non-admin
+ * gets 403.
  */
-const adminAllowlist = (): Set<string> =>
-  new Set(
-    (process.env.BLACKOUT_ADMIN_USERS ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
-
 const requireAdmin = (c: Context) => {
   const user = requireUser(c, 'Sign in required');
   if (user instanceof Response) return user;
-  const allow = adminAllowlist();
-  if (!allow.has(user.username) && !allow.has(user.sub)) {
+  if (!isAdminUser(user.sub, user.username)) {
     return c.json({ code: 'forbidden', message: 'Admin privileges required' }, 403);
   }
   return user;

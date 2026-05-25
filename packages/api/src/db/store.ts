@@ -1375,6 +1375,10 @@ class InMemoryDb {
     return record;
   }
 
+  getStreamSession(sessionId: string): StreamSessionRecord | undefined {
+    return this.streamSessions.get(sessionId);
+  }
+
   endStreamSession(sessionId: string, replayPointer?: string): StreamSessionRecord | undefined {
     const existing = this.streamSessions.get(sessionId);
     if (!existing) return undefined;

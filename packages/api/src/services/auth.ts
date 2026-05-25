@@ -8,6 +8,9 @@ export interface AuthTokenPayload {
   iss: string;
   aud: string;
   jti: string;
+  /** Domain capabilities granted to this session, e.g. `streaming.read`.
+   *  Optional so tokens issued before capability minting still verify. */
+  capabilities?: string[];
 }
 
 const base64Url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
@@ -135,6 +138,35 @@ export function verifyPasswordConstantTime(password: string, stored: string | un
   return Boolean(stored) && ok;
 }
 
+/**
+ * Comma-separated allowlist of admin usernames or full user ids. Shared by
+ * the admin route gate and capability minting so "who is an admin" has a
+ * single source of truth.
+ */
+export const adminAllowlist = (): Set<string> =>
+  new Set(
+    (process.env.BLACKOUT_ADMIN_USERS ?? '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+
+export const isAdminUser = (userId: string, username: string): boolean => {
+  const allow = adminAllowlist();
+  return allow.has(username) || allow.has(userId);
+};
+
+/**
+ * Capabilities embedded in a freshly minted session token. Every authenticated
+ * user can both browse the Live directory (`streaming.read`) and go live
+ * (`streaming.write`). The streaming module enforces per-creator ownership, so
+ * a user can only manage streams they own; per-stream visibility is enforced
+ * there too.
+ */
+export function deriveUserCapabilities(): string[] {
+  return ['streaming.read', 'streaming.write'];
+}
+
 export interface SignedJwt {
   token: string;
   jti: string;
@@ -163,6 +195,7 @@ export function signJwtWithMeta(
     iss: config.issuer,
     aud: config.audience,
     jti,
+    capabilities: deriveUserCapabilities(),
   };
 
   const encodedHeader = base64Url(JSON.stringify(header));
