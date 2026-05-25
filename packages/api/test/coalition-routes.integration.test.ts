@@ -124,3 +124,45 @@ test('coalition seller-locations returns visible vendors', async () => {
     assert.ok(body.locations.length >= 2);
     assert.ok(body.locations.every((location) => location.isVisible));
 });
+
+test('coalition seller-locations filters by nearby radius', async () => {
+    type LocResponse = { locations: Array<{ id: string }> };
+    const all = (await (
+        await app.request('/v1/coalition/seller-locations', { headers: authHeader() })
+    ).json()) as LocResponse;
+
+    // Seeds cluster around (40.7128, -74.006); a far origin with a tight radius
+    // excludes everything.
+    const far = (await (
+        await app.request('/v1/coalition/seller-locations?lat=0&lng=0&radiusKm=1', {
+            headers: authHeader(),
+        })
+    ).json()) as LocResponse;
+    assert.equal(far.locations.length, 0);
+
+    // A generous radius around the cluster returns everything visible.
+    const near = (await (
+        await app.request(
+            '/v1/coalition/seller-locations?lat=40.7128&lng=-74.006&radiusKm=5',
+            { headers: authHeader() },
+        )
+    ).json()) as LocResponse;
+    assert.equal(near.locations.length, all.locations.length);
+});
+
+test('coalition mutual-aid filters by nearby radius', async () => {
+    type AidResponse = { posts: Array<{ id: string }> };
+    const far = (await (
+        await app.request('/v1/coalition/mutual-aid?lat=0&lng=0&radiusKm=1', {
+            headers: authHeader(),
+        })
+    ).json()) as AidResponse;
+    assert.equal(far.posts.length, 0);
+
+    const near = (await (
+        await app.request('/v1/coalition/mutual-aid?lat=40.715&lng=-74.009&radiusKm=10', {
+            headers: authHeader(),
+        })
+    ).json()) as AidResponse;
+    assert.ok(near.posts.length >= 2);
+});

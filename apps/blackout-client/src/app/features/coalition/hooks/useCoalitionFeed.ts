@@ -8,6 +8,7 @@ import {
     type CoalitionFeedResponse,
     type CoalitionScopeQuery,
     type MutualAidResponse,
+    type NearbyQuery,
     type SellerLocationsResponse,
     type SpatialFeedResponse,
 } from '../coalitionClient';
@@ -65,10 +66,19 @@ export function useSpatialFeed(scope: CoalitionScopeQuery, layers?: string[]) {
     );
 }
 
-export function useMutualAid(scope: CoalitionScopeQuery) {
-    return useAsync<MutualAidResponse>(() => fetchMutualAid(scope), [scope.denId]);
+const nearbyKey = (nearby?: NearbyQuery): string =>
+    nearby ? `${nearby.lat},${nearby.lng},${nearby.radiusKm}` : '';
+
+export function useMutualAid(scope: CoalitionScopeQuery, nearby?: NearbyQuery) {
+    return useAsync<MutualAidResponse>(
+        () => fetchMutualAid(scope, nearby),
+        [scope.denId, nearbyKey(nearby)],
+    );
 }
 
-export function useSellerLocations() {
-    return useAsync<SellerLocationsResponse>(() => fetchSellerLocations(), []);
+export function useSellerLocations(nearby?: NearbyQuery) {
+    return useAsync<SellerLocationsResponse>(
+        () => fetchSellerLocations(nearby),
+        [nearbyKey(nearby)],
+    );
 }

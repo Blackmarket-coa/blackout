@@ -5,6 +5,7 @@ import {
     AID_POST_TYPES,
     AID_POST_URGENCY,
     SPATIAL_LAYER_KEYS,
+    isWithinRadiusMeters,
     rankCoalitionFeed,
 } from '@blackout/core';
 import {
@@ -70,9 +71,36 @@ coalition.get('/spatial-feed', (c) => {
     });
 });
 
+const nearbyQuerySchema = z.object({
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lng: z.coerce.number().min(-180).max(180).optional(),
+    radiusKm: z.coerce.number().positive().max(20_000).optional(),
+});
+
+/** Returns the viewer coordinates + radius (m) when a full nearby filter is supplied. */
+function parseNearby(c: { req: { query: (key: string) => string | undefined } }):
+    | { viewer: { latitude: number; longitude: number }; radiusMeters: number }
+    | null {
+    const parsed = nearbyQuerySchema.safeParse({
+        lat: c.req.query('lat'),
+        lng: c.req.query('lng'),
+        radiusKm: c.req.query('radiusKm'),
+    });
+    if (!parsed.success) return null;
+    const { lat, lng, radiusKm } = parsed.data;
+    if (lat === undefined || lng === undefined || radiusKm === undefined) return null;
+    return { viewer: { latitude: lat, longitude: lng }, radiusMeters: radiusKm * 1000 };
+}
+
 coalition.get('/mutual-aid', (c) => {
     const denId = c.req.query('denId');
-    const posts = listAidPosts({ denId });
+    let posts = listAidPosts({ denId });
+    const nearby = parseNearby(c);
+    if (nearby) {
+        posts = posts.filter((post) =>
+            isWithinRadiusMeters(post.location, nearby.viewer, nearby.radiusMeters),
+        );
+    }
     return c.json({ posts });
 });
 
@@ -116,7 +144,14 @@ coalition.post('/mutual-aid', async (c) => {
 
 coalition.get('/seller-locations', (c) => {
     const onlyVisible = c.req.query('onlyVisible') !== 'false';
-    return c.json({ locations: listSellerLocations({ onlyVisible }) });
+    let locations = listSellerLocations({ onlyVisible });
+    const nearby = parseNearby(c);
+    if (nearby) {
+        locations = locations.filter((location) =>
+            isWithinRadiusMeters(location.coordinates, nearby.viewer, nearby.radiusMeters),
+        );
+    }
+    return c.json({ locations });
 });
 
 export default coalition;

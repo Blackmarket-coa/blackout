@@ -30,6 +30,22 @@ export interface MutualAidResponse {
     posts: AidPost[];
 }
 
+/** Viewer-centred radius filter shared by mutual-aid + seller-location queries. */
+export interface NearbyQuery {
+    lat: number;
+    lng: number;
+    radiusKm: number;
+}
+
+function nearbyParams(nearby?: NearbyQuery): Record<string, string | undefined> {
+    if (!nearby) return {};
+    return {
+        lat: String(nearby.lat),
+        lng: String(nearby.lng),
+        radiusKm: String(nearby.radiusKm),
+    };
+}
+
 export interface SellerLocationsResponse {
     locations: SellerLocation[];
 }
@@ -86,16 +102,22 @@ export function fetchSpatialFeed(
 
 export function fetchMutualAid(
     scope: CoalitionScopeQuery,
+    nearby?: NearbyQuery,
     token: string | null = readBlackoutApiToken(),
 ): Promise<MutualAidResponse> {
-    const path = appendQuery(`${COALITION_BASE}/mutual-aid`, { denId: scope.denId });
+    const path = appendQuery(`${COALITION_BASE}/mutual-aid`, {
+        denId: scope.denId,
+        ...nearbyParams(nearby),
+    });
     return getJson<MutualAidResponse>(path, token);
 }
 
 export function fetchSellerLocations(
+    nearby?: NearbyQuery,
     token: string | null = readBlackoutApiToken(),
 ): Promise<SellerLocationsResponse> {
-    return getJson<SellerLocationsResponse>(`${COALITION_BASE}/seller-locations`, token);
+    const path = appendQuery(`${COALITION_BASE}/seller-locations`, nearbyParams(nearby));
+    return getJson<SellerLocationsResponse>(path, token);
 }
 
 export interface CreateAidPostInput {
