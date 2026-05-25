@@ -16,7 +16,8 @@
     "migrate": "tsx src/db/migrate.ts up",
     "migrate:up": "tsx src/db/migrate.ts up",
     "migrate:down": "tsx src/db/migrate.ts down",
-    "migrate:status": "tsx src/db/migrate.ts status"
+    "migrate:status": "tsx src/db/migrate.ts status",
+    "db:import-json": "tsx src/scripts/importJsonStoreToPostgres.ts"
   },
   "dependencies": {
     "@blackout/contracts": "workspace:*",
