@@ -66,11 +66,13 @@ import type {
   ColiseumLiveSessionRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
-import { hydrateMap, introspectColumns, type TablePlan } from './pgWriter';
+import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
 import { WriteBehindQueue } from './writeBehindQueue';
+import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgPool } from './migrate';
 import { log } from '../telemetry/logger';
+import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
@@ -3115,6 +3117,10 @@ type MutableMap = Map<string, Record<string, unknown>>;
 export class PostgresBackedDb extends InMemoryDb {
   private readonly plans = new Map<string, TablePlan>();
   private queue: WriteBehindQueue | null = null;
+  private pool: PgPool | null = null;
+  private transport: StoreChangeTransport | null = null;
+  /** Identifies this replica so it can ignore its own change notifications. */
+  private readonly instanceId = randomUUID();
 
   constructor() {
     super();
@@ -3149,8 +3155,13 @@ export class PostgresBackedDb extends InMemoryDb {
     }
   }
 
-  /** Hydrate every mapped table from Postgres, then arm the write-behind queue. */
-  async init(pool: PgPool): Promise<void> {
+  /**
+   * Hydrate every mapped table from Postgres, arm the write-behind queue, and
+   * (when a transport is supplied) subscribe to peer change notifications so
+   * this replica's mirror stays coherent with writes on other replicas.
+   */
+  async init(pool: PgPool, transport?: StoreChangeTransport): Promise<void> {
+    this.pool = pool;
     const client = await pool.connect();
     try {
       for (const descriptor of TABLE_DESCRIPTORS) {
@@ -3170,12 +3181,106 @@ export class PostgresBackedDb extends InMemoryDb {
     } finally {
       client.release?.();
     }
-    this.queue = new WriteBehindQueue(pool, this.plans, (name) => this.mapByName(name));
+    this.transport = transport ?? null;
+    this.queue = new WriteBehindQueue(
+      pool,
+      this.plans,
+      (name) => this.mapByName(name),
+      transport ?? undefined,
+      this.instanceId,
+    );
+    if (transport) {
+      await transport.subscribe((payload) => this.applyPeerChange(payload));
+      // After a dropped LISTEN connection we may have missed notifications;
+      // re-hydrate everything to recover.
+      transport.onReconnect(() => {
+        void this.rehydrateAll();
+      });
+    }
   }
 
-  /** Flush queued writes — call on graceful shutdown. */
+  /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
+  private async rehydrateAll(): Promise<void> {
+    if (!this.pool) return;
+    const client = await this.pool.connect();
+    try {
+      for (const [mapName, plan] of this.plans) {
+        const fresh: MutableMap = new Map();
+        const res = await client.query<Record<string, unknown>>(
+          `SELECT * FROM ${plan.descriptor.tableName}`,
+        );
+        for (const row of res.rows) {
+          const record = rowToRecord(plan, row);
+          fresh.set(plan.descriptor.keyOf(record), record);
+        }
+        (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+      }
+    } catch (err) {
+      log.warn('pg_store_rehydrate_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      client.release?.();
+    }
+  }
+
+  /**
+   * Apply a peer replica's change to the local mirror. 'u' refreshes the single
+   * changed row; 'r' reloads the whole table. Self-notifications are ignored
+   * (the originating mutator already updated this mirror synchronously).
+   */
+  private applyPeerChange(payload: StoreChangePayload): void {
+    if (payload.src === this.instanceId) return;
+    const plan = this.plans.get(payload.m);
+    if (!plan || !this.pool) return;
+    const pool = this.pool;
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        if (payload.op === 'u' && payload.kv) {
+          const where = plan.descriptor.conflictColumns
+            .map((c, i) => `${c} = $${i + 1}`)
+            .join(' AND ');
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
+            payload.kv,
+          );
+          if (res.rows.length > 0) {
+            const record = rowToRecord(plan, res.rows[0]);
+            this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
+          }
+        } else if (payload.op === 'r') {
+          const fresh: MutableMap = new Map();
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName}`,
+          );
+          for (const row of res.rows) {
+            const record = rowToRecord(plan, row);
+            fresh.set(plan.descriptor.keyOf(record), record);
+          }
+          (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
+        }
+      } catch (err) {
+        log.warn('pg_store_peer_refresh_failed', {
+          map: payload.m,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        client.release?.();
+      }
+    })();
+  }
+
+  /** Flush queued writes. Does NOT close the change subscription — safe to call
+   * repeatedly (e.g. to await durability) without unsubscribing from peers. */
   async drain(): Promise<void> {
     await this.queue?.drain();
+  }
+
+  /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
+  async shutdown(): Promise<void> {
+    await this.drain();
+    await this.transport?.close();
   }
 }
 
@@ -3186,14 +3291,23 @@ export const db =
       ? new PostgresBackedDb()
       : new FileBackedDb();
 
-/** Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres). */
+/**
+ * Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres).
+ * Cross-replica cache invalidation via Postgres LISTEN/NOTIFY is on by default;
+ * set BLACKOUT_DB_PG_NOTIFY=0 to disable (e.g. a known single-instance deploy).
+ */
 export async function initRuntimeStore(pool: PgPool): Promise<void> {
-  if (db instanceof PostgresBackedDb) await db.init(pool);
+  if (!(db instanceof PostgresBackedDb)) return;
+  const transport =
+    process.env.BLACKOUT_DB_PG_NOTIFY === '0'
+      ? undefined
+      : new PgNotifyTransport(pool as unknown as ConstructorParameters<typeof PgNotifyTransport>[0]);
+  await db.init(pool, transport);
 }
 
-/** Drain pending Postgres write-behind ops on graceful shutdown. */
+/** Flush write-behind ops + close the change subscription on graceful shutdown. */
 export async function drainRuntimeStore(): Promise<void> {
-  if (db instanceof PostgresBackedDb) await db.drain();
+  if (db instanceof PostgresBackedDb) await db.shutdown();
 }
 
 /** Runtime store mode, for boot wiring. */
