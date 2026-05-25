@@ -9,6 +9,7 @@ import type {
     NormalizedListing,
 } from './provider';
 import { marketplaceProviderIds } from './provider';
+import { isPluginDomain } from './domain';
 
 const entitlementKinds: EntitlementKind[] = [
     'emoji_pack',
@@ -100,6 +101,7 @@ export function parseNormalizedListing(input: unknown): NormalizedListing {
         providerId,
         providerListingId: requireString(input, 'providerListingId'),
         category,
+        domain: isPluginDomain(input.domain) ? input.domain : undefined,
         title: requireString(input, 'title'),
         description: requireString(input, 'description'),
         priceCents: priceRaw,

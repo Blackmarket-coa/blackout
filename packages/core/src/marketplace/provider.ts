@@ -1,3 +1,5 @@
+import type { PluginDomain } from './domain';
+
 export const marketplaceProviderIds = [
     'freeblackmarket',
     'blamazon',
@@ -171,6 +173,8 @@ export interface NormalizedListing {
     providerId: MarketplaceProviderId;
     providerListingId: string;
     category: MarketplaceCategory;
+    /** Ecosystem-domain axis (orthogonal to `category`); optional for legacy listings. */
+    domain?: PluginDomain;
     title: string;
     description: string;
     priceCents: number;
