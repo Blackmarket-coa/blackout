@@ -9,37 +9,37 @@ const mocks = vi.hoisted(() => ({
     room: { value: { roomId: '!den:srv' } as { roomId: string } | null },
 }));
 
-vi.mock('../../hooks/useMatrixClient', () => ({
+vi.mock('../../../../src/app/hooks/useMatrixClient', () => ({
     useMatrixClient: () => mocks.mx.value,
     useMatrixClientOrNull: () => mocks.mx.value,
 }));
-vi.mock('../../hooks/usePowerLevels', () => ({
+vi.mock('../../../../src/app/hooks/usePowerLevels', () => ({
     PowerLevelsContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     usePowerLevels: () => ({}),
 }));
-vi.mock('../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter', () => ({
+vi.mock('../../../../src/app/plugins/matrix-adapters/hooks/useLegacyRoomAdapter', () => ({
     useLegacyRoomAdapter: () => ({ data: mocks.room.value, loading: false, error: null }),
 }));
-vi.mock('../room/RoomInviteAcceptGate', () => ({
+vi.mock('../../../../src/app/features/room/RoomInviteAcceptGate', () => ({
     RoomInviteAcceptGate: ({ children, roomId }: { children: React.ReactNode; roomId: string }) => (
         <div data-testid="gate" data-room-id={roomId}>
             {children}
         </div>
     ),
 }));
-vi.mock('../room/RoomTimeline', () => ({
+vi.mock('../../../../src/app/features/room/RoomTimeline', () => ({
     RoomTimeline: ({ roomId }: { roomId: string }) => (
         <div data-testid="embedded-timeline" data-room-id={roomId} />
     ),
 }));
-vi.mock('../room/MessageComposer', () => ({
+vi.mock('../../../../src/app/features/room/MessageComposer', () => ({
     MessageComposer: ({ roomId }: { roomId: string }) => (
         <div data-testid="embedded-composer" data-room-id={roomId} />
     ),
 }));
 
 // eslint-disable-next-line import/first
-import { EmbeddedDenChat } from './EmbeddedDenChat';
+import { EmbeddedDenChat } from '../../../../src/app/features/streams/EmbeddedDenChat';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -88,7 +88,7 @@ describe('EmbeddedDenChat', () => {
         mocks.room.value = null;
         const container = render(<EmbeddedDenChat denId="!den:srv" />);
         expect(
-            container.querySelector('[data-testid="livestream-den-chat-loading"]')
+            container.querySelector('[data-testid="livestream-den-chat-loading"]'),
         ).not.toBeNull();
         expect(container.querySelector('[data-testid="embedded-timeline"]')).toBeNull();
     });
