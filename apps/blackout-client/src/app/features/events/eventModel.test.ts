@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildEventDirectory,
+    buildMonthGrid,
     collectEventsFromRoom,
     splitEventsByTimeline,
     type EventStateLike,
+    type EventViewItem,
     type RoomWithStateLike,
 } from './eventModel';
 
@@ -179,5 +181,40 @@ describe('splitEventsByTimeline', () => {
         const split = splitEventsByTimeline(items, now);
         expect(split.upcoming.map((i) => i.eventId)).toEqual(['$soon']);
         expect(split.past.map((i) => i.eventId)).toEqual(['$past']);
+    });
+});
+
+describe('buildMonthGrid', () => {
+    const eventAt = (id: string, iso: string): EventViewItem => ({
+        id,
+        roomId: '!r:s',
+        eventId: id,
+        title: id,
+        description: '',
+        startsAt: iso,
+        visibility: 'public',
+        tags: [],
+        updatedAt: iso,
+        startsAtMs: Date.parse(iso),
+    });
+
+    it('lays out a Sunday-first 6x7 grid and buckets events by UTC day', () => {
+        const grid = buildMonthGrid(
+            [eventAt('$a', '2026-05-15T12:00:00Z'), eventAt('$b', '2026-05-15T18:00:00Z')],
+            2026,
+            4 // May (0-based)
+        );
+        expect(grid.weeks).toHaveLength(6);
+        for (const week of grid.weeks) expect(week).toHaveLength(7);
+
+        const cells = grid.weeks.flat();
+        const may15 = cells.find((cell) => cell.date === '2026-05-15');
+        expect(may15?.inMonth).toBe(true);
+        expect(may15?.events.map((e) => e.eventId)).toEqual(['$a', '$b']);
+
+        // A day with no events stays empty, and spill-over days are flagged.
+        const may16 = cells.find((cell) => cell.date === '2026-05-16');
+        expect(may16?.events).toEqual([]);
+        expect(cells.some((cell) => !cell.inMonth)).toBe(true);
     });
 });
