@@ -14,6 +14,19 @@ export type ColiseumCitation =
 
 export type ColiseumCitationKind = ColiseumCitation['kind'];
 
+/**
+ * Short-form video attached to a ColiseumArgument so debates can be presented
+ * as a vertical, swipe-driven reel (not just text). The mxc points at an
+ * already-uploaded Matrix media object — Coliseum does not transcode; it
+ * references the same media pipeline used elsewhere.
+ */
+export interface ColiseumArgumentMedia {
+    kind: 'video';
+    mxc: string;
+    posterMxc?: string;
+    durationMs?: number;
+}
+
 export const COLISEUM_CITATION_KINDS: readonly ColiseumCitationKind[] = [
     'live',
     'townhall',
@@ -91,6 +104,23 @@ export function validateCitations(input: unknown): ColiseumCitation[] {
         if (validated) out.push(validated);
     }
     return out;
+}
+
+/**
+ * Validate argument video media. Returns the media untouched on success, or
+ * null on shape/identifier failure. Strict on the mxc URI (mirrors the `audio`
+ * citation), permissive on optional poster/duration.
+ */
+export function validateArgumentMedia(input: unknown): ColiseumArgumentMedia | null {
+    if (!input || typeof input !== 'object') return null;
+    const data = input as Record<string, unknown>;
+    if (data.kind !== 'video') return null;
+    if (!isNonEmptyString(data.mxc) || !MXC_RE.test(data.mxc)) return null;
+    const posterMxc =
+        isNonEmptyString(data.posterMxc) && MXC_RE.test(data.posterMxc) ? data.posterMxc : undefined;
+    const durationMs =
+        typeof data.durationMs === 'number' && data.durationMs >= 0 ? data.durationMs : undefined;
+    return { kind: 'video', mxc: data.mxc, posterMxc, durationMs };
 }
 
 /**

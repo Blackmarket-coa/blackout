@@ -9,6 +9,7 @@ import {
     scoreColiseumArgument,
     wilsonLowerBound,
     type ColiseumArgument,
+    type ColiseumArgumentMedia,
     type ColiseumCitation,
     type ColiseumNewsAnchor,
     type ColiseumStance,
@@ -324,6 +325,7 @@ export interface CreateArgumentInput {
     stanceWeight: number;
     body: string;
     citations: ColiseumCitation[];
+    media?: ColiseumArgumentMedia;
 }
 
 export function createArgument(
