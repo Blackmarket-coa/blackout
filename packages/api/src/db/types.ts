@@ -1,3 +1,5 @@
+import type { AidPost, SpatialFeedItem } from '@blackout/core';
+
 export type UUID = string;
 
 export interface UserRecord {
@@ -810,4 +812,15 @@ export interface TipRecord {
   capturedAt: string | null;
   refundedAt: string | null;
   metadata?: Record<string, unknown>;
+}
+
+/** A pin on the Coalition spatial map (events, dens, streams, aid, vendors, …). */
+export interface CoalitionSpatialItemRecord extends SpatialFeedItem {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A durable mutual-aid request/offer surfaced on the Coalition map. */
+export interface CoalitionAidPostRecord extends AidPost {
+  createdAt: string;
 }

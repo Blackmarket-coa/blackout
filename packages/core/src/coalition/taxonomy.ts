@@ -1,10 +1,15 @@
 export const SPATIAL_LAYER_DEFINITIONS = [
-    { key: 'vendors', label: 'Marketplace', aliases: ['vendors', 'marketplace'] },
+    { key: 'vendors', label: 'Marketplace', aliases: ['vendors', 'marketplace', 'markets'] },
     { key: 'jobs', label: 'Jobs', aliases: ['jobs'] },
     { key: 'gardens', label: 'Gardens', aliases: ['gardens'] },
     { key: 'votes', label: 'Governance', aliases: ['votes', 'governance'] },
     { key: 'aid', label: 'Mutual Aid', aliases: ['aid', 'mutual aid'] },
     { key: 'infra', label: 'Infrastructure', aliases: ['infra', 'infrastructure'] },
+    { key: 'events', label: 'Events', aliases: ['events', 'event'] },
+    { key: 'dens', label: 'Dens', aliases: ['dens', 'den'] },
+    { key: 'streams', label: 'Streams', aliases: ['streams', 'stream', 'livestreams'] },
+    { key: 'projects', label: 'Projects', aliases: ['projects', 'project'] },
+    { key: 'communities', label: 'Communities', aliases: ['communities', 'community', 'canopies'] },
     { key: 'mycelium', label: 'Federation', aliases: ['mycelium', 'federation', 'constellation'] },
 ] as const;
 

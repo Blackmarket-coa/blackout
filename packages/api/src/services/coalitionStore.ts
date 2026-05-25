@@ -6,12 +6,12 @@ import {
     SELLER_LOCATION_TYPES,
     SPATIAL_LAYER_KEYS,
     deriveDisplayStatus,
-    deriveSpatialEventStatus,
     type AidPost,
     type CoalitionFeedItem,
     type SellerLocation,
     type SpatialFeedItem,
 } from '@blackout/core';
+import { db } from '../db/store';
 
 const NOW_ISO = () => new Date().toISOString();
 
@@ -77,87 +77,6 @@ const seedFeed: CoalitionFeedItem[] = [
     },
 ];
 
-const seedSpatial: SpatialFeedItem[] = [
-    {
-        id: 'spatial-vendor-1',
-        layer: 'vendors',
-        title: 'Sunrise Farm Stand pop-up',
-        latitude: 40.7128,
-        longitude: -74.006,
-        visibility: 'public',
-        eventType: 'farm',
-        startsAt: '2026-05-03T13:00:00Z',
-        endsAt: '2026-05-03T18:00:00Z',
-        status: deriveSpatialEventStatus({
-            startsAt: '2026-05-03T13:00:00Z',
-            endsAt: '2026-05-03T18:00:00Z',
-        }),
-        source: 'medusa',
-    },
-    {
-        id: 'spatial-aid-1',
-        layer: 'aid',
-        title: 'Diaper bank restock',
-        latitude: 40.7185,
-        longitude: -74.012,
-        visibility: 'community',
-        eventType: 'aid',
-        startsAt: '2026-05-02T09:00:00Z',
-        endsAt: '2026-05-02T17:00:00Z',
-        status: deriveSpatialEventStatus({
-            startsAt: '2026-05-02T09:00:00Z',
-            endsAt: '2026-05-02T17:00:00Z',
-        }),
-        severity: 'moderate',
-        source: 'gateway',
-    },
-    {
-        id: 'spatial-vote-1',
-        layer: 'votes',
-        title: 'Block proposal #BMC-019',
-        latitude: 40.7079,
-        longitude: -74.011,
-        visibility: 'community',
-        eventType: 'community_event',
-        startsAt: '2026-05-02T18:30:00Z',
-        endsAt: '2026-05-02T20:30:00Z',
-        status: deriveSpatialEventStatus({
-            startsAt: '2026-05-02T18:30:00Z',
-            endsAt: '2026-05-02T20:30:00Z',
-        }),
-        source: 'blackout',
-    },
-];
-
-const seedAid: AidPost[] = [
-    {
-        id: 'aidp_seed_1',
-        customerId: '@vine:server',
-        type: 'need',
-        category: 'food',
-        title: 'Diapers size 3 needed',
-        description: 'Looking for a pack to tide a family over until Friday.',
-        location: { latitude: 40.7185, longitude: -74.012 },
-        displayRadiusMeters: 500,
-        urgency: 'high',
-        status: 'open',
-        denId: '!demo-aid:server',
-    },
-    {
-        id: 'aidp_seed_2',
-        customerId: '@oak:server',
-        type: 'offer',
-        category: 'transport',
-        title: 'Free rides to clinic Tuesday',
-        description: 'Rides 9am-3pm within 5 miles. DM to coordinate.',
-        location: { latitude: 40.7128, longitude: -74.006 },
-        displayRadiusMeters: 8000,
-        urgency: 'medium',
-        status: 'open',
-        denId: '!demo-aid:server',
-    },
-];
-
 const seedSellers: SellerLocation[] = [
     {
         id: 'sloc_seed_1',
@@ -190,10 +109,6 @@ const seedSellers: SellerLocation[] = [
 const feedStore = new Map<string, CoalitionFeedItem>(
     seedFeed.map((item) => [item.id, item]),
 );
-const spatialStore = new Map<string, SpatialFeedItem>(
-    seedSpatial.map((item) => [item.id, item]),
-);
-const aidStore = new Map<string, AidPost>(seedAid.map((post) => [post.id, post]));
 const sellerStore = new Map<string, SellerLocation>(
     seedSellers.map((location) => [location.id, location]),
 );
@@ -227,19 +142,19 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
               )
             : SPATIAL_LAYER_KEYS,
     );
-    return [...spatialStore.values()].filter((item) => allowed.has(item.layer));
+    return db.listCoalitionSpatialItems().filter((item) => allowed.has(item.layer));
 }
 
 export function listAidPosts(filter: { denId?: string } = {}): AidPost[] {
     const now = Date.now();
-    return [...aidStore.values()]
+    return db
+        .listCoalitionAidPosts()
         .map((post) => ({ ...post, status: deriveDisplayStatus(post, now) }))
         .filter((post) => (filter.denId ? post.denId === filter.denId : true));
 }
 
 export function createAidPost(post: AidPost): AidPost {
-    aidStore.set(post.id, post);
-    return post;
+    return db.createCoalitionAidPost(post);
 }
 
 export function listSellerLocations(filter: { onlyVisible?: boolean } = {}): SellerLocation[] {

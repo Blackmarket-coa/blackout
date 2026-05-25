@@ -1,8 +1,13 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import {
     SPATIAL_LAYER_DEFINITIONS,
+    URGENCY_RANK,
+    deriveSpatialEventStatus,
+    haversineDistanceMeters,
+    spatialHeatWeight,
     type AidPost,
     type SellerLocation,
+    type SpatialEventStatus,
     type SpatialFeedItem,
     type SpatialLayerKey,
 } from '@blackout/core';
@@ -30,6 +35,41 @@ interface PinDetails {
     latitude: number;
     longitude: number;
     denId?: string;
+    status?: SpatialEventStatus;
+    heat?: number;
+    /** Event start (ISO) for temporal filtering; absent for standing pins (aid, vendors). */
+    startsAt?: string;
+}
+
+type TemporalMode = 'now' | 'today' | 'week' | 'all';
+
+const TEMPORAL_FILTERS: ReadonlyArray<{ key: TemporalMode; label: string }> = [
+    { key: 'now', label: 'Now' },
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'This week' },
+    { key: 'all', label: 'All' },
+];
+
+const RADIUS_OPTIONS_KM = [1, 5, 25] as const;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a pin belongs in the selected time window. Standing pins (no
+ * `startsAt`, e.g. mutual-aid offers and vendor locations) are always present;
+ * time-boxed pins are matched against the window.
+ */
+function passesTemporal(pin: PinDetails, mode: TemporalMode, nowMs: number): boolean {
+    if (mode === 'all') return true;
+    if (!pin.startsAt) return true;
+    const startMs = Date.parse(pin.startsAt);
+    if (Number.isNaN(startMs)) return true;
+    if (mode === 'now') return pin.status === 'live';
+    const startOfToday = new Date(nowMs);
+    startOfToday.setHours(0, 0, 0, 0);
+    const horizon = mode === 'today' ? startOfToday.getTime() + DAY_MS : nowMs + 7 * DAY_MS;
+    // Live pins always belong to "today" and "this week".
+    return pin.status === 'live' || (startMs >= startOfToday.getTime() && startMs <= horizon);
 }
 
 export function MapTab({ scope }: MapTabProps) {
@@ -39,18 +79,16 @@ export function MapTab({ scope }: MapTabProps) {
     const [selectedPin, setSelectedPin] = useState<PinDetails | null>(null);
     const [nearby, setNearby] = useState<NearbyQuery | undefined>(undefined);
     const [nearbyError, setNearbyError] = useState<string | null>(null);
+    const [temporalMode, setTemporalMode] = useState<TemporalMode>('all');
+    const [radiusKm, setRadiusKm] = useState<number>(5);
+    const [showHeat, setShowHeat] = useState(false);
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
     const aidState = useMutualAid(scope, nearby);
     const sellerState = useSellerLocations(nearby);
 
-    const toggleNearby = () => {
-        if (nearby) {
-            setNearby(undefined);
-            setNearbyError(null);
-            return;
-        }
+    const requestNearby = (km: number) => {
         if (!navigator.geolocation) {
             setNearbyError('Location is unavailable on this device.');
             return;
@@ -61,14 +99,30 @@ export function MapTab({ scope }: MapTabProps) {
                 setNearby({
                     lat: position.coords.latitude,
                     lng: position.coords.longitude,
-                    radiusKm: 5,
+                    radiusKm: km,
                 });
             },
             () => setNearbyError('Could not get your location.')
         );
     };
 
-    const pins = useMemo(
+    const toggleNearby = () => {
+        if (nearby) {
+            setNearby(undefined);
+            setNearbyError(null);
+            return;
+        }
+        requestNearby(radiusKm);
+    };
+
+    const selectRadius = (km: number) => {
+        setRadiusKm(km);
+        if (nearby) {
+            setNearby({ ...nearby, radiusKm: km });
+        }
+    };
+
+    const allPins = useMemo(
         () =>
             pinList(
                 spatialState.data?.items ?? [],
@@ -77,6 +131,41 @@ export function MapTab({ scope }: MapTabProps) {
             ),
         [spatialState.data, aidState.data, sellerState.data]
     );
+
+    // Apply the temporal window, then (when "Near me" is active) sort by distance.
+    const pins = useMemo(() => {
+        const nowMs = Date.now();
+        const filtered = allPins.filter((pin) => passesTemporal(pin, temporalMode, nowMs));
+        if (!nearby) return filtered;
+        const viewer = { latitude: nearby.lat, longitude: nearby.lng };
+        return [...filtered].sort((a, b) => {
+            const da = haversineDistanceMeters(
+                { latitude: a.latitude, longitude: a.longitude },
+                viewer
+            );
+            const db = haversineDistanceMeters(
+                { latitude: b.latitude, longitude: b.longitude },
+                viewer
+            );
+            return da - db;
+        });
+    }, [allPins, temporalMode, nearby]);
+
+    const nearbyCount = useMemo(() => {
+        if (!nearby) return pins.length;
+        const viewer = { latitude: nearby.lat, longitude: nearby.lng };
+        const radiusMeters = nearby.radiusKm * 1000;
+        return pins.filter(
+            (pin) =>
+                Number.isFinite(pin.latitude) &&
+                Number.isFinite(pin.longitude) &&
+                haversineDistanceMeters(
+                    { latitude: pin.latitude, longitude: pin.longitude },
+                    viewer
+                ) <= radiusMeters
+        ).length;
+    }, [pins, nearby]);
+
     const myceliumGraph = useMyceliumGraph();
     const myceliumActive = activeLayers.has('mycelium');
 
@@ -127,6 +216,7 @@ export function MapTab({ scope }: MapTabProps) {
                         pins={pins}
                         viewerLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : null}
                         focusPinId={selectedPin?.id ?? null}
+                        showHeat={showHeat}
                         onSelectPin={(id) => {
                             const pin = pins.find((candidate) => candidate.id === id);
                             if (pin) setSelectedPin(pin);
@@ -174,7 +264,11 @@ export function MapTab({ scope }: MapTabProps) {
                         onClick={toggleNearby}
                         aria-pressed={Boolean(nearby)}
                         data-testid="coalition-map-nearby"
-                        title={nearby ? 'Showing activity within 5km' : 'Filter to nearby activity'}
+                        title={
+                            nearby
+                                ? `Showing activity within ${radiusKm}km`
+                                : 'Filter to nearby activity'
+                        }
                         style={{
                             border: '1px solid var(--border-default)',
                             borderRadius: 999,
@@ -189,11 +283,94 @@ export function MapTab({ scope }: MapTabProps) {
                     >
                         📍 Near me{nearby ? ' ✓' : ''}
                     </button>
+                    {RADIUS_OPTIONS_KM.map((km) => (
+                        <button
+                            key={km}
+                            type="button"
+                            onClick={() => selectRadius(km)}
+                            aria-pressed={radiusKm === km}
+                            data-testid={`coalition-map-radius-${km}`}
+                            title={`Search radius ${km}km`}
+                            style={{
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 999,
+                                padding: '4px 8px',
+                                fontSize: 12,
+                                background:
+                                    radiusKm === km
+                                        ? 'var(--accent-primary, #1ABC9C)'
+                                        : 'var(--bg-surface)',
+                                color: radiusKm === km ? '#0a1a0f' : 'var(--text-primary)',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {km}km
+                        </button>
+                    ))}
                     {nearbyError ? (
                         <span style={{ fontSize: 11, color: 'var(--danger)', alignSelf: 'center' }}>
                             {nearbyError}
                         </span>
                     ) : null}
+                </div>
+
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 48,
+                        left: 12,
+                        zIndex: 2,
+                        display: 'flex',
+                        gap: 6,
+                        flexWrap: 'wrap',
+                    }}
+                    data-testid="coalition-map-temporal"
+                >
+                    {TEMPORAL_FILTERS.map((filter) => {
+                        const active = temporalMode === filter.key;
+                        return (
+                            <button
+                                key={filter.key}
+                                type="button"
+                                onClick={() => setTemporalMode(filter.key)}
+                                aria-pressed={active}
+                                data-testid={`coalition-map-temporal-${filter.key}`}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    borderRadius: 999,
+                                    padding: '4px 10px',
+                                    fontSize: 12,
+                                    background: active
+                                        ? 'var(--accent-primary, #1ABC9C)'
+                                        : 'var(--bg-surface)',
+                                    color: active ? '#0a1a0f' : 'var(--text-primary)',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                {filter.label}
+                            </button>
+                        );
+                    })}
+                    <button
+                        type="button"
+                        onClick={() => setShowHeat((value) => !value)}
+                        aria-pressed={showHeat}
+                        data-testid="coalition-map-heat"
+                        title="Toggle the activity-heat overlay"
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            background: showHeat
+                                ? 'var(--accent-primary, #1ABC9C)'
+                                : 'var(--bg-surface)',
+                            color: showHeat ? '#0a1a0f' : 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        🔥 Heat{showHeat ? ' ✓' : ''}
+                    </button>
                 </div>
 
                 {myceliumActive && (
@@ -231,6 +408,27 @@ export function MapTab({ scope }: MapTabProps) {
                         </div>
                     </div>
                 )}
+
+                <div
+                    style={{
+                        position: 'absolute',
+                        bottom: 200,
+                        left: 12,
+                        zIndex: 2,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 999,
+                        padding: '4px 10px',
+                    }}
+                    data-testid="coalition-map-discovery-count"
+                >
+                    {nearby
+                        ? `${nearbyCount} happening within ${radiusKm}km`
+                        : `${pins.length} on the map`}
+                </div>
 
                 <ul
                     style={{
@@ -311,15 +509,23 @@ function pinList(
     aid: AidPost[],
     sellers: SellerLocation[]
 ): PinDetails[] {
+    const nowMs = Date.now();
     const pins: PinDetails[] = [];
     for (const item of spatial) {
+        const status =
+            item.status ??
+            deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }, nowMs);
         pins.push({
             id: item.id,
             title: item.title,
-            subtitle: `${item.layer} · ${item.status}`,
+            subtitle: `${item.layer} · ${status}`,
             layer: item.layer,
             latitude: item.latitude,
             longitude: item.longitude,
+            denId: item.denId,
+            status,
+            heat: spatialHeatWeight({ ...item, status }, nowMs),
+            startsAt: item.startsAt,
         });
     }
     for (const post of aid) {
@@ -331,6 +537,7 @@ function pinList(
             latitude: post.location.latitude,
             longitude: post.location.longitude,
             denId: post.denId,
+            heat: URGENCY_RANK[post.urgency],
         });
     }
     for (const seller of sellers) {
