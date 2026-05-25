@@ -5,10 +5,17 @@ import { atomWithStorage } from 'jotai/utils';
  * coliseum this is an account-level surface, not room-scoped, so the tab set is
  * fixed here rather than derived from a Matrix state event.
  */
-export type StreamingTabId = 'live' | 'broadcast' | 'connections' | 'bridges' | 'health';
+export type StreamingTabId =
+    | 'live'
+    | 'replays'
+    | 'broadcast'
+    | 'connections'
+    | 'bridges'
+    | 'health';
 
 export const STREAMING_TAB_ORDER: StreamingTabId[] = [
     'live',
+    'replays',
     'broadcast',
     'connections',
     'bridges',
@@ -17,6 +24,7 @@ export const STREAMING_TAB_ORDER: StreamingTabId[] = [
 
 export const STREAMING_TAB_LABELS: Record<StreamingTabId, string> = {
     live: 'Live',
+    replays: 'Replays',
     broadcast: 'Broadcast',
     connections: 'Connections',
     bridges: 'Bridges & Webhooks',

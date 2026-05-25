@@ -7,7 +7,10 @@ import { Provider as JotaiProvider, createStore } from 'jotai';
 
 // The hub mounts heavy, network-backed components per tab. Stub each one so the
 // test exercises the tab routing without their data fetches.
-vi.mock('../streams', () => ({ LiveDirectory: () => <div data-testid="stub-live" /> }));
+vi.mock('../streams', () => ({
+    LiveDirectory: () => <div data-testid="stub-live" />,
+    ReplaysDirectory: () => <div data-testid="stub-replays" />,
+}));
 vi.mock('../settings/linked-accounts', () => ({
     LinkedAccounts: () => <div data-testid="stub-linked-accounts" />,
 }));
@@ -74,14 +77,21 @@ describe('StreamingView', () => {
         localStorage.clear();
     });
 
-    it('renders all five tabs and defaults to the Live tab', async () => {
+    it('renders all six tabs and defaults to the Live tab', async () => {
         const { container } = await mountView();
         const tabs = Array.from(container.querySelectorAll('[data-streaming-tab]')).map((el) =>
             el.getAttribute('data-streaming-tab')
         );
-        expect(tabs).toEqual(['live', 'broadcast', 'connections', 'bridges', 'health']);
+        expect(tabs).toEqual(['live', 'replays', 'broadcast', 'connections', 'bridges', 'health']);
         expect(container.querySelector('[data-testid="streaming-tab-live"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="stub-live"]')).not.toBeNull();
+    });
+
+    it('switches to Replays and mounts the replay archive', async () => {
+        const { container } = await mountView();
+        await clickTab(container, 'replays');
+        expect(container.querySelector('[data-testid="streaming-tab-replays"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="stub-replays"]')).not.toBeNull();
     });
 
     it('switches to Broadcast and mounts the simulcast / OBS / IRC / widget tools', async () => {
