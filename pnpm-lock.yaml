@@ -519,6 +519,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@types/node':
+        specifier: ^22.19.15
+        version: 22.19.15
       '@types/nodemailer':
         specifier: ^7.0.4
         version: 7.0.11
@@ -528,6 +531,9 @@ importers:
       socket.io-client:
         specifier: ^4.8.3
         version: 4.8.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
   packages/blackout-protocol:
     dependencies:

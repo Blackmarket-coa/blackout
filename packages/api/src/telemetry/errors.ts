@@ -59,8 +59,11 @@ const initSentry = async (): Promise<void> => {
     release: process.env.SENTRY_RELEASE,
     environment: process.env.NODE_ENV ?? 'development',
     tracesSampleRate: Number.parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
-    beforeBreadcrumb: (breadcrumb) => ({ ...breadcrumb, data: sanitizeBreadcrumb(breadcrumb.data) }),
-    beforeSend: (event) => {
+    beforeBreadcrumb: (breadcrumb: { data?: Record<string, unknown> }) => ({
+      ...breadcrumb,
+      data: sanitizeBreadcrumb(breadcrumb.data),
+    }),
+    beforeSend: (event: { request?: { headers?: Record<string, string> } }) => {
       if (event.request?.headers) {
         for (const key of Object.keys(event.request.headers)) {
           if (SECRET_KEY_RE.test(key)) {

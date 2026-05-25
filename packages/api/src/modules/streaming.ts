@@ -413,7 +413,7 @@ function createStreamingRouter() {
     const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
-    const clipId = c.req.param('clipId');
+    const { clipId } = c.req.param();
     const clip = db.getClip(clipId);
     if (!clip) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
 
@@ -439,7 +439,7 @@ function createStreamingRouter() {
     const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
-    const clipId = c.req.param('clipId');
+    const { clipId } = c.req.param();
     const clip = db.getClip(clipId);
     if (!clip) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
     const subject = requireAuthenticatedUser(c);

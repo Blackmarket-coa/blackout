@@ -46,6 +46,7 @@ jobs:
           pnpm --filter @blackout/core run build
           pnpm --filter @blackout/design run build
       - run: pnpm --filter @blackout/client run typecheck
+      - run: pnpm --filter @blackout/api run typecheck
       - run: pnpm --filter blackout-mobile run preflight
 
   unit-tests:
