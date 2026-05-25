@@ -29,6 +29,12 @@ export interface SpatialFeedItem {
     status: SpatialEventStatus;
     severity?: SpatialSeverity;
     confidence?: number;
+    /** Participation density (0..1) used to weight the activity heat overlay. */
+    activityLevel?: number;
+    /** Optional links so a pin can deep-link to the den/stream/community it represents. */
+    denId?: string;
+    streamId?: string;
+    canopyId?: string;
     source?: 'gateway' | 'medusa' | 'blackstar' | 'blackout';
     meta?: Record<string, unknown>;
 }
@@ -78,6 +84,23 @@ const SEVERITY_RANK: Record<SpatialSeverity, number> = {
 
 export function severityToScore(severity: SpatialSeverity | undefined): number {
     return severity === undefined ? 0 : SEVERITY_RANK[severity];
+}
+
+/**
+ * Heat intensity (0..1) for the activity overlay. A pin radiates heat from
+ * whichever signal is strongest: its severity, its participation density, or
+ * the fact that it is currently live.
+ */
+export function spatialHeatWeight(
+    item: Pick<SpatialFeedItem, 'severity' | 'activityLevel' | 'startsAt' | 'endsAt'> & {
+        status?: SpatialEventStatus;
+    },
+    nowEpochMs: number = Date.now(),
+): number {
+    const status =
+        item.status ?? deriveSpatialEventStatus({ startsAt: item.startsAt, endsAt: item.endsAt }, nowEpochMs);
+    const liveWeight = status === 'live' ? 0.8 : 0;
+    return clamp01(Math.max(severityToScore(item.severity), item.activityLevel ?? 0, liveWeight));
 }
 
 function recencyScore(createdAtIso: string, halfLifeHours: number, nowMs: number): number {

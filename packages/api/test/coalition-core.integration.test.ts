@@ -17,6 +17,7 @@ import {
     resolveEnabledTabs,
     scoreCoalitionItem,
     severityToScore,
+    spatialHeatWeight,
     type AidPost,
     type CoalitionFeedItem,
 } from '@blackout/core';
@@ -38,9 +39,55 @@ test('normalizeSpatialLayerKeys deduplicates and discards unknowns', () => {
     assert.deepEqual(keys, ['vendors', 'aid']);
 });
 
-test('SPATIAL_LAYER_KEYS covers the canonical layers (now seven, including mycelium)', () => {
-    assert.equal(SPATIAL_LAYER_KEYS.length, 7);
-    assert.ok(SPATIAL_LAYER_KEYS.includes('mycelium'));
+test('normalizeSpatialLayerKey resolves the new living-map aliases', () => {
+    assert.equal(normalizeSpatialLayerKey('event'), 'events');
+    assert.equal(normalizeSpatialLayerKey('livestreams'), 'streams');
+    assert.equal(normalizeSpatialLayerKey('canopies'), 'communities');
+    assert.equal(normalizeSpatialLayerKey('markets'), 'vendors');
+});
+
+test('spatialHeatWeight takes the strongest of severity, activity, and liveness', () => {
+    // A live event with no other signal still radiates the live floor (0.8).
+    assert.equal(
+        spatialHeatWeight({ startsAt: '2026-05-02T11:00:00Z', endsAt: '2026-05-02T13:00:00Z' }, NOW),
+        0.8,
+    );
+    // High activity beats the live floor.
+    assert.equal(
+        spatialHeatWeight(
+            { startsAt: '2026-05-02T11:00:00Z', endsAt: '2026-05-02T13:00:00Z', activityLevel: 0.95 },
+            NOW,
+        ),
+        0.95,
+    );
+    // A past pin with only low severity radiates just that.
+    assert.equal(
+        spatialHeatWeight(
+            { startsAt: '2026-05-01T00:00:00Z', endsAt: '2026-05-01T01:00:00Z', severity: 'low' },
+            NOW,
+        ),
+        severityToScore('low'),
+    );
+    // Nothing notable → no heat.
+    assert.equal(spatialHeatWeight({ startsAt: '2026-05-03T00:00:00Z' }, NOW), 0);
+});
+
+test('SPATIAL_LAYER_KEYS covers the canonical layers including the living-map additions', () => {
+    assert.equal(SPATIAL_LAYER_KEYS.length, 12);
+    for (const key of [
+        'vendors',
+        'aid',
+        'votes',
+        'infra',
+        'events',
+        'dens',
+        'streams',
+        'projects',
+        'communities',
+        'mycelium',
+    ]) {
+        assert.ok(SPATIAL_LAYER_KEYS.includes(key), `expected layer ${key}`);
+    }
 });
 
 test('deriveSpatialEventStatus handles upcoming/live/past', () => {

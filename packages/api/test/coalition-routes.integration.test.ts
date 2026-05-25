@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
+process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 process.env.JWT_SECRET_PRIMARY =
     process.env.JWT_SECRET_PRIMARY ?? 'Str0ng!TestKey-For-Api-Integration-1234#ABCxyzZZ';
 process.env.JWT_ISSUER = process.env.JWT_ISSUER ?? 'blackout-api-test';
@@ -64,6 +65,21 @@ test('coalition spatial-feed filters by layer', async () => {
     assert.ok(body.items.every((item) => item.layer === 'aid'));
 });
 
+test('coalition spatial-feed advertises and serves the new living-map layers', async () => {
+    const response = await app.request('/v1/coalition/spatial-feed', { headers: authHeader() });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+        items: Array<{ layer: string }>;
+        layers: string[];
+    };
+    for (const layer of ['events', 'dens', 'streams', 'projects', 'communities']) {
+        assert.ok(body.layers.includes(layer), `layers should advertise ${layer}`);
+    }
+    const present = new Set(body.items.map((item) => item.layer));
+    assert.ok(present.has('events'));
+    assert.ok(present.has('streams'));
+});
+
 test('coalition mutual-aid lists posts', async () => {
     const response = await app.request('/v1/coalition/mutual-aid', { headers: authHeader() });
     assert.equal(response.status, 200);
@@ -98,6 +114,30 @@ test('coalition mutual-aid create accepts a valid post', async () => {
     const body = (await response.json()) as { post: { id: string; status: string } };
     assert.ok(body.post.id.startsWith('aidp_'));
     assert.equal(body.post.status, 'open');
+});
+
+test('coalition mutual-aid persists a created post for later reads', async () => {
+    const create = await app.request('/v1/coalition/mutual-aid', {
+        method: 'POST',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({
+            type: 'need',
+            category: 'materials',
+            title: 'Tarps for the build day',
+            description: 'Need a few waterproof tarps before the weekend garden build.',
+            location: { latitude: 40.72, longitude: -73.997 },
+            denId: '!demo-persist:server',
+        }),
+    });
+    assert.equal(create.status, 201);
+    const created = (await create.json()) as { post: { id: string } };
+
+    const list = (await (
+        await app.request('/v1/coalition/mutual-aid?denId=!demo-persist:server', {
+            headers: authHeader(),
+        })
+    ).json()) as { posts: Array<{ id: string }> };
+    assert.ok(list.posts.some((post) => post.id === created.post.id));
 });
 
 test('coalition mutual-aid create rejects bad coordinates', async () => {

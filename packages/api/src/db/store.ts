@@ -56,7 +56,10 @@ import type {
   TwitchIrcBotTokenRecord,
   ObsWsPasswordRecord,
   SimulcastDestinationRecord,
+  CoalitionSpatialItemRecord,
+  CoalitionAidPostRecord,
 } from './types';
+import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
 
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
@@ -111,6 +114,8 @@ type PersistedState = {
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
+  coalitionSpatialItems: CoalitionSpatialItemRecord[];
+  coalitionAidPosts: CoalitionAidPostRecord[];
 };
 
 class InMemoryDb {
@@ -177,6 +182,14 @@ class InMemoryDb {
   twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
+  /** Coalition spatial map pins, keyed by item id. */
+  coalitionSpatialItems = new Map<string, CoalitionSpatialItemRecord>(
+    COALITION_SPATIAL_SEED.map((row) => [row.id, row]),
+  );
+  /** Coalition mutual-aid posts, keyed by post id. */
+  coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
+    COALITION_AID_SEED.map((row) => [row.id, row]),
+  );
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -1822,6 +1835,38 @@ class InMemoryDb {
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
+
+  // --- coalition spatial map ---
+
+  listCoalitionSpatialItems(): CoalitionSpatialItemRecord[] {
+    return [...this.coalitionSpatialItems.values()];
+  }
+
+  upsertCoalitionSpatialItem(
+    input: Omit<CoalitionSpatialItemRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionSpatialItemRecord {
+    const existing = this.coalitionSpatialItems.get(input.id);
+    const now = nowIso();
+    const record: CoalitionSpatialItemRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionSpatialItems.set(record.id, record);
+    return record;
+  }
+
+  listCoalitionAidPosts(): CoalitionAidPostRecord[] {
+    return [...this.coalitionAidPosts.values()];
+  }
+
+  createCoalitionAidPost(
+    input: Omit<CoalitionAidPostRecord, 'createdAt'>,
+  ): CoalitionAidPostRecord {
+    const record: CoalitionAidPostRecord = { ...input, createdAt: nowIso() };
+    this.coalitionAidPosts.set(record.id, record);
+    return record;
+  }
 }
 
 class FileBackedDb extends InMemoryDb {
@@ -1946,6 +1991,16 @@ class FileBackedDb extends InMemoryDb {
     this.obsWsPasswords = new Map(
       (parsed.obsWsPasswords ?? []).map((row) => [row.id, row]),
     );
+    if (parsed.coalitionSpatialItems) {
+      this.coalitionSpatialItems = new Map(
+        parsed.coalitionSpatialItems.map((row) => [row.id, row]),
+      );
+    }
+    if (parsed.coalitionAidPosts) {
+      this.coalitionAidPosts = new Map(
+        parsed.coalitionAidPosts.map((row) => [row.id, row]),
+      );
+    }
   }
 
   private snapshot(): PersistedState {
@@ -1998,6 +2053,8 @@ class FileBackedDb extends InMemoryDb {
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
+      coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
+      coalitionAidPosts: [...this.coalitionAidPosts.values()],
     };
   }
 
@@ -2746,6 +2803,22 @@ class FileBackedDb extends InMemoryDb {
     const removed = super.deleteObsWsPassword(id);
     if (removed) this.persist();
     return removed;
+  }
+
+  override upsertCoalitionSpatialItem(
+    input: Omit<CoalitionSpatialItemRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionSpatialItemRecord {
+    const created = super.upsertCoalitionSpatialItem(input);
+    this.persist();
+    return created;
+  }
+
+  override createCoalitionAidPost(
+    input: Omit<CoalitionAidPostRecord, 'createdAt'>,
+  ): CoalitionAidPostRecord {
+    const created = super.createCoalitionAidPost(input);
+    this.persist();
+    return created;
   }
 }
 
