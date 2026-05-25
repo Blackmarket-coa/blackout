@@ -59,6 +59,7 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  PluginInstallationRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
 
@@ -118,6 +119,7 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  pluginInstallations: PluginInstallationRecord[];
 };
 
 class InMemoryDb {
@@ -194,6 +196,8 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Plugin installations (activation-at-scope), keyed by installation id. */
+  pluginInstallations = new Map<string, PluginInstallationRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -1910,6 +1914,60 @@ class InMemoryDb {
     this.coalitionAidPosts.set(record.id, record);
     return record;
   }
+
+  // --- plugin installations (activation-at-scope) ---
+
+  createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const now = nowIso();
+    const record: PluginInstallationRecord = { ...input, installedAt: now, updatedAt: now };
+    this.pluginInstallations.set(record.id, record);
+    return record;
+  }
+
+  getPluginInstallation(id: string): PluginInstallationRecord | undefined {
+    return this.pluginInstallations.get(id);
+  }
+
+  /** Enforces the (pluginId, scopeType, scopeId) uniqueness constraint. */
+  findPluginInstallation(
+    pluginId: string,
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord | undefined {
+    return [...this.pluginInstallations.values()].find(
+      (row) => row.pluginId === pluginId && row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForScope(
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter(
+      (row) => row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForPlugin(pluginId: string): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const existing = this.pluginInstallations.get(id);
+    if (!existing) return undefined;
+    const updated: PluginInstallationRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.pluginInstallations.set(id, updated);
+    return updated;
+  }
+
+  deletePluginInstallation(id: string): boolean {
+    return this.pluginInstallations.delete(id);
+  }
 }
 
 class FileBackedDb extends InMemoryDb {
@@ -2047,6 +2105,9 @@ class FileBackedDb extends InMemoryDb {
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
       );
     }
+    this.pluginInstallations = new Map(
+      (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
+    );
   }
 
   private snapshot(): PersistedState {
@@ -2102,6 +2163,7 @@ class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      pluginInstallations: [...this.pluginInstallations.values()],
     };
   }
 
@@ -2880,6 +2942,29 @@ class FileBackedDb extends InMemoryDb {
     const created = super.createCoalitionAidPost(input);
     this.persist();
     return created;
+  }
+
+  override createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const created = super.createPluginInstallation(input);
+    this.persist();
+    return created;
+  }
+
+  override updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const updated = super.updatePluginInstallation(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deletePluginInstallation(id: string): boolean {
+    const removed = super.deletePluginInstallation(id);
+    if (removed) this.persist();
+    return removed;
   }
 }
 
