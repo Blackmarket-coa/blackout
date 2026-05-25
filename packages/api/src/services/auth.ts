@@ -158,16 +158,13 @@ export const isAdminUser = (userId: string, username: string): boolean => {
 
 /**
  * Capabilities embedded in a freshly minted session token. Every authenticated
- * user can browse the Live directory (`streaming.read`); going live
- * (`streaming.write`) stays reserved for admins. Per-stream visibility is still
- * enforced separately at the streaming module.
+ * user can both browse the Live directory (`streaming.read`) and go live
+ * (`streaming.write`). The streaming module enforces per-creator ownership, so
+ * a user can only manage streams they own; per-stream visibility is enforced
+ * there too.
  */
-export function deriveUserCapabilities(userId: string, username: string): string[] {
-  const capabilities = ['streaming.read'];
-  if (isAdminUser(userId, username)) {
-    capabilities.push('streaming.write');
-  }
-  return capabilities;
+export function deriveUserCapabilities(): string[] {
+  return ['streaming.read', 'streaming.write'];
 }
 
 export interface SignedJwt {
@@ -198,7 +195,7 @@ export function signJwtWithMeta(
     iss: config.issuer,
     aud: config.audience,
     jti,
-    capabilities: deriveUserCapabilities(userId, username),
+    capabilities: deriveUserCapabilities(),
   };
 
   const encodedHeader = base64Url(JSON.stringify(header));

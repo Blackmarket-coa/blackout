@@ -10,8 +10,8 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 
-async function issueToken(): Promise<string> {
-  const suffix = Date.now();
+async function issueToken(): Promise<{ token: string; userId: string }> {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const response = await app.request('/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -23,18 +23,18 @@ async function issueToken(): Promise<string> {
   });
 
   assert.equal(response.status, 201);
-  const body = (await response.json()) as { token: string };
-  return body.token;
+  const body = (await response.json()) as { token: string; userId: string };
+  return { token: body.token, userId: body.userId };
 }
 
 test('streaming module provisions keys, stream metadata, access policy, sessions and moderation controls', async () => {
-  const token = await issueToken();
-  const creatorId = `creator-${Date.now()}`;
+  const { token, userId: creatorId } = await issueToken();
   const streamId = `stream-${Date.now()}`;
+  // No x-blackout-capabilities header: the session token now carries
+  // streaming.read + streaming.write, and ownership is enforced by creatorId.
   const headers = {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
-    'x-blackout-capabilities': 'streaming.read,streaming.write,moderation.read',
   };
 
   const streamKeyResp = await app.request(`/v1/streaming/creators/${creatorId}/stream-key`, {
@@ -82,10 +82,7 @@ test('streaming module provisions keys, stream metadata, access policy, sessions
 
   const accessReadResp = await app.request(`/v1/streaming/streams/${streamId}/access?subscriberId=sub-1`, {
     method: 'GET',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'x-blackout-capabilities': 'streaming.read',
-    },
+    headers: { authorization: `Bearer ${token}` },
   });
   assert.equal(accessReadResp.status, 200);
   const accessBody = (await accessReadResp.json()) as { canAccess: boolean };
@@ -93,14 +90,12 @@ test('streaming module provisions keys, stream metadata, access policy, sessions
 });
 
 test('PUT /streams/:id/metadata round-trips denId; null clears it', async () => {
-  const token = await issueToken();
-  const creatorId = `creator-den-${Date.now()}`;
+  const { token, userId: creatorId } = await issueToken();
   const streamId = `stream-den-${Date.now()}`;
   const denId = '!den-room:blackout.coop';
   const headers = {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
-    'x-blackout-capabilities': 'streaming.read,streaming.write',
   };
 
   const provision = await app.request(`/v1/streaming/creators/${creatorId}/stream-key`, {
