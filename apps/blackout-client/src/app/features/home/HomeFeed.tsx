@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -27,105 +27,13 @@ import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
-
-const layoutStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100%',
-    width: '100%',
-    background: 'var(--bg-surface, #0f172a)',
-    color: 'var(--text-primary, #f8fafc)',
-};
-
-const headerStyle: CSSProperties = {
-    padding: '20px 20px 8px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-    flexWrap: 'wrap',
-};
-
-const headerTitleColStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    minWidth: 0,
-};
-
-const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 700 };
-const subtitleStyle: CSSProperties = {
-    margin: 0,
-    color: 'var(--text-muted, #9ca3af)',
-    fontSize: 13,
-};
-
-const sectionStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: '4px 16px 12px',
-};
-
-const sectionLabelStyle: CSSProperties = {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    color: 'var(--text-muted, #9ca3af)',
-    margin: '8px 4px 0',
-};
-
-const cardStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 14px',
-    border: '1px solid var(--border-default, #374151)',
-    borderRadius: 10,
-    background: 'var(--bg-input, #0f172a)',
-    color: 'inherit',
-    textDecoration: 'none',
-};
-
-const cardBodyStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-};
-
-const cardTitleStyle: CSSProperties = {
-    fontSize: 15,
-    fontWeight: 600,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-};
-
-const cardSubtitleStyle: CSSProperties = {
-    fontSize: 13,
-    color: 'var(--text-muted, #9ca3af)',
-};
-
-const emptyStateStyle: CSSProperties = {
-    margin: '24px 16px',
-    padding: '24px 20px',
-    border: '1px dashed var(--border-default, #374151)',
-    borderRadius: 12,
-    color: 'var(--text-muted, #9ca3af)',
-    fontSize: 14,
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-};
-
-const ctaLinkStyle: CSSProperties = {
-    color: 'var(--accent-primary, #3b82f6)',
-    textDecoration: 'underline',
-    fontWeight: 600,
-};
+import { AmbientBackdrop } from './AmbientBackdrop';
+import { EcosystemCanvas } from './EcosystemCanvas';
+import { ContextSidebar } from './context/ContextSidebar';
+import { useTimeOfDay } from './useTimeOfDay';
+import { useReducedMotion } from './useReducedMotion';
+import { useAmbientSound } from './useAmbientSound';
+import * as css from './HomeFeed.css';
 
 interface QuickAction {
     flag: keyof FeatureFlags;
@@ -185,19 +93,43 @@ const QUICK_ACTIONS: QuickAction[] = [
     },
 ];
 
+const greetingForHour = (hour: number): string => {
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    if (hour < 21) return 'Good evening';
+    return 'Good night';
+};
+
+const PHASE_ICON: Record<string, string> = { dawn: '🌅', day: '☀️', dusk: '🌇', night: '🌙' };
+
+/** Soft organic divider between feed sections. */
+const WaveDivider = (): JSX.Element => (
+    <svg className={css.wave} viewBox="0 0 1200 18" preserveAspectRatio="none" aria-hidden="true">
+        <path
+            d="M0 9 C 150 18, 300 0, 450 9 S 750 18, 900 9 S 1200 0, 1200 9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+        />
+    </svg>
+);
+
 /**
  * Top-level destination mounted at `/` when both `shellAppShell` and
- * `discoveryHomeFeed` flags are on. Renders a unified, client-aggregated
- * feed across dens, livestreams, the coalition feed, coliseum topics, and
- * profile statuses — stacked as a "Following" section (the viewer's joined
- * content) above a "Discover" section (everything else, de-duplicated) with a
- * pinned "Live now" rail. Each source is fetched independently so one failure
- * degrades gracefully (see `useUnifiedFeed`); no new server endpoint is
- * required.
+ * `discoveryHomeFeed` flags are on. A solarpunk "living ecosystem" home: an
+ * ambient time-of-day backdrop + community-nervous-system canvas behind a
+ * two-column layout — a centre living feed (unified across dens, livestreams,
+ * the coalition feed, coliseum topics, and profile statuses) beside a
+ * right-hand context/spatial-awareness sidebar. Each feed source is fetched
+ * independently so one failure degrades gracefully (see `useUnifiedFeed`); no
+ * new server endpoint is required.
  */
 export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
     const feed = useUnifiedFeed();
+    const atmosphere = useTimeOfDay();
+    const reducedMotion = useReducedMotion();
+    const ambientSound = useAmbientSound();
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
     const navigate = useNavigate();
@@ -260,131 +192,200 @@ export const HomeFeed = (): JSX.Element => {
         tourEnabled &&
         (homeTour.state.status === 'completed' || homeTour.state.status === 'dismissed');
 
+    const signalCount = followingItems.length + discoverItems.length;
+    const greeting = greetingForHour(new Date().getHours());
+
     return (
-        <section style={layoutStyle} data-shell-region="home-feed">
-            <header style={headerStyle} data-testid="home-feed-header">
-                <div style={headerTitleColStyle}>
-                    <h1 style={titleStyle}>Home</h1>
-                    <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
-                    {showReplay ? (
-                        <button
-                            type="button"
-                            data-testid="home-tour-replay"
-                            onClick={() => {
-                                void (async () => {
-                                    await homeTour.reset();
-                                    trackOnboardingTourStarted(Date.now());
-                                    await homeTour.start();
-                                })();
-                            }}
-                            style={{
-                                width: 'fit-content',
-                                marginTop: 4,
-                                fontSize: 12,
-                                background: 'transparent',
-                                color: 'var(--accent-primary, #3b82f6)',
-                                border: '1px solid var(--border-default, #374151)',
-                                borderRadius: 8,
-                                padding: '4px 8px',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Replay homepage tour
-                        </button>
-                    ) : null}
-                </div>
-                {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
-            </header>
-            <TopicChipBar />
-            {quickActions.length > 0 ? (
-                <section
-                    style={sectionStyle}
-                    data-shell-region="home-quick-actions"
-                    data-testid="home-quick-actions"
-                >
-                    <header style={sectionLabelStyle}>Quick actions</header>
-                    {quickActions.map((action) => (
-                        <Link
-                            key={action.to}
-                            to={action.to}
-                            style={cardStyle}
-                            data-testid={action.testid}
-                        >
-                            <span style={cardBodyStyle}>
-                                <span style={cardTitleStyle}>{action.title}</span>
-                                <span style={cardSubtitleStyle}>{action.subtitle}</span>
+        <section className={css.root} data-shell-region="home-feed">
+            <AmbientBackdrop atmosphere={atmosphere} reducedMotion={reducedMotion} />
+            <EcosystemCanvas
+                glow={atmosphere.glow}
+                activity={Math.min(12, feed.discover.length)}
+                reducedMotion={reducedMotion}
+            />
+            <div className={css.content}>
+                <header className={css.header} data-testid="home-feed-header">
+                    <div className={css.headerTitleCol}>
+                        <h1 className={css.greeting}>{greeting}</h1>
+                        <p className={css.subtitle}>What&apos;s growing across Blackout today.</p>
+                        <div className={css.atmosphereRow}>
+                            <span className={css.chip}>
+                                {PHASE_ICON[atmosphere.phase]} {atmosphere.label}
                             </span>
-                        </Link>
-                    ))}
-                </section>
-            ) : null}
-            {pluginCards.length > 0 ? (
-                <section
-                    style={sectionStyle}
-                    data-shell-region="home-plugin-cards"
-                    data-testid="home-plugin-cards"
-                >
-                    <header style={sectionLabelStyle}>Plugins</header>
-                    {pluginCards.map((record) => {
-                        const card = record.manifest.homepageCard!;
-                        return (
-                            <Link
-                                key={record.manifest.id}
-                                to={card.to ?? `/plugins/${encodeURIComponent(record.manifest.id)}`}
-                                style={cardStyle}
-                                data-testid="home-plugin-card"
-                                data-plugin-id={record.manifest.id}
+                            <span className={css.chip}>🌱 {signalCount} signals nearby</span>
+                        </div>
+                        {showReplay ? (
+                            <button
+                                type="button"
+                                data-testid="home-tour-replay"
+                                className={css.replayButton}
+                                onClick={() => {
+                                    void (async () => {
+                                        await homeTour.reset();
+                                        trackOnboardingTourStarted(Date.now());
+                                        await homeTour.start();
+                                    })();
+                                }}
                             >
-                                <span style={cardBodyStyle}>
-                                    <span style={cardTitleStyle}>{card.title}</span>
-                                    {card.subtitle ? (
-                                        <span style={cardSubtitleStyle}>{card.subtitle}</span>
-                                    ) : null}
-                                </span>
-                            </Link>
-                        );
-                    })}
-                </section>
-            ) : null}
-            <LiveNowRail items={feed.liveRail} />
-            <section data-shell-region="home-following" data-testid="home-following-section">
-                <header style={sectionLabelStyle}>Following</header>
-                {followingItems.length === 0 ? (
-                    <div style={emptyStateStyle} data-testid="home-feed-empty">
-                        <strong>{feed.loading ? 'Loading your feed…' : 'No activity yet.'}</strong>
-                        {!feed.loading ? (
-                            <>
-                                <span>
-                                    Join a{' '}
-                                    <GlossaryTerm term="canopy">
-                                        {BLACKOUT_TERMS.canopy.singular}
-                                    </GlossaryTerm>{' '}
-                                    to start seeing posts in your feed.
-                                </span>
-                                <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
-                                    Discover {BLACKOUT_TERMS.canopy.plural}
-                                </Link>
-                            </>
+                                Replay homepage tour
+                            </button>
                         ) : null}
                     </div>
-                ) : (
-                    <div style={sectionStyle} data-testid="home-feed-list">
-                        {followingItems.map((item) => (
-                            <UnifiedFeedCard key={item.id} item={item} />
-                        ))}
+                    <div className={css.headerActions}>
+                        {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
+                        <button
+                            type="button"
+                            className={css.iconButton}
+                            data-testid="home-ambient-sound-toggle"
+                            aria-pressed={ambientSound.enabled}
+                            disabled={!ambientSound.supported}
+                            title={
+                                ambientSound.supported
+                                    ? 'Toggle ambient soundscape'
+                                    : 'Ambient soundscape coming soon'
+                            }
+                            onClick={ambientSound.toggle}
+                        >
+                            {ambientSound.enabled ? '🔊' : '🔈'} Ambient{' '}
+                            {ambientSound.enabled ? 'on' : 'off'}
+                        </button>
                     </div>
-                )}
-            </section>
-            {discoverItems.length > 0 ? (
-                <section data-shell-region="home-discover" data-testid="home-discover-section">
-                    <header style={sectionLabelStyle}>Discover</header>
-                    <div style={sectionStyle} data-testid="home-discover-list">
-                        {discoverItems.map((item) => (
-                            <UnifiedFeedCard key={item.id} item={item} />
-                        ))}
-                    </div>
-                </section>
-            ) : null}
+                </header>
+                <div className={css.topicBar}>
+                    <TopicChipBar />
+                </div>
+                <div className={css.grid}>
+                    <main className={css.centerColumn}>
+                        {quickActions.length > 0 ? (
+                            <section
+                                className={css.section}
+                                data-shell-region="home-quick-actions"
+                                data-testid="home-quick-actions"
+                            >
+                                <header className={css.sectionLabel}>Quick actions</header>
+                                <div className={css.quickActions}>
+                                    {quickActions.map((action) => (
+                                        <Link
+                                            key={action.to}
+                                            to={action.to}
+                                            className={css.quickAction}
+                                            data-testid={action.testid}
+                                        >
+                                            <span className={css.quickActionTitle}>
+                                                {action.title}
+                                            </span>
+                                            <span className={css.quickActionSubtitle}>
+                                                {action.subtitle}
+                                            </span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            </section>
+                        ) : null}
+                        {pluginCards.length > 0 ? (
+                            <section
+                                className={css.section}
+                                data-shell-region="home-plugin-cards"
+                                data-testid="home-plugin-cards"
+                            >
+                                <header className={css.sectionLabel}>Plugins</header>
+                                <div className={css.quickActions}>
+                                    {pluginCards.map((record) => {
+                                        const card = record.manifest.homepageCard!;
+                                        return (
+                                            <Link
+                                                key={record.manifest.id}
+                                                to={
+                                                    card.to ??
+                                                    `/plugins/${encodeURIComponent(
+                                                        record.manifest.id
+                                                    )}`
+                                                }
+                                                className={css.quickAction}
+                                                data-testid="home-plugin-card"
+                                                data-plugin-id={record.manifest.id}
+                                            >
+                                                <span className={css.quickActionTitle}>
+                                                    {card.title}
+                                                </span>
+                                                {card.subtitle ? (
+                                                    <span className={css.quickActionSubtitle}>
+                                                        {card.subtitle}
+                                                    </span>
+                                                ) : null}
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        ) : null}
+                        <LiveNowRail items={feed.liveRail} />
+                        <WaveDivider />
+                        <section
+                            className={css.section}
+                            data-shell-region="home-following"
+                            data-testid="home-following-section"
+                        >
+                            <header className={css.sectionLabel}>Following</header>
+                            {followingItems.length === 0 ? (
+                                <div className={css.emptyState} data-testid="home-feed-empty">
+                                    <strong>
+                                        {feed.loading ? 'Loading your feed…' : 'No activity yet.'}
+                                    </strong>
+                                    {!feed.loading ? (
+                                        <>
+                                            <span>
+                                                Join a{' '}
+                                                <GlossaryTerm term="canopy">
+                                                    {BLACKOUT_TERMS.canopy.singular}
+                                                </GlossaryTerm>{' '}
+                                                to start seeing posts in your feed.
+                                            </span>
+                                            <Link to={COMMUNITIES_PATH} className={css.ctaLink}>
+                                                Discover {BLACKOUT_TERMS.canopy.plural}
+                                            </Link>
+                                        </>
+                                    ) : null}
+                                </div>
+                            ) : (
+                                <div className={css.feedList} data-testid="home-feed-list">
+                                    {followingItems.map((item) => (
+                                        <UnifiedFeedCard
+                                            key={item.id}
+                                            item={item}
+                                            reducedMotion={reducedMotion}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+                        {discoverItems.length > 0 ? (
+                            <>
+                                <WaveDivider />
+                                <section
+                                    className={css.section}
+                                    data-shell-region="home-discover"
+                                    data-testid="home-discover-section"
+                                >
+                                    <header className={css.sectionLabel}>Discover</header>
+                                    <div className={css.feedList} data-testid="home-discover-list">
+                                        {discoverItems.map((item) => (
+                                            <UnifiedFeedCard
+                                                key={item.id}
+                                                item={item}
+                                                reducedMotion={reducedMotion}
+                                            />
+                                        ))}
+                                    </div>
+                                </section>
+                            </>
+                        ) : null}
+                    </main>
+                    <aside className={css.rightColumn} data-shell-region="home-context">
+                        <ContextSidebar feed={feed} atmosphere={atmosphere} />
+                    </aside>
+                </div>
+            </div>
             {tourEnabled ? <HomeTourOverlay /> : null}
         </section>
     );
