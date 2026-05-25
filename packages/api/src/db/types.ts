@@ -1,4 +1,10 @@
 import type { AidPost, SpatialFeedItem } from '@blackout/core';
+import type {
+  ColiseumArgument,
+  ColiseumLiveSession,
+  ColiseumTopic,
+  ColiseumVote,
+} from '@blackout/core';
 
 export type UUID = string;
 
@@ -839,3 +845,15 @@ export interface CoalitionSpatialItemRecord extends SpatialFeedItem {
 export interface CoalitionAidPostRecord extends AidPost {
   createdAt: string;
 }
+
+/**
+ * Coliseum debate records. These persist the discourse layer (topics,
+ * arguments, votes, live sessions) so debate history survives a restart. The
+ * shapes are the canonical core types; denormalized scores (voteScore,
+ * nuanceScore, debateHeat) are stored on the records and recomputed by the
+ * coliseum service on each write.
+ */
+export type ColiseumTopicRecord = ColiseumTopic;
+export type ColiseumArgumentRecord = ColiseumArgument;
+export type ColiseumVoteRecord = ColiseumVote;
+export type ColiseumLiveSessionRecord = ColiseumLiveSession;
