@@ -1,4 +1,4 @@
-import type { NormalizedEntitlement } from '@blackout/core';
+import type { InstallScope, NormalizedEntitlement } from '@blackout/core';
 import type { PluginManifest, SignedPluginBundle } from '@blackout/sdk';
 import {
     registerDynamicFeaturePlugin,
@@ -30,6 +30,11 @@ export interface InstallContext {
      * omitted, all manifest-declared capabilities are granted.
      */
     approvedCapabilities?: PluginManifest['capabilities'];
+    /**
+     * Scope this install activates in (Phase 1). Omitted means a user-global
+     * install, which stays visible regardless of the shell's current scope.
+     */
+    scope?: InstallScope;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -130,6 +135,7 @@ export async function installEntitlement(
         status,
         installedAt: new Date().toISOString(),
         grantedCapabilities,
+        ...(ctx.scope ? { scope: ctx.scope } : {}),
     };
 
     switch (bundle.manifest.artifactKind) {

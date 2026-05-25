@@ -693,6 +693,32 @@ export interface MarketplaceListingsCacheRecord {
   refreshedAt: string;
 }
 
+export type PluginInstallScopeType = 'user' | 'den' | 'coalition' | 'creator';
+
+export type PluginInstallStatus =
+  | 'enabled'
+  | 'disabled'
+  | 'available'
+  | 'pending'
+  | 'error';
+
+export interface PluginInstallationRecord {
+  id: UUID;
+  pluginId: string;
+  entitlementId: UUID | null;
+  scopeType: PluginInstallScopeType;
+  scopeId: string;
+  installedByUserId: string;
+  status: PluginInstallStatus;
+  artifactKind: string;
+  domain: string | null;
+  grantedCapabilities: string[];
+  config: Record<string, unknown>;
+  manifest: Record<string, unknown>;
+  installedAt: string;
+  updatedAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {
