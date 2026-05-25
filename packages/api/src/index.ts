@@ -68,6 +68,9 @@ import { runSecurityPreflight } from './config/security';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 import { matrixClient } from './integrations/matrix-client';
+import { drainRuntimeStore, initRuntimeStore, RUNTIME_DB_MODE } from './db/store';
+import { migrateUp, MIGRATIONS_DIR } from './db/migrate';
+import { getSharedPgPool } from './config/postgres';
 
 const securityPreflight = runSecurityPreflight();
 
@@ -235,6 +238,35 @@ app.get('/metrics', (c) => {
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const shouldListen = process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
+
+// Postgres runtime store: run migrations then hydrate the in-memory mirror
+// BEFORE serving or starting any store-reading background loops. Top-level
+// await pauses module evaluation until the store is ready. Skipped under test
+// (shouldListen=false) and in memory/file modes.
+if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
+  const pool = await getSharedPgPool();
+  if (process.env.BLACKOUT_DB_MIGRATE_ON_START !== '0') {
+    const applied = await migrateUp({ pool, migrationsDir: MIGRATIONS_DIR });
+    log.info('db_migrations_applied_on_start', { count: applied.length });
+  }
+  await initRuntimeStore(pool);
+  log.info('postgres_store_hydrated');
+
+  const drainOnExit = (signal: string) => {
+    void (async () => {
+      try {
+        await drainRuntimeStore();
+        log.info('postgres_store_drained', { signal });
+      } catch (err) {
+        log.warn('postgres_store_drain_failed', { error: String(err) });
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
+  process.once('SIGTERM', () => drainOnExit('SIGTERM'));
+  process.once('SIGINT', () => drainOnExit('SIGINT'));
+}
 
 if (shouldListen) {
   // Fire-and-forget: optional tracing + error reporting. Both fall back to a
