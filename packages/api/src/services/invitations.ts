@@ -153,7 +153,7 @@ export type PreviewOutcome =
       kind: 'ok';
       record: InvitationTokenRecord;
       inviter: { id: string; username: string };
-      usesRemaining: number;
+      usesRemaining: number | null;
     }
   | { kind: 'invalid' }
   | { kind: 'revoked' }
@@ -173,7 +173,7 @@ export const previewInvitation = (presentedToken: string): PreviewOutcome => {
     kind: 'ok',
     record,
     inviter: { id: inviter.id, username: inviter.username },
-    usesRemaining: record.maxUses - record.useCount,
+    usesRemaining: record.unlimited ? null : Math.max(0, record.maxUses - record.useCount),
   };
 };
 
