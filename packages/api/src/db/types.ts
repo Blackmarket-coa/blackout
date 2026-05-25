@@ -391,15 +391,12 @@ export interface CommunityRecord {
   createdAt: string;
 }
 
-export interface ChannelRecord {
-  id: UUID;
-  communityId: UUID;
+export interface CanopyDirectoryEntryRecord {
+  canopyId: string;
   name: string;
-  description?: string;
-  channelType: 'text' | 'voice' | 'broadcast' | 'governance';
-  isPrivate: boolean;
-  matrixRoomId?: string;
-  createdAt: string;
+  summary?: string;
+  federationTier: 'local' | 'zone' | 'global';
+  indexedAt: string;
 }
 
 export interface MessageRecord {

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+  CanopyDirectoryEntryRecord,
   CanopyVoiceRoomRecord,
-  ChannelRecord,
   FederationLinkRecord,
   MarketplaceEntitlementRecord,
   MarketplaceLicenseKeyRecord,
@@ -64,7 +64,7 @@ const DB_FILE_PATH = resolve(process.cwd(), process.env.BLACKOUT_DB_FILE ?? '.bl
 
 type PersistedState = {
   users: UserRecord[];
-  channels: ChannelRecord[];
+  canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
   messages: MessageRecord[];
   scheduledMessages: ScheduledMessageRecord[];
   votes: VoteRecord[];
@@ -115,7 +115,8 @@ type PersistedState = {
 
 class InMemoryDb {
   users = new Map<string, UserRecord>();
-  channels = new Map<string, ChannelRecord>();
+  /** Keyed by canopy (Matrix space) id. */
+  canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
   messages = new Map<string, MessageRecord>();
   /** Keyed by scheduled-message id. */
   scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -1111,14 +1112,20 @@ class InMemoryDb {
     return this.simulcastDestinations.delete(id);
   }
 
-  createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const record: ChannelRecord = { ...input, createdAt: nowIso() };
-    this.channels.set(record.id, record);
+  upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record: CanopyDirectoryEntryRecord = { ...input, indexedAt: nowIso() };
+    this.canopyDirectoryEntries.set(record.canopyId, record);
     return record;
   }
 
-  listChannels(): ChannelRecord[] {
-    return [...this.channels.values()];
+  getCanopyDirectoryEntry(canopyId: string): CanopyDirectoryEntryRecord | undefined {
+    return this.canopyDirectoryEntries.get(canopyId);
+  }
+
+  listCanopyDirectoryEntries(): CanopyDirectoryEntryRecord[] {
+    return [...this.canopyDirectoryEntries.values()];
   }
 
   createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -1838,7 +1845,9 @@ class FileBackedDb extends InMemoryDb {
 
     const parsed = JSON.parse(readFileSync(DB_FILE_PATH, 'utf8')) as PersistedState;
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
-    this.channels = new Map(parsed.channels.map((row) => [row.id, row]));
+    this.canopyDirectoryEntries = new Map(
+      (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row]),
+    );
     this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
     this.scheduledMessages = new Map(
       (parsed.scheduledMessages ?? []).map((row) => [row.id, row]),
@@ -1951,7 +1960,7 @@ class FileBackedDb extends InMemoryDb {
   private snapshot(): PersistedState {
     return {
       users: [...this.users.values()],
-      channels: [...this.channels.values()],
+      canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
       messages: [...this.messages.values()],
       scheduledMessages: [...this.scheduledMessages.values()],
       votes: [...this.votes.values()],
@@ -2167,10 +2176,12 @@ class FileBackedDb extends InMemoryDb {
     return record;
   }
 
-  override createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const created = super.createChannel(input);
+  override upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record = super.upsertCanopyDirectoryEntry(input);
     this.persist();
-    return created;
+    return record;
   }
 
   override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
