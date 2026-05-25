@@ -174,6 +174,14 @@ describe('HomeFeed', () => {
         expect(recent?.querySelector('[aria-label="3"]')).not.toBeNull();
     });
 
+    it('renders the context/spatial-awareness sidebar', async () => {
+        const { container } = await mountWithRooms([]);
+        expect(container.querySelector('[data-shell-region="home-context"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="home-context-sidebar"]')).not.toBeNull();
+        // Ecosystem pulse is derived from the live feed (not mocked).
+        expect(container.querySelector('[data-testid="home-context-pulse"]')).not.toBeNull();
+    });
+
     it('renders the Following section and a pinned live rail slot', async () => {
         const { container } = await mountWithRooms([fakeRoom({ roomId: '!d:s', name: 'A Den' })]);
         expect(container.querySelector('[data-testid="home-following-section"]')).not.toBeNull();

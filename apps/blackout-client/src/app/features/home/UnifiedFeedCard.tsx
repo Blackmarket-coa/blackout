@@ -1,5 +1,6 @@
-import { type CSSProperties } from 'react';
+import classNames from 'classnames';
 import { Link } from 'react-router-dom';
+import * as css from './UnifiedFeedCard.css';
 import type { UnifiedFeedItem, UnifiedFeedSource } from './unifiedFeedModel';
 
 const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
@@ -12,84 +13,43 @@ const SOURCE_LABELS: Record<UnifiedFeedSource, string> = {
     marketplace: 'Market',
 };
 
-const cardStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr auto',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 14px',
-    border: '1px solid var(--border-default, #374151)',
-    borderRadius: 10,
-    background: 'var(--bg-input, #0f172a)',
-    color: 'inherit',
-    textDecoration: 'none',
+const SOURCE_GLYPH: Record<UnifiedFeedSource, string> = {
+    den: '🔥',
+    stream: '🎥',
+    coliseum: '⚖️',
+    coalition: '📍',
+    status: '✦',
+    wall: '📝',
+    marketplace: '🛒',
 };
 
-const thumbStyle: CSSProperties = {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    objectFit: 'cover',
-    background: 'var(--bg-nav, #1f2937)',
-    flexShrink: 0,
-};
+interface UnifiedFeedCardProps {
+    item: UnifiedFeedItem;
+    reducedMotion?: boolean;
+}
 
-const bodyStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-};
-
-const sourceTagStyle: CSSProperties = {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    color: 'var(--text-muted, #9ca3af)',
-    fontWeight: 700,
-};
-
-const titleStyle: CSSProperties = {
-    fontSize: 15,
-    fontWeight: 600,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-};
-
-const subtitleStyle: CSSProperties = {
-    fontSize: 13,
-    color: 'var(--text-muted, #9ca3af)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-};
-
-const badgeStyle: CSSProperties = {
-    minWidth: 22,
-    height: 22,
-    padding: '0 8px',
-    borderRadius: 999,
-    background: 'var(--accent-primary, #3b82f6)',
-    color: 'var(--text-primary, #f8fafc)',
-    fontSize: 11,
-    fontWeight: 700,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-};
-
-const liveBadgeStyle: CSSProperties = {
-    ...badgeStyle,
-    background: 'var(--accent-danger, #ef4444)',
-};
-
-export const UnifiedFeedCard = ({ item }: { item: UnifiedFeedItem }): JSX.Element => {
+/**
+ * One organic, source-tinted card in the living feed. Each source carries its
+ * own accent + glyph (campfire dens, live windows, debate scales, coalition
+ * pins, human-energy statuses, market stalls); dens additionally get a softly
+ * flickering "campfire" ring when motion is allowed. When an item has media,
+ * the leading slot shows an inline thumbnail instead of the glyph ring.
+ */
+export const UnifiedFeedCard = ({
+    item,
+    reducedMotion = false,
+}: UnifiedFeedCardProps): JSX.Element => {
     const isLive = item.source === 'stream' && item.badge === 'LIVE';
+    const glyph =
+        item.source === 'status' && 'emoji' in item && item.emoji
+            ? item.emoji
+            : SOURCE_GLYPH[item.source];
+    const emberRing = item.source === 'den' && !reducedMotion;
+
     return (
         <Link
             to={item.href}
-            style={cardStyle}
+            className={css.card({ source: item.source })}
             data-testid="home-feed-card"
             data-source={item.source}
             data-den-id={item.denId ?? undefined}
@@ -98,20 +58,28 @@ export const UnifiedFeedCard = ({ item }: { item: UnifiedFeedItem }): JSX.Elemen
                 <img
                     src={item.mediaUrl}
                     alt=""
-                    style={thumbStyle}
+                    className={css.thumb}
                     loading="lazy"
                     data-testid="home-feed-card-thumb"
                 />
             ) : (
-                <span aria-hidden style={{ width: 0 }} />
+                <span
+                    className={classNames(css.ring, emberRing && css.ringEmber)}
+                    aria-hidden="true"
+                >
+                    {glyph}
+                </span>
             )}
-            <span style={bodyStyle}>
-                <span style={sourceTagStyle}>{SOURCE_LABELS[item.source]}</span>
-                <span style={titleStyle}>{item.title}</span>
-                <span style={subtitleStyle}>{item.subtitle}</span>
+            <span className={css.body}>
+                <span className={css.sourceTag}>{SOURCE_LABELS[item.source]}</span>
+                <span className={css.title}>{item.title}</span>
+                <span className={css.subtitle}>{item.subtitle}</span>
             </span>
             {item.badge ? (
-                <span style={isLive ? liveBadgeStyle : badgeStyle} aria-label={item.badge}>
+                <span
+                    className={classNames(css.badge, isLive && css.liveBadge)}
+                    aria-label={item.badge}
+                >
                     {item.badge}
                 </span>
             ) : null}
