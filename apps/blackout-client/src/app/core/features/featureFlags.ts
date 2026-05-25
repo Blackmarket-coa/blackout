@@ -81,6 +81,25 @@ export type FeatureFlags = {
      */
     topics: boolean;
     /**
+     * Familiar feed IA flag. When on, HomeFeed renders a For You / Following
+     * segmented toggle and a Hot / New / Top sort control (TikTok/X + Reddit
+     * conventions) instead of the stacked Following-then-Discover sections.
+     * Sort maps onto `mergeAndRank` in `unifiedFeedModel`. Default off.
+     */
+    homeFeedSegments: boolean;
+    /**
+     * Daily-streak retention chip. When on, HomeFeed tracks consecutive UTC
+     * days the viewer opens Home (persisted to `co.bmc.retention.streak.v1`)
+     * and renders a streak chip in the header. Default off.
+     */
+    homeStreak: boolean;
+    /**
+     * Episodic/series feed badge. When on, feed items carrying a `series:<name>`
+     * tag render a "SERIES" badge (the binge/return loop). Pure client-side
+     * derivation over existing tags; no schema change. Default off.
+     */
+    seriesTag: boolean;
+    /**
      * Market destination tab flag. When on, the existing
      * `MarketplaceSlice` is mounted as a top-level destination at
      * `/market` (and the AppShell bottom-tab "Market" entry resolves
@@ -176,6 +195,15 @@ export type FeatureFlags = {
      */
     onboardingDeveloperStep: boolean;
     /**
+     * Familiar-migration onboarding step. When on, the member onboarding
+     * flow gains an interest picker (topic multi-select) and a
+     * find-communities step that seeds default canopy joins, so the Home
+     * "Following" feed is populated on first load. Selected interests are
+     * persisted to `co.bmc.discovery.interests.v1` and boost matching feed
+     * items in `useUnifiedFeed`. Default off.
+     */
+    onboardingInterestPicker: boolean;
+    /**
      * Post-wizard guided spotlight tour of the homepage. When on, the
      * onboarding route navigates to `/` after the wizard completes and
      * `HomeFeed` mounts `HomeTourOverlay` so new beta users are walked
@@ -255,6 +283,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     // for the tour before being routed into their den.
     discoveryHomeFeed: true,
     topics: false,
+    homeFeedSegments: false,
+    homeStreak: false,
+    seriesTag: false,
     marketTab: false,
     productsAttachments: false,
     productsAttachComposer: false,
@@ -269,6 +300,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
     onboardingDeveloperStep: false,
+    onboardingInterestPicker: false,
     // On by default: new (incl. invited) users get the Home tour. Env
     // `BLACKOUT_ONBOARDING_HOME_TOUR=false` can still disable it.
     onboardingHomeTour: true,
@@ -527,6 +559,30 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_TOPICS === 'false') {
             nextFlags.topics = false;
         }
+        if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'true') {
+            nextFlags.onboardingInterestPicker = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
+            nextFlags.onboardingInterestPicker = false;
+        }
+        if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'true') {
+            nextFlags.homeFeedSegments = true;
+        }
+        if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
+            nextFlags.homeFeedSegments = false;
+        }
+        if (env.BLACKOUT_HOME_STREAK === 'true') {
+            nextFlags.homeStreak = true;
+        }
+        if (env.BLACKOUT_HOME_STREAK === 'false') {
+            nextFlags.homeStreak = false;
+        }
+        if (env.BLACKOUT_SERIES_TAG === 'true') {
+            nextFlags.seriesTag = true;
+        }
+        if (env.BLACKOUT_SERIES_TAG === 'false') {
+            nextFlags.seriesTag = false;
+        }
         if (env.BLACKOUT_MARKET_TAB === 'true') {
             nextFlags.marketTab = true;
         }
@@ -761,6 +817,30 @@ export const resolveFeatureFlags = (
     if (env.BLACKOUT_TOPICS === 'false') {
         nextFlags.topics = false;
     }
+    if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'true') {
+        nextFlags.onboardingInterestPicker = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_INTEREST_PICKER === 'false') {
+        nextFlags.onboardingInterestPicker = false;
+    }
+    if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'true') {
+        nextFlags.homeFeedSegments = true;
+    }
+    if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
+        nextFlags.homeFeedSegments = false;
+    }
+    if (env.BLACKOUT_HOME_STREAK === 'true') {
+        nextFlags.homeStreak = true;
+    }
+    if (env.BLACKOUT_HOME_STREAK === 'false') {
+        nextFlags.homeStreak = false;
+    }
+    if (env.BLACKOUT_SERIES_TAG === 'true') {
+        nextFlags.seriesTag = true;
+    }
+    if (env.BLACKOUT_SERIES_TAG === 'false') {
+        nextFlags.seriesTag = false;
+    }
     if (env.BLACKOUT_MARKET_TAB === 'true') {
         nextFlags.marketTab = true;
     }
@@ -882,7 +962,9 @@ const collectRuntimeEnv = (): Record<string, string | undefined> => {
         Object.assign(env, process.env as Record<string, string | undefined>);
     }
     try {
-        const meta = (Function('return import.meta')() as { env?: Record<string, string | undefined> }) ?? {};
+        const meta =
+            (Function('return import.meta')() as { env?: Record<string, string | undefined> }) ??
+            {};
         if (meta.env) Object.assign(env, meta.env);
     } catch {
         // ignore — `import.meta` is unavailable in some test contexts.

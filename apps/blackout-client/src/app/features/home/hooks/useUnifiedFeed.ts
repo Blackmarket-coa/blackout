@@ -16,14 +16,17 @@ import {
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
+    withSeriesBadges,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
+    type FeedSort,
     type StreamFeedItem,
     type UnifiedFeedItem,
     type UnifiedFeedSource,
 } from '../unifiedFeedModel';
 import type { RoomLike } from '../feedModel';
 import { useFollowedActivity } from './useFollowedActivity';
+import { useDiscoveryInterestTags } from '../discoveryInterests';
 
 const REMOTE_FETCH_LIMIT = 30;
 
@@ -62,7 +65,7 @@ const collectJoinedCanopyIds = (rooms: readonly RoomLike[]): Set<string> => {
     return ids;
 };
 
-export function useUnifiedFeed(): UnifiedFeedResult {
+export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
     const rooms = useAtomValue(joinedRoomsAtom) as unknown as Room[];
     const flags = runtimeFeatureFlags;
     // Stream cards/rail link into the `/live/:streamId` viewer, which is owned
@@ -71,6 +74,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
     const streamsEnabled = flags.streamsViewer;
 
     const activity = useFollowedActivity(flags.profile);
+    const boostTags = useDiscoveryInterestTags();
 
     const [remote, setRemote] = useState<RemoteState>({
         streams: [],
@@ -130,7 +134,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
         const wallItems = mapWallPosts(activity.walls, now);
         const joinedCanopyIds = collectJoinedCanopyIds(rooms as unknown as RoomLike[]);
 
-        const combined: UnifiedFeedItem[] = [
+        const merged: UnifiedFeedItem[] = [
             ...denItems,
             ...statusItems,
             ...wallItems,
@@ -138,9 +142,14 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             ...remote.coalition,
             ...remote.coliseum,
         ];
+        const combined = flags.seriesTag ? withSeriesBadges(merged) : merged;
 
-        const discover = mergeAndRank(combined);
-        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds));
+        const discover = mergeAndRank(combined, { boostTags, sort, now });
+        const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {
+            boostTags,
+            sort,
+            now,
+        });
         const liveRail = selectLiveRail(discover);
 
         return {
@@ -150,5 +159,5 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             loading: remote.loading,
             errorsBySource: remote.errorsBySource,
         };
-    }, [rooms, activity, remote]);
+    }, [rooms, activity, remote, boostTags, sort]);
 }
