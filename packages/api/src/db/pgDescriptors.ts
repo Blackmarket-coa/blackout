@@ -162,6 +162,7 @@ const ALL_MAP_NAMES = [
   'coliseumArguments',
   'coliseumVotes',
   'coliseumLiveSessions',
+  'pluginInstallations',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -306,4 +307,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   upsertColiseumArguments: resync('coliseumArguments'),
   upsertColiseumVote: upsert('coliseumVotes'),
   upsertColiseumLiveSession: upsert('coliseumLiveSessions'),
+  createPluginInstallation: upsert('pluginInstallations'),
+  updatePluginInstallation: upsert('pluginInstallations'),
+  deletePluginInstallation: resync('pluginInstallations'),
 };

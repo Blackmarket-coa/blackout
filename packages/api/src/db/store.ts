@@ -59,6 +59,7 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
@@ -127,6 +128,7 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
@@ -207,6 +209,8 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Plugin installations (activation-at-scope), keyed by installation id. */
+  pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
   /** Coliseum arguments, keyed by argument id. */
@@ -1932,6 +1936,60 @@ class InMemoryDb {
     return record;
   }
 
+  // --- plugin installations (activation-at-scope) ---
+
+  createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const now = nowIso();
+    const record: PluginInstallationRecord = { ...input, installedAt: now, updatedAt: now };
+    this.pluginInstallations.set(record.id, record);
+    return record;
+  }
+
+  getPluginInstallation(id: string): PluginInstallationRecord | undefined {
+    return this.pluginInstallations.get(id);
+  }
+
+  /** Enforces the (pluginId, scopeType, scopeId) uniqueness constraint. */
+  findPluginInstallation(
+    pluginId: string,
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord | undefined {
+    return [...this.pluginInstallations.values()].find(
+      (row) => row.pluginId === pluginId && row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForScope(
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter(
+      (row) => row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForPlugin(pluginId: string): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const existing = this.pluginInstallations.get(id);
+    if (!existing) return undefined;
+    const updated: PluginInstallationRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.pluginInstallations.set(id, updated);
+    return updated;
+  }
+
+  deletePluginInstallation(id: string): boolean {
+    return this.pluginInstallations.delete(id);
+  }
+
   // --- Coliseum ---
 
   private static coliseumVoteKey(argumentId: string, voterId: string): string {
@@ -2131,6 +2189,9 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
       );
     }
+    this.pluginInstallations = new Map(
+      (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
+    );
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
     }
@@ -2202,6 +2263,7 @@ export class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
@@ -2984,6 +3046,29 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.createCoalitionAidPost(input);
     this.persist();
     return created;
+  }
+
+  override createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const created = super.createPluginInstallation(input);
+    this.persist();
+    return created;
+  }
+
+  override updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const updated = super.updatePluginInstallation(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deletePluginInstallation(id: string): boolean {
+    const removed = super.deletePluginInstallation(id);
+    if (removed) this.persist();
+    return removed;
   }
 
   override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
