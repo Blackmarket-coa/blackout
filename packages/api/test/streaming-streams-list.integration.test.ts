@@ -130,12 +130,15 @@ test('GET /v1/streaming/streams/:streamId returns the stream when public', async
     assert.equal(missing.status, 404);
 });
 
-test('GET /v1/streaming/streams rejects callers without streaming.read capability', async () => {
+test('GET /v1/streaming/streams rejects unauthenticated callers', async () => {
+    const response = await app.request('/v1/streaming/streams');
+    assert.equal(response.status, 401);
+});
+
+test('GET /v1/streaming/streams allows authenticated users via the minted streaming.read capability', async () => {
     const token = await issueToken();
-    const headers = {
-        authorization: `Bearer ${token}`,
-        'x-blackout-capabilities': '',
-    };
-    const response = await app.request('/v1/streaming/streams', { headers });
-    assert.equal(response.status, 403);
+    const response = await app.request('/v1/streaming/streams', {
+        headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
 });

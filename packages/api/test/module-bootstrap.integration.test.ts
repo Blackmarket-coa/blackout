@@ -53,7 +53,7 @@ test('feature module routes bootstrap under /v1', async () => {
   const token = await issueToken();
   const headers = {
     authorization: `Bearer ${token}`,
-    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,deadman.read,moderation.read,streaming.read,discovery.read',
+    'x-blackout-capabilities': 'governance.read,forum.read,deaddrop.read,deadman.read,moderation.read,streaming.read,streaming.write,discovery.read',
   };
 
   const checks = await Promise.all([

@@ -109,7 +109,10 @@ function createStreamingRouter() {
   });
 
   streaming.get('/creators/:creatorId/stream-key', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // The managed stream key is a publishing secret — gate it on the
+    // creator/admin `streaming.write` capability, not the now-universal
+    // `streaming.read`, so a viewer can't read it and hijack the broadcast.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     const { creatorId } = c.req.param();
@@ -411,7 +414,8 @@ function createStreamingRouter() {
   });
 
   streaming.get('/streams/:streamId/sessions', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Creator-private operational history — restricted to streaming.write.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     return c.json(db.listStreamSessions(c.req.param('streamId')));
@@ -447,7 +451,9 @@ function createStreamingRouter() {
   });
 
   streaming.get('/streams/:streamId/moderation', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Banned-user lists and keyword filters are moderation-integrity data —
+    // exposing them to viewers enables ban awareness and filter evasion.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     const streamId = c.req.param('streamId');
@@ -455,14 +461,16 @@ function createStreamingRouter() {
   });
 
   streaming.get('/events', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Internal streaming domain event log — operator-only.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
 
     return c.json(listDomainEvents('streaming'));
   });
 
   streaming.get('/streams/:streamId/revenue', (c) => {
-    const denied = requireDomainCapability(c, 'streaming', 'read');
+    // Creator earnings — restricted to the creator/admin write capability.
+    const denied = requireDomainCapability(c, 'streaming', 'write');
     if (denied) return denied;
     return c.json(aggregateStreamRevenue(c.req.param('streamId')));
   });
