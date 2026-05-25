@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
+import type { ClipRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
 import { emitDomainEvent, listDomainEvents } from './domain-events';
@@ -56,6 +57,17 @@ const streamModerationSchema = z.object({
   slowModeSeconds: z.number().optional(),
   bannedUserIds: z.array(z.string()).optional(),
   keywordFilters: z.array(z.string()).optional(),
+});
+
+const clipCreateSchema = z.object({
+  creatorId: z.string().min(1),
+  title: z.string().min(1),
+  mediaPointer: z.string().min(1),
+  sourceStreamId: z.string().min(1).optional(),
+  thumbnailPointer: z.string().min(1).optional(),
+  durationSeconds: z.number().int().nonnegative().optional(),
+  visibility: z.enum(['public', 'private', 'member_only']).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 function ensureStream(streamId: string, creatorId: string) {
@@ -297,6 +309,99 @@ function createStreamingRouter() {
       denId: stream.denId,
       updatedAt: stream.updatedAt,
     });
+  });
+
+  const clipToJson = (clip: ClipRecord) => ({
+    id: clip.id,
+    creatorId: clip.creatorId,
+    sourceStreamId: clip.sourceStreamId,
+    title: clip.title,
+    mediaPointer: clip.mediaPointer,
+    thumbnailPointer: clip.thumbnailPointer,
+    durationSeconds: clip.durationSeconds,
+    visibility: clip.visibility,
+    tags: clip.tags,
+    createdAt: clip.createdAt,
+    updatedAt: clip.updatedAt,
+  });
+
+  // GET /v1/streaming/clips — short-form clip directory. Mirrors the
+  // streams listing: only `public` clips are returned, newest first.
+  // Filters: creatorId, limit (1..200, default 50).
+  streaming.get('/clips', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const creatorIdFilter = c.req.query('creatorId');
+    const limitRaw = c.req.query('limit');
+    const limit = (() => {
+      if (!limitRaw) return 50;
+      const parsed = Number.parseInt(limitRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return 50;
+      return Math.min(parsed, 200);
+    })();
+
+    const items = db
+      .listClips({ creatorId: creatorIdFilter ?? undefined, limit })
+      .filter((clip) => clip.visibility === 'public');
+
+    return c.json({ items: items.map(clipToJson) });
+  });
+
+  // GET /v1/streaming/clips/:clipId — single clip. 404 when missing or private.
+  streaming.get('/clips/:clipId', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const clip = db.getClip(c.req.param('clipId'));
+    if (!clip || clip.visibility === 'private') {
+      return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
+    }
+    return c.json(clipToJson(clip));
+  });
+
+  // POST /v1/streaming/clips — create a clip. The body's creatorId must be
+  // the caller, and (if set) the source stream must belong to them too.
+  streaming.post('/clips', async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+
+    const parsed = await readJsonBody(c, clipCreateSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const subject = requireAuthenticatedUser(c);
+    if (parsed.creatorId !== subject) return ownershipForbidden(c);
+    if (parsed.sourceStreamId) {
+      const sourceStream = db.getStream(parsed.sourceStreamId);
+      if (sourceStream && sourceStream.creatorId !== subject) return ownershipForbidden(c);
+    }
+
+    const clip = db.upsertClip({
+      id: crypto.randomUUID(),
+      creatorId: parsed.creatorId,
+      sourceStreamId: parsed.sourceStreamId,
+      title: parsed.title,
+      mediaPointer: parsed.mediaPointer,
+      thumbnailPointer: parsed.thumbnailPointer,
+      durationSeconds: parsed.durationSeconds ?? 0,
+      visibility: parsed.visibility ?? 'public',
+      tags: parsed.tags ?? [],
+    });
+    return c.json(clipToJson(clip), 201);
+  });
+
+  // DELETE /v1/streaming/clips/:clipId — owner-only.
+  streaming.delete('/clips/:clipId', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+
+    const clipId = c.req.param('clipId');
+    const clip = db.getClip(clipId);
+    if (!clip) return c.json({ code: 'clip_not_found', message: 'Clip not found' }, 404);
+    const subject = requireAuthenticatedUser(c);
+    if (clip.creatorId !== subject) return ownershipForbidden(c);
+    db.deleteClip(clipId);
+    return c.json({ ok: true });
   });
 
   streaming.get('/streams/:streamId/access', (c) => {

@@ -179,6 +179,17 @@ test('signing up via a personal link follows the owner and the link never exhaus
   const record = db.getInvitationTokenById(invitation.id);
   assert.equal(record?.useCount, 2);
   assert.equal(record?.unlimited, true);
+
+  // The public preview must keep presenting the link as unlimited even after
+  // redemptions — a raw maxUses-useCount subtraction would report -1 here.
+  const preview = await app.request(`/v1/invitations/preview/${encodeURIComponent(token)}`);
+  assert.equal(preview.status, 200);
+  const previewBody = (await preview.json()) as {
+    valid: boolean;
+    invitation: { usesRemaining: number | null };
+  };
+  assert.equal(previewBody.valid, true);
+  assert.equal(previewBody.invitation.usesRemaining, null);
 });
 
 test('GET /v1/i/:token renders OG tags and redirects carrying the registration token', async () => {

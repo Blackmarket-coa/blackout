@@ -83,6 +83,13 @@ export const MARKET_LISTING_PATH = '/market/listings/:listingId';
 export const LIVE_PATH = '/live';
 export const LIVE_STREAM_PATH = '/live/:streamId';
 export const STREAMING_PATH = '/streaming';
+/**
+ * Creator Hub alias. The hub shell continues to live at `STREAMING_PATH`
+ * (so the AppShell mobile-tab id `shell.streams` and persisted tab state
+ * keep working); `/creator-hub` redirects there so the rebranded URL
+ * round-trips for deep links and bookmarks.
+ */
+export const CREATOR_HUB_PATH = '/creator-hub';
 
 /** Top-level Coalition and Coliseum destinations (see their feature `routes.ts`). */
 export const COALITION_PATH = '/coalition';

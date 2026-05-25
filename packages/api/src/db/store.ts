@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+  CanopyDirectoryEntryRecord,
   CanopyVoiceRoomRecord,
-  ChannelRecord,
   FederationLinkRecord,
   MarketplaceEntitlementRecord,
   MarketplaceLicenseKeyRecord,
@@ -29,6 +29,7 @@ import type {
   StreamRecord,
   StreamSessionRecord,
   StreamModerationRecord,
+  ClipRecord,
   TipRecord,
   CreatorSubscriptionTierRecord,
   CreatorSubscriptionRecord,
@@ -58,6 +59,10 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  ColiseumTopicRecord,
+  ColiseumArgumentRecord,
+  ColiseumVoteRecord,
+  ColiseumLiveSessionRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
 import { hydrateMap, introspectColumns, type TablePlan } from './pgWriter';
@@ -72,7 +77,7 @@ const DB_FILE_PATH = resolve(process.cwd(), process.env.BLACKOUT_DB_FILE ?? '.bl
 
 type PersistedState = {
   users: UserRecord[];
-  channels: ChannelRecord[];
+  canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
   messages: MessageRecord[];
   scheduledMessages: ScheduledMessageRecord[];
   votes: VoteRecord[];
@@ -86,6 +91,7 @@ type PersistedState = {
   streams: StreamRecord[];
   streamSessions: StreamSessionRecord[];
   streamModeration: StreamModerationRecord[];
+  clips: ClipRecord[];
   canopyVoiceRooms: CanopyVoiceRoomRecord[];
   voiceRoomParticipants: VoiceRoomParticipantRecord[];
   voiceRoomEvents: VoiceRoomEventRecord[];
@@ -121,11 +127,16 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  coliseumTopics: ColiseumTopicRecord[];
+  coliseumArguments: ColiseumArgumentRecord[];
+  coliseumVotes: ColiseumVoteRecord[];
+  coliseumLiveSessions: ColiseumLiveSessionRecord[];
 };
 
 class InMemoryDb {
   users = new Map<string, UserRecord>();
-  channels = new Map<string, ChannelRecord>();
+  /** Keyed by canopy (Matrix space) id. */
+  canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
   messages = new Map<string, MessageRecord>();
   /** Keyed by scheduled-message id. */
   scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -140,6 +151,7 @@ class InMemoryDb {
   streams = new Map<string, StreamRecord>();
   streamSessions = new Map<string, StreamSessionRecord>();
   streamModeration = new Map<string, StreamModerationRecord>();
+  clips = new Map<string, ClipRecord>();
   canopyVoiceRooms = new Map<string, CanopyVoiceRoomRecord>();
   voiceRoomParticipants = new Map<string, VoiceRoomParticipantRecord>();
   voiceRoomEvents = new Map<string, VoiceRoomEventRecord>();
@@ -195,6 +207,14 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Coliseum debate topics, keyed by topic id. */
+  coliseumTopics = new Map<string, ColiseumTopicRecord>();
+  /** Coliseum arguments, keyed by argument id. */
+  coliseumArguments = new Map<string, ColiseumArgumentRecord>();
+  /** Coliseum votes, keyed by `${argumentId}::${voterId}` (one vote per pair). */
+  coliseumVotes = new Map<string, ColiseumVoteRecord>();
+  /** Coliseum live debate sessions, keyed by session id. */
+  coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -1129,14 +1149,20 @@ class InMemoryDb {
     return this.simulcastDestinations.delete(id);
   }
 
-  createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const record: ChannelRecord = { ...input, createdAt: nowIso() };
-    this.channels.set(record.id, record);
+  upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record: CanopyDirectoryEntryRecord = { ...input, indexedAt: nowIso() };
+    this.canopyDirectoryEntries.set(record.canopyId, record);
     return record;
   }
 
-  listChannels(): ChannelRecord[] {
-    return [...this.channels.values()];
+  getCanopyDirectoryEntry(canopyId: string): CanopyDirectoryEntryRecord | undefined {
+    return this.canopyDirectoryEntries.get(canopyId);
+  }
+
+  listCanopyDirectoryEntries(): CanopyDirectoryEntryRecord[] {
+    return [...this.canopyDirectoryEntries.values()];
   }
 
   createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -1427,6 +1453,39 @@ class InMemoryDb {
 
   getStreamModeration(streamId: string): StreamModerationRecord | undefined {
     return this.streamModeration.get(streamId);
+  }
+
+  upsertClip(input: Omit<ClipRecord, 'createdAt' | 'updatedAt'>): ClipRecord {
+    const existing = this.clips.get(input.id);
+    const record: ClipRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? nowIso(),
+      updatedAt: nowIso(),
+    };
+    this.clips.set(record.id, record);
+    return record;
+  }
+
+  getClip(clipId: string): ClipRecord | undefined {
+    return this.clips.get(clipId);
+  }
+
+  deleteClip(clipId: string): boolean {
+    return this.clips.delete(clipId);
+  }
+
+  listClips(options: { creatorId?: string; limit?: number } = {}): ClipRecord[] {
+    const { creatorId, limit } = options;
+    const items = [...this.clips.values()]
+      .filter((clip) => (creatorId ? clip.creatorId === creatorId : true))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return typeof limit === 'number' ? items.slice(0, limit) : items;
+  }
+
+  listClipsBySourceStream(sourceStreamId: string): ClipRecord[] {
+    return [...this.clips.values()]
+      .filter((clip) => clip.sourceStreamId === sourceStreamId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   getFederatedCommunities(communityIds: string[]): string[] {
@@ -1872,9 +1931,72 @@ class InMemoryDb {
     this.coalitionAidPosts.set(record.id, record);
     return record;
   }
+
+  // --- Coliseum ---
+
+  private static coliseumVoteKey(argumentId: string, voterId: string): string {
+    return `${argumentId}::${voterId}`;
+  }
+
+  listColiseumTopics(): ColiseumTopicRecord[] {
+    return [...this.coliseumTopics.values()];
+  }
+
+  getColiseumTopic(id: string): ColiseumTopicRecord | undefined {
+    return this.coliseumTopics.get(id);
+  }
+
+  upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    this.coliseumTopics.set(record.id, record);
+    return record;
+  }
+
+  listColiseumArguments(): ColiseumArgumentRecord[] {
+    return [...this.coliseumArguments.values()];
+  }
+
+  getColiseumArgument(id: string): ColiseumArgumentRecord | undefined {
+    return this.coliseumArguments.get(id);
+  }
+
+  upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    this.coliseumArguments.set(record.id, record);
+    return record;
+  }
+
+  /** Bulk upsert so a score recompute persists once rather than per-argument. */
+  upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    for (const record of records) this.coliseumArguments.set(record.id, record);
+  }
+
+  listColiseumVotes(): ColiseumVoteRecord[] {
+    return [...this.coliseumVotes.values()];
+  }
+
+  getColiseumVote(argumentId: string, voterId: string): ColiseumVoteRecord | undefined {
+    return this.coliseumVotes.get(InMemoryDb.coliseumVoteKey(argumentId, voterId));
+  }
+
+  upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    this.coliseumVotes.set(InMemoryDb.coliseumVoteKey(record.argumentId, record.voterId), record);
+    return record;
+  }
+
+  listColiseumLiveSessions(): ColiseumLiveSessionRecord[] {
+    return [...this.coliseumLiveSessions.values()];
+  }
+
+  getColiseumLiveSession(id: string): ColiseumLiveSessionRecord | undefined {
+    return this.coliseumLiveSessions.get(id);
+  }
+
+  upsertColiseumLiveSession(record: ColiseumLiveSessionRecord): ColiseumLiveSessionRecord {
+    this.coliseumLiveSessions.set(record.id, record);
+    return record;
+  }
 }
 
-class FileBackedDb extends InMemoryDb {
+export class FileBackedDb extends InMemoryDb {
   constructor() {
     super();
     this.hydrate();
@@ -1888,7 +2010,9 @@ class FileBackedDb extends InMemoryDb {
 
     const parsed = JSON.parse(readFileSync(DB_FILE_PATH, 'utf8')) as PersistedState;
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
-    this.channels = new Map(parsed.channels.map((row) => [row.id, row]));
+    this.canopyDirectoryEntries = new Map(
+      (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row]),
+    );
     this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
     this.scheduledMessages = new Map(
       (parsed.scheduledMessages ?? []).map((row) => [row.id, row]),
@@ -1906,6 +2030,7 @@ class FileBackedDb extends InMemoryDb {
     this.streams = new Map((parsed.streams ?? []).map((row) => [row.id, row]));
     this.streamSessions = new Map((parsed.streamSessions ?? []).map((row) => [row.id, row]));
     this.streamModeration = new Map((parsed.streamModeration ?? []).map((row) => [row.streamId, row]));
+    this.clips = new Map((parsed.clips ?? []).map((row) => [row.id, row]));
     this.canopyVoiceRooms = new Map((parsed.canopyVoiceRooms ?? []).map((row) => [row.id, row]));
     this.voiceRoomParticipants = new Map((parsed.voiceRoomParticipants ?? []).map((row) => [row.id, row]));
     this.voiceRoomEvents = new Map((parsed.voiceRoomEvents ?? []).map((row) => [row.id, row]));
@@ -2006,12 +2131,28 @@ class FileBackedDb extends InMemoryDb {
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coliseumTopics) {
+      this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumArguments) {
+      this.coliseumArguments = new Map(parsed.coliseumArguments.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumVotes) {
+      this.coliseumVotes = new Map(
+        parsed.coliseumVotes.map((row) => [`${row.argumentId}::${row.voterId}`, row]),
+      );
+    }
+    if (parsed.coliseumLiveSessions) {
+      this.coliseumLiveSessions = new Map(
+        parsed.coliseumLiveSessions.map((row) => [row.id, row]),
+      );
+    }
   }
 
   private snapshot(): PersistedState {
     return {
       users: [...this.users.values()],
-      channels: [...this.channels.values()],
+      canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
       messages: [...this.messages.values()],
       scheduledMessages: [...this.scheduledMessages.values()],
       votes: [...this.votes.values()],
@@ -2025,6 +2166,7 @@ class FileBackedDb extends InMemoryDb {
       streams: [...this.streams.values()],
       streamSessions: [...this.streamSessions.values()],
       streamModeration: [...this.streamModeration.values()],
+      clips: [...this.clips.values()],
       canopyVoiceRooms: [...this.canopyVoiceRooms.values()],
       voiceRoomParticipants: [...this.voiceRoomParticipants.values()],
       voiceRoomEvents: [...this.voiceRoomEvents.values()],
@@ -2060,6 +2202,10 @@ class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      coliseumTopics: [...this.coliseumTopics.values()],
+      coliseumArguments: [...this.coliseumArguments.values()],
+      coliseumVotes: [...this.coliseumVotes.values()],
+      coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
     };
   }
 
@@ -2229,10 +2375,12 @@ class FileBackedDb extends InMemoryDb {
     return record;
   }
 
-  override createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const created = super.createChannel(input);
+  override upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record = super.upsertCanopyDirectoryEntry(input);
     this.persist();
-    return created;
+    return record;
   }
 
   override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -2331,6 +2479,18 @@ class FileBackedDb extends InMemoryDb {
     const created = super.upsertStreamModeration(input);
     this.persist();
     return created;
+  }
+
+  override upsertClip(input: Omit<ClipRecord, 'createdAt' | 'updatedAt'>): ClipRecord {
+    const created = super.upsertClip(input);
+    this.persist();
+    return created;
+  }
+
+  override deleteClip(clipId: string): boolean {
+    const deleted = super.deleteClip(clipId);
+    if (deleted) this.persist();
+    return deleted;
   }
 
   override createOrUpdateVoiceRoom(input: {
@@ -2824,6 +2984,37 @@ class FileBackedDb extends InMemoryDb {
     const created = super.createCoalitionAidPost(input);
     this.persist();
     return created;
+  }
+
+  override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    const saved = super.upsertColiseumTopic(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    const saved = super.upsertColiseumArgument(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    super.upsertColiseumArguments(records);
+    this.persist();
+  }
+
+  override upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    const saved = super.upsertColiseumVote(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumLiveSession(
+    record: ColiseumLiveSessionRecord,
+  ): ColiseumLiveSessionRecord {
+    const saved = super.upsertColiseumLiveSession(record);
+    this.persist();
+    return saved;
   }
 }
 

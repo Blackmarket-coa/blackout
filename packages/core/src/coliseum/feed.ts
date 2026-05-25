@@ -40,6 +40,8 @@ export const COLISEUM_STANCES: readonly ColiseumStance[] = ['for', 'against', 'n
 export interface ColiseumArgument {
     id: string;
     topicId: string;
+    /** When set, this argument rebuts another argument on the same topic, forming a chain. */
+    parentArgumentId?: string;
     authorId: string;
     stance: ColiseumStance;
     /** 0..1 — distance from a pure for/against position. 1 = pure stance, 0 = pure nuance. */
@@ -164,6 +166,76 @@ export function rankColiseumArguments(
 ): RankedColiseumArgument[] {
     return args
         .map((argument) => ({ ...argument, score: scoreColiseumArgument(argument, options) }))
+        .sort((a, b) => b.score - a.score);
+}
+
+export interface ColiseumArgumentTreeNode<T extends ColiseumArgument = ColiseumArgument> {
+    argument: T;
+    depth: number;
+    replies: ColiseumArgumentTreeNode<T>[];
+}
+
+/**
+ * Fold a flat argument list into a rebuttal tree using `parentArgumentId`.
+ * Input order is preserved at every level (so a pre-ranked list yields a
+ * rank-ordered tree). Arguments whose parent is missing or points outside the
+ * list are treated as roots, so the tree never drops an argument.
+ */
+export function buildColiseumArgumentTree<T extends ColiseumArgument>(
+    args: ReadonlyArray<T>,
+): ColiseumArgumentTreeNode<T>[] {
+    const nodes = new Map<string, ColiseumArgumentTreeNode<T>>();
+    for (const argument of args) {
+        nodes.set(argument.id, { argument, depth: 0, replies: [] });
+    }
+
+    const roots: ColiseumArgumentTreeNode<T>[] = [];
+    for (const argument of args) {
+        const node = nodes.get(argument.id)!;
+        const parentId = argument.parentArgumentId;
+        const parent = parentId ? nodes.get(parentId) : undefined;
+        if (parent && parent.argument.id !== argument.id) {
+            parent.replies.push(node);
+        } else {
+            roots.push(node);
+        }
+    }
+
+    const assignDepth = (node: ColiseumArgumentTreeNode<T>, depth: number): void => {
+        node.depth = depth;
+        for (const reply of node.replies) assignDepth(reply, depth + 1);
+    };
+    for (const root of roots) assignDepth(root, 0);
+
+    return roots;
+}
+
+export interface CrossTopicReelEntry<T extends ColiseumArgument = ColiseumArgument> {
+    argument: T;
+    /** The argument's topic debate heat, 0..1. */
+    debateHeat: number;
+}
+
+export interface RankedCrossTopicArgument<T extends ColiseumArgument = ColiseumArgument>
+    extends RankedColiseumArgument {
+    argument: T;
+}
+
+/**
+ * Rank arguments drawn from many topics for the global discourse reel. Each
+ * argument's own score is multiplied by a heat factor so a hot topic's top
+ * arguments float up without drowning a strong argument on a cooler topic.
+ */
+export function rankCrossTopicArguments<T extends ColiseumArgument>(
+    entries: ReadonlyArray<CrossTopicReelEntry<T>>,
+    options: Parameters<typeof scoreColiseumArgument>[1] = {},
+): Array<T & { score: number }> {
+    return entries
+        .map(({ argument, debateHeat }) => {
+            const base = scoreColiseumArgument(argument, options);
+            const heatFactor = 0.7 + 0.3 * clamp01(debateHeat);
+            return { ...argument, score: clamp01(base * heatFactor) };
+        })
         .sort((a, b) => b.score - a.score);
 }
 

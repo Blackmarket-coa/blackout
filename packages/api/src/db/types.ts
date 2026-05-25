@@ -1,4 +1,10 @@
 import type { AidPost, SpatialFeedItem } from '@blackout/core';
+import type {
+  ColiseumArgument,
+  ColiseumLiveSession,
+  ColiseumTopic,
+  ColiseumVote,
+} from '@blackout/core';
 
 export type UUID = string;
 
@@ -393,15 +399,12 @@ export interface CommunityRecord {
   createdAt: string;
 }
 
-export interface ChannelRecord {
-  id: UUID;
-  communityId: UUID;
+export interface CanopyDirectoryEntryRecord {
+  canopyId: string;
   name: string;
-  description?: string;
-  channelType: 'text' | 'voice' | 'broadcast' | 'governance';
-  isPrivate: boolean;
-  matrixRoomId?: string;
-  createdAt: string;
+  summary?: string;
+  federationTier: 'local' | 'zone' | 'global';
+  indexedAt: string;
 }
 
 export interface MessageRecord {
@@ -569,6 +572,24 @@ export interface StreamModerationRecord {
   keywordFilters: string[];
   updatedAt: string;
 }
+
+export interface ClipRecord {
+  id: UUID;
+  creatorId: UUID;
+  /** Source stream this clip was cut from, when applicable. */
+  sourceStreamId?: UUID;
+  title: string;
+  /** mxc:// or HLS pointer to the clip media. */
+  mediaPointer: string;
+  /** Optional poster/thumbnail pointer. */
+  thumbnailPointer?: string;
+  durationSeconds: number;
+  visibility: 'public' | 'private' | 'member_only';
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CanopyVoiceRoomRecord {
   id: UUID;
   canopyId: UUID;
@@ -824,3 +845,15 @@ export interface CoalitionSpatialItemRecord extends SpatialFeedItem {
 export interface CoalitionAidPostRecord extends AidPost {
   createdAt: string;
 }
+
+/**
+ * Coliseum debate records. These persist the discourse layer (topics,
+ * arguments, votes, live sessions) so debate history survives a restart. The
+ * shapes are the canonical core types; denormalized scores (voteScore,
+ * nuanceScore, debateHeat) are stored on the records and recomputed by the
+ * coliseum service on each write.
+ */
+export type ColiseumTopicRecord = ColiseumTopic;
+export type ColiseumArgumentRecord = ColiseumArgument;
+export type ColiseumVoteRecord = ColiseumVote;
+export type ColiseumLiveSessionRecord = ColiseumLiveSession;

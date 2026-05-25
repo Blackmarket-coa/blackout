@@ -60,13 +60,16 @@ vi.mock('../../../../src/app/features/coliseum/coliseumClient', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const setReactValue = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) => {
+const setReactValue = (
+    element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+    value: string
+) => {
     const proto =
         element instanceof HTMLTextAreaElement
             ? HTMLTextAreaElement.prototype
             : element instanceof HTMLSelectElement
-              ? HTMLSelectElement.prototype
-              : HTMLInputElement.prototype;
+            ? HTMLSelectElement.prototype
+            : HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
     descriptor?.set?.call(element, value);
     element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -93,7 +96,7 @@ const renderDebate = (client: DebateTabClient) => {
         root.render(
             <Provider store={store}>
                 <DebateTab client={client} />
-            </Provider>,
+            </Provider>
         );
     });
 
@@ -121,7 +124,7 @@ describe('DebateTab interactions', () => {
         await flush();
 
         const upButton = container.querySelector(
-            '[data-testid="coliseum-vote-up-arg-1"]',
+            '[data-testid="coliseum-vote-up-arg-1"]'
         ) as HTMLButtonElement;
         expect(upButton).toBeTruthy();
 
@@ -137,15 +140,17 @@ describe('DebateTab interactions', () => {
 
         castColiseumVote.mockRejectedValueOnce(new Error('boom'));
         await act(async () => {
-            (container.querySelector(
-                '[data-testid="coliseum-vote-down-arg-1"]',
-            ) as HTMLButtonElement).click();
+            (
+                container.querySelector(
+                    '[data-testid="coliseum-vote-down-arg-1"]'
+                ) as HTMLButtonElement
+            ).click();
         });
         await flush();
 
-        expect(container.querySelector('[data-testid="coliseum-debate-vote-error"]')?.textContent).toContain(
-            'boom',
-        );
+        expect(
+            container.querySelector('[data-testid="coliseum-debate-vote-error"]')?.textContent
+        ).toContain('boom');
     });
 
     it('posts a new argument from the composer', async () => {
@@ -156,13 +161,13 @@ describe('DebateTab interactions', () => {
         await flush();
 
         const stance = container.querySelector(
-            '[data-testid="coliseum-debate-composer-stance"]',
+            '[data-testid="coliseum-debate-composer-stance"]'
         ) as HTMLSelectElement;
         const body = container.querySelector(
-            '[data-testid="coliseum-debate-composer-body"]',
+            '[data-testid="coliseum-debate-composer-body"]'
         ) as HTMLTextAreaElement;
         const submit = container.querySelector(
-            '[data-testid="coliseum-debate-composer-submit"]',
+            '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
 
         act(() => {
@@ -171,9 +176,9 @@ describe('DebateTab interactions', () => {
         });
 
         await act(async () => {
-            submit.closest('form')!.dispatchEvent(
-                new Event('submit', { bubbles: true, cancelable: true }),
-            );
+            submit
+                .closest('form')!
+                .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         });
         await flush();
 
@@ -181,6 +186,54 @@ describe('DebateTab interactions', () => {
             topicId: 'topic-1',
             stance: 'against',
             body: 'I disagree.',
+        });
+    });
+
+    it('posts a rebuttal carrying the parent argument id', async () => {
+        const castColiseumVote = vi.fn();
+        const createColiseumArgument = vi.fn().mockResolvedValueOnce({});
+        const container = renderDebate({ castColiseumVote, createColiseumArgument });
+
+        await flush();
+
+        const rebut = container.querySelector(
+            '[data-testid="coliseum-rebut-arg-1"]'
+        ) as HTMLButtonElement;
+        expect(rebut).toBeTruthy();
+
+        await act(async () => {
+            rebut.click();
+        });
+        await flush();
+
+        // The composer now shows the rebuttal context.
+        expect(
+            container.querySelector('[data-testid="coliseum-composer-replying-to"]')?.textContent
+        ).toContain('@alice:example.org');
+
+        const body = container.querySelector(
+            '[data-testid="coliseum-debate-composer-body"]'
+        ) as HTMLTextAreaElement;
+        act(() => {
+            setReactValue(body, 'Your data excludes substations.');
+        });
+
+        await act(async () => {
+            (
+                container.querySelector(
+                    '[data-testid="coliseum-debate-composer-submit"]'
+                ) as HTMLButtonElement
+            )
+                .closest('form')!
+                .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+        await flush();
+
+        expect(createColiseumArgument).toHaveBeenCalledWith({
+            topicId: 'topic-1',
+            parentArgumentId: 'arg-1',
+            stance: 'against',
+            body: 'Your data excludes substations.',
         });
     });
 
@@ -192,19 +245,19 @@ describe('DebateTab interactions', () => {
         await flush();
 
         const submit = container.querySelector(
-            '[data-testid="coliseum-debate-composer-submit"]',
+            '[data-testid="coliseum-debate-composer-submit"]'
         ) as HTMLButtonElement;
 
         await act(async () => {
-            submit.closest('form')!.dispatchEvent(
-                new Event('submit', { bubbles: true, cancelable: true }),
-            );
+            submit
+                .closest('form')!
+                .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         });
         await flush();
 
         expect(createColiseumArgument).not.toHaveBeenCalled();
-        expect(container.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent).toContain(
-            'required',
-        );
+        expect(
+            container.querySelector('[data-testid="coliseum-debate-composer-error"]')?.textContent
+        ).toContain('required');
     });
 });

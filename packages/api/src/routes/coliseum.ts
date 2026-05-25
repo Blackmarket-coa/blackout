@@ -3,23 +3,35 @@ import { z } from 'zod';
 import {
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
+    isValidLiveRoomId,
     validateArgumentMedia,
+    validateCitation,
     validateCitations,
     type ColiseumArgumentMedia,
     type ColiseumCitation,
     type ColiseumTopicStatus,
+    type PinnedEvidence,
 } from '@blackout/core';
 import {
     castVote,
     createArgument,
+    createLiveSession,
     createTopic,
+    endLiveSession,
+    getActiveSessionForTopic,
     getArgument,
     getTopic,
     getVerdict,
+    grantSpeak,
     listArgumentsForTopic,
+    listCrossTopicReel,
     listTopics,
     newArgumentId,
     newTopicId,
+    pinSessionEvidence,
+    requestSpeak,
+    revokeSpeak,
+    unpinSessionEvidence,
 } from '../services/coliseumStore';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
@@ -123,6 +135,7 @@ const citationSchema = z.record(z.string(), z.unknown());
 
 const createArgumentSchema = z.object({
     topicId: z.string().min(1),
+    parentArgumentId: z.string().min(1).optional(),
     stance: z.enum(COLISEUM_STANCES as unknown as [string, ...string[]]),
     stanceWeight: z.number().min(0).max(1).default(0.5),
     body: z.string().min(1).max(4000),
@@ -143,6 +156,7 @@ coliseum.post('/arguments', async (c) => {
     const created = createArgument({
         id: newArgumentId(),
         topicId: parsed.topicId,
+        parentArgumentId: parsed.parentArgumentId,
         authorId: user.sub,
         stance: parsed.stance as never,
         stanceWeight: parsed.stanceWeight,
@@ -151,7 +165,7 @@ coliseum.post('/arguments', async (c) => {
         media: validatedMedia,
     });
     if (!created) {
-        return c.json({ code: 'not_found', message: 'Topic not found' }, 404);
+        return c.json({ code: 'not_found', message: 'Topic or parent argument not found' }, 404);
     }
     return c.json({ argument: created }, 201);
 });
@@ -189,6 +203,147 @@ coliseum.get('/verdict/:topicId', (c) => {
         return c.json({ code: 'not_found', message: 'Topic not found' }, 404);
     }
     return c.json({ verdict });
+});
+
+// --- Cross-topic discourse reel (Feature 3) ---
+
+const reelQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+});
+
+coliseum.get('/reel', (c) => {
+    const parsed = reelQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+        return c.json(
+            {
+                code: 'invalid_request',
+                message: 'Invalid reel query',
+                details: { issues: parsed.error.issues.map((i) => i.message) },
+            },
+            400,
+        );
+    }
+    const { items, nextOffset } = listCrossTopicReel({
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
+    });
+    return c.json({ generatedAt: new Date().toISOString(), items, nextOffset });
+});
+
+// --- Live debate sessions (Feature 2) ---
+
+const createLiveSessionSchema = z.object({
+    topicId: z.string().min(1),
+    roomId: z.string().min(1),
+});
+
+coliseum.post('/live/sessions', async (c) => {
+    const user = requireUser(c, 'Sign in to start a live debate');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createLiveSessionSchema);
+    if (parsed instanceof Response) return parsed;
+    if (!isValidLiveRoomId(parsed.roomId)) {
+        return c.json({ code: 'invalid_request', message: 'Invalid room id' }, 400);
+    }
+    const session = createLiveSession({
+        topicId: parsed.topicId,
+        roomId: parsed.roomId,
+        moderatorId: user.sub,
+    });
+    if (!session) {
+        return c.json({ code: 'not_found', message: 'Topic not found' }, 404);
+    }
+    return c.json({ session }, 201);
+});
+
+coliseum.get('/live/sessions/:topicId', (c) => {
+    const session = getActiveSessionForTopic(c.req.param('topicId'));
+    return c.json({ session: session ?? null });
+});
+
+/** Map a store result (null = not found, 'forbidden' = not a moderator) to a Response, or return the session. */
+function liveResult<T extends { id: string }>(
+    c: Parameters<typeof requireUser>[0],
+    result: T | null | 'forbidden',
+) {
+    if (result === null) {
+        return c.json({ code: 'not_found', message: 'Live session not found' }, 404);
+    }
+    if (result === 'forbidden') {
+        return c.json({ code: 'forbidden', message: 'Moderator role required' }, 403);
+    }
+    return c.json({ session: result });
+}
+
+coliseum.post('/live/sessions/:id/speak', (c) => {
+    const user = requireUser(c, 'Sign in to request to speak');
+    if (user instanceof Response) return user;
+    const session = requestSpeak(c.req.param('id'), user.sub);
+    if (!session) {
+        return c.json({ code: 'not_found', message: 'Live session not found' }, 404);
+    }
+    return c.json({ session });
+});
+
+coliseum.post('/live/sessions/:id/speak/:userId/grant', (c) => {
+    const user = requireUser(c, 'Sign in to moderate');
+    if (user instanceof Response) return user;
+    const result = grantSpeak(c.req.param('id'), user.sub, c.req.param('userId'));
+    return liveResult(c, result);
+});
+
+coliseum.post('/live/sessions/:id/speak/:userId/revoke', (c) => {
+    const user = requireUser(c, 'Sign in to moderate');
+    if (user instanceof Response) return user;
+    const result = revokeSpeak(c.req.param('id'), user.sub, c.req.param('userId'));
+    return liveResult(c, result);
+});
+
+const pinSchema = z.union([
+    z.object({ argumentId: z.string().min(1) }),
+    z.object({ citation: z.record(z.string(), z.unknown()) }),
+]);
+
+function resolvePinnedEvidence(input: z.infer<typeof pinSchema>): PinnedEvidence | null {
+    if ('argumentId' in input) {
+        return getArgument(input.argumentId) ? { kind: 'argument', argumentId: input.argumentId } : null;
+    }
+    const citation = validateCitation(input.citation);
+    return citation ? { kind: 'citation', citation } : null;
+}
+
+coliseum.post('/live/sessions/:id/pin', async (c) => {
+    const user = requireUser(c, 'Sign in to moderate');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, pinSchema);
+    if (parsed instanceof Response) return parsed;
+    const evidence = resolvePinnedEvidence(parsed);
+    if (!evidence) {
+        return c.json({ code: 'invalid_request', message: 'Invalid evidence reference' }, 400);
+    }
+    const result = pinSessionEvidence(c.req.param('id'), user.sub, evidence);
+    return liveResult(c, result);
+});
+
+coliseum.post('/live/sessions/:id/unpin', async (c) => {
+    const user = requireUser(c, 'Sign in to moderate');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, pinSchema);
+    if (parsed instanceof Response) return parsed;
+    const evidence = resolvePinnedEvidence(parsed);
+    if (!evidence) {
+        return c.json({ code: 'invalid_request', message: 'Invalid evidence reference' }, 400);
+    }
+    const result = unpinSessionEvidence(c.req.param('id'), user.sub, evidence);
+    return liveResult(c, result);
+});
+
+coliseum.post('/live/sessions/:id/end', (c) => {
+    const user = requireUser(c, 'Sign in to moderate');
+    if (user instanceof Response) return user;
+    const result = endLiveSession(c.req.param('id'), user.sub);
+    return liveResult(c, result);
 });
 
 export default coliseum;

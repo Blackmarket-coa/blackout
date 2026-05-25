@@ -41,6 +41,7 @@ import {
 } from '../../components/create-room';
 import { RoomType } from '../../../types/matrix/room';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { indexCanopy } from '../discovery/discoveryClient';
 
 const getCreateSpaceKindToIcon = (kind: CreateRoomKind) => {
   if (kind === CreateRoomKind.Private) return Icons.SpaceLock;
@@ -131,6 +132,16 @@ export function CreateSpaceForm({ defaultKind, space, onCreate }: CreateSpaceFor
       allowFederation: federation,
       additionalCreators: allowAdditionalCreators ? additionalCreators : undefined,
     }).then((roomId) => {
+      // Register the new canopy in the Blackout discovery directory so it's
+      // browsable and so canopy-scoped features (voice rooms, app installs)
+      // that gate on a known canopy can be created. Best-effort: the canopy
+      // already exists in Matrix regardless, so a failed/blocked index must
+      // not break creation.
+      void indexCanopy({
+        canopyId: roomId,
+        name: roomName,
+        summary: roomTopic || undefined,
+      }).catch(() => undefined);
       if (alive()) {
         onCreate?.(roomId);
       }

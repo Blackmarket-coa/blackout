@@ -431,7 +431,9 @@ const renderBody = (
                 </p>
             )}
             <p style={{ margin: 0, opacity: 0.7, fontSize: 13 }}>
-                {inv.usesRemaining} use{inv.usesRemaining === 1 ? '' : 's'} remaining
+                {inv.usesRemaining == null
+                    ? 'Unlimited uses'
+                    : `${inv.usesRemaining} use${inv.usesRemaining === 1 ? '' : 's'} remaining`}
                 {expiry ? ` · expires ${expiry}` : ''}
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

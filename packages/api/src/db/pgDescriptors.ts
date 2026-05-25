@@ -47,6 +47,11 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     conflictColumns: ['helix_subscription_id'],
   },
   widgetAlertTokens: { keyOf: (r) => String(r.secretHash), conflictColumns: ['secret_hash'] },
+  canopyDirectoryEntries: { keyOf: (r) => String(r.canopyId), conflictColumns: ['canopy_id'] },
+  coliseumVotes: {
+    keyOf: (r) => `${r.argumentId}::${r.voterId}`,
+    conflictColumns: ['argument_id', 'voter_id'],
+  },
   // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address columns.
   coalitionAidPosts: {
     toRow: (r) => {
@@ -103,7 +108,6 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
 /** Every store map, in the order they should hydrate. */
 const ALL_MAP_NAMES = [
   'users',
-  'channels',
   'messages',
   'scheduledMessages',
   'votes',
@@ -152,6 +156,12 @@ const ALL_MAP_NAMES = [
   'obsWsPasswords',
   'coalitionSpatialItems',
   'coalitionAidPosts',
+  'canopyDirectoryEntries',
+  'clips',
+  'coliseumTopics',
+  'coliseumArguments',
+  'coliseumVotes',
+  'coliseumLiveSessions',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -211,7 +221,6 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   revokeRefreshTokenFamily: resync('refreshTokens'),
   revokeRefreshTokensForUser: resync('refreshTokens'),
   revokeSession: upsert('revokedSessions'),
-  createChannel: upsert('channels'),
   createMessage: upsert('messages'),
   createVote: upsert('votes'),
   castVote: upsert('voteEntries'),
@@ -288,4 +297,13 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   deleteObsWsPassword: resync('obsWsPasswords'),
   upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
   createCoalitionAidPost: upsert('coalitionAidPosts'),
+  upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
+  upsertClip: upsert('clips'),
+  deleteClip: resync('clips'),
+  upsertColiseumTopic: upsert('coliseumTopics'),
+  upsertColiseumArgument: upsert('coliseumArguments'),
+  // Bulk insert returns void; resync persists every in-memory argument.
+  upsertColiseumArguments: resync('coliseumArguments'),
+  upsertColiseumVote: upsert('coliseumVotes'),
+  upsertColiseumLiveSession: upsert('coliseumLiveSessions'),
 };

@@ -686,4 +686,40 @@ export const matrixClient = {
     }
     return { ok: response.ok, status: response.status, eventId };
   },
+
+  /**
+   * Boot-time / health probe for the Matrix dependency. Invites and redemption
+   * require the bot token to hold *Synapse admin* rights (force-join, registration
+   * tokens, parent-space lookup); a deploy missing that comes up "healthy" yet
+   * fails every invite at redeem time. This reports configuration + admin
+   * reachability so the failure surfaces at startup and in `/health`, not later.
+   *
+   * Does not throw and does not cache — cheap enough to call on demand.
+   */
+  async adminPreflight(): Promise<{
+    configured: boolean;
+    botUserId?: string;
+    adminOk: boolean;
+    reason?: string;
+    detail?: string;
+  }> {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { configured: false, adminOk: false, reason: 'matrix_not_configured' };
+    }
+
+    const botUserId = await matrixClient.botUserId();
+    const stats = await matrixClient.serverStats();
+    if (stats.ok) {
+      return { configured: true, botUserId, adminOk: true };
+    }
+    return {
+      configured: true,
+      botUserId,
+      adminOk: false,
+      reason: 'reason' in stats ? stats.reason : 'synapse_unreachable',
+      detail: 'detail' in stats ? stats.detail : undefined,
+    };
+  },
 };
