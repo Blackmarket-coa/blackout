@@ -60,6 +60,11 @@ import type {
   CoalitionAidPostRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
+import { hydrateMap, introspectColumns, type TablePlan } from './pgWriter';
+import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
+import { WriteBehindQueue } from './writeBehindQueue';
+import type { PgPool } from './migrate';
+import { log } from '../telemetry/logger';
 
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
@@ -2822,4 +2827,98 @@ class FileBackedDb extends InMemoryDb {
   }
 }
 
-export const db = DB_MODE === 'memory' ? new InMemoryDb() : new FileBackedDb();
+/**
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Single-instance
+ * write-through: reads are inherited from InMemoryDb (served from the in-memory
+ * mirror hydrated on boot), and the 107 mutators are wrapped to enqueue a
+ * Postgres write after updating the mirror. Not safe for >1 replica — each
+ * process holds its own mirror with no cross-instance invalidation.
+ */
+type MutableMap = Map<string, Record<string, unknown>>;
+
+export class PostgresBackedDb extends InMemoryDb {
+  private readonly plans = new Map<string, TablePlan>();
+  private queue: WriteBehindQueue | null = null;
+
+  constructor() {
+    super();
+    this.installWriteThrough();
+  }
+
+  private mapByName(name: string): MutableMap {
+    return (this as unknown as Record<string, MutableMap>)[name];
+  }
+
+  /** Shadow each mutator with a wrapper that calls the original then enqueues a write. */
+  private installWriteThrough(): void {
+    const proto = InMemoryDb.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+    const self = this as unknown as Record<string, unknown>;
+    for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
+      const original = proto[method];
+      if (typeof original !== 'function') continue;
+      self[method] = (...args: unknown[]): unknown => {
+        const result = original.apply(this, args);
+        const queue = this.queue;
+        if (queue) {
+          if (spec.kind === 'upsert') {
+            if (result && typeof result === 'object') {
+              queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
+            }
+          } else {
+            for (const m of spec.maps) queue.enqueueResync(m);
+          }
+        }
+        return result;
+      };
+    }
+  }
+
+  /** Hydrate every mapped table from Postgres, then arm the write-behind queue. */
+  async init(pool: PgPool): Promise<void> {
+    const client = await pool.connect();
+    try {
+      for (const descriptor of TABLE_DESCRIPTORS) {
+        const columns = await introspectColumns(client, descriptor.tableName);
+        if (columns.length === 0) {
+          log.warn('pg_store_table_missing', { table: descriptor.tableName });
+          continue;
+        }
+        const plan: TablePlan = {
+          descriptor,
+          columns,
+          columnNames: new Set(columns.map((c) => c.name)),
+        };
+        this.plans.set(descriptor.mapName, plan);
+        await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
+      }
+    } finally {
+      client.release?.();
+    }
+    this.queue = new WriteBehindQueue(pool, this.plans, (name) => this.mapByName(name));
+  }
+
+  /** Flush queued writes — call on graceful shutdown. */
+  async drain(): Promise<void> {
+    await this.queue?.drain();
+  }
+}
+
+export const db =
+  DB_MODE === 'memory'
+    ? new InMemoryDb()
+    : DB_MODE === 'postgres'
+      ? new PostgresBackedDb()
+      : new FileBackedDb();
+
+/** Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres). */
+export async function initRuntimeStore(pool: PgPool): Promise<void> {
+  if (db instanceof PostgresBackedDb) await db.init(pool);
+}
+
+/** Drain pending Postgres write-behind ops on graceful shutdown. */
+export async function drainRuntimeStore(): Promise<void> {
+  if (db instanceof PostgresBackedDb) await db.drain();
+}
+
+/** Runtime store mode, for boot wiring. */
+export const RUNTIME_DB_MODE = DB_MODE;

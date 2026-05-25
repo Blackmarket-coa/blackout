@@ -1,0 +1,18 @@
+ALTER TABLE coalition_spatial_items DROP COLUMN IF EXISTS confidence;
+ALTER TABLE coalition_spatial_items DROP COLUMN IF EXISTS status;
+DROP TABLE IF EXISTS invitation_redemptions;
+DROP TABLE IF EXISTS invitation_tokens;
+DROP TABLE IF EXISTS account_deletion_tokens;
+DROP TABLE IF EXISTS email_verification_tokens;
+DROP TABLE IF EXISTS voice_room_events;
+DROP TABLE IF EXISTS voice_room_participants;
+DROP TABLE IF EXISTS canopy_voice_rooms;
+DROP TABLE IF EXISTS stream_moderation;
+DROP TABLE IF EXISTS stream_sessions;
+DROP TABLE IF EXISTS streams;
+DROP TABLE IF EXISTS creator_stream_auth;
+DROP TABLE IF EXISTS moderation_actions;
+DROP TABLE IF EXISTS deadman_switches;
+DROP TABLE IF EXISTS dead_drops;
+DROP TABLE IF EXISTS forum_posts;
+DROP TABLE IF EXISTS scheduled_messages;

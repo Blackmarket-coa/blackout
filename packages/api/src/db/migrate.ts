@@ -56,6 +56,9 @@ export interface MigrateOptions {
   targetOrdinal?: number;
 }
 
+/** Filesystem path to the bundled migration SQL files. */
+export const MIGRATIONS_DIR = new URL('./migrations/', import.meta.url).pathname;
+
 const SCHEMA_MIGRATIONS_DDL = `
   CREATE TABLE IF NOT EXISTS schema_migrations (
     id VARCHAR(128) PRIMARY KEY,
@@ -280,7 +283,7 @@ const runCli = async () => {
   // still import this module for type-checking and helper reuse.
   const { default: pg } = (await import('pg')) as { default: { Pool: new (cfg: { connectionString: string }) => PgPool } };
   const pool = new pg.Pool({ connectionString: databaseUrl });
-  const migrationsDir = new URL('./migrations/', import.meta.url).pathname;
+  const migrationsDir = MIGRATIONS_DIR;
 
   try {
     switch (command) {
