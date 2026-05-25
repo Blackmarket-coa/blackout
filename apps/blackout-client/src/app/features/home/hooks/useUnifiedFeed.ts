@@ -6,10 +6,13 @@ import { runtimeFeatureFlags } from '../../../core/features/featureFlags';
 import { listStreams } from '../../streams/streamsClient';
 import { fetchCoalitionFeed } from '../../coalition/coalitionClient';
 import { fetchColiseumTopics } from '../../coliseum/coliseumClient';
+import { fetchListings } from '../../monetization/marketplace/marketplaceClient';
+import { readBlackoutApiToken } from '../../monetization/marketplace/useMarketplaceAuth';
 import {
     mapCoalition,
     mapColiseum,
     mapDens,
+    mapMarketplace,
     mapStatuses,
     mapStreams,
     mapWallPosts,
@@ -18,6 +21,7 @@ import {
     selectLiveRail,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
+    type MarketplaceFeedItem,
     type StreamFeedItem,
     type UnifiedFeedItem,
     type UnifiedFeedSource,
@@ -39,6 +43,7 @@ interface RemoteState {
     streams: StreamFeedItem[];
     coalition: CoalitionFeedCardItem[];
     coliseum: ColiseumFeedCardItem[];
+    marketplace: MarketplaceFeedItem[];
     loading: boolean;
     errorsBySource: Partial<Record<UnifiedFeedSource, string>>;
 }
@@ -69,6 +74,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
     // by `streamsViewer`. Gate the source on it so we never emit dead links
     // when the viewer route isn't mounted.
     const streamsEnabled = flags.streamsViewer;
+    const marketplaceEnabled = flags.marketTab;
 
     const activity = useFollowedActivity(flags.profile);
 
@@ -76,6 +82,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
         streams: [],
         coalition: [],
         coliseum: [],
+        marketplace: [],
         loading: true,
         errorsBySource: {},
     });
@@ -85,15 +92,21 @@ export function useUnifiedFeed(): UnifiedFeedResult {
         setRemote((prev) => ({ ...prev, loading: true }));
         void (async () => {
             const now = Date.now();
-            const [streamsResult, coalitionResult, coliseumResult] = await Promise.allSettled([
-                streamsEnabled ? listStreams({ limit: REMOTE_FETCH_LIMIT }) : Promise.resolve(null),
-                flags.coalition
-                    ? fetchCoalitionFeed({}, { limit: REMOTE_FETCH_LIMIT })
-                    : Promise.resolve(null),
-                flags.coliseum
-                    ? fetchColiseumTopics({}, { limit: REMOTE_FETCH_LIMIT })
-                    : Promise.resolve(null),
-            ]);
+            const [streamsResult, coalitionResult, coliseumResult, marketplaceResult] =
+                await Promise.allSettled([
+                    streamsEnabled
+                        ? listStreams({ limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    flags.coalition
+                        ? fetchCoalitionFeed({}, { limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    flags.coliseum
+                        ? fetchColiseumTopics({}, { limit: REMOTE_FETCH_LIMIT })
+                        : Promise.resolve(null),
+                    marketplaceEnabled
+                        ? fetchListings({}, readBlackoutApiToken())
+                        : Promise.resolve(null),
+                ]);
             if (cancelled) return;
 
             const errorsBySource: Partial<Record<UnifiedFeedSource, string>> = {};
@@ -115,13 +128,26 @@ export function useUnifiedFeed(): UnifiedFeedResult {
                     : [];
             if (coliseumResult.status === 'rejected')
                 errorsBySource.coliseum = errorMessage(coliseumResult.reason);
+            const marketplace =
+                marketplaceResult.status === 'fulfilled' && marketplaceResult.value
+                    ? mapMarketplace(marketplaceResult.value, now)
+                    : [];
+            if (marketplaceResult.status === 'rejected')
+                errorsBySource.marketplace = errorMessage(marketplaceResult.reason);
 
-            setRemote({ streams, coalition, coliseum, loading: false, errorsBySource });
+            setRemote({
+                streams,
+                coalition,
+                coliseum,
+                marketplace,
+                loading: false,
+                errorsBySource,
+            });
         })();
         return () => {
             cancelled = true;
         };
-    }, [streamsEnabled, flags.coalition, flags.coliseum]);
+    }, [streamsEnabled, marketplaceEnabled, flags.coalition, flags.coliseum]);
 
     return useMemo(() => {
         const now = Date.now();
@@ -137,6 +163,7 @@ export function useUnifiedFeed(): UnifiedFeedResult {
             ...remote.streams,
             ...remote.coalition,
             ...remote.coliseum,
+            ...remote.marketplace,
         ];
 
         const discover = mergeAndRank(combined);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -27,6 +27,20 @@ import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
+import type { UnifiedFeedItem } from './unifiedFeedModel';
+
+/** Case-insensitive filter over title/subtitle/tags. Empty query is a no-op. */
+function filterFeedByQuery(
+    items: readonly UnifiedFeedItem[],
+    query: string
+): UnifiedFeedItem[] {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return items as UnifiedFeedItem[];
+    return items.filter((item) => {
+        const haystack = [item.title, item.subtitle, ...item.tags].join(' ').toLowerCase();
+        return haystack.includes(trimmed);
+    });
+}
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -242,6 +256,16 @@ export const HomeFeed = (): JSX.Element => {
         [feed.discover, followingIds]
     );
 
+    const [query, setQuery] = useState('');
+    const visibleFollowing = useMemo(() => filterFeedByQuery(followingItems, query), [
+        followingItems,
+        query,
+    ]);
+    const visibleDiscover = useMemo(() => filterFeedByQuery(discoverItems, query), [
+        discoverItems,
+        query,
+    ]);
+
     const quickActions = QUICK_ACTIONS.filter((action) => runtimeFeatureFlags[action.flag]);
 
     const pluginCards = useMemo(
@@ -296,6 +320,21 @@ export const HomeFeed = (): JSX.Element => {
                 {runtimeFeatureFlags.profile ? <HomeComposer /> : null}
             </header>
             <TopicChipBar />
+            <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search your feed…"
+                data-testid="home-feed-search"
+                style={{
+                    margin: '8px 16px',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border-default, #374151)',
+                    background: 'var(--bg-input, #0f172a)',
+                    color: 'var(--text-primary, #f8fafc)',
+                }}
+            />
             {quickActions.length > 0 ? (
                 <section
                     style={sectionStyle}
@@ -369,7 +408,7 @@ export const HomeFeed = (): JSX.Element => {
                     </div>
                 ) : (
                     <div style={sectionStyle} data-testid="home-feed-list">
-                        {followingItems.map((item) => (
+                        {visibleFollowing.map((item) => (
                             <UnifiedFeedCard key={item.id} item={item} />
                         ))}
                     </div>
@@ -379,7 +418,7 @@ export const HomeFeed = (): JSX.Element => {
                 <section data-shell-region="home-discover" data-testid="home-discover-section">
                     <header style={sectionLabelStyle}>Discover</header>
                     <div style={sectionStyle} data-testid="home-discover-list">
-                        {discoverItems.map((item) => (
+                        {visibleDiscover.map((item) => (
                             <UnifiedFeedCard key={item.id} item={item} />
                         ))}
                     </div>
