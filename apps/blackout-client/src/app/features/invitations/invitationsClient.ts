@@ -60,7 +60,7 @@ export type InvitationPreviewResponse =
               inviter: { id: string; username: string };
               matrixRoomId?: string;
               label?: string;
-              usesRemaining: number;
+              usesRemaining: number | null;
               expiresAt?: string;
           };
       }
