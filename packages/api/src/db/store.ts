@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
 import type {
+  CanopyDirectoryEntryRecord,
   CanopyVoiceRoomRecord,
-  ChannelRecord,
   FederationLinkRecord,
   MarketplaceEntitlementRecord,
   MarketplaceLicenseKeyRecord,
@@ -54,7 +54,22 @@ import type {
   TwitchIrcBotTokenRecord,
   ObsWsPasswordRecord,
   SimulcastDestinationRecord,
+  CoalitionSpatialItemRecord,
+  CoalitionAidPostRecord,
+  PluginInstallationRecord,
+  ColiseumTopicRecord,
+  ColiseumArgumentRecord,
+  ColiseumVoteRecord,
+  ColiseumLiveSessionRecord,
 } from './types';
+import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
+import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
+import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
+import { WriteBehindQueue } from './writeBehindQueue';
+import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
+import type { PgPool } from './migrate';
+import { log } from '../telemetry/logger';
+import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
@@ -62,7 +77,7 @@ const DB_FILE_PATH = resolve(process.cwd(), process.env.BLACKOUT_DB_FILE ?? '.bl
 
 type PersistedState = {
   users: UserRecord[];
-  channels: ChannelRecord[];
+  canopyDirectoryEntries: CanopyDirectoryEntryRecord[];
   messages: MessageRecord[];
   scheduledMessages: ScheduledMessageRecord[];
   votes: VoteRecord[];
@@ -110,11 +125,19 @@ type PersistedState = {
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
+  coalitionSpatialItems: CoalitionSpatialItemRecord[];
+  coalitionAidPosts: CoalitionAidPostRecord[];
+  pluginInstallations: PluginInstallationRecord[];
+  coliseumTopics: ColiseumTopicRecord[];
+  coliseumArguments: ColiseumArgumentRecord[];
+  coliseumVotes: ColiseumVoteRecord[];
+  coliseumLiveSessions: ColiseumLiveSessionRecord[];
 };
 
 class InMemoryDb {
   users = new Map<string, UserRecord>();
-  channels = new Map<string, ChannelRecord>();
+  /** Keyed by canopy (Matrix space) id. */
+  canopyDirectoryEntries = new Map<string, CanopyDirectoryEntryRecord>();
   messages = new Map<string, MessageRecord>();
   /** Keyed by scheduled-message id. */
   scheduledMessages = new Map<string, ScheduledMessageRecord>();
@@ -177,6 +200,24 @@ class InMemoryDb {
   twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
+  /** Coalition spatial map pins, keyed by item id. */
+  coalitionSpatialItems = new Map<string, CoalitionSpatialItemRecord>(
+    COALITION_SPATIAL_SEED.map((row) => [row.id, row]),
+  );
+  /** Coalition mutual-aid posts, keyed by post id. */
+  coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
+    COALITION_AID_SEED.map((row) => [row.id, row]),
+  );
+  /** Plugin installations (activation-at-scope), keyed by installation id. */
+  pluginInstallations = new Map<string, PluginInstallationRecord>();
+  /** Coliseum debate topics, keyed by topic id. */
+  coliseumTopics = new Map<string, ColiseumTopicRecord>();
+  /** Coliseum arguments, keyed by argument id. */
+  coliseumArguments = new Map<string, ColiseumArgumentRecord>();
+  /** Coliseum votes, keyed by `${argumentId}::${voterId}` (one vote per pair). */
+  coliseumVotes = new Map<string, ColiseumVoteRecord>();
+  /** Coliseum live debate sessions, keyed by session id. */
+  coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -1111,14 +1152,20 @@ class InMemoryDb {
     return this.simulcastDestinations.delete(id);
   }
 
-  createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const record: ChannelRecord = { ...input, createdAt: nowIso() };
-    this.channels.set(record.id, record);
+  upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record: CanopyDirectoryEntryRecord = { ...input, indexedAt: nowIso() };
+    this.canopyDirectoryEntries.set(record.canopyId, record);
     return record;
   }
 
-  listChannels(): ChannelRecord[] {
-    return [...this.channels.values()];
+  getCanopyDirectoryEntry(canopyId: string): CanopyDirectoryEntryRecord | undefined {
+    return this.canopyDirectoryEntries.get(canopyId);
+  }
+
+  listCanopyDirectoryEntries(): CanopyDirectoryEntryRecord[] {
+    return [...this.canopyDirectoryEntries.values()];
   }
 
   createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -1871,9 +1918,158 @@ class InMemoryDb {
   private webhookKey(providerId: MarketplaceProviderIdString, eventId: string): string {
     return `${providerId}:${eventId}`;
   }
+
+  // --- coalition spatial map ---
+
+  listCoalitionSpatialItems(): CoalitionSpatialItemRecord[] {
+    return [...this.coalitionSpatialItems.values()];
+  }
+
+  upsertCoalitionSpatialItem(
+    input: Omit<CoalitionSpatialItemRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionSpatialItemRecord {
+    const existing = this.coalitionSpatialItems.get(input.id);
+    const now = nowIso();
+    const record: CoalitionSpatialItemRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionSpatialItems.set(record.id, record);
+    return record;
+  }
+
+  listCoalitionAidPosts(): CoalitionAidPostRecord[] {
+    return [...this.coalitionAidPosts.values()];
+  }
+
+  createCoalitionAidPost(
+    input: Omit<CoalitionAidPostRecord, 'createdAt'>,
+  ): CoalitionAidPostRecord {
+    const record: CoalitionAidPostRecord = { ...input, createdAt: nowIso() };
+    this.coalitionAidPosts.set(record.id, record);
+    return record;
+  }
+
+  // --- plugin installations (activation-at-scope) ---
+
+  createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const now = nowIso();
+    const record: PluginInstallationRecord = { ...input, installedAt: now, updatedAt: now };
+    this.pluginInstallations.set(record.id, record);
+    return record;
+  }
+
+  getPluginInstallation(id: string): PluginInstallationRecord | undefined {
+    return this.pluginInstallations.get(id);
+  }
+
+  /** Enforces the (pluginId, scopeType, scopeId) uniqueness constraint. */
+  findPluginInstallation(
+    pluginId: string,
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord | undefined {
+    return [...this.pluginInstallations.values()].find(
+      (row) => row.pluginId === pluginId && row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForScope(
+    scopeType: PluginInstallationRecord['scopeType'],
+    scopeId: string,
+  ): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter(
+      (row) => row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
+  listPluginInstallationsForPlugin(pluginId: string): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const existing = this.pluginInstallations.get(id);
+    if (!existing) return undefined;
+    const updated: PluginInstallationRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.pluginInstallations.set(id, updated);
+    return updated;
+  }
+
+  deletePluginInstallation(id: string): boolean {
+    return this.pluginInstallations.delete(id);
+  }
+
+  // --- Coliseum ---
+
+  private static coliseumVoteKey(argumentId: string, voterId: string): string {
+    return `${argumentId}::${voterId}`;
+  }
+
+  listColiseumTopics(): ColiseumTopicRecord[] {
+    return [...this.coliseumTopics.values()];
+  }
+
+  getColiseumTopic(id: string): ColiseumTopicRecord | undefined {
+    return this.coliseumTopics.get(id);
+  }
+
+  upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    this.coliseumTopics.set(record.id, record);
+    return record;
+  }
+
+  listColiseumArguments(): ColiseumArgumentRecord[] {
+    return [...this.coliseumArguments.values()];
+  }
+
+  getColiseumArgument(id: string): ColiseumArgumentRecord | undefined {
+    return this.coliseumArguments.get(id);
+  }
+
+  upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    this.coliseumArguments.set(record.id, record);
+    return record;
+  }
+
+  /** Bulk upsert so a score recompute persists once rather than per-argument. */
+  upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    for (const record of records) this.coliseumArguments.set(record.id, record);
+  }
+
+  listColiseumVotes(): ColiseumVoteRecord[] {
+    return [...this.coliseumVotes.values()];
+  }
+
+  getColiseumVote(argumentId: string, voterId: string): ColiseumVoteRecord | undefined {
+    return this.coliseumVotes.get(InMemoryDb.coliseumVoteKey(argumentId, voterId));
+  }
+
+  upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    this.coliseumVotes.set(InMemoryDb.coliseumVoteKey(record.argumentId, record.voterId), record);
+    return record;
+  }
+
+  listColiseumLiveSessions(): ColiseumLiveSessionRecord[] {
+    return [...this.coliseumLiveSessions.values()];
+  }
+
+  getColiseumLiveSession(id: string): ColiseumLiveSessionRecord | undefined {
+    return this.coliseumLiveSessions.get(id);
+  }
+
+  upsertColiseumLiveSession(record: ColiseumLiveSessionRecord): ColiseumLiveSessionRecord {
+    this.coliseumLiveSessions.set(record.id, record);
+    return record;
+  }
 }
 
-class FileBackedDb extends InMemoryDb {
+export class FileBackedDb extends InMemoryDb {
   constructor() {
     super();
     this.hydrate();
@@ -1887,7 +2083,9 @@ class FileBackedDb extends InMemoryDb {
 
     const parsed = JSON.parse(readFileSync(DB_FILE_PATH, 'utf8')) as PersistedState;
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
-    this.channels = new Map(parsed.channels.map((row) => [row.id, row]));
+    this.canopyDirectoryEntries = new Map(
+      (parsed.canopyDirectoryEntries ?? []).map((row) => [row.canopyId, row]),
+    );
     this.messages = new Map(parsed.messages.map((row) => [row.id, row]));
     this.scheduledMessages = new Map(
       (parsed.scheduledMessages ?? []).map((row) => [row.id, row]),
@@ -1996,12 +2194,41 @@ class FileBackedDb extends InMemoryDb {
     this.obsWsPasswords = new Map(
       (parsed.obsWsPasswords ?? []).map((row) => [row.id, row]),
     );
+    if (parsed.coalitionSpatialItems) {
+      this.coalitionSpatialItems = new Map(
+        parsed.coalitionSpatialItems.map((row) => [row.id, row]),
+      );
+    }
+    if (parsed.coalitionAidPosts) {
+      this.coalitionAidPosts = new Map(
+        parsed.coalitionAidPosts.map((row) => [row.id, row]),
+      );
+    }
+    this.pluginInstallations = new Map(
+      (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
+    );
+    if (parsed.coliseumTopics) {
+      this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumArguments) {
+      this.coliseumArguments = new Map(parsed.coliseumArguments.map((row) => [row.id, row]));
+    }
+    if (parsed.coliseumVotes) {
+      this.coliseumVotes = new Map(
+        parsed.coliseumVotes.map((row) => [`${row.argumentId}::${row.voterId}`, row]),
+      );
+    }
+    if (parsed.coliseumLiveSessions) {
+      this.coliseumLiveSessions = new Map(
+        parsed.coliseumLiveSessions.map((row) => [row.id, row]),
+      );
+    }
   }
 
   private snapshot(): PersistedState {
     return {
       users: [...this.users.values()],
-      channels: [...this.channels.values()],
+      canopyDirectoryEntries: [...this.canopyDirectoryEntries.values()],
       messages: [...this.messages.values()],
       scheduledMessages: [...this.scheduledMessages.values()],
       votes: [...this.votes.values()],
@@ -2049,6 +2276,13 @@ class FileBackedDb extends InMemoryDb {
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
+      coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
+      coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      pluginInstallations: [...this.pluginInstallations.values()],
+      coliseumTopics: [...this.coliseumTopics.values()],
+      coliseumArguments: [...this.coliseumArguments.values()],
+      coliseumVotes: [...this.coliseumVotes.values()],
+      coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
     };
   }
 
@@ -2218,10 +2452,12 @@ class FileBackedDb extends InMemoryDb {
     return record;
   }
 
-  override createChannel(input: Omit<ChannelRecord, 'createdAt'>): ChannelRecord {
-    const created = super.createChannel(input);
+  override upsertCanopyDirectoryEntry(
+    input: Omit<CanopyDirectoryEntryRecord, 'indexedAt'>,
+  ): CanopyDirectoryEntryRecord {
+    const record = super.upsertCanopyDirectoryEntry(input);
     this.persist();
-    return created;
+    return record;
   }
 
   override createMessage(input: Omit<MessageRecord, 'createdAt'>): MessageRecord {
@@ -2824,6 +3060,282 @@ class FileBackedDb extends InMemoryDb {
     if (removed) this.persist();
     return removed;
   }
+
+  override upsertCoalitionSpatialItem(
+    input: Omit<CoalitionSpatialItemRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionSpatialItemRecord {
+    const created = super.upsertCoalitionSpatialItem(input);
+    this.persist();
+    return created;
+  }
+
+  override createCoalitionAidPost(
+    input: Omit<CoalitionAidPostRecord, 'createdAt'>,
+  ): CoalitionAidPostRecord {
+    const created = super.createCoalitionAidPost(input);
+    this.persist();
+    return created;
+  }
+
+  override createPluginInstallation(
+    input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
+  ): PluginInstallationRecord {
+    const created = super.createPluginInstallation(input);
+    this.persist();
+    return created;
+  }
+
+  override updatePluginInstallation(
+    id: string,
+    patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
+  ): PluginInstallationRecord | undefined {
+    const updated = super.updatePluginInstallation(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override deletePluginInstallation(id: string): boolean {
+    const removed = super.deletePluginInstallation(id);
+    if (removed) this.persist();
+    return removed;
+  }
+
+  override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
+    const saved = super.upsertColiseumTopic(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArgument(record: ColiseumArgumentRecord): ColiseumArgumentRecord {
+    const saved = super.upsertColiseumArgument(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumArguments(records: readonly ColiseumArgumentRecord[]): void {
+    super.upsertColiseumArguments(records);
+    this.persist();
+  }
+
+  override upsertColiseumVote(record: ColiseumVoteRecord): ColiseumVoteRecord {
+    const saved = super.upsertColiseumVote(record);
+    this.persist();
+    return saved;
+  }
+
+  override upsertColiseumLiveSession(
+    record: ColiseumLiveSessionRecord,
+  ): ColiseumLiveSessionRecord {
+    const saved = super.upsertColiseumLiveSession(record);
+    this.persist();
+    return saved;
+  }
 }
 
-export const db = DB_MODE === 'memory' ? new InMemoryDb() : new FileBackedDb();
+/**
+ * Postgres-backed store (BLACKOUT_DB_MODE=postgres). Single-instance
+ * write-through: reads are inherited from InMemoryDb (served from the in-memory
+ * mirror hydrated on boot), and the 107 mutators are wrapped to enqueue a
+ * Postgres write after updating the mirror. Not safe for >1 replica — each
+ * process holds its own mirror with no cross-instance invalidation.
+ */
+type MutableMap = Map<string, Record<string, unknown>>;
+
+export class PostgresBackedDb extends InMemoryDb {
+  private readonly plans = new Map<string, TablePlan>();
+  private queue: WriteBehindQueue | null = null;
+  private pool: PgPool | null = null;
+  private transport: StoreChangeTransport | null = null;
+  /** Identifies this replica so it can ignore its own change notifications. */
+  private readonly instanceId = randomUUID();
+
+  constructor() {
+    super();
+    this.installWriteThrough();
+  }
+
+  private mapByName(name: string): MutableMap {
+    return (this as unknown as Record<string, MutableMap>)[name];
+  }
+
+  /** Shadow each mutator with a wrapper that calls the original then enqueues a write. */
+  private installWriteThrough(): void {
+    const proto = InMemoryDb.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+    const self = this as unknown as Record<string, unknown>;
+    for (const [method, spec] of Object.entries(MUTATOR_SPECS)) {
+      const original = proto[method];
+      if (typeof original !== 'function') continue;
+      self[method] = (...args: unknown[]): unknown => {
+        const result = original.apply(this, args);
+        const queue = this.queue;
+        if (queue) {
+          if (spec.kind === 'upsert') {
+            if (result && typeof result === 'object') {
+              queue.enqueueUpsert(spec.map, result as Record<string, unknown>);
+            }
+          } else {
+            for (const m of spec.maps) queue.enqueueResync(m);
+          }
+        }
+        return result;
+      };
+    }
+  }
+
+  /**
+   * Hydrate every mapped table from Postgres, arm the write-behind queue, and
+   * (when a transport is supplied) subscribe to peer change notifications so
+   * this replica's mirror stays coherent with writes on other replicas.
+   */
+  async init(pool: PgPool, transport?: StoreChangeTransport): Promise<void> {
+    this.pool = pool;
+    const client = await pool.connect();
+    try {
+      for (const descriptor of TABLE_DESCRIPTORS) {
+        const columns = await introspectColumns(client, descriptor.tableName);
+        if (columns.length === 0) {
+          log.warn('pg_store_table_missing', { table: descriptor.tableName });
+          continue;
+        }
+        const plan: TablePlan = {
+          descriptor,
+          columns,
+          columnNames: new Set(columns.map((c) => c.name)),
+        };
+        this.plans.set(descriptor.mapName, plan);
+        await hydrateMap(client, plan, this.mapByName(descriptor.mapName));
+      }
+    } finally {
+      client.release?.();
+    }
+    this.transport = transport ?? null;
+    this.queue = new WriteBehindQueue(
+      pool,
+      this.plans,
+      (name) => this.mapByName(name),
+      transport ?? undefined,
+      this.instanceId,
+    );
+    if (transport) {
+      await transport.subscribe((payload) => this.applyPeerChange(payload));
+      // After a dropped LISTEN connection we may have missed notifications;
+      // re-hydrate everything to recover.
+      transport.onReconnect(() => {
+        void this.rehydrateAll();
+      });
+    }
+  }
+
+  /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
+  private async rehydrateAll(): Promise<void> {
+    if (!this.pool) return;
+    const client = await this.pool.connect();
+    try {
+      for (const [mapName, plan] of this.plans) {
+        const fresh: MutableMap = new Map();
+        const res = await client.query<Record<string, unknown>>(
+          `SELECT * FROM ${plan.descriptor.tableName}`,
+        );
+        for (const row of res.rows) {
+          const record = rowToRecord(plan, row);
+          fresh.set(plan.descriptor.keyOf(record), record);
+        }
+        (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+      }
+    } catch (err) {
+      log.warn('pg_store_rehydrate_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      client.release?.();
+    }
+  }
+
+  /**
+   * Apply a peer replica's change to the local mirror. 'u' refreshes the single
+   * changed row; 'r' reloads the whole table. Self-notifications are ignored
+   * (the originating mutator already updated this mirror synchronously).
+   */
+  private applyPeerChange(payload: StoreChangePayload): void {
+    if (payload.src === this.instanceId) return;
+    const plan = this.plans.get(payload.m);
+    if (!plan || !this.pool) return;
+    const pool = this.pool;
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        if (payload.op === 'u' && payload.kv) {
+          const where = plan.descriptor.conflictColumns
+            .map((c, i) => `${c} = $${i + 1}`)
+            .join(' AND ');
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
+            payload.kv,
+          );
+          if (res.rows.length > 0) {
+            const record = rowToRecord(plan, res.rows[0]);
+            this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
+          }
+        } else if (payload.op === 'r') {
+          const fresh: MutableMap = new Map();
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName}`,
+          );
+          for (const row of res.rows) {
+            const record = rowToRecord(plan, row);
+            fresh.set(plan.descriptor.keyOf(record), record);
+          }
+          (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
+        }
+      } catch (err) {
+        log.warn('pg_store_peer_refresh_failed', {
+          map: payload.m,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        client.release?.();
+      }
+    })();
+  }
+
+  /** Flush queued writes. Does NOT close the change subscription — safe to call
+   * repeatedly (e.g. to await durability) without unsubscribing from peers. */
+  async drain(): Promise<void> {
+    await this.queue?.drain();
+  }
+
+  /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
+  async shutdown(): Promise<void> {
+    await this.drain();
+    await this.transport?.close();
+  }
+}
+
+export const db =
+  DB_MODE === 'memory'
+    ? new InMemoryDb()
+    : DB_MODE === 'postgres'
+      ? new PostgresBackedDb()
+      : new FileBackedDb();
+
+/**
+ * Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres).
+ * Cross-replica cache invalidation via Postgres LISTEN/NOTIFY is on by default;
+ * set BLACKOUT_DB_PG_NOTIFY=0 to disable (e.g. a known single-instance deploy).
+ */
+export async function initRuntimeStore(pool: PgPool): Promise<void> {
+  if (!(db instanceof PostgresBackedDb)) return;
+  const transport =
+    process.env.BLACKOUT_DB_PG_NOTIFY === '0'
+      ? undefined
+      : new PgNotifyTransport(pool as unknown as ConstructorParameters<typeof PgNotifyTransport>[0]);
+  await db.init(pool, transport);
+}
+
+/** Flush write-behind ops + close the change subscription on graceful shutdown. */
+export async function drainRuntimeStore(): Promise<void> {
+  if (db instanceof PostgresBackedDb) await db.shutdown();
+}
+
+/** Runtime store mode, for boot wiring. */
+export const RUNTIME_DB_MODE = DB_MODE;

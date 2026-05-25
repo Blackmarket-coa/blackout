@@ -1,10 +1,10 @@
 import { atom } from 'jotai';
 import type { ShellPanelEntry } from '../../../core/features/types';
-import { installedPluginsAtom } from './installedPluginsAtom';
+import { installedPluginsForScopeAtom } from './installedPluginsAtom';
 
 export const installedPluginPanelsAtom = atom<ShellPanelEntry[]>((get) => {
     const entries: ShellPanelEntry[] = [];
-    for (const record of get(installedPluginsAtom)) {
+    for (const record of get(installedPluginsForScopeAtom)) {
         if (record.status !== 'enabled') continue;
         const manifest = record.manifest;
         const route = `/plugins/${encodeURIComponent(manifest.id)}`;

@@ -10,9 +10,9 @@ import shareRoutes from './routes/sharePreview';
 import messageRoutes from './routes/messages';
 import scheduledMessageRoutes from './routes/scheduledMessages';
 import federationRoutes from './routes/federation';
-import channelRoutes from './routes/channels';
 import entitlementRoutes from './routes/entitlements';
 import marketplaceRoutes from './routes/marketplace';
+import pluginInstallationRoutes from './routes/pluginInstallations';
 import creatorRoutes from './routes/creator';
 import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
@@ -68,8 +68,19 @@ import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
+import { matrixClient } from './integrations/matrix-client';
+import { drainRuntimeStore, initRuntimeStore, RUNTIME_DB_MODE } from './db/store';
+import { migrateUp, MIGRATIONS_DIR } from './db/migrate';
+import { getSharedPgPool } from './config/postgres';
 
 const securityPreflight = runSecurityPreflight();
+
+// Snapshot of the Matrix admin dependency, refreshed by the startup preflight
+// below. Surfaced in `/health` so a misconfigured homeserver/bot token (which
+// would otherwise only fail at invite-redeem time) is visible to readiness
+// probes. Stays at `preflight_pending` in test/non-listening modes.
+type MatrixHealth = Awaited<ReturnType<typeof matrixClient.adminPreflight>>;
+let matrixHealth: MatrixHealth = { configured: false, adminOk: false, reason: 'preflight_pending' };
 const app = new Hono();
 const API_ALIAS_REMOVAL_DATE = '2026-08-31';
 const legacyAliasEnabled = new Date() < new Date(`${API_ALIAS_REMOVAL_DATE}T00:00:00.000Z`);
@@ -134,9 +145,9 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/messages`, messageRoutes);
   app.route(`${root}/scheduled-messages`, scheduledMessageRoutes);
   app.route(`${root}/federation`, federationRoutes);
-  app.route(`${root}/channels`, channelRoutes);
   app.route(`${root}/entitlements`, entitlementRoutes);
   app.route(`${root}/marketplace`, marketplaceRoutes);
+  app.route(`${root}/plugin-installations`, pluginInstallationRoutes);
   app.route(`${root}/creator`, creatorRoutes);
   app.route(`${root}/voice`, voiceRoutes);
   app.route(`${root}/subscriptions`, subscriptionRoutes);
@@ -204,7 +215,7 @@ app.route('/bug-report/widget', widgetReportRoutes);
 // returns OG meta tags and redirects humans into the SPA `/invite/:token` flow.
 app.route('/i', shareRoutes);
 
-app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight }));
+app.get('/health', (c) => c.json({ status: 'ok', legacyAliasEnabled, aliasRemovalDate: API_ALIAS_REMOVAL_DATE, security: securityPreflight, matrix: matrixHealth }));
 
 app.get('/metrics', (c) => {
   // Token-gated to keep cardinality and PII surface internal. Either set
@@ -230,6 +241,35 @@ app.get('/metrics', (c) => {
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 const shouldListen = process.env.NODE_ENV !== 'test' && process.env.BLACKOUT_API_SKIP_LISTEN !== '1';
 
+// Postgres runtime store: run migrations then hydrate the in-memory mirror
+// BEFORE serving or starting any store-reading background loops. Top-level
+// await pauses module evaluation until the store is ready. Skipped under test
+// (shouldListen=false) and in memory/file modes.
+if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
+  const pool = await getSharedPgPool();
+  if (process.env.BLACKOUT_DB_MIGRATE_ON_START !== '0') {
+    const applied = await migrateUp({ pool, migrationsDir: MIGRATIONS_DIR });
+    log.info('db_migrations_applied_on_start', { count: applied.length });
+  }
+  await initRuntimeStore(pool);
+  log.info('postgres_store_hydrated');
+
+  const drainOnExit = (signal: string) => {
+    void (async () => {
+      try {
+        await drainRuntimeStore();
+        log.info('postgres_store_drained', { signal });
+      } catch (err) {
+        log.warn('postgres_store_drain_failed', { error: String(err) });
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
+  process.once('SIGTERM', () => drainOnExit('SIGTERM'));
+  process.once('SIGINT', () => drainOnExit('SIGINT'));
+}
+
 if (shouldListen) {
   // Fire-and-forget: optional tracing + error reporting. Both fall back to a
   // noop transport when their env knobs are unset, so this is safe even in
@@ -237,6 +277,34 @@ if (shouldListen) {
   initTracing().catch((err) => log.warn('tracing init failed', { error: String(err) }));
   initErrorReporter().catch((err) => log.warn('error reporter init failed', { error: String(err) }));
   bootstrapMailer();
+
+  // Probe the Matrix admin dependency once at boot. Invites/redemption need the
+  // bot token to hold Synapse admin rights; without this check a misconfigured
+  // deploy looks healthy but fails every invite. We log loudly and cache the
+  // result for `/health` rather than hard-failing, since some environments run
+  // without Matrix on purpose.
+  matrixClient
+    .adminPreflight()
+    .then((result) => {
+      matrixHealth = result;
+      if (!result.configured) {
+        const msg = 'matrix_preflight: homeserver/bot token not configured — invites will be unavailable';
+        if (process.env.NODE_ENV === 'production') log.warn(msg);
+        else log.info(msg);
+      } else if (!result.adminOk) {
+        log.warn('matrix_preflight: bot token lacks Synapse admin access — invites will fail at redeem time', {
+          botUserId: result.botUserId,
+          reason: result.reason,
+          detail: result.detail,
+        });
+      } else {
+        log.info('matrix_preflight: Synapse admin reachable', { botUserId: result.botUserId });
+      }
+    })
+    .catch((err) => {
+      matrixHealth = { configured: true, adminOk: false, reason: 'preflight_error', detail: String(err) };
+      log.warn('matrix_preflight: probe threw', { error: String(err) });
+    });
 
   // Resolve the outbound mail transport. Production refuses to start
   // without an explicit MAIL_PROVIDER (see services/mailer.ts), so this

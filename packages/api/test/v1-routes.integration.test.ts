@@ -126,20 +126,6 @@ test('v1 messages post/list works', async () => {
   assert.ok(body.some((msg) => msg.content));
 });
 
-test('v1 channels create/list works', async () => {
-  const create = await app.request('/v1/channels', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ communityId: 'c-1', name: 'general' }),
-  });
-  assert.equal(create.status, 201);
-
-  const list = await app.request('/v1/channels');
-  assert.equal(list.status, 200);
-  const body = (await list.json()) as Array<{ name: string }>;
-  assert.ok(body.some((channel) => channel.name === 'general'));
-});
-
 test('v1 governance proposal create/get works', async () => {
   const { token, userId } = await registerUser();
   const headers = {

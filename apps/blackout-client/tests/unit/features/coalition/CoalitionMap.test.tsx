@@ -11,16 +11,34 @@ const mocks = vi.hoisted(() => {
         color?: string;
         removed: boolean;
     }> = [];
+    const sources = new Map<string, { setData: (value: unknown) => void }>();
+    const layers = new Set<string>();
     const mapInstance = {
         addControl: vi.fn(),
         on: vi.fn((event: string, cb: () => void) => {
             if (event === 'load') cb();
         }),
+        off: vi.fn(),
         remove: vi.fn(),
         fitBounds: vi.fn(),
         easeTo: vi.fn(),
         flyTo: vi.fn(),
         getZoom: vi.fn(() => 10),
+        isStyleLoaded: vi.fn(() => true),
+        addSource: vi.fn((id: string) => {
+            sources.set(id, { setData: vi.fn() });
+        }),
+        getSource: vi.fn((id: string) => sources.get(id)),
+        removeSource: vi.fn((id: string) => {
+            sources.delete(id);
+        }),
+        addLayer: vi.fn((layer: { id: string }) => {
+            layers.add(layer.id);
+        }),
+        getLayer: vi.fn((id: string) => (layers.has(id) ? { id } : undefined)),
+        removeLayer: vi.fn((id: string) => {
+            layers.delete(id);
+        }),
     };
     return { markerInstances, mapInstance };
 });
@@ -142,6 +160,55 @@ describe('CoalitionMap', () => {
         render(<CoalitionMap pins={pins} focusPinId="b" onSelectPin={vi.fn()} />);
         expect(mocks.mapInstance.flyTo).toHaveBeenCalledWith(
             expect.objectContaining({ center: [-74.3, 40.2] })
+        );
+    });
+
+    it('pulses live and high-heat pins but not quiet ones', () => {
+        render(
+            <CoalitionMap
+                pins={[
+                    {
+                        id: 'live',
+                        title: 'Live now',
+                        layer: 'events',
+                        latitude: 40.1,
+                        longitude: -74.2,
+                        status: 'live',
+                    },
+                    {
+                        id: 'hot',
+                        title: 'Busy den',
+                        layer: 'dens',
+                        latitude: 40.2,
+                        longitude: -74.3,
+                        heat: 0.85,
+                    },
+                    {
+                        id: 'quiet',
+                        title: 'Past',
+                        layer: 'vendors',
+                        latitude: 40.3,
+                        longitude: -74.4,
+                        status: 'past',
+                    },
+                ]}
+                onSelectPin={vi.fn()}
+            />
+        );
+        const pulsing = mocks.markerInstances.filter(
+            (marker) => marker.element?.dataset.pulsing === 'true'
+        );
+        expect(pulsing).toHaveLength(2);
+    });
+
+    it('adds a native heatmap layer when heat is enabled', () => {
+        render(<CoalitionMap pins={pins} showHeat onSelectPin={vi.fn()} />);
+        expect(mocks.mapInstance.addSource).toHaveBeenCalledWith(
+            'coalition-heat',
+            expect.objectContaining({ type: 'geojson' })
+        );
+        expect(mocks.mapInstance.addLayer).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'coalition-heat-layer', type: 'heatmap' })
         );
     });
 });

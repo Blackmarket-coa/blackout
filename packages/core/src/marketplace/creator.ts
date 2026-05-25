@@ -3,6 +3,7 @@ import type {
     MarketplaceCategory,
     MarketplaceProviderId,
 } from './provider';
+import { isPluginDomain, type PluginDomain } from './domain';
 
 export type CreatorListingStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
 
@@ -11,6 +12,8 @@ export type CreatorArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 
 export interface CreatorListingDraft {
     artifactKind: CreatorArtifactKind;
     category: MarketplaceCategory;
+    /** Ecosystem-domain axis (orthogonal to `category`); optional for legacy listings. */
+    domain?: PluginDomain;
     entitlementKind: EntitlementKind;
     title: string;
     description: string;
@@ -135,6 +138,7 @@ export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
     return {
         artifactKind,
         category,
+        domain: isPluginDomain(input.domain) ? input.domain : undefined,
         entitlementKind,
         title: requireString(input, 'title'),
         description: requireString(input, 'description'),

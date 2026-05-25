@@ -14,6 +14,14 @@ api:
     pullPolicy: IfNotPresent
   replicaCount: 3
   port: 3000
+  store:
+    # Runtime datastore mode. `postgres` uses the write-through Postgres store
+    # (migrate-on-boot, hydrate, write-through). Safe at >1 replica because
+    # pgNotify keeps each replica's in-memory mirror coherent via LISTEN/NOTIFY.
+    # Set to `file` to fall back to the JSON snapshot store.
+    mode: postgres
+    # Cross-replica cache invalidation. Keep true for any multi-replica deploy.
+    pgNotify: true
   resources:
     requests:
       cpu: 100m

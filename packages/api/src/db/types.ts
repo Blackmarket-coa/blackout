@@ -1,3 +1,11 @@
+import type { AidPost, SpatialFeedItem } from '@blackout/core';
+import type {
+  ColiseumArgument,
+  ColiseumLiveSession,
+  ColiseumTopic,
+  ColiseumVote,
+} from '@blackout/core';
+
 export type UUID = string;
 
 export interface UserRecord {
@@ -391,15 +399,12 @@ export interface CommunityRecord {
   createdAt: string;
 }
 
-export interface ChannelRecord {
-  id: UUID;
-  communityId: UUID;
+export interface CanopyDirectoryEntryRecord {
+  canopyId: string;
   name: string;
-  description?: string;
-  channelType: 'text' | 'voice' | 'broadcast' | 'governance';
-  isPrivate: boolean;
-  matrixRoomId?: string;
-  createdAt: string;
+  summary?: string;
+  federationTier: 'local' | 'zone' | 'global';
+  indexedAt: string;
 }
 
 export interface MessageRecord {
@@ -688,6 +693,32 @@ export interface MarketplaceListingsCacheRecord {
   refreshedAt: string;
 }
 
+export type PluginInstallScopeType = 'user' | 'den' | 'coalition' | 'creator';
+
+export type PluginInstallStatus =
+  | 'enabled'
+  | 'disabled'
+  | 'available'
+  | 'pending'
+  | 'error';
+
+export interface PluginInstallationRecord {
+  id: UUID;
+  pluginId: string;
+  entitlementId: UUID | null;
+  scopeType: PluginInstallScopeType;
+  scopeId: string;
+  installedByUserId: string;
+  status: PluginInstallStatus;
+  artifactKind: string;
+  domain: string | null;
+  grantedCapabilities: string[];
+  config: Record<string, unknown>;
+  manifest: Record<string, unknown>;
+  installedAt: string;
+  updatedAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {
@@ -829,3 +860,26 @@ export interface TipRecord {
   refundedAt: string | null;
   metadata?: Record<string, unknown>;
 }
+
+/** A pin on the Coalition spatial map (events, dens, streams, aid, vendors, …). */
+export interface CoalitionSpatialItemRecord extends SpatialFeedItem {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A durable mutual-aid request/offer surfaced on the Coalition map. */
+export interface CoalitionAidPostRecord extends AidPost {
+  createdAt: string;
+}
+
+/**
+ * Coliseum debate records. These persist the discourse layer (topics,
+ * arguments, votes, live sessions) so debate history survives a restart. The
+ * shapes are the canonical core types; denormalized scores (voteScore,
+ * nuanceScore, debateHeat) are stored on the records and recomputed by the
+ * coliseum service on each write.
+ */
+export type ColiseumTopicRecord = ColiseumTopic;
+export type ColiseumArgumentRecord = ColiseumArgument;
+export type ColiseumVoteRecord = ColiseumVote;
+export type ColiseumLiveSessionRecord = ColiseumLiveSession;

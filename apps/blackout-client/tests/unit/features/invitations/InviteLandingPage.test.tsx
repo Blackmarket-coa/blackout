@@ -141,4 +141,19 @@ describe('InviteLandingPage', () => {
         expect(assignMock).not.toHaveBeenCalled();
         expect(container.textContent ?? '').toContain('expired');
     });
+
+    it('renders "Unlimited uses" for an unlimited link instead of a uses count', async () => {
+        previewInvitationMock.mockResolvedValue({
+            valid: true,
+            invitation: { inviter: { id: 'u1', username: 'alice' }, usesRemaining: null },
+        });
+        const mx = makeSpaceClient('!unused:server', false);
+
+        const container = renderPage(seedStore(mx, 'logged_out'));
+        await flush();
+
+        const text = container.textContent ?? '';
+        expect(text).toContain('Unlimited uses');
+        expect(text).not.toContain('uses remaining');
+    });
 });

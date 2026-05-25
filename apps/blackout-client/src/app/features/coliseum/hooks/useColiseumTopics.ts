@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    fetchColiseumReel,
     fetchColiseumTopic,
     fetchColiseumTopics,
     fetchColiseumVerdict,
+    type ColiseumReelResponse,
     type ColiseumScopeQuery,
     type ColiseumTopicDetailResponse,
     type ColiseumTopicsResponse,
     type ColiseumVerdictResponse,
+    type FetchColiseumReelOptions,
     type FetchColiseumTopicsOptions,
 } from '../coliseumClient';
 
@@ -54,24 +57,31 @@ export type { ColiseumScopeQuery } from '../coliseumClient';
 
 export function useColiseumTopics(
     scope: ColiseumScopeQuery,
-    options: FetchColiseumTopicsOptions = {},
+    options: FetchColiseumTopicsOptions = {}
 ) {
     return useAsync<ColiseumTopicsResponse>(
         () => fetchColiseumTopics(scope, options),
-        [scope.canopyId, scope.denId, options.category, options.tag, options.status, options.limit],
+        [scope.canopyId, scope.denId, options.category, options.tag, options.status, options.limit]
     );
 }
 
 export function useColiseumTopic(topicId: string | null) {
     return useAsync<ColiseumTopicDetailResponse | null>(
         () => (topicId ? fetchColiseumTopic(topicId) : Promise.resolve(null)),
-        [topicId],
+        [topicId]
     );
 }
 
 export function useColiseumVerdict(topicId: string | null) {
     return useAsync<ColiseumVerdictResponse | null>(
         () => (topicId ? fetchColiseumVerdict(topicId) : Promise.resolve(null)),
-        [topicId],
+        [topicId]
+    );
+}
+
+export function useColiseumReel(options: FetchColiseumReelOptions = {}, enabled = true) {
+    return useAsync<ColiseumReelResponse | null>(
+        () => (enabled ? fetchColiseumReel(options) : Promise.resolve(null)),
+        [enabled, options.limit, options.offset]
     );
 }
