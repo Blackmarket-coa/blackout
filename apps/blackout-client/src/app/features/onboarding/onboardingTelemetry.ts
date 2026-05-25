@@ -37,6 +37,16 @@ export type OnboardingTelemetryEvent =
           skipped: boolean;
       }
     | {
+          name: 'onboarding_interests_selected';
+          spaceId: string;
+          count: number;
+      }
+    | {
+          name: 'onboarding_communities_seeded';
+          spaceId: string;
+          count: number;
+      }
+    | {
           name: 'onboarding_tour_started';
           startedAt: number;
       }
@@ -195,6 +205,14 @@ export const trackOnboardingCompleted = (
     });
 };
 
+export const trackOnboardingInterestsSelected = (spaceId: string, count: number) => {
+    emit({ name: 'onboarding_interests_selected', spaceId, count });
+};
+
+export const trackOnboardingCommunitiesSeeded = (spaceId: string, count: number) => {
+    emit({ name: 'onboarding_communities_seeded', spaceId, count });
+};
+
 export const trackOnboardingTourStarted = (startedAt: number) => {
     emit({ name: 'onboarding_tour_started', startedAt });
 };
@@ -219,10 +237,7 @@ export const trackOnboardingTourCompleted = (elapsedMs: number) => {
     emit({ name: 'onboarding_tour_completed', elapsedMs });
 };
 
-export const trackOnboardingDebugBundleDownloaded = (
-    source: DebugBundleSource,
-    stepId: string
-) => {
+export const trackOnboardingDebugBundleDownloaded = (source: DebugBundleSource, stepId: string) => {
     emit({ name: 'onboarding_debug_bundle_downloaded', source, stepId });
 };
 
@@ -274,9 +289,7 @@ export const getOnboardingAnalyticsSummary = (spaceId?: string): OnboardingAnaly
         {}
     );
 
-    const tourStarted = filtered.filter(
-        (event) => event.name === 'onboarding_tour_started'
-    ).length;
+    const tourStarted = filtered.filter((event) => event.name === 'onboarding_tour_started').length;
     const tourCompleted = filtered.filter(
         (event) => event.name === 'onboarding_tour_completed'
     ).length;

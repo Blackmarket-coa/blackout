@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWelcomeContent } from '../welcome/useWelcome';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { ONBOARDING_CREATOR_PATH } from '../../pages/paths';
 import { downloadDebugBundle } from '../settings/debugBundle';
+import { useMatrixClientOrNull } from '../../hooks/useMatrixClient';
+import {
+    listCanopiesByTag,
+    listTopics,
+    type TopicCanopySummary,
+    type TopicSummary,
+} from '../topics/topicsClient';
+import { writeDiscoveryInterestTags } from '../home/discoveryInterests';
 import {
     ONBOARDING_STEP_SEQUENCE,
     type CommunityIntent,
@@ -14,14 +22,19 @@ import {
 } from './onboardingState';
 import { useHomeTour } from './homeTourState';
 import {
+    trackOnboardingCommunitiesSeeded,
     trackOnboardingCompleted,
     trackOnboardingDebugBundleDownloaded,
     trackOnboardingDroppedOff,
+    trackOnboardingInterestsSelected,
     trackOnboardingStarted,
     trackOnboardingStepCompleted,
     trackOnboardingStepViewed,
     trackOnboardingTourStarted,
 } from './onboardingTelemetry';
+
+const INTEREST_CANOPY_LIMIT = 6;
+const INTEREST_TOPIC_LIMIT = 24;
 
 type OnboardingFlowProps = {
     spaceId: string;
@@ -32,6 +45,8 @@ type OnboardingFlowProps = {
 const stepLabel: Record<OnboardingStepId, string> = {
     choose_role: 'Choose your role',
     welcome_context: 'Welcome + context',
+    interest_picker: 'Pick your interests',
+    find_communities: 'Find communities',
     community_selection: 'Community selection',
     channel_subscription: 'Channel subscription',
     first_contribution: 'First contribution prompt',
@@ -64,20 +79,25 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
     const progress = useOnboardingProgress(spaceId);
     const homeTour = useHomeTour();
     const navigate = useNavigate();
+    const matrixClient = useMatrixClientOrNull();
     const creatorPathEnabled = runtimeFeatureFlags.onboardingCreatorPath;
     const developerStepEnabled = runtimeFeatureFlags.onboardingDeveloperStep;
+    const interestPickerEnabled = runtimeFeatureFlags.onboardingInterestPicker;
     const homeTourEnabled = runtimeFeatureFlags.onboardingHomeTour;
 
-    // Visible steps respect the developer-step flag without mutating the
-    // canonical sequence used for persisted indexes. When the flag is off
-    // the array matches the legacy v3 order so existing snapshots keep
-    // pointing at the same step.
+    // Visible steps respect the step-gating flags without mutating the
+    // canonical sequence used for persisted indexes. When a flag is off the
+    // corresponding step drops out so existing snapshots keep pointing at a
+    // real step.
     const visibleSteps = useMemo<OnboardingStepId[]>(
         () =>
-            ONBOARDING_STEP_SEQUENCE.filter(
-                (step) => step !== 'developer_tools' || developerStepEnabled
-            ),
-        [developerStepEnabled]
+            ONBOARDING_STEP_SEQUENCE.filter((step) => {
+                if (step === 'developer_tools') return developerStepEnabled;
+                if (step === 'interest_picker' || step === 'find_communities')
+                    return interestPickerEnabled;
+                return true;
+            }),
+        [developerStepEnabled, interestPickerEnabled]
     );
 
     const [startedAt, setStartedAt] = useState(Date.now());
@@ -85,6 +105,12 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
     const [role, setRole] = useState<OnboardingRole | undefined>(undefined);
     const [communityIntent, setCommunityIntent] = useState<CommunityIntent | undefined>(undefined);
     const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
+    const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+    const [seededCanopyIds, setSeededCanopyIds] = useState<string[]>([]);
+    const [topicOptions, setTopicOptions] = useState<TopicSummary[]>([]);
+    const [canopySuggestions, setCanopySuggestions] = useState<TopicCanopySummary[]>([]);
+    const [selectedCanopyIds, setSelectedCanopyIds] = useState<string[]>([]);
+    const [canopiesLoading, setCanopiesLoading] = useState(false);
     const [firstContributionPrompt, setFirstContributionPrompt] = useState('');
     const [loading, setLoading] = useState(true);
     const [done, setDone] = useState(false);
@@ -114,6 +140,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             setRole(snapshot.role);
             setCommunityIntent(snapshot.communityIntent);
             setSelectedChannels(snapshot.selectedChannels);
+            setSelectedInterests(snapshot.selectedInterests ?? []);
+            setSeededCanopyIds(snapshot.seededCanopyIds ?? []);
             setFirstContributionPrompt(snapshot.firstContributionPrompt ?? '');
             setDone(snapshot.completed);
             // Hand-off state: user previously chose 'creator' but neither the
@@ -141,6 +169,68 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
 
     const elapsedMs = useMemo(() => Date.now() - startedAt, [startedAt, stepIndex]);
 
+    // Load topic options for the interest picker once the flow opens. Gated on
+    // the flag so the request never fires when the steps aren't visible.
+    useEffect(() => {
+        if (!interestPickerEnabled) return undefined;
+        let cancelled = false;
+        void listTopics({ limit: INTEREST_TOPIC_LIMIT })
+            .then((response) => {
+                if (!cancelled) setTopicOptions(response.items);
+            })
+            .catch(() => {
+                if (!cancelled) setTopicOptions([]);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [interestPickerEnabled, restartKey]);
+
+    // Derive canopy suggestions for the find-communities step from the chosen
+    // interests. Every suggestion defaults to checked — the Discord "default
+    // channels" pattern — so the Following feed is seeded unless the user
+    // opts out.
+    useEffect(() => {
+        if (!interestPickerEnabled || currentStep !== 'find_communities') return undefined;
+        if (selectedInterests.length === 0) {
+            setCanopySuggestions([]);
+            setSelectedCanopyIds([]);
+            return undefined;
+        }
+        let cancelled = false;
+        setCanopiesLoading(true);
+        void Promise.allSettled(
+            selectedInterests.map((tag) => listCanopiesByTag(tag, { limit: INTEREST_CANOPY_LIMIT }))
+        )
+            .then((results) => {
+                if (cancelled) return;
+                const byId = new Map<string, TopicCanopySummary>();
+                for (const result of results) {
+                    if (result.status !== 'fulfilled') continue;
+                    for (const canopy of result.value.items) {
+                        if (!byId.has(canopy.id)) byId.set(canopy.id, canopy);
+                    }
+                }
+                const suggestions = [...byId.values()];
+                setCanopySuggestions(suggestions);
+                setSelectedCanopyIds(suggestions.map((canopy) => canopy.id));
+            })
+            .finally(() => {
+                if (!cancelled) setCanopiesLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [interestPickerEnabled, currentStep, selectedInterests]);
+
+    const joinSelectedCanopies = useCallback(async (): Promise<string[]> => {
+        if (!matrixClient || selectedCanopyIds.length === 0) return [];
+        const results = await Promise.allSettled(
+            selectedCanopyIds.map((canopyId) => matrixClient.joinRoom(canopyId))
+        );
+        return selectedCanopyIds.filter((_, index) => results[index].status === 'fulfilled');
+    }, [matrixClient, selectedCanopyIds]);
+
     if (loading) {
         return <p style={{ color: 'var(--text-secondary)' }}>Loading onboarding progress…</p>;
     }
@@ -155,6 +245,10 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
         setRole(undefined);
         setCommunityIntent(undefined);
         setSelectedChannels([]);
+        setSelectedInterests([]);
+        setSeededCanopyIds([]);
+        setSelectedCanopyIds([]);
+        setCanopySuggestions([]);
         setFirstContributionPrompt('');
         setDone(false);
         setCreatorHandoff(false);
@@ -204,8 +298,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 <header style={{ display: 'grid', gap: 6 }}>
                     <strong>You're set up as a creator</strong>
                     <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                        Continue the creator wizard to finish payout setup, or switch back to
-                        the member flow.
+                        Continue the creator wizard to finish payout setup, or switch back to the
+                        member flow.
                     </span>
                 </header>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -290,6 +384,18 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             return;
         }
 
+        let nextSeededCanopyIds = seededCanopyIds;
+        if (currentStep === 'interest_picker') {
+            if (matrixClient) {
+                await writeDiscoveryInterestTags(matrixClient, selectedInterests);
+            }
+            trackOnboardingInterestsSelected(spaceId, selectedInterests.length);
+        } else if (currentStep === 'find_communities') {
+            nextSeededCanopyIds = await joinSelectedCanopies();
+            setSeededCanopyIds(nextSeededCanopyIds);
+            trackOnboardingCommunitiesSeeded(spaceId, nextSeededCanopyIds.length);
+        }
+
         trackOnboardingStepCompleted(spaceId, currentStep, stepIndex, elapsedMs);
         const isLast = stepIndex === visibleSteps.length - 1;
         const nextStepIndex = Math.min(stepIndex + 1, visibleSteps.length - 1);
@@ -297,6 +403,8 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             stepIndex: nextStepIndex,
             communityIntent,
             selectedChannels,
+            selectedInterests,
+            seededCanopyIds: nextSeededCanopyIds,
             firstContributionPrompt,
         });
 
@@ -349,9 +457,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                 >
                     <div
                         style={{
-                            width: `${
-                                ((stepIndex + 1) / visibleSteps.length) * 100
-                            }%`,
+                            width: `${((stepIndex + 1) / visibleSteps.length) * 100}%`,
                             height: '100%',
                             background: 'var(--accent-primary)',
                             transition: 'width 200ms ease',
@@ -423,6 +529,111 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                     <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
                         {welcome.data.description}
                     </p>
+                </div>
+            ) : null}
+
+            {currentStep === 'interest_picker' ? (
+                <div data-testid="onboarding-interest-picker" style={{ display: 'grid', gap: 8 }}>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        Pick a few topics you care about. We'll use them to fill your feed and
+                        suggest communities to join.
+                    </p>
+                    {topicOptions.length === 0 ? (
+                        <p
+                            data-testid="onboarding-interest-empty"
+                            style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}
+                        >
+                            Loading topics…
+                        </p>
+                    ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {topicOptions.map((topic) => {
+                                const selected = selectedInterests.includes(topic.tag);
+                                return (
+                                    <button
+                                        key={topic.tag}
+                                        type="button"
+                                        data-testid="onboarding-interest-chip"
+                                        aria-pressed={selected}
+                                        onClick={() =>
+                                            setSelectedInterests((prev) =>
+                                                selected
+                                                    ? prev.filter((tag) => tag !== topic.tag)
+                                                    : Array.from(new Set([...prev, topic.tag]))
+                                            )
+                                        }
+                                        style={{
+                                            border: '1px solid var(--border-default)',
+                                            borderRadius: 999,
+                                            padding: '4px 10px',
+                                            background: selected
+                                                ? 'var(--accent-muted)'
+                                                : 'var(--bg-surface)',
+                                        }}
+                                    >
+                                        #{topic.tag}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            ) : null}
+
+            {currentStep === 'find_communities' ? (
+                <div data-testid="onboarding-find-communities" style={{ display: 'grid', gap: 8 }}>
+                    <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                        {selectedInterests.length === 0
+                            ? 'Pick a few interests first to see suggested communities.'
+                            : "Join a few communities so your feed isn't empty. We've pre-selected some based on your interests."}
+                    </p>
+                    {canopiesLoading ? (
+                        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}>
+                            Loading communities…
+                        </p>
+                    ) : null}
+                    {!canopiesLoading &&
+                    selectedInterests.length > 0 &&
+                    canopySuggestions.length === 0 ? (
+                        <p
+                            data-testid="onboarding-find-communities-empty"
+                            style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}
+                        >
+                            No suggestions yet — you can browse communities later.
+                        </p>
+                    ) : null}
+                    <div style={{ display: 'grid', gap: 6 }}>
+                        {canopySuggestions.map((canopy) => {
+                            const selected = selectedCanopyIds.includes(canopy.id);
+                            return (
+                                <label
+                                    key={canopy.id}
+                                    data-testid="onboarding-community-option"
+                                    style={{ display: 'inline-flex', gap: 8, alignItems: 'start' }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selected}
+                                        onChange={(event) => {
+                                            setSelectedCanopyIds((prev) =>
+                                                event.target.checked
+                                                    ? Array.from(new Set([...prev, canopy.id]))
+                                                    : prev.filter((id) => id !== canopy.id)
+                                            );
+                                        }}
+                                    />
+                                    <span style={{ display: 'grid', gap: 2 }}>
+                                        <strong>{canopy.name}</strong>
+                                        {canopy.bio ? (
+                                            <small style={{ color: 'var(--text-secondary)' }}>
+                                                {canopy.bio}
+                                            </small>
+                                        ) : null}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
                 </div>
             ) : null}
 
@@ -519,10 +730,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             ) : null}
 
             {currentStep === 'developer_tools' ? (
-                <div
-                    data-testid="onboarding-developer-step"
-                    style={{ display: 'grid', gap: 10 }}
-                >
+                <div data-testid="onboarding-developer-step" style={{ display: 'grid', gap: 10 }}>
                     <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
                         We're launching beta. If you're a bug hunter or part of a software team,
                         these references will help you file actionable issues.

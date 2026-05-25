@@ -24,10 +24,17 @@ import { HomeTourOverlay } from '../onboarding/HomeTourOverlay';
 import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
+import type { FeedSort } from './unifiedFeedModel';
+import { useStreak } from './streakState';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
 import type { UnifiedFeedItem } from './unifiedFeedModel';
+import {
+    trackHomeSegmentSwitched,
+    trackHomeSortChanged,
+    type HomeFeedSegment,
+} from './homeFeedTelemetry';
 
 /** Case-insensitive filter over title/subtitle/tags. Empty query is a no-op. */
 function filterFeedByQuery(
@@ -141,6 +148,57 @@ const ctaLinkStyle: CSSProperties = {
     fontWeight: 600,
 };
 
+const streakChipStyle: CSSProperties = {
+    width: 'fit-content',
+    marginTop: 4,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '2px 10px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-input, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+};
+
+const controlsRowStyle: CSSProperties = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+    padding: '0 16px 4px',
+};
+
+const pillGroupStyle: CSSProperties = { display: 'inline-flex', gap: 4 };
+
+const pillStyle = (active: boolean): CSSProperties => ({
+    padding: '6px 14px',
+    borderRadius: 999,
+    border: '1px solid',
+    borderColor: active ? 'var(--accent-primary, #3b82f6)' : 'var(--border-default, #374151)',
+    background: active ? 'var(--accent-primary, #3b82f6)' : 'transparent',
+    color: active ? '#fff' : 'var(--text-primary, #f8fafc)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+});
+
+const sortPillStyle = (active: boolean): CSSProperties => ({
+    ...pillStyle(active),
+    padding: '4px 10px',
+    fontWeight: 500,
+    fontSize: 12,
+});
+
+const FEED_SORTS: { id: FeedSort; label: string }[] = [
+    { id: 'hot', label: 'Hot' },
+    { id: 'new', label: 'New' },
+    { id: 'top', label: 'Top' },
+];
+
 interface QuickAction {
     flag: keyof FeatureFlags;
     to: string;
@@ -211,7 +269,12 @@ const QUICK_ACTIONS: QuickAction[] = [
  */
 export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
-    const feed = useUnifiedFeed();
+    const segmentsEnabled = runtimeFeatureFlags.homeFeedSegments;
+    const streakEnabled = runtimeFeatureFlags.homeStreak;
+    const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
+    const [sort, setSort] = useState<FeedSort>('hot');
+    const feed = useUnifiedFeed(segmentsEnabled ? sort : undefined);
+    const streak = useStreak(streakEnabled);
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
     const navigate = useNavigate();
@@ -257,14 +320,10 @@ export const HomeFeed = (): JSX.Element => {
     );
 
     const [query, setQuery] = useState('');
-    const visibleFollowing = useMemo(() => filterFeedByQuery(followingItems, query), [
-        followingItems,
-        query,
-    ]);
-    const visibleDiscover = useMemo(() => filterFeedByQuery(discoverItems, query), [
-        discoverItems,
-        query,
-    ]);
+    // Segmented mode shows one list at a time, so "For You" is the full ranked
+    // discover feed (no need to de-dupe against a simultaneously-visible
+    // Following section).
+    const segmentItems = segment === 'following' ? followingItems : feed.discover;
 
     const quickActions = QUICK_ACTIONS.filter((action) => runtimeFeatureFlags[action.flag]);
 
@@ -290,6 +349,12 @@ export const HomeFeed = (): JSX.Element => {
                 <div style={headerTitleColStyle}>
                     <h1 style={titleStyle}>Home</h1>
                     <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
+                    {streakEnabled && streak.count > 0 ? (
+                        <span style={streakChipStyle} data-testid="home-streak-chip">
+                            <span aria-hidden="true">🔥</span>
+                            {streak.count}-day streak
+                        </span>
+                    ) : null}
                     {showReplay ? (
                         <button
                             type="button"
@@ -335,6 +400,57 @@ export const HomeFeed = (): JSX.Element => {
                     color: 'var(--text-primary, #f8fafc)',
                 }}
             />
+            {segmentsEnabled ? (
+                <div style={controlsRowStyle} data-testid="home-feed-controls">
+                    <div style={pillGroupStyle} role="tablist" aria-label="Feed">
+                        <button
+                            type="button"
+                            role="tab"
+                            data-testid="home-feed-segment-foryou"
+                            aria-pressed={segment === 'forYou'}
+                            aria-selected={segment === 'forYou'}
+                            style={pillStyle(segment === 'forYou')}
+                            onClick={() => {
+                                setSegment('forYou');
+                                trackHomeSegmentSwitched('forYou');
+                            }}
+                        >
+                            For You
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            data-testid="home-feed-segment-following"
+                            aria-pressed={segment === 'following'}
+                            aria-selected={segment === 'following'}
+                            style={pillStyle(segment === 'following')}
+                            onClick={() => {
+                                setSegment('following');
+                                trackHomeSegmentSwitched('following');
+                            }}
+                        >
+                            Following
+                        </button>
+                    </div>
+                    <div style={pillGroupStyle} aria-label="Sort">
+                        {FEED_SORTS.map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                data-testid={`home-feed-sort-${option.id}`}
+                                aria-pressed={sort === option.id}
+                                style={sortPillStyle(sort === option.id)}
+                                onClick={() => {
+                                    setSort(option.id);
+                                    trackHomeSortChanged(option.id);
+                                }}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
             {quickActions.length > 0 ? (
                 <section
                     style={sectionStyle}
@@ -386,44 +502,93 @@ export const HomeFeed = (): JSX.Element => {
                 </section>
             ) : null}
             <LiveNowRail items={feed.liveRail} />
-            <section data-shell-region="home-following" data-testid="home-following-section">
-                <header style={sectionLabelStyle}>Following</header>
-                {followingItems.length === 0 ? (
-                    <div style={emptyStateStyle} data-testid="home-feed-empty">
-                        <strong>{feed.loading ? 'Loading your feed…' : 'No activity yet.'}</strong>
-                        {!feed.loading ? (
-                            <>
-                                <span>
-                                    Join a{' '}
-                                    <GlossaryTerm term="canopy">
-                                        {BLACKOUT_TERMS.canopy.singular}
-                                    </GlossaryTerm>{' '}
-                                    to start seeing posts in your feed.
-                                </span>
-                                <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
-                                    Discover {BLACKOUT_TERMS.canopy.plural}
-                                </Link>
-                            </>
-                        ) : null}
-                    </div>
-                ) : (
-                    <div style={sectionStyle} data-testid="home-feed-list">
-                        {visibleFollowing.map((item) => (
-                            <UnifiedFeedCard key={item.id} item={item} />
-                        ))}
-                    </div>
-                )}
-            </section>
-            {discoverItems.length > 0 ? (
-                <section data-shell-region="home-discover" data-testid="home-discover-section">
-                    <header style={sectionLabelStyle}>Discover</header>
-                    <div style={sectionStyle} data-testid="home-discover-list">
-                        {visibleDiscover.map((item) => (
-                            <UnifiedFeedCard key={item.id} item={item} />
-                        ))}
-                    </div>
+            {segmentsEnabled ? (
+                <section
+                    data-shell-region="home-feed-segment"
+                    data-testid="home-feed-segment-section"
+                >
+                    {segmentItems.length === 0 ? (
+                        <div style={emptyStateStyle} data-testid="home-feed-empty">
+                            <strong>
+                                {feed.loading
+                                    ? 'Loading your feed…'
+                                    : segment === 'following'
+                                    ? 'No activity yet.'
+                                    : 'Nothing to show right now.'}
+                            </strong>
+                            {!feed.loading && segment === 'following' ? (
+                                <>
+                                    <span>
+                                        Join a{' '}
+                                        <GlossaryTerm term="canopy">
+                                            {BLACKOUT_TERMS.canopy.singular}
+                                        </GlossaryTerm>{' '}
+                                        to start seeing posts in your feed.
+                                    </span>
+                                    <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
+                                        Discover {BLACKOUT_TERMS.canopy.plural}
+                                    </Link>
+                                </>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div style={sectionStyle} data-testid="home-feed-list">
+                            {filterFeedByQuery(segmentItems, query).map((item) => (
+                                <UnifiedFeedCard key={item.id} item={item} />
+                            ))}
+                        </div>
+                    )}
                 </section>
-            ) : null}
+            ) : (
+                <>
+                    <section
+                        data-shell-region="home-following"
+                        data-testid="home-following-section"
+                    >
+                        <header style={sectionLabelStyle}>Following</header>
+                        {followingItems.length === 0 ? (
+                            <div style={emptyStateStyle} data-testid="home-feed-empty">
+                                <strong>
+                                    {feed.loading ? 'Loading your feed…' : 'No activity yet.'}
+                                </strong>
+                                {!feed.loading ? (
+                                    <>
+                                        <span>
+                                            Join a{' '}
+                                            <GlossaryTerm term="canopy">
+                                                {BLACKOUT_TERMS.canopy.singular}
+                                            </GlossaryTerm>{' '}
+                                            to start seeing posts in your feed.
+                                        </span>
+                                        <Link to={COMMUNITIES_PATH} style={ctaLinkStyle}>
+                                            Discover {BLACKOUT_TERMS.canopy.plural}
+                                        </Link>
+                                    </>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div style={sectionStyle} data-testid="home-feed-list">
+                                {filterFeedByQuery(followingItems, query).map((item) => (
+                                    <UnifiedFeedCard key={item.id} item={item} />
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                    {discoverItems.length > 0 ? (
+                        <section
+                            data-shell-region="home-discover"
+                            data-testid="home-discover-section"
+                        >
+                            <header style={sectionLabelStyle}>Discover</header>
+                            <div style={sectionStyle} data-testid="home-discover-list">
+                                {filterFeedByQuery(discoverItems, query).map((item) => (
+                                    <UnifiedFeedCard key={item.id} item={item} />
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+                </>
+            )}
             {tourEnabled ? <HomeTourOverlay /> : null}
         </section>
     );
