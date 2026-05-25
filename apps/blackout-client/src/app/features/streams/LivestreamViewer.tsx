@@ -1,10 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import {
-    LIVE_PATH,
-    CREATOR_STOREFRONT_PATH,
-    buildCommunitiesPath,
-} from '../../pages/paths';
+import { LIVE_PATH, CREATOR_STOREFRONT_PATH, buildCommunitiesPath } from '../../pages/paths';
 import {
     buildOwncastPlaylistUrl,
     fetchOwncastOrigin,
@@ -19,6 +15,15 @@ import {
 const TipButtonLazy = lazy(() =>
     import('../monetization/components/TipButton').then((mod) => ({
         default: mod.TipButton,
+    }))
+);
+
+// The embedded den chat pulls in the full room timeline + composer (Slate,
+// uploads, encryption). Keep it lazy so the viewer renders immediately and
+// the heavy chat bundle only loads for den-associated streams.
+const EmbeddedDenChatLazy = lazy(() =>
+    import('./EmbeddedDenChat').then((mod) => ({
+        default: mod.EmbeddedDenChat,
     }))
 );
 
@@ -146,14 +151,11 @@ const PlayerPane = ({
 
 /**
  * `/live/:streamId` viewer. Renders the stream metadata, an Owncast
- * embed (live or replay), a "Join den chat" CTA when the stream is
- * associated with a den, and a TipButton context-bound to the stream.
- * The breadcrumb's creator link doubles as a product-shelf entry into
- * the creator's storefront.
- *
- * The fully embedded chat overlay (Matrix room mounted in-page next to
- * the player) is a larger workstream-D scope item; this viewer surfaces
- * the association as a deep link into the den for now.
+ * embed (live or replay), a TipButton context-bound to the stream, and —
+ * when the stream is associated with a den — the den's live chat mounted
+ * in-page below the player (via EmbeddedDenChat), plus an "Open full den"
+ * link for the standalone room. The breadcrumb's creator link doubles as a
+ * product-shelf entry into the creator's storefront.
  */
 export const LivestreamViewer = (): JSX.Element => {
     const { streamId } = useParams<{ streamId: string }>();
@@ -262,7 +264,7 @@ export const LivestreamViewer = (): JSX.Element => {
                         data-testid="livestream-den-chat-link"
                         data-den-id={stream.denId}
                     >
-                        Join den chat
+                        Open full den ↗
                     </Link>
                 ) : null}
                 <Suspense fallback={null}>
@@ -274,6 +276,11 @@ export const LivestreamViewer = (): JSX.Element => {
                     />
                 </Suspense>
             </div>
+            {stream.denId ? (
+                <Suspense fallback={null}>
+                    <EmbeddedDenChatLazy denId={stream.denId} />
+                </Suspense>
+            ) : null}
         </section>
     );
 };
