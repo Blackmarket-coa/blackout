@@ -113,8 +113,15 @@ services:
       # Prometheus scrape token. The API returns 503 on /metrics when
       # this is unset in production.
       - INTERNAL_METRICS_TOKEN=${INTERNAL_METRICS_TOKEN}
-      # File-backed key/value store. Kept on a named volume so invites,
-      # accounts, and other API-owned state survive container restarts.
+      # Runtime store mode. `postgres` makes the API persist all state to the
+      # Postgres service above via the write-through store: it runs migrations
+      # on boot, hydrates an in-memory read mirror, and write-throughs every
+      # mutation. SAFE here because this baseline runs a SINGLE api container —
+      # the mirror is per-process, so multi-replica deployments (Helm/k8s) must
+      # NOT use this mode until cross-replica invalidation exists.
+      - BLACKOUT_DB_MODE=postgres
+      # Legacy file-store path. Unused in postgres mode (kept for the named
+      # volume + an easy rollback to file mode by removing BLACKOUT_DB_MODE).
       - BLACKOUT_DB_FILE=/var/lib/blackout/store.json
     volumes:
       - blackout-api-data:/var/lib/blackout
