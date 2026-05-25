@@ -197,14 +197,6 @@ export interface ColiseumLiveSessionResponse {
     session: ColiseumLiveSession | null;
 }
 
-export interface ColiseumLiveTokenResponse {
-    token: string;
-    expiresAt: string;
-    apiKey: string;
-    roomId: string;
-    canPublish: boolean;
-}
-
 export function fetchColiseumLiveSession(
     topicId: string,
     token: string | null = readBlackoutApiToken()
@@ -287,17 +279,6 @@ export function endColiseumLiveSession(
 ): Promise<{ session: ColiseumLiveSession }> {
     return postJson<{ session: ColiseumLiveSession }>(
         `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/end`,
-        {},
-        token
-    );
-}
-
-export function fetchColiseumLiveToken(
-    sessionId: string,
-    token: string | null = readBlackoutApiToken()
-): Promise<ColiseumLiveTokenResponse> {
-    return postJson<ColiseumLiveTokenResponse>(
-        `${COLISEUM_BASE}/live/sessions/${encodeURIComponent(sessionId)}/token`,
         {},
         token
     );
