@@ -1,27 +1,25 @@
 import type { ShellPanelEntry } from '../../core/features/types';
-import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import {
-    COMMUNITIES_PATH,
-    CREATE_PATH,
-    INBOX_PATH,
-    MARKET_PATH,
+    COALITION_PATH,
+    COLISEUM_PATH,
+    PROFILE_SELF_PATH,
     ROOT_PATH,
+    STREAMING_PATH,
 } from '../../pages/paths';
 
 /**
- * Five canonical AppShell destinations rendered as mobile-tab entries
- * (and adopted by the desktop rail in PR 2). The `id` namespace is
- * intentional: BottomTabBar filters to exactly these ids so other
- * features that register mobile-tab panels (governance, etc.) stay out
+ * Five canonical AppShell mobile destinations, matching the Blackout product
+ * spec's primary mobile tabs: Home / Coalition / Coliseum / Streams / Profile.
+ * The `id` namespace is intentional: BottomTabBar filters to exactly these ids
+ * so other features that register mobile-tab panels (governance, etc.) stay out
  * of the AppShell tab bar.
  *
- * Each panel `to` points at an existing or near-term route so the bar
- * always navigates to a real surface as subsequent PRs come online:
- *   - shell.home → `/` (ClientLayout root today, HomeFeed in PR 2)
- *   - shell.communities → `/communities` (CommunitiesView, wired)
- *   - shell.create → `/create` (placeholder until PR 1 follow-up wires it)
- *   - shell.market → `/market` (PR 3 hoists existing MarketplaceSlice here)
- *   - shell.inbox → `/messages/` (existing MessagingHub)
+ * Each panel `to` points at an existing top-level route:
+ *   - shell.home → `/` (HomeFeed)
+ *   - shell.coalition → `/coalition` (spatial community layer)
+ *   - shell.coliseum → `/coliseum` (vertical debate reel)
+ *   - shell.streams → `/streaming` (live + replay directory)
+ *   - shell.profile → `/profile/me` (the viewer's own profile)
  */
 export const shellDestinationPanels: ShellPanelEntry[] = [
     {
@@ -32,31 +30,31 @@ export const shellDestinationPanels: ShellPanelEntry[] = [
         order: 10,
     },
     {
-        id: 'shell.communities',
+        id: 'shell.coalition',
         kind: 'mobile-tab',
-        label: BLACKOUT_TERMS.canopy.titlePlural,
-        to: COMMUNITIES_PATH,
+        label: 'Coalition',
+        to: COALITION_PATH,
         order: 20,
     },
     {
-        id: 'shell.create',
+        id: 'shell.coliseum',
         kind: 'mobile-tab',
-        label: 'Create',
-        to: CREATE_PATH,
+        label: 'Coliseum',
+        to: COLISEUM_PATH,
         order: 30,
     },
     {
-        id: 'shell.market',
+        id: 'shell.streams',
         kind: 'mobile-tab',
-        label: 'Market',
-        to: MARKET_PATH,
+        label: 'Streams',
+        to: STREAMING_PATH,
         order: 40,
     },
     {
-        id: 'shell.inbox',
+        id: 'shell.profile',
         kind: 'mobile-tab',
-        label: 'Inbox',
-        to: INBOX_PATH,
+        label: 'Profile',
+        to: PROFILE_SELF_PATH,
         order: 50,
     },
 ];

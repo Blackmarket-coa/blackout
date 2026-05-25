@@ -88,6 +88,9 @@ export const STREAMING_PATH = '/streaming';
 export const COALITION_PATH = '/coalition';
 export const COLISEUM_PATH = '/coliseum';
 
+/** The signed-in user's own profile ("personal headquarters"); see `features/profile/routes.ts`. */
+export const PROFILE_SELF_PATH = '/profile/me';
+
 /** Builds the livestream viewer URL from a stream id. */
 export const buildLivePath = (streamId: string): string => `/live/${encodeURIComponent(streamId)}`;
 export const CREATOR_DASHBOARD_PATH = '/creator';

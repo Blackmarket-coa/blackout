@@ -11,8 +11,10 @@ import { defaultFeatureFlags, runtimeFeatureFlags } from '../../core/features/fe
 
 const HomeStub = () => <div data-testid="home-body">home body</div>;
 const CommunitiesStub = () => <div data-testid="communities-body">communities body</div>;
-const CreateStub = () => <div data-testid="create-body">create body</div>;
-const MarketStub = () => <div data-testid="market-body">market body</div>;
+const CoalitionStub = () => <div data-testid="coalition-body">coalition body</div>;
+const ColiseumStub = () => <div data-testid="coliseum-body">coliseum body</div>;
+const StreamsStub = () => <div data-testid="streams-body">streams body</div>;
+const ProfileStub = () => <div data-testid="profile-body">profile body</div>;
 const InboxStub = () => <div data-testid="inbox-body">inbox body</div>;
 const DirectStub = () => <div data-testid="direct-body">direct body</div>;
 const ExploreStub = () => <div data-testid="explore-body">explore body</div>;
@@ -43,8 +45,10 @@ const renderShell = (initialPath: string, options: RenderShellOptions = {}) => {
                 children: [
                     { path: '/', element: <HomeStub /> },
                     { path: '/communities', element: <CommunitiesStub /> },
-                    { path: '/create', element: <CreateStub /> },
-                    { path: '/market', element: <MarketStub /> },
+                    { path: '/coalition', element: <CoalitionStub /> },
+                    { path: '/coliseum', element: <ColiseumStub /> },
+                    { path: '/streaming', element: <StreamsStub /> },
+                    { path: '/profile/me', element: <ProfileStub /> },
                     { path: '/messages', element: <InboxStub /> },
                     { path: '/messages/*', element: <InboxStub /> },
                     { path: '/direct', element: <DirectStub /> },
@@ -142,15 +146,15 @@ describe('AppShell', () => {
 
         expect(panelIds).toEqual([
             'shell.home',
-            'shell.communities',
-            'shell.create',
-            'shell.market',
-            'shell.inbox',
+            'shell.coalition',
+            'shell.coliseum',
+            'shell.streams',
+            'shell.profile',
         ]);
     });
 
     it('marks the active destination via aria-current=page on the matching tab', async () => {
-        const { router, container, root, store } = renderShell('/market');
+        const { router, container, root, store } = renderShell('/coliseum');
         await act(async () => {
             root.render(
                 <JotaiProvider store={store}>
@@ -161,7 +165,7 @@ describe('AppShell', () => {
         });
 
         const active = container.querySelector(
-            '[data-panel-id="shell.market"][aria-current="page"]'
+            '[data-panel-id="shell.coliseum"][aria-current="page"]'
         );
         expect(active).not.toBeNull();
 
@@ -169,22 +173,22 @@ describe('AppShell', () => {
         expect(inactive?.getAttribute('aria-current')).toBeNull();
     });
 
-    // Workstream A Port 1 exit criterion: one router-integration assertion
-    // per shell panel state. The schedule lists `Home / Direct / Explore /
-    // Inbox`; the live destination set is `Home / Communities / Create /
-    // Market / Inbox`. We cover every destination's active-tab state below,
-    // and assert mode resolution for the schedule-cited Direct/Explore
-    // sub-routes (which map onto the inbox/discovery modes per modeRouter).
+    // One router-integration assertion per shell panel state. The live
+    // destination set matches the product spec's primary mobile tabs:
+    // `Home / Coalition / Coliseum / Streams / Profile`. We cover every
+    // destination's active-tab state below, and assert mode resolution for
+    // the Direct/Explore sub-routes (which map onto the inbox/discovery
+    // modes per modeRouter).
     const ACTIVE_TAB_CASES: ReadonlyArray<{
         name: string;
         path: string;
         panelId: string;
     }> = [
         { name: 'Home', path: '/', panelId: 'shell.home' },
-        { name: 'Communities', path: '/communities', panelId: 'shell.communities' },
-        { name: 'Create', path: '/create', panelId: 'shell.create' },
-        { name: 'Market', path: '/market', panelId: 'shell.market' },
-        { name: 'Inbox', path: '/messages/', panelId: 'shell.inbox' },
+        { name: 'Coalition', path: '/coalition', panelId: 'shell.coalition' },
+        { name: 'Coliseum', path: '/coliseum', panelId: 'shell.coliseum' },
+        { name: 'Streams', path: '/streaming', panelId: 'shell.streams' },
+        { name: 'Profile', path: '/profile/me', panelId: 'shell.profile' },
     ];
 
     for (const { name, path, panelId } of ACTIVE_TAB_CASES) {
@@ -264,8 +268,8 @@ describe('AppShell', () => {
 
             const bar = container.querySelector('[data-testid="app-shell-workspace-tab-bar"]');
             expect(bar).not.toBeNull();
-            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map(
-                (el) => el.getAttribute('data-panel-id')
+            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map((el) =>
+                el.getAttribute('data-panel-id')
             );
             expect(panelIds).toEqual([
                 'governance.workspace',
@@ -390,13 +394,11 @@ describe('AppShell', () => {
             const aside = container.querySelector('[data-shell-region="right-panel"]');
             expect(aside).not.toBeNull();
 
-            const bar = container.querySelector(
-                '[data-testid="app-shell-right-panel-tab-bar"]'
-            );
+            const bar = container.querySelector('[data-testid="app-shell-right-panel-tab-bar"]');
             expect(bar).not.toBeNull();
 
-            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map(
-                (el) => el.getAttribute('data-panel-id')
+            const panelIds = Array.from(bar?.querySelectorAll('[data-panel-id]') ?? []).map((el) =>
+                el.getAttribute('data-panel-id')
             );
             expect(panelIds).toEqual([
                 'governance.right-panel.active',
