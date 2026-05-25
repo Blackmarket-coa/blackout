@@ -44,8 +44,33 @@ vi.mock('../settings/outbound-event-webhooks', () => ({
 vi.mock('../settings/integrations-health', () => ({
     IntegrationsHealth: () => <div data-testid="stub-health" />,
 }));
+// The Creator Hub sections are lazy-loaded and pull in the growth /
+// monetization / Matrix-media clients; stub them so the test exercises tab
+// routing without their fetches.
+vi.mock('./sections/CreatorHubOverview', () => ({
+    CreatorHubOverview: () => <div data-testid="stub-overview" />,
+}));
+vi.mock('./sections/ClipsDirectory', () => ({
+    ClipsDirectory: () => <div data-testid="stub-clips" />,
+}));
+vi.mock('./sections/CreatorKits', () => ({
+    CreatorKits: () => <div data-testid="stub-kits" />,
+}));
+vi.mock('./sections/RewardsSection', () => ({
+    RewardsSection: () => <div data-testid="stub-rewards" />,
+}));
 
 import StreamingView, { type StreamingViewProps } from './StreamingView';
+
+// Lazy sections resolve their dynamic import over a couple of microtask
+// turns before Suspense swaps in the resolved component; flush several.
+const flushLazy = async () => {
+    await act(async () => {
+        for (let i = 0; i < 5; i += 1) {
+            await Promise.resolve();
+        }
+    });
+};
 
 const mountView = async (props: StreamingViewProps = {}) => {
     const store = createStore();
@@ -60,6 +85,7 @@ const mountView = async (props: StreamingViewProps = {}) => {
         );
         await Promise.resolve();
     });
+    await flushLazy();
     return { container };
 };
 
@@ -69,6 +95,7 @@ const clickTab = async (container: HTMLElement, tab: string) => {
         button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await Promise.resolve();
     });
+    await flushLazy();
 };
 
 describe('StreamingView', () => {
@@ -77,12 +104,30 @@ describe('StreamingView', () => {
         localStorage.clear();
     });
 
-    it('renders all six tabs and defaults to the Live tab', async () => {
+    it('renders every hub tab and defaults to the Overview tab', async () => {
         const { container } = await mountView();
         const tabs = Array.from(container.querySelectorAll('[data-streaming-tab]')).map((el) =>
             el.getAttribute('data-streaming-tab')
         );
-        expect(tabs).toEqual(['live', 'replays', 'broadcast', 'connections', 'bridges', 'health']);
+        expect(tabs).toEqual([
+            'overview',
+            'live',
+            'replays',
+            'clips',
+            'kits',
+            'rewards',
+            'broadcast',
+            'connections',
+            'bridges',
+            'health',
+        ]);
+        expect(container.querySelector('[data-testid="streaming-tab-overview"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="stub-overview"]')).not.toBeNull();
+    });
+
+    it('switches to Live and mounts the live directory', async () => {
+        const { container } = await mountView();
+        await clickTab(container, 'live');
         expect(container.querySelector('[data-testid="streaming-tab-live"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="stub-live"]')).not.toBeNull();
     });
@@ -92,6 +137,16 @@ describe('StreamingView', () => {
         await clickTab(container, 'replays');
         expect(container.querySelector('[data-testid="streaming-tab-replays"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="stub-replays"]')).not.toBeNull();
+    });
+
+    it('switches to Clips, Kits, and Rewards and mounts each section', async () => {
+        const { container } = await mountView();
+        await clickTab(container, 'clips');
+        expect(container.querySelector('[data-testid="stub-clips"]')).not.toBeNull();
+        await clickTab(container, 'kits');
+        expect(container.querySelector('[data-testid="stub-kits"]')).not.toBeNull();
+        await clickTab(container, 'rewards');
+        expect(container.querySelector('[data-testid="stub-rewards"]')).not.toBeNull();
     });
 
     it('switches to Broadcast and mounts the simulcast / OBS / IRC / widget tools', async () => {
@@ -137,7 +192,9 @@ describe('StreamingView', () => {
             expect(container.querySelector('[data-testid="stub-youtube-bridge"]')).not.toBeNull();
             expect(container.querySelector('[data-testid="stub-kick-bridge"]')).not.toBeNull();
             expect(container.querySelector('[data-testid="stub-discord-webhooks"]')).not.toBeNull();
-            expect(container.querySelector('[data-testid="stub-outbound-webhooks"]')).not.toBeNull();
+            expect(
+                container.querySelector('[data-testid="stub-outbound-webhooks"]')
+            ).not.toBeNull();
         } finally {
             vi.useRealTimers();
         }

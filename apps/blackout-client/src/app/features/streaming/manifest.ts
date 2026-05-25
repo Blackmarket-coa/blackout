@@ -4,20 +4,22 @@ import { streamingPanels } from './panels';
 import { streamingRoutes } from './routes';
 
 /**
- * Consolidated Streaming hub (`/streaming`). Routed like coalition/coliseum:
- * a top-level destination with an internal tab strip. Surfaces the streaming
- * viewer plus the platform-connection management UIs (linked accounts, RTMP
- * simulcast, OBS-WS, chat bridges, webhooks, widget alerts, integrations
- * health) that were previously built but unreachable from the active settings
- * shell.
+ * Creator Hub (`/streaming`, rebranded; also reachable via the
+ * `/creator-hub` alias). Routed like coalition/coliseum: a top-level
+ * destination with an internal tab strip. Acts as the creator operating
+ * system — an Overview that deep-links the creator's surfaces (storefront,
+ * earnings, coalitions, events), the live + replay + clip directories,
+ * creator kits, a rewards dashboard, plus the platform-connection
+ * management UIs (linked accounts, RTMP simulcast, OBS-WS, chat bridges,
+ * webhooks, widget alerts, integrations health).
  */
 export const streamingFeature: BlackoutFeature = {
     id: 'streaming',
-    name: 'Streaming',
+    name: 'Creator Hub',
     customizations: [
         {
             id: 'streaming-shell',
-            name: 'Streaming Shell',
+            name: 'Creator Hub Shell',
             category: 'visual/layout plugin',
             capabilityGate: {
                 flags: ['streaming'],

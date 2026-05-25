@@ -567,6 +567,24 @@ export interface StreamModerationRecord {
   keywordFilters: string[];
   updatedAt: string;
 }
+
+export interface ClipRecord {
+  id: UUID;
+  creatorId: UUID;
+  /** Source stream this clip was cut from, when applicable. */
+  sourceStreamId?: UUID;
+  title: string;
+  /** mxc:// or HLS pointer to the clip media. */
+  mediaPointer: string;
+  /** Optional poster/thumbnail pointer. */
+  thumbnailPointer?: string;
+  durationSeconds: number;
+  visibility: 'public' | 'private' | 'member_only';
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CanopyVoiceRoomRecord {
   id: UUID;
   canopyId: UUID;

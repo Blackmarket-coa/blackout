@@ -29,14 +29,47 @@ export interface ListStreamsResponse {
     items: StreamSummary[];
 }
 
+export interface ClipSummary {
+    id: string;
+    creatorId: string;
+    sourceStreamId?: string;
+    title: string;
+    mediaPointer: string;
+    thumbnailPointer?: string;
+    durationSeconds: number;
+    visibility: StreamVisibility;
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ListClipsResponse {
+    items: ClipSummary[];
+}
+
+export interface CreateClipInput {
+    creatorId: string;
+    title: string;
+    mediaPointer: string;
+    sourceStreamId?: string;
+    thumbnailPointer?: string;
+    durationSeconds?: number;
+    visibility?: StreamVisibility;
+    tags?: string[];
+}
+
 export interface OwncastOriginConfig {
     origin: string;
     rtmpEndpoint?: string;
     [key: string]: unknown;
 }
 
-const callJson = <T>(method: 'GET', path: string, token: string | null): Promise<T> =>
-    createAuthorizedApiClient(token)({ method, path }) as Promise<T>;
+const callJson = <T>(
+    method: 'GET' | 'POST',
+    path: string,
+    token: string | null,
+    body?: unknown
+): Promise<T> => createAuthorizedApiClient(token)({ method, path, body }) as Promise<T>;
 
 const appendQuery = (path: string, params: Record<string, string | undefined>): string => {
     const search = new URLSearchParams();
@@ -95,3 +128,28 @@ export const buildOwncastPlaylistUrl = (origin: string): string => {
     const trimmed = origin.replace(/\/+$/, '');
     return `${trimmed}/hls/stream.m3u8`;
 };
+
+/** Wraps `GET /v1/streaming/clips` — list public short-form clips, newest first. */
+export const listClips = (
+    options: { creatorId?: string; limit?: number } = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<ListClipsResponse> => {
+    const path = appendQuery(`${STREAMING_BASE}/clips`, {
+        creatorId: options.creatorId,
+        limit: options.limit !== undefined ? String(options.limit) : undefined,
+    });
+    return callJson<ListClipsResponse>('GET', path, token);
+};
+
+/** Wraps `GET /v1/streaming/clips/:clipId`. */
+export const fetchClip = (
+    clipId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ClipSummary> =>
+    callJson<ClipSummary>('GET', `${STREAMING_BASE}/clips/${encodeURIComponent(clipId)}`, token);
+
+/** Wraps `POST /v1/streaming/clips` — create a clip (creatorId must be the caller). */
+export const createClip = (
+    input: CreateClipInput,
+    token: string | null = readBlackoutApiToken()
+): Promise<ClipSummary> => callJson<ClipSummary>('POST', `${STREAMING_BASE}/clips`, token, input);
