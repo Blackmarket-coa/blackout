@@ -6,6 +6,7 @@ import {
     normalizeColiseumTopic,
     rankColiseumArguments,
     rankColiseumTopics,
+    rankCrossTopicArguments,
     scoreColiseumArgument,
     wilsonLowerBound,
     type ColiseumArgument,
@@ -18,7 +19,17 @@ import {
     type ColiseumTopicStatus,
     type ColiseumVote,
     type ColiseumWinnerVerdictResult,
+    type CrossTopicReelEntry,
     type RankedColiseumArgument,
+    canModerateSession,
+    endSession as endSessionTransition,
+    grantSlot,
+    pinEvidence as pinEvidenceTransition,
+    requestSlot,
+    revokeSlot,
+    unpinEvidence as unpinEvidenceTransition,
+    type ColiseumLiveSession,
+    type PinnedEvidence,
 } from '@blackout/core';
 import { recordReputationEvent } from './reputationStore';
 
@@ -338,9 +349,46 @@ export function scoreArgument(arg: ColiseumArgument, nowMs?: number): number {
     return scoreColiseumArgument(arg, { nowMs, weights: DEFAULT_COLISEUM_WEIGHTS });
 }
 
+export interface ColiseumReelItem extends RankedColiseumArgument {
+    topicId: string;
+    topicTitle: string;
+}
+
+export interface CrossTopicReelResult {
+    items: ColiseumReelItem[];
+    nextOffset: number | null;
+}
+
+export function listCrossTopicReel(
+    options: { limit?: number; offset?: number; nowMs?: number } = {},
+): CrossTopicReelResult {
+    const limit = options.limit ?? 20;
+    const offset = options.offset ?? 0;
+    const nowMs = options.nowMs ?? Date.now();
+
+    const entries: CrossTopicReelEntry[] = [];
+    const titleByTopic = new Map<string, string>();
+    for (const argument of argumentStore.values()) {
+        const topic = topicStore.get(argument.topicId);
+        if (!topic) continue;
+        titleByTopic.set(topic.id, topic.title);
+        entries.push({ argument, debateHeat: topic.debateHeat });
+    }
+
+    const ranked = rankCrossTopicArguments(entries, { nowMs });
+    const page = ranked.slice(offset, offset + limit);
+    const items: ColiseumReelItem[] = page.map((argument) => ({
+        ...argument,
+        topicTitle: titleByTopic.get(argument.topicId) ?? '',
+    }));
+    const nextOffset = offset + limit < ranked.length ? offset + limit : null;
+    return { items, nextOffset };
+}
+
 export interface CreateArgumentInput {
     id: string;
     topicId: string;
+    parentArgumentId?: string;
     authorId: string;
     stance: ColiseumStance;
     stanceWeight: number;
@@ -354,6 +402,10 @@ export function createArgument(
     nowMs: number = Date.now(),
 ): ColiseumArgument | null {
     if (!topicStore.has(input.topicId)) return null;
+    if (input.parentArgumentId !== undefined) {
+        const parent = argumentStore.get(input.parentArgumentId);
+        if (!parent || parent.topicId !== input.topicId) return null;
+    }
     const argument: ColiseumArgument = {
         ...input,
         createdAt: new Date(nowMs).toISOString(),
@@ -435,6 +487,145 @@ export function getVerdict(topicId: string, nowMs: number = Date.now()): Coliseu
         votes: topicVotes,
         nowMs,
     });
+}
+
+/** Live debate sessions, keyed by session id, with a topicId → sessionId index. */
+const liveSessionStore = new Map<string, ColiseumLiveSession>();
+const activeSessionByTopic = new Map<string, string>();
+
+export function newLiveSessionId(): string {
+    return `live_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export interface CreateLiveSessionInput {
+    topicId: string;
+    roomId: string;
+    moderatorId: string;
+}
+
+/**
+ * Create a live session for a topic. Idempotent per topic while a session is
+ * live: returns the existing active session rather than spawning a duplicate.
+ * Returns null if the topic does not exist.
+ */
+export function createLiveSession(
+    input: CreateLiveSessionInput,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null {
+    if (!topicStore.has(input.topicId)) return null;
+    const existingId = activeSessionByTopic.get(input.topicId);
+    if (existingId) {
+        const existing = liveSessionStore.get(existingId);
+        if (existing && existing.status !== 'ended') return existing;
+    }
+    const nowIso = new Date(nowMs).toISOString();
+    const session: ColiseumLiveSession = {
+        id: newLiveSessionId(),
+        topicId: input.topicId,
+        roomId: input.roomId,
+        moderatorIds: [input.moderatorId],
+        status: 'live',
+        speakingQueue: [],
+        pinnedEvidence: [],
+        createdAt: nowIso,
+        startedAt: nowIso,
+    };
+    liveSessionStore.set(session.id, session);
+    activeSessionByTopic.set(session.topicId, session.id);
+    return session;
+}
+
+export function getLiveSession(sessionId: string): ColiseumLiveSession | null {
+    return liveSessionStore.get(sessionId) ?? null;
+}
+
+export function getActiveSessionForTopic(topicId: string): ColiseumLiveSession | null {
+    const sessionId = activeSessionByTopic.get(topicId);
+    if (!sessionId) return null;
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    return session;
+}
+
+export function requestSpeak(
+    sessionId: string,
+    userId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null {
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    const next = requestSlot(session, userId, new Date(nowMs).toISOString());
+    liveSessionStore.set(sessionId, next);
+    return next;
+}
+
+export function grantSpeak(
+    sessionId: string,
+    moderatorId: string,
+    targetUserId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = grantSlot(session, targetUserId, new Date(nowMs).toISOString());
+    liveSessionStore.set(sessionId, next);
+    return next;
+}
+
+export function revokeSpeak(
+    sessionId: string,
+    moderatorId: string,
+    targetUserId: string,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = revokeSlot(session, targetUserId);
+    liveSessionStore.set(sessionId, next);
+    return next;
+}
+
+export function pinSessionEvidence(
+    sessionId: string,
+    moderatorId: string,
+    evidence: PinnedEvidence,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = pinEvidenceTransition(session, evidence);
+    liveSessionStore.set(sessionId, next);
+    return next;
+}
+
+export function unpinSessionEvidence(
+    sessionId: string,
+    moderatorId: string,
+    evidence: PinnedEvidence,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = liveSessionStore.get(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = unpinEvidenceTransition(session, evidence);
+    liveSessionStore.set(sessionId, next);
+    return next;
+}
+
+export function endLiveSession(
+    sessionId: string,
+    moderatorId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = liveSessionStore.get(sessionId);
+    if (!session) return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = endSessionTransition(session, new Date(nowMs).toISOString());
+    liveSessionStore.set(sessionId, next);
+    if (activeSessionByTopic.get(session.topicId) === sessionId) {
+        activeSessionByTopic.delete(session.topicId);
+    }
+    return next;
 }
 
 export function newTopicId(): string {

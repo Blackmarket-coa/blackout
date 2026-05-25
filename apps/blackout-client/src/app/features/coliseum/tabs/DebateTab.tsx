@@ -7,7 +7,13 @@ import React, {
     type CSSProperties,
 } from 'react';
 import { useAtom } from 'jotai';
-import type { ColiseumArgumentMedia, ColiseumStance, RankedColiseumArgument } from '@blackout/core';
+import {
+    buildColiseumArgumentTree,
+    type ColiseumArgumentMedia,
+    type ColiseumArgumentTreeNode,
+    type ColiseumStance,
+    type RankedColiseumArgument,
+} from '@blackout/core';
 import { useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
@@ -106,11 +112,13 @@ function ArgumentCard({
     argument,
     isWinner,
     onVote,
+    onRebut,
     pendingDirection,
 }: {
     argument: RankedColiseumArgument;
     isWinner: boolean;
     onVote: (argumentId: string, direction: 'up' | 'down') => Promise<void>;
+    onRebut: (argument: RankedColiseumArgument) => void;
     pendingDirection: 'up' | 'down' | null;
 }) {
     return (
@@ -184,6 +192,21 @@ function ArgumentCard({
                 >
                     {pendingDirection === 'down' ? 'Voting…' : '👎 Disagree'}
                 </button>
+                <button
+                    type="button"
+                    data-testid={`coliseum-rebut-${argument.id}`}
+                    onClick={() => onRebut(argument)}
+                    style={{
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        border: '1px solid var(--border-default)',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: 'var(--text-primary)',
+                    }}
+                >
+                    ↪ Rebut
+                </button>
             </div>
         </article>
     );
@@ -229,10 +252,14 @@ function ArgumentComposer({
     topicId,
     onCreate,
     onUploadVideo,
+    replyingTo,
+    onCancelReply,
 }: {
     topicId: string;
     onCreate: (input: CreateColiseumArgumentInput) => Promise<void>;
     onUploadVideo?: (file: File) => Promise<string>;
+    replyingTo?: { id: string; authorId: string } | null;
+    onCancelReply?: () => void;
 }) {
     const [stance, setStance] = useState<ColiseumStance>('for');
     const [body, setBody] = useState('');
@@ -261,6 +288,11 @@ function ArgumentComposer({
         },
         [videoPreviewUrl]
     );
+
+    // A rebuttal defaults to the opposing stance, but stays editable.
+    useEffect(() => {
+        if (replyingTo) setStance('against');
+    }, [replyingTo?.id]);
 
     const onPickVideo = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0] ?? null;
@@ -300,9 +332,16 @@ function ArgumentComposer({
                     setUploading(false);
                     media = { kind: 'video', mxc, durationMs: videoDurationRef.current };
                 }
-                await onCreate({ topicId, stance, body: trimmed, ...(media ? { media } : {}) });
+                await onCreate({
+                    topicId,
+                    stance,
+                    body: trimmed,
+                    ...(replyingTo ? { parentArgumentId: replyingTo.id } : {}),
+                    ...(media ? { media } : {}),
+                });
                 setBody('');
                 clearVideo();
+                onCancelReply?.();
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to post argument.');
             } finally {
@@ -310,7 +349,17 @@ function ArgumentComposer({
                 setUploading(false);
             }
         },
-        [body, clearVideo, onCreate, onUploadVideo, stance, topicId, videoFile]
+        [
+            body,
+            clearVideo,
+            onCreate,
+            onCancelReply,
+            onUploadVideo,
+            replyingTo,
+            stance,
+            topicId,
+            videoFile,
+        ]
     );
 
     return (
@@ -327,7 +376,36 @@ function ArgumentComposer({
                 background: 'var(--bg-surface)',
             }}
         >
-            <strong style={{ fontSize: 13 }}>Add your argument</strong>
+            {replyingTo ? (
+                <div
+                    data-testid="coliseum-composer-replying-to"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 13,
+                    }}
+                >
+                    <strong>↪ Rebutting {replyingTo.authorId}</strong>
+                    <button
+                        type="button"
+                        data-testid="coliseum-composer-cancel-reply"
+                        onClick={onCancelReply}
+                        style={{
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            border: '1px solid var(--border-default)',
+                            background: 'transparent',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            ) : (
+                <strong style={{ fontSize: 13 }}>Add your argument</strong>
+            )}
             <label
                 style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}
             >
@@ -471,6 +549,46 @@ function StancePie({ args }: { args: ReadonlyArray<RankedColiseumArgument> }) {
     );
 }
 
+/** Maximum indentation steps so deep rebuttal chains don't run off-screen. */
+const MAX_THREAD_INDENT = 5;
+
+function ThreadedArgument({
+    node,
+    winnerId,
+    onVote,
+    onRebut,
+    pendingVotes,
+}: {
+    node: ColiseumArgumentTreeNode<RankedColiseumArgument>;
+    winnerId: string | null;
+    onVote: (argumentId: string, direction: 'up' | 'down') => Promise<void>;
+    onRebut: (argument: RankedColiseumArgument) => void;
+    pendingVotes: Record<string, 'up' | 'down' | null>;
+}) {
+    const indent = Math.min(node.depth, MAX_THREAD_INDENT) * 16;
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginLeft: indent }}>
+            <ArgumentCard
+                argument={node.argument}
+                isWinner={node.argument.id === winnerId}
+                onVote={onVote}
+                onRebut={onRebut}
+                pendingDirection={pendingVotes[node.argument.id] ?? null}
+            />
+            {node.replies.map((reply) => (
+                <ThreadedArgument
+                    key={reply.argument.id}
+                    node={reply}
+                    winnerId={winnerId}
+                    onVote={onVote}
+                    onRebut={onRebut}
+                    pendingVotes={pendingVotes}
+                />
+            ))}
+        </div>
+    );
+}
+
 export function DebateTab({ client = defaultClient }: { client?: DebateTabClient } = {}) {
     const [selectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
     const [, setTab] = useAtom(coliseumTabAtom);
@@ -483,7 +601,12 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
     const { data: verdictData, refetch: refetchVerdict } = useColiseumVerdict(selectedTopicId);
     const [pendingVotes, setPendingVotes] = useState<Record<string, 'up' | 'down' | null>>({});
     const [voteError, setVoteError] = useState<string | null>(null);
+    const [replyingTo, setReplyingTo] = useState<{ id: string; authorId: string } | null>(null);
     const mx = useMatrixClientOrNull();
+
+    const onRebut = useCallback((argument: RankedColiseumArgument) => {
+        setReplyingTo({ id: argument.id, authorId: argument.authorId });
+    }, []);
 
     const uploadVideo = useMemo<((file: File) => Promise<string>) | undefined>(() => {
         if (client.uploadArgumentVideo) return client.uploadArgumentVideo;
@@ -552,7 +675,6 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
 
     const { topic, arguments: args } = topicData;
     const winnerId = verdictData?.verdict?.winningArgumentId ?? null;
-    const consensusIds = new Set(verdictData?.verdict?.consensusArgumentIds ?? []);
 
     return (
         <div style={containerStyle} data-testid="coliseum-debate">
@@ -584,6 +706,8 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
                 topicId={selectedTopicId}
                 onCreate={onCreateArgument}
                 onUploadVideo={uploadVideo}
+                replyingTo={replyingTo}
+                onCancelReply={() => setReplyingTo(null)}
             />
 
             {voteError ? (
@@ -601,17 +725,14 @@ export function DebateTab({ client = defaultClient }: { client?: DebateTabClient
                     No arguments yet. Be first to take a stance.
                 </div>
             ) : (
-                args.map((argument) => (
-                    <ArgumentCard
-                        key={argument.id}
-                        argument={argument}
-                        isWinner={
-                            argument.id === winnerId || consensusIds.has(argument.id)
-                                ? argument.id === winnerId
-                                : false
-                        }
+                buildColiseumArgumentTree(args).map((node) => (
+                    <ThreadedArgument
+                        key={node.argument.id}
+                        node={node}
+                        winnerId={winnerId}
                         onVote={onVote}
-                        pendingDirection={pendingVotes[argument.id] ?? null}
+                        onRebut={onRebut}
+                        pendingVotes={pendingVotes}
                     />
                 ))
             )}
