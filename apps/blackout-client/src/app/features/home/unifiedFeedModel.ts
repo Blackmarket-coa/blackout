@@ -337,6 +337,31 @@ export const mergeAndRank = (
     return deduped.slice(0, limit);
 };
 
+/** Convention prefix marking a feed item as part of an episodic series. */
+export const SERIES_TAG_PREFIX = 'series:';
+
+/** Returns the series name from a `series:<name>` tag, or null if absent. */
+export const seriesNameFromTags = (tags: readonly string[]): string | null => {
+    for (const tag of tags) {
+        if (tag.toLowerCase().startsWith(SERIES_TAG_PREFIX)) {
+            const name = tag.slice(SERIES_TAG_PREFIX.length).trim();
+            if (name.length > 0) return name;
+        }
+    }
+    return null;
+};
+
+/**
+ * Tags items carrying a `series:<name>` tag with a "SERIES" badge to surface
+ * the episodic/binge loop. Items that already have a badge (LIVE, unread
+ * count, status emoji) keep it — those take priority.
+ */
+export const withSeriesBadges = (items: readonly UnifiedFeedItem[]): UnifiedFeedItem[] =>
+    items.map((item) => {
+        if (item.badge) return item;
+        return seriesNameFromTags(item.tags) ? { ...item, badge: 'SERIES' } : item;
+    });
+
 /** Live streams only, highest-ranked first, capped for the pinned rail. */
 export const selectLiveRail = (
     items: readonly UnifiedFeedItem[],

@@ -16,6 +16,7 @@ import {
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
+    withSeriesBadges,
     type CoalitionFeedCardItem,
     type ColiseumFeedCardItem,
     type FeedSort,
@@ -133,7 +134,7 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
         const wallItems = mapWallPosts(activity.walls, now);
         const joinedCanopyIds = collectJoinedCanopyIds(rooms as unknown as RoomLike[]);
 
-        const combined: UnifiedFeedItem[] = [
+        const merged: UnifiedFeedItem[] = [
             ...denItems,
             ...statusItems,
             ...wallItems,
@@ -141,6 +142,7 @@ export function useUnifiedFeed(sort?: FeedSort): UnifiedFeedResult {
             ...remote.coalition,
             ...remote.coliseum,
         ];
+        const combined = flags.seriesTag ? withSeriesBadges(merged) : merged;
 
         const discover = mergeAndRank(combined, { boostTags, sort, now });
         const following = mergeAndRank(partitionFollowing(combined, joinedCanopyIds), {

@@ -88,6 +88,18 @@ export type FeatureFlags = {
      */
     homeFeedSegments: boolean;
     /**
+     * Daily-streak retention chip. When on, HomeFeed tracks consecutive UTC
+     * days the viewer opens Home (persisted to `co.bmc.retention.streak.v1`)
+     * and renders a streak chip in the header. Default off.
+     */
+    homeStreak: boolean;
+    /**
+     * Episodic/series feed badge. When on, feed items carrying a `series:<name>`
+     * tag render a "SERIES" badge (the binge/return loop). Pure client-side
+     * derivation over existing tags; no schema change. Default off.
+     */
+    seriesTag: boolean;
+    /**
      * Market destination tab flag. When on, the existing
      * `MarketplaceSlice` is mounted as a top-level destination at
      * `/market` (and the AppShell bottom-tab "Market" entry resolves
@@ -272,6 +284,8 @@ export const defaultFeatureFlags: FeatureFlags = {
     discoveryHomeFeed: true,
     topics: false,
     homeFeedSegments: false,
+    homeStreak: false,
+    seriesTag: false,
     marketTab: false,
     productsAttachments: false,
     productsAttachComposer: false,
@@ -557,6 +571,18 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
             nextFlags.homeFeedSegments = false;
         }
+        if (env.BLACKOUT_HOME_STREAK === 'true') {
+            nextFlags.homeStreak = true;
+        }
+        if (env.BLACKOUT_HOME_STREAK === 'false') {
+            nextFlags.homeStreak = false;
+        }
+        if (env.BLACKOUT_SERIES_TAG === 'true') {
+            nextFlags.seriesTag = true;
+        }
+        if (env.BLACKOUT_SERIES_TAG === 'false') {
+            nextFlags.seriesTag = false;
+        }
         if (env.BLACKOUT_MARKET_TAB === 'true') {
             nextFlags.marketTab = true;
         }
@@ -802,6 +828,18 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_HOME_FEED_SEGMENTS === 'false') {
         nextFlags.homeFeedSegments = false;
+    }
+    if (env.BLACKOUT_HOME_STREAK === 'true') {
+        nextFlags.homeStreak = true;
+    }
+    if (env.BLACKOUT_HOME_STREAK === 'false') {
+        nextFlags.homeStreak = false;
+    }
+    if (env.BLACKOUT_SERIES_TAG === 'true') {
+        nextFlags.seriesTag = true;
+    }
+    if (env.BLACKOUT_SERIES_TAG === 'false') {
+        nextFlags.seriesTag = false;
     }
     if (env.BLACKOUT_MARKET_TAB === 'true') {
         nextFlags.marketTab = true;

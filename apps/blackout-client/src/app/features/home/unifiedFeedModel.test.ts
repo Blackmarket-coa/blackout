@@ -12,6 +12,8 @@ import {
     mergeAndRank,
     partitionFollowing,
     selectLiveRail,
+    seriesNameFromTags,
+    withSeriesBadges,
     type UnifiedFeedItem,
 } from './unifiedFeedModel';
 
@@ -240,6 +242,33 @@ describe('selectLiveRail', () => {
         );
         const rail = selectLiveRail(items);
         expect(rail.map((i) => i.id)).toEqual(['stream:a']);
+    });
+});
+
+describe('series badges', () => {
+    it('extracts the series name from a series:<name> tag, case-insensitively', () => {
+        expect(seriesNameFromTags(['news', 'Series:Weekly Roundup'])).toBe('Weekly Roundup');
+        expect(seriesNameFromTags(['music'])).toBeNull();
+        expect(seriesNameFromTags(['series:'])).toBeNull();
+    });
+
+    it('badges items carrying a series tag but never overwrites an existing badge', () => {
+        const seriesTopic = mapColiseum([topic({ id: 's', tags: ['series:Debate Club'] })], NOW);
+        const plainTopic = mapColiseum([topic({ id: 'p', tags: ['news'] })], NOW);
+        const liveStream = mapStreams(
+            [stream({ id: 'l', state: 'live', tags: ['series:Live'] })],
+            NOW
+        );
+
+        const [badged] = withSeriesBadges(seriesTopic);
+        expect(badged.badge).toBe('SERIES');
+
+        const [plain] = withSeriesBadges(plainTopic);
+        expect(plain.badge).toBeUndefined();
+
+        // The live stream already carries a LIVE badge, which wins.
+        const [live] = withSeriesBadges(liveStream);
+        expect(live.badge).toBe('LIVE');
     });
 });
 

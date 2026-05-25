@@ -4,7 +4,8 @@ export type HomeFeedSegment = 'forYou' | 'following';
 
 export type HomeFeedTelemetryEvent =
     | { name: 'home_segment_switched'; segment: HomeFeedSegment }
-    | { name: 'home_sort_changed'; sort: FeedSort };
+    | { name: 'home_sort_changed'; sort: FeedSort }
+    | { name: 'home_streak_incremented'; count: number };
 
 /**
  * Emits on the shared `blackout:telemetry` CustomEvent channel (same channel
@@ -22,4 +23,8 @@ export const trackHomeSegmentSwitched = (segment: HomeFeedSegment) => {
 
 export const trackHomeSortChanged = (sort: FeedSort) => {
     emit({ name: 'home_sort_changed', sort });
+};
+
+export const trackHomeStreakIncremented = (count: number) => {
+    emit({ name: 'home_streak_incremented', count });
 };

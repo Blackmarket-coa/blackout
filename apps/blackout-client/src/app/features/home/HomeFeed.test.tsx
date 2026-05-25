@@ -64,6 +64,7 @@ import HomeFeed from './HomeFeed';
 import { fetchCoalitionFeed } from '../coalition/coalitionClient';
 import { joinedRoomsAtom } from '../../state/rooms';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { __resetStreakStateForTests } from './streakState';
 
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * ONE_HOUR;
@@ -105,6 +106,9 @@ describe('HomeFeed', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
         runtimeFeatureFlags.homeFeedSegments = false;
+        runtimeFeatureFlags.homeStreak = false;
+        window.localStorage.clear();
+        __resetStreakStateForTests();
     });
 
     it('renders the empty state when no joined dens are available', async () => {
@@ -260,5 +264,19 @@ describe('HomeFeed', () => {
         ).not.toBeNull();
 
         runtimeFeatureFlags.homeFeedSegments = false;
+    });
+
+    it('shows a daily streak chip starting at one day when homeStreak is on', async () => {
+        runtimeFeatureFlags.homeStreak = true;
+        const { container } = await mountWithRooms([]);
+        const chip = container.querySelector('[data-testid="home-streak-chip"]');
+        expect(chip).not.toBeNull();
+        expect(chip?.textContent).toContain('1-day streak');
+        runtimeFeatureFlags.homeStreak = false;
+    });
+
+    it('hides the streak chip when homeStreak is off', async () => {
+        const { container } = await mountWithRooms([]);
+        expect(container.querySelector('[data-testid="home-streak-chip"]')).toBeNull();
     });
 });

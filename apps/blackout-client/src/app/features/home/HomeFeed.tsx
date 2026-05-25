@@ -25,6 +25,7 @@ import { useHomeTour } from '../onboarding/homeTourState';
 import { trackOnboardingTourStarted } from '../onboarding/onboardingTelemetry';
 import { useUnifiedFeed } from './hooks/useUnifiedFeed';
 import type { FeedSort } from './unifiedFeedModel';
+import { useStreak } from './streakState';
 import { HomeComposer } from './HomeComposer';
 import { LiveNowRail } from './LiveNowRail';
 import { UnifiedFeedCard } from './UnifiedFeedCard';
@@ -131,6 +132,21 @@ const ctaLinkStyle: CSSProperties = {
     color: 'var(--accent-primary, #3b82f6)',
     textDecoration: 'underline',
     fontWeight: 600,
+};
+
+const streakChipStyle: CSSProperties = {
+    width: 'fit-content',
+    marginTop: 4,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: '2px 10px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-input, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
 };
 
 const controlsRowStyle: CSSProperties = {
@@ -240,9 +256,11 @@ const QUICK_ACTIONS: QuickAction[] = [
 export const HomeFeed = (): JSX.Element => {
     const installed = useAtomValue(installedPluginsAtom);
     const segmentsEnabled = runtimeFeatureFlags.homeFeedSegments;
+    const streakEnabled = runtimeFeatureFlags.homeStreak;
     const [segment, setSegment] = useState<HomeFeedSegment>('forYou');
     const [sort, setSort] = useState<FeedSort>('hot');
     const feed = useUnifiedFeed(segmentsEnabled ? sort : undefined);
+    const streak = useStreak(streakEnabled);
     const tourEnabled = runtimeFeatureFlags.onboardingHomeTour;
     const homeTour = useHomeTour();
     const navigate = useNavigate();
@@ -316,6 +334,12 @@ export const HomeFeed = (): JSX.Element => {
                 <div style={headerTitleColStyle}>
                     <h1 style={titleStyle}>Home</h1>
                     <p style={subtitleStyle}>What&apos;s happening across Blackout.</p>
+                    {streakEnabled && streak.count > 0 ? (
+                        <span style={streakChipStyle} data-testid="home-streak-chip">
+                            <span aria-hidden="true">🔥</span>
+                            {streak.count}-day streak
+                        </span>
+                    ) : null}
                     {showReplay ? (
                         <button
                             type="button"
