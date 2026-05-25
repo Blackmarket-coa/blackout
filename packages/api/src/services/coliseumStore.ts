@@ -6,6 +6,7 @@ import {
     normalizeColiseumTopic,
     rankColiseumArguments,
     rankColiseumTopics,
+    rankCrossTopicArguments,
     scoreColiseumArgument,
     wilsonLowerBound,
     type ColiseumArgument,
@@ -18,8 +19,19 @@ import {
     type ColiseumTopicStatus,
     type ColiseumVote,
     type ColiseumWinnerVerdictResult,
+    type CrossTopicReelEntry,
     type RankedColiseumArgument,
+    canModerateSession,
+    endSession as endSessionTransition,
+    grantSlot,
+    pinEvidence as pinEvidenceTransition,
+    requestSlot,
+    revokeSlot,
+    unpinEvidence as unpinEvidenceTransition,
+    type ColiseumLiveSession,
+    type PinnedEvidence,
 } from '@blackout/core';
+import { db } from '../db/store';
 import { recordReputationEvent } from './reputationStore';
 
 const NOW_ISO = () => new Date().toISOString();
@@ -30,9 +42,9 @@ const NOW_ISO = () => new Date().toISOString();
  * never inflates the author's standing.
  */
 function awardEndorsement(argumentId: string, voterId: string): void {
-    const argument = argumentStore.get(argumentId);
+    const argument = db.getColiseumArgument(argumentId);
     if (!argument || argument.authorId === voterId) return;
-    const topic = topicStore.get(argument.topicId);
+    const topic = db.getColiseumTopic(argument.topicId);
     recordReputationEvent({
         userId: argument.authorId,
         type: 'argument_endorsed',
@@ -173,19 +185,9 @@ const seedVotes: ColiseumVote[] = [
     { argumentId: 'arg-ai-2', voterId: '@u1:server', direction: 'up', createdAt: '2026-05-01T20:00:00Z' },
 ];
 
-const topicStore = new Map<string, ColiseumTopic>();
-const argumentStore = new Map<string, ColiseumArgument>();
-const voteStore = new Map<string, ColiseumVote>();
-/** keyed by `${argumentId}::${voterId}` to enforce one vote per (argument, voter). */
-const voteIndex = new Map<string, ColiseumVote>();
-
-function voteKey(argumentId: string, voterId: string): string {
-    return `${argumentId}::${voterId}`;
-}
-
 function countVotesByArgument(): Map<string, { up: number; down: number }> {
     const counts = new Map<string, { up: number; down: number }>();
-    for (const vote of voteStore.values()) {
+    for (const vote of db.listColiseumVotes()) {
         const entry = counts.get(vote.argumentId) ?? { up: 0, down: 0 };
         if (vote.direction === 'up') entry.up += 1;
         else entry.down += 1;
@@ -194,38 +196,39 @@ function countVotesByArgument(): Map<string, { up: number; down: number }> {
     return counts;
 }
 
+function votesForTopic(topicArgs: ReadonlyArray<ColiseumArgument>): ColiseumVote[] {
+    const ids = new Set(topicArgs.map((a) => a.id));
+    return db.listColiseumVotes().filter((v) => ids.has(v.argumentId));
+}
+
 function recomputeArgumentScores(topicId: string, nowMs: number = Date.now()): void {
-    const topicArgs = [...argumentStore.values()].filter((a) => a.topicId === topicId);
+    const topicArgs = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     if (topicArgs.length === 0) return;
     const counts = countVotesByArgument();
 
     const verdict = deriveColiseumWinnerVerdict({
         topicId,
         arguments: topicArgs,
-        votes: [...voteStore.values()].filter((v) =>
-            topicArgs.some((a) => a.id === v.argumentId),
-        ),
+        votes: votesForTopic(topicArgs),
         nowMs,
     });
 
-    for (const arg of topicArgs) {
+    const updated = topicArgs.map((arg) => {
         const c = counts.get(arg.id) ?? { up: 0, down: 0 };
         const voteScore = wilsonLowerBound(c.up, c.down);
         const nuanceScore = verdict.consensusByArgument[arg.id] ?? 0;
-        argumentStore.set(arg.id, { ...arg, voteScore, nuanceScore });
-    }
+        return { ...arg, voteScore, nuanceScore };
+    });
+    db.upsertColiseumArguments(updated);
 }
 
 function recomputeTopicHeat(topicId: string, nowMs: number = Date.now()): void {
-    const topic = topicStore.get(topicId);
+    const topic = db.getColiseumTopic(topicId);
     if (!topic) return;
 
-    const topicArgs = [...argumentStore.values()].filter((a) => a.topicId === topicId);
+    const topicArgs = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     const argumentCount = topicArgs.length;
-    let voteCount = 0;
-    for (const vote of voteStore.values()) {
-        if (topicArgs.some((a) => a.id === vote.argumentId)) voteCount += 1;
-    }
+    const voteCount = votesForTopic(topicArgs).length;
 
     const heat = computeTopicHeat({
         publishedAt: topic.newsAnchor.publishedAt,
@@ -238,7 +241,7 @@ function recomputeTopicHeat(topicId: string, nowMs: number = Date.now()): void {
         { createdAt: topic.createdAt, closesAt: topic.closesAt, archivesAt: topic.archivesAt },
         nowMs,
     );
-    topicStore.set(topicId, {
+    db.upsertColiseumTopic({
         ...topic,
         recencyScore: heat.recencyScore,
         velocityScore: heat.velocityScore,
@@ -247,33 +250,42 @@ function recomputeTopicHeat(topicId: string, nowMs: number = Date.now()): void {
     });
 }
 
-function seedAll(): void {
+/**
+ * Demo data is loaded once, on an empty store, in non-production environments.
+ * Set COLISEUM_SEED=1 to force-enable (e.g. a staging demo) or COLISEUM_SEED=0
+ * to disable. Production starts empty unless explicitly opted in.
+ */
+function coliseumSeedEnabled(): boolean {
+    if (process.env.COLISEUM_SEED === '1') return true;
+    if (process.env.COLISEUM_SEED === '0') return false;
+    return process.env.NODE_ENV !== 'production';
+}
+
+function seedColiseumIfEmpty(): void {
+    if (!coliseumSeedEnabled()) return;
+    if (db.listColiseumTopics().length > 0) return;
+
     const seedNow = Date.parse('2026-05-02T12:00:00Z');
     for (const seed of seedTopics) {
-        const topic = normalizeColiseumTopic(
-            { ...seed, argumentCount: 0, voteCount: 0 },
-            seedNow,
+        db.upsertColiseumTopic(
+            normalizeColiseumTopic({ ...seed, argumentCount: 0, voteCount: 0 }, seedNow),
         );
-        topicStore.set(topic.id, topic);
     }
     for (const seed of seedArguments) {
-        argumentStore.set(seed.id, { ...seed, voteScore: 0, nuanceScore: 0 });
+        db.upsertColiseumArgument({ ...seed, voteScore: 0, nuanceScore: 0 });
     }
     for (const vote of seedVotes) {
-        voteStore.set(`${vote.argumentId}::${vote.voterId}::${vote.createdAt}`, vote);
-        voteIndex.set(voteKey(vote.argumentId, vote.voterId), vote);
-        if (vote.direction === 'up') {
-            awardEndorsement(vote.argumentId, vote.voterId);
-        }
+        db.upsertColiseumVote(vote);
+        if (vote.direction === 'up') awardEndorsement(vote.argumentId, vote.voterId);
     }
-    const topicIds = new Set([...argumentStore.values()].map((a) => a.topicId));
+    const topicIds = new Set(db.listColiseumArguments().map((a) => a.topicId));
     for (const topicId of topicIds) {
         recomputeArgumentScores(topicId, seedNow);
         recomputeTopicHeat(topicId, seedNow);
     }
 }
 
-seedAll();
+seedColiseumIfEmpty();
 
 export interface TopicFilter {
     canopyId?: string;
@@ -284,8 +296,7 @@ export interface TopicFilter {
 }
 
 export function listTopics(filter: TopicFilter = {}): ColiseumTopic[] {
-    const all = [...topicStore.values()];
-    const filtered = all.filter((topic) => {
+    const filtered = db.listColiseumTopics().filter((topic) => {
         if (filter.canopyId && topic.canopyId !== filter.canopyId) return false;
         if (filter.denId && topic.denId !== filter.denId) return false;
         if (filter.category && topic.category !== filter.category) return false;
@@ -297,7 +308,7 @@ export function listTopics(filter: TopicFilter = {}): ColiseumTopic[] {
 }
 
 export function getTopic(topicId: string): ColiseumTopic | null {
-    return topicStore.get(topicId) ?? null;
+    return db.getColiseumTopic(topicId) ?? null;
 }
 
 export interface CreateTopicInput {
@@ -322,7 +333,7 @@ export function createTopic(input: CreateTopicInput, nowMs: number = Date.now())
         },
         nowMs,
     );
-    topicStore.set(topic.id, topic);
+    db.upsertColiseumTopic(topic);
     return topic;
 }
 
@@ -330,7 +341,7 @@ export function listArgumentsForTopic(
     topicId: string,
     options: { nowMs?: number } = {},
 ): RankedColiseumArgument[] {
-    const args = [...argumentStore.values()].filter((a) => a.topicId === topicId);
+    const args = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     return rankColiseumArguments(args, { nowMs: options.nowMs });
 }
 
@@ -338,9 +349,46 @@ export function scoreArgument(arg: ColiseumArgument, nowMs?: number): number {
     return scoreColiseumArgument(arg, { nowMs, weights: DEFAULT_COLISEUM_WEIGHTS });
 }
 
+export interface ColiseumReelItem extends RankedColiseumArgument {
+    topicId: string;
+    topicTitle: string;
+}
+
+export interface CrossTopicReelResult {
+    items: ColiseumReelItem[];
+    nextOffset: number | null;
+}
+
+export function listCrossTopicReel(
+    options: { limit?: number; offset?: number; nowMs?: number } = {},
+): CrossTopicReelResult {
+    const limit = options.limit ?? 20;
+    const offset = options.offset ?? 0;
+    const nowMs = options.nowMs ?? Date.now();
+
+    const entries: CrossTopicReelEntry[] = [];
+    const titleByTopic = new Map<string, string>();
+    for (const argument of db.listColiseumArguments()) {
+        const topic = db.getColiseumTopic(argument.topicId);
+        if (!topic) continue;
+        titleByTopic.set(topic.id, topic.title);
+        entries.push({ argument, debateHeat: topic.debateHeat });
+    }
+
+    const ranked = rankCrossTopicArguments(entries, { nowMs });
+    const page = ranked.slice(offset, offset + limit);
+    const items: ColiseumReelItem[] = page.map((argument) => ({
+        ...argument,
+        topicTitle: titleByTopic.get(argument.topicId) ?? '',
+    }));
+    const nextOffset = offset + limit < ranked.length ? offset + limit : null;
+    return { items, nextOffset };
+}
+
 export interface CreateArgumentInput {
     id: string;
     topicId: string;
+    parentArgumentId?: string;
     authorId: string;
     stance: ColiseumStance;
     stanceWeight: number;
@@ -353,21 +401,25 @@ export function createArgument(
     input: CreateArgumentInput,
     nowMs: number = Date.now(),
 ): ColiseumArgument | null {
-    if (!topicStore.has(input.topicId)) return null;
+    if (!db.getColiseumTopic(input.topicId)) return null;
+    if (input.parentArgumentId !== undefined) {
+        const parent = db.getColiseumArgument(input.parentArgumentId);
+        if (!parent || parent.topicId !== input.topicId) return null;
+    }
     const argument: ColiseumArgument = {
         ...input,
         createdAt: new Date(nowMs).toISOString(),
         voteScore: 0,
         nuanceScore: 0,
     };
-    argumentStore.set(argument.id, argument);
+    db.upsertColiseumArgument(argument);
     recomputeArgumentScores(input.topicId, nowMs);
     recomputeTopicHeat(input.topicId, nowMs);
-    return argumentStore.get(argument.id) ?? null;
+    return db.getColiseumArgument(argument.id) ?? null;
 }
 
 export function getArgument(argumentId: string): ColiseumArgument | null {
-    return argumentStore.get(argumentId) ?? null;
+    return db.getColiseumArgument(argumentId) ?? null;
 }
 
 export interface CastVoteInput {
@@ -383,7 +435,7 @@ export interface CastVoteResult {
 }
 
 export function castVote(input: CastVoteInput, nowMs: number = Date.now()): CastVoteResult | null {
-    const argument = argumentStore.get(input.argumentId);
+    const argument = db.getColiseumArgument(input.argumentId);
     if (!argument) return null;
     const vote: ColiseumVote = {
         argumentId: input.argumentId,
@@ -392,49 +444,160 @@ export function castVote(input: CastVoteInput, nowMs: number = Date.now()): Cast
         stanceShift: input.stanceShift,
         createdAt: new Date(nowMs).toISOString(),
     };
-    const indexKey = voteKey(vote.argumentId, vote.voterId);
-    const previous = voteIndex.get(indexKey);
-    if (previous) {
-        for (const [storedKey, storedVote] of voteStore) {
-            if (
-                storedVote.argumentId === previous.argumentId &&
-                storedVote.voterId === previous.voterId &&
-                storedVote.createdAt === previous.createdAt
-            ) {
-                voteStore.delete(storedKey);
-                break;
-            }
-        }
-    }
-    const storeKey = `${vote.argumentId}::${vote.voterId}::${vote.createdAt}`;
-    voteStore.set(storeKey, vote);
-    voteIndex.set(indexKey, vote);
+    // Keyed by (argument, voter), so this replaces any prior vote from the same
+    // voter on the same argument — one vote per pair, flips overwrite.
+    db.upsertColiseumVote(vote);
     recomputeArgumentScores(argument.topicId, nowMs);
     recomputeTopicHeat(argument.topicId, nowMs);
     if (vote.direction === 'up') {
         awardEndorsement(vote.argumentId, vote.voterId);
     }
-    const updated = argumentStore.get(argument.id);
+    const updated = db.getColiseumArgument(argument.id);
     if (!updated) return null;
     return { vote, argument: updated };
 }
 
 export function listVotesForArgument(argumentId: string): ColiseumVote[] {
-    return [...voteStore.values()].filter((v) => v.argumentId === argumentId);
+    return db.listColiseumVotes().filter((v) => v.argumentId === argumentId);
 }
 
 export function getVerdict(topicId: string, nowMs: number = Date.now()): ColiseumWinnerVerdictResult | null {
-    if (!topicStore.has(topicId)) return null;
-    const topicArgs = [...argumentStore.values()].filter((a) => a.topicId === topicId);
-    const topicVotes = [...voteStore.values()].filter((v) =>
-        topicArgs.some((a) => a.id === v.argumentId),
-    );
+    if (!db.getColiseumTopic(topicId)) return null;
+    const topicArgs = db.listColiseumArguments().filter((a) => a.topicId === topicId);
     return deriveColiseumWinnerVerdict({
         topicId,
         arguments: topicArgs,
-        votes: topicVotes,
+        votes: votesForTopic(topicArgs),
         nowMs,
     });
+}
+
+export function newLiveSessionId(): string {
+    return `live_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export interface CreateLiveSessionInput {
+    topicId: string;
+    roomId: string;
+    moderatorId: string;
+}
+
+/**
+ * Create a live session for a topic. Idempotent per topic while a session is
+ * live: returns the existing active session rather than spawning a duplicate.
+ * Returns null if the topic does not exist.
+ */
+export function createLiveSession(
+    input: CreateLiveSessionInput,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null {
+    if (!db.getColiseumTopic(input.topicId)) return null;
+    const existing = getActiveSessionForTopic(input.topicId);
+    if (existing) return existing;
+    const nowIso = new Date(nowMs).toISOString();
+    const session: ColiseumLiveSession = {
+        id: newLiveSessionId(),
+        topicId: input.topicId,
+        roomId: input.roomId,
+        moderatorIds: [input.moderatorId],
+        status: 'live',
+        speakingQueue: [],
+        pinnedEvidence: [],
+        createdAt: nowIso,
+        startedAt: nowIso,
+    };
+    db.upsertColiseumLiveSession(session);
+    return session;
+}
+
+export function getLiveSession(sessionId: string): ColiseumLiveSession | null {
+    return db.getColiseumLiveSession(sessionId) ?? null;
+}
+
+export function getActiveSessionForTopic(topicId: string): ColiseumLiveSession | null {
+    const live = db
+        .listColiseumLiveSessions()
+        .filter((s) => s.topicId === topicId && s.status !== 'ended')
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return live[0] ?? null;
+}
+
+export function requestSpeak(
+    sessionId: string,
+    userId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session || session.status === 'ended') return null;
+    const next = requestSlot(session, userId, new Date(nowMs).toISOString());
+    db.upsertColiseumLiveSession(next);
+    return next;
+}
+
+export function grantSpeak(
+    sessionId: string,
+    moderatorId: string,
+    targetUserId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = grantSlot(session, targetUserId, new Date(nowMs).toISOString());
+    db.upsertColiseumLiveSession(next);
+    return next;
+}
+
+export function revokeSpeak(
+    sessionId: string,
+    moderatorId: string,
+    targetUserId: string,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = revokeSlot(session, targetUserId);
+    db.upsertColiseumLiveSession(next);
+    return next;
+}
+
+export function pinSessionEvidence(
+    sessionId: string,
+    moderatorId: string,
+    evidence: PinnedEvidence,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = pinEvidenceTransition(session, evidence);
+    db.upsertColiseumLiveSession(next);
+    return next;
+}
+
+export function unpinSessionEvidence(
+    sessionId: string,
+    moderatorId: string,
+    evidence: PinnedEvidence,
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session || session.status === 'ended') return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = unpinEvidenceTransition(session, evidence);
+    db.upsertColiseumLiveSession(next);
+    return next;
+}
+
+export function endLiveSession(
+    sessionId: string,
+    moderatorId: string,
+    nowMs: number = Date.now(),
+): ColiseumLiveSession | null | 'forbidden' {
+    const session = db.getColiseumLiveSession(sessionId);
+    if (!session) return null;
+    if (!canModerateSession(session, moderatorId)) return 'forbidden';
+    const next = endSessionTransition(session, new Date(nowMs).toISOString());
+    db.upsertColiseumLiveSession(next);
+    return next;
 }
 
 export function newTopicId(): string {

@@ -8,8 +8,19 @@ import {
     COLISEUM_TOPIC_CATEGORY_KEYS,
     DEFAULT_COLISEUM_TAB,
     DEFAULT_COLISEUM_WEIGHTS,
+    buildColiseumArgumentTree,
     buildVoteMatrix,
+    canModerateSession,
     citationDepthScore,
+    endSession,
+    grantSlot,
+    isGrantedSpeaker,
+    isValidLiveRoomId,
+    pinEvidence,
+    rankCrossTopicArguments,
+    requestSlot,
+    revokeSlot,
+    unpinEvidence,
     computeConsensus,
     computeTopicHeat,
     deriveColiseumTopicStatus,
@@ -453,3 +464,101 @@ function mkVotes(
         createdAt: '2026-05-02T11:00:00Z',
     }));
 }
+
+test('buildColiseumArgumentTree nests replies under parents and preserves order', () => {
+    const root1 = { ...argFixture('root1') };
+    const root2 = { ...argFixture('root2') };
+    const reply1 = { ...argFixture('reply1'), parentArgumentId: 'root1' };
+    const reply2 = { ...argFixture('reply2'), parentArgumentId: 'root1' };
+    const nested = { ...argFixture('nested'), parentArgumentId: 'reply1' };
+
+    const tree = buildColiseumArgumentTree([root1, reply1, nested, reply2, root2]);
+
+    assert.equal(tree.length, 2);
+    assert.deepEqual(
+        tree.map((n) => n.argument.id),
+        ['root1', 'root2'],
+    );
+    const r1 = tree[0]!;
+    assert.equal(r1.depth, 0);
+    assert.deepEqual(
+        r1.replies.map((n) => n.argument.id),
+        ['reply1', 'reply2'],
+    );
+    assert.equal(r1.replies[0]!.depth, 1);
+    assert.equal(r1.replies[0]!.replies[0]!.argument.id, 'nested');
+    assert.equal(r1.replies[0]!.replies[0]!.depth, 2);
+});
+
+test('buildColiseumArgumentTree treats missing parents as roots (drops nothing)', () => {
+    const orphan = { ...argFixture('orphan'), parentArgumentId: 'gone' };
+    const tree = buildColiseumArgumentTree([orphan]);
+    assert.equal(tree.length, 1);
+    assert.equal(tree[0]!.argument.id, 'orphan');
+    assert.equal(tree[0]!.depth, 0);
+});
+
+test('rankCrossTopicArguments lets topic heat lift an equal-score argument', () => {
+    const a = { ...argFixture('cool'), voteScore: 0.5 };
+    const b = { ...argFixture('hot'), voteScore: 0.5 };
+    const ranked = rankCrossTopicArguments(
+        [
+            { argument: a, debateHeat: 0.1 },
+            { argument: b, debateHeat: 0.9 },
+        ],
+        { nowMs: NOW },
+    );
+    assert.equal(ranked[0]!.id, 'hot');
+    assert.equal(ranked[1]!.id, 'cool');
+});
+
+function liveFixture() {
+    return {
+        id: 'live1',
+        topicId: 't1',
+        roomId: '!debate:server',
+        moderatorIds: ['@mod:server'],
+        status: 'live' as const,
+        speakingQueue: [],
+        pinnedEvidence: [],
+        createdAt: '2026-05-02T11:00:00Z',
+        startedAt: '2026-05-02T11:00:00Z',
+    };
+}
+
+test('live session speaking-queue transitions are pure and moderator-aware', () => {
+    const session = liveFixture();
+    assert.ok(canModerateSession(session, '@mod:server'));
+    assert.ok(!canModerateSession(session, '@speaker:server'));
+
+    const requested = requestSlot(session, '@speaker:server', '2026-05-02T11:05:00Z');
+    assert.equal(requested.speakingQueue.length, 1);
+    assert.equal(requested.speakingQueue[0]!.state, 'requested');
+    assert.equal(session.speakingQueue.length, 0); // original untouched
+
+    const granted = grantSlot(requested, '@speaker:server', '2026-05-02T11:06:00Z');
+    assert.ok(isGrantedSpeaker(granted, '@speaker:server'));
+
+    const revoked = revokeSlot(granted, '@speaker:server');
+    assert.ok(!isGrantedSpeaker(revoked, '@speaker:server'));
+});
+
+test('live session evidence pin/unpin is idempotent and immutable', () => {
+    const session = liveFixture();
+    const evidence = { kind: 'argument' as const, argumentId: 'arg-grid-1' };
+    const pinned = pinEvidence(session, evidence);
+    assert.equal(pinned.pinnedEvidence.length, 1);
+    const pinnedAgain = pinEvidence(pinned, evidence);
+    assert.equal(pinnedAgain.pinnedEvidence.length, 1);
+    const unpinned = unpinEvidence(pinnedAgain, evidence);
+    assert.equal(unpinned.pinnedEvidence.length, 0);
+    assert.equal(session.pinnedEvidence.length, 0);
+});
+
+test('endSession marks ended and isValidLiveRoomId validates room ids', () => {
+    const ended = endSession(liveFixture(), '2026-05-02T12:00:00Z');
+    assert.equal(ended.status, 'ended');
+    assert.equal(ended.endedAt, '2026-05-02T12:00:00Z');
+    assert.ok(isValidLiveRoomId('!room:server'));
+    assert.ok(!isValidLiveRoomId('room-without-prefix'));
+});

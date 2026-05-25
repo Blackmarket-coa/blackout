@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
 import type { ColiseumStance, RankedColiseumArgument } from '@blackout/core';
-import { useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
+import { useColiseumReel, useColiseumTopic, useColiseumVerdict } from '../hooks/useColiseumTopics';
 import { coliseumTabAtom, selectedColiseumTopicIdAtom } from '../../../state/coliseum';
 import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../../utils/matrix';
@@ -103,21 +103,22 @@ function ReelCard({
     isWinner,
     onVote,
     flash,
+    topicTitle,
+    onOpenTopic,
 }: {
     argument: RankedColiseumArgument;
     isWinner: boolean;
     onVote: (argumentId: string, direction: 'up' | 'down') => void;
     flash: 'up' | 'down' | null;
+    topicTitle?: string;
+    onOpenTopic?: () => void;
 }) {
     const mx = useMatrixClientOrNull();
     const touchStart = useRef<{ x: number; y: number } | null>(null);
 
-    const videoSrc =
-        argument.media && mx ? mxcUrlToHttp(mx, argument.media.mxc, true) : null;
+    const videoSrc = argument.media && mx ? mxcUrlToHttp(mx, argument.media.mxc, true) : null;
     const posterSrc =
-        argument.media?.posterMxc && mx
-            ? mxcUrlToHttp(mx, argument.media.posterMxc, true)
-            : null;
+        argument.media?.posterMxc && mx ? mxcUrlToHttp(mx, argument.media.posterMxc, true) : null;
 
     const onTouchStart = useCallback((event: React.TouchEvent) => {
         const touch = event.touches[0];
@@ -138,7 +139,7 @@ function ReelCard({
                 onVote(argument.id, dx > 0 ? 'up' : 'down');
             }
         },
-        [argument.id, onVote],
+        [argument.id, onVote]
     );
 
     return (
@@ -168,8 +169,7 @@ function ReelCard({
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: 32,
-                        background:
-                            'radial-gradient(circle at 50% 30%, #1c2733, #05080c)',
+                        background: 'radial-gradient(circle at 50% 30%, #1c2733, #05080c)',
                     }}
                 >
                     <p
@@ -199,9 +199,7 @@ function ReelCard({
                         justifyContent: 'center',
                         fontSize: 96,
                         background:
-                            flash === 'up'
-                                ? 'rgba(26,188,156,0.18)'
-                                : 'rgba(231,76,60,0.18)',
+                            flash === 'up' ? 'rgba(26,188,156,0.18)' : 'rgba(231,76,60,0.18)',
                     }}
                 >
                     {flash === 'up' ? '👍' : '👎'}
@@ -209,10 +207,37 @@ function ReelCard({
             ) : null}
 
             <div style={overlayStyle}>
+                {topicTitle ? (
+                    <button
+                        type="button"
+                        data-testid="coliseum-reel-topic-chip"
+                        onClick={onOpenTopic}
+                        style={{
+                            alignSelf: 'flex-start',
+                            padding: '2px 10px',
+                            borderRadius: 999,
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#fff',
+                            cursor: onOpenTopic ? 'pointer' : 'default',
+                            fontSize: 12,
+                        }}
+                    >
+                        From: {topicTitle} →
+                    </button>
+                ) : null}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={stanceTagStyle(argument.stance)}>
                         {STANCE_LABEL[argument.stance]}
                     </span>
+                    {argument.parentArgumentId ? (
+                        <span
+                            data-testid="coliseum-reel-rebuttal"
+                            style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}
+                        >
+                            ↪ rebuttal
+                        </span>
+                    ) : null}
                     {isWinner ? (
                         <span style={{ fontSize: 12, fontWeight: 700 }}>🏆 Winner</span>
                     ) : null}
@@ -266,13 +291,9 @@ function ReelCard({
     );
 }
 
-export function ReelTab({ client = defaultClient }: { client?: ReelTabClient } = {}) {
-    const [selectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
-    const [, setTab] = useAtom(coliseumTabAtom);
-    const { data: topicData, loading, error, refetch } = useColiseumTopic(selectedTopicId);
-    const { data: verdictData, refetch: refetchVerdict } = useColiseumVerdict(selectedTopicId);
+/** Shared flash + fire-and-forget vote handling for both reel modes. */
+function useReelVote(client: ReelTabClient, onAfter: () => void) {
     const [flashes, setFlashes] = useState<Record<string, 'up' | 'down' | null>>({});
-
     const onVote = useCallback(
         (argumentId: string, direction: 'up' | 'down') => {
             setFlashes((prev) => ({ ...prev, [argumentId]: direction }));
@@ -282,38 +303,25 @@ export function ReelTab({ client = defaultClient }: { client?: ReelTabClient } =
             void (async () => {
                 try {
                     await client.castColiseumVote({ argumentId, direction });
-                    refetch();
-                    refetchVerdict();
+                    onAfter();
                 } catch {
                     // Reel is fire-and-forget; the next refetch reconciles state.
                 }
             })();
         },
-        [client, refetch, refetchVerdict],
+        [client, onAfter]
     );
+    return { flashes, onVote };
+}
 
-    if (!selectedTopicId) {
-        return (
-            <div style={{ padding: 24, color: 'var(--text-secondary)' }}>
-                Pick a topic on the{' '}
-                <button
-                    type="button"
-                    onClick={() => setTab('topics')}
-                    style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--accent-primary, #1ABC9C)',
-                        cursor: 'pointer',
-                        padding: 0,
-                        fontSize: 'inherit',
-                    }}
-                >
-                    Topics
-                </button>{' '}
-                tab to watch the reel.
-            </div>
-        );
-    }
+function TopicReel({ topicId, client }: { topicId: string; client: ReelTabClient }) {
+    const { data: topicData, loading, error, refetch } = useColiseumTopic(topicId);
+    const { data: verdictData, refetch: refetchVerdict } = useColiseumVerdict(topicId);
+    const onAfter = useCallback(() => {
+        refetch();
+        refetchVerdict();
+    }, [refetch, refetchVerdict]);
+    const { flashes, onVote } = useReelVote(client, onAfter);
 
     if (loading && !topicData) {
         return <div style={{ padding: 24 }}>Loading reel...</div>;
@@ -348,6 +356,72 @@ export function ReelTab({ client = defaultClient }: { client?: ReelTabClient } =
                 />
             ))}
         </div>
+    );
+}
+
+function GlobalReel({ client }: { client: ReelTabClient }) {
+    const [, setSelectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
+    const [, setTab] = useAtom(coliseumTabAtom);
+    const { data, loading, error, refetch } = useColiseumReel({ limit: 50 });
+    const { flashes, onVote } = useReelVote(client, refetch);
+
+    if (loading && !data) {
+        return <div style={{ padding: 24 }}>Loading discourse reel...</div>;
+    }
+    if (error) {
+        return <div style={{ padding: 24, color: 'var(--danger)' }}>Couldn't load: {error}</div>;
+    }
+
+    const items = data?.items ?? [];
+    if (items.length === 0) {
+        return (
+            <div style={{ padding: 24, color: 'var(--text-secondary)' }}>
+                No arguments to show yet. Start a debate from the{' '}
+                <button
+                    type="button"
+                    onClick={() => setTab('topics')}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--accent-primary, #1ABC9C)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: 'inherit',
+                    }}
+                >
+                    Topics
+                </button>{' '}
+                tab.
+            </div>
+        );
+    }
+
+    return (
+        <div style={reelContainerStyle} data-testid="coliseum-reel-global">
+            {items.map((item) => (
+                <ReelCard
+                    key={item.id}
+                    argument={item}
+                    isWinner={false}
+                    onVote={onVote}
+                    flash={flashes[item.id] ?? null}
+                    topicTitle={item.topicTitle}
+                    onOpenTopic={() => {
+                        setSelectedTopicId(item.topicId);
+                        setTab('debate');
+                    }}
+                />
+            ))}
+        </div>
+    );
+}
+
+export function ReelTab({ client = defaultClient }: { client?: ReelTabClient } = {}) {
+    const [selectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
+    return selectedTopicId ? (
+        <TopicReel topicId={selectedTopicId} client={client} />
+    ) : (
+        <GlobalReel client={client} />
     );
 }
 
