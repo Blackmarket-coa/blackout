@@ -1,6 +1,7 @@
-import React, { useMemo, useState, type CSSProperties } from 'react';
+import React, { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useAtom } from 'jotai';
 import {
+    isGrantedSpeaker,
     isValidLiveRoomId,
     type ColiseumCitation,
     type ColiseumLiveSession,
@@ -265,7 +266,23 @@ function ActiveSession({
     const call = useOptionalCall();
     const currentUserId = mx?.getUserId() ?? null;
     const isModerator = currentUserId ? session.moderatorIds.includes(currentUserId) : false;
-    const joinedHere = call?.joined && call.roomId === session.roomId;
+    const joinedHere = Boolean(call?.joined && call.roomId === session.roomId);
+
+    // Single transport: media flows over matrixRTC broadcast mode (presenters
+    // publish, audience subscribes). The speaking queue is the control plane —
+    // moderators and granted speakers may publish; everyone else is receive-only.
+    // matrixRTC has no per-participant SFU publish gate here, so audience members
+    // are held muted client-side rather than enforced at the server.
+    const canPublish =
+        isModerator || (currentUserId ? isGrantedSpeaker(session, currentUserId) : false);
+
+    // Keep audience receive-only: if this user can't publish while joined here,
+    // force mic and camera off (covers a speaker whose slot was just revoked).
+    useEffect(() => {
+        if (!call || !joinedHere || canPublish) return;
+        if (!call.muted) call.setMuted(true);
+        if (call.cameraEnabled) call.setCameraEnabled(false);
+    }, [call, joinedHere, canPublish]);
 
     const argumentsById = useMemo(
         () => new Map(topicArguments.map((arg) => [arg.id, arg])),
@@ -315,6 +332,40 @@ function ActiveSession({
                     ) : null}
                 </span>
             </div>
+
+            {call && joinedHere ? (
+                canPublish ? (
+                    <div
+                        data-testid="coliseum-live-publish-controls"
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                    >
+                        <span style={{ color: 'var(--text-secondary)' }}>🎙️ On mic</span>
+                        <button
+                            type="button"
+                            data-testid="coliseum-live-toggle-mic"
+                            onClick={() => call.setMuted(!call.muted)}
+                            style={pillButtonStyle}
+                        >
+                            {call.muted ? 'Unmute' : 'Mute'}
+                        </button>
+                        <button
+                            type="button"
+                            data-testid="coliseum-live-toggle-camera"
+                            onClick={() => call.setCameraEnabled(!call.cameraEnabled)}
+                            style={pillButtonStyle}
+                        >
+                            {call.cameraEnabled ? 'Stop video' : 'Start video'}
+                        </button>
+                    </div>
+                ) : (
+                    <p
+                        data-testid="coliseum-live-audience-note"
+                        style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}
+                    >
+                        👂 You're in the audience (receive-only). Request to speak to go on mic.
+                    </p>
+                )
+            ) : null}
 
             <SpeakingQueue
                 session={session}

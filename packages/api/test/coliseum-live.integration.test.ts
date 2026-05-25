@@ -121,39 +121,6 @@ test('creator becomes moderator; request -> grant flow mutates the queue', async
     );
 });
 
-test('token endpoint grants publish to moderators/speakers and subscribe-only to audience', async () => {
-    const sessionId = await startSession('@mod-tok:server');
-    await app.request(`/v1/coliseum/live/sessions/${sessionId}/speak`, {
-        method: 'POST',
-        headers: { ...authHeader('@granted:server'), ...json },
-    });
-    await app.request(`/v1/coliseum/live/sessions/${sessionId}/speak/@granted:server/grant`, {
-        method: 'POST',
-        headers: { ...authHeader('@mod-tok:server'), ...json },
-    });
-
-    const modToken = await app.request(`/v1/coliseum/live/sessions/${sessionId}/token`, {
-        method: 'POST',
-        headers: { ...authHeader('@mod-tok:server'), ...json },
-    });
-    assert.equal(modToken.status, 200);
-    assert.equal(((await modToken.json()) as { canPublish: boolean }).canPublish, true);
-
-    const speakerToken = await app.request(`/v1/coliseum/live/sessions/${sessionId}/token`, {
-        method: 'POST',
-        headers: { ...authHeader('@granted:server'), ...json },
-    });
-    assert.equal(((await speakerToken.json()) as { canPublish: boolean }).canPublish, true);
-
-    const audienceToken = await app.request(`/v1/coliseum/live/sessions/${sessionId}/token`, {
-        method: 'POST',
-        headers: { ...authHeader('@lurker:server'), ...json },
-    });
-    const audienceBody = (await audienceToken.json()) as { canPublish: boolean; token: string };
-    assert.equal(audienceBody.canPublish, false);
-    assert.ok(audienceBody.token.length > 0);
-});
-
 test('moderator can pin valid evidence; bad evidence is rejected', async () => {
     const sessionId = await startSession('@mod-pin:server');
 

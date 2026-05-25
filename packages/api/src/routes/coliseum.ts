@@ -3,7 +3,6 @@ import { z } from 'zod';
 import {
     COLISEUM_STANCES,
     COLISEUM_TOPIC_CATEGORY_KEYS,
-    isGrantedSpeaker,
     isValidLiveRoomId,
     validateArgumentMedia,
     validateCitation,
@@ -21,7 +20,6 @@ import {
     endLiveSession,
     getActiveSessionForTopic,
     getArgument,
-    getLiveSession,
     getTopic,
     getVerdict,
     grantSpeak,
@@ -35,7 +33,6 @@ import {
     revokeSpeak,
     unpinSessionEvidence,
 } from '../services/coliseumStore';
-import { createLiveKitAccessToken } from '../services/livekit';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 
@@ -347,26 +344,6 @@ coliseum.post('/live/sessions/:id/end', (c) => {
     if (user instanceof Response) return user;
     const result = endLiveSession(c.req.param('id'), user.sub);
     return liveResult(c, result);
-});
-
-coliseum.post('/live/sessions/:id/token', (c) => {
-    const user = requireUser(c, 'Sign in to join the debate');
-    if (user instanceof Response) return user;
-    const session = getLiveSession(c.req.param('id'));
-    if (!session || session.status === 'ended') {
-        return c.json({ code: 'not_found', message: 'Live session not found' }, 404);
-    }
-    const isModerator = session.moderatorIds.includes(user.sub);
-    const canPublish = isModerator || isGrantedSpeaker(session, user.sub);
-    const token = createLiveKitAccessToken({
-        identity: user.sub,
-        name: user.username,
-        roomName: session.roomId,
-        role: isModerator ? 'moderator' : 'member',
-        canPublish,
-        canSubscribe: true,
-    });
-    return c.json({ ...token, roomId: session.roomId, canPublish });
 });
 
 export default coliseum;
