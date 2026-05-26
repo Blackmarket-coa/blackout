@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../../db/store';
+import { withTimeout } from '../http';
 import {
   decryptSecret,
   encryptSecret,
@@ -162,7 +163,7 @@ export const completeFlow = async (
   params: { userId: string; code: string; state: string },
   deps: CompleteFlowDeps = {},
 ): Promise<CallbackOutcome> => {
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
   const stateHash = sha256Hex(params.state);
   const pending = db.consumePendingOAuthLink(stateHash);
   if (!pending) return { kind: 'state_invalid' };
@@ -262,7 +263,7 @@ export const refreshFlow = async (
   // Lazily required to keep the providerFlow module decoupled from the
   // service layer at definition time.
   const { decryptLinkedAccount, upsertLinkedAccount } = await import('../../services/linkedAccounts');
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
 
   const decrypted = decryptLinkedAccount(userId, spec.provider);
   if (!decrypted) return { kind: 'no_link' };

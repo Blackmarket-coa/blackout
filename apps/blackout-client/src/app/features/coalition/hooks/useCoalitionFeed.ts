@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CoalitionFeedItem, CoalitionRankingModel } from '@blackout/core';
 import {
+    fetchCoalitionEvents,
     fetchCoalitionFeed,
     fetchCoalitionTasks,
+    fetchKits,
     fetchMutualAid,
+    fetchMyRingInvites,
+    fetchRings,
     fetchSellerLocations,
     fetchSpatialFeed,
     type CoalitionFeedResponse,
     type CoalitionScopeQuery,
+    type EventsResponse,
     type MutualAidResponse,
     type NearbyQuery,
+    type RingView,
     type SellerLocationsResponse,
     type SpatialFeedResponse,
     type TasksResponse,
@@ -94,4 +100,20 @@ export function useSellerLocations(nearby?: NearbyQuery) {
 
 export function useCoalitionTasks(scope: CoalitionScopeQuery) {
     return useAsync<TasksResponse>(() => fetchCoalitionTasks(scope), [scope.denId]);
+}
+
+export function useCoalitionEvents(scope: CoalitionScopeQuery) {
+    return useAsync<EventsResponse>(() => fetchCoalitionEvents(scope), [scope.canopyId, scope.denId]);
+}
+
+export function useCoalitionRings(memberId?: string) {
+    return useAsync<{ rings: RingView[] }>(() => fetchRings(memberId), [memberId]);
+}
+
+export function useCoalitionKits() {
+    return useAsync(() => fetchKits(), []);
+}
+
+export function useMyRingInvites() {
+    return useAsync(() => fetchMyRingInvites(), []);
 }

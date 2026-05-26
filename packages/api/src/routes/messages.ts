@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { encodeStego, encryptE2E, formatFederatedMessage, signMessage } from '@blackout/core';
 import { db } from '../db/store';
+import type { VoteRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { routeOutboundMatrixMessage } from '../services/outboundMessageRouter';
 import { readJsonBody } from '../middleware/validate';
@@ -12,7 +13,7 @@ const messages = new Hono();
 const sendMessageSchema = z.object({
   content: z.string().min(1),
   userId: z.string().min(1),
-  stegoTier: z.number().int().min(1).max(3).optional(),
+  stegoTier: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   sign: z.boolean().optional(),
   matrixRoomId: z.string().optional(),
   governance: z.looseObject({ type: z.string() }).optional(),
@@ -53,7 +54,8 @@ messages.post('/:channelId', async (c) => {
     channelId,
     userId,
     content: transformedContent,
-    governance: governance?.type === 'poll' ? governance : undefined,
+    governance:
+      governance?.type === 'poll' ? (governance as { type: 'poll'; data: VoteRecord }) : undefined,
     contentStegoTier: stegoTier,
     signature: sign ? signMessage(content, userId) : undefined,
     isEncrypted: stegoTier > 1,

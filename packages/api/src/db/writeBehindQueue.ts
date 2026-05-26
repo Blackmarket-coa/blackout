@@ -9,7 +9,8 @@
 
 import { log } from '../telemetry/logger';
 import type { PgPool } from './migrate';
-import { resyncMap, upsertRecord, type TablePlan } from './pgWriter';
+import type { StoreChangeTransport } from './pgNotify';
+import { resyncMap, snakeToCamel, upsertRecord, type TablePlan } from './pgWriter';
 
 type WriteOp =
   | { kind: 'upsert'; mapName: string; record: Record<string, unknown> }
@@ -25,6 +26,9 @@ export class WriteBehindQueue {
     private readonly pool: PgPool,
     private readonly plans: Map<string, TablePlan>,
     private readonly getMap: MapAccessor,
+    /** Cross-replica change publisher + this instance's id. Omit for single-instance. */
+    private readonly transport?: StoreChangeTransport,
+    private readonly instanceId = '',
   ) {}
 
   /** Approximate number of ops not yet flushed (diagnostics / backpressure). */
@@ -65,6 +69,17 @@ export class WriteBehindQueue {
           client.release?.();
         }
       });
+      // Tell peer replicas to refresh their mirror for this change.
+      if (this.transport) {
+        if (op.kind === 'upsert') {
+          const kv = plan.descriptor.conflictColumns.map((col) =>
+            String(op.record[snakeToCamel(col)]),
+          );
+          this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'u', kv });
+        } else {
+          this.transport.publish({ src: this.instanceId, m: op.mapName, op: 'r' });
+        }
+      }
     } catch (err) {
       log.error('db_write_behind_failed', {
         map: op.mapName,

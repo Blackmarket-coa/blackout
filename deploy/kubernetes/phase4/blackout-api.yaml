@@ -46,6 +46,12 @@ spec:
               value: production
             - name: PORT
               value: "3000"
+            # Write-through Postgres store. Safe at >1 replica: pg_notify keeps
+            # each replica's in-memory mirror coherent via LISTEN/NOTIFY.
+            - name: BLACKOUT_DB_MODE
+              value: "postgres"
+            - name: BLACKOUT_DB_PG_NOTIFY
+              value: "1"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef: { name: blackout-api, key: DATABASE_URL }
@@ -62,6 +68,15 @@ spec:
               value: "true"
             - name: AUTH_RATE_LIMIT_MAX
               value: "10"
+          # In postgres mode the pod migrates + hydrates the in-memory mirror
+          # before serving /health; give startup headroom (~150s) before
+          # liveness/readiness engage so it isn't killed mid-hydrate.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health

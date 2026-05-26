@@ -45,7 +45,7 @@ const questCreateSchema = z.object({
     rewardCents: z.number().int().nonnegative(),
     startsAt: z.string().optional().nullable(),
     endsAt: z.string().optional().nullable(),
-    criteria: z.record(z.unknown()).optional(),
+    criteria: z.record(z.string(), z.unknown()).optional(),
 });
 
 function createGrowthRouter() {

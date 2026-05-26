@@ -146,7 +146,7 @@ function createDiscoveryRouter() {
         tag: c.req.query('tag'),
         language: c.req.query('language'),
         paid: (c.req.query('paid') as 'paid' | 'free' | 'all' | undefined) ?? 'all',
-        activity: (c.req.query('activity') as 'active' | 'quiet' | 'all' | undefined) ?? 'all',
+        activity: ((a) => (a === 'active' || a === 'quiet' ? a : undefined))(c.req.query('activity')),
         sort: (c.req.query('sort') as 'relevance' | 'activity' | 'name' | undefined) ?? 'relevance',
         entityType: (c.req.query('entityType') as 'creator' | 'canopy' | 'all' | undefined) ?? 'all',
         region: c.req.query('region'),

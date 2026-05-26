@@ -1,21 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import {
     aggregateReputation,
     type ReputationEventType,
     type ReputationProfile,
     type ReputationSubject,
 } from '@blackout/core';
-
-interface StoredReputationEvent {
-    userId: string;
-    type: ReputationEventType;
-    subject?: ReputationSubject;
-    points?: number;
-    createdAt: string;
-}
-
-const events: StoredReputationEvent[] = [];
-/** Dedupe keys keep idempotent awards (e.g. one endorsement per voter+argument). */
-const seenDedupeKeys = new Set<string>();
+import { db } from '../db/store';
 
 export interface RecordReputationEventInput {
     userId: string;
@@ -26,28 +16,30 @@ export interface RecordReputationEventInput {
     dedupeKey?: string;
 }
 
-/** Returns true if the event was recorded, false if deduped away. */
+/**
+ * Returns true if the event was recorded, false if deduped away. Events persist
+ * in the shared store, so per-subject reputation — and the dedupe set, derived
+ * from the stored events' dedupe keys — survive a restart.
+ */
 export function recordReputationEvent(input: RecordReputationEventInput): boolean {
-    if (input.dedupeKey) {
-        if (seenDedupeKeys.has(input.dedupeKey)) return false;
-        seenDedupeKeys.add(input.dedupeKey);
-    }
-    events.push({
+    if (input.dedupeKey && db.reputationDedupeKeyExists(input.dedupeKey)) return false;
+    db.addReputationEvent({
+        id: randomUUID(),
         userId: input.userId,
         type: input.type,
         subject: input.subject,
         points: input.points,
+        dedupeKey: input.dedupeKey,
         createdAt: new Date().toISOString(),
     });
     return true;
 }
 
 export function getUserReputation(userId: string): ReputationProfile {
-    return aggregateReputation(events.filter((event) => event.userId === userId));
+    return aggregateReputation(db.listReputationEvents().filter((event) => event.userId === userId));
 }
 
 /** Test hook: clear all recorded reputation. */
 export function resetReputationStore(): void {
-    events.length = 0;
-    seenDedupeKeys.clear();
+    db.resetReputationEvents();
 }

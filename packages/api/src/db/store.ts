@@ -22,9 +22,6 @@ import type {
   VoiceRoomParticipantRecord,
   VoteEntryRecord,
   VoteRecord,
-  ForumPostRecord,
-  DeadDropRecord,
-  ModerationActionRecord,
   CreatorStreamAuthRecord,
   StreamRecord,
   StreamSessionRecord,
@@ -59,6 +56,16 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  CoalitionEventRecord,
+  EventRsvpRecord,
+  VolunteerSlotRecord,
+  VolunteerSignupRecord,
+  RideOfferRecord,
+  RideClaimRecord,
+  CoalitionRingRecord,
+  RingMembershipRecord,
+  RingInvitationRecord,
+  CoalitionKitApplicationRecord,
   PluginInstallationRecord,
   PluginDenRecord,
   CoalitionKitManifestApplicationRecord,
@@ -69,13 +76,16 @@ import type {
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
+  ReputationEventRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
-import { hydrateMap, introspectColumns, type TablePlan } from './pgWriter';
+import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
 import { WriteBehindQueue } from './writeBehindQueue';
+import { PgNotifyTransport, type StoreChangePayload, type StoreChangeTransport } from './pgNotify';
 import type { PgPool } from './migrate';
 import { log } from '../telemetry/logger';
+import { randomUUID } from 'node:crypto';
 
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
@@ -133,6 +143,16 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  coalitionEvents: CoalitionEventRecord[];
+  eventRsvps: EventRsvpRecord[];
+  eventVolunteerSlots: VolunteerSlotRecord[];
+  eventVolunteerSignups: VolunteerSignupRecord[];
+  eventRideOffers: RideOfferRecord[];
+  eventRideClaims: RideClaimRecord[];
+  coalitionRings: CoalitionRingRecord[];
+  ringMemberships: RingMembershipRecord[];
+  ringInvitations: RingInvitationRecord[];
+  coalitionKitApplications: CoalitionKitApplicationRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
   coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -143,6 +163,7 @@ type PersistedState = {
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
   coliseumLiveSessions: ColiseumLiveSessionRecord[];
+  reputationEvents: ReputationEventRecord[];
 };
 
 class InMemoryDb {
@@ -219,6 +240,26 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Coalition events (gatherings), keyed by event id. */
+  coalitionEvents = new Map<string, CoalitionEventRecord>();
+  /** Event RSVPs, keyed by `${eventId}::${userId}` (one per attendee per event). */
+  eventRsvps = new Map<string, EventRsvpRecord>();
+  /** Volunteer slots, keyed by slot id. */
+  eventVolunteerSlots = new Map<string, VolunteerSlotRecord>();
+  /** Volunteer signups, keyed by `${slotId}::${userId}`. */
+  eventVolunteerSignups = new Map<string, VolunteerSignupRecord>();
+  /** Ride offers, keyed by offer id. */
+  eventRideOffers = new Map<string, RideOfferRecord>();
+  /** Ride seat claims, keyed by `${offerId}::${riderId}`. */
+  eventRideClaims = new Map<string, RideClaimRecord>();
+  /** Coalition rings (circles/crews/guilds), keyed by ring id. */
+  coalitionRings = new Map<string, CoalitionRingRecord>();
+  /** Ring memberships, keyed by `${ringId}::${userId}`. */
+  ringMemberships = new Map<string, RingMembershipRecord>();
+  /** Ring invitations, keyed by `${ringId}::${inviteeId}`. */
+  ringInvitations = new Map<string, RingInvitationRecord>();
+  /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
+  coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -239,6 +280,8 @@ class InMemoryDb {
   coliseumVotes = new Map<string, ColiseumVoteRecord>();
   /** Coliseum live debate sessions, keyed by session id. */
   coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
+  /** Subject-scoped reputation awards, keyed by event id. */
+  reputationEvents = new Map<string, ReputationEventRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -277,6 +320,20 @@ class InMemoryDb {
 
   getUserById(id: string): UserRecord | undefined {
     return this.users.get(id);
+  }
+
+  /** Case-insensitive username substring search; returns id + username only. */
+  searchUsers(query: string, limit = 10): Array<{ id: string; username: string }> {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: Array<{ id: string; username: string }> = [];
+    for (const user of this.users.values()) {
+      if (user.username.toLowerCase().includes(q)) {
+        out.push({ id: user.id, username: user.username });
+        if (out.length >= limit) break;
+      }
+    }
+    return out;
   }
 
   updateUserPassword(id: string, passwordHash: string): UserRecord | undefined {
@@ -1512,6 +1569,22 @@ class InMemoryDb {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const existing = this.clips.get(clipId);
+    if (!existing) return undefined;
+    const record: ClipRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.clips.set(clipId, record);
+    return record;
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -1956,6 +2029,229 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition events + RSVPs ---
+
+  private static eventRsvpKey(eventId: string, userId: string): string {
+    return `${eventId}::${userId}`;
+  }
+
+  listCoalitionEvents(): CoalitionEventRecord[] {
+    return [...this.coalitionEvents.values()];
+  }
+
+  getCoalitionEvent(id: string): CoalitionEventRecord | undefined {
+    return this.coalitionEvents.get(id);
+  }
+
+  upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const existing = this.coalitionEvents.get(input.id);
+    const now = nowIso();
+    const record: CoalitionEventRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionEvents.set(record.id, record);
+    return record;
+  }
+
+  listEventRsvps(eventId: string): EventRsvpRecord[] {
+    return [...this.eventRsvps.values()].filter((rsvp) => rsvp.eventId === eventId);
+  }
+
+  upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const key = InMemoryDb.eventRsvpKey(input.eventId, input.userId);
+    const existing = this.eventRsvps.get(key);
+    const now = nowIso();
+    const record: EventRsvpRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRsvps.set(key, record);
+    return record;
+  }
+
+  // --- event volunteer slots + ride coordination ---
+
+  private static signupKey(slotId: string, userId: string): string {
+    return `${slotId}::${userId}`;
+  }
+  private static rideClaimKey(offerId: string, riderId: string): string {
+    return `${offerId}::${riderId}`;
+  }
+
+  listVolunteerSlots(eventId: string): VolunteerSlotRecord[] {
+    return [...this.eventVolunteerSlots.values()].filter((slot) => slot.eventId === eventId);
+  }
+
+  getVolunteerSlot(id: string): VolunteerSlotRecord | undefined {
+    return this.eventVolunteerSlots.get(id);
+  }
+
+  upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const existing = this.eventVolunteerSlots.get(input.id);
+    const now = nowIso();
+    const record: VolunteerSlotRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSlots.set(record.id, record);
+    return record;
+  }
+
+  listVolunteerSignups(eventId: string): VolunteerSignupRecord[] {
+    return [...this.eventVolunteerSignups.values()].filter((row) => row.eventId === eventId);
+  }
+
+  upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const key = InMemoryDb.signupKey(input.slotId, input.userId);
+    const existing = this.eventVolunteerSignups.get(key);
+    const now = nowIso();
+    const record: VolunteerSignupRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSignups.set(key, record);
+    return record;
+  }
+
+  listRideOffers(eventId: string): RideOfferRecord[] {
+    return [...this.eventRideOffers.values()].filter((offer) => offer.eventId === eventId);
+  }
+
+  getRideOffer(id: string): RideOfferRecord | undefined {
+    return this.eventRideOffers.get(id);
+  }
+
+  upsertRideOffer(input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>): RideOfferRecord {
+    const existing = this.eventRideOffers.get(input.id);
+    const now = nowIso();
+    const record: RideOfferRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideOffers.set(record.id, record);
+    return record;
+  }
+
+  listRideClaims(eventId: string): RideClaimRecord[] {
+    return [...this.eventRideClaims.values()].filter((claim) => claim.eventId === eventId);
+  }
+
+  upsertRideClaim(input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>): RideClaimRecord {
+    const key = InMemoryDb.rideClaimKey(input.offerId, input.riderId);
+    const existing = this.eventRideClaims.get(key);
+    const now = nowIso();
+    const record: RideClaimRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideClaims.set(key, record);
+    return record;
+  }
+
+  // --- coalition rings ---
+
+  private static ringMembershipKey(ringId: string, userId: string): string {
+    return `${ringId}::${userId}`;
+  }
+
+  listCoalitionRings(): CoalitionRingRecord[] {
+    return [...this.coalitionRings.values()];
+  }
+
+  getCoalitionRing(id: string): CoalitionRingRecord | undefined {
+    return this.coalitionRings.get(id);
+  }
+
+  upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const existing = this.coalitionRings.get(input.id);
+    const now = nowIso();
+    const record: CoalitionRingRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionRings.set(record.id, record);
+    return record;
+  }
+
+  listRingMemberships(ringId?: string): RingMembershipRecord[] {
+    const all = [...this.ringMemberships.values()];
+    return ringId ? all.filter((m) => m.ringId === ringId) : all;
+  }
+
+  upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.userId);
+    const existing = this.ringMemberships.get(key);
+    const now = nowIso();
+    const record: RingMembershipRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringMemberships.set(key, record);
+    return record;
+  }
+
+  listRingInvitations(filter: { ringId?: string; inviteeId?: string } = {}): RingInvitationRecord[] {
+    return [...this.ringInvitations.values()].filter((row) => {
+      if (filter.ringId && row.ringId !== filter.ringId) return false;
+      if (filter.inviteeId && row.inviteeId !== filter.inviteeId) return false;
+      return true;
+    });
+  }
+
+  upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.inviteeId);
+    const existing = this.ringInvitations.get(key);
+    const now = nowIso();
+    const record: RingInvitationRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringInvitations.set(key, record);
+    return record;
+  }
+
+  // --- coalition kit applications ---
+
+  listCoalitionKitApplications(filter: { scopeType?: string; scopeId?: string } = {}): CoalitionKitApplicationRecord[] {
+    return [...this.coalitionKitApplications.values()].filter((row) => {
+      if (filter.scopeType && row.scopeType !== filter.scopeType) return false;
+      if (filter.scopeId && row.scopeId !== filter.scopeId) return false;
+      return true;
+    });
+  }
+
+  recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const record: CoalitionKitApplicationRecord = { ...input, createdAt: nowIso() };
+    this.coalitionKitApplications.set(record.id, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2203,19 +2499,52 @@ class InMemoryDb {
     this.coliseumLiveSessions.set(record.id, record);
     return record;
   }
+
+  // --- Reputation ---
+
+  listReputationEvents(): ReputationEventRecord[] {
+    return [...this.reputationEvents.values()];
+  }
+
+  /** True if an award with this dedupe key was already recorded. */
+  reputationDedupeKeyExists(dedupeKey: string): boolean {
+    for (const event of this.reputationEvents.values()) {
+      if (event.dedupeKey === dedupeKey) return true;
+    }
+    return false;
+  }
+
+  addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+    this.reputationEvents.set(record.id, record);
+    return record;
+  }
+
+  resetReputationEvents(): void {
+    this.reputationEvents.clear();
+  }
 }
 
 export class FileBackedDb extends InMemoryDb {
+  // Persistence is suppressed until construction finishes. During `super()` the
+  // InMemoryDb constructor seeds a demo user, whose persisting override would
+  // otherwise write an empty snapshot over an existing file BEFORE hydrate()
+  // could load it — silently wiping real data on every restart. Reads as
+  // `undefined` (falsy) during `super()` since instance fields initialize after
+  // the base constructor returns, so the guard is active throughout seeding.
+  private ready = false;
+
   constructor() {
     super();
+    const fileExisted = existsSync(DB_FILE_PATH);
     this.hydrate();
+    this.ready = true;
+    // First boot only: write the seeded snapshot. On restart the file already
+    // holds real data loaded by hydrate(), so we leave it untouched.
+    if (!fileExisted) this.persist();
   }
 
   private hydrate() {
-    if (!existsSync(DB_FILE_PATH)) {
-      this.persist();
-      return;
-    }
+    if (!existsSync(DB_FILE_PATH)) return;
 
     const parsed = JSON.parse(readFileSync(DB_FILE_PATH, 'utf8')) as PersistedState;
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
@@ -2335,6 +2664,48 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coalitionSpatialItems.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coalitionEvents) {
+      this.coalitionEvents = new Map(parsed.coalitionEvents.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRsvps) {
+      this.eventRsvps = new Map(
+        parsed.eventRsvps.map((row) => [`${row.eventId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.eventVolunteerSlots) {
+      this.eventVolunteerSlots = new Map(parsed.eventVolunteerSlots.map((row) => [row.id, row]));
+    }
+    if (parsed.eventVolunteerSignups) {
+      this.eventVolunteerSignups = new Map(
+        parsed.eventVolunteerSignups.map((row) => [`${row.slotId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.eventRideOffers) {
+      this.eventRideOffers = new Map(parsed.eventRideOffers.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRideClaims) {
+      this.eventRideClaims = new Map(
+        parsed.eventRideClaims.map((row) => [`${row.offerId}::${row.riderId}`, row]),
+      );
+    }
+    if (parsed.coalitionRings) {
+      this.coalitionRings = new Map(parsed.coalitionRings.map((row) => [row.id, row]));
+    }
+    if (parsed.ringMemberships) {
+      this.ringMemberships = new Map(
+        parsed.ringMemberships.map((row) => [`${row.ringId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.ringInvitations) {
+      this.ringInvitations = new Map(
+        parsed.ringInvitations.map((row) => [`${row.ringId}::${row.inviteeId}`, row]),
+      );
+    }
+    if (parsed.coalitionKitApplications) {
+      this.coalitionKitApplications = new Map(
+        parsed.coalitionKitApplications.map((row) => [row.id, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2365,6 +2736,9 @@ export class FileBackedDb extends InMemoryDb {
       this.coliseumLiveSessions = new Map(
         parsed.coliseumLiveSessions.map((row) => [row.id, row]),
       );
+    }
+    if (parsed.reputationEvents) {
+      this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
     }
   }
 
@@ -2421,6 +2795,16 @@ export class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      coalitionEvents: [...this.coalitionEvents.values()],
+      eventRsvps: [...this.eventRsvps.values()],
+      eventVolunteerSlots: [...this.eventVolunteerSlots.values()],
+      eventVolunteerSignups: [...this.eventVolunteerSignups.values()],
+      eventRideOffers: [...this.eventRideOffers.values()],
+      eventRideClaims: [...this.eventRideClaims.values()],
+      coalitionRings: [...this.coalitionRings.values()],
+      ringMemberships: [...this.ringMemberships.values()],
+      ringInvitations: [...this.ringInvitations.values()],
+      coalitionKitApplications: [...this.coalitionKitApplications.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
       coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
@@ -2431,10 +2815,14 @@ export class FileBackedDb extends InMemoryDb {
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
       coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
+      reputationEvents: [...this.reputationEvents.values()],
     };
   }
 
   private persist() {
+    // Suppressed during construction (see `ready`) so demo-seed writes can't
+    // clobber an existing file before hydrate() loads it.
+    if (!this.ready) return;
     mkdirSync(dirname(DB_FILE_PATH), { recursive: true });
     writeFileSync(DB_FILE_PATH, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
   }
@@ -2710,6 +3098,20 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.upsertClip(input);
     this.persist();
     return created;
+  }
+
+  override updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const updated = super.updateClip(clipId, patch);
+    if (updated) this.persist();
+    return updated;
   }
 
   override deleteClip(clipId: string): boolean {
@@ -3211,6 +3613,86 @@ export class FileBackedDb extends InMemoryDb {
     return created;
   }
 
+  override upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const created = super.upsertCoalitionEvent(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const created = super.upsertEventRsvp(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const created = super.upsertVolunteerSlot(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const created = super.upsertVolunteerSignup(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideOffer(
+    input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>,
+  ): RideOfferRecord {
+    const created = super.upsertRideOffer(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideClaim(
+    input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>,
+  ): RideClaimRecord {
+    const created = super.upsertRideClaim(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const created = super.upsertCoalitionRing(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const created = super.upsertRingMembership(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const created = super.upsertRingInvitation(input);
+    this.persist();
+    return created;
+  }
+
+  override recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const created = super.recordCoalitionKitApplication(input);
+    this.persist();
+    return created;
+  }
+
   override createPluginInstallation(
     input: Omit<PluginInstallationRecord, 'installedAt' | 'updatedAt'>,
   ): PluginInstallationRecord {
@@ -3309,6 +3791,17 @@ export class FileBackedDb extends InMemoryDb {
     this.persist();
     return saved;
   }
+
+  override addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+    const saved = super.addReputationEvent(record);
+    this.persist();
+    return saved;
+  }
+
+  override resetReputationEvents(): void {
+    super.resetReputationEvents();
+    this.persist();
+  }
 }
 
 /**
@@ -3323,6 +3816,10 @@ type MutableMap = Map<string, Record<string, unknown>>;
 export class PostgresBackedDb extends InMemoryDb {
   private readonly plans = new Map<string, TablePlan>();
   private queue: WriteBehindQueue | null = null;
+  private pool: PgPool | null = null;
+  private transport: StoreChangeTransport | null = null;
+  /** Identifies this replica so it can ignore its own change notifications. */
+  private readonly instanceId = randomUUID();
 
   constructor() {
     super();
@@ -3357,8 +3854,13 @@ export class PostgresBackedDb extends InMemoryDb {
     }
   }
 
-  /** Hydrate every mapped table from Postgres, then arm the write-behind queue. */
-  async init(pool: PgPool): Promise<void> {
+  /**
+   * Hydrate every mapped table from Postgres, arm the write-behind queue, and
+   * (when a transport is supplied) subscribe to peer change notifications so
+   * this replica's mirror stays coherent with writes on other replicas.
+   */
+  async init(pool: PgPool, transport?: StoreChangeTransport): Promise<void> {
+    this.pool = pool;
     const client = await pool.connect();
     try {
       for (const descriptor of TABLE_DESCRIPTORS) {
@@ -3378,12 +3880,106 @@ export class PostgresBackedDb extends InMemoryDb {
     } finally {
       client.release?.();
     }
-    this.queue = new WriteBehindQueue(pool, this.plans, (name) => this.mapByName(name));
+    this.transport = transport ?? null;
+    this.queue = new WriteBehindQueue(
+      pool,
+      this.plans,
+      (name) => this.mapByName(name),
+      transport ?? undefined,
+      this.instanceId,
+    );
+    if (transport) {
+      await transport.subscribe((payload) => this.applyPeerChange(payload));
+      // After a dropped LISTEN connection we may have missed notifications;
+      // re-hydrate everything to recover.
+      transport.onReconnect(() => {
+        void this.rehydrateAll();
+      });
+    }
   }
 
-  /** Flush queued writes — call on graceful shutdown. */
+  /** Re-load every table from Postgres into the mirror (used on listener reconnect). */
+  private async rehydrateAll(): Promise<void> {
+    if (!this.pool) return;
+    const client = await this.pool.connect();
+    try {
+      for (const [mapName, plan] of this.plans) {
+        const fresh: MutableMap = new Map();
+        const res = await client.query<Record<string, unknown>>(
+          `SELECT * FROM ${plan.descriptor.tableName}`,
+        );
+        for (const row of res.rows) {
+          const record = rowToRecord(plan, row);
+          fresh.set(plan.descriptor.keyOf(record), record);
+        }
+        (this as unknown as Record<string, MutableMap>)[mapName] = fresh;
+      }
+    } catch (err) {
+      log.warn('pg_store_rehydrate_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      client.release?.();
+    }
+  }
+
+  /**
+   * Apply a peer replica's change to the local mirror. 'u' refreshes the single
+   * changed row; 'r' reloads the whole table. Self-notifications are ignored
+   * (the originating mutator already updated this mirror synchronously).
+   */
+  private applyPeerChange(payload: StoreChangePayload): void {
+    if (payload.src === this.instanceId) return;
+    const plan = this.plans.get(payload.m);
+    if (!plan || !this.pool) return;
+    const pool = this.pool;
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        if (payload.op === 'u' && payload.kv) {
+          const where = plan.descriptor.conflictColumns
+            .map((c, i) => `${c} = $${i + 1}`)
+            .join(' AND ');
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName} WHERE ${where}`,
+            payload.kv,
+          );
+          if (res.rows.length > 0) {
+            const record = rowToRecord(plan, res.rows[0]);
+            this.mapByName(payload.m).set(plan.descriptor.keyOf(record), record);
+          }
+        } else if (payload.op === 'r') {
+          const fresh: MutableMap = new Map();
+          const res = await client.query<Record<string, unknown>>(
+            `SELECT * FROM ${plan.descriptor.tableName}`,
+          );
+          for (const row of res.rows) {
+            const record = rowToRecord(plan, row);
+            fresh.set(plan.descriptor.keyOf(record), record);
+          }
+          (this as unknown as Record<string, MutableMap>)[payload.m] = fresh;
+        }
+      } catch (err) {
+        log.warn('pg_store_peer_refresh_failed', {
+          map: payload.m,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        client.release?.();
+      }
+    })();
+  }
+
+  /** Flush queued writes. Does NOT close the change subscription — safe to call
+   * repeatedly (e.g. to await durability) without unsubscribing from peers. */
   async drain(): Promise<void> {
     await this.queue?.drain();
+  }
+
+  /** Flush queued writes and tear down the change subscription — graceful shutdown only. */
+  async shutdown(): Promise<void> {
+    await this.drain();
+    await this.transport?.close();
   }
 }
 
@@ -3394,14 +3990,23 @@ export const db =
       ? new PostgresBackedDb()
       : new FileBackedDb();
 
-/** Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres). */
+/**
+ * Hydrate + arm the Postgres store (no-op unless BLACKOUT_DB_MODE=postgres).
+ * Cross-replica cache invalidation via Postgres LISTEN/NOTIFY is on by default;
+ * set BLACKOUT_DB_PG_NOTIFY=0 to disable (e.g. a known single-instance deploy).
+ */
 export async function initRuntimeStore(pool: PgPool): Promise<void> {
-  if (db instanceof PostgresBackedDb) await db.init(pool);
+  if (!(db instanceof PostgresBackedDb)) return;
+  const transport =
+    process.env.BLACKOUT_DB_PG_NOTIFY === '0'
+      ? undefined
+      : new PgNotifyTransport(pool as unknown as ConstructorParameters<typeof PgNotifyTransport>[0]);
+  await db.init(pool, transport);
 }
 
-/** Drain pending Postgres write-behind ops on graceful shutdown. */
+/** Flush write-behind ops + close the change subscription on graceful shutdown. */
 export async function drainRuntimeStore(): Promise<void> {
-  if (db instanceof PostgresBackedDb) await db.drain();
+  if (db instanceof PostgresBackedDb) await db.shutdown();
 }
 
 /** Runtime store mode, for boot wiring. */

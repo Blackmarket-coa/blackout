@@ -1,9 +1,23 @@
-import type { AidPost, SpatialFeedItem } from '@blackout/core';
+import type {
+  AidPost,
+  CoalitionEvent,
+  CoalitionRing,
+  EventRsvp,
+  RideClaim,
+  RideOffer,
+  RingInvitation,
+  RingMembership,
+  SpatialFeedItem,
+  VolunteerSignup,
+  VolunteerSlot,
+} from '@blackout/core';
 import type {
   ColiseumArgument,
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
+  ReputationEventType,
+  ReputationSubject,
 } from '@blackout/core';
 
 export type UUID = string;
@@ -930,6 +944,70 @@ export interface CoalitionAidPostRecord extends AidPost {
   createdAt: string;
 }
 
+/** A scheduled Coalition event (gathering) surfaced on the map's 'events' layer. */
+export interface CoalitionEventRecord extends CoalitionEvent {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** An attendee RSVP for a Coalition event. Keyed in-memory by `${eventId}::${userId}`. */
+export interface EventRsvpRecord extends EventRsvp {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A volunteer role on an event. */
+export interface VolunteerSlotRecord extends VolunteerSlot {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A volunteer signup. Keyed in-memory by `${slotId}::${userId}`. */
+export interface VolunteerSignupRecord extends VolunteerSignup {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ride offer attached to an event. */
+export interface RideOfferRecord extends RideOffer {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A claimed seat on a ride offer. Keyed in-memory by `${offerId}::${riderId}`. */
+export interface RideClaimRecord extends RideClaim {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A Coalition Ring (circle/crew/guild). */
+export interface CoalitionRingRecord extends CoalitionRing {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ring membership. Keyed in-memory by `${ringId}::${userId}`. */
+export interface RingMembershipRecord extends RingMembership {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ring invitation. Keyed in-memory by `${ringId}::${inviteeId}`. */
+export interface RingInvitationRecord extends RingInvitation {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A record that a Coalition Kit was applied to a den/coalition scope. */
+export interface CoalitionKitApplicationRecord {
+  id: string;
+  kitId: string;
+  scopeType: string;
+  scopeId: string;
+  appliedByUserId: string;
+  createdAt: string;
+}
+
 /**
  * Coliseum debate records. These persist the discourse layer (topics,
  * arguments, votes, live sessions) so debate history survives a restart. The
@@ -941,3 +1019,18 @@ export type ColiseumTopicRecord = ColiseumTopic;
 export type ColiseumArgumentRecord = ColiseumArgument;
 export type ColiseumVoteRecord = ColiseumVote;
 export type ColiseumLiveSessionRecord = ColiseumLiveSession;
+
+/**
+ * A subject-scoped reputation award. Persisted so per-subject standing survives
+ * a restart; `dedupeKey` (when present) makes an award idempotent and the dedupe
+ * survives reloads too.
+ */
+export interface ReputationEventRecord {
+  id: UUID;
+  userId: UUID;
+  type: ReputationEventType;
+  subject?: ReputationSubject;
+  points?: number;
+  dedupeKey?: string;
+  createdAt: string;
+}

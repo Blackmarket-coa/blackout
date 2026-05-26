@@ -19,8 +19,11 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
     chat: 'Chat',
     video: 'For You',
     map: 'Local',
+    events: 'Events',
+    rings: 'Rings',
     shop: 'Shop',
     tasks: 'Tasks',
+    kits: 'Kits',
     documents: 'Documents',
     ai: 'AI',
 };

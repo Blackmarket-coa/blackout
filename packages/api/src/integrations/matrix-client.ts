@@ -693,7 +693,9 @@ export const matrixClient = {
 
   async sendEvent(
     roomId: string,
-    content: Record<string, unknown>,
+    // Any JSON-serializable event content; it is only stringified below, so
+    // typed message objects (e.g. the chat-bridge forwarders) are accepted.
+    content: object,
     options: { eventType?: string; txnId?: string } = {},
   ) {
     const hs = homeserver();

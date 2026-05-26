@@ -9,6 +9,12 @@ export interface RateLimitOptions {
   maxRequests: number;
   /** Override store for tests. If omitted, the default shared store is used. */
   store?: RateLimitStore;
+  /**
+   * Optional per-request identity (e.g. the authenticated user id) to key the
+   * limit on instead of the client IP. Falls back to the IP key when it returns
+   * a falsy value, so anonymous traffic is still bucketed by address.
+   */
+  identify?: (c: Context) => string | null | undefined;
 }
 
 /**
@@ -102,7 +108,7 @@ const clientKey = (c: Context, bucket: string): string => {
 };
 
 export function createRateLimit(options: RateLimitOptions) {
-  const { bucket, windowMs, maxRequests, store: providedStore } = options;
+  const { bucket, windowMs, maxRequests, store: providedStore, identify } = options;
   let resolvedStore: RateLimitStore | null = providedStore ?? null;
 
   return async function rateLimitMiddleware(c: Context, next: Next) {
@@ -110,7 +116,8 @@ export function createRateLimit(options: RateLimitOptions) {
       resolvedStore = providedStore ?? (await getDefaultRateLimitStore());
     }
     const store = resolvedStore;
-    const key = clientKey(c, bucket);
+    const identity = identify?.(c);
+    const key = identity ? `${bucket}:${identity}` : clientKey(c, bucket);
 
     let count: number;
     try {
@@ -140,4 +147,14 @@ export const authRateLimit = createRateLimit({
   bucket: 'auth',
   windowMs: 60_000,
   maxRequests: Number.isFinite(authMax) && authMax > 0 ? authMax : 10,
+});
+
+// Mutating clip endpoints (create/update/delete). Reads stay on the global
+// limiter; writes get a tighter per-IP bucket so a single client can't flood
+// the clip store. Override with CLIP_WRITE_RATE_LIMIT_MAX.
+const clipWriteMax = Number.parseInt(process.env.CLIP_WRITE_RATE_LIMIT_MAX ?? '', 10);
+export const clipWriteRateLimit = createRateLimit({
+  bucket: 'clip-write',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(clipWriteMax) && clipWriteMax > 0 ? clipWriteMax : 30,
 });

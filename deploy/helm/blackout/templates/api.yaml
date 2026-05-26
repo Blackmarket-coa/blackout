@@ -49,6 +49,10 @@ spec:
               value: {{ .Values.global.environment }}
             - name: PORT
               value: {{ .Values.api.port | quote }}
+            - name: BLACKOUT_DB_MODE
+              value: {{ .Values.api.store.mode | quote }}
+            - name: BLACKOUT_DB_PG_NOTIFY
+              value: {{ ternary "1" "0" .Values.api.store.pgNotify | quote }}
             - name: AUTH_RATE_LIMIT_MAX
               value: {{ .Values.api.rateLimit.authMax | quote }}
             - name: CORS_ALLOW_CREDENTIALS
@@ -91,6 +95,13 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: blackout-api
             {{- end }}
+          # In postgres mode the pod runs migrations + hydrates the in-memory
+          # mirror before it begins serving /health, so give startup generous
+          # headroom (up to ~150s) before liveness/readiness engage.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet: { path: /health, port: http }
             initialDelaySeconds: 2
