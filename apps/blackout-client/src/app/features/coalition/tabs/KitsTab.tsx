@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import type { CoalitionKit } from '@blackout/core';
+import {
+    COALITION_STATE_EVENT_TYPE,
+    type CoalitionKit,
+    type CoalitionStateEventContent,
+} from '@blackout/core';
 import { useCoalitionKits, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import { applyKit, fetchAppliedKits, type KitApplication } from '../coalitionClient';
+import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 
 export interface KitsTabProps {
     scope: CoalitionScopeQuery;
@@ -39,11 +44,31 @@ const rowStyle: CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', ali
 
 export default function KitsTab({ scope }: KitsTabProps): React.ReactElement {
     const { data, loading, error } = useCoalitionKits();
+    const mx = useMatrixClientOrNull();
     const [applied, setApplied] = useState<KitApplication[]>([]);
     const [busyKit, setBusyKit] = useState<string | null>(null);
     const [message, setMessage] = useState<string | null>(null);
 
     const denId = scope.denId;
+
+    // After applying a kit, write the den's co.bmc.coalition state so the kit's
+    // recommended tabs actually turn on (merging with any existing config).
+    const writeEnabledTabs = useCallback(
+        async (kit: CoalitionKit) => {
+            if (!mx || !denId) return;
+            const existing = mx
+                .getRoom(denId)
+                ?.currentState?.getStateEvents(COALITION_STATE_EVENT_TYPE, '')
+                ?.getContent<CoalitionStateEventContent>();
+            const merged: CoalitionStateEventContent = {
+                ...(existing ?? {}),
+                enabled: true,
+                enabledTabs: kit.enabledTabs,
+            };
+            await mx.sendStateEvent(denId, COALITION_STATE_EVENT_TYPE as never, merged as never, '');
+        },
+        [mx, denId],
+    );
 
     const reloadApplied = useCallback(async () => {
         if (!denId) return;
@@ -66,7 +91,14 @@ export default function KitsTab({ scope }: KitsTabProps): React.ReactElement {
             setMessage(null);
             try {
                 await applyKit(kit.id, { scopeType: 'den', scopeId: denId });
-                setMessage(`Applied "${kit.name}". Enable these tabs: ${kit.enabledTabs.join(', ')}.`);
+                try {
+                    await writeEnabledTabs(kit);
+                    setMessage(`Applied "${kit.name}" and enabled its tabs.`);
+                } catch {
+                    setMessage(
+                        `Applied "${kit.name}". Enable these tabs manually: ${kit.enabledTabs.join(', ')}.`,
+                    );
+                }
                 void reloadApplied();
             } catch (err) {
                 setMessage(err instanceof Error ? err.message : 'Could not apply kit.');
@@ -74,7 +106,7 @@ export default function KitsTab({ scope }: KitsTabProps): React.ReactElement {
                 setBusyKit(null);
             }
         },
-        [denId, reloadApplied],
+        [denId, reloadApplied, writeEnabledTabs],
     );
 
     const kits = data?.kits ?? [];

@@ -1,7 +1,14 @@
-import React, { useCallback, useState, type CSSProperties } from 'react';
+import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { RING_KINDS, RING_VISIBILITY, type RingKind, type RingVisibility } from '@blackout/core';
 import { useCoalitionRings, useMyRingInvites } from '../hooks/useCoalitionFeed';
-import { createRing, inviteToRing, joinRing, respondToRingInvite } from '../coalitionClient';
+import {
+    createRing,
+    inviteToRing,
+    joinRing,
+    respondToRingInvite,
+    searchCoalitionUsers,
+    type UserSearchResult,
+} from '../coalitionClient';
 
 const containerStyle: CSSProperties = {
     display: 'flex',
@@ -42,31 +49,66 @@ const ghostButtonStyle: CSSProperties = { ...buttonStyle, background: 'transpare
 const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 };
 const rowStyle: CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' };
 
-/** Inline invite-by-id control on a ring card (owners/admins only; the API gates it). */
+/** Member-search invite picker on a ring card (owners/admins only; the API gates it). */
 function RingInvite({ ringId }: { ringId: string }): React.ReactElement {
-    const [inviteeId, setInviteeId] = useState('');
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<UserSearchResult[]>([]);
     const [note, setNote] = useState<string | null>(null);
-    const submit = useCallback(async () => {
-        if (!inviteeId.trim()) return;
-        try {
-            await inviteToRing(ringId, inviteeId.trim());
-            setNote('Invited');
-            setInviteeId('');
-        } catch (err) {
-            setNote(err instanceof Error ? err.message : 'Could not invite');
+
+    useEffect(() => {
+        const q = query.trim();
+        if (q.length < 2) {
+            setResults([]);
+            return;
         }
-    }, [ringId, inviteeId]);
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            searchCoalitionUsers(q)
+                .then((res) => {
+                    if (!cancelled) setResults(res.users);
+                })
+                .catch(() => {
+                    if (!cancelled) setResults([]);
+                });
+        }, 200);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [query]);
+
+    const invite = useCallback(
+        async (user: UserSearchResult) => {
+            try {
+                await inviteToRing(ringId, user.id);
+                setNote(`Invited ${user.username}`);
+                setQuery('');
+                setResults([]);
+            } catch (err) {
+                setNote(err instanceof Error ? err.message : 'Could not invite');
+            }
+        },
+        [ringId],
+    );
+
     return (
-        <div style={rowStyle}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <input
-                style={{ ...inputStyle, flex: 1, minWidth: 120 }}
-                placeholder="Invite by user id"
-                value={inviteeId}
-                onChange={(e) => setInviteeId(e.target.value)}
+                style={{ ...inputStyle, minWidth: 120 }}
+                placeholder="Invite a member (search by name)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
             />
-            <button type="button" style={ghostButtonStyle} onClick={submit}>
-                Invite
-            </button>
+            {results.map((user) => (
+                <button
+                    key={user.id}
+                    type="button"
+                    style={{ ...ghostButtonStyle, textAlign: 'left' }}
+                    onClick={() => invite(user)}
+                >
+                    {user.username}
+                </button>
+            ))}
             {note ? <span style={labelStyle}>{note}</span> : null}
         </div>
     );
