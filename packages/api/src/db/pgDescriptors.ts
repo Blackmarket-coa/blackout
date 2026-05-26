@@ -3,7 +3,7 @@
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
 // renamed webhook-audit table, and the nested coalition-aid location) are
-// declared explicitly. The MUTATOR_SPECS table says, for each of the 108
+// declared explicitly. The MUTATOR_SPECS table says, for each of the 123
 // InMemoryDb mutators, whether a write-through is a targeted upsert of the
 // returned record or a (rarer) resync of the affected map(s).
 
@@ -51,6 +51,116 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
   coliseumVotes: {
     keyOf: (r) => `${r.argumentId}::${r.voterId}`,
     conflictColumns: ['argument_id', 'voter_id'],
+  },
+  eventRsvps: {
+    keyOf: (r) => `${r.eventId}::${r.userId}`,
+    conflictColumns: ['event_id', 'user_id'],
+  },
+  eventVolunteerSignups: {
+    keyOf: (r) => `${r.slotId}::${r.userId}`,
+    conflictColumns: ['slot_id', 'user_id'],
+  },
+  eventRideClaims: {
+    keyOf: (r) => `${r.offerId}::${r.riderId}`,
+    conflictColumns: ['offer_id', 'rider_id'],
+  },
+  ringMemberships: {
+    keyOf: (r) => `${r.ringId}::${r.userId}`,
+    conflictColumns: ['ring_id', 'user_id'],
+  },
+  ringInvitations: {
+    keyOf: (r) => `${r.ringId}::${r.inviteeId}`,
+    conflictColumns: ['ring_id', 'invitee_id'],
+  },
+  // coalition_rings flattens the optional nested location into lat/lng/address.
+  coalitionRings: {
+    toRow: (r) => {
+      const loc = (r.location ?? {}) as { latitude?: number; longitude?: number; address?: string };
+      return {
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        kind: r.kind,
+        visibility: r.visibility,
+        owner_id: r.ownerId,
+        latitude: loc.latitude ?? null,
+        longitude: loc.longitude ?? null,
+        address: loc.address ?? null,
+        den_id: r.denId ?? null,
+        created_at: r.createdAt,
+        updated_at: r.updatedAt,
+      };
+    },
+    fromRow: (row) => {
+      const rec: Record<string, unknown> = {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        kind: row.kind,
+        visibility: row.visibility,
+        ownerId: row.owner_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+      if (row.latitude != null && row.longitude != null) {
+        rec.location = {
+          latitude: row.latitude,
+          longitude: row.longitude,
+          ...(row.address != null ? { address: row.address } : {}),
+        };
+      }
+      if (row.den_id != null) rec.denId = row.den_id;
+      return rec;
+    },
+  },
+  // coalition_events flattens the nested location into lat/lng/address columns.
+  coalitionEvents: {
+    toRow: (r) => {
+      const loc = (r.location ?? {}) as { latitude?: number; longitude?: number; address?: string };
+      return {
+        id: r.id,
+        organizer_id: r.organizerId,
+        title: r.title,
+        description: r.description,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        address: loc.address ?? null,
+        starts_at: r.startsAt,
+        ends_at: r.endsAt ?? null,
+        category: r.category,
+        visibility: r.visibility,
+        status: r.status,
+        den_id: r.denId ?? null,
+        capacity: r.capacity ?? null,
+        recurrence: r.recurrence ?? null,
+        created_at: r.createdAt,
+        updated_at: r.updatedAt,
+      };
+    },
+    fromRow: (row) => {
+      const rec: Record<string, unknown> = {
+        id: row.id,
+        organizerId: row.organizer_id,
+        title: row.title,
+        description: row.description,
+        location: {
+          latitude: row.latitude,
+          longitude: row.longitude,
+          ...(row.address != null ? { address: row.address } : {}),
+        },
+        startsAt: row.starts_at,
+        category: row.category,
+        visibility: row.visibility,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+      if (row.ends_at != null) rec.endsAt = row.ends_at;
+      if (row.den_id != null) rec.denId = row.den_id;
+      if (row.capacity != null) rec.capacity = row.capacity;
+      if (row.recurrence != null) rec.recurrence = row.recurrence;
+      return rec;
+    },
   },
   // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address columns.
   coalitionAidPosts: {
@@ -156,6 +266,16 @@ const ALL_MAP_NAMES = [
   'obsWsPasswords',
   'coalitionSpatialItems',
   'coalitionAidPosts',
+  'coalitionEvents',
+  'eventRsvps',
+  'eventVolunteerSlots',
+  'eventVolunteerSignups',
+  'eventRideOffers',
+  'eventRideClaims',
+  'coalitionRings',
+  'ringMemberships',
+  'ringInvitations',
+  'coalitionKitApplications',
   'canopyDirectoryEntries',
   'clips',
   'coliseumTopics',
@@ -186,7 +306,7 @@ const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
 const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
 
 /**
- * Maps each of the 108 InMemoryDb mutators to its write-through. `upsert`
+ * Maps each of the 123 InMemoryDb mutators to its write-through. `upsert`
  * persists the method's returned record; `resync` reconciles a map after a
  * delete / bulk-revoke / consume. The 6 `reset*ForTest` seams are intentionally
  * absent — postgres mode never calls them.
@@ -299,6 +419,16 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   deleteObsWsPassword: resync('obsWsPasswords'),
   upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
   createCoalitionAidPost: upsert('coalitionAidPosts'),
+  upsertCoalitionEvent: upsert('coalitionEvents'),
+  upsertEventRsvp: upsert('eventRsvps'),
+  upsertVolunteerSlot: upsert('eventVolunteerSlots'),
+  upsertVolunteerSignup: upsert('eventVolunteerSignups'),
+  upsertRideOffer: upsert('eventRideOffers'),
+  upsertRideClaim: upsert('eventRideClaims'),
+  upsertCoalitionRing: upsert('coalitionRings'),
+  upsertRingMembership: upsert('ringMemberships'),
+  upsertRingInvitation: upsert('ringInvitations'),
+  recordCoalitionKitApplication: upsert('coalitionKitApplications'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
   updateClip: upsert('clips'),

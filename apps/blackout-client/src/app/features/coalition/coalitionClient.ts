@@ -1,8 +1,23 @@
 import type {
     AidPost,
+    CoalitionEvent,
     CoalitionFeedItem,
+    CoalitionKit,
     CoalitionRankingModel,
+    CoalitionRing,
+    CoalitionTabId,
     CoalitionTask,
+    RingInvitation,
+    EventCategory,
+    EventLocation,
+    EventOccurrence,
+    EventRecurrence,
+    EventRsvp,
+    EventVisibility,
+    RingKind,
+    RingVisibility,
+    RsvpStatus,
+    RsvpSummary,
     SellerLocation,
     SpatialFeedItem,
     TaskStatus,
@@ -180,6 +195,296 @@ export function updateCoalitionTaskStatus(
     return patchJson<{ task: CoalitionTask }>(
         `${COALITION_BASE}/tasks/${encodeURIComponent(id)}`,
         { status },
+        token,
+    );
+}
+
+// --- coalition events ---
+
+export interface CoalitionEventSummary extends CoalitionEvent {
+    rsvpSummary: RsvpSummary;
+    nextOccurrence?: EventOccurrence;
+}
+
+export interface EventsResponse {
+    events: CoalitionEventSummary[];
+}
+
+export interface EventDetailResponse {
+    event: CoalitionEvent;
+    rsvpSummary: RsvpSummary;
+    rsvps: EventRsvp[];
+    occurrences: EventOccurrence[];
+}
+
+export interface CreateEventInput {
+    title: string;
+    description: string;
+    location: EventLocation;
+    startsAt: string;
+    endsAt?: string;
+    category: EventCategory;
+    visibility?: EventVisibility;
+    denId?: string;
+    capacity?: number;
+    recurrence?: EventRecurrence;
+}
+
+export function fetchCoalitionEvents(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken(),
+): Promise<EventsResponse> {
+    const path = appendQuery(`${COALITION_BASE}/events`, { denId: scope.denId });
+    return getJson<EventsResponse>(path, token);
+}
+
+export function fetchCoalitionEvent(
+    id: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<EventDetailResponse> {
+    return getJson<EventDetailResponse>(`${COALITION_BASE}/events/${encodeURIComponent(id)}`, token);
+}
+
+export function createCoalitionEvent(
+    input: CreateEventInput,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ event: CoalitionEvent }> {
+    return postJson<{ event: CoalitionEvent }>(`${COALITION_BASE}/events`, input, token);
+}
+
+export function rsvpToEvent(
+    id: string,
+    status: RsvpStatus,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ rsvp: EventRsvp; rsvpSummary: RsvpSummary }> {
+    return postJson<{ rsvp: EventRsvp; rsvpSummary: RsvpSummary }>(
+        `${COALITION_BASE}/events/${encodeURIComponent(id)}/rsvp`,
+        { status },
+        token,
+    );
+}
+
+export function createEventDen(
+    id: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ denId?: string; event?: CoalitionEvent; created?: boolean }> {
+    return postJson<{ denId?: string; event?: CoalitionEvent; created?: boolean }>(
+        `${COALITION_BASE}/events/${encodeURIComponent(id)}/den`,
+        {},
+        token,
+    );
+}
+
+// --- event logistics: volunteer slots + rides ---
+
+export interface VolunteerSlotView {
+    id: string;
+    eventId: string;
+    role: string;
+    capacity: number;
+    filled: number;
+    remaining: number;
+}
+export interface RideOfferView {
+    id: string;
+    eventId: string;
+    driverId: string;
+    originLabel: string;
+    departAt?: string;
+    seatsTotal: number;
+    notes?: string;
+    claimed: number;
+    seatsRemaining: number;
+}
+
+const eventPath = (id: string, suffix: string) =>
+    `${COALITION_BASE}/events/${encodeURIComponent(id)}${suffix}`;
+
+export function fetchVolunteerSlots(
+    eventId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ slots: VolunteerSlotView[] }> {
+    return getJson<{ slots: VolunteerSlotView[] }>(eventPath(eventId, '/volunteer-slots'), token);
+}
+
+export function createVolunteerSlot(
+    eventId: string,
+    input: { role: string; capacity: number },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ slot: VolunteerSlotView }> {
+    return postJson<{ slot: VolunteerSlotView }>(eventPath(eventId, '/volunteer-slots'), input, token);
+}
+
+export function volunteerSignup(
+    eventId: string,
+    slotId: string,
+    withdraw = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    const action = withdraw ? 'withdraw' : 'signup';
+    return postJson(
+        eventPath(eventId, `/volunteer-slots/${encodeURIComponent(slotId)}/${action}`),
+        {},
+        token,
+    );
+}
+
+export function fetchRideOffers(
+    eventId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ offers: RideOfferView[] }> {
+    return getJson<{ offers: RideOfferView[] }>(eventPath(eventId, '/rides'), token);
+}
+
+export function createRideOffer(
+    eventId: string,
+    input: { originLabel: string; departAt?: string; seatsTotal: number; notes?: string },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ offer: RideOfferView }> {
+    return postJson<{ offer: RideOfferView }>(eventPath(eventId, '/rides'), input, token);
+}
+
+export function claimRide(
+    eventId: string,
+    offerId: string,
+    release = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    const action = release ? 'release' : 'claim';
+    return postJson(
+        eventPath(eventId, `/rides/${encodeURIComponent(offerId)}/${action}`),
+        {},
+        token,
+    );
+}
+
+// --- coalition rings ---
+
+export interface RingView extends CoalitionRing {
+    memberCount: number;
+}
+
+export interface CreateRingInput {
+    name: string;
+    description?: string;
+    kind?: RingKind;
+    visibility?: RingVisibility;
+    location?: { latitude: number; longitude: number; address?: string };
+    denId?: string;
+}
+
+export function fetchRings(
+    memberId: string | undefined,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ rings: RingView[] }> {
+    return getJson<{ rings: RingView[] }>(
+        appendQuery(`${COALITION_BASE}/rings`, { memberId }),
+        token,
+    );
+}
+
+export function createRing(
+    input: CreateRingInput,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ ring: CoalitionRing; memberCount: number }> {
+    return postJson<{ ring: CoalitionRing; memberCount: number }>(
+        `${COALITION_BASE}/rings`,
+        input,
+        token,
+    );
+}
+
+export function joinRing(
+    id: string,
+    leave = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ memberCount: number }> {
+    return postJson<{ memberCount: number }>(
+        `${COALITION_BASE}/rings/${encodeURIComponent(id)}/${leave ? 'leave' : 'join'}`,
+        {},
+        token,
+    );
+}
+
+export interface UserSearchResult {
+    id: string;
+    username: string;
+}
+
+export function searchCoalitionUsers(
+    q: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ users: UserSearchResult[] }> {
+    return getJson<{ users: UserSearchResult[] }>(
+        appendQuery(`${COALITION_BASE}/user-search`, { q }),
+        token,
+    );
+}
+
+export function inviteToRing(
+    ringId: string,
+    inviteeId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ invitation: RingInvitation }> {
+    return postJson<{ invitation: RingInvitation }>(
+        `${COALITION_BASE}/rings/${encodeURIComponent(ringId)}/invites`,
+        { inviteeId },
+        token,
+    );
+}
+
+export function fetchMyRingInvites(
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ invitations: RingInvitation[] }> {
+    return getJson<{ invitations: RingInvitation[] }>(`${COALITION_BASE}/rings/invites/mine`, token);
+}
+
+export function respondToRingInvite(
+    ringId: string,
+    accept: boolean,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    return postJson(
+        `${COALITION_BASE}/rings/${encodeURIComponent(ringId)}/invites/${accept ? 'accept' : 'decline'}`,
+        {},
+        token,
+    );
+}
+
+// --- coalition kits ---
+
+export interface KitApplication {
+    id: string;
+    kitId: string;
+    scopeType: string;
+    scopeId: string;
+    appliedByUserId: string;
+    createdAt: string;
+}
+
+export function fetchKits(token: string | null = readBlackoutApiToken()): Promise<{ kits: CoalitionKit[] }> {
+    return getJson<{ kits: CoalitionKit[] }>(`${COALITION_BASE}/kits`, token);
+}
+
+export function fetchAppliedKits(
+    scopeType: string,
+    scopeId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ applications: KitApplication[] }> {
+    return getJson<{ applications: KitApplication[] }>(
+        appendQuery(`${COALITION_BASE}/kits/applied`, { scopeType, scopeId }),
+        token,
+    );
+}
+
+export function applyKit(
+    kitId: string,
+    scope: { scopeType: string; scopeId: string },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ kit: CoalitionKit; enabledTabs: CoalitionTabId[]; application: KitApplication }> {
+    return postJson<{ kit: CoalitionKit; enabledTabs: CoalitionTabId[]; application: KitApplication }>(
+        `${COALITION_BASE}/kits/${encodeURIComponent(kitId)}/apply`,
+        scope,
         token,
     );
 }

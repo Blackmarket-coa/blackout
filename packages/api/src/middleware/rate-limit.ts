@@ -9,6 +9,12 @@ export interface RateLimitOptions {
   maxRequests: number;
   /** Override store for tests. If omitted, the default shared store is used. */
   store?: RateLimitStore;
+  /**
+   * Optional per-request identity (e.g. the authenticated user id) to key the
+   * limit on instead of the client IP. Falls back to the IP key when it returns
+   * a falsy value, so anonymous traffic is still bucketed by address.
+   */
+  identify?: (c: Context) => string | null | undefined;
 }
 
 /**
@@ -102,7 +108,7 @@ const clientKey = (c: Context, bucket: string): string => {
 };
 
 export function createRateLimit(options: RateLimitOptions) {
-  const { bucket, windowMs, maxRequests, store: providedStore } = options;
+  const { bucket, windowMs, maxRequests, store: providedStore, identify } = options;
   let resolvedStore: RateLimitStore | null = providedStore ?? null;
 
   return async function rateLimitMiddleware(c: Context, next: Next) {
@@ -110,7 +116,8 @@ export function createRateLimit(options: RateLimitOptions) {
       resolvedStore = providedStore ?? (await getDefaultRateLimitStore());
     }
     const store = resolvedStore;
-    const key = clientKey(c, bucket);
+    const identity = identify?.(c);
+    const key = identity ? `${bucket}:${identity}` : clientKey(c, bucket);
 
     let count: number;
     try {

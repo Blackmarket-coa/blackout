@@ -6,6 +6,7 @@ import PinnedMediaShelf from './PinnedMediaShelf';
 import ProfileStatusBar from './ProfileStatusBar';
 import ProfileThemeScope from './ProfileThemeScope';
 import ProfileReputation from './ProfileReputation';
+import ProfileRings from './ProfileRings';
 import ProfileWall from './ProfileWall';
 import TopFriendsGrid from './TopFriendsGrid';
 import type { MemberProfile } from './profileTypes';
@@ -138,6 +139,11 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                         <section style={sectionStyle}>
                             <h2 style={headingStyle}>Reputation</h2>
                             <ProfileReputation userId={target.userId} />
+                        </section>
+
+                        <section style={sectionStyle}>
+                            <h2 style={headingStyle}>Rings</h2>
+                            <ProfileRings userId={target.userId} />
                         </section>
 
                         <section style={sectionStyle}>
