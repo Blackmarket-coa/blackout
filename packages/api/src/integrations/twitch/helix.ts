@@ -9,6 +9,7 @@
  */
 
 import { readTwitchOAuthConfig } from './oauth';
+import { withTimeout } from '../http';
 
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const EVENTSUB_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions';
@@ -34,7 +35,7 @@ export interface HelixDeps {
  * (acceptable: client_credentials grants are cheap).
  */
 export const getAppAccessToken = async (deps: HelixDeps = {}): Promise<AppAccessToken> => {
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
   const now = deps.now ? deps.now() : Date.now();
   if (cachedToken && cachedToken.expiresAtMs - now > TOKEN_LEEWAY_MS) {
     return cachedToken;
@@ -103,7 +104,7 @@ export const createEventSubSubscription = async (
   input: CreateEventSubInput,
   deps: HelixDeps = {},
 ): Promise<CreateEventSubOutcome> => {
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
   const config = readTwitchOAuthConfig();
   const token = await getAppAccessToken(deps);
   const res = await fetchFn(EVENTSUB_URL, {
@@ -164,7 +165,7 @@ export const deleteEventSubSubscription = async (
   helixSubscriptionId: string,
   deps: HelixDeps = {},
 ): Promise<DeleteEventSubOutcome> => {
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
   const config = readTwitchOAuthConfig();
   const token = await getAppAccessToken(deps);
   const url = `${EVENTSUB_URL}?id=${encodeURIComponent(helixSubscriptionId)}`;
