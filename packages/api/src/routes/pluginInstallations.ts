@@ -11,6 +11,7 @@ import { db } from '../db/store';
 import {
     authorizeAiCapability,
     authorizeEntitlement,
+    authorizeGovernance,
     authorizeScope,
     getInstallation,
     installPluginAtScope,
@@ -96,9 +97,18 @@ pluginInstallations.post('/', async (c) => {
     }
 
     const entitlementId = typeof body.entitlementId === 'string' ? body.entitlementId : null;
-    const entAuth = authorizeEntitlement(user.sub, entitlementId, body.requiresEntitlement === true);
+    const requiresEntitlement = body.requiresEntitlement === true;
+    const entAuth = authorizeEntitlement(user.sub, entitlementId, requiresEntitlement);
     if (!entAuth.ok) {
         return c.json({ code: entAuth.code, message: entAuth.message }, statusForAuthCode(entAuth.code));
+    }
+
+    const isPaid = requiresEntitlement || entitlementId !== null;
+    const governanceProposalId =
+        typeof body.governanceProposalId === 'string' ? body.governanceProposalId : null;
+    const govAuth = authorizeGovernance(scope, isPaid, governanceProposalId);
+    if (!govAuth.ok) {
+        return c.json({ code: govAuth.code, message: govAuth.message }, statusForAuthCode(govAuth.code));
     }
 
     const domain = typeof body.domain === 'string' ? body.domain : null;

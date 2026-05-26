@@ -261,6 +261,98 @@ test('AI gate is a no-op when BLACKOUT_PLUGIN_AI_CAPABILITY is off', async () =>
     assert.equal(res.status, 201);
 });
 
+test('with governance flag on, paid coalition installs require a passed proposal', async () => {
+    process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = 'true';
+    const now = new Date().toISOString();
+    db.marketplaceEntitlements.set('ent-gov', {
+        id: 'ent-gov',
+        userId: COORDINATOR_ID,
+        providerId: 'freeblackmarket',
+        providerListingId: 'paid-kit',
+        sku: null,
+        kind: 'plugin_flag',
+        status: 'granted',
+        grantedAt: now,
+        expiresAt: null,
+        sourceEventId: 'evt-gov',
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+    });
+    try {
+        const paidBody = (extra: Record<string, unknown>) =>
+            JSON.stringify({
+                pluginId: 'paid-kit',
+                scope: { type: 'coalition', id: 'coa-gov' },
+                artifactKind: 'manifest_plugin',
+                entitlementId: 'ent-gov',
+                requiresEntitlement: true,
+                ...extra,
+            });
+
+        // Paid coalition install with no proposal → blocked.
+        const noProposal = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({}),
+        });
+        assert.equal(noProposal.status, 403);
+        assert.equal(((await noProposal.json()) as { code: string }).code, 'governance_required');
+
+        // An unpassed proposal does not authorize.
+        db.createVote({
+            id: 'vote-active',
+            communityId: 'coa-gov',
+            proposerId: COORDINATOR_ID,
+            title: 'Install paid-kit',
+            voteType: 'yes_no',
+            options: [{ id: 'yes', text: 'Yes' }],
+            requiresQuorum: 50,
+            durationHours: 168,
+            status: 'active',
+        });
+        const active = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({ governanceProposalId: 'vote-active' }),
+        });
+        assert.equal(active.status, 403);
+
+        // A passed proposal for this coalition authorizes the install.
+        db.createVote({
+            id: 'vote-passed',
+            communityId: 'coa-gov',
+            proposerId: COORDINATOR_ID,
+            title: 'Install paid-kit',
+            voteType: 'yes_no',
+            options: [{ id: 'yes', text: 'Yes' }],
+            requiresQuorum: 50,
+            durationHours: 168,
+            status: 'passed',
+        });
+        const passed = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({ governanceProposalId: 'vote-passed' }),
+        });
+        assert.equal(passed.status, 201);
+
+        // A free coalition install is unaffected by the governance gate.
+        const free = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'free-board',
+                scope: { type: 'coalition', id: 'coa-gov' },
+                artifactKind: 'manifest_plugin',
+            }),
+        });
+        assert.equal(free.status, 201);
+    } finally {
+        process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = '';
+    }
+});
+
 test('with AI flag on, AI plugins are confined to AI dens', async () => {
     process.env.BLACKOUT_PLUGIN_AI_CAPABILITY = 'true';
     try {

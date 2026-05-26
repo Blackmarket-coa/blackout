@@ -41,6 +41,11 @@ export function pluginAiCapabilityEnabled(): boolean {
     return process.env.BLACKOUT_PLUGIN_AI_CAPABILITY === 'true';
 }
 
+/** Default-off gate for governance-backed scope authorization (Phase 3). */
+export function pluginScopeGovernanceEnabled(): boolean {
+    return process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE === 'true';
+}
+
 const ENTITLEMENT_ACTIVE = new Set(['granted', 'pending']);
 
 export interface InstallAuthorization {
@@ -52,7 +57,8 @@ export interface InstallAuthorization {
         | 'entitlement_required'
         | 'entitlement_not_owned'
         | 'entitlement_inactive'
-        | 'ai_scope_forbidden';
+        | 'ai_scope_forbidden'
+        | 'governance_required';
     message: string;
 }
 
@@ -135,6 +141,43 @@ export function authorizeAiCapability(
                 ? 'AI plugins can only be installed in an AI den.'
                 : 'This den does not permit AI tooling.',
     };
+}
+
+/**
+ * Governance gate (Phase 3): a PAID coalition install must be authorized by a
+ * passed governance proposal in that coalition. The caller references the
+ * proposal by id; we verify it exists, has `status: 'passed'`, and belongs to
+ * the target coalition (`communityId === scope.id`). Free coalition installs
+ * and all other scopes are unaffected (they fall back to `authorizeScope`'s
+ * admin check). No-op when the flag is off.
+ *
+ * Den/coalition admin authority still rides on `reputationTier` as a stand-in
+ * until Matrix power-level wiring lands; this gate adds the real vote
+ * requirement for the paid path, which is where the governance policy bites.
+ */
+export function authorizeGovernance(
+    scope: InstallScope,
+    isPaid: boolean,
+    governanceProposalId: string | null | undefined,
+): InstallAuthorization {
+    if (!pluginScopeGovernanceEnabled()) return { ok: true, code: 'ok', message: '' };
+    if (scope.type !== 'coalition' || !isPaid) return { ok: true, code: 'ok', message: '' };
+    if (!governanceProposalId) {
+        return {
+            ok: false,
+            code: 'governance_required',
+            message: 'A paid coalition install requires a passed governance proposal.',
+        };
+    }
+    const proposal = db.getVote(governanceProposalId);
+    if (!proposal || proposal.status !== 'passed' || proposal.communityId !== scope.id) {
+        return {
+            ok: false,
+            code: 'governance_required',
+            message: 'The referenced governance proposal has not passed for this coalition.',
+        };
+    }
+    return { ok: true, code: 'ok', message: '' };
 }
 
 /** Ownership gate: a non-free install must reference an active entitlement the caller owns. */
