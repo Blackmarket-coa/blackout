@@ -56,6 +56,14 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     keyOf: (r) => `${r.eventId}::${r.userId}`,
     conflictColumns: ['event_id', 'user_id'],
   },
+  eventVolunteerSignups: {
+    keyOf: (r) => `${r.slotId}::${r.userId}`,
+    conflictColumns: ['slot_id', 'user_id'],
+  },
+  eventRideClaims: {
+    keyOf: (r) => `${r.offerId}::${r.riderId}`,
+    conflictColumns: ['offer_id', 'rider_id'],
+  },
   // coalition_events flattens the nested location into lat/lng/address columns.
   coalitionEvents: {
     toRow: (r) => {
@@ -211,6 +219,10 @@ const ALL_MAP_NAMES = [
   'coalitionAidPosts',
   'coalitionEvents',
   'eventRsvps',
+  'eventVolunteerSlots',
+  'eventVolunteerSignups',
+  'eventRideOffers',
+  'eventRideClaims',
   'canopyDirectoryEntries',
   'clips',
   'coliseumTopics',
@@ -355,6 +367,10 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createCoalitionAidPost: upsert('coalitionAidPosts'),
   upsertCoalitionEvent: upsert('coalitionEvents'),
   upsertEventRsvp: upsert('eventRsvps'),
+  upsertVolunteerSlot: upsert('eventVolunteerSlots'),
+  upsertVolunteerSignup: upsert('eventVolunteerSignups'),
+  upsertRideOffer: upsert('eventRideOffers'),
+  upsertRideClaim: upsert('eventRideClaims'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
   updateClip: upsert('clips'),

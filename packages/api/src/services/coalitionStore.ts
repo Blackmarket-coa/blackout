@@ -243,6 +243,53 @@ export function newRsvpId(): string {
     return `rsvp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
+// --- event logistics: volunteer slots + ride coordination ---
+
+export function listVolunteerSlots(eventId: string) {
+    return db.listVolunteerSlots(eventId);
+}
+export function getVolunteerSlot(id: string) {
+    return db.getVolunteerSlot(id);
+}
+export function saveVolunteerSlot(input: Parameters<typeof db.upsertVolunteerSlot>[0]) {
+    return db.upsertVolunteerSlot(input);
+}
+export function listVolunteerSignups(eventId: string) {
+    return db.listVolunteerSignups(eventId);
+}
+export function saveVolunteerSignup(input: Parameters<typeof db.upsertVolunteerSignup>[0]) {
+    return db.upsertVolunteerSignup(input);
+}
+export function listRideOffers(eventId: string) {
+    return db.listRideOffers(eventId);
+}
+export function getRideOffer(id: string) {
+    return db.getRideOffer(id);
+}
+export function saveRideOffer(input: Parameters<typeof db.upsertRideOffer>[0]) {
+    return db.upsertRideOffer(input);
+}
+export function listRideClaims(eventId: string) {
+    return db.listRideClaims(eventId);
+}
+export function saveRideClaim(input: Parameters<typeof db.upsertRideClaim>[0]) {
+    return db.upsertRideClaim(input);
+}
+
+const rand = () => `${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+export function newSlotId(): string {
+    return `vslot_${rand()}`;
+}
+export function newSignupId(): string {
+    return `vsign_${rand()}`;
+}
+export function newRideOfferId(): string {
+    return `ride_${rand()}`;
+}
+export function newRideClaimId(): string {
+    return `rclaim_${rand()}`;
+}
+
 export function nowIso(): string {
     return NOW_ISO();
 }

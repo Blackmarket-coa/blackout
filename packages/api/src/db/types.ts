@@ -1,4 +1,13 @@
-import type { AidPost, CoalitionEvent, EventRsvp, SpatialFeedItem } from '@blackout/core';
+import type {
+  AidPost,
+  CoalitionEvent,
+  EventRsvp,
+  RideClaim,
+  RideOffer,
+  SpatialFeedItem,
+  VolunteerSignup,
+  VolunteerSlot,
+} from '@blackout/core';
 import type {
   ColiseumArgument,
   ColiseumLiveSession,
@@ -880,6 +889,30 @@ export interface CoalitionEventRecord extends CoalitionEvent {
 
 /** An attendee RSVP for a Coalition event. Keyed in-memory by `${eventId}::${userId}`. */
 export interface EventRsvpRecord extends EventRsvp {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A volunteer role on an event. */
+export interface VolunteerSlotRecord extends VolunteerSlot {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A volunteer signup. Keyed in-memory by `${slotId}::${userId}`. */
+export interface VolunteerSignupRecord extends VolunteerSignup {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ride offer attached to an event. */
+export interface RideOfferRecord extends RideOffer {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A claimed seat on a ride offer. Keyed in-memory by `${offerId}::${riderId}`. */
+export interface RideClaimRecord extends RideClaim {
   createdAt: string;
   updatedAt: string;
 }

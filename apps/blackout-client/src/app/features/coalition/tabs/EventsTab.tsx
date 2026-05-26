@@ -9,6 +9,7 @@ import {
     type RecurrenceFrequency,
     type RsvpStatus,
 } from '@blackout/core';
+import EventLogistics from './EventLogistics';
 import { useCoalitionEvents, type CoalitionScopeQuery } from '../hooks/useCoalitionFeed';
 import {
     createCoalitionEvent,
@@ -415,6 +416,7 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                                         </ul>
                                     </div>
                                 ) : null}
+                                <EventLogistics eventId={event.id} />
                             </div>
                         ) : null}
                     </div>

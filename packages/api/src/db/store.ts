@@ -58,6 +58,10 @@ import type {
   CoalitionAidPostRecord,
   CoalitionEventRecord,
   EventRsvpRecord,
+  VolunteerSlotRecord,
+  VolunteerSignupRecord,
+  RideOfferRecord,
+  RideClaimRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
@@ -131,6 +135,10 @@ type PersistedState = {
   coalitionAidPosts: CoalitionAidPostRecord[];
   coalitionEvents: CoalitionEventRecord[];
   eventRsvps: EventRsvpRecord[];
+  eventVolunteerSlots: VolunteerSlotRecord[];
+  eventVolunteerSignups: VolunteerSignupRecord[];
+  eventRideOffers: RideOfferRecord[];
+  eventRideClaims: RideClaimRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
@@ -216,6 +224,14 @@ class InMemoryDb {
   coalitionEvents = new Map<string, CoalitionEventRecord>();
   /** Event RSVPs, keyed by `${eventId}::${userId}` (one per attendee per event). */
   eventRsvps = new Map<string, EventRsvpRecord>();
+  /** Volunteer slots, keyed by slot id. */
+  eventVolunteerSlots = new Map<string, VolunteerSlotRecord>();
+  /** Volunteer signups, keyed by `${slotId}::${userId}`. */
+  eventVolunteerSignups = new Map<string, VolunteerSignupRecord>();
+  /** Ride offers, keyed by offer id. */
+  eventRideOffers = new Map<string, RideOfferRecord>();
+  /** Ride seat claims, keyed by `${offerId}::${riderId}`. */
+  eventRideClaims = new Map<string, RideClaimRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
@@ -2006,6 +2022,93 @@ class InMemoryDb {
     return record;
   }
 
+  // --- event volunteer slots + ride coordination ---
+
+  private static signupKey(slotId: string, userId: string): string {
+    return `${slotId}::${userId}`;
+  }
+  private static rideClaimKey(offerId: string, riderId: string): string {
+    return `${offerId}::${riderId}`;
+  }
+
+  listVolunteerSlots(eventId: string): VolunteerSlotRecord[] {
+    return [...this.eventVolunteerSlots.values()].filter((slot) => slot.eventId === eventId);
+  }
+
+  getVolunteerSlot(id: string): VolunteerSlotRecord | undefined {
+    return this.eventVolunteerSlots.get(id);
+  }
+
+  upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const existing = this.eventVolunteerSlots.get(input.id);
+    const now = nowIso();
+    const record: VolunteerSlotRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSlots.set(record.id, record);
+    return record;
+  }
+
+  listVolunteerSignups(eventId: string): VolunteerSignupRecord[] {
+    return [...this.eventVolunteerSignups.values()].filter((row) => row.eventId === eventId);
+  }
+
+  upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const key = InMemoryDb.signupKey(input.slotId, input.userId);
+    const existing = this.eventVolunteerSignups.get(key);
+    const now = nowIso();
+    const record: VolunteerSignupRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSignups.set(key, record);
+    return record;
+  }
+
+  listRideOffers(eventId: string): RideOfferRecord[] {
+    return [...this.eventRideOffers.values()].filter((offer) => offer.eventId === eventId);
+  }
+
+  getRideOffer(id: string): RideOfferRecord | undefined {
+    return this.eventRideOffers.get(id);
+  }
+
+  upsertRideOffer(input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>): RideOfferRecord {
+    const existing = this.eventRideOffers.get(input.id);
+    const now = nowIso();
+    const record: RideOfferRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideOffers.set(record.id, record);
+    return record;
+  }
+
+  listRideClaims(eventId: string): RideClaimRecord[] {
+    return [...this.eventRideClaims.values()].filter((claim) => claim.eventId === eventId);
+  }
+
+  upsertRideClaim(input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>): RideClaimRecord {
+    const key = InMemoryDb.rideClaimKey(input.offerId, input.riderId);
+    const existing = this.eventRideClaims.get(key);
+    const now = nowIso();
+    const record: RideClaimRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideClaims.set(key, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2272,6 +2375,22 @@ export class FileBackedDb extends InMemoryDb {
         parsed.eventRsvps.map((row) => [`${row.eventId}::${row.userId}`, row]),
       );
     }
+    if (parsed.eventVolunteerSlots) {
+      this.eventVolunteerSlots = new Map(parsed.eventVolunteerSlots.map((row) => [row.id, row]));
+    }
+    if (parsed.eventVolunteerSignups) {
+      this.eventVolunteerSignups = new Map(
+        parsed.eventVolunteerSignups.map((row) => [`${row.slotId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.eventRideOffers) {
+      this.eventRideOffers = new Map(parsed.eventRideOffers.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRideClaims) {
+      this.eventRideClaims = new Map(
+        parsed.eventRideClaims.map((row) => [`${row.offerId}::${row.riderId}`, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2353,6 +2472,10 @@ export class FileBackedDb extends InMemoryDb {
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       coalitionEvents: [...this.coalitionEvents.values()],
       eventRsvps: [...this.eventRsvps.values()],
+      eventVolunteerSlots: [...this.eventVolunteerSlots.values()],
+      eventVolunteerSignups: [...this.eventVolunteerSignups.values()],
+      eventRideOffers: [...this.eventRideOffers.values()],
+      eventRideClaims: [...this.eventRideClaims.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
@@ -3167,6 +3290,38 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
   ): EventRsvpRecord {
     const created = super.upsertEventRsvp(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const created = super.upsertVolunteerSlot(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const created = super.upsertVolunteerSignup(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideOffer(
+    input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>,
+  ): RideOfferRecord {
+    const created = super.upsertRideOffer(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideClaim(
+    input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>,
+  ): RideClaimRecord {
+    const created = super.upsertRideClaim(input);
     this.persist();
     return created;
   }

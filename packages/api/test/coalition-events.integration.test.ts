@@ -186,3 +186,108 @@ test('nextOccurrence skips fully-past occurrences', () => {
     );
     assert.equal(occ?.status, 'past');
 });
+
+// --- volunteer slots ---
+
+test('volunteer slots: organizer creates, attendees fill to capacity, then withdraw', async () => {
+    const created = await createEvent({ title: 'Build day' });
+    const { event } = (await created.json()) as { event: { id: string } };
+
+    // non-organizer cannot add a slot
+    const forbidden = await app.request(`/v1/coalition/events/${event.id}/volunteer-slots`, {
+        method: 'POST',
+        headers: authHeader('rando'),
+        body: JSON.stringify({ role: 'Setup', capacity: 1 }),
+    });
+    assert.equal(forbidden.status, 403);
+
+    const slotRes = await app.request(`/v1/coalition/events/${event.id}/volunteer-slots`, {
+        method: 'POST',
+        headers: authHeader('event-organizer'),
+        body: JSON.stringify({ role: 'Setup crew', capacity: 1 }),
+    });
+    assert.equal(slotRes.status, 201);
+    const { slot } = (await slotRes.json()) as { slot: { id: string } };
+
+    const signup = await app.request(
+        `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
+        { method: 'POST', headers: authHeader('vol-1') },
+    );
+    assert.equal(signup.status, 200);
+
+    // capacity is 1 — a second distinct volunteer is rejected
+    const full = await app.request(
+        `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
+        { method: 'POST', headers: authHeader('vol-2') },
+    );
+    assert.equal(full.status, 409);
+
+    // list shows it filled with no remaining capacity
+    const listRes = await app.request(`/v1/coalition/events/${event.id}/volunteer-slots`, {
+        headers: authHeader(),
+    });
+    const { slots } = (await listRes.json()) as {
+        slots: Array<{ id: string; filled: number; remaining: number }>;
+    };
+    const listed = slots.find((s) => s.id === slot.id);
+    assert.equal(listed?.filled, 1);
+    assert.equal(listed?.remaining, 0);
+
+    // vol-1 withdraws → seat frees up, vol-2 can now join
+    await app.request(`/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/withdraw`, {
+        method: 'POST',
+        headers: authHeader('vol-1'),
+    });
+    const retry = await app.request(
+        `/v1/coalition/events/${event.id}/volunteer-slots/${slot.id}/signup`,
+        { method: 'POST', headers: authHeader('vol-2') },
+    );
+    assert.equal(retry.status, 200);
+});
+
+// --- ride coordination ---
+
+test('ride coordination: offer seats, claim to capacity, release frees a seat', async () => {
+    const created = await createEvent({ title: 'Rally' });
+    const { event } = (await created.json()) as { event: { id: string } };
+
+    const offerRes = await app.request(`/v1/coalition/events/${event.id}/rides`, {
+        method: 'POST',
+        headers: authHeader('driver-1'),
+        body: JSON.stringify({ originLabel: 'North lot', seatsTotal: 1, departAt: '2030-06-01T13:00:00.000Z' }),
+    });
+    assert.equal(offerRes.status, 201);
+    const { offer } = (await offerRes.json()) as { offer: { id: string } };
+
+    const claim = await app.request(`/v1/coalition/events/${event.id}/rides/${offer.id}/claim`, {
+        method: 'POST',
+        headers: authHeader('rider-1'),
+    });
+    assert.equal(claim.status, 200);
+
+    const full = await app.request(`/v1/coalition/events/${event.id}/rides/${offer.id}/claim`, {
+        method: 'POST',
+        headers: authHeader('rider-2'),
+    });
+    assert.equal(full.status, 409);
+
+    const listRes = await app.request(`/v1/coalition/events/${event.id}/rides`, {
+        headers: authHeader(),
+    });
+    const { offers } = (await listRes.json()) as {
+        offers: Array<{ id: string; claimed: number; seatsRemaining: number }>;
+    };
+    const listed = offers.find((o) => o.id === offer.id);
+    assert.equal(listed?.claimed, 1);
+    assert.equal(listed?.seatsRemaining, 0);
+
+    await app.request(`/v1/coalition/events/${event.id}/rides/${offer.id}/release`, {
+        method: 'POST',
+        headers: authHeader('rider-1'),
+    });
+    const retry = await app.request(`/v1/coalition/events/${event.id}/rides/${offer.id}/claim`, {
+        method: 'POST',
+        headers: authHeader('rider-2'),
+    });
+    assert.equal(retry.status, 200);
+});

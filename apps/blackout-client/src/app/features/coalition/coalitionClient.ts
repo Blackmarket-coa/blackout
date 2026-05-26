@@ -268,3 +268,86 @@ export function createEventDen(
         token,
     );
 }
+
+// --- event logistics: volunteer slots + rides ---
+
+export interface VolunteerSlotView {
+    id: string;
+    eventId: string;
+    role: string;
+    capacity: number;
+    filled: number;
+    remaining: number;
+}
+export interface RideOfferView {
+    id: string;
+    eventId: string;
+    driverId: string;
+    originLabel: string;
+    departAt?: string;
+    seatsTotal: number;
+    notes?: string;
+    claimed: number;
+    seatsRemaining: number;
+}
+
+const eventPath = (id: string, suffix: string) =>
+    `${COALITION_BASE}/events/${encodeURIComponent(id)}${suffix}`;
+
+export function fetchVolunteerSlots(
+    eventId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ slots: VolunteerSlotView[] }> {
+    return getJson<{ slots: VolunteerSlotView[] }>(eventPath(eventId, '/volunteer-slots'), token);
+}
+
+export function createVolunteerSlot(
+    eventId: string,
+    input: { role: string; capacity: number },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ slot: VolunteerSlotView }> {
+    return postJson<{ slot: VolunteerSlotView }>(eventPath(eventId, '/volunteer-slots'), input, token);
+}
+
+export function volunteerSignup(
+    eventId: string,
+    slotId: string,
+    withdraw = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    const action = withdraw ? 'withdraw' : 'signup';
+    return postJson(
+        eventPath(eventId, `/volunteer-slots/${encodeURIComponent(slotId)}/${action}`),
+        {},
+        token,
+    );
+}
+
+export function fetchRideOffers(
+    eventId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ offers: RideOfferView[] }> {
+    return getJson<{ offers: RideOfferView[] }>(eventPath(eventId, '/rides'), token);
+}
+
+export function createRideOffer(
+    eventId: string,
+    input: { originLabel: string; departAt?: string; seatsTotal: number; notes?: string },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ offer: RideOfferView }> {
+    return postJson<{ offer: RideOfferView }>(eventPath(eventId, '/rides'), input, token);
+}
+
+export function claimRide(
+    eventId: string,
+    offerId: string,
+    release = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    const action = release ? 'release' : 'claim';
+    return postJson(
+        eventPath(eventId, `/rides/${encodeURIComponent(offerId)}/${action}`),
+        {},
+        token,
+    );
+}

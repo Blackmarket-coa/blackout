@@ -11,26 +11,43 @@ import {
     RSVP_STATUSES,
     SPATIAL_LAYER_KEYS,
     TASK_STATUSES,
+    countActive,
     expandOccurrences,
     isWithinRadiusMeters,
     nextOccurrence,
     rankCoalitionFeed,
+    seatsRemaining,
+    slotRemaining,
 } from '@blackout/core';
 import {
     createAidPost,
     getEvent,
+    getRideOffer,
+    getVolunteerSlot,
     listAidPosts,
     listEventRsvps,
     listEvents,
     listFeedItems,
+    listRideClaims,
+    listRideOffers,
     listSellerLocations,
     listSpatialItems,
+    listVolunteerSignups,
+    listVolunteerSlots,
     newAidId,
     newEventId,
+    newRideClaimId,
+    newRideOfferId,
     newRsvpId,
+    newSignupId,
+    newSlotId,
     rsvpSummaryFor,
     saveEvent,
+    saveRideClaim,
+    saveRideOffer,
     saveRsvp,
+    saveVolunteerSignup,
+    saveVolunteerSlot,
 } from '../services/coalitionStore';
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import { matrixClient } from '../integrations/matrix-client';
@@ -383,6 +400,170 @@ coalition.post('/events/:id/den', async (c) => {
     }
     const updated = saveEvent({ ...event, denId: result.roomId });
     return c.json({ denId: result.roomId, event: updated, created: true }, 201);
+});
+
+// --- event volunteer slots ---
+
+const createSlotSchema = z.object({
+    role: z.string().min(1).max(120),
+    capacity: z.number().int().min(1).max(10_000),
+});
+
+coalition.post('/events/:id/volunteer-slots', async (c) => {
+    const user = requireUser(c, 'Sign in to add a volunteer slot');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    if (event.organizerId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the organizer can add slots' }, 403);
+    }
+    const parsed = await readJsonBody(c, createSlotSchema);
+    if (parsed instanceof Response) return parsed;
+    const slot = saveVolunteerSlot({
+        id: newSlotId(),
+        eventId: event.id,
+        role: parsed.role,
+        capacity: parsed.capacity,
+        status: 'open',
+    });
+    return c.json({ slot }, 201);
+});
+
+coalition.get('/events/:id/volunteer-slots', (c) => {
+    const eventId = c.req.param('id');
+    const signups = listVolunteerSignups(eventId);
+    const slots = listVolunteerSlots(eventId)
+        .filter((slot) => slot.status === 'open')
+        .map((slot) => {
+            const filled = countActive(signups.filter((s) => s.slotId === slot.id));
+            return { ...slot, filled, remaining: slotRemaining(slot, filled) };
+        });
+    return c.json({ slots });
+});
+
+coalition.post('/events/:id/volunteer-slots/:slotId/signup', async (c) => {
+    const user = requireUser(c, 'Sign in to volunteer');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const slot = getVolunteerSlot(c.req.param('slotId'));
+    if (!slot || slot.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
+    }
+    const othersActive = countActive(
+        listVolunteerSignups(eventId).filter((s) => s.slotId === slot.id && s.userId !== user.sub),
+    );
+    if (othersActive >= slot.capacity) {
+        return c.json({ code: 'slot_full', message: 'This slot is full' }, 409);
+    }
+    const signup = saveVolunteerSignup({
+        id: newSignupId(),
+        slotId: slot.id,
+        eventId,
+        userId: user.sub,
+        active: true,
+    });
+    return c.json({ signup });
+});
+
+coalition.post('/events/:id/volunteer-slots/:slotId/withdraw', async (c) => {
+    const user = requireUser(c, 'Sign in to withdraw');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const slot = getVolunteerSlot(c.req.param('slotId'));
+    if (!slot || slot.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
+    }
+    const signup = saveVolunteerSignup({
+        id: newSignupId(),
+        slotId: slot.id,
+        eventId,
+        userId: user.sub,
+        active: false,
+    });
+    return c.json({ signup });
+});
+
+// --- event ride coordination ---
+
+const createRideSchema = z.object({
+    originLabel: z.string().min(1).max(200),
+    departAt: z.string().datetime().optional(),
+    seatsTotal: z.number().int().min(1).max(50),
+    notes: z.string().max(500).optional(),
+});
+
+coalition.post('/events/:id/rides', async (c) => {
+    const user = requireUser(c, 'Sign in to offer a ride');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    const parsed = await readJsonBody(c, createRideSchema);
+    if (parsed instanceof Response) return parsed;
+    const offer = saveRideOffer({
+        id: newRideOfferId(),
+        eventId: event.id,
+        driverId: user.sub,
+        originLabel: parsed.originLabel,
+        departAt: parsed.departAt,
+        seatsTotal: parsed.seatsTotal,
+        notes: parsed.notes,
+        status: 'open',
+    });
+    return c.json({ offer }, 201);
+});
+
+coalition.get('/events/:id/rides', (c) => {
+    const eventId = c.req.param('id');
+    const claims = listRideClaims(eventId);
+    const offers = listRideOffers(eventId)
+        .filter((offer) => offer.status === 'open')
+        .map((offer) => {
+            const claimed = countActive(claims.filter((cl) => cl.offerId === offer.id));
+            return { ...offer, claimed, seatsRemaining: seatsRemaining(offer, claimed) };
+        });
+    return c.json({ offers });
+});
+
+coalition.post('/events/:id/rides/:offerId/claim', async (c) => {
+    const user = requireUser(c, 'Sign in to claim a seat');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const offer = getRideOffer(c.req.param('offerId'));
+    if (!offer || offer.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
+    }
+    const othersActive = countActive(
+        listRideClaims(eventId).filter((cl) => cl.offerId === offer.id && cl.riderId !== user.sub),
+    );
+    if (othersActive >= offer.seatsTotal) {
+        return c.json({ code: 'ride_full', message: 'No seats remaining' }, 409);
+    }
+    const claim = saveRideClaim({
+        id: newRideClaimId(),
+        offerId: offer.id,
+        eventId,
+        riderId: user.sub,
+        active: true,
+    });
+    return c.json({ claim });
+});
+
+coalition.post('/events/:id/rides/:offerId/release', async (c) => {
+    const user = requireUser(c, 'Sign in to release a seat');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const offer = getRideOffer(c.req.param('offerId'));
+    if (!offer || offer.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
+    }
+    const claim = saveRideClaim({
+        id: newRideClaimId(),
+        offerId: offer.id,
+        eventId,
+        riderId: user.sub,
+        active: false,
+    });
+    return c.json({ claim });
 });
 
 export default coalition;

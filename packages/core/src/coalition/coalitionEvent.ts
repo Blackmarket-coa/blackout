@@ -189,3 +189,59 @@ export function nextOccurrence(
     if (occurrences.length === 0) return undefined;
     return occurrences.find((o) => o.status !== 'past') ?? occurrences[occurrences.length - 1];
 }
+
+// --- volunteer + ride coordination (attached to an event) ---
+
+/** A role an organizer needs filled (e.g. "Setup crew"). `closed` hides it. */
+export interface VolunteerSlot {
+    id: string;
+    eventId: string;
+    role: string;
+    capacity: number;
+    status: 'open' | 'closed';
+}
+
+/** An attendee signing up for a volunteer slot. `active` toggles on withdraw. */
+export interface VolunteerSignup {
+    id: string;
+    slotId: string;
+    eventId: string;
+    userId: string;
+    active: boolean;
+}
+
+/** A driver offering seats to an event. `closed` retires the offer. */
+export interface RideOffer {
+    id: string;
+    eventId: string;
+    driverId: string;
+    originLabel: string;
+    departAt?: string;
+    seatsTotal: number;
+    notes?: string;
+    status: 'open' | 'closed';
+}
+
+/** A rider claiming a seat on a ride offer. `active` toggles on release. */
+export interface RideClaim {
+    id: string;
+    offerId: string;
+    eventId: string;
+    riderId: string;
+    active: boolean;
+}
+
+export function slotRemaining(
+    slot: Pick<VolunteerSlot, 'capacity'>,
+    activeSignups: number,
+): number {
+    return Math.max(0, slot.capacity - activeSignups);
+}
+
+export function seatsRemaining(offer: Pick<RideOffer, 'seatsTotal'>, activeClaims: number): number {
+    return Math.max(0, offer.seatsTotal - activeClaims);
+}
+
+export function countActive(rows: readonly { active: boolean }[]): number {
+    return rows.reduce((total, row) => total + (row.active ? 1 : 0), 0);
+}
