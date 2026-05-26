@@ -165,6 +165,9 @@ const ALL_MAP_NAMES = [
   'pluginInstallations',
   'pluginDens',
   'coalitionKitApplications',
+  'pluginReviews',
+  'pluginForks',
+  'pluginShowcases',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -315,4 +318,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createPluginDen: upsert('pluginDens'),
   createCoalitionKitApplication: upsert('coalitionKitApplications'),
   updateCoalitionKitApplication: upsert('coalitionKitApplications'),
+  upsertPluginReview: upsert('pluginReviews'),
+  createPluginFork: upsert('pluginForks'),
+  createPluginShowcase: upsert('pluginShowcases'),
 };

@@ -744,6 +744,37 @@ export interface CoalitionKitApplicationRecord {
   updatedAt: string;
 }
 
+export interface PluginReviewRecord {
+  id: UUID;
+  pluginId: string;
+  providerListingId: string | null;
+  userId: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PluginForkRecord {
+  id: UUID;
+  pluginId: string;
+  forkedFromPluginId: string;
+  ownerUserId: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface PluginShowcaseRecord {
+  id: UUID;
+  pluginId: string;
+  userId: string;
+  scopeType: string;
+  scopeId: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {

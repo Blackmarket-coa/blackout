@@ -62,6 +62,9 @@ import type {
   PluginInstallationRecord,
   PluginDenRecord,
   CoalitionKitApplicationRecord,
+  PluginReviewRecord,
+  PluginForkRecord,
+  PluginShowcaseRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
@@ -133,6 +136,9 @@ type PersistedState = {
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
+  pluginReviews: PluginReviewRecord[];
+  pluginForks: PluginForkRecord[];
+  pluginShowcases: PluginShowcaseRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
@@ -219,6 +225,12 @@ class InMemoryDb {
   pluginDens = new Map<string, PluginDenRecord>();
   /** Coalition kit applications ledger, keyed by application id. */
   coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
+  /** Plugin reviews/ratings, keyed by review id. */
+  pluginReviews = new Map<string, PluginReviewRecord>();
+  /** Plugin forks, keyed by fork id. */
+  pluginForks = new Map<string, PluginForkRecord>();
+  /** Plugin showcases, keyed by showcase id. */
+  pluginShowcases = new Map<string, PluginShowcaseRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
   /** Coliseum arguments, keyed by argument id. */
@@ -2063,6 +2075,68 @@ class InMemoryDb {
     return updated;
   }
 
+  // --- plugin social (Phase 6) ---
+
+  upsertPluginReview(
+    input: Omit<PluginReviewRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  ): PluginReviewRecord {
+    const now = nowIso();
+    const existing = [...this.pluginReviews.values()].find(
+      (row) => row.pluginId === input.pluginId && row.userId === input.userId,
+    );
+    if (existing) {
+      const updated: PluginReviewRecord = {
+        ...existing,
+        rating: input.rating,
+        body: input.body,
+        providerListingId: input.providerListingId,
+        updatedAt: now,
+      };
+      this.pluginReviews.set(existing.id, updated);
+      return updated;
+    }
+    const record: PluginReviewRecord = {
+      id: input.id ?? crypto.randomUUID(),
+      pluginId: input.pluginId,
+      providerListingId: input.providerListingId,
+      userId: input.userId,
+      rating: input.rating,
+      body: input.body,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.pluginReviews.set(record.id, record);
+    return record;
+  }
+
+  listPluginReviews(pluginId: string): PluginReviewRecord[] {
+    return [...this.pluginReviews.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  createPluginFork(input: Omit<PluginForkRecord, 'createdAt'>): PluginForkRecord {
+    const record: PluginForkRecord = { ...input, createdAt: nowIso() };
+    this.pluginForks.set(record.id, record);
+    return record;
+  }
+
+  listPluginForks(forkedFromPluginId: string): PluginForkRecord[] {
+    return [...this.pluginForks.values()].filter(
+      (row) => row.forkedFromPluginId === forkedFromPluginId,
+    );
+  }
+
+  createPluginShowcase(input: Omit<PluginShowcaseRecord, 'createdAt'>): PluginShowcaseRecord {
+    const record: PluginShowcaseRecord = { ...input, createdAt: nowIso() };
+    this.pluginShowcases.set(record.id, record);
+    return record;
+  }
+
+  listPluginShowcasesForScope(scopeType: string, scopeId: string): PluginShowcaseRecord[] {
+    return [...this.pluginShowcases.values()].filter(
+      (row) => row.scopeType === scopeType && row.scopeId === scopeId,
+    );
+  }
+
   // --- Coliseum ---
 
   private static coliseumVoteKey(argumentId: string, voterId: string): string {
@@ -2269,6 +2343,9 @@ export class FileBackedDb extends InMemoryDb {
     this.coalitionKitApplications = new Map(
       (parsed.coalitionKitApplications ?? []).map((row) => [row.id, row]),
     );
+    this.pluginReviews = new Map((parsed.pluginReviews ?? []).map((row) => [row.id, row]));
+    this.pluginForks = new Map((parsed.pluginForks ?? []).map((row) => [row.id, row]));
+    this.pluginShowcases = new Map((parsed.pluginShowcases ?? []).map((row) => [row.id, row]));
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
     }
@@ -2343,6 +2420,9 @@ export class FileBackedDb extends InMemoryDb {
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
+      pluginReviews: [...this.pluginReviews.values()],
+      pluginForks: [...this.pluginForks.values()],
+      pluginShowcases: [...this.pluginShowcases.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
@@ -3171,6 +3251,28 @@ export class FileBackedDb extends InMemoryDb {
     const updated = super.updateCoalitionKitApplication(id, patch);
     if (updated) this.persist();
     return updated;
+  }
+
+  override upsertPluginReview(
+    input: Omit<PluginReviewRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  ): PluginReviewRecord {
+    const saved = super.upsertPluginReview(input);
+    this.persist();
+    return saved;
+  }
+
+  override createPluginFork(input: Omit<PluginForkRecord, 'createdAt'>): PluginForkRecord {
+    const created = super.createPluginFork(input);
+    this.persist();
+    return created;
+  }
+
+  override createPluginShowcase(
+    input: Omit<PluginShowcaseRecord, 'createdAt'>,
+  ): PluginShowcaseRecord {
+    const created = super.createPluginShowcase(input);
+    this.persist();
+    return created;
   }
 
   override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
