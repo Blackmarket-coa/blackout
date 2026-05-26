@@ -1995,6 +1995,10 @@ class InMemoryDb {
     return [...this.pluginInstallations.values()].filter((row) => row.pluginId === pluginId);
   }
 
+  listAllPluginInstallations(): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()];
+  }
+
   updatePluginInstallation(
     id: string,
     patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,

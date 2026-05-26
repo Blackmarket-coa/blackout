@@ -6,6 +6,7 @@ export * from './installation';
 export * from './aiGate';
 export * from './kit';
 export * from './social';
+export * from './discovery';
 
 export * from './presentation';
 
