@@ -931,6 +931,16 @@ export interface RingMembershipRecord extends RingMembership {
   updatedAt: string;
 }
 
+/** A record that a Coalition Kit was applied to a den/coalition scope. */
+export interface CoalitionKitApplicationRecord {
+  id: string;
+  kitId: string;
+  scopeType: string;
+  scopeId: string;
+  appliedByUserId: string;
+  createdAt: string;
+}
+
 /**
  * Coliseum debate records. These persist the discourse layer (topics,
  * arguments, votes, live sessions) so debate history survives a restart. The

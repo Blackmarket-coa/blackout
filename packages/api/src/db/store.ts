@@ -64,6 +64,7 @@ import type {
   RideClaimRecord,
   CoalitionRingRecord,
   RingMembershipRecord,
+  CoalitionKitApplicationRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
@@ -143,6 +144,7 @@ type PersistedState = {
   eventRideClaims: RideClaimRecord[];
   coalitionRings: CoalitionRingRecord[];
   ringMemberships: RingMembershipRecord[];
+  coalitionKitApplications: CoalitionKitApplicationRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
@@ -240,6 +242,8 @@ class InMemoryDb {
   coalitionRings = new Map<string, CoalitionRingRecord>();
   /** Ring memberships, keyed by `${ringId}::${userId}`. */
   ringMemberships = new Map<string, RingMembershipRecord>();
+  /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
+  coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
@@ -2165,6 +2169,24 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition kit applications ---
+
+  listCoalitionKitApplications(filter: { scopeType?: string; scopeId?: string } = {}): CoalitionKitApplicationRecord[] {
+    return [...this.coalitionKitApplications.values()].filter((row) => {
+      if (filter.scopeType && row.scopeType !== filter.scopeType) return false;
+      if (filter.scopeId && row.scopeId !== filter.scopeId) return false;
+      return true;
+    });
+  }
+
+  recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const record: CoalitionKitApplicationRecord = { ...input, createdAt: nowIso() };
+    this.coalitionKitApplications.set(record.id, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2455,6 +2477,11 @@ export class FileBackedDb extends InMemoryDb {
         parsed.ringMemberships.map((row) => [`${row.ringId}::${row.userId}`, row]),
       );
     }
+    if (parsed.coalitionKitApplications) {
+      this.coalitionKitApplications = new Map(
+        parsed.coalitionKitApplications.map((row) => [row.id, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2542,6 +2569,7 @@ export class FileBackedDb extends InMemoryDb {
       eventRideClaims: [...this.eventRideClaims.values()],
       coalitionRings: [...this.coalitionRings.values()],
       ringMemberships: [...this.ringMemberships.values()],
+      coalitionKitApplications: [...this.coalitionKitApplications.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
@@ -3404,6 +3432,14 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
   ): RingMembershipRecord {
     const created = super.upsertRingMembership(input);
+    this.persist();
+    return created;
+  }
+
+  override recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const created = super.recordCoalitionKitApplication(input);
     this.persist();
     return created;
   }

@@ -2,8 +2,10 @@ import type {
     AidPost,
     CoalitionEvent,
     CoalitionFeedItem,
+    CoalitionKit,
     CoalitionRankingModel,
     CoalitionRing,
+    CoalitionTabId,
     CoalitionTask,
     EventCategory,
     EventLocation,
@@ -399,6 +401,44 @@ export function joinRing(
     return postJson<{ memberCount: number }>(
         `${COALITION_BASE}/rings/${encodeURIComponent(id)}/${leave ? 'leave' : 'join'}`,
         {},
+        token,
+    );
+}
+
+// --- coalition kits ---
+
+export interface KitApplication {
+    id: string;
+    kitId: string;
+    scopeType: string;
+    scopeId: string;
+    appliedByUserId: string;
+    createdAt: string;
+}
+
+export function fetchKits(token: string | null = readBlackoutApiToken()): Promise<{ kits: CoalitionKit[] }> {
+    return getJson<{ kits: CoalitionKit[] }>(`${COALITION_BASE}/kits`, token);
+}
+
+export function fetchAppliedKits(
+    scopeType: string,
+    scopeId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ applications: KitApplication[] }> {
+    return getJson<{ applications: KitApplication[] }>(
+        appendQuery(`${COALITION_BASE}/kits/applied`, { scopeType, scopeId }),
+        token,
+    );
+}
+
+export function applyKit(
+    kitId: string,
+    scope: { scopeType: string; scopeId: string },
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ kit: CoalitionKit; enabledTabs: CoalitionTabId[]; application: KitApplication }> {
+    return postJson<{ kit: CoalitionKit; enabledTabs: CoalitionTabId[]; application: KitApplication }>(
+        `${COALITION_BASE}/kits/${encodeURIComponent(kitId)}/apply`,
+        scope,
         token,
     );
 }

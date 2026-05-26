@@ -338,6 +338,20 @@ export function newMembershipId(): string {
     return `rmem_${rand()}`;
 }
 
+// --- coalition kit applications ---
+
+export function listKitApplications(filter: { scopeType?: string; scopeId?: string } = {}) {
+    return db.listCoalitionKitApplications(filter);
+}
+export function recordKitApplication(
+    input: Parameters<typeof db.recordCoalitionKitApplication>[0],
+) {
+    return db.recordCoalitionKitApplication(input);
+}
+export function newKitApplicationId(): string {
+    return `kitapp_${rand()}`;
+}
+
 export function nowIso(): string {
     return NOW_ISO();
 }

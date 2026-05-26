@@ -7,3 +7,4 @@ export * from './tasks';
 export * from './events';
 export * from './coalitionEvent';
 export * from './coalitionRing';
+export * from './coalitionKit';

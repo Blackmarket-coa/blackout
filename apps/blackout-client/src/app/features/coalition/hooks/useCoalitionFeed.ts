@@ -4,6 +4,7 @@ import {
     fetchCoalitionEvents,
     fetchCoalitionFeed,
     fetchCoalitionTasks,
+    fetchKits,
     fetchMutualAid,
     fetchRings,
     fetchSellerLocations,
@@ -106,4 +107,8 @@ export function useCoalitionEvents(scope: CoalitionScopeQuery) {
 
 export function useCoalitionRings(memberId?: string) {
     return useAsync<{ rings: RingView[] }>(() => fetchRings(memberId), [memberId]);
+}
+
+export function useCoalitionKits() {
+    return useAsync(() => fetchKits(), []);
 }

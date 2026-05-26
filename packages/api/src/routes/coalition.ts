@@ -7,6 +7,8 @@ import {
     EVENT_CATEGORIES,
     EVENT_LIFECYCLE_STATUSES,
     EVENT_VISIBILITY,
+    INSTALL_SCOPE_TYPES,
+    KIT_DEFINITIONS,
     RECURRENCE_FREQUENCIES,
     RING_KINDS,
     RING_ROLES,
@@ -18,6 +20,7 @@ import {
     countActive,
     countActiveMembers,
     expandOccurrences,
+    getKit,
     isWithinRadiusMeters,
     nextOccurrence,
     rankCoalitionFeed,
@@ -40,10 +43,12 @@ import {
     listVolunteerSignups,
     listVolunteerSlots,
     getRing,
+    listKitApplications,
     listRingMemberships,
     listRings,
     newAidId,
     newEventId,
+    newKitApplicationId,
     newMembershipId,
     newRideClaimId,
     newRideOfferId,
@@ -55,6 +60,7 @@ import {
     saveEvent,
     saveRideClaim,
     saveRideOffer,
+    recordKitApplication,
     saveRing,
     saveRingMembership,
     saveRsvp,
@@ -62,6 +68,8 @@ import {
     saveVolunteerSlot,
 } from '../services/coalitionStore';
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
+import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
+import { db } from '../db/store';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
@@ -716,6 +724,62 @@ coalition.patch('/rings/:id/members/:userId', async (c) => {
         active: true,
     });
     return c.json({ membership });
+});
+
+// --- Coalition kits (preconfigured community setup packs) ---
+
+coalition.get('/kits', (c) => {
+    return c.json({ kits: KIT_DEFINITIONS });
+});
+
+coalition.get('/kits/applied', (c) => {
+    const scopeType = c.req.query('scopeType');
+    const scopeId = c.req.query('scopeId');
+    return c.json({ applications: listKitApplications({ scopeType, scopeId }) });
+});
+
+const applyKitSchema = z.object({
+    scopeType: z.enum(INSTALL_SCOPE_TYPES),
+    scopeId: z.string().min(1),
+});
+
+coalition.post('/kits/:id/apply', async (c) => {
+    const user = requireUser(c, 'Sign in to apply a kit');
+    if (user instanceof Response) return user;
+    const kit = getKit(c.req.param('id'));
+    if (!kit) return c.json({ code: 'not_found', message: 'Kit not found' }, 404);
+    const parsed = await readJsonBody(c, applyKitSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const scope = { type: parsed.scopeType, id: parsed.scopeId };
+    const reputationTier = db.getUserById(user.sub)?.reputationTier ?? 'member';
+    const scopeAuth = authorizeScope(user.sub, reputationTier, scope);
+    if (!scopeAuth.ok) {
+        return c.json({ code: scopeAuth.code, message: scopeAuth.message }, 403);
+    }
+
+    // Install each bundled (free, in-tree) plugin at the target scope.
+    const installations = kit.plugins.map((plugin) =>
+        installPluginAtScope({
+            pluginId: plugin.pluginId,
+            scope,
+            installedByUserId: user.sub,
+            entitlementId: null,
+            artifactKind: plugin.artifactKind,
+            domain: plugin.domain,
+            manifest: { id: plugin.pluginId, name: kit.name, kit: kit.id, free: true },
+        }),
+    );
+
+    const application = recordKitApplication({
+        id: newKitApplicationId(),
+        kitId: kit.id,
+        scopeType: parsed.scopeType,
+        scopeId: parsed.scopeId,
+        appliedByUserId: user.sub,
+    });
+
+    return c.json({ kit, enabledTabs: kit.enabledTabs, installations, application }, 201);
 });
 
 export default coalition;
