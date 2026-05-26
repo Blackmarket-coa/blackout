@@ -166,7 +166,9 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
               )
             : SPATIAL_LAYER_KEYS,
     );
-    const items = db.listCoalitionSpatialItems().filter((item) => allowed.has(item.layer));
+    const items: SpatialFeedItem[] = db
+        .listCoalitionSpatialItems()
+        .filter((item) => allowed.has(item.layer));
     if (allowed.has('events')) {
         const now = Date.now();
         for (const event of db.listCoalitionEvents()) {
