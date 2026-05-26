@@ -77,6 +77,54 @@ spec:
                   name: blackout-api
                   key: JWT_SECRET_ROLLOVER
                   optional: true
+            # Bug-report intake forwarders. All optional: with none set the API
+            # degrades to a dev no-op (files no GitHub issue, skips rageshake).
+            {{- if .Values.api.bugReport.rageshakeEndpointUrl }}
+            - name: RAGESHAKE_ENDPOINT_URL
+              value: {{ .Values.api.bugReport.rageshakeEndpointUrl | quote }}
+            {{- end }}
+            {{- with .Values.api.bugReport.github }}
+            {{- if .owner }}
+            - name: GITHUB_BUG_REPORT_OWNER
+              value: {{ .owner | quote }}
+            {{- end }}
+            {{- if .repo }}
+            - name: GITHUB_BUG_REPORT_REPO
+              value: {{ .repo | quote }}
+            {{- end }}
+            {{- if .labels }}
+            - name: GITHUB_BUG_REPORT_LABELS
+              value: {{ .labels | quote }}
+            {{- end }}
+            {{- end }}
+            # GitHub App (preferred) / PAT (fallback) creds for filing issues.
+            # Sourced from the blackout-api secret and marked optional so the pod
+            # still boots when issue creation isn't configured. Populate the keys
+            # via externalSecrets.remoteRefs (see values.yaml).
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: blackout-api
+                  key: GITHUB_APP_ID
+                  optional: true
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: blackout-api
+                  key: GITHUB_APP_INSTALLATION_ID
+                  optional: true
+            - name: GITHUB_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: blackout-api
+                  key: GITHUB_APP_PRIVATE_KEY
+                  optional: true
+            - name: GITHUB_BUG_REPORT_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: blackout-api
+                  key: GITHUB_BUG_REPORT_PAT
+                  optional: true
             {{- if .Values.api.metrics.enabled }}
             - name: INTERNAL_METRICS_TOKEN
               valueFrom:

@@ -158,13 +158,33 @@ export const isAdminUser = (userId: string, username: string): boolean => {
 
 /**
  * Capabilities embedded in a freshly minted session token. Every authenticated
- * user can both browse the Live directory (`streaming.read`) and go live
- * (`streaming.write`). The streaming module enforces per-creator ownership, so
- * a user can only manage streams they own; per-stream visibility is enforced
- * there too.
+ * user gets read access to all guarded feature domains, plus write only where
+ * the owning module enforces per-resource ownership: `streaming.write` (the
+ * streaming module checks per-creator ownership) and `profile.write` (the
+ * profile module checks `subject === userId`). Domains whose write path is
+ * gated solely by the capability (e.g. governance, moderation) are kept
+ * read-only here so a normal token can't moderate or govern.
  */
 export function deriveUserCapabilities(): string[] {
-  return ['streaming.read', 'streaming.write'];
+  // Read access to every guarded feature domain is granted to all users.
+  // Write is granted only where the module enforces per-resource ownership
+  // (streaming: per-creator; profile: subject === userId). Domains that gate
+  // mutations solely on the capability (governance, moderation, etc.) are
+  // intentionally read-only here to avoid universal write access.
+  return [
+    'streaming.read',
+    'streaming.write',
+    'profile.read',
+    'profile.write',
+    'governance.read',
+    'forum.read',
+    'deaddrop.read',
+    'deadman.read',
+    'moderation.read',
+    'discovery.read',
+    'stego.read',
+    'growth.read',
+  ];
 }
 
 export interface SignedJwt {

@@ -32,15 +32,46 @@ async function register(): Promise<Account> {
 const auth = (account: Account) => ({ authorization: `Bearer ${account.token}` });
 const jsonAuth = (account: Account) => ({ ...auth(account), 'content-type': 'application/json' });
 
-test('every authenticated user is minted streaming.read + streaming.write and can browse Live', async () => {
+test('every authenticated user is minted read access + safe writes and can browse Live', async () => {
   const account = await register();
 
   const claims = verifyJwt(account.token);
   assert.ok(claims, 'token should verify');
-  assert.deepEqual(claims?.capabilities, ['streaming.read', 'streaming.write']);
+  const caps = new Set(claims?.capabilities ?? []);
+
+  // Read access to every guarded domain, plus write only where the module
+  // enforces per-resource ownership (streaming, profile).
+  for (const cap of [
+    'streaming.read',
+    'streaming.write',
+    'profile.read',
+    'profile.write',
+    'governance.read',
+    'moderation.read',
+    'forum.read',
+    'discovery.read',
+  ]) {
+    assert.ok(caps.has(cap), `expected capability ${cap}`);
+  }
+
+  // Writes for domains that gate solely on the capability (no ownership check)
+  // must NOT be minted into every token, or any user could moderate/govern.
+  for (const cap of ['governance.write', 'moderation.write', 'forum.write', 'deaddrop.write']) {
+    assert.ok(!caps.has(cap), `should not mint ${cap} for all users`);
+  }
 
   const listResp = await app.request('/v1/streaming/streams', { headers: auth(account) });
   assert.equal(listResp.status, 200);
+});
+
+// Regression: opening a profile failed because tokens never carried
+// profile.read, so GET /v1/profile/:id returned 403 (surfaced as the reported
+// "405"). A real login token must now grant profile.read with no extra header.
+test('a registered user can read profiles without an explicit capability header', async () => {
+  const account = await register();
+  const res = await app.request(`/v1/profile/${account.userId}`, { headers: auth(account) });
+  // 404 (no profile saved yet) — crucially NOT 403 missing_capability.
+  assert.equal(res.status, 404);
 });
 
 test('a user can provision and read their own stream key, but not another creator’s', async () => {

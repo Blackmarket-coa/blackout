@@ -42,7 +42,7 @@ export const useBugReportSubmission = (): UseBugReportSubmission => {
       const callOnce = () =>
         client<BugReportResponse>({
           method: 'POST',
-          path: '/bug-report',
+          path: '/v1/bug-report',
           body: payload,
         });
 

@@ -42,7 +42,7 @@ export const useWidgetReportSubmission = (): ((payload: WidgetReportPayload) => 
       try {
         const res = await client<WidgetReportOutcome | RateLimitedBody>({
           method: 'POST',
-          path: '/bug-report/widget',
+          path: '/v1/bug-report/widget',
           body: payload,
         });
         if (isRateLimited(res)) return { kind: 'rate_limited' };

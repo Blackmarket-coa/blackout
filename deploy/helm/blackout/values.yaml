@@ -42,6 +42,17 @@ api:
     allowCredentials: true
   rateLimit:
     authMax: 10
+  bugReport:
+    # Bug-report intake forwarders (POST /bug-report, /v1/bug-report).
+    # All optional — when unset the API degrades to a dev no-op that files
+    # nothing. To file real GitHub issues, set github.owner/repo and supply
+    # GitHub App (or PAT) credentials via externalSecrets.remoteRefs below.
+    rageshakeEndpointUrl: ""
+    github:
+      # Defaults to Blackmarket-coa/blackout in the API when left blank.
+      owner: ""
+      repo: ""
+      labels: ""
   metrics:
     # When true, the chart annotates pods for Prometheus scraping. The api
     # gates /metrics with INTERNAL_METRICS_TOKEN so this is safe even if
@@ -81,6 +92,13 @@ externalSecrets:
     REDIS_URL: blackout/api/redis_url
     SENTRY_DSN: blackout/api/sentry_dsn
     INTERNAL_METRICS_TOKEN: blackout/api/internal_metrics_token
+    # Bug-report → GitHub issue credentials (optional). Uncomment and point at
+    # your secret-store keys to turn on automatic issue creation. The API reads
+    # the GitHub App trio first, falling back to GITHUB_BUG_REPORT_PAT.
+    # GITHUB_APP_ID: blackout/api/github_app_id
+    # GITHUB_APP_INSTALLATION_ID: blackout/api/github_app_installation_id
+    # GITHUB_APP_PRIVATE_KEY: blackout/api/github_app_private_key
+    # GITHUB_BUG_REPORT_PAT: blackout/api/github_bug_report_pat
 
 # Argo Rollouts: enables a canary deploy strategy that ships 10% → wait → 30% → wait → 100%
 # with metric-driven analysis against http_request_duration_seconds and
