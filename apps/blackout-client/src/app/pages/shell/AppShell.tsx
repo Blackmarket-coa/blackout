@@ -12,6 +12,8 @@ import { BottomTabBar } from './BottomTabBar';
 import { MobileTopBar } from './MobileTopBar';
 import { DynamicRightPanel } from './DynamicRightPanel';
 import { WorkspaceTabBar } from './WorkspaceTabBar';
+import { PrimaryNavBar } from './PrimaryNavBar';
+import { CanopySidebar } from './CanopySidebar';
 import { DialogHost } from '../../shell/DialogHost';
 import { getModalCloser, getModalOpener } from '../../shell/modalOpenerRegistry';
 import { runtimeFeatureFlags } from '../../core/features/featureFlags';
@@ -143,8 +145,9 @@ export const AppShell = () => {
             data-shell-mode={mode}
             data-shell-viewport={mobile ? 'mobile' : 'desktop'}
         >
-            {mobile ? <MobileTopBar /> : null}
+            {mobile ? <MobileTopBar /> : <PrimaryNavBar />}
             <div style={mobile ? BODY_MOBILE_STYLE : BODY_DESKTOP_STYLE}>
+                {mobile ? null : <CanopySidebar />}
                 <main style={mobile ? OUTLET_MOBILE_STYLE : OUTLET_DESKTOP_STYLE}>
                     {mobile ? null : <WorkspaceTabBar />}
                     <Outlet />

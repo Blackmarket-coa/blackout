@@ -9,13 +9,10 @@ import {
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import {
-    COALITION_PATH,
-    COLISEUM_PATH,
     COMMUNITIES_PATH,
     EVENTS_PATH,
     LIVE_PATH,
     MARKET_PATH,
-    STREAMING_PATH,
     buildCommunitiesPath,
 } from '../../pages/paths';
 import { TopicChipBar } from '../topics/TopicChipBar';
@@ -68,32 +65,14 @@ interface QuickAction {
 }
 
 /**
- * Shortcut cards for the major top-level destinations. Each is gated by its
- * own feature flag so a card only renders when its route is actually mounted
- * (never a dead link). Order is display priority.
+ * Shortcut cards for secondary discovery destinations. The primary
+ * destinations (Home · Creator Hub · Coalition · Coliseum) live in the
+ * global top nav, and canopies live in the left rail, so they are not
+ * duplicated here. Each card is gated by its own feature flag so it only
+ * renders when its route is actually mounted (never a dead link). Order is
+ * display priority.
  */
 const QUICK_ACTIONS: QuickAction[] = [
-    {
-        flag: 'streaming',
-        to: STREAMING_PATH,
-        title: 'Streaming',
-        subtitle: 'Go live, manage connections & integrations',
-        testid: 'home-quick-action-streaming',
-    },
-    {
-        flag: 'coalition',
-        to: COALITION_PATH,
-        title: 'Coalition',
-        subtitle: 'Cross-canopy mutual aid, map & shop',
-        testid: 'home-quick-action-coalition',
-    },
-    {
-        flag: 'coliseum',
-        to: COLISEUM_PATH,
-        title: 'Coliseum',
-        subtitle: 'Debate topics, live verdicts & sources',
-        testid: 'home-quick-action-coliseum',
-    },
     {
         flag: 'eventsV1',
         to: EVENTS_PATH,

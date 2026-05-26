@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -59,7 +59,6 @@ import {
     writeQuickActionCollapsed,
 } from '../../features/quick-actions/featureEntrypoints';
 import { customizationAtom } from '../../state/customization';
-import { PrimaryRail } from './PrimaryRail';
 import { CreateSpaceModalRenderer } from '../../features/create-space/CreateSpaceModal';
 import { CreateRoomModalRenderer } from '../../features/create-room/CreateRoomModal';
 import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
@@ -450,11 +449,6 @@ export const ClientLayout = () => {
         markQuickActionsSeen(unseenQuickActionIds);
     }, [unseenQuickActionIds]);
 
-    const persistSpaceOrder = async (next: string[]) => {
-        setSpaceOrder(next);
-        await client.setAccountData('blackout.space_order' as never, { order: next } as never);
-    };
-
     const openRoom = (roomId: string, jumpToEventId?: string) => {
         openRoomWithContext(roomId, jumpToEventId);
     };
@@ -758,7 +752,7 @@ export const ClientLayout = () => {
                 width: '100%',
                 display: 'grid',
                 gridTemplateColumns: desktop
-                    ? `${layout.spaceColumnWidth}px ${layout.roomColumnWidth}px 1fr`
+                    ? `${layout.roomColumnWidth}px 1fr`
                     : mobile
                     ? '1fr'
                     : '1fr',
@@ -773,130 +767,6 @@ export const ClientLayout = () => {
             />
 
             <ToastOutlet />
-
-            {desktop || (!mobile && !selectedRoomId) ? (
-                <PrimaryRail
-                    onCreateCanopy={() => openCreateSpaceModal()}
-                    homeButton={
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setSelectedSpaceId(null);
-                                setSelectedRoomId(null);
-                                navigate('/');
-                            }}
-                            title="Home"
-                            aria-label="Home"
-                            data-testid="primary-rail-home"
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 10,
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                            }}
-                        >
-                            🏠
-                        </button>
-                    }
-                    inviteButton={
-                        <button
-                            type="button"
-                            onClick={() => setShowGlobalInvitations(true)}
-                            title="Create an invite link"
-                            aria-label="Create an invite link"
-                            data-testid="primary-rail-invite"
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 10,
-                                border: '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                            }}
-                        >
-                            ✉️
-                        </button>
-                    }
-                    canopyBlock={orderedSpaces.map((space, idx) => (
-                        <button
-                            key={space.roomId}
-                            type="button"
-                            draggable
-                            onDragStart={(event: DragEvent<HTMLButtonElement>) =>
-                                event.dataTransfer.setData('text/plain', space.roomId)
-                            }
-                            onDragOver={(event: DragEvent<HTMLButtonElement>) =>
-                                event.preventDefault()
-                            }
-                            onDrop={(event: DragEvent<HTMLButtonElement>) => {
-                                event.preventDefault();
-                                const dragged = event.dataTransfer.getData('text/plain');
-                                const next = [...spaceOrder.filter((id) => id !== dragged)];
-                                next.splice(idx, 0, dragged);
-                                void persistSpaceOrder(next);
-                            }}
-                            onClick={() => {
-                                setSelectedSpaceId(space.roomId);
-                                setSelectedRoomId(null);
-                            }}
-                            style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 12,
-                                border:
-                                    selectedSpaceId === space.roomId
-                                        ? '1px solid var(--accent-primary)'
-                                        : '1px solid var(--border-default)',
-                                background: 'var(--bg-input)',
-                                position: 'relative',
-                            }}
-                            title={space.name}
-                        >
-                            {space.name.charAt(0)}
-                            {roomUnread(space) > 0 ? (
-                                <span
-                                    style={{
-                                        position: 'absolute',
-                                        top: -4,
-                                        right: -4,
-                                        background: 'var(--danger)',
-                                        color: '#fff',
-                                        borderRadius: 999,
-                                        minWidth: 16,
-                                        fontSize: 10,
-                                    }}
-                                >
-                                    {roomUnread(space)}
-                                </span>
-                            ) : null}
-                        </button>
-                    ))}
-                    avatarButton={
-                        desktop && userId ? (
-                            <button
-                                type="button"
-                                onClick={() => openSettingsSection('appearance')}
-                                title={`${userId} — open settings`}
-                                aria-label="Open settings"
-                                style={{
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: '50%',
-                                    border: '1px solid var(--border-default)',
-                                    background: 'var(--accent-muted)',
-                                    color: 'var(--text-primary)',
-                                    fontSize: 14,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                {userId.replace(/^@/, '').charAt(0).toUpperCase()}
-                            </button>
-                        ) : null
-                    }
-                />
-            ) : null}
 
             {desktop || !mobile ? (
                 <aside
@@ -932,6 +802,25 @@ export const ClientLayout = () => {
                                   BLACKOUT_TERMS.canopy.title
                                 : 'Home'}
                         </strong>
+                        <button
+                            type="button"
+                            onClick={() => setShowGlobalInvitations(true)}
+                            title="Create an invite link"
+                            aria-label="Create an invite link"
+                            data-testid="den-list-invite"
+                            style={{
+                                flex: '0 0 auto',
+                                width: 32,
+                                height: 32,
+                                borderRadius: 8,
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            ✉️
+                        </button>
                     </header>
 
                     <div
@@ -1813,74 +1702,6 @@ export const ClientLayout = () => {
                 </div>
             </main>
 
-            {desktop ? (
-                <>
-                    <div
-                        role="separator"
-                        aria-label="Resize canopy rail"
-                        style={{
-                            position: 'fixed',
-                            left: layout.spaceColumnWidth - 2,
-                            top: 0,
-                            width: 4,
-                            height: '100vh',
-                            cursor: 'col-resize',
-                        }}
-                        onMouseDown={(event) => {
-                            const origin = event.clientX;
-                            const start = layout.spaceColumnWidth;
-                            const onMove = (moveEvent: MouseEvent) => {
-                                const width = Math.min(
-                                    96,
-                                    Math.max(52, start + (moveEvent.clientX - origin))
-                                );
-                                setSettings({
-                                    ...settings,
-                                    layout: { ...(settings.layout ?? {}), spaceColumnWidth: width },
-                                });
-                            };
-                            const onUp = () => {
-                                window.removeEventListener('mousemove', onMove);
-                                window.removeEventListener('mouseup', onUp);
-                            };
-                            window.addEventListener('mousemove', onMove);
-                            window.addEventListener('mouseup', onUp);
-                        }}
-                    />
-                    <div
-                        role="separator"
-                        aria-label="Resize den list"
-                        style={{
-                            position: 'fixed',
-                            left: layout.spaceColumnWidth + layout.roomColumnWidth - 2,
-                            top: 0,
-                            width: 4,
-                            height: '100vh',
-                            cursor: 'col-resize',
-                        }}
-                        onMouseDown={(event) => {
-                            const origin = event.clientX;
-                            const start = layout.roomColumnWidth;
-                            const onMove = (moveEvent: MouseEvent) => {
-                                const width = Math.min(
-                                    360,
-                                    Math.max(220, start + (moveEvent.clientX - origin))
-                                );
-                                setSettings({
-                                    ...settings,
-                                    layout: { ...(settings.layout ?? {}), roomColumnWidth: width },
-                                });
-                            };
-                            const onUp = () => {
-                                window.removeEventListener('mousemove', onMove);
-                                window.removeEventListener('mouseup', onUp);
-                            };
-                            window.addEventListener('mousemove', onMove);
-                            window.addEventListener('mouseup', onUp);
-                        }}
-                    />
-                </>
-            ) : null}
 
             {lobbyOpen && selectedSpaceId ? (
                 <aside
