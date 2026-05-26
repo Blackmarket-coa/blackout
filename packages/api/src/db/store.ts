@@ -298,6 +298,20 @@ class InMemoryDb {
     return this.users.get(id);
   }
 
+  /** Case-insensitive username substring search; returns id + username only. */
+  searchUsers(query: string, limit = 10): Array<{ id: string; username: string }> {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: Array<{ id: string; username: string }> = [];
+    for (const user of this.users.values()) {
+      if (user.username.toLowerCase().includes(q)) {
+        out.push({ id: user.id, username: user.username });
+        if (out.length >= limit) break;
+      }
+    }
+    return out;
+  }
+
   updateUserPassword(id: string, passwordHash: string): UserRecord | undefined {
     const user = this.users.get(id);
     if (!user) return undefined;

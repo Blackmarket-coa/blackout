@@ -23,6 +23,7 @@ export const COALITION_TAB_LABELS: Record<CoalitionTabId, string> = {
     rings: 'Rings',
     shop: 'Shop',
     tasks: 'Tasks',
+    kits: 'Kits',
     documents: 'Documents',
     ai: 'AI',
 };

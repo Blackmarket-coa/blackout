@@ -11,6 +11,7 @@ process.env.AUTH_RATE_LIMIT_MAX = process.env.AUTH_RATE_LIMIT_MAX ?? '1000';
 
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
+const { db } = await import('../src/db/store');
 const { countActiveMembers, canManageRing } = await import('@blackout/core');
 
 function authHeader(user: string): Record<string, string> {
@@ -173,6 +174,29 @@ test('private ring: invite → accept is the way in (direct join stays 403)', as
         headers: authHeader('invitee-1'),
     });
     assert.equal(again.status, 404);
+});
+
+test('user-search resolves a username to a blackout id (for the invite picker)', async () => {
+    const id = `user-search-${Math.random().toString(36).slice(2, 8)}`;
+    db.createUser({
+        id,
+        username: 'searchable_organizer',
+        email: `${id}@example.test`,
+        passwordHash: 'h',
+        reputationScore: 1,
+        reputationTier: 'member',
+        pubkeyEd25519: 'pk',
+    });
+    const res = await app.request('/v1/coalition/user-search?q=searchable_org', {
+        headers: authHeader('searcher'),
+    });
+    assert.equal(res.status, 200);
+    const { users } = (await res.json()) as { users: Array<{ id: string; username: string }> };
+    assert.ok(users.some((u) => u.id === id && u.username === 'searchable_organizer'));
+
+    // search requires auth
+    const noauth = await app.request('/v1/coalition/user-search?q=x');
+    assert.equal(noauth.status, 401);
 });
 
 test('public rings with a location surface on the communities map layer', async () => {

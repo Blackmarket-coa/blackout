@@ -406,6 +406,21 @@ export function joinRing(
     );
 }
 
+export interface UserSearchResult {
+    id: string;
+    username: string;
+}
+
+export function searchCoalitionUsers(
+    q: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ users: UserSearchResult[] }> {
+    return getJson<{ users: UserSearchResult[] }>(
+        appendQuery(`${COALITION_BASE}/user-search`, { q }),
+        token,
+    );
+}
+
 export function inviteToRing(
     ringId: string,
     inviteeId: string,

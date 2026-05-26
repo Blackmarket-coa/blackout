@@ -864,4 +864,13 @@ coalition.post('/kits/:id/apply', async (c) => {
     return c.json({ kit, enabledTabs: kit.enabledTabs, installations, application }, 201);
 });
 
+// Lightweight authed username search, used by the ring-invite picker to
+// resolve a Blackout user id for an invitee.
+coalition.get('/user-search', (c) => {
+    const user = requireUser(c, 'Sign in to search members');
+    if (user instanceof Response) return user;
+    const q = c.req.query('q') ?? '';
+    return c.json({ users: db.searchUsers(q, 10) });
+});
+
 export default coalition;
