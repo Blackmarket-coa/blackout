@@ -1,9 +1,11 @@
 import type {
   AidPost,
   CoalitionEvent,
+  CoalitionRing,
   EventRsvp,
   RideClaim,
   RideOffer,
+  RingMembership,
   SpatialFeedItem,
   VolunteerSignup,
   VolunteerSlot,
@@ -913,6 +915,18 @@ export interface RideOfferRecord extends RideOffer {
 
 /** A claimed seat on a ride offer. Keyed in-memory by `${offerId}::${riderId}`. */
 export interface RideClaimRecord extends RideClaim {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A Coalition Ring (circle/crew/guild). */
+export interface CoalitionRingRecord extends CoalitionRing {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ring membership. Keyed in-memory by `${ringId}::${userId}`. */
+export interface RingMembershipRecord extends RingMembership {
   createdAt: string;
   updatedAt: string;
 }

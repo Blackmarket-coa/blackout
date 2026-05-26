@@ -8,10 +8,15 @@ import {
     EVENT_LIFECYCLE_STATUSES,
     EVENT_VISIBILITY,
     RECURRENCE_FREQUENCIES,
+    RING_KINDS,
+    RING_ROLES,
+    RING_VISIBILITY,
     RSVP_STATUSES,
     SPATIAL_LAYER_KEYS,
     TASK_STATUSES,
+    canManageRing,
     countActive,
+    countActiveMembers,
     expandOccurrences,
     isWithinRadiusMeters,
     nextOccurrence,
@@ -34,10 +39,15 @@ import {
     listSpatialItems,
     listVolunteerSignups,
     listVolunteerSlots,
+    getRing,
+    listRingMemberships,
+    listRings,
     newAidId,
     newEventId,
+    newMembershipId,
     newRideClaimId,
     newRideOfferId,
+    newRingId,
     newRsvpId,
     newSignupId,
     newSlotId,
@@ -45,6 +55,8 @@ import {
     saveEvent,
     saveRideClaim,
     saveRideOffer,
+    saveRing,
+    saveRingMembership,
     saveRsvp,
     saveVolunteerSignup,
     saveVolunteerSlot,
@@ -564,6 +576,146 @@ coalition.post('/events/:id/rides/:offerId/release', async (c) => {
         active: false,
     });
     return c.json({ claim });
+});
+
+// --- Coalition rings (trusted circles/crews/guilds) ---
+
+const memberCountFor = (ringId: string): number =>
+    countActiveMembers(listRingMemberships(ringId));
+
+const ringLocationSchema = z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    address: z.string().max(280).optional(),
+});
+
+const createRingSchema = z.object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(2000).default(''),
+    kind: z.enum(RING_KINDS).default('circle'),
+    visibility: z.enum(RING_VISIBILITY).default('public'),
+    location: ringLocationSchema.optional(),
+    denId: z.string().optional(),
+});
+
+coalition.get('/rings', (c) => {
+    const memberId = c.req.query('memberId');
+    const memberships = listRingMemberships();
+    let rings = listRings();
+    if (memberId) {
+        // A user's rings (for profile display) — exclude private rings of others.
+        const ringIds = new Set(
+            memberships.filter((m) => m.userId === memberId && m.active).map((m) => m.ringId),
+        );
+        rings = rings.filter((r) => ringIds.has(r.id) && r.visibility !== 'private');
+    } else {
+        rings = rings.filter((r) => r.visibility === 'public');
+    }
+    const result = rings.map((ring) => ({
+        ...ring,
+        memberCount: countActiveMembers(memberships.filter((m) => m.ringId === ring.id)),
+    }));
+    return c.json({ rings: result });
+});
+
+coalition.post('/rings', async (c) => {
+    const user = requireUser(c, 'Sign in to create a ring');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createRingSchema);
+    if (parsed instanceof Response) return parsed;
+    const ring = saveRing({
+        id: newRingId(),
+        name: parsed.name,
+        description: parsed.description,
+        kind: parsed.kind,
+        visibility: parsed.visibility,
+        ownerId: user.sub,
+        location: parsed.location,
+        denId: parsed.denId,
+    });
+    // The creator is the founding owner.
+    saveRingMembership({
+        id: newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: 'owner',
+        active: true,
+    });
+    return c.json({ ring, memberCount: 1 }, 201);
+});
+
+coalition.get('/rings/:id', (c) => {
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const members = listRingMemberships(ring.id).filter((m) => m.active);
+    return c.json({
+        ring,
+        memberCount: members.length,
+        members: members.map((m) => ({ userId: m.userId, role: m.role })),
+    });
+});
+
+coalition.post('/rings/:id/join', async (c) => {
+    const user = requireUser(c, 'Sign in to join a ring');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (ring.visibility === 'private') {
+        return c.json({ code: 'invite_only', message: 'This ring is invite-only' }, 403);
+    }
+    const existing = listRingMemberships(ring.id).find((m) => m.userId === user.sub);
+    const membership = saveRingMembership({
+        id: existing?.id ?? newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: existing?.role ?? 'member',
+        active: true,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ring.id) });
+});
+
+coalition.post('/rings/:id/leave', async (c) => {
+    const user = requireUser(c, 'Sign in to leave a ring');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const existing = listRingMemberships(ring.id).find((m) => m.userId === user.sub);
+    const membership = saveRingMembership({
+        id: existing?.id ?? newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: existing?.role ?? 'member',
+        active: false,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ring.id) });
+});
+
+const updateMemberSchema = z.object({ role: z.enum(RING_ROLES) });
+
+coalition.patch('/rings/:id/members/:userId', async (c) => {
+    const user = requireUser(c, 'Sign in to manage members');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const memberships = listRingMemberships(ring.id);
+    if (!canManageRing(memberships, user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can manage members' }, 403);
+    }
+    const parsed = await readJsonBody(c, updateMemberSchema);
+    if (parsed instanceof Response) return parsed;
+    const targetId = c.req.param('userId');
+    const target = memberships.find((m) => m.userId === targetId && m.active);
+    if (!target) {
+        return c.json({ code: 'not_found', message: 'Member not found' }, 404);
+    }
+    const membership = saveRingMembership({
+        id: target.id,
+        ringId: ring.id,
+        userId: targetId,
+        role: parsed.role,
+        active: true,
+    });
+    return c.json({ membership });
 });
 
 export default coalition;

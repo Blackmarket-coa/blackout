@@ -5,6 +5,7 @@ import {
     AID_POST_URGENCY,
     SELLER_LOCATION_TYPES,
     SPATIAL_LAYER_KEYS,
+    countActiveMembers,
     deriveDisplayStatus,
     nextOccurrence,
     summarizeRsvps,
@@ -176,6 +177,29 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
             items.push(eventToSpatialItem(event, now));
         }
     }
+    if (allowed.has('communities')) {
+        const nowIso = NOW_ISO();
+        const memberships = db.listRingMemberships();
+        for (const ring of db.listCoalitionRings()) {
+            if (!ring.location || ring.visibility !== 'public') continue;
+            const memberCount = countActiveMembers(
+                memberships.filter((m) => m.ringId === ring.id),
+            );
+            items.push({
+                id: `ring:${ring.id}`,
+                layer: 'communities',
+                title: ring.name,
+                latitude: ring.location.latitude,
+                longitude: ring.location.longitude,
+                visibility: ring.visibility,
+                eventType: 'other',
+                startsAt: nowIso,
+                status: 'live',
+                source: 'blackout',
+                meta: { ringId: ring.id, kind: ring.kind, memberCount },
+            });
+        }
+    }
     return items;
 }
 
@@ -288,6 +312,30 @@ export function newRideOfferId(): string {
 }
 export function newRideClaimId(): string {
     return `rclaim_${rand()}`;
+}
+
+// --- coalition rings ---
+
+export function listRings() {
+    return db.listCoalitionRings();
+}
+export function getRing(id: string) {
+    return db.getCoalitionRing(id);
+}
+export function saveRing(input: Parameters<typeof db.upsertCoalitionRing>[0]) {
+    return db.upsertCoalitionRing(input);
+}
+export function listRingMemberships(ringId?: string) {
+    return db.listRingMemberships(ringId);
+}
+export function saveRingMembership(input: Parameters<typeof db.upsertRingMembership>[0]) {
+    return db.upsertRingMembership(input);
+}
+export function newRingId(): string {
+    return `ring_${rand()}`;
+}
+export function newMembershipId(): string {
+    return `rmem_${rand()}`;
 }
 
 export function nowIso(): string {

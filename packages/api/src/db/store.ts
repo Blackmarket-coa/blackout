@@ -62,6 +62,8 @@ import type {
   VolunteerSignupRecord,
   RideOfferRecord,
   RideClaimRecord,
+  CoalitionRingRecord,
+  RingMembershipRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
@@ -139,6 +141,8 @@ type PersistedState = {
   eventVolunteerSignups: VolunteerSignupRecord[];
   eventRideOffers: RideOfferRecord[];
   eventRideClaims: RideClaimRecord[];
+  coalitionRings: CoalitionRingRecord[];
+  ringMemberships: RingMembershipRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
@@ -232,6 +236,10 @@ class InMemoryDb {
   eventRideOffers = new Map<string, RideOfferRecord>();
   /** Ride seat claims, keyed by `${offerId}::${riderId}`. */
   eventRideClaims = new Map<string, RideClaimRecord>();
+  /** Coalition rings (circles/crews/guilds), keyed by ring id. */
+  coalitionRings = new Map<string, CoalitionRingRecord>();
+  /** Ring memberships, keyed by `${ringId}::${userId}`. */
+  ringMemberships = new Map<string, RingMembershipRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
@@ -2109,6 +2117,54 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition rings ---
+
+  private static ringMembershipKey(ringId: string, userId: string): string {
+    return `${ringId}::${userId}`;
+  }
+
+  listCoalitionRings(): CoalitionRingRecord[] {
+    return [...this.coalitionRings.values()];
+  }
+
+  getCoalitionRing(id: string): CoalitionRingRecord | undefined {
+    return this.coalitionRings.get(id);
+  }
+
+  upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const existing = this.coalitionRings.get(input.id);
+    const now = nowIso();
+    const record: CoalitionRingRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionRings.set(record.id, record);
+    return record;
+  }
+
+  listRingMemberships(ringId?: string): RingMembershipRecord[] {
+    const all = [...this.ringMemberships.values()];
+    return ringId ? all.filter((m) => m.ringId === ringId) : all;
+  }
+
+  upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.userId);
+    const existing = this.ringMemberships.get(key);
+    const now = nowIso();
+    const record: RingMembershipRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringMemberships.set(key, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2391,6 +2447,14 @@ export class FileBackedDb extends InMemoryDb {
         parsed.eventRideClaims.map((row) => [`${row.offerId}::${row.riderId}`, row]),
       );
     }
+    if (parsed.coalitionRings) {
+      this.coalitionRings = new Map(parsed.coalitionRings.map((row) => [row.id, row]));
+    }
+    if (parsed.ringMemberships) {
+      this.ringMemberships = new Map(
+        parsed.ringMemberships.map((row) => [`${row.ringId}::${row.userId}`, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2476,6 +2540,8 @@ export class FileBackedDb extends InMemoryDb {
       eventVolunteerSignups: [...this.eventVolunteerSignups.values()],
       eventRideOffers: [...this.eventRideOffers.values()],
       eventRideClaims: [...this.eventRideClaims.values()],
+      coalitionRings: [...this.coalitionRings.values()],
+      ringMemberships: [...this.ringMemberships.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
@@ -3322,6 +3388,22 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>,
   ): RideClaimRecord {
     const created = super.upsertRideClaim(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const created = super.upsertCoalitionRing(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const created = super.upsertRingMembership(input);
     this.persist();
     return created;
   }

@@ -3,6 +3,7 @@ import type {
     CoalitionEvent,
     CoalitionFeedItem,
     CoalitionRankingModel,
+    CoalitionRing,
     CoalitionTask,
     EventCategory,
     EventLocation,
@@ -10,6 +11,8 @@ import type {
     EventRecurrence,
     EventRsvp,
     EventVisibility,
+    RingKind,
+    RingVisibility,
     RsvpStatus,
     RsvpSummary,
     SellerLocation,
@@ -347,6 +350,54 @@ export function claimRide(
     const action = release ? 'release' : 'claim';
     return postJson(
         eventPath(eventId, `/rides/${encodeURIComponent(offerId)}/${action}`),
+        {},
+        token,
+    );
+}
+
+// --- coalition rings ---
+
+export interface RingView extends CoalitionRing {
+    memberCount: number;
+}
+
+export interface CreateRingInput {
+    name: string;
+    description?: string;
+    kind?: RingKind;
+    visibility?: RingVisibility;
+    location?: { latitude: number; longitude: number; address?: string };
+    denId?: string;
+}
+
+export function fetchRings(
+    memberId: string | undefined,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ rings: RingView[] }> {
+    return getJson<{ rings: RingView[] }>(
+        appendQuery(`${COALITION_BASE}/rings`, { memberId }),
+        token,
+    );
+}
+
+export function createRing(
+    input: CreateRingInput,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ ring: CoalitionRing; memberCount: number }> {
+    return postJson<{ ring: CoalitionRing; memberCount: number }>(
+        `${COALITION_BASE}/rings`,
+        input,
+        token,
+    );
+}
+
+export function joinRing(
+    id: string,
+    leave = false,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ memberCount: number }> {
+    return postJson<{ memberCount: number }>(
+        `${COALITION_BASE}/rings/${encodeURIComponent(id)}/${leave ? 'leave' : 'join'}`,
         {},
         token,
     );

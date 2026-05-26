@@ -5,6 +5,7 @@ import {
     fetchCoalitionFeed,
     fetchCoalitionTasks,
     fetchMutualAid,
+    fetchRings,
     fetchSellerLocations,
     fetchSpatialFeed,
     type CoalitionFeedResponse,
@@ -12,6 +13,7 @@ import {
     type EventsResponse,
     type MutualAidResponse,
     type NearbyQuery,
+    type RingView,
     type SellerLocationsResponse,
     type SpatialFeedResponse,
     type TasksResponse,
@@ -100,4 +102,8 @@ export function useCoalitionTasks(scope: CoalitionScopeQuery) {
 
 export function useCoalitionEvents(scope: CoalitionScopeQuery) {
     return useAsync<EventsResponse>(() => fetchCoalitionEvents(scope), [scope.canopyId, scope.denId]);
+}
+
+export function useCoalitionRings(memberId?: string) {
+    return useAsync<{ rings: RingView[] }>(() => fetchRings(memberId), [memberId]);
 }
