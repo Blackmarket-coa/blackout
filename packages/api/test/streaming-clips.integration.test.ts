@@ -134,6 +134,112 @@ test('DELETE /v1/streaming/clips/:clipId removes the caller-owned clip', async (
     assert.equal(detail.status, 404);
 });
 
+test('PATCH /v1/streaming/clips/:clipId updates owner-owned fields', async () => {
+    const { token, userId: creatorId } = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+
+    const created = await app.request('/v1/streaming/clips', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ creatorId, title: 'Before', mediaPointer: 'mxc://blackout/clip-edit' }),
+    });
+    const clip = (await created.json()) as { id: string; updatedAt: string };
+
+    const patched = await app.request(`/v1/streaming/clips/${clip.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ title: 'After', visibility: 'member_only', tags: ['edited'] }),
+    });
+    assert.equal(patched.status, 200);
+    const body = (await patched.json()) as {
+        id: string;
+        title: string;
+        visibility: string;
+        tags: string[];
+        updatedAt: string;
+    };
+    assert.equal(body.id, clip.id);
+    assert.equal(body.title, 'After');
+    assert.equal(body.visibility, 'member_only');
+    assert.deepEqual(body.tags, ['edited']);
+});
+
+test('PATCH /v1/streaming/clips/:clipId rejects an empty patch with 400', async () => {
+    const { token, userId: creatorId } = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+
+    const created = await app.request('/v1/streaming/clips', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ creatorId, title: 'NoOp', mediaPointer: 'mxc://blackout/clip-noop' }),
+    });
+    const clip = (await created.json()) as { id: string };
+
+    const patched = await app.request(`/v1/streaming/clips/${clip.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({}),
+    });
+    assert.equal(patched.status, 400);
+});
+
+test('PATCH /v1/streaming/clips/:clipId rejects a non-owner with 403', async () => {
+    const { token, userId: creatorId } = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+
+    const created = await app.request('/v1/streaming/clips', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ creatorId, title: 'Mine', mediaPointer: 'mxc://blackout/clip-owned' }),
+    });
+    const clip = (await created.json()) as { id: string };
+
+    const { token: otherToken } = await issueToken();
+    const patched = await app.request(`/v1/streaming/clips/${clip.id}`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${otherToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Hijacked' }),
+    });
+    assert.equal(patched.status, 403);
+});
+
+test('PATCH /v1/streaming/clips/:clipId returns 404 for an unknown clip', async () => {
+    const { token } = await issueToken();
+    const patched = await app.request('/v1/streaming/clips/00000000-0000-0000-0000-000000000000', {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'ghost' }),
+    });
+    assert.equal(patched.status, 404);
+});
+
+test('clip writes are rate limited per client (429 once the bucket is exhausted)', async () => {
+    const { token, userId: creatorId } = await issueToken();
+    // Distinct forwarded IP so this bucket is isolated from the other tests'
+    // `local` bucket; the default clip-write limit is 30/min.
+    const headers = {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.77',
+    };
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i += 1) {
+        const res = await app.request('/v1/streaming/clips', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ creatorId, title: `Flood ${i}`, mediaPointer: `mxc://blackout/flood-${i}` }),
+        });
+        statuses.push(res.status);
+    }
+
+    assert.ok(
+        statuses.slice(0, 30).every((s) => s === 201),
+        'first 30 writes should be accepted',
+    );
+    assert.equal(statuses[30], 429, '31st write should be rate limited');
+});
+
 test('GET /v1/streaming/clips rejects unauthenticated callers', async () => {
     const response = await app.request('/v1/streaming/clips');
     assert.equal(response.status, 401);

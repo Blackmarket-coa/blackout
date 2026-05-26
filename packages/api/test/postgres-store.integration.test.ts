@@ -202,3 +202,46 @@ test('write-through persists across a simulated restart', async () => {
     'deleted youtube link should not hydrate',
   );
 });
+
+test('updateClip write-through persists the patch (PATCH /clips/:id path)', async () => {
+  const { pool } = await freshDb();
+
+  const store1 = new PostgresBackedDb();
+  await store1.init(pool);
+
+  const clipId = randomUUID();
+  store1.upsertClip({
+    id: clipId,
+    creatorId: 'creator-1',
+    sourceStreamId: 'stream-1',
+    title: 'Original title',
+    mediaPointer: 'mxc://server/original',
+    durationSeconds: 30,
+    visibility: 'public',
+    tags: ['raw'],
+  });
+
+  // The clip PATCH endpoint applies a partial update via updateClip. In
+  // Postgres mode this must reach the database, not just the in-memory mirror
+  // — otherwise the edit is silently lost on restart / across replicas.
+  const updated = store1.updateClip(clipId, {
+    title: 'Edited title',
+    visibility: 'member_only',
+    tags: ['edited', 'highlight'],
+  });
+  assert.ok(updated, 'updateClip should return the patched record');
+  assert.equal(updated?.title, 'Edited title');
+
+  await store1.drain();
+
+  // Simulate a restart: a fresh store hydrating from the same database must
+  // observe the patch (it would not if updateClip skipped write-through).
+  const store2 = new PostgresBackedDb();
+  await store2.init(pool);
+
+  const hydrated = store2.getClip(clipId);
+  assert.ok(hydrated, 'clip should hydrate after restart');
+  assert.equal(hydrated?.title, 'Edited title');
+  assert.equal(hydrated?.visibility, 'member_only');
+  assert.deepEqual(hydrated?.tags, ['edited', 'highlight']);
+});

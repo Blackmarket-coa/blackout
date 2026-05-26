@@ -357,6 +357,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   upsertEventRsvp: upsert('eventRsvps'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
+  updateClip: upsert('clips'),
   deleteClip: resync('clips'),
   upsertColiseumTopic: upsert('coliseumTopics'),
   upsertColiseumArgument: upsert('coliseumArguments'),

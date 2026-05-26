@@ -192,7 +192,8 @@ export type VerifyResult =
 const toBase64Url = (bytes: Uint8Array): string =>
     Buffer.from(bytes).toString('base64url');
 
-const fromBase64Url = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'base64url'));
+const fromBase64Url = (s: string): Uint8Array<ArrayBuffer> =>
+  new Uint8Array(Buffer.from(s, 'base64url'));
 
 /**
  * Server-side attestation verification. Delegates to

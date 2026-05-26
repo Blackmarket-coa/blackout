@@ -42,7 +42,8 @@ import { log } from '../telemetry/logger';
 export interface MatrixSendEventClient {
   sendEvent: (
     roomId: string,
-    content: Record<string, unknown>,
+    // Any JSON-serializable event content; typed message objects are accepted.
+    content: object,
     options?: { eventType?: string; txnId?: string },
   ) => Promise<{ ok: boolean; status?: number; reason?: 'matrix_not_configured' }>;
 }

@@ -22,9 +22,6 @@ import type {
   VoiceRoomParticipantRecord,
   VoteEntryRecord,
   VoteRecord,
-  ForumPostRecord,
-  DeadDropRecord,
-  ModerationActionRecord,
   CreatorStreamAuthRecord,
   StreamRecord,
   StreamSessionRecord,
@@ -1502,6 +1499,22 @@ class InMemoryDb {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const existing = this.clips.get(clipId);
+    if (!existing) return undefined;
+    const record: ClipRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.clips.set(clipId, record);
+    return record;
+  }
+
   getFederatedCommunities(communityIds: string[]): string[] {
     const linked = [...this.federationLinks.values()].flatMap((link) => [link.sourceCommunityId, link.targetCommunityId]);
     return [...new Set(linked.filter((id) => communityIds.includes(id)))];
@@ -2112,16 +2125,26 @@ class InMemoryDb {
 }
 
 export class FileBackedDb extends InMemoryDb {
+  // Persistence is suppressed until construction finishes. During `super()` the
+  // InMemoryDb constructor seeds a demo user, whose persisting override would
+  // otherwise write an empty snapshot over an existing file BEFORE hydrate()
+  // could load it — silently wiping real data on every restart. Reads as
+  // `undefined` (falsy) during `super()` since instance fields initialize after
+  // the base constructor returns, so the guard is active throughout seeding.
+  private ready = false;
+
   constructor() {
     super();
+    const fileExisted = existsSync(DB_FILE_PATH);
     this.hydrate();
+    this.ready = true;
+    // First boot only: write the seeded snapshot. On restart the file already
+    // holds real data loaded by hydrate(), so we leave it untouched.
+    if (!fileExisted) this.persist();
   }
 
   private hydrate() {
-    if (!existsSync(DB_FILE_PATH)) {
-      this.persist();
-      return;
-    }
+    if (!existsSync(DB_FILE_PATH)) return;
 
     const parsed = JSON.parse(readFileSync(DB_FILE_PATH, 'utf8')) as PersistedState;
     this.users = new Map(parsed.users.map((row) => [row.id, row]));
@@ -2339,6 +2362,9 @@ export class FileBackedDb extends InMemoryDb {
   }
 
   private persist() {
+    // Suppressed during construction (see `ready`) so demo-seed writes can't
+    // clobber an existing file before hydrate() loads it.
+    if (!this.ready) return;
     mkdirSync(dirname(DB_FILE_PATH), { recursive: true });
     writeFileSync(DB_FILE_PATH, `${JSON.stringify(this.snapshot(), null, 2)}\n`, 'utf8');
   }
@@ -2614,6 +2640,20 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.upsertClip(input);
     this.persist();
     return created;
+  }
+
+  override updateClip(
+    clipId: string,
+    patch: Partial<
+      Pick<
+        ClipRecord,
+        'title' | 'sourceStreamId' | 'mediaPointer' | 'thumbnailPointer' | 'durationSeconds' | 'visibility' | 'tags'
+      >
+    >,
+  ): ClipRecord | undefined {
+    const updated = super.updateClip(clipId, patch);
+    if (updated) this.persist();
+    return updated;
   }
 
   override deleteClip(clipId: string): boolean {

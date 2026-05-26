@@ -11,7 +11,7 @@ const homeserverDomain = () =>
 const createLinkSchema = z.object({
   sourceCommunityId: z.string().min(1),
   targetCommunityId: z.string().min(1),
-  linkType: z.string().optional(),
+  linkType: z.enum(['zone', 'alliance', 'supply_chain']).optional(),
   matrixBridgeRoomId: z.string().optional(),
 });
 

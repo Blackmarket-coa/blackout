@@ -304,7 +304,7 @@ export const verifyInclusion = (
     if (proof.treeSize !== expectedRoot.treeSize) return false;
     if (proof.leafIndex < 0 || proof.leafIndex >= proof.treeSize) return false;
 
-    let hash = Buffer.from(proof.leafHash, 'base64url');
+    let hash: Buffer = Buffer.from(proof.leafHash, 'base64url');
     let fn = proof.leafIndex;
     let sn = proof.treeSize - 1;
 

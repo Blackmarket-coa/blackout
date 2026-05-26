@@ -482,6 +482,38 @@ test('scheduler.runYoutubePoll: walks every active bridge; one no_active_broadca
   assert.equal(result.delivered, 1, 'second user still delivered');
 });
 
+test('scheduler.runYoutubePoll: a rate-limited bridge is skipped on the next tick (honors Retry-After)', async () => {
+  const { service, scheduler, db } = await loadModules();
+  scheduler.__resetPollGateForTests();
+  const alice = await seedUser(db);
+  await seedYoutubeLink(alice.id);
+  service.createBridge({
+    blackoutUserId: alice.id,
+    youtubeChannelId: VALID_CHANNEL_ID,
+    matrixRoomId: '!a:srv',
+  });
+  const { matrixClient } = buildFakeMatrix();
+
+  let fetchCalls = 0;
+  const stubFetch: typeof fetch = (async () => {
+    fetchCalls += 1;
+    return new Response('rate limited', { status: 429, headers: { 'retry-after': '120' } });
+  }) as unknown as typeof fetch;
+
+  // First poll hits YouTube and gets rate-limited → bridge gated for ~120s.
+  const first = await scheduler.runYoutubePoll({ matrixClient, fetch: stubFetch });
+  assert.equal(first.rateLimited, 1);
+  assert.equal(first.skipped, 0);
+  assert.equal(fetchCalls, 1);
+
+  // Second poll runs immediately: the bridge is still gated, so it is skipped
+  // and YouTube is NOT contacted again.
+  const second = await scheduler.runYoutubePoll({ matrixClient, fetch: stubFetch });
+  assert.equal(second.skipped, 1, 'rate-limited bridge should be skipped');
+  assert.equal(second.rateLimited, 0);
+  assert.equal(fetchCalls, 1, 'no second call to YouTube while gated');
+});
+
 test('scheduler.start/stop: idempotent + restartable', async () => {
   const { scheduler } = await loadModules();
   assert.equal(scheduler.isYoutubeChatSchedulerRunning(), false);

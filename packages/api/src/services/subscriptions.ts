@@ -69,7 +69,9 @@ const CANOPY_PRODUCTS = [
   graceDays: number;
 }>;
 
-const productsByPlan = new Map(CANOPY_PRODUCTS.map((p) => [p.planCode, p]));
+const productsByPlan = new Map<string, (typeof CANOPY_PRODUCTS)[number]>(
+  CANOPY_PRODUCTS.map((p) => [p.planCode, p]),
+);
 
 const subscriptions = new Map<string, SubscriptionRecord>();
 const auditTimelineByUser = new Map<string, SubscriptionAuditEvent[]>();
