@@ -4,20 +4,76 @@ import {
     AID_POST_CATEGORIES,
     AID_POST_TYPES,
     AID_POST_URGENCY,
+    EVENT_CATEGORIES,
+    EVENT_LIFECYCLE_STATUSES,
+    EVENT_VISIBILITY,
+    INSTALL_SCOPE_TYPES,
+    KIT_DEFINITIONS,
+    RECURRENCE_FREQUENCIES,
+    RING_KINDS,
+    RING_ROLES,
+    RING_VISIBILITY,
+    RSVP_STATUSES,
     SPATIAL_LAYER_KEYS,
     TASK_STATUSES,
+    canManageRing,
+    countActive,
+    countActiveMembers,
+    expandOccurrences,
+    getKit,
     isWithinRadiusMeters,
+    nextOccurrence,
     rankCoalitionFeed,
+    seatsRemaining,
+    slotRemaining,
 } from '@blackout/core';
 import {
     createAidPost,
+    getEvent,
+    getRideOffer,
+    getVolunteerSlot,
     listAidPosts,
+    listEventRsvps,
+    listEvents,
     listFeedItems,
+    listRideClaims,
+    listRideOffers,
     listSellerLocations,
     listSpatialItems,
+    listVolunteerSignups,
+    listVolunteerSlots,
+    getRing,
+    listKitApplications,
+    listRingInvitations,
+    listRingMemberships,
+    listRings,
     newAidId,
+    newEventId,
+    newKitApplicationId,
+    newMembershipId,
+    newRingInvitationId,
+    newRideClaimId,
+    newRideOfferId,
+    newRingId,
+    newRsvpId,
+    newSignupId,
+    newSlotId,
+    rsvpSummaryFor,
+    saveEvent,
+    saveRideClaim,
+    saveRideOffer,
+    recordKitApplication,
+    saveRing,
+    saveRingInvitation,
+    saveRingMembership,
+    saveRsvp,
+    saveVolunteerSignup,
+    saveVolunteerSlot,
 } from '../services/coalitionStore';
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
+import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
+import { db } from '../db/store';
+import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 
@@ -199,6 +255,613 @@ coalition.patch('/tasks/:id', async (c) => {
         return c.json({ code: 'not_found', message: 'Task not found' }, 404);
     }
     return c.json({ task });
+});
+
+// --- Coalition events (gatherings) ---
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+coalition.get('/events', (c) => {
+    const denId = c.req.query('denId');
+    const now = Date.now();
+    const events = listEvents({ denId }).map((event) => ({
+        ...event,
+        rsvpSummary: rsvpSummaryFor(event.id),
+        nextOccurrence: nextOccurrence(event, now),
+    }));
+    return c.json({ events });
+});
+
+coalition.get('/events/:id', (c) => {
+    const event = getEvent(c.req.param('id'));
+    if (!event) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
+    const now = Date.now();
+    // Anchor the horizon on the event's own start so far-future / recurring
+    // events still surface their upcoming occurrences.
+    const horizon = Math.max(now, Date.parse(event.startsAt)) + DAY_MS * 365;
+    const occurrences = expandOccurrences(event, now - DAY_MS, horizon, now).slice(0, 50);
+    return c.json({
+        event,
+        rsvpSummary: rsvpSummaryFor(event.id),
+        rsvps: listEventRsvps(event.id),
+        occurrences,
+    });
+});
+
+const recurrenceSchema = z.object({
+    frequency: z.enum(RECURRENCE_FREQUENCIES),
+    interval: z.number().int().min(1).max(365),
+    until: z.string().datetime().optional(),
+    count: z.number().int().min(1).max(366).optional(),
+});
+
+const eventLocationSchema = z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    address: z.string().max(280).optional(),
+});
+
+const createEventSchema = z.object({
+    title: z.string().min(1).max(140),
+    description: z.string().min(1).max(2000),
+    location: eventLocationSchema,
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().optional(),
+    category: z.enum(EVENT_CATEGORIES),
+    visibility: z.enum(EVENT_VISIBILITY).default('public'),
+    denId: z.string().optional(),
+    capacity: z.number().int().min(1).max(1_000_000).optional(),
+    recurrence: recurrenceSchema.optional(),
+});
+
+coalition.post('/events', async (c) => {
+    const user = requireUser(c, 'Sign in to create an event');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createEventSchema);
+    if (parsed instanceof Response) return parsed;
+    const event = saveEvent({
+        id: newEventId(),
+        organizerId: user.sub,
+        title: parsed.title,
+        description: parsed.description,
+        location: parsed.location,
+        startsAt: parsed.startsAt,
+        endsAt: parsed.endsAt,
+        category: parsed.category,
+        visibility: parsed.visibility,
+        status: 'scheduled',
+        denId: parsed.denId,
+        capacity: parsed.capacity,
+        recurrence: parsed.recurrence,
+    });
+    return c.json({ event }, 201);
+});
+
+const updateEventSchema = z.object({
+    title: z.string().min(1).max(140).optional(),
+    description: z.string().min(1).max(2000).optional(),
+    location: eventLocationSchema.optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().nullable().optional(),
+    status: z.enum(EVENT_LIFECYCLE_STATUSES).optional(),
+    denId: z.string().nullable().optional(),
+    capacity: z.number().int().min(1).max(1_000_000).nullable().optional(),
+    recurrence: recurrenceSchema.nullable().optional(),
+});
+
+coalition.patch('/events/:id', async (c) => {
+    const user = requireUser(c, 'Sign in to edit an event');
+    if (user instanceof Response) return user;
+    const existing = getEvent(c.req.param('id'));
+    if (!existing) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
+    if (existing.organizerId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the organizer can edit this event' }, 403);
+    }
+    const parsed = await readJsonBody(c, updateEventSchema);
+    if (parsed instanceof Response) return parsed;
+    // Apply the patch: undefined = leave as-is, null = clear an optional field.
+    const next = { ...existing } as Record<string, unknown>;
+    for (const [key, value] of Object.entries(parsed)) {
+        if (value === undefined) continue;
+        if (value === null) delete next[key];
+        else next[key] = value;
+    }
+    const event = saveEvent(next as Parameters<typeof saveEvent>[0]);
+    return c.json({ event });
+});
+
+const rsvpSchema = z.object({ status: z.enum(RSVP_STATUSES) });
+
+coalition.post('/events/:id/rsvp', async (c) => {
+    const user = requireUser(c, 'Sign in to RSVP');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
+    const parsed = await readJsonBody(c, rsvpSchema);
+    if (parsed instanceof Response) return parsed;
+    const rsvp = saveRsvp({
+        id: newRsvpId(),
+        eventId: event.id,
+        userId: user.sub,
+        status: parsed.status,
+    });
+    return c.json({ rsvp, rsvpSummary: rsvpSummaryFor(event.id) });
+});
+
+// Provision an "after-event den" — a persistent Matrix room attached to the
+// event so attendees keep organizing once it ends.
+coalition.post('/events/:id/den', async (c) => {
+    const user = requireUser(c, 'Sign in to create a den');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) {
+        return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    }
+    if (event.organizerId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the organizer can create the den' }, 403);
+    }
+    if (event.denId) {
+        return c.json({ denId: event.denId, created: false });
+    }
+    const result = await matrixClient.createRoom({
+        name: event.title,
+        topic: `Coalition event den: ${event.title}`,
+        preset: 'public_chat',
+        visibility: event.visibility === 'public' ? 'public' : 'private',
+    });
+    if (!result.ok) {
+        return c.json(
+            { code: 'matrix_unavailable', message: 'Could not create den', reason: result.reason },
+            502,
+        );
+    }
+    const updated = saveEvent({ ...event, denId: result.roomId });
+    return c.json({ denId: result.roomId, event: updated, created: true }, 201);
+});
+
+// --- event volunteer slots ---
+
+const createSlotSchema = z.object({
+    role: z.string().min(1).max(120),
+    capacity: z.number().int().min(1).max(10_000),
+});
+
+coalition.post('/events/:id/volunteer-slots', async (c) => {
+    const user = requireUser(c, 'Sign in to add a volunteer slot');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    if (event.organizerId !== user.sub) {
+        return c.json({ code: 'forbidden', message: 'Only the organizer can add slots' }, 403);
+    }
+    const parsed = await readJsonBody(c, createSlotSchema);
+    if (parsed instanceof Response) return parsed;
+    const slot = saveVolunteerSlot({
+        id: newSlotId(),
+        eventId: event.id,
+        role: parsed.role,
+        capacity: parsed.capacity,
+        status: 'open',
+    });
+    return c.json({ slot }, 201);
+});
+
+coalition.get('/events/:id/volunteer-slots', (c) => {
+    const eventId = c.req.param('id');
+    const signups = listVolunteerSignups(eventId);
+    const slots = listVolunteerSlots(eventId)
+        .filter((slot) => slot.status === 'open')
+        .map((slot) => {
+            const filled = countActive(signups.filter((s) => s.slotId === slot.id));
+            return { ...slot, filled, remaining: slotRemaining(slot, filled) };
+        });
+    return c.json({ slots });
+});
+
+coalition.post('/events/:id/volunteer-slots/:slotId/signup', async (c) => {
+    const user = requireUser(c, 'Sign in to volunteer');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const slot = getVolunteerSlot(c.req.param('slotId'));
+    if (!slot || slot.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
+    }
+    const othersActive = countActive(
+        listVolunteerSignups(eventId).filter((s) => s.slotId === slot.id && s.userId !== user.sub),
+    );
+    if (othersActive >= slot.capacity) {
+        return c.json({ code: 'slot_full', message: 'This slot is full' }, 409);
+    }
+    const signup = saveVolunteerSignup({
+        id: newSignupId(),
+        slotId: slot.id,
+        eventId,
+        userId: user.sub,
+        active: true,
+    });
+    return c.json({ signup });
+});
+
+coalition.post('/events/:id/volunteer-slots/:slotId/withdraw', async (c) => {
+    const user = requireUser(c, 'Sign in to withdraw');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const slot = getVolunteerSlot(c.req.param('slotId'));
+    if (!slot || slot.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Volunteer slot not found' }, 404);
+    }
+    const signup = saveVolunteerSignup({
+        id: newSignupId(),
+        slotId: slot.id,
+        eventId,
+        userId: user.sub,
+        active: false,
+    });
+    return c.json({ signup });
+});
+
+// --- event ride coordination ---
+
+const createRideSchema = z.object({
+    originLabel: z.string().min(1).max(200),
+    departAt: z.string().datetime().optional(),
+    seatsTotal: z.number().int().min(1).max(50),
+    notes: z.string().max(500).optional(),
+});
+
+coalition.post('/events/:id/rides', async (c) => {
+    const user = requireUser(c, 'Sign in to offer a ride');
+    if (user instanceof Response) return user;
+    const event = getEvent(c.req.param('id'));
+    if (!event) return c.json({ code: 'not_found', message: 'Event not found' }, 404);
+    const parsed = await readJsonBody(c, createRideSchema);
+    if (parsed instanceof Response) return parsed;
+    const offer = saveRideOffer({
+        id: newRideOfferId(),
+        eventId: event.id,
+        driverId: user.sub,
+        originLabel: parsed.originLabel,
+        departAt: parsed.departAt,
+        seatsTotal: parsed.seatsTotal,
+        notes: parsed.notes,
+        status: 'open',
+    });
+    return c.json({ offer }, 201);
+});
+
+coalition.get('/events/:id/rides', (c) => {
+    const eventId = c.req.param('id');
+    const claims = listRideClaims(eventId);
+    const offers = listRideOffers(eventId)
+        .filter((offer) => offer.status === 'open')
+        .map((offer) => {
+            const claimed = countActive(claims.filter((cl) => cl.offerId === offer.id));
+            return { ...offer, claimed, seatsRemaining: seatsRemaining(offer, claimed) };
+        });
+    return c.json({ offers });
+});
+
+coalition.post('/events/:id/rides/:offerId/claim', async (c) => {
+    const user = requireUser(c, 'Sign in to claim a seat');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const offer = getRideOffer(c.req.param('offerId'));
+    if (!offer || offer.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
+    }
+    const othersActive = countActive(
+        listRideClaims(eventId).filter((cl) => cl.offerId === offer.id && cl.riderId !== user.sub),
+    );
+    if (othersActive >= offer.seatsTotal) {
+        return c.json({ code: 'ride_full', message: 'No seats remaining' }, 409);
+    }
+    const claim = saveRideClaim({
+        id: newRideClaimId(),
+        offerId: offer.id,
+        eventId,
+        riderId: user.sub,
+        active: true,
+    });
+    return c.json({ claim });
+});
+
+coalition.post('/events/:id/rides/:offerId/release', async (c) => {
+    const user = requireUser(c, 'Sign in to release a seat');
+    if (user instanceof Response) return user;
+    const eventId = c.req.param('id');
+    const offer = getRideOffer(c.req.param('offerId'));
+    if (!offer || offer.eventId !== eventId) {
+        return c.json({ code: 'not_found', message: 'Ride offer not found' }, 404);
+    }
+    const claim = saveRideClaim({
+        id: newRideClaimId(),
+        offerId: offer.id,
+        eventId,
+        riderId: user.sub,
+        active: false,
+    });
+    return c.json({ claim });
+});
+
+// --- Coalition rings (trusted circles/crews/guilds) ---
+
+const memberCountFor = (ringId: string): number =>
+    countActiveMembers(listRingMemberships(ringId));
+
+const ringLocationSchema = z.object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    address: z.string().max(280).optional(),
+});
+
+const createRingSchema = z.object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(2000).default(''),
+    kind: z.enum(RING_KINDS).default('circle'),
+    visibility: z.enum(RING_VISIBILITY).default('public'),
+    location: ringLocationSchema.optional(),
+    denId: z.string().optional(),
+});
+
+coalition.get('/rings', (c) => {
+    const memberId = c.req.query('memberId');
+    const memberships = listRingMemberships();
+    let rings = listRings();
+    if (memberId) {
+        // A user's rings (for profile display) — exclude private rings of others.
+        const ringIds = new Set(
+            memberships.filter((m) => m.userId === memberId && m.active).map((m) => m.ringId),
+        );
+        rings = rings.filter((r) => ringIds.has(r.id) && r.visibility !== 'private');
+    } else {
+        rings = rings.filter((r) => r.visibility === 'public');
+    }
+    const result = rings.map((ring) => ({
+        ...ring,
+        memberCount: countActiveMembers(memberships.filter((m) => m.ringId === ring.id)),
+    }));
+    return c.json({ rings: result });
+});
+
+coalition.post('/rings', async (c) => {
+    const user = requireUser(c, 'Sign in to create a ring');
+    if (user instanceof Response) return user;
+    const parsed = await readJsonBody(c, createRingSchema);
+    if (parsed instanceof Response) return parsed;
+    const ring = saveRing({
+        id: newRingId(),
+        name: parsed.name,
+        description: parsed.description,
+        kind: parsed.kind,
+        visibility: parsed.visibility,
+        ownerId: user.sub,
+        location: parsed.location,
+        denId: parsed.denId,
+    });
+    // The creator is the founding owner.
+    saveRingMembership({
+        id: newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: 'owner',
+        active: true,
+    });
+    return c.json({ ring, memberCount: 1 }, 201);
+});
+
+coalition.get('/rings/:id', (c) => {
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const members = listRingMemberships(ring.id).filter((m) => m.active);
+    return c.json({
+        ring,
+        memberCount: members.length,
+        members: members.map((m) => ({ userId: m.userId, role: m.role })),
+    });
+});
+
+coalition.post('/rings/:id/join', async (c) => {
+    const user = requireUser(c, 'Sign in to join a ring');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (ring.visibility === 'private') {
+        return c.json({ code: 'invite_only', message: 'This ring is invite-only' }, 403);
+    }
+    const existing = listRingMemberships(ring.id).find((m) => m.userId === user.sub);
+    const membership = saveRingMembership({
+        id: existing?.id ?? newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: existing?.role ?? 'member',
+        active: true,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ring.id) });
+});
+
+coalition.post('/rings/:id/leave', async (c) => {
+    const user = requireUser(c, 'Sign in to leave a ring');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const existing = listRingMemberships(ring.id).find((m) => m.userId === user.sub);
+    const membership = saveRingMembership({
+        id: existing?.id ?? newMembershipId(),
+        ringId: ring.id,
+        userId: user.sub,
+        role: existing?.role ?? 'member',
+        active: false,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ring.id) });
+});
+
+const updateMemberSchema = z.object({ role: z.enum(RING_ROLES) });
+
+coalition.patch('/rings/:id/members/:userId', async (c) => {
+    const user = requireUser(c, 'Sign in to manage members');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    const memberships = listRingMemberships(ring.id);
+    if (!canManageRing(memberships, user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can manage members' }, 403);
+    }
+    const parsed = await readJsonBody(c, updateMemberSchema);
+    if (parsed instanceof Response) return parsed;
+    const targetId = c.req.param('userId');
+    const target = memberships.find((m) => m.userId === targetId && m.active);
+    if (!target) {
+        return c.json({ code: 'not_found', message: 'Member not found' }, 404);
+    }
+    const membership = saveRingMembership({
+        id: target.id,
+        ringId: ring.id,
+        userId: targetId,
+        role: parsed.role,
+        active: true,
+    });
+    return c.json({ membership });
+});
+
+// --- ring invitations (the path into private rings) ---
+
+coalition.get('/rings/invites/mine', (c) => {
+    const user = requireUser(c, 'Sign in to view invitations');
+    if (user instanceof Response) return user;
+    const invitations = listRingInvitations({ inviteeId: user.sub }).filter(
+        (inv) => inv.status === 'pending',
+    );
+    return c.json({ invitations });
+});
+
+const inviteSchema = z.object({ inviteeId: z.string().min(1).max(255) });
+
+coalition.post('/rings/:id/invites', async (c) => {
+    const user = requireUser(c, 'Sign in to invite members');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (!canManageRing(listRingMemberships(ring.id), user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can invite' }, 403);
+    }
+    const parsed = await readJsonBody(c, inviteSchema);
+    if (parsed instanceof Response) return parsed;
+    const invitation = saveRingInvitation({
+        id: newRingInvitationId(),
+        ringId: ring.id,
+        inviterId: user.sub,
+        inviteeId: parsed.inviteeId,
+        status: 'pending',
+    });
+    return c.json({ invitation }, 201);
+});
+
+coalition.get('/rings/:id/invites', (c) => {
+    const user = requireUser(c, 'Sign in to view invitations');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (!canManageRing(listRingMemberships(ring.id), user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can view invitations' }, 403);
+    }
+    return c.json({ invitations: listRingInvitations({ ringId: ring.id }) });
+});
+
+coalition.post('/rings/:id/invites/accept', async (c) => {
+    const user = requireUser(c, 'Sign in to accept an invitation');
+    if (user instanceof Response) return user;
+    const ringId = c.req.param('id');
+    const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
+        (inv) => inv.status === 'pending',
+    );
+    if (!invite) {
+        return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
+    }
+    saveRingInvitation({ ...invite, status: 'accepted' });
+    const membership = saveRingMembership({
+        id: newMembershipId(),
+        ringId,
+        userId: user.sub,
+        role: 'member',
+        active: true,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ringId) });
+});
+
+coalition.post('/rings/:id/invites/decline', async (c) => {
+    const user = requireUser(c, 'Sign in to decline an invitation');
+    if (user instanceof Response) return user;
+    const ringId = c.req.param('id');
+    const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
+        (inv) => inv.status === 'pending',
+    );
+    if (!invite) {
+        return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
+    }
+    const invitation = saveRingInvitation({ ...invite, status: 'declined' });
+    return c.json({ invitation });
+});
+
+// --- Coalition kits (preconfigured community setup packs) ---
+
+coalition.get('/kits', (c) => {
+    return c.json({ kits: KIT_DEFINITIONS });
+});
+
+coalition.get('/kits/applied', (c) => {
+    const scopeType = c.req.query('scopeType');
+    const scopeId = c.req.query('scopeId');
+    return c.json({ applications: listKitApplications({ scopeType, scopeId }) });
+});
+
+const applyKitSchema = z.object({
+    scopeType: z.enum(INSTALL_SCOPE_TYPES),
+    scopeId: z.string().min(1),
+});
+
+coalition.post('/kits/:id/apply', async (c) => {
+    const user = requireUser(c, 'Sign in to apply a kit');
+    if (user instanceof Response) return user;
+    const kit = getKit(c.req.param('id'));
+    if (!kit) return c.json({ code: 'not_found', message: 'Kit not found' }, 404);
+    const parsed = await readJsonBody(c, applyKitSchema);
+    if (parsed instanceof Response) return parsed;
+
+    const scope = { type: parsed.scopeType, id: parsed.scopeId };
+    const reputationTier = db.getUserById(user.sub)?.reputationTier ?? 'member';
+    const scopeAuth = authorizeScope(user.sub, reputationTier, scope);
+    if (!scopeAuth.ok) {
+        return c.json({ code: scopeAuth.code, message: scopeAuth.message }, 403);
+    }
+
+    // Install each bundled (free, in-tree) plugin at the target scope.
+    const installations = kit.plugins.map((plugin) =>
+        installPluginAtScope({
+            pluginId: plugin.pluginId,
+            scope,
+            installedByUserId: user.sub,
+            entitlementId: null,
+            artifactKind: plugin.artifactKind,
+            domain: plugin.domain,
+            manifest: { id: plugin.pluginId, name: kit.name, kit: kit.id, free: true },
+        }),
+    );
+
+    const application = recordKitApplication({
+        id: newKitApplicationId(),
+        kitId: kit.id,
+        scopeType: parsed.scopeType,
+        scopeId: parsed.scopeId,
+        appliedByUserId: user.sub,
+    });
+
+    return c.json({ kit, enabledTabs: kit.enabledTabs, installations, application }, 201);
 });
 
 export default coalition;

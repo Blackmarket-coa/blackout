@@ -56,6 +56,16 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  CoalitionEventRecord,
+  EventRsvpRecord,
+  VolunteerSlotRecord,
+  VolunteerSignupRecord,
+  RideOfferRecord,
+  RideClaimRecord,
+  CoalitionRingRecord,
+  RingMembershipRecord,
+  RingInvitationRecord,
+  CoalitionKitApplicationRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
@@ -127,6 +137,16 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  coalitionEvents: CoalitionEventRecord[];
+  eventRsvps: EventRsvpRecord[];
+  eventVolunteerSlots: VolunteerSlotRecord[];
+  eventVolunteerSignups: VolunteerSignupRecord[];
+  eventRideOffers: RideOfferRecord[];
+  eventRideClaims: RideClaimRecord[];
+  coalitionRings: CoalitionRingRecord[];
+  ringMemberships: RingMembershipRecord[];
+  ringInvitations: RingInvitationRecord[];
+  coalitionKitApplications: CoalitionKitApplicationRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
@@ -208,6 +228,26 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Coalition events (gatherings), keyed by event id. */
+  coalitionEvents = new Map<string, CoalitionEventRecord>();
+  /** Event RSVPs, keyed by `${eventId}::${userId}` (one per attendee per event). */
+  eventRsvps = new Map<string, EventRsvpRecord>();
+  /** Volunteer slots, keyed by slot id. */
+  eventVolunteerSlots = new Map<string, VolunteerSlotRecord>();
+  /** Volunteer signups, keyed by `${slotId}::${userId}`. */
+  eventVolunteerSignups = new Map<string, VolunteerSignupRecord>();
+  /** Ride offers, keyed by offer id. */
+  eventRideOffers = new Map<string, RideOfferRecord>();
+  /** Ride seat claims, keyed by `${offerId}::${riderId}`. */
+  eventRideClaims = new Map<string, RideClaimRecord>();
+  /** Coalition rings (circles/crews/guilds), keyed by ring id. */
+  coalitionRings = new Map<string, CoalitionRingRecord>();
+  /** Ring memberships, keyed by `${ringId}::${userId}`. */
+  ringMemberships = new Map<string, RingMembershipRecord>();
+  /** Ring invitations, keyed by `${ringId}::${inviteeId}`. */
+  ringInvitations = new Map<string, RingInvitationRecord>();
+  /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
+  coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
@@ -1951,6 +1991,229 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition events + RSVPs ---
+
+  private static eventRsvpKey(eventId: string, userId: string): string {
+    return `${eventId}::${userId}`;
+  }
+
+  listCoalitionEvents(): CoalitionEventRecord[] {
+    return [...this.coalitionEvents.values()];
+  }
+
+  getCoalitionEvent(id: string): CoalitionEventRecord | undefined {
+    return this.coalitionEvents.get(id);
+  }
+
+  upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const existing = this.coalitionEvents.get(input.id);
+    const now = nowIso();
+    const record: CoalitionEventRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionEvents.set(record.id, record);
+    return record;
+  }
+
+  listEventRsvps(eventId: string): EventRsvpRecord[] {
+    return [...this.eventRsvps.values()].filter((rsvp) => rsvp.eventId === eventId);
+  }
+
+  upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const key = InMemoryDb.eventRsvpKey(input.eventId, input.userId);
+    const existing = this.eventRsvps.get(key);
+    const now = nowIso();
+    const record: EventRsvpRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRsvps.set(key, record);
+    return record;
+  }
+
+  // --- event volunteer slots + ride coordination ---
+
+  private static signupKey(slotId: string, userId: string): string {
+    return `${slotId}::${userId}`;
+  }
+  private static rideClaimKey(offerId: string, riderId: string): string {
+    return `${offerId}::${riderId}`;
+  }
+
+  listVolunteerSlots(eventId: string): VolunteerSlotRecord[] {
+    return [...this.eventVolunteerSlots.values()].filter((slot) => slot.eventId === eventId);
+  }
+
+  getVolunteerSlot(id: string): VolunteerSlotRecord | undefined {
+    return this.eventVolunteerSlots.get(id);
+  }
+
+  upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const existing = this.eventVolunteerSlots.get(input.id);
+    const now = nowIso();
+    const record: VolunteerSlotRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSlots.set(record.id, record);
+    return record;
+  }
+
+  listVolunteerSignups(eventId: string): VolunteerSignupRecord[] {
+    return [...this.eventVolunteerSignups.values()].filter((row) => row.eventId === eventId);
+  }
+
+  upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const key = InMemoryDb.signupKey(input.slotId, input.userId);
+    const existing = this.eventVolunteerSignups.get(key);
+    const now = nowIso();
+    const record: VolunteerSignupRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventVolunteerSignups.set(key, record);
+    return record;
+  }
+
+  listRideOffers(eventId: string): RideOfferRecord[] {
+    return [...this.eventRideOffers.values()].filter((offer) => offer.eventId === eventId);
+  }
+
+  getRideOffer(id: string): RideOfferRecord | undefined {
+    return this.eventRideOffers.get(id);
+  }
+
+  upsertRideOffer(input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>): RideOfferRecord {
+    const existing = this.eventRideOffers.get(input.id);
+    const now = nowIso();
+    const record: RideOfferRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideOffers.set(record.id, record);
+    return record;
+  }
+
+  listRideClaims(eventId: string): RideClaimRecord[] {
+    return [...this.eventRideClaims.values()].filter((claim) => claim.eventId === eventId);
+  }
+
+  upsertRideClaim(input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>): RideClaimRecord {
+    const key = InMemoryDb.rideClaimKey(input.offerId, input.riderId);
+    const existing = this.eventRideClaims.get(key);
+    const now = nowIso();
+    const record: RideClaimRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRideClaims.set(key, record);
+    return record;
+  }
+
+  // --- coalition rings ---
+
+  private static ringMembershipKey(ringId: string, userId: string): string {
+    return `${ringId}::${userId}`;
+  }
+
+  listCoalitionRings(): CoalitionRingRecord[] {
+    return [...this.coalitionRings.values()];
+  }
+
+  getCoalitionRing(id: string): CoalitionRingRecord | undefined {
+    return this.coalitionRings.get(id);
+  }
+
+  upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const existing = this.coalitionRings.get(input.id);
+    const now = nowIso();
+    const record: CoalitionRingRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionRings.set(record.id, record);
+    return record;
+  }
+
+  listRingMemberships(ringId?: string): RingMembershipRecord[] {
+    const all = [...this.ringMemberships.values()];
+    return ringId ? all.filter((m) => m.ringId === ringId) : all;
+  }
+
+  upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.userId);
+    const existing = this.ringMemberships.get(key);
+    const now = nowIso();
+    const record: RingMembershipRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringMemberships.set(key, record);
+    return record;
+  }
+
+  listRingInvitations(filter: { ringId?: string; inviteeId?: string } = {}): RingInvitationRecord[] {
+    return [...this.ringInvitations.values()].filter((row) => {
+      if (filter.ringId && row.ringId !== filter.ringId) return false;
+      if (filter.inviteeId && row.inviteeId !== filter.inviteeId) return false;
+      return true;
+    });
+  }
+
+  upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.inviteeId);
+    const existing = this.ringInvitations.get(key);
+    const now = nowIso();
+    const record: RingInvitationRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringInvitations.set(key, record);
+    return record;
+  }
+
+  // --- coalition kit applications ---
+
+  listCoalitionKitApplications(filter: { scopeType?: string; scopeId?: string } = {}): CoalitionKitApplicationRecord[] {
+    return [...this.coalitionKitApplications.values()].filter((row) => {
+      if (filter.scopeType && row.scopeType !== filter.scopeType) return false;
+      if (filter.scopeId && row.scopeId !== filter.scopeId) return false;
+      return true;
+    });
+  }
+
+  recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const record: CoalitionKitApplicationRecord = { ...input, createdAt: nowIso() };
+    this.coalitionKitApplications.set(record.id, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2209,6 +2472,48 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coalitionSpatialItems.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coalitionEvents) {
+      this.coalitionEvents = new Map(parsed.coalitionEvents.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRsvps) {
+      this.eventRsvps = new Map(
+        parsed.eventRsvps.map((row) => [`${row.eventId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.eventVolunteerSlots) {
+      this.eventVolunteerSlots = new Map(parsed.eventVolunteerSlots.map((row) => [row.id, row]));
+    }
+    if (parsed.eventVolunteerSignups) {
+      this.eventVolunteerSignups = new Map(
+        parsed.eventVolunteerSignups.map((row) => [`${row.slotId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.eventRideOffers) {
+      this.eventRideOffers = new Map(parsed.eventRideOffers.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRideClaims) {
+      this.eventRideClaims = new Map(
+        parsed.eventRideClaims.map((row) => [`${row.offerId}::${row.riderId}`, row]),
+      );
+    }
+    if (parsed.coalitionRings) {
+      this.coalitionRings = new Map(parsed.coalitionRings.map((row) => [row.id, row]));
+    }
+    if (parsed.ringMemberships) {
+      this.ringMemberships = new Map(
+        parsed.ringMemberships.map((row) => [`${row.ringId}::${row.userId}`, row]),
+      );
+    }
+    if (parsed.ringInvitations) {
+      this.ringInvitations = new Map(
+        parsed.ringInvitations.map((row) => [`${row.ringId}::${row.inviteeId}`, row]),
+      );
+    }
+    if (parsed.coalitionKitApplications) {
+      this.coalitionKitApplications = new Map(
+        parsed.coalitionKitApplications.map((row) => [row.id, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2288,6 +2593,16 @@ export class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      coalitionEvents: [...this.coalitionEvents.values()],
+      eventRsvps: [...this.eventRsvps.values()],
+      eventVolunteerSlots: [...this.eventVolunteerSlots.values()],
+      eventVolunteerSignups: [...this.eventVolunteerSignups.values()],
+      eventRideOffers: [...this.eventRideOffers.values()],
+      eventRideClaims: [...this.eventRideClaims.values()],
+      coalitionRings: [...this.coalitionRings.values()],
+      ringMemberships: [...this.ringMemberships.values()],
+      ringInvitations: [...this.ringInvitations.values()],
+      coalitionKitApplications: [...this.coalitionKitApplications.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
@@ -3086,6 +3401,86 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<CoalitionAidPostRecord, 'createdAt'>,
   ): CoalitionAidPostRecord {
     const created = super.createCoalitionAidPost(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const created = super.upsertCoalitionEvent(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const created = super.upsertEventRsvp(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSlot(
+    input: Omit<VolunteerSlotRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSlotRecord {
+    const created = super.upsertVolunteerSlot(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertVolunteerSignup(
+    input: Omit<VolunteerSignupRecord, 'createdAt' | 'updatedAt'>,
+  ): VolunteerSignupRecord {
+    const created = super.upsertVolunteerSignup(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideOffer(
+    input: Omit<RideOfferRecord, 'createdAt' | 'updatedAt'>,
+  ): RideOfferRecord {
+    const created = super.upsertRideOffer(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRideClaim(
+    input: Omit<RideClaimRecord, 'createdAt' | 'updatedAt'>,
+  ): RideClaimRecord {
+    const created = super.upsertRideClaim(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionRing(
+    input: Omit<CoalitionRingRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionRingRecord {
+    const created = super.upsertCoalitionRing(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingMembership(
+    input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
+  ): RingMembershipRecord {
+    const created = super.upsertRingMembership(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const created = super.upsertRingInvitation(input);
+    this.persist();
+    return created;
+  }
+
+  override recordCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
+  ): CoalitionKitApplicationRecord {
+    const created = super.recordCoalitionKitApplication(input);
     this.persist();
     return created;
   }

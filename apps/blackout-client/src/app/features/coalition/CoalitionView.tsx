@@ -7,6 +7,8 @@ import CoalitionTabStrip from './CoalitionTabStrip';
 import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
+import EventsTab from './tabs/EventsTab';
+import RingsTab from './tabs/RingsTab';
 import ShopTab from './tabs/ShopTab';
 import TasksTab from './tabs/TasksTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
@@ -83,6 +85,8 @@ export function CoalitionView({
                 {activeTab === 'chat' ? <ChatTab denId={denId ?? null} /> : null}
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
                 {activeTab === 'map' ? <MapTab scope={scope} /> : null}
+                {activeTab === 'events' ? <EventsTab scope={scope} /> : null}
+                {activeTab === 'rings' ? <RingsTab /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
                 {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
                 {activeTab === 'documents' && denId ? (
