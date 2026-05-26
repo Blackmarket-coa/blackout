@@ -51,12 +51,20 @@ const post = (app: Hono, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+// Clears both delivery sinks (Matrix + GitHub/rageshake) so the route exercises
+// the dual dev-no-op path hermetically — no homeserver, no GitHub auth, no
+// rageshake endpoint — and still returns 200.
 const withNoMatrix = async (fn: () => Promise<void>) => {
   const previous = { ...process.env };
   delete process.env.MATRIX_HOMESERVER;
   delete process.env.MATRIX_HOMESERVER_URL;
   delete process.env.MATRIX_BOT_TOKEN;
   delete process.env.BUG_REPORT_MATRIX_ROOM_ID;
+  delete process.env.GITHUB_APP_ID;
+  delete process.env.GITHUB_APP_INSTALLATION_ID;
+  delete process.env.GITHUB_APP_PRIVATE_KEY;
+  delete process.env.GITHUB_BUG_REPORT_PAT;
+  delete process.env.RAGESHAKE_ENDPOINT_URL;
   try {
     await fn();
   } finally {

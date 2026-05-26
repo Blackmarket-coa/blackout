@@ -290,9 +290,11 @@ const SentView = ({ outcome, onClose }: { outcome: WidgetReportOutcome; onClose:
   <>
     <Text size="H4">Thanks — report received</Text>
     <Text size="T200" priority="300">
-      {outcome.devNoop
-        ? 'Your report was captured. (No #bugs room is configured in this environment.)'
-        : 'It’s posted in the contributors’ #bugs room with a triage thread.'}
+      {outcome.messageLink
+        ? 'It’s posted in the contributors’ #bugs room with a triage thread.'
+        : outcome.devNoop
+          ? 'Your report was captured. (No #bugs room is configured in this environment.)'
+          : 'Your report was filed for the team to triage.'}
     </Text>
     {outcome.messageLink && (
       <a
