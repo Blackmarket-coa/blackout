@@ -112,6 +112,20 @@ creator.post('/listings', async (c) => {
 
     const draft = parseCreatorListingDraft(parsed);
 
+    // Coalition kit manifests are applied via the coalition-kit-manifests flow,
+    // not sold through external marketplace providers. Rejecting here also
+    // narrows draft.artifactKind to the provider-sellable kinds below.
+    if (draft.artifactKind === 'coalition_kit') {
+        return c.json(
+            {
+                code: 'unsupported_artifact',
+                message:
+                    'Coalition kit manifests are published via the coalition-kit-manifests flow, not marketplace providers.',
+            },
+            400
+        );
+    }
+
     let providerResult;
     try {
         providerResult = await provider.createCreatorListing({
