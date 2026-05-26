@@ -70,8 +70,9 @@ test('every authenticated user is minted read access + safe writes and can brows
 test('a registered user can read profiles without an explicit capability header', async () => {
   const account = await register();
   const res = await app.request(`/v1/profile/${account.userId}`, { headers: auth(account) });
-  // 404 (no profile saved yet) — crucially NOT 403 missing_capability.
-  assert.equal(res.status, 404);
+  // 200 with a synthesized default profile (none saved yet) — crucially NOT
+  // 403 missing_capability.
+  assert.equal(res.status, 200);
 });
 
 test('a user can provision and read their own stream key, but not another creator’s', async () => {

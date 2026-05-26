@@ -20,13 +20,23 @@ function authHeaders(userId: string, capabilities: string[] = ['profile.read', '
     };
 }
 
-test('profile GET returns 404 before upsert', async () => {
+test('profile GET returns a synthesized default before upsert', async () => {
     __resetProfileStoreForTests();
     const userId = 'profile-user-a';
     const response = await app.request(`/v1/profile/${userId}`, {
         headers: authHeaders(userId),
     });
-    assert.equal(response.status, 404);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+        userId: string;
+        displayName: string;
+        roleBadges: string[];
+        mutualSpaces: string[];
+    };
+    assert.equal(body.userId, userId);
+    assert.equal(body.displayName, userId);
+    assert.deepEqual(body.roleBadges, []);
+    assert.deepEqual(body.mutualSpaces, []);
 });
 
 test('profile PUT upserts and GET returns the saved record', async () => {
