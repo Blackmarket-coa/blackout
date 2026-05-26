@@ -1,4 +1,4 @@
-import type { AidPost, SpatialFeedItem } from '@blackout/core';
+import type { AidPost, CoalitionEvent, EventRsvp, SpatialFeedItem } from '@blackout/core';
 import type {
   ColiseumArgument,
   ColiseumLiveSession,
@@ -870,6 +870,18 @@ export interface CoalitionSpatialItemRecord extends SpatialFeedItem {
 /** A durable mutual-aid request/offer surfaced on the Coalition map. */
 export interface CoalitionAidPostRecord extends AidPost {
   createdAt: string;
+}
+
+/** A scheduled Coalition event (gathering) surfaced on the map's 'events' layer. */
+export interface CoalitionEventRecord extends CoalitionEvent {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** An attendee RSVP for a Coalition event. Keyed in-memory by `${eventId}::${userId}`. */
+export interface EventRsvpRecord extends EventRsvp {
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**

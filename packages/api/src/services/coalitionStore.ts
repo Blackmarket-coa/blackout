@@ -6,8 +6,12 @@ import {
     SELLER_LOCATION_TYPES,
     SPATIAL_LAYER_KEYS,
     deriveDisplayStatus,
+    nextOccurrence,
+    summarizeRsvps,
     type AidPost,
+    type CoalitionEvent,
     type CoalitionFeedItem,
+    type RsvpSummary,
     type SellerLocation,
     type SpatialFeedItem,
 } from '@blackout/core';
@@ -134,6 +138,26 @@ export interface SpatialFilter {
     canopyId?: string;
 }
 
+/** Project a scheduled event onto its map pin using its soonest live/upcoming occurrence. */
+function eventToSpatialItem(event: CoalitionEvent, nowMs: number): SpatialFeedItem {
+    const occ = nextOccurrence(event, nowMs);
+    return {
+        id: `event:${event.id}`,
+        layer: 'events',
+        title: event.title,
+        latitude: event.location.latitude,
+        longitude: event.location.longitude,
+        visibility: event.visibility,
+        eventType: 'community_event',
+        startsAt: occ?.startsAt ?? event.startsAt,
+        endsAt: occ?.endsAt ?? event.endsAt,
+        status: occ?.status ?? 'past',
+        denId: event.denId,
+        source: 'blackout',
+        meta: { eventId: event.id, category: event.category },
+    };
+}
+
 export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] {
     const allowed = new Set(
         filter.layers && filter.layers.length > 0
@@ -142,7 +166,15 @@ export function listSpatialItems(filter: SpatialFilter = {}): SpatialFeedItem[] 
               )
             : SPATIAL_LAYER_KEYS,
     );
-    return db.listCoalitionSpatialItems().filter((item) => allowed.has(item.layer));
+    const items = db.listCoalitionSpatialItems().filter((item) => allowed.has(item.layer));
+    if (allowed.has('events')) {
+        const now = Date.now();
+        for (const event of db.listCoalitionEvents()) {
+            if (event.status === 'cancelled') continue;
+            items.push(eventToSpatialItem(event, now));
+        }
+    }
+    return items;
 }
 
 export function listAidPosts(filter: { denId?: string } = {}): AidPost[] {
@@ -171,6 +203,42 @@ export const COALITION_SELLER_TYPES = SELLER_LOCATION_TYPES;
 
 export function newAidId(): string {
     return `aidp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+// --- coalition events + RSVPs ---
+
+export function listEvents(filter: { denId?: string } = {}) {
+    return db
+        .listCoalitionEvents()
+        .filter((event) => (filter.denId ? event.denId === filter.denId : true));
+}
+
+export function getEvent(id: string) {
+    return db.getCoalitionEvent(id);
+}
+
+export function saveEvent(input: Parameters<typeof db.upsertCoalitionEvent>[0]) {
+    return db.upsertCoalitionEvent(input);
+}
+
+export function listEventRsvps(eventId: string) {
+    return db.listEventRsvps(eventId);
+}
+
+export function rsvpSummaryFor(eventId: string): RsvpSummary {
+    return summarizeRsvps(db.listEventRsvps(eventId));
+}
+
+export function saveRsvp(input: Parameters<typeof db.upsertEventRsvp>[0]) {
+    return db.upsertEventRsvp(input);
+}
+
+export function newEventId(): string {
+    return `evt_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+}
+
+export function newRsvpId(): string {
+    return `rsvp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
 export function nowIso(): string {

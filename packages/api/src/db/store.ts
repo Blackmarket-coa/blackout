@@ -59,6 +59,8 @@ import type {
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
+  CoalitionEventRecord,
+  EventRsvpRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
@@ -130,6 +132,8 @@ type PersistedState = {
   obsWsPasswords: ObsWsPasswordRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
+  coalitionEvents: CoalitionEventRecord[];
+  eventRsvps: EventRsvpRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
@@ -211,6 +215,10 @@ class InMemoryDb {
   coalitionAidPosts = new Map<string, CoalitionAidPostRecord>(
     COALITION_AID_SEED.map((row) => [row.id, row]),
   );
+  /** Coalition events (gatherings), keyed by event id. */
+  coalitionEvents = new Map<string, CoalitionEventRecord>();
+  /** Event RSVPs, keyed by `${eventId}::${userId}` (one per attendee per event). */
+  eventRsvps = new Map<string, EventRsvpRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
@@ -1938,6 +1946,53 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition events + RSVPs ---
+
+  private static eventRsvpKey(eventId: string, userId: string): string {
+    return `${eventId}::${userId}`;
+  }
+
+  listCoalitionEvents(): CoalitionEventRecord[] {
+    return [...this.coalitionEvents.values()];
+  }
+
+  getCoalitionEvent(id: string): CoalitionEventRecord | undefined {
+    return this.coalitionEvents.get(id);
+  }
+
+  upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const existing = this.coalitionEvents.get(input.id);
+    const now = nowIso();
+    const record: CoalitionEventRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.coalitionEvents.set(record.id, record);
+    return record;
+  }
+
+  listEventRsvps(eventId: string): EventRsvpRecord[] {
+    return [...this.eventRsvps.values()].filter((rsvp) => rsvp.eventId === eventId);
+  }
+
+  upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const key = InMemoryDb.eventRsvpKey(input.eventId, input.userId);
+    const existing = this.eventRsvps.get(key);
+    const now = nowIso();
+    const record: EventRsvpRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.eventRsvps.set(key, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2186,6 +2241,14 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coalitionSpatialItems.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coalitionEvents) {
+      this.coalitionEvents = new Map(parsed.coalitionEvents.map((row) => [row.id, row]));
+    }
+    if (parsed.eventRsvps) {
+      this.eventRsvps = new Map(
+        parsed.eventRsvps.map((row) => [`${row.eventId}::${row.userId}`, row]),
+      );
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2265,6 +2328,8 @@ export class FileBackedDb extends InMemoryDb {
       obsWsPasswords: [...this.obsWsPasswords.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
+      coalitionEvents: [...this.coalitionEvents.values()],
+      eventRsvps: [...this.eventRsvps.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
@@ -3046,6 +3111,22 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<CoalitionAidPostRecord, 'createdAt'>,
   ): CoalitionAidPostRecord {
     const created = super.createCoalitionAidPost(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionEvent(
+    input: Omit<CoalitionEventRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionEventRecord {
+    const created = super.upsertCoalitionEvent(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertEventRsvp(
+    input: Omit<EventRsvpRecord, 'createdAt' | 'updatedAt'>,
+  ): EventRsvpRecord {
+    const created = super.upsertEventRsvp(input);
     this.persist();
     return created;
   }

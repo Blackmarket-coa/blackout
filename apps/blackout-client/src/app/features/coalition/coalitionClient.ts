@@ -1,8 +1,17 @@
 import type {
     AidPost,
+    CoalitionEvent,
     CoalitionFeedItem,
     CoalitionRankingModel,
     CoalitionTask,
+    EventCategory,
+    EventLocation,
+    EventOccurrence,
+    EventRecurrence,
+    EventRsvp,
+    EventVisibility,
+    RsvpStatus,
+    RsvpSummary,
     SellerLocation,
     SpatialFeedItem,
     TaskStatus,
@@ -180,6 +189,82 @@ export function updateCoalitionTaskStatus(
     return patchJson<{ task: CoalitionTask }>(
         `${COALITION_BASE}/tasks/${encodeURIComponent(id)}`,
         { status },
+        token,
+    );
+}
+
+// --- coalition events ---
+
+export interface CoalitionEventSummary extends CoalitionEvent {
+    rsvpSummary: RsvpSummary;
+    nextOccurrence?: EventOccurrence;
+}
+
+export interface EventsResponse {
+    events: CoalitionEventSummary[];
+}
+
+export interface EventDetailResponse {
+    event: CoalitionEvent;
+    rsvpSummary: RsvpSummary;
+    rsvps: EventRsvp[];
+    occurrences: EventOccurrence[];
+}
+
+export interface CreateEventInput {
+    title: string;
+    description: string;
+    location: EventLocation;
+    startsAt: string;
+    endsAt?: string;
+    category: EventCategory;
+    visibility?: EventVisibility;
+    denId?: string;
+    capacity?: number;
+    recurrence?: EventRecurrence;
+}
+
+export function fetchCoalitionEvents(
+    scope: CoalitionScopeQuery,
+    token: string | null = readBlackoutApiToken(),
+): Promise<EventsResponse> {
+    const path = appendQuery(`${COALITION_BASE}/events`, { denId: scope.denId });
+    return getJson<EventsResponse>(path, token);
+}
+
+export function fetchCoalitionEvent(
+    id: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<EventDetailResponse> {
+    return getJson<EventDetailResponse>(`${COALITION_BASE}/events/${encodeURIComponent(id)}`, token);
+}
+
+export function createCoalitionEvent(
+    input: CreateEventInput,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ event: CoalitionEvent }> {
+    return postJson<{ event: CoalitionEvent }>(`${COALITION_BASE}/events`, input, token);
+}
+
+export function rsvpToEvent(
+    id: string,
+    status: RsvpStatus,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ rsvp: EventRsvp; rsvpSummary: RsvpSummary }> {
+    return postJson<{ rsvp: EventRsvp; rsvpSummary: RsvpSummary }>(
+        `${COALITION_BASE}/events/${encodeURIComponent(id)}/rsvp`,
+        { status },
+        token,
+    );
+}
+
+export function createEventDen(
+    id: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ denId?: string; event?: CoalitionEvent; created?: boolean }> {
+    return postJson<{ denId?: string; event?: CoalitionEvent; created?: boolean }>(
+        `${COALITION_BASE}/events/${encodeURIComponent(id)}/den`,
+        {},
         token,
     );
 }

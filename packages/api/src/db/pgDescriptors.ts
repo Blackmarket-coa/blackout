@@ -52,6 +52,59 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     keyOf: (r) => `${r.argumentId}::${r.voterId}`,
     conflictColumns: ['argument_id', 'voter_id'],
   },
+  eventRsvps: {
+    keyOf: (r) => `${r.eventId}::${r.userId}`,
+    conflictColumns: ['event_id', 'user_id'],
+  },
+  // coalition_events flattens the nested location into lat/lng/address columns.
+  coalitionEvents: {
+    toRow: (r) => {
+      const loc = (r.location ?? {}) as { latitude?: number; longitude?: number; address?: string };
+      return {
+        id: r.id,
+        organizer_id: r.organizerId,
+        title: r.title,
+        description: r.description,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        address: loc.address ?? null,
+        starts_at: r.startsAt,
+        ends_at: r.endsAt ?? null,
+        category: r.category,
+        visibility: r.visibility,
+        status: r.status,
+        den_id: r.denId ?? null,
+        capacity: r.capacity ?? null,
+        recurrence: r.recurrence ?? null,
+        created_at: r.createdAt,
+        updated_at: r.updatedAt,
+      };
+    },
+    fromRow: (row) => {
+      const rec: Record<string, unknown> = {
+        id: row.id,
+        organizerId: row.organizer_id,
+        title: row.title,
+        description: row.description,
+        location: {
+          latitude: row.latitude,
+          longitude: row.longitude,
+          ...(row.address != null ? { address: row.address } : {}),
+        },
+        startsAt: row.starts_at,
+        category: row.category,
+        visibility: row.visibility,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+      if (row.ends_at != null) rec.endsAt = row.ends_at;
+      if (row.den_id != null) rec.denId = row.den_id;
+      if (row.capacity != null) rec.capacity = row.capacity;
+      if (row.recurrence != null) rec.recurrence = row.recurrence;
+      return rec;
+    },
+  },
   // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address columns.
   coalitionAidPosts: {
     toRow: (r) => {
@@ -156,6 +209,8 @@ const ALL_MAP_NAMES = [
   'obsWsPasswords',
   'coalitionSpatialItems',
   'coalitionAidPosts',
+  'coalitionEvents',
+  'eventRsvps',
   'canopyDirectoryEntries',
   'clips',
   'coliseumTopics',
@@ -298,6 +353,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   deleteObsWsPassword: resync('obsWsPasswords'),
   upsertCoalitionSpatialItem: upsert('coalitionSpatialItems'),
   createCoalitionAidPost: upsert('coalitionAidPosts'),
+  upsertCoalitionEvent: upsert('coalitionEvents'),
+  upsertEventRsvp: upsert('eventRsvps'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
   deleteClip: resync('clips'),
