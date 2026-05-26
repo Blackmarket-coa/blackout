@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
     COLISEUM_STANCES,
@@ -35,8 +35,50 @@ import {
 } from '../services/coliseumStore';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { createRateLimit } from '../middleware/rate-limit';
 
 const coliseum = new Hono();
+
+/** Authenticated user id, used to key write rate limits per account (not per IP). */
+const rateLimitUser = (c: Context): string | undefined => {
+    const user = c.get('user') as { sub?: string } | null | undefined;
+    return user?.sub ?? undefined;
+};
+
+const envMax = (name: string, fallback: number): number => {
+    const parsed = Number.parseInt(process.env[name] ?? '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+// Per-user write limits keep the public discourse surface from being flooded.
+// Anonymous requests (which 401 in the handler anyway) fall back to per-IP keying.
+const topicRateLimit = createRateLimit({
+    bucket: 'coliseum-topic',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_TOPIC_RATE_LIMIT_MAX', 20),
+    identify: rateLimitUser,
+});
+const argumentRateLimit = createRateLimit({
+    bucket: 'coliseum-argument',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_ARGUMENT_RATE_LIMIT_MAX', 30),
+    identify: rateLimitUser,
+});
+const voteRateLimit = createRateLimit({
+    bucket: 'coliseum-vote',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_VOTE_RATE_LIMIT_MAX', 60),
+    identify: rateLimitUser,
+});
+const liveRateLimit = createRateLimit({
+    bucket: 'coliseum-live',
+    windowMs: 60_000,
+    maxRequests: envMax('COLISEUM_LIVE_RATE_LIMIT_MAX', 30),
+    identify: rateLimitUser,
+});
+
+// All live-session mutations (create, request/grant/revoke speak, pin, end).
+coliseum.use('/live/*', liveRateLimit);
 
 const topicStatusValues: [ColiseumTopicStatus, ...ColiseumTopicStatus[]] = [
     'emerging',
@@ -109,7 +151,7 @@ const createTopicSchema = z.object({
     archivesAt: z.string().datetime().optional(),
 });
 
-coliseum.post('/topics', async (c) => {
+coliseum.post('/topics', topicRateLimit, async (c) => {
     const user = requireUser(c, 'Sign in to create a debate topic');
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, createTopicSchema);
@@ -145,7 +187,7 @@ const createArgumentSchema = z.object({
     media: z.record(z.string(), z.unknown()).optional(),
 });
 
-coliseum.post('/arguments', async (c) => {
+coliseum.post('/arguments', argumentRateLimit, async (c) => {
     const user = requireUser(c, 'Sign in to post an argument');
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, createArgumentSchema);
@@ -175,7 +217,7 @@ const voteSchema = z.object({
     stanceShift: z.number().min(-1).max(1).optional(),
 });
 
-coliseum.post('/arguments/:id/vote', async (c) => {
+coliseum.post('/arguments/:id/vote', voteRateLimit, async (c) => {
     const user = requireUser(c, 'Sign in to vote');
     if (user instanceof Response) return user;
     const argumentId = c.req.param('id');
