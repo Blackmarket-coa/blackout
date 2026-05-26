@@ -7,6 +7,7 @@ import { defaultFeatureFlags, type FeatureFlags } from './featureFlags';
 import { useCapabilityContext } from './capabilityContext';
 import { getAllFeaturePlugins, subscribeFeaturePlugins } from './plugins';
 import type { ShellPanelEntry, ShellPanelKind } from './types';
+import { isShellPathActive } from '../../pages/shell/modeRouter';
 import { installedPluginPanelsAtom } from '../../features/monetization/install/installedPluginPanelsAtom';
 
 export type RegistrySidebarMode = 'list' | 'rail';
@@ -24,6 +25,16 @@ type RegistrySidebarListProps = {
     mode?: RegistrySidebarMode;
     /** Pathname of the active route, used to mark the current rail item. */
     activePath?: string;
+    /**
+     * Optional post-composition filter. Lets a consumer drop entries that
+     * are already surfaced elsewhere (e.g. the shell top nav owns the
+     * primary destinations, so the left sidebar excludes them).
+     */
+    filter?: (entry: ShellPanelEntry) => boolean;
+    /** `list` mode: inline style for each link. */
+    itemStyle?: React.CSSProperties;
+    /** `list` mode: inline style merged in when the link is active. */
+    activeItemStyle?: React.CSSProperties;
 };
 
 const RAIL_BUTTON_SIZE = 40;
@@ -59,6 +70,9 @@ export function RegistrySidebarList({
     className,
     mode = 'list',
     activePath,
+    filter,
+    itemStyle,
+    activeItemStyle,
 }: RegistrySidebarListProps) {
     const ctx = useCapabilityContext();
     const [plugins, setPlugins] = useState(() => getAllFeaturePlugins());
@@ -71,20 +85,20 @@ export function RegistrySidebarList({
     const installedPluginPanels = useAtomValue(installedPluginPanelsAtom);
 
     const panels = useMemo<ShellPanelEntry[]>(() => {
-        if (kind !== 'sidebar' || installedPluginPanels.length === 0) {
-            return registryPanels;
-        }
-        const merged = [...registryPanels, ...installedPluginPanels];
-        return merged
-            .map((entry, insertion) => ({ entry, insertion }))
-            .sort((left, right) => {
-                const leftOrder = left.entry.order ?? Number.POSITIVE_INFINITY;
-                const rightOrder = right.entry.order ?? Number.POSITIVE_INFINITY;
-                if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-                return left.insertion - right.insertion;
-            })
-            .map(({ entry }) => entry);
-    }, [kind, registryPanels, installedPluginPanels]);
+        const ordered =
+            kind !== 'sidebar' || installedPluginPanels.length === 0
+                ? registryPanels
+                : [...registryPanels, ...installedPluginPanels]
+                      .map((entry, insertion) => ({ entry, insertion }))
+                      .sort((left, right) => {
+                          const leftOrder = left.entry.order ?? Number.POSITIVE_INFINITY;
+                          const rightOrder = right.entry.order ?? Number.POSITIVE_INFINITY;
+                          if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+                          return left.insertion - right.insertion;
+                      })
+                      .map(({ entry }) => entry);
+        return filter ? ordered.filter(filter) : ordered;
+    }, [kind, registryPanels, installedPluginPanels, filter]);
 
     const itemsRef = useRef<Array<HTMLAnchorElement | null>>([]);
 
@@ -177,18 +191,27 @@ export function RegistrySidebarList({
             aria-label={`Feature ${kind} entries`}
         >
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {panels.map((panel) => (
-                    <li key={panel.id}>
-                        <Link
-                            to={panel.to}
-                            data-testid={`registry-panel-${panel.id}`}
-                            data-panel-kind={panel.kind}
-                        >
-                            {panel.icon ? createElement(panel.icon) : null}
-                            <span>{panel.label}</span>
-                        </Link>
-                    </li>
-                ))}
+                {panels.map((panel) => {
+                    const active = activePath ? isShellPathActive(activePath, panel.to) : false;
+                    return (
+                        <li key={panel.id}>
+                            <Link
+                                to={panel.to}
+                                data-testid={`registry-panel-${panel.id}`}
+                                data-panel-kind={panel.kind}
+                                data-active={active ? 'true' : undefined}
+                                aria-current={active ? 'page' : undefined}
+                                style={{
+                                    ...(itemStyle ?? {}),
+                                    ...(active ? activeItemStyle ?? {} : {}),
+                                }}
+                            >
+                                {panel.icon ? createElement(panel.icon) : null}
+                                <span>{panel.label}</span>
+                            </Link>
+                        </li>
+                    );
+                })}
             </ul>
         </nav>
     );

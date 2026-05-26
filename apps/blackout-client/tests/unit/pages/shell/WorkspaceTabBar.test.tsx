@@ -27,28 +27,18 @@ const renderAt = (path: string): HTMLElement => {
     return container;
 };
 
-describe('WorkspaceTabBar — persistent Home anchor (audit B)', () => {
+describe('WorkspaceTabBar — secondary sub-tab strip', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
     });
 
-    it('renders the Home link on a deep route', () => {
+    it('does not render a Home link (the primary nav owns Home now)', () => {
         const container = renderAt('/settings/about');
-        const home = container.querySelector('[data-testid="workspace-tab-bar-home"]');
-        expect(home).toBeTruthy();
-        expect(home?.getAttribute('href')).toBe('/');
+        expect(container.querySelector('[data-testid="workspace-tab-bar-home"]')).toBeNull();
     });
 
-    it('renders the Home link on the bare root and marks it active', () => {
+    it('renders nothing on the bare root (no segment, no sub-tabs)', () => {
         const container = renderAt('/');
-        const home = container.querySelector('[data-testid="workspace-tab-bar-home"]');
-        expect(home).toBeTruthy();
-        expect(home?.getAttribute('aria-current')).toBe('page');
-    });
-
-    it('renders the Home link on a plugin route (inherits, does not replace nav)', () => {
-        const container = renderAt('/plugins');
-        const home = container.querySelector('[data-testid="workspace-tab-bar-home"]');
-        expect(home).toBeTruthy();
+        expect(container.querySelector('[data-shell-region="workspace-tab-bar"]')).toBeNull();
     });
 });

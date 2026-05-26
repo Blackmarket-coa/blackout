@@ -8,17 +8,19 @@ import {
 } from '../../pages/paths';
 
 /**
- * Five canonical AppShell mobile destinations, matching the Blackout product
- * spec's primary mobile tabs: Home / Coalition / Coliseum / Creator Hub / Profile.
- * The `id` namespace is intentional: BottomTabBar filters to exactly these ids
- * so other features that register mobile-tab panels (governance, etc.) stay out
- * of the AppShell tab bar.
+ * Five canonical AppShell destinations, matching the Blackout product spec's
+ * primary tabs: Home / Creator Hub / Coalition / Coliseum / Profile. These
+ * feed both the desktop top nav (PrimaryNavBar) and the mobile BottomTabBar,
+ * so the ordering here is the single source of truth across viewports.
+ * The `id` namespace is intentional: the bars filter to exactly these ids
+ * so other features that register mobile-tab panels (governance, etc.) stay
+ * out of the AppShell bars.
  *
  * Each panel `to` points at an existing top-level route:
  *   - shell.home → `/` (HomeFeed)
+ *   - shell.streams → `/streaming` (Creator Hub: live + replay + clips, etc.)
  *   - shell.coalition → `/coalition` (spatial community layer)
  *   - shell.coliseum → `/coliseum` (vertical debate reel)
- *   - shell.streams → `/streaming` (Creator Hub: live + replay + clips, etc.)
  *   - shell.profile → `/profile/me` (the viewer's own profile)
  */
 export const shellDestinationPanels: ShellPanelEntry[] = [
@@ -30,24 +32,24 @@ export const shellDestinationPanels: ShellPanelEntry[] = [
         order: 10,
     },
     {
+        id: 'shell.streams',
+        kind: 'mobile-tab',
+        label: 'Creator Hub',
+        to: STREAMING_PATH,
+        order: 20,
+    },
+    {
         id: 'shell.coalition',
         kind: 'mobile-tab',
         label: 'Coalition',
         to: COALITION_PATH,
-        order: 20,
+        order: 30,
     },
     {
         id: 'shell.coliseum',
         kind: 'mobile-tab',
         label: 'Coliseum',
         to: COLISEUM_PATH,
-        order: 30,
-    },
-    {
-        id: 'shell.streams',
-        kind: 'mobile-tab',
-        label: 'Creator Hub',
-        to: STREAMING_PATH,
         order: 40,
     },
     {

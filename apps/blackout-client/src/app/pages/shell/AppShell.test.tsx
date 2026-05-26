@@ -146,9 +146,9 @@ describe('AppShell', () => {
 
         expect(panelIds).toEqual([
             'shell.home',
+            'shell.streams',
             'shell.coalition',
             'shell.coliseum',
-            'shell.streams',
             'shell.profile',
         ]);
     });
