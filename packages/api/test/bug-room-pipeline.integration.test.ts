@@ -7,7 +7,21 @@ import {
   type WidgetReportInput,
   type BugRoomConfig,
   type MatrixPoster,
+  type WidgetGithubForwarder,
 } from '../src/services/bugRoomPipeline';
+
+// Default GitHub forwarder for tests: a successful issue. Individual tests
+// override it to exercise the dual-sink / double-failure behavior. Injecting it
+// keeps these unit tests hermetic (no ambient env / network through the real
+// `submitBugReport`).
+const githubOk: WidgetGithubForwarder = async () => ({
+  issueUrl: 'https://github.test/blackout/issues/1',
+  issueError: null,
+});
+const githubFail: WidgetGithubForwarder = async () => ({
+  issueUrl: null,
+  issueError: 'github unavailable',
+});
 
 const baseInput: WidgetReportInput = {
   description: 'The compose box freezes when I paste an image',
@@ -39,6 +53,8 @@ interface Call {
 
 class MatrixHarness {
   readonly calls: Call[] = [];
+  readonly created: { aliasLocalpart?: string; name?: string; topic?: string }[] = [];
+  readonly joins: { roomId: string; userId: string }[] = [];
   uploads = 0;
   readonly mx: MatrixPoster;
 
@@ -53,6 +69,15 @@ class MatrixHarness {
         this.calls.push({ roomId, content, eventType: options?.eventType });
         return { ok: true, status: 200, eventId: `$evt${this.calls.length}` };
       },
+      botUserId: async () => '@bot:example.org',
+      createRoom: async (input) => {
+        this.created.push(input);
+        return { ok: true, roomId: '!created:example.org' };
+      },
+      adminJoinUserToRoom: async (roomId, userId) => {
+        this.joins.push({ roomId, userId });
+        return { ok: true, status: 200 };
+      },
       ...overrides,
     };
   }
@@ -60,9 +85,21 @@ class MatrixHarness {
 
 const makeMatrix = (overrides: Partial<MatrixPoster> = {}): MatrixHarness => new MatrixHarness(overrides);
 
+// Run the pipeline with the harness' poster + a default-success GitHub leg.
+const run = (
+  input: WidgetReportInput,
+  harness: MatrixHarness,
+  opts: { config?: BugRoomConfig; forwardToGithub?: WidgetGithubForwarder } = {},
+) =>
+  postWidgetReportToBugRoom(input, {
+    config: opts.config ?? baseConfig,
+    matrix: harness.mx,
+    forwardToGithub: opts.forwardToGithub ?? githubOk,
+  });
+
 test('happy path: posts report, seeds triage thread + status reaction, returns link', async () => {
   const harness = makeMatrix();
-  const out = await postWidgetReportToBugRoom(baseInput, { config: baseConfig, matrix: harness.mx });
+  const out = await run(baseInput, harness);
 
   assert.equal(out.ok, true);
   assert.equal(out.roomId, '!bugs:example.org');
@@ -71,6 +108,7 @@ test('happy path: posts report, seeds triage thread + status reaction, returns l
   assert.equal(out.threadSeeded, true);
   assert.equal(out.reactionSeeded, true);
   assert.equal(out.devNoop, false);
+  assert.equal(out.issueUrl, 'https://github.test/blackout/issues/1');
 
   // 3 sendEvent calls: report message, triage thread reply, reaction.
   assert.equal(harness.calls.length, 3);
@@ -94,7 +132,7 @@ test('attachment is uploaded and posted as a thread reply', async () => {
       base64: Buffer.from('hello world').toString('base64'),
     },
   };
-  const out = await postWidgetReportToBugRoom(input, { config: baseConfig, matrix: harness.mx });
+  const out = await run(input, harness);
   assert.equal(out.attachmentPosted, true);
   assert.equal(harness.uploads, 1);
 
@@ -118,37 +156,85 @@ test('oversized attachment is skipped without failing the report', async () => {
       base64: Buffer.from('way too many bytes here').toString('base64'),
     },
   };
-  const out = await postWidgetReportToBugRoom(input, { config: tiny, matrix: harness.mx });
+  const out = await run(input, harness, { config: tiny });
   assert.equal(out.ok, true);
   assert.equal(out.attachmentPosted, false);
   assert.equal(harness.uploads, 0);
 });
 
-test('dev no-op: matrix not configured → ok with devNoop, no posts', async () => {
+test('dev no-op: matrix not configured → ok with devNoop, no Matrix posts or room creation', async () => {
   const harness = makeMatrix({
     resolveRoomAlias: async () => ({ ok: false, reason: 'matrix_not_configured' }),
   });
   const noRoomConfig: BugRoomConfig = { ...baseConfig, roomId: null };
-  const out = await postWidgetReportToBugRoom(baseInput, { config: noRoomConfig, matrix: harness.mx });
+  const out = await run(baseInput, harness, { config: noRoomConfig });
   assert.equal(out.ok, true);
   assert.equal(out.devNoop, true);
   assert.equal(out.eventId, null);
   assert.equal(harness.calls.length, 0);
+  assert.equal(harness.created.length, 0);
 });
 
 test('resolves the #bugs alias when no room id is configured', async () => {
   const harness = makeMatrix();
   const aliasConfig: BugRoomConfig = { ...baseConfig, roomId: null };
-  const out = await postWidgetReportToBugRoom(baseInput, { config: aliasConfig, matrix: harness.mx });
+  const out = await run(baseInput, harness, { config: aliasConfig });
   assert.equal(out.roomId, '!resolved-#bugs:example.org');
+  assert.equal(harness.created.length, 0);
 });
 
-test('report post failure surfaces as not-ok', async () => {
+test('self-heal: creates #bugs when the alias cannot be resolved, then posts there', async () => {
+  const harness = makeMatrix({
+    resolveRoomAlias: async () => ({ ok: false, status: 404, reason: 'alias_not_found' }),
+  });
+  const aliasConfig: BugRoomConfig = { ...baseConfig, roomId: null };
+  const out = await run(baseInput, harness, { config: aliasConfig });
+
+  assert.equal(out.ok, true);
+  assert.equal(harness.created.length, 1);
+  assert.equal(harness.created[0]?.aliasLocalpart, 'bugs');
+  assert.equal(out.roomId, '!created:example.org');
+  assert.equal(out.eventId, '$evt1');
+});
+
+test('self-heal: a 403 admin-joins the bot into #bugs and retries the post', async () => {
+  let attempts = 0;
+  const harness = makeMatrix({
+    sendEvent: async () => {
+      attempts += 1;
+      // First report post is rejected (bot not a member); after the admin-join
+      // the retry — and the follow-up thread/reaction posts — succeed.
+      if (attempts === 1) return { ok: false, status: 403 };
+      return { ok: true, status: 200, eventId: `$evt${attempts}` };
+    },
+  });
+  const out = await run(baseInput, harness);
+
+  assert.equal(out.ok, true);
+  assert.equal(harness.joins.length, 1);
+  assert.equal(harness.joins[0]?.userId, '@bot:example.org');
+  assert.equal(out.eventId, '$evt2');
+});
+
+test('matrix post failure still succeeds via the GitHub leg (partial)', async () => {
+  const harness = makeMatrix({
+    // A non-403 failure is not self-heal-able, so the Matrix leg fails outright.
+    sendEvent: async () => ({ ok: false, status: 502 }),
+  });
+  const out = await run(baseInput, harness, { forwardToGithub: githubOk });
+  assert.equal(out.ok, true);
+  assert.equal(out.eventId, null);
+  assert.equal(out.issueUrl, 'https://github.test/blackout/issues/1');
+  assert.match(out.error ?? '', /502/);
+});
+
+test('both sinks failing surfaces as not-ok', async () => {
   const harness = makeMatrix({
     sendEvent: async () => ({ ok: false, status: 502 }),
   });
-  const out = await postWidgetReportToBugRoom(baseInput, { config: baseConfig, matrix: harness.mx });
+  const out = await run(baseInput, harness, { forwardToGithub: githubFail });
   assert.equal(out.ok, false);
+  assert.equal(out.issueUrl, null);
   assert.match(out.error ?? '', /502/);
 });
 

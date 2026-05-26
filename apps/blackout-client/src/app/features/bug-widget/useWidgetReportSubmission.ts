@@ -12,6 +12,8 @@ export interface WidgetReportOutcome {
   threadSeeded: boolean;
   reactionSeeded: boolean;
   devNoop: boolean;
+  issueUrl?: string | null;
+  issueError?: string | null;
   error: string | null;
 }
 

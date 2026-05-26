@@ -14,15 +14,27 @@
  * tokens are dropped and matrix/room/user ids are pseudonymised — reports stay
  * pseudonymous by default (reporter identity only appears as an opt-in hash).
  *
+ * Resilience: a report is delivered to two independent sinks so a single
+ * misconfiguration never hard-fails the widget (which previously surfaced as a
+ * 502 in the UI):
+ *   - Matrix `#bugs` is self-healing — if the alias can't be resolved we create
+ *     the room (the bot becomes creator/admin), and if the post is rejected
+ *     403 because the bot isn't a member we admin-join it and retry once.
+ *   - Every report is also forwarded to GitHub via `submitBugReport` so it
+ *     lands as an issue even when Matrix delivery fails.
+ * The outcome is `ok` if *either* sink succeeds; only a double failure is 502.
+ *
  * Dev no-op: when no homeserver/bot token is configured the room can't be
- * resolved, so we short-circuit to a synthetic outcome and let the UI flow
- * complete without external services (mirrors the GitHub no-op in
- * `bugReportPipeline.ts`).
+ * resolved, so the Matrix leg short-circuits to a synthetic outcome; the GitHub
+ * leg dev-no-ops the same way when no auth is configured (see
+ * `bugReportPipeline.ts`). Either keeps the end-to-end UI flow working without
+ * external services.
  */
 
 import { redactString } from '@blackout/core/redaction';
 import { createHash } from 'node:crypto';
 import { matrixClient } from '../integrations/matrix-client';
+import { submitBugReport, type BugReportInput } from './bugReportPipeline';
 import { log } from '../telemetry/logger';
 
 export interface WidgetReportMetadata {
@@ -60,6 +72,9 @@ export interface WidgetReportOutcome {
   readonly threadSeeded: boolean;
   readonly reactionSeeded: boolean;
   readonly devNoop: boolean;
+  /** GitHub issue URL when the parallel GitHub forward succeeded (or dev no-op). */
+  readonly issueUrl: string | null;
+  readonly issueError: string | null;
   readonly error: string | null;
 }
 
@@ -194,11 +209,30 @@ export interface MatrixPoster {
     content: Record<string, unknown>,
     options?: { eventType?: string; txnId?: string },
   ): Promise<{ ok: boolean; status?: number; eventId?: string; reason?: string }>;
+  /** Self-heal: bot mxid, used to admin-join the bot into #bugs on a 403. */
+  botUserId(): Promise<string | undefined>;
+  /** Self-heal: create #bugs when its alias can't be resolved. */
+  createRoom(input: {
+    aliasLocalpart?: string;
+    name?: string;
+    topic?: string;
+  }): Promise<{ ok: boolean; roomId?: string; reason?: string; status?: number }>;
+  /** Self-heal: admin-join the bot into the room so it can post. */
+  adminJoinUserToRoom(
+    roomId: string,
+    userId: string,
+  ): Promise<{ ok: boolean; status?: number; reason?: string }>;
 }
+
+/** Forwards a widget report to GitHub (default reuses {@link submitBugReport}). */
+export type WidgetGithubForwarder = (
+  input: WidgetReportInput,
+) => Promise<{ issueUrl: string | null; issueError: string | null }>;
 
 export interface BugRoomPipelineDeps {
   readonly config?: BugRoomConfig;
   readonly matrix?: MatrixPoster;
+  readonly forwardToGithub?: WidgetGithubForwarder;
 }
 
 const failure = (error: string): WidgetReportOutcome => ({
@@ -210,50 +244,140 @@ const failure = (error: string): WidgetReportOutcome => ({
   threadSeeded: false,
   reactionSeeded: false,
   devNoop: false,
+  issueUrl: null,
+  issueError: null,
   error,
 });
 
-export const postWidgetReportToBugRoom = async (
-  input: WidgetReportInput,
-  deps: BugRoomPipelineDeps = {},
-): Promise<WidgetReportOutcome> => {
-  const cfg = deps.config ?? readBugRoomConfig();
-  const mx = deps.matrix ?? (matrixClient as MatrixPoster);
+// Bare localpart for the #bugs alias (e.g. `#bugs:host` → `bugs`), used when
+// self-healing creates the room. Synapse derives the full alias from it.
+const aliasLocalpart = (alias: string): string => alias.replace(/^#/, '').split(':')[0] || 'bugs';
 
-  // Resolve the target room. A configured id wins; otherwise resolve the alias.
-  let roomId = cfg.roomId;
-  if (!roomId) {
-    const resolved = await mx.resolveRoomAlias(cfg.roomAlias);
-    if (!resolved.ok || !resolved.roomId) {
-      if (resolved.reason === 'matrix_not_configured') {
-        // Dev no-op so the client flow still completes end-to-end.
-        log.info('bug_room.noop', { reason: 'matrix_not_configured' });
-        return {
-          ok: true,
-          roomId: null,
-          eventId: null,
-          messageLink: null,
-          attachmentPosted: false,
-          threadSeeded: false,
-          reactionSeeded: false,
-          devNoop: true,
-          error: null,
-        };
-      }
-      return failure(`could not resolve #bugs room: ${resolved.reason ?? 'unknown'}`);
-    }
-    roomId = resolved.roomId;
+// Map the widget report onto the shared GitHub bug-report shape. The widget has
+// no category/severity pickers, so we tag it generically; the screenshot is
+// omitted here (the Matrix leg carries attachments and GitHub caps body size).
+const mapToBugReport = (input: WidgetReportInput): BugReportInput => {
+  const description: string[] = [input.description.trim()];
+  if (input.steps?.trim()) description.push('', '## Steps to reproduce', input.steps.trim());
+  if (input.suggestions?.trim()) description.push('', '## Suggestions', input.suggestions.trim());
+  const m = input.metadata;
+  return {
+    title: buildReportTitle(input.description),
+    description: description.join('\n'),
+    category: 'other',
+    severity: 'medium',
+    includeDiagnostics: true,
+    includeMatrixIdHash: Boolean(input.includeReporterHash && input.reporterMatrixId),
+    matrixId: input.reporterMatrixId,
+    diagnostics: {
+      clientVersion: m.clientVersion,
+      userAgent: m.userAgent,
+      platform: m.platform,
+      consoleTail: [],
+      currentPath: m.currentPath,
+      buildChannel: m.buildChannel,
+    },
+  };
+};
+
+const defaultForwardToGithub: WidgetGithubForwarder = async (input) => {
+  try {
+    const out = await submitBugReport(mapToBugReport(input));
+    return { issueUrl: out.issueUrl, issueError: out.issueError };
+  } catch (err) {
+    const issueError = err instanceof Error ? err.message : String(err);
+    log.warn('bug_room.github_forward_failed', { error: issueError });
+    return { issueUrl: null, issueError };
   }
+};
+
+// Admin-join the server bot into the room so it can post. Returns false (and
+// logs) on any failure so the caller can give up gracefully.
+const ensureBotInRoom = async (mx: MatrixPoster, roomId: string): Promise<boolean> => {
+  const botId = await mx.botUserId();
+  if (!botId) return false;
+  const joined = await mx.adminJoinUserToRoom(roomId, botId);
+  if (!joined.ok) {
+    log.warn('bug_room.bot_join_failed', { roomId, status: joined.status, reason: joined.reason });
+    return false;
+  }
+  log.info('bug_room.bot_joined', { roomId });
+  return true;
+};
+
+interface MatrixLeg {
+  readonly devNoop: boolean;
+  readonly roomId: string | null;
+  readonly eventId: string | null;
+  readonly messageLink: string | null;
+  readonly attachmentPosted: boolean;
+  readonly threadSeeded: boolean;
+  readonly reactionSeeded: boolean;
+  readonly error: string | null;
+}
+
+const EMPTY_MATRIX_LEG: MatrixLeg = {
+  devNoop: false,
+  roomId: null,
+  eventId: null,
+  messageLink: null,
+  attachmentPosted: false,
+  threadSeeded: false,
+  reactionSeeded: false,
+  error: null,
+};
+
+// Resolve the target room, self-healing a missing alias by creating #bugs.
+const resolveOrCreateRoom = async (
+  mx: MatrixPoster,
+  cfg: BugRoomConfig,
+): Promise<{ roomId: string } | { devNoop: true } | { error: string }> => {
+  if (cfg.roomId) return { roomId: cfg.roomId };
+  const resolved = await mx.resolveRoomAlias(cfg.roomAlias);
+  if (resolved.ok && resolved.roomId) return { roomId: resolved.roomId };
+  if (resolved.reason === 'matrix_not_configured') {
+    log.info('bug_room.noop', { reason: 'matrix_not_configured' });
+    return { devNoop: true };
+  }
+  if (resolved.reason === 'alias_not_found') {
+    const created = await mx.createRoom({
+      aliasLocalpart: aliasLocalpart(cfg.roomAlias),
+      name: 'Bugs',
+      topic: 'User-reported bugs (auto-provisioned)',
+    });
+    if (created.ok && created.roomId) {
+      log.info('bug_room.created', { roomId: created.roomId });
+      return { roomId: created.roomId };
+    }
+    return { error: `could not create #bugs room: ${created.reason ?? 'unknown'}` };
+  }
+  return { error: `could not resolve #bugs room: ${resolved.reason ?? 'unknown'}` };
+};
+
+const deliverToMatrix = async (
+  input: WidgetReportInput,
+  cfg: BugRoomConfig,
+  mx: MatrixPoster,
+): Promise<MatrixLeg> => {
+  const room = await resolveOrCreateRoom(mx, cfg);
+  if ('devNoop' in room) return { ...EMPTY_MATRIX_LEG, devNoop: true };
+  if ('error' in room) return { ...EMPTY_MATRIX_LEG, error: room.error };
+  const { roomId } = room;
 
   const message = buildReportMessage(input, cfg);
-  const posted = await mx.sendEvent(roomId, {
+  const content = {
     msgtype: 'm.text',
     body: message.body,
     format: 'org.matrix.custom.html',
     formatted_body: message.formattedBody,
-  });
+  };
+  // Self-heal: a 403 usually means the bot isn't in #bugs — admin-join + retry.
+  let posted = await mx.sendEvent(roomId, content);
+  if (!posted.ok && posted.status === 403 && (await ensureBotInRoom(mx, roomId))) {
+    posted = await mx.sendEvent(roomId, content);
+  }
   if (!posted.ok || !posted.eventId) {
-    return failure(`#bugs post failed (status ${posted.status ?? 'n/a'})`);
+    return { ...EMPTY_MATRIX_LEG, roomId, error: `#bugs post failed (status ${posted.status ?? 'n/a'})` };
   }
   const eventId = posted.eventId;
 
@@ -286,15 +410,51 @@ export const postWidgetReportToBugRoom = async (
     .catch(() => false);
 
   return {
-    ok: true,
+    devNoop: false,
     roomId,
     eventId,
     messageLink: matrixToLink(roomId, eventId),
     attachmentPosted,
     threadSeeded,
     reactionSeeded,
-    devNoop: false,
     error: null,
+  };
+};
+
+export const postWidgetReportToBugRoom = async (
+  input: WidgetReportInput,
+  deps: BugRoomPipelineDeps = {},
+): Promise<WidgetReportOutcome> => {
+  const cfg = deps.config ?? readBugRoomConfig();
+  const mx = deps.matrix ?? (matrixClient as MatrixPoster);
+  const forwardToGithub = deps.forwardToGithub ?? defaultForwardToGithub;
+
+  // Two independent sinks in parallel: Matrix #bugs (self-healing) and a GitHub
+  // issue. The report is delivered if either succeeds, so a single broken sink
+  // no longer surfaces as a 502 in the widget.
+  const [matrix, github] = await Promise.all([
+    deliverToMatrix(input, cfg, mx),
+    forwardToGithub(input),
+  ]);
+
+  const matrixOk = matrix.eventId !== null || matrix.devNoop;
+  const githubOk = github.issueUrl !== null;
+  const error = matrixOk
+    ? null
+    : matrix.error ?? (githubOk ? null : 'bug report delivery failed');
+
+  return {
+    ok: matrixOk || githubOk,
+    roomId: matrix.roomId,
+    eventId: matrix.eventId,
+    messageLink: matrix.messageLink,
+    attachmentPosted: matrix.attachmentPosted,
+    threadSeeded: matrix.threadSeeded,
+    reactionSeeded: matrix.reactionSeeded,
+    devNoop: matrix.devNoop,
+    issueUrl: github.issueUrl,
+    issueError: github.issueError,
+    error,
   };
 };
 
