@@ -1,6 +1,15 @@
-export interface DomainEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> {
+export interface DomainEvent<TPayload = unknown> {
   id: string;
-  module: 'governance' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'monetization';
+  module:
+    | 'governance'
+    | 'forum'
+    | 'deaddrop'
+    | 'deadman'
+    | 'moderation'
+    | 'streaming'
+    | 'monetization'
+    | 'profile'
+    | 'stego';
   type: string;
   payload: TPayload;
   emittedAt: string;
@@ -8,7 +17,7 @@ export interface DomainEvent<TPayload extends Record<string, unknown> = Record<s
 
 const events: DomainEvent[] = [];
 
-export function emitDomainEvent<TPayload extends Record<string, unknown>>(event: Omit<DomainEvent<TPayload>, 'id' | 'emittedAt'>): DomainEvent<TPayload> {
+export function emitDomainEvent<TPayload>(event: Omit<DomainEvent<TPayload>, 'id' | 'emittedAt'>): DomainEvent<TPayload> {
   const emitted: DomainEvent<TPayload> = {
     id: crypto.randomUUID(),
     emittedAt: new Date().toISOString(),

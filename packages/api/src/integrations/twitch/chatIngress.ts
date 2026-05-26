@@ -464,7 +464,7 @@ const TWITCH_PRIVMSG_MAX_BYTES = 500;
 export type SendChatMessageOutcome =
   | { kind: 'ok' }
   | { kind: 'no_session' }
-  | { kind: 'not_connected'; state: 'connecting' | 'closing' | 'closed' }
+  | { kind: 'not_connected'; state: 'connecting' | 'connected' | 'closing' | 'closed' }
   | { kind: 'invalid_body'; reason: string };
 
 /**

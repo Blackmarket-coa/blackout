@@ -300,6 +300,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createCoalitionAidPost: upsert('coalitionAidPosts'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
+  updateClip: upsert('clips'),
   deleteClip: resync('clips'),
   upsertColiseumTopic: upsert('coliseumTopics'),
   upsertColiseumArgument: upsert('coliseumArguments'),

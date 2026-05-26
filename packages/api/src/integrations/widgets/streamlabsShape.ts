@@ -38,6 +38,7 @@ interface StreamlabsSubscription {
   gifter?: string;
   is_gift?: boolean;
   _id: string;
+  [key: string]: unknown;
 }
 
 interface StreamlabsBits {
@@ -93,8 +94,7 @@ export const toWidgetAlert = (
   // from the event's own platform id when available so re-deliveries
   // dedupe; otherwise a UUID is fine since Streamlabs widgets only use
   // `_id` for "have I seen this?" tracking, not authentication.
-  const id =
-    options.idForEvent?.() ?? (event.kind === 'cheer' || event.kind === 'follow' ? null : null) ?? buildEventId(event, now);
+  const id = options.idForEvent?.() ?? buildEventId(event, now);
 
   const baseEnvelope = {
     origin: 'twitch' as const,
@@ -166,6 +166,7 @@ interface StreamlabsDonation {
   currency: string;
   message: string;
   _id: string;
+  [key: string]: unknown;
 }
 
 const formatDollarString = (cents: number): string =>
@@ -198,7 +199,7 @@ export const toWidgetAlertFromPatreon = (
     type: 'donation',
     origin: 'patreon',
     publishedAtMs: now,
-    message: [message satisfies Record<string, unknown>],
+    message: [message],
     source: event,
   };
 };
