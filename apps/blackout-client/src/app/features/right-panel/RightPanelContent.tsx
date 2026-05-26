@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import { activeThreadRootIdAtom, type RightPanelType } from '../../state/navigation';
 import { rightPanelPlugin, resolveRightPanelSlotRegistry } from '../../plugins/right-panel';
@@ -25,6 +25,7 @@ export const RightPanelContent = ({
         [rolesEnabled]
     );
     const activeThreadRootId = useAtomValue(activeThreadRootIdAtom);
+    const setActiveThreadRootId = useSetAtom(activeThreadRootIdAtom);
 
     if (!room) {
         return (
@@ -64,6 +65,8 @@ export const RightPanelContent = ({
                 rolesEnabled={rolesEnabled}
                 onJumpToEvent={onJumpToEvent}
                 activeThreadRootId={activeThreadRootId}
+                onSelectThread={(rootEventId) => setActiveThreadRootId(rootEventId)}
+                onClearThread={() => setActiveThreadRootId(null)}
             />
         </div>
     );

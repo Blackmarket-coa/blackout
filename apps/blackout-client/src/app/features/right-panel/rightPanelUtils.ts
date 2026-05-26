@@ -1,5 +1,6 @@
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
+import { getAllParents } from '../../utils/room';
+import type { RoomToParents } from '../../../types/matrix/room';
 
 export type PresenceGroup = 'online' | 'away' | 'offline';
 
@@ -145,7 +146,7 @@ export const searchEvents = (events: MatrixEvent[], query: string): MatrixEvent[
         .reverse();
 };
 
-const getOrderedChildIds = (space: Room): string[] => {
+export const getOrderedChildIds = (space: Room): string[] => {
     return space.currentState
         .getStateEvents('m.space.child')
         .map((event) => ({
@@ -193,47 +194,87 @@ const collectSpaceGroups = (
     );
 };
 
+/**
+ * Build the "Home" den list (no canopy selected): direct messages and dens
+ * with no parent canopy ("orphans"). A den belongs to a canopy only when an
+ * `m.space.child`/`m.space.parent` edge exists (tracked live in
+ * `roomToParents`), so anything without a parent surfaces here under "Direct"
+ * rather than disappearing or being matched by string heuristics.
+ */
+export const getDirectGroups = ({
+    rooms,
+    roomToParents,
+    mDirect,
+}: {
+    rooms: Room[];
+    roomToParents: RoomToParents;
+    mDirect: Set<string>;
+}): SpaceGroup[] => {
+    const dens = rooms.filter((room) => room.getType() !== 'm.space');
+    const dms = dens.filter((room) => mDirect.has(room.roomId));
+    const orphans = dens.filter(
+        (room) => !mDirect.has(room.roomId) && getAllParents(roomToParents, room.roomId).size === 0
+    );
+
+    const groups: SpaceGroup[] = [];
+    if (dms.length > 0) {
+        groups.push({ id: 'dms', label: 'Direct messages', rooms: dms });
+    }
+    groups.push({ id: 'direct', label: 'Direct', rooms: orphans });
+    return groups;
+};
+
 export const buildSpaceGroups = ({
     selectedSpaceId,
-    selectedSpaceRooms,
     rooms,
+    roomToParents,
+    mDirect,
 }: {
     selectedSpaceId: string | null;
-    selectedSpaceRooms: Room[];
     rooms: Room[];
+    roomToParents: RoomToParents;
+    mDirect: Set<string>;
 }): SpaceGroup[] => {
+    // Home: no canopy selected → direct messages + orphan dens, never a flat
+    // list of every den the user is in.
     if (!selectedSpaceId) {
-        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
-    }
-
-    const selectedSpace = rooms.find((room) => room.roomId === selectedSpaceId);
-    if (!selectedSpace) {
-        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
-    }
-
-    const childIds = getOrderedChildIds(selectedSpace);
-    if (childIds.length === 0) {
-        return [{ id: 'rooms', label: BLACKOUT_TERMS.den.titlePlural, rooms: selectedSpaceRooms }];
+        return getDirectGroups({ rooms, roomToParents, mDirect });
     }
 
     const roomById = new Map(rooms.map((room) => [room.roomId, room]));
-    const directRooms = childIds
-        .map((roomId) => roomById.get(roomId))
-        .filter((room): room is Room => {
-            if (!room) return false;
-            return room.getType() !== 'm.space';
-        });
+    const selectedSpace = roomById.get(selectedSpaceId);
+    const orderedChildIds = selectedSpace ? getOrderedChildIds(selectedSpace) : [];
 
-    const groups: SpaceGroup[] = [{ id: 'general', label: 'General', rooms: directRooms }];
-    const childSpaces = childIds
-        .map((roomId) => roomById.get(roomId))
-        .filter((room): room is Room => {
-            if (!room) return false;
-            return room.getType() === 'm.space';
-        });
+    // Primary path: order dens by the canopy's `m.space.child` state. This reads
+    // room state directly and does not depend on the `roomToParents` index.
+    if (orderedChildIds.length > 0) {
+        const directRooms = orderedChildIds
+            .map((roomId) => roomById.get(roomId))
+            .filter((room): room is Room => {
+                if (!room) return false;
+                return room.getType() !== 'm.space';
+            });
 
-    childSpaces.forEach((space) => collectSpaceGroups(space, roomById, groups));
-    return groups;
+        const groups: SpaceGroup[] = [{ id: 'general', label: 'General', rooms: directRooms }];
+        const childSpaces = orderedChildIds
+            .map((roomId) => roomById.get(roomId))
+            .filter((room): room is Room => {
+                if (!room) return false;
+                return room.getType() === 'm.space';
+            });
+
+        childSpaces.forEach((space) => collectSpaceGroups(space, roomById, groups));
+        return groups;
+    }
+
+    // Fallback: the canopy's child state isn't loaded — derive its dens from the
+    // live parent index instead of guessing by substring match.
+    const childRooms = rooms.filter(
+        (room) =>
+            room.getType() !== 'm.space' &&
+            (roomToParents.get(room.roomId)?.has(selectedSpaceId) ?? false)
+    );
+    return [{ id: 'general', label: 'General', rooms: childRooms }];
 };
 
 export const getUnreadMarkerEventId = (room: Room | null, userId: string | null): string | null => {

@@ -106,6 +106,7 @@ vi.mock('../../../../src/app/features/settings', () => ({
 
 vi.mock('../../../../src/app/features/room/MessageComposer', () => ({
     default: () => null,
+    MessageComposer: () => null,
 }));
 
 vi.mock('../../../../src/app/features/room/RoomTimeline', () => ({
@@ -162,22 +163,27 @@ const makeEvent = (
     relType?: string,
     mentions?: { user_ids?: string[]; room?: boolean },
     ts = 1_700_000_000_000,
-    sender = '@author:example.org'
-): MatrixEvent =>
-    ({
+    sender = '@author:example.org',
+    relatesToEventId?: string
+): MatrixEvent => {
+    const relation = relType
+        ? { rel_type: relType, ...(relatesToEventId ? { event_id: relatesToEventId } : {}) }
+        : null;
+    return {
         getId: () => id,
         getType: () => 'm.room.message',
         getTs: () => ts,
         getSender: () => sender,
         getStateKey: () => undefined,
-        getRelation: () => (relType ? { rel_type: relType } : null),
+        getRelation: () => relation,
         isRedacted: () => false,
         getContent: () => ({
             body,
-            ...(relType ? { 'm.relates_to': { rel_type: relType } } : {}),
+            ...(relation ? { 'm.relates_to': relation } : {}),
             ...(mentions ? { 'm.mentions': mentions } : {}),
         }),
-    } as unknown as MatrixEvent);
+    } as unknown as MatrixEvent;
+};
 
 const makeRoom = ({
     roomId,
@@ -356,11 +362,11 @@ describe('ClientLayout UI wiring', () => {
         expect(inviteButton?.getAttribute('aria-label')).toBe('Create an invite link');
     });
 
-    it('threads/pins/search click sets jump target and closes panel', () => {
+    it('threads panel lists distinct roots and drills into a thread on click', () => {
         const events = [
-            makeEvent('$evt-thread', 'thread', 'm.thread'),
+            makeEvent('$root', 'thread root'),
+            makeEvent('$reply', 'thread reply', 'm.thread', undefined, undefined, undefined, '$root'),
             makeEvent('$evt-pin', 'pinned message'),
-            makeEvent('$evt-search', 'find me'),
         ];
         mockEvents = events;
         // ClientLayout reads via useLegacyRoomTimelineAdapter, which pulls
@@ -382,20 +388,20 @@ describe('ClientLayout UI wiring', () => {
 
         const panel = container.querySelector('[data-testid="right-panel"]');
         expect(panel).toBeTruthy();
-        // Scope to row buttons inside the panel — the panel header's Close
-        // button matches by text but we want the thread row whose body is
-        // the literal "thread".
-        const threadButton = Array.from(
-            panel?.querySelectorAll('button[type="button"]') ?? []
-        ).find((candidate) => candidate.textContent?.includes('thread')) as HTMLButtonElement;
-        expect(threadButton).toBeTruthy();
+        // The list shows one row per thread root (not one per reply event).
+        const rootButton = panel?.querySelector(
+            '[data-testid="thread-root-$root"]'
+        ) as HTMLButtonElement;
+        expect(rootButton).toBeTruthy();
 
-        act(() => threadButton.click());
+        act(() => rootButton.click());
 
-        expect(container.querySelector('[data-testid="right-panel"]')).toBeNull();
-        expect(
-            (container.querySelector('[data-testid="timeline"]') as HTMLElement).dataset.jump
-        ).toBe('$evt-thread');
+        // Drilling in keeps the panel open and renders the thread tree for the
+        // selected root rather than jumping away.
+        const openPanel = container.querySelector('[data-testid="right-panel"]');
+        expect(openPanel).toBeTruthy();
+        const threadPanel = openPanel?.querySelector('[data-testid="thread-panel"]');
+        expect(threadPanel?.getAttribute('data-root-event-id')).toBe('$root');
     });
 
     it('governance button opens governance panel', () => {
@@ -926,44 +932,5 @@ describe('ClientLayout UI wiring', () => {
 
         expect(container.textContent).toContain('Mobile quick settings');
         expect(container.querySelector('[data-testid="settings-page"]')).toBeTruthy();
-    });
-
-    it('allows mobile room organization preference changes from settings drawer', async () => {
-        setViewportWidth(640);
-        const room = makeRoom({ roomId: '!room:example.org', name: 'Room' });
-        mockRoom = room;
-
-        const { container } = renderLayout({
-            rooms: [room],
-            selectedRoomId: null,
-            selectedSpaceId: '!space:example.org',
-            rightPanel: null,
-        });
-
-        const settingsButton = Array.from(container.querySelectorAll('button')).find(
-            (button) => button.textContent === 'Settings'
-        ) as HTMLButtonElement;
-        act(() => settingsButton.click());
-        await act(async () => {
-            await Promise.resolve();
-        });
-
-        const organizationSelect = container.querySelector(
-            '[data-testid="mobile-den-organization"]'
-        ) as HTMLSelectElement;
-        expect(organizationSelect).toBeTruthy();
-        expect(organizationSelect.value).toBe('space');
-
-        act(() => {
-            organizationSelect.value = 'all';
-            organizationSelect.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-        await act(async () => {
-            await Promise.resolve();
-        });
-
-        expect(organizationSelect.value).toBe('all');
-        // Both options labelled with terminology-driven copy must be present.
-        expect(container.textContent).toMatch(/All dens/);
     });
 });

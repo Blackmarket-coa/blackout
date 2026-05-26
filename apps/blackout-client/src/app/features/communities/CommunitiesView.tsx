@@ -1,35 +1,25 @@
 import React, { useMemo } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useNavigate } from 'react-router-dom';
+import { useAtomValue } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
-import { buildCommunitiesPath } from '../../pages/paths';
+import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 
 export const CommunitiesView = () => {
     const rooms = useAtomValue(joinedRoomsAtom);
-    const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
-    const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
-    const navigate = useNavigate();
+    const { navigateRoom, navigateSpace } = useRoomNavigate();
 
     const joinedSpaces = useMemo(
         () => rooms.filter((room) => room.getType() === 'm.space'),
         [rooms]
     );
 
-    const openSpace = (spaceId: string) => {
-        setSelectedSpaceId(spaceId);
-        setSelectedRoomId(null);
-        navigate(buildCommunitiesPath(spaceId, null));
-    };
-
-    const openRoom = (roomId: string) => {
-        setSelectedRoomId(roomId);
-        setSelectedSpaceId(null);
-        navigate(buildCommunitiesPath(null, roomId));
-    };
+    // Open a den through the canopy-resolving navigator so it lands inside its
+    // parent canopy (`/communities/:canopyId/dens/:denId`) instead of as a bare,
+    // canopy-less den.
+    const openSpace = (spaceId: string) => navigateSpace(spaceId);
+    const openRoom = (roomId: string) => navigateRoom(roomId);
 
     return (
         <section

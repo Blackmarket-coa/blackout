@@ -1,14 +1,17 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { Link, useInRouterContext, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
+import { mDirectAtom } from '../../state/mDirectList';
 import { userIdAtom } from '../../state/auth';
 import {
     selectedRoomIdAtom,
     selectedSpaceIdAtom,
     rightPanelAtom,
+    activeThreadRootIdAtom,
     roomJumpTargetEventIdAtom,
     roomUnreadMarkerEventIdAtom,
     type RightPanelType,
@@ -36,7 +39,7 @@ import { useOptionalCall } from '../../features/call';
 import { OnboardingWizard, WelcomeScreen } from '../../features/welcome';
 import { useRoom, useRoomTimeline } from '../../features/room/hooks/useRoomLegacy';
 import RightPanelContent from '../../features/right-panel/RightPanelContent';
-import { buildSpaceGroups } from '../../features/right-panel/rightPanelUtils';
+import { buildSpaceGroups, getThreadRootIds } from '../../features/right-panel/rightPanelUtils';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { InvitationsManager } from '../../components/invitations';
 import { ToastOutlet } from '../../components/toast/ToastOutlet';
@@ -148,14 +151,17 @@ export const ClientLayout = () => {
     const client = useMatrixClient();
     useBindAtoms(client);
     const rooms = useAtomValue(joinedRoomsAtom);
+    const roomToParents = useAtomValue(roomToParentsAtom);
+    const mDirect = useAtomValue(mDirectAtom);
     const userId = useAtomValue(userIdAtom);
-    const [storedSettings, setSettings] = useAtom(settingsAtom);
+    const [storedSettings] = useAtom(settingsAtom);
     const [customization] = useAtom(customizationAtom);
     const settings = storedSettings instanceof Promise ? defaultAppSettings : storedSettings;
     const [, setSettingsPage] = useAtom(settingsPageAtom);
     const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
     const [selectedSpaceId, setSelectedSpaceId] = useAtom(selectedSpaceIdAtom);
     const [rightPanel, setRightPanel] = useAtom(rightPanelAtom);
+    const setActiveThreadRootId = useSetAtom(activeThreadRootIdAtom);
     const [jumpTargetEventId, setJumpTargetEventId] = useAtom(roomJumpTargetEventIdAtom);
     const [unreadMarkerEventId, setUnreadMarkerEventId] = useAtom(roomUnreadMarkerEventIdAtom);
     const [, setComposerCommandPayload] = useAtom(composerCommandPayloadAtom);
@@ -404,23 +410,22 @@ export const ClientLayout = () => {
         });
     }, [onboardingSpaceId]);
 
-    const selectedSpaceRooms = useMemo(() => {
-        if (settings.mobileRoomListScope === 'all' || !selectedSpaceId) return homeRooms;
-        return homeRooms.filter(
-            (room) =>
-                room.roomId.includes(selectedSpaceId.slice(1, 5)) ||
-                room.name.toLowerCase().includes(selectedSpaceId.slice(1, 4).toLowerCase())
-        );
-    }, [homeRooms, selectedSpaceId, settings.mobileRoomListScope]);
-
     const deadDrop = useDeadDrop(selectedRoomId ?? '');
     const activeRoomState = useRoom(selectedRoomId ?? '');
     const timelineState = useRoomTimeline(selectedRoomId ?? '');
+    const threadRootCount = useMemo(
+        () => getThreadRootIds(timelineState.data ?? []).length,
+        [timelineState.data]
+    );
+    const openThreadsPanel = () => {
+        setActiveThreadRootId(null);
+        setRightPanel('threads');
+    };
     const myPresence = userId ? client.getUser(userId)?.presence ?? 'offline' : 'offline';
 
     const groups = useMemo(
-        () => buildSpaceGroups({ selectedSpaceId, selectedSpaceRooms, rooms }),
-        [rooms, selectedSpaceId, selectedSpaceRooms]
+        () => buildSpaceGroups({ selectedSpaceId, rooms, roomToParents, mDirect }),
+        [rooms, selectedSpaceId, roomToParents, mDirect]
     );
 
     const canOpenModerationDashboard = useMemo(
@@ -627,6 +632,22 @@ export const ClientLayout = () => {
                                     Call unavailable
                                 </small>
                             )}
+                            <button
+                                type="button"
+                                data-testid="den-threads-toggle"
+                                onClick={openThreadsPanel}
+                                title={`Threads in this ${BLACKOUT_TERMS.den.singular}`}
+                                style={{
+                                    border: '1px solid var(--border-default)',
+                                    borderRadius: 8,
+                                    background: 'var(--bg-input)',
+                                    color: 'var(--text-primary)',
+                                    padding: '2px 8px',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                🧵 Threads{threadRootCount > 0 ? ` (${threadRootCount})` : ''}
+                            </button>
                         </div>
                         <DeadDropIndicator
                             config={deadDrop.data}
@@ -1471,42 +1492,6 @@ export const ClientLayout = () => {
                                     >
                                         Readability
                                     </button>
-                                </div>
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        gap: 8,
-                                    }}
-                                >
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        Den organization
-                                    </span>
-                                    <select
-                                        data-testid="mobile-den-organization"
-                                        aria-label="Den organization"
-                                        value={settings.mobileRoomListScope ?? 'space'}
-                                        onChange={(event) =>
-                                            setSettings({
-                                                ...settings,
-                                                mobileRoomListScope: event.target.value as
-                                                    | 'space'
-                                                    | 'all',
-                                            })
-                                        }
-                                        style={{
-                                            border: '1px solid var(--border-default)',
-                                            borderRadius: 8,
-                                            background: 'var(--bg-input)',
-                                            color: 'var(--text-primary)',
-                                        }}
-                                    >
-                                        <option value="space">
-                                            Current {BLACKOUT_TERMS.canopy.singular}
-                                        </option>
-                                        <option value="all">All {BLACKOUT_TERMS.den.plural}</option>
-                                    </select>
                                 </div>
                             </section>
                         ) : null}

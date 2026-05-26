@@ -3,12 +3,15 @@ import { useCallback } from 'react';
 import type { Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
 import {
     selectedRoomIdAtom,
+    selectedSpaceIdAtom,
     roomJumpTargetEventIdAtom,
     roomUnreadMarkerEventIdAtom,
 } from '../../state/navigation';
 import { getUnreadMarkerEventId } from '../right-panel/rightPanelUtils';
+import { resolveParentCanopyId } from '../../hooks/roomNavPath';
 
 export interface MentionTarget {
     roomId: string;
@@ -18,18 +21,36 @@ export interface MentionTarget {
 export const useMentionNavigation = () => {
     const client = useMatrixClient();
     const rooms = useAtomValue(joinedRoomsAtom);
+    const roomToParents = useAtomValue(roomToParentsAtom);
+    const selectedSpaceId = useAtomValue(selectedSpaceIdAtom);
     const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
+    const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
     const setJumpTargetEventId = useSetAtom(roomJumpTargetEventIdAtom);
     const setUnreadMarkerEventId = useSetAtom(roomUnreadMarkerEventIdAtom);
 
     const openRoomWithContext = useCallback(
         (roomId: string, jumpToEventId?: string) => {
             const room = rooms.find((candidate) => candidate.roomId === roomId) ?? null;
+            // Canopy-first: resolve and select the den's parent canopy so the
+            // chat shell opens inside the canopy, not as a bare den. Orphan dens
+            // / DMs resolve to `null` (the Home / Direct context).
+            setSelectedSpaceId(
+                resolveParentCanopyId({ mx: client, roomToParents, spaceSelectedId: selectedSpaceId, roomId }),
+            );
             setSelectedRoomId(roomId);
             setJumpTargetEventId(jumpToEventId ?? null);
             setUnreadMarkerEventId(getUnreadMarkerEventId(room, client.getUserId()));
         },
-        [client, rooms, setJumpTargetEventId, setSelectedRoomId, setUnreadMarkerEventId],
+        [
+            client,
+            rooms,
+            roomToParents,
+            selectedSpaceId,
+            setJumpTargetEventId,
+            setSelectedRoomId,
+            setSelectedSpaceId,
+            setUnreadMarkerEventId,
+        ],
     );
 
     const markEventRead = useCallback(
