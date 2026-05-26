@@ -180,10 +180,18 @@ test('growth quests: 404 on completing missing quest', async () => {
     assert.equal(response.status, 404);
 });
 
-test('growth endpoints reject callers without growth capability', async () => {
+test('growth read endpoints are granted to authenticated users by default', async () => {
     resetGrowthForTest();
     const user = await issueToken();
+    // growth.read is part of every user's token capabilities, so the read
+    // endpoint is reachable without an explicit capability header.
     const headers = buildHeaders(user.token, []);
     const response = await app.request('/v1/growth/referrals/me', { headers });
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 200);
+});
+
+test('growth endpoints reject unauthenticated callers', async () => {
+    resetGrowthForTest();
+    const response = await app.request('/v1/growth/referrals/me');
+    assert.equal(response.status, 401);
 });

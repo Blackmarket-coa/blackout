@@ -188,6 +188,11 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/auth/webauthn`, webauthnRoutes);
   app.route(`${root}/key-transparency`, keyTransparencyRoutes);
   app.route(`${root}/diagnostics`, diagnosticsRoutes);
+  // Also reachable under /v1 (and the legacy alias) so the web client works on
+  // hosts whose nginx only proxies /v1/* to the API; the top-level mounts below
+  // stay for native + backward compat. Mirrors the /i route's dual mount.
+  app.route(`${root}/bug-report`, bugReportRoutes);
+  app.route(`${root}/bug-report/widget`, widgetReportRoutes);
   registerFeatureModules(app, root);
 }
 

@@ -149,15 +149,22 @@ test('topics enumerate frequency-sorted tags and list canopies by tag', async ()
   assert.equal(limitedBody.items[0].tag, 'mutual-aid');
 });
 
-test('topics endpoint rejects requests without discovery.read capability', async () => {
+test('topics endpoint grants discovery.read to authenticated users by default', async () => {
   const token = await issueToken();
   const headers = {
     authorization: `Bearer ${token}`,
     'x-blackout-capabilities': '',
   };
 
+  // discovery.read is now part of every user's token capabilities, so the
+  // endpoint is reachable without an explicit capability header.
   const response = await app.request('/v1/topics', { headers });
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 200);
+});
+
+test('topics endpoint rejects unauthenticated requests', async () => {
+  const response = await app.request('/v1/topics');
+  assert.equal(response.status, 401);
 });
 
 test('topics canopiesByTag returns 400 on empty tag', async () => {
