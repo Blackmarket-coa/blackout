@@ -14,6 +14,8 @@
  * pipeline). The youtube.readonly scope is sufficient for both reads.
  */
 
+import { withTimeout } from '../http';
+
 const BASE_URL = 'https://www.googleapis.com/youtube/v3';
 
 export interface YouTubeBroadcast {
@@ -99,7 +101,7 @@ export const findActiveLiveBroadcast = async (
   accessToken: string,
   deps: YoutubeApiDeps = {},
 ): Promise<ListBroadcastsOutcome> => {
-  const fetchFn = deps.fetch ?? fetch;
+  const fetchFn = withTimeout(deps.fetch ?? fetch);
   const url = `${BASE_URL}/liveBroadcasts?part=snippet&broadcastStatus=active&maxResults=5`;
   const res = await fetchFn(url, {
     headers: { authorization: `Bearer ${accessToken}` },
@@ -130,7 +132,7 @@ export const listLiveChatMessages = async (
   accessToken: string,
   options: ListChatMessagesOptions,
 ): Promise<ListChatMessagesOutcome> => {
-  const fetchFn = options.fetch ?? fetch;
+  const fetchFn = withTimeout(options.fetch ?? fetch);
   const params = new URLSearchParams({
     liveChatId: options.liveChatId,
     part: 'snippet,authorDetails',
@@ -176,7 +178,7 @@ export const insertLiveChatMessage = async (
   accessToken: string,
   options: InsertChatMessageOptions,
 ): Promise<InsertChatMessageOutcome> => {
-  const fetchFn = options.fetch ?? fetch;
+  const fetchFn = withTimeout(options.fetch ?? fetch);
   const url = `${BASE_URL}/liveChat/messages?part=snippet`;
   const res = await fetchFn(url, {
     method: 'POST',
