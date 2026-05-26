@@ -10,7 +10,12 @@ export const PLUGINS_PROTOCOL_VERSION = 2;
 
 export type PluginProtocolVersion = 1 | 2;
 
-export type PluginArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+export type PluginArtifactKind =
+    | 'theme'
+    | 'manifest_plugin'
+    | 'code_plugin'
+    | 'asset_bundle'
+    | 'coalition_kit';
 
 export type PluginCapability =
     | 'shell.panel.read'
@@ -19,7 +24,11 @@ export type PluginCapability =
     | 'message.compose'
     | 'storage.read'
     | 'storage.write'
-    | 'http.fetch';
+    | 'http.fetch'
+    // AI inference is confined to AI dens (see core `den/classification.ts`
+    // `aiToolsEnabled`). Granting it is necessary but not sufficient: the host
+    // sandbox hard-denies `ai.inference` RPCs outside an AI den at runtime.
+    | 'ai.inference';
 
 /**
  * Spatial declaration: pinned sidebar entry contributed by an installed
@@ -110,6 +119,14 @@ export interface PluginManifest {
         iconUrl?: string;
         order?: number;
     };
+    /**
+     * Optional companion dens (Matrix rooms) the plugin wants provisioned at
+     * install time (Phase 5 den factory). `purpose` is one of the core plugin
+     * den purposes (support/tutorial/collaboration/update) and `denType` is a
+     * den classification; both are validated server-side. Strings are kept
+     * loose here so the protocol stays free of a core dependency.
+     */
+    pluginDens?: Array<{ purpose: string; denType?: string; name?: string }>;
 }
 
 export interface PluginSignatureEnvelope {

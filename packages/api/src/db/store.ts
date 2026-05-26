@@ -67,6 +67,11 @@ import type {
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
   PluginInstallationRecord,
+  PluginDenRecord,
+  CoalitionKitManifestApplicationRecord,
+  PluginReviewRecord,
+  PluginForkRecord,
+  PluginShowcaseRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
@@ -149,6 +154,11 @@ type PersistedState = {
   ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
   pluginInstallations: PluginInstallationRecord[];
+  pluginDens: PluginDenRecord[];
+  coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
+  pluginReviews: PluginReviewRecord[];
+  pluginForks: PluginForkRecord[];
+  pluginShowcases: PluginShowcaseRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
@@ -252,6 +262,16 @@ class InMemoryDb {
   coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
+  /** Plugin-provisioned companion dens, keyed by linkage id. */
+  pluginDens = new Map<string, PluginDenRecord>();
+  /** Coalition kit applications ledger, keyed by application id. */
+  coalitionKitManifestApplications = new Map<string, CoalitionKitManifestApplicationRecord>();
+  /** Plugin reviews/ratings, keyed by review id. */
+  pluginReviews = new Map<string, PluginReviewRecord>();
+  /** Plugin forks, keyed by fork id. */
+  pluginForks = new Map<string, PluginForkRecord>();
+  /** Plugin showcases, keyed by showcase id. */
+  pluginShowcases = new Map<string, PluginShowcaseRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
   /** Coliseum arguments, keyed by argument id. */
@@ -2271,6 +2291,10 @@ class InMemoryDb {
     return [...this.pluginInstallations.values()].filter((row) => row.pluginId === pluginId);
   }
 
+  listAllPluginInstallations(): PluginInstallationRecord[] {
+    return [...this.pluginInstallations.values()];
+  }
+
   updatePluginInstallation(
     id: string,
     patch: Partial<Omit<PluginInstallationRecord, 'id' | 'installedAt'>>,
@@ -2284,6 +2308,133 @@ class InMemoryDb {
 
   deletePluginInstallation(id: string): boolean {
     return this.pluginInstallations.delete(id);
+  }
+
+  // --- plugin dens (Phase 5 den factory) ---
+
+  createPluginDen(input: Omit<PluginDenRecord, 'createdAt'>): PluginDenRecord {
+    const record: PluginDenRecord = { ...input, createdAt: nowIso() };
+    this.pluginDens.set(record.id, record);
+    return record;
+  }
+
+  /** Enforces the (installationId, purpose) uniqueness constraint. */
+  findPluginDen(installationId: string, purpose: string): PluginDenRecord | undefined {
+    return [...this.pluginDens.values()].find(
+      (row) => row.installationId === installationId && row.purpose === purpose,
+    );
+  }
+
+  listPluginDensForInstallation(installationId: string): PluginDenRecord[] {
+    return [...this.pluginDens.values()].filter((row) => row.installationId === installationId);
+  }
+
+  listPluginDensForPlugin(pluginId: string): PluginDenRecord[] {
+    return [...this.pluginDens.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  // --- coalition kit applications (Phase 4) ---
+
+  createCoalitionKitManifestApplication(
+    input: Omit<CoalitionKitManifestApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitManifestApplicationRecord {
+    const now = nowIso();
+    const record: CoalitionKitManifestApplicationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.coalitionKitManifestApplications.set(record.id, record);
+    return record;
+  }
+
+  /** Enforces the (coalitionId, kitId) uniqueness constraint. */
+  findCoalitionKitManifestApplication(
+    coalitionId: string,
+    kitId: string,
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    return [...this.coalitionKitManifestApplications.values()].find(
+      (row) => row.coalitionId === coalitionId && row.kitId === kitId,
+    );
+  }
+
+  listCoalitionKitManifestApplications(coalitionId: string): CoalitionKitManifestApplicationRecord[] {
+    return [...this.coalitionKitManifestApplications.values()].filter(
+      (row) => row.coalitionId === coalitionId,
+    );
+  }
+
+  updateCoalitionKitManifestApplication(
+    id: string,
+    patch: Partial<Omit<CoalitionKitManifestApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    const existing = this.coalitionKitManifestApplications.get(id);
+    if (!existing) return undefined;
+    const updated: CoalitionKitManifestApplicationRecord = {
+      ...existing,
+      ...patch,
+      updatedAt: nowIso(),
+    };
+    this.coalitionKitManifestApplications.set(id, updated);
+    return updated;
+  }
+
+  // --- plugin social (Phase 6) ---
+
+  upsertPluginReview(
+    input: Omit<PluginReviewRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  ): PluginReviewRecord {
+    const now = nowIso();
+    const existing = [...this.pluginReviews.values()].find(
+      (row) => row.pluginId === input.pluginId && row.userId === input.userId,
+    );
+    if (existing) {
+      const updated: PluginReviewRecord = {
+        ...existing,
+        rating: input.rating,
+        body: input.body,
+        providerListingId: input.providerListingId,
+        updatedAt: now,
+      };
+      this.pluginReviews.set(existing.id, updated);
+      return updated;
+    }
+    const record: PluginReviewRecord = {
+      id: input.id ?? crypto.randomUUID(),
+      pluginId: input.pluginId,
+      providerListingId: input.providerListingId,
+      userId: input.userId,
+      rating: input.rating,
+      body: input.body,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.pluginReviews.set(record.id, record);
+    return record;
+  }
+
+  listPluginReviews(pluginId: string): PluginReviewRecord[] {
+    return [...this.pluginReviews.values()].filter((row) => row.pluginId === pluginId);
+  }
+
+  createPluginFork(input: Omit<PluginForkRecord, 'createdAt'>): PluginForkRecord {
+    const record: PluginForkRecord = { ...input, createdAt: nowIso() };
+    this.pluginForks.set(record.id, record);
+    return record;
+  }
+
+  listPluginForks(forkedFromPluginId: string): PluginForkRecord[] {
+    return [...this.pluginForks.values()].filter(
+      (row) => row.forkedFromPluginId === forkedFromPluginId,
+    );
+  }
+
+  createPluginShowcase(input: Omit<PluginShowcaseRecord, 'createdAt'>): PluginShowcaseRecord {
+    const record: PluginShowcaseRecord = { ...input, createdAt: nowIso() };
+    this.pluginShowcases.set(record.id, record);
+    return record;
+  }
+
+  listPluginShowcasesForScope(scopeType: string, scopeId: string): PluginShowcaseRecord[] {
+    return [...this.pluginShowcases.values()].filter(
+      (row) => row.scopeType === scopeType && row.scopeId === scopeId,
+    );
   }
 
   // --- Coliseum ---
@@ -2563,6 +2714,13 @@ export class FileBackedDb extends InMemoryDb {
     this.pluginInstallations = new Map(
       (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
     );
+    this.pluginDens = new Map((parsed.pluginDens ?? []).map((row) => [row.id, row]));
+    this.coalitionKitManifestApplications = new Map(
+      (parsed.coalitionKitManifestApplications ?? []).map((row) => [row.id, row]),
+    );
+    this.pluginReviews = new Map((parsed.pluginReviews ?? []).map((row) => [row.id, row]));
+    this.pluginForks = new Map((parsed.pluginForks ?? []).map((row) => [row.id, row]));
+    this.pluginShowcases = new Map((parsed.pluginShowcases ?? []).map((row) => [row.id, row]));
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
     }
@@ -2648,6 +2806,11 @@ export class FileBackedDb extends InMemoryDb {
       ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
+      pluginDens: [...this.pluginDens.values()],
+      coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
+      pluginReviews: [...this.pluginReviews.values()],
+      pluginForks: [...this.pluginForks.values()],
+      pluginShowcases: [...this.pluginShowcases.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
@@ -3551,6 +3714,51 @@ export class FileBackedDb extends InMemoryDb {
     const removed = super.deletePluginInstallation(id);
     if (removed) this.persist();
     return removed;
+  }
+
+  override createPluginDen(input: Omit<PluginDenRecord, 'createdAt'>): PluginDenRecord {
+    const created = super.createPluginDen(input);
+    this.persist();
+    return created;
+  }
+
+  override createCoalitionKitManifestApplication(
+    input: Omit<CoalitionKitManifestApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitManifestApplicationRecord {
+    const created = super.createCoalitionKitManifestApplication(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionKitManifestApplication(
+    id: string,
+    patch: Partial<Omit<CoalitionKitManifestApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    const updated = super.updateCoalitionKitManifestApplication(id, patch);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override upsertPluginReview(
+    input: Omit<PluginReviewRecord, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+  ): PluginReviewRecord {
+    const saved = super.upsertPluginReview(input);
+    this.persist();
+    return saved;
+  }
+
+  override createPluginFork(input: Omit<PluginForkRecord, 'createdAt'>): PluginForkRecord {
+    const created = super.createPluginFork(input);
+    this.persist();
+    return created;
+  }
+
+  override createPluginShowcase(
+    input: Omit<PluginShowcaseRecord, 'createdAt'>,
+  ): PluginShowcaseRecord {
+    const created = super.createPluginShowcase(input);
+    this.persist();
+    return created;
   }
 
   override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {

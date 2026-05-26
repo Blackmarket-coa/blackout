@@ -1,9 +1,17 @@
 import { Hono } from 'hono';
-import { isInstallScopeType, isInstallStatus, type InstallScope } from '@blackout/core';
+import {
+    isDenType,
+    isInstallScopeType,
+    isInstallStatus,
+    type DenType,
+    type InstallScope,
+} from '@blackout/core';
 import { requireUser } from '../middleware/require-user';
 import { db } from '../db/store';
 import {
+    authorizeAiCapability,
     authorizeEntitlement,
+    authorizeGovernance,
     authorizeScope,
     getInstallation,
     installPluginAtScope,
@@ -14,6 +22,12 @@ import {
     setInstallationStatus,
     uninstall,
 } from '../services/pluginInstallations';
+import {
+    listPluginDensForInstallation,
+    pluginDensEnabled,
+    provisionPluginDens,
+} from '../services/pluginDens';
+import type { PluginDenSpecInput } from '@blackout/core';
 
 const pluginInstallations = new Hono();
 
@@ -89,9 +103,28 @@ pluginInstallations.post('/', async (c) => {
     }
 
     const entitlementId = typeof body.entitlementId === 'string' ? body.entitlementId : null;
-    const entAuth = authorizeEntitlement(user.sub, entitlementId, body.requiresEntitlement === true);
+    const requiresEntitlement = body.requiresEntitlement === true;
+    const entAuth = authorizeEntitlement(user.sub, entitlementId, requiresEntitlement);
     if (!entAuth.ok) {
         return c.json({ code: entAuth.code, message: entAuth.message }, statusForAuthCode(entAuth.code));
+    }
+
+    const isPaid = requiresEntitlement || entitlementId !== null;
+    const governanceProposalId =
+        typeof body.governanceProposalId === 'string' ? body.governanceProposalId : null;
+    const govAuth = authorizeGovernance(scope, isPaid, governanceProposalId);
+    if (!govAuth.ok) {
+        return c.json({ code: govAuth.code, message: govAuth.message }, statusForAuthCode(govAuth.code));
+    }
+
+    const domain = typeof body.domain === 'string' ? body.domain : null;
+    const grantedCapabilities = Array.isArray(body.grantedCapabilities)
+        ? body.grantedCapabilities.filter((x): x is string => typeof x === 'string')
+        : [];
+    const denType: DenType | undefined = isDenType(body.denType) ? body.denType : undefined;
+    const aiAuth = authorizeAiCapability(grantedCapabilities, domain, scope, denType);
+    if (!aiAuth.ok) {
+        return c.json({ code: aiAuth.code, message: aiAuth.message }, statusForAuthCode(aiAuth.code));
     }
 
     const installation = installPluginAtScope({
@@ -100,10 +133,8 @@ pluginInstallations.post('/', async (c) => {
         installedByUserId: user.sub,
         entitlementId,
         artifactKind,
-        domain: typeof body.domain === 'string' ? body.domain : null,
-        grantedCapabilities: Array.isArray(body.grantedCapabilities)
-            ? body.grantedCapabilities.filter((x): x is string => typeof x === 'string')
-            : [],
+        domain,
+        grantedCapabilities,
         config: isRecord(body.config) ? body.config : {},
         manifest: isRecord(body.manifest) ? body.manifest : {},
     });
@@ -147,6 +178,62 @@ pluginInstallations.delete('/:id', (c) => {
     }
     uninstall(id);
     return c.json({ ok: true });
+});
+
+// --- Phase 5: plugin dens (den factory) ---
+
+function readDenSpecs(value: unknown): PluginDenSpecInput[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    return value.flatMap((entry) => {
+        if (!isRecord(entry) || typeof entry.purpose !== 'string') return [];
+        return [
+            {
+                purpose: entry.purpose,
+                denType: typeof entry.denType === 'string' ? entry.denType : undefined,
+                name: typeof entry.name === 'string' ? entry.name : undefined,
+            },
+        ];
+    });
+}
+
+pluginInstallations.get('/:id/dens', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (!pluginDensEnabled()) {
+        return c.json({ code: 'feature_disabled', message: 'Plugin dens are not enabled.' }, 404);
+    }
+    const existing = getInstallation(c.req.param('id'));
+    if (!existing) return c.json({ code: 'not_found', message: 'Installation not found.' }, 404);
+    return c.json({ dens: listPluginDensForInstallation(existing.id) });
+});
+
+pluginInstallations.post('/:id/dens', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (!pluginDensEnabled()) {
+        return c.json({ code: 'feature_disabled', message: 'Plugin dens are not enabled.' }, 404);
+    }
+    const existing = getInstallation(c.req.param('id'));
+    if (!existing) return c.json({ code: 'not_found', message: 'Installation not found.' }, 404);
+
+    const reputationTier = db.getUserById(user.sub)?.reputationTier ?? 'member';
+    const scopeAuth = authorizeScope(user.sub, reputationTier, existing.scope);
+    if (!scopeAuth.ok) {
+        return c.json({ code: scopeAuth.code, message: scopeAuth.message }, statusForAuthCode(scopeAuth.code));
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const manifest = isRecord(existing.manifest) ? existing.manifest : {};
+    const specs = readDenSpecs(body.specs) ?? readDenSpecs(manifest.pluginDens);
+    const pluginName = typeof manifest.name === 'string' ? manifest.name : existing.pluginId;
+
+    const result = await provisionPluginDens({
+        installationId: existing.id,
+        pluginId: existing.pluginId,
+        pluginName,
+        specs,
+    });
+    return c.json(result, result.failures.length > 0 ? 207 : 201);
 });
 
 export default pluginInstallations;

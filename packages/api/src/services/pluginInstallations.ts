@@ -18,7 +18,10 @@
 
 import crypto from 'node:crypto';
 import {
+    evaluateAiInstall,
     isActiveInstallStatus,
+    pluginUsesAi,
+    type DenType,
     type InstallScope,
     type InstallScopeType,
     type InstallStatus,
@@ -33,6 +36,16 @@ export function pluginInstallScopesEnabled(): boolean {
     return process.env.BLACKOUT_PLUGIN_INSTALL_SCOPES === 'true';
 }
 
+/** Default-off gate for AI-plugin install/runtime gating (Phase 2). */
+export function pluginAiCapabilityEnabled(): boolean {
+    return process.env.BLACKOUT_PLUGIN_AI_CAPABILITY === 'true';
+}
+
+/** Default-off gate for governance-backed scope authorization (Phase 3). */
+export function pluginScopeGovernanceEnabled(): boolean {
+    return process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE === 'true';
+}
+
 const ENTITLEMENT_ACTIVE = new Set(['granted', 'pending']);
 
 export interface InstallAuthorization {
@@ -43,7 +56,9 @@ export interface InstallAuthorization {
         | 'scope_forbidden'
         | 'entitlement_required'
         | 'entitlement_not_owned'
-        | 'entitlement_inactive';
+        | 'entitlement_inactive'
+        | 'ai_scope_forbidden'
+        | 'governance_required';
     message: string;
 }
 
@@ -99,6 +114,70 @@ export function authorizeScope(
         default:
             return { ok: false, code: 'scope_forbidden', message: 'Unknown scope type.' };
     }
+}
+
+/**
+ * AI gate (Phase 2): an AI plugin (granted `ai.inference` or `ai` domain) may
+ * only install at a `den` scope, and — when the caller asserts the den's type —
+ * that den must be an AI den. The server cannot read the den's Matrix
+ * classification itself, so an absent `denType` passes here; the sandbox
+ * runtime gate is the authoritative boundary. No-op when the flag is off.
+ */
+export function authorizeAiCapability(
+    capabilities: readonly string[],
+    domain: string | null | undefined,
+    scope: InstallScope,
+    denType?: DenType,
+): InstallAuthorization {
+    if (!pluginAiCapabilityEnabled()) return { ok: true, code: 'ok', message: '' };
+    const usesAi = pluginUsesAi(capabilities, domain === 'ai' ? 'ai' : undefined);
+    const gate = evaluateAiInstall(usesAi, scope.type, denType);
+    if (gate.allowed) return { ok: true, code: 'ok', message: '' };
+    return {
+        ok: false,
+        code: 'ai_scope_forbidden',
+        message:
+            gate.reason === 'ai_requires_den_scope'
+                ? 'AI plugins can only be installed in an AI den.'
+                : 'This den does not permit AI tooling.',
+    };
+}
+
+/**
+ * Governance gate (Phase 3): a PAID coalition install must be authorized by a
+ * passed governance proposal in that coalition. The caller references the
+ * proposal by id; we verify it exists, has `status: 'passed'`, and belongs to
+ * the target coalition (`communityId === scope.id`). Free coalition installs
+ * and all other scopes are unaffected (they fall back to `authorizeScope`'s
+ * admin check). No-op when the flag is off.
+ *
+ * Den/coalition admin authority still rides on `reputationTier` as a stand-in
+ * until Matrix power-level wiring lands; this gate adds the real vote
+ * requirement for the paid path, which is where the governance policy bites.
+ */
+export function authorizeGovernance(
+    scope: InstallScope,
+    isPaid: boolean,
+    governanceProposalId: string | null | undefined,
+): InstallAuthorization {
+    if (!pluginScopeGovernanceEnabled()) return { ok: true, code: 'ok', message: '' };
+    if (scope.type !== 'coalition' || !isPaid) return { ok: true, code: 'ok', message: '' };
+    if (!governanceProposalId) {
+        return {
+            ok: false,
+            code: 'governance_required',
+            message: 'A paid coalition install requires a passed governance proposal.',
+        };
+    }
+    const proposal = db.getVote(governanceProposalId);
+    if (!proposal || proposal.status !== 'passed' || proposal.communityId !== scope.id) {
+        return {
+            ok: false,
+            code: 'governance_required',
+            message: 'The referenced governance proposal has not passed for this coalition.',
+        };
+    }
+    return { ok: true, code: 'ok', message: '' };
 }
 
 /** Ownership gate: a non-free install must reference an active entitlement the caller owns. */

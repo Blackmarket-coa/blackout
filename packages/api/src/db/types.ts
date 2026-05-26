@@ -733,6 +733,64 @@ export interface PluginInstallationRecord {
   updatedAt: string;
 }
 
+export interface PluginDenRecord {
+  id: UUID;
+  installationId: UUID;
+  pluginId: string;
+  denId: string;
+  purpose: string;
+  denType: string;
+  name: string;
+  createdAt: string;
+}
+
+// Creator-published kit manifests (Phase 4) — distinct from develop's curated
+// in-tree coalition packs (`coalition_kit_applications`).
+export interface CoalitionKitManifestApplicationRecord {
+  id: UUID;
+  coalitionId: string;
+  kitId: string;
+  appliedByUserId: string;
+  archetype: string;
+  customization: Record<string, unknown>;
+  denIds: string[];
+  bundledPluginIds: string[];
+  status: 'applied' | 'reverted';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PluginReviewRecord {
+  id: UUID;
+  pluginId: string;
+  providerListingId: string | null;
+  userId: string;
+  rating: number;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PluginForkRecord {
+  id: UUID;
+  pluginId: string;
+  forkedFromPluginId: string;
+  ownerUserId: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface PluginShowcaseRecord {
+  id: UUID;
+  pluginId: string;
+  userId: string;
+  scopeType: string;
+  scopeId: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {

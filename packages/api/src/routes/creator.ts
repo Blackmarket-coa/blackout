@@ -21,7 +21,7 @@ const creator = new Hono();
 
 const draftSchema = z.object({
     providerId: z.string().min(1),
-    artifactKind: z.enum(['theme', 'manifest_plugin', 'code_plugin', 'asset_bundle']),
+    artifactKind: z.enum(['theme', 'manifest_plugin', 'code_plugin', 'asset_bundle', 'coalition_kit']),
     category: z.enum([
         'emoji-sticker',
         'meme-asset',
@@ -111,6 +111,20 @@ creator.post('/listings', async (c) => {
     }
 
     const draft = parseCreatorListingDraft(parsed);
+
+    // Coalition kit manifests are applied via the coalition-kit-manifests flow,
+    // not sold through external marketplace providers. Rejecting here also
+    // narrows draft.artifactKind to the provider-sellable kinds below.
+    if (draft.artifactKind === 'coalition_kit') {
+        return c.json(
+            {
+                code: 'unsupported_artifact',
+                message:
+                    'Coalition kit manifests are published via the coalition-kit-manifests flow, not marketplace providers.',
+            },
+            400
+        );
+    }
 
     let providerResult;
     try {

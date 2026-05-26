@@ -245,3 +245,173 @@ test('disable then delete an installation', async () => {
     });
     assert.equal(gone.status, 404);
 });
+
+test('AI gate is a no-op when BLACKOUT_PLUGIN_AI_CAPABILITY is off', async () => {
+    // Flag default-off: an ai.inference plugin installs anywhere (back-compat).
+    const res = await app.request('/v1/plugin-installations', {
+        method: 'POST',
+        headers: headers(COORDINATOR_ID),
+        body: JSON.stringify({
+            pluginId: 'ai-helper',
+            scope: userScope(COORDINATOR_ID),
+            artifactKind: 'code_plugin',
+            grantedCapabilities: ['ai.inference'],
+        }),
+    });
+    assert.equal(res.status, 201);
+});
+
+test('with governance flag on, paid coalition installs require a passed proposal', async () => {
+    process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = 'true';
+    const now = new Date().toISOString();
+    db.marketplaceEntitlements.set('ent-gov', {
+        id: 'ent-gov',
+        userId: COORDINATOR_ID,
+        providerId: 'freeblackmarket',
+        providerListingId: 'paid-kit',
+        sku: null,
+        kind: 'plugin_flag',
+        status: 'granted',
+        grantedAt: now,
+        expiresAt: null,
+        sourceEventId: 'evt-gov',
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+    });
+    try {
+        const paidBody = (extra: Record<string, unknown>) =>
+            JSON.stringify({
+                pluginId: 'paid-kit',
+                scope: { type: 'coalition', id: 'coa-gov' },
+                artifactKind: 'manifest_plugin',
+                entitlementId: 'ent-gov',
+                requiresEntitlement: true,
+                ...extra,
+            });
+
+        // Paid coalition install with no proposal → blocked.
+        const noProposal = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({}),
+        });
+        assert.equal(noProposal.status, 403);
+        assert.equal(((await noProposal.json()) as { code: string }).code, 'governance_required');
+
+        // An unpassed proposal does not authorize.
+        db.createVote({
+            id: 'vote-active',
+            communityId: 'coa-gov',
+            proposerId: COORDINATOR_ID,
+            title: 'Install paid-kit',
+            voteType: 'yes_no',
+            options: [{ id: 'yes', text: 'Yes' }],
+            requiresQuorum: 50,
+            durationHours: 168,
+            status: 'active',
+        });
+        const active = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({ governanceProposalId: 'vote-active' }),
+        });
+        assert.equal(active.status, 403);
+
+        // A passed proposal for this coalition authorizes the install.
+        db.createVote({
+            id: 'vote-passed',
+            communityId: 'coa-gov',
+            proposerId: COORDINATOR_ID,
+            title: 'Install paid-kit',
+            voteType: 'yes_no',
+            options: [{ id: 'yes', text: 'Yes' }],
+            requiresQuorum: 50,
+            durationHours: 168,
+            status: 'passed',
+        });
+        const passed = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: paidBody({ governanceProposalId: 'vote-passed' }),
+        });
+        assert.equal(passed.status, 201);
+
+        // A free coalition install is unaffected by the governance gate.
+        const free = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'free-board',
+                scope: { type: 'coalition', id: 'coa-gov' },
+                artifactKind: 'manifest_plugin',
+            }),
+        });
+        assert.equal(free.status, 201);
+    } finally {
+        process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = '';
+    }
+});
+
+test('with AI flag on, AI plugins are confined to AI dens', async () => {
+    process.env.BLACKOUT_PLUGIN_AI_CAPABILITY = 'true';
+    try {
+        // Non-den scope is rejected.
+        const userScoped = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: userScope(COORDINATOR_ID),
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+            }),
+        });
+        assert.equal(userScoped.status, 403);
+        assert.equal(((await userScoped.json()) as { code: string }).code, 'ai_scope_forbidden');
+
+        // A den asserted as non-AI is rejected.
+        const publicDen = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: { type: 'den', id: 'den-public' },
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+                denType: 'public',
+            }),
+        });
+        assert.equal(publicDen.status, 403);
+        assert.equal(((await publicDen.json()) as { code: string }).code, 'ai_scope_forbidden');
+
+        // An AI den is allowed.
+        const aiDen = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: { type: 'den', id: 'den-ai' },
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+                denType: 'ai',
+            }),
+        });
+        assert.equal(aiDen.status, 201);
+
+        // A non-AI plugin is unaffected by the gate.
+        const normal = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'plain-plugin',
+                scope: userScope(COORDINATOR_ID),
+                artifactKind: 'manifest_plugin',
+                grantedCapabilities: ['message.read'],
+            }),
+        });
+        assert.equal(normal.status, 201);
+    } finally {
+        process.env.BLACKOUT_PLUGIN_AI_CAPABILITY = '';
+    }
+});

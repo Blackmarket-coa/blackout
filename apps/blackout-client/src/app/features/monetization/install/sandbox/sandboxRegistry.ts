@@ -9,6 +9,7 @@ function buildSandbox(
     manifest: PluginManifest,
     bundleBytes: Uint8Array,
     grantedCapabilities: readonly PluginCapability[],
+    aiAllowed: boolean,
 ): PluginSandbox {
     const granted = new Set(grantedCapabilities);
     const effective = manifest.capabilities.filter((cap) => granted.has(cap));
@@ -16,6 +17,7 @@ function buildSandbox(
         manifest: { ...manifest, capabilities: effective },
         bundleBytes,
         handlers: defaultHandlers(),
+        aiAllowed,
     });
 }
 
@@ -23,6 +25,7 @@ export function mountSandbox(
     manifest: PluginManifest,
     bundleBytes: Uint8Array,
     grantedCapabilities: readonly PluginCapability[],
+    aiAllowed = false,
 ): PluginSandbox {
     // Build the new sandbox first, then destroy the old one. If
     // buildSandbox throws (bundle decode failure, iframe insertion
@@ -31,7 +34,7 @@ export function mountSandbox(
     // down also prevents a flicker where consumers observe a brief
     // "no sandbox" window between mount calls.
     const previous = sandboxes.get(manifest.id);
-    const sandbox = buildSandbox(manifest, bundleBytes, grantedCapabilities);
+    const sandbox = buildSandbox(manifest, bundleBytes, grantedCapabilities, aiAllowed);
     sandboxes.set(manifest.id, sandbox);
     bundleCache.set(manifest.id, bundleBytes);
     if (previous) {
@@ -61,8 +64,9 @@ export function getSandbox(pluginId: string): PluginSandbox | undefined {
 export function remountSandbox(
     manifest: PluginManifest,
     grantedCapabilities: readonly PluginCapability[],
+    aiAllowed = false,
 ): PluginSandbox | undefined {
     const bytes = bundleCache.get(manifest.id);
     if (!bytes) return undefined;
-    return mountSandbox(manifest, bytes, grantedCapabilities);
+    return mountSandbox(manifest, bytes, grantedCapabilities, aiAllowed);
 }

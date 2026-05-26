@@ -652,6 +652,45 @@ export const matrixClient = {
    * that re-issue on retry don't double-deliver; otherwise a fresh UUID
    * is generated.
    */
+  /**
+   * Write a room *state* event (PUT .../state/{type}/{stateKey}). Unlike
+   * `sendEvent` (timeline messages with a txn id) this targets the state
+   * endpoint, used e.g. to stamp a den's `co.bmc.den.classification`.
+   */
+  async sendStateEvent(
+    roomId: string,
+    eventType: string,
+    content: Record<string, unknown>,
+    stateKey = '',
+  ) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token || !roomId) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    const response = await fetch(
+      `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/${encodeURIComponent(eventType)}/${encodeURIComponent(stateKey)}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(content),
+      },
+    );
+    let eventId: string | undefined;
+    if (response.ok) {
+      try {
+        const json = (await response.json()) as { event_id?: string };
+        eventId = json.event_id;
+      } catch {
+        /* empty body on some proxies */
+      }
+    }
+    return { ok: response.ok, status: response.status, eventId };
+  },
+
   async sendEvent(
     roomId: string,
     // Any JSON-serializable event content; it is only stringified below, so
