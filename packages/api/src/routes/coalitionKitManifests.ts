@@ -7,15 +7,15 @@ import {
     authorizeScope,
 } from '../services/pluginInstallations';
 import {
-    applyCoalitionKit,
-    coalitionKitsEnabled,
-    listCoalitionKitApplications,
-} from '../services/coalitionKits';
+    applyCoalitionKitManifest,
+    coalitionKitManifestsEnabled,
+    listCoalitionKitManifestApplications,
+} from '../services/coalitionKitManifests';
 
 const coalitionKits = new Hono();
 
 coalitionKits.use('*', async (c, next) => {
-    if (!coalitionKitsEnabled()) {
+    if (!coalitionKitManifestsEnabled()) {
         return c.json({ code: 'feature_disabled', message: 'Coalition kits are not enabled.' }, 404);
     }
     await next();
@@ -24,7 +24,7 @@ coalitionKits.use('*', async (c, next) => {
 coalitionKits.get('/:coalitionId', (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
-    return c.json({ applications: listCoalitionKitApplications(c.req.param('coalitionId')) });
+    return c.json({ applications: listCoalitionKitManifestApplications(c.req.param('coalitionId')) });
 });
 
 coalitionKits.post('/:coalitionId/apply', async (c) => {
@@ -60,7 +60,7 @@ coalitionKits.post('/:coalitionId/apply', async (c) => {
         return c.json({ code: 'invalid_manifest', message: (error as Error).message }, 400);
     }
 
-    const result = await applyCoalitionKit({
+    const result = await applyCoalitionKitManifest({
         coalitionId,
         manifest,
         appliedByUserId: user.sub,

@@ -730,7 +730,9 @@ export interface PluginDenRecord {
   createdAt: string;
 }
 
-export interface CoalitionKitApplicationRecord {
+// Creator-published kit manifests (Phase 4) — distinct from develop's curated
+// in-tree coalition packs (`coalition_kit_applications`).
+export interface CoalitionKitManifestApplicationRecord {
   id: UUID;
   coalitionId: string;
   kitId: string;

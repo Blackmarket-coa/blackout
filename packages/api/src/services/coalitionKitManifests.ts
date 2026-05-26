@@ -18,13 +18,13 @@ import {
     type CoalitionKitManifest,
 } from '@blackout/core';
 import { db } from '../db/store';
-import type { CoalitionKitApplicationRecord } from '../db/types';
+import type { CoalitionKitManifestApplicationRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { installPluginAtScope } from './pluginInstallations';
 
-/** Default-off gate. Flip `BLACKOUT_COALITION_KITS=true` to enable. */
-export function coalitionKitsEnabled(): boolean {
-    return process.env.BLACKOUT_COALITION_KITS === 'true';
+/** Default-off gate. Flip `BLACKOUT_COALITION_KIT_MANIFESTS=true` to enable. */
+export function coalitionKitManifestsEnabled(): boolean {
+    return process.env.BLACKOUT_COALITION_KIT_MANIFESTS === 'true';
 }
 
 export type KitDenProvisionResult =
@@ -32,7 +32,7 @@ export type KitDenProvisionResult =
     | { ok: false; reason: string };
 export type KitDenProvisioner = (spec: CoalitionKitDenSpec) => Promise<KitDenProvisionResult>;
 
-export interface CoalitionKitApplication {
+export interface CoalitionKitManifestApplication {
     id: string;
     coalitionId: string;
     kitId: string;
@@ -47,13 +47,13 @@ export interface CoalitionKitApplication {
 }
 
 export interface ApplyCoalitionKitResult {
-    application: CoalitionKitApplication;
+    application: CoalitionKitManifestApplication;
     /** True when an existing application was returned rather than newly applied. */
     alreadyApplied: boolean;
     denFailures: Array<{ slug: string; reason: string }>;
 }
 
-function toModel(record: CoalitionKitApplicationRecord): CoalitionKitApplication {
+function toModel(record: CoalitionKitManifestApplicationRecord): CoalitionKitManifestApplication {
     return { ...record };
 }
 
@@ -77,11 +77,11 @@ export const defaultKitDenProvisioner: KitDenProvisioner = async (spec) => {
     return { ok: true, denId: created.roomId };
 };
 
-export function listCoalitionKitApplications(coalitionId: string): CoalitionKitApplication[] {
-    return db.listCoalitionKitApplications(coalitionId).map(toModel);
+export function listCoalitionKitManifestApplications(coalitionId: string): CoalitionKitManifestApplication[] {
+    return db.listCoalitionKitManifestApplications(coalitionId).map(toModel);
 }
 
-export async function applyCoalitionKit(
+export async function applyCoalitionKitManifest(
     params: {
         coalitionId: string;
         manifest: CoalitionKitManifest;
@@ -91,7 +91,7 @@ export async function applyCoalitionKit(
 ): Promise<ApplyCoalitionKitResult> {
     const { coalitionId, manifest, appliedByUserId } = params;
 
-    const existing = db.findCoalitionKitApplication(coalitionId, manifest.kitId);
+    const existing = db.findCoalitionKitManifestApplication(coalitionId, manifest.kitId);
     if (existing) {
         return { application: toModel(existing), alreadyApplied: true, denFailures: [] };
     }
@@ -116,7 +116,7 @@ export async function applyCoalitionKit(
         else denFailures.push({ slug: spec.slug, reason: result.reason });
     }
 
-    const record = db.createCoalitionKitApplication({
+    const record = db.createCoalitionKitManifestApplication({
         id: crypto.randomUUID(),
         coalitionId,
         kitId: manifest.kitId,

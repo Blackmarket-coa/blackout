@@ -5,7 +5,7 @@
 -- at coalition scope. One row per (coalition, kit) so re-apply is idempotent;
 -- the row also supports later teardown.
 
-CREATE TABLE coalition_kit_applications (
+CREATE TABLE coalition_kit_manifest_applications (
   id VARCHAR(128) PRIMARY KEY,
   coalition_id VARCHAR(255) NOT NULL,
   kit_id VARCHAR(255) NOT NULL,
@@ -25,8 +25,8 @@ CREATE TABLE coalition_kit_applications (
 );
 
 -- One application per (coalition, kit); re-apply updates this row.
-CREATE UNIQUE INDEX uq_coalition_kit_applications_coalition_kit
-  ON coalition_kit_applications (coalition_id, kit_id);
+CREATE UNIQUE INDEX uq_coalition_kit_manifest_applications_coalition_kit
+  ON coalition_kit_manifest_applications (coalition_id, kit_id);
 
-CREATE INDEX idx_coalition_kit_applications_coalition
-  ON coalition_kit_applications (coalition_id);
+CREATE INDEX idx_coalition_kit_manifest_applications_coalition
+  ON coalition_kit_manifest_applications (coalition_id);

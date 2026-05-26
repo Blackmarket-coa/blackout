@@ -12,8 +12,8 @@ process.env.BLACKOUT_DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'memory';
 const { default: app } = await import('../src/index');
 const { signJwt } = await import('../src/services/auth');
 const { db } = await import('../src/db/store');
-const { applyCoalitionKit, listCoalitionKitApplications } = await import(
-    '../src/services/coalitionKits'
+const { applyCoalitionKitManifest, listCoalitionKitManifestApplications } = await import(
+    '../src/services/coalitionKitManifests'
 );
 const { listInstallationsForScope } = await import('../src/services/pluginInstallations');
 
@@ -61,14 +61,14 @@ test('parseCoalitionKitManifest rejects a bad archetype', () => {
     assert.throws(() => parseCoalitionKitManifest({ ...rawManifest, archetype: 'nope' }), /archetype/);
 });
 
-test('applyCoalitionKit installs plugins at coalition scope, provisions dens, and is idempotent', async () => {
+test('applyCoalitionKitManifest installs plugins at coalition scope, provisions dens, and is idempotent', async () => {
     const manifest = parseCoalitionKitManifest(rawManifest);
     const fakeProvisioner = async (spec: { slug: string }) => ({
         ok: true as const,
         denId: `!den-${spec.slug}:test`,
     });
 
-    const first = await applyCoalitionKit(
+    const first = await applyCoalitionKitManifest(
         { coalitionId: 'coa-kit-1', manifest, appliedByUserId: COORDINATOR_ID },
         fakeProvisioner,
     );
@@ -82,18 +82,18 @@ test('applyCoalitionKit installs plugins at coalition scope, provisions dens, an
     assert.ok(installs.every((i) => i.status === 'available'));
 
     // Re-applying returns the existing application without duplicating.
-    const second = await applyCoalitionKit(
+    const second = await applyCoalitionKitManifest(
         { coalitionId: 'coa-kit-1', manifest, appliedByUserId: COORDINATOR_ID },
         fakeProvisioner,
     );
     assert.equal(second.alreadyApplied, true);
-    assert.equal(listCoalitionKitApplications('coa-kit-1').length, 1);
+    assert.equal(listCoalitionKitManifestApplications('coa-kit-1').length, 1);
 });
 
-test('applyCoalitionKit records den provisioning failures', async () => {
+test('applyCoalitionKitManifest records den provisioning failures', async () => {
     const manifest = parseCoalitionKitManifest(rawManifest);
     const failing = async () => ({ ok: false as const, reason: 'matrix_not_configured' });
-    const result = await applyCoalitionKit(
+    const result = await applyCoalitionKitManifest(
         { coalitionId: 'coa-kit-2', manifest, appliedByUserId: COORDINATOR_ID },
         failing,
     );
@@ -102,16 +102,16 @@ test('applyCoalitionKit records den provisioning failures', async () => {
 });
 
 test('coalition-kit routes 404 when the flag is off', async () => {
-    const res = await app.request('/v1/coalition-kits/coa-x', { headers: headers(COORDINATOR_ID) });
+    const res = await app.request('/v1/coalition-kit-manifests/coa-x', { headers: headers(COORDINATOR_ID) });
     assert.equal(res.status, 404);
     assert.equal(((await res.json()) as { code: string }).code, 'feature_disabled');
 });
 
 test('apply route enforces governance for a paid kit', async () => {
-    process.env.BLACKOUT_COALITION_KITS = 'true';
+    process.env.BLACKOUT_COALITION_KIT_MANIFESTS = 'true';
     process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = 'true';
     try {
-        const res = await app.request('/v1/coalition-kits/coa-paid/apply', {
+        const res = await app.request('/v1/coalition-kit-manifests/coa-paid/apply', {
             method: 'POST',
             headers: headers(COORDINATOR_ID),
             body: JSON.stringify({ manifest: rawManifest, isPaid: true }),
@@ -130,14 +130,14 @@ test('apply route enforces governance for a paid kit', async () => {
             durationHours: 168,
             status: 'passed',
         });
-        const ok = await app.request('/v1/coalition-kits/coa-paid/apply', {
+        const ok = await app.request('/v1/coalition-kit-manifests/coa-paid/apply', {
             method: 'POST',
             headers: headers(COORDINATOR_ID),
             body: JSON.stringify({ manifest: rawManifest, isPaid: true, governanceProposalId: 'ck-vote' }),
         });
         assert.ok(ok.status === 201 || ok.status === 207, `expected applied, got ${ok.status}`);
     } finally {
-        process.env.BLACKOUT_COALITION_KITS = '';
+        process.env.BLACKOUT_COALITION_KIT_MANIFESTS = '';
         process.env.BLACKOUT_PLUGIN_SCOPE_GOVERNANCE = '';
     }
 });

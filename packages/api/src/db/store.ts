@@ -61,7 +61,7 @@ import type {
   CoalitionAidPostRecord,
   PluginInstallationRecord,
   PluginDenRecord,
-  CoalitionKitApplicationRecord,
+  CoalitionKitManifestApplicationRecord,
   PluginReviewRecord,
   PluginForkRecord,
   PluginShowcaseRecord,
@@ -135,7 +135,7 @@ type PersistedState = {
   coalitionAidPosts: CoalitionAidPostRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
-  coalitionKitApplications: CoalitionKitApplicationRecord[];
+  coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
   pluginReviews: PluginReviewRecord[];
   pluginForks: PluginForkRecord[];
   pluginShowcases: PluginShowcaseRecord[];
@@ -224,7 +224,7 @@ class InMemoryDb {
   /** Plugin-provisioned companion dens, keyed by linkage id. */
   pluginDens = new Map<string, PluginDenRecord>();
   /** Coalition kit applications ledger, keyed by application id. */
-  coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
+  coalitionKitManifestApplications = new Map<string, CoalitionKitManifestApplicationRecord>();
   /** Plugin reviews/ratings, keyed by review id. */
   pluginReviews = new Map<string, PluginReviewRecord>();
   /** Plugin forks, keyed by fork id. */
@@ -2039,43 +2039,43 @@ class InMemoryDb {
 
   // --- coalition kit applications (Phase 4) ---
 
-  createCoalitionKitApplication(
-    input: Omit<CoalitionKitApplicationRecord, 'createdAt' | 'updatedAt'>,
-  ): CoalitionKitApplicationRecord {
+  createCoalitionKitManifestApplication(
+    input: Omit<CoalitionKitManifestApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitManifestApplicationRecord {
     const now = nowIso();
-    const record: CoalitionKitApplicationRecord = { ...input, createdAt: now, updatedAt: now };
-    this.coalitionKitApplications.set(record.id, record);
+    const record: CoalitionKitManifestApplicationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.coalitionKitManifestApplications.set(record.id, record);
     return record;
   }
 
   /** Enforces the (coalitionId, kitId) uniqueness constraint. */
-  findCoalitionKitApplication(
+  findCoalitionKitManifestApplication(
     coalitionId: string,
     kitId: string,
-  ): CoalitionKitApplicationRecord | undefined {
-    return [...this.coalitionKitApplications.values()].find(
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    return [...this.coalitionKitManifestApplications.values()].find(
       (row) => row.coalitionId === coalitionId && row.kitId === kitId,
     );
   }
 
-  listCoalitionKitApplications(coalitionId: string): CoalitionKitApplicationRecord[] {
-    return [...this.coalitionKitApplications.values()].filter(
+  listCoalitionKitManifestApplications(coalitionId: string): CoalitionKitManifestApplicationRecord[] {
+    return [...this.coalitionKitManifestApplications.values()].filter(
       (row) => row.coalitionId === coalitionId,
     );
   }
 
-  updateCoalitionKitApplication(
+  updateCoalitionKitManifestApplication(
     id: string,
-    patch: Partial<Omit<CoalitionKitApplicationRecord, 'id' | 'createdAt'>>,
-  ): CoalitionKitApplicationRecord | undefined {
-    const existing = this.coalitionKitApplications.get(id);
+    patch: Partial<Omit<CoalitionKitManifestApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    const existing = this.coalitionKitManifestApplications.get(id);
     if (!existing) return undefined;
-    const updated: CoalitionKitApplicationRecord = {
+    const updated: CoalitionKitManifestApplicationRecord = {
       ...existing,
       ...patch,
       updatedAt: nowIso(),
     };
-    this.coalitionKitApplications.set(id, updated);
+    this.coalitionKitManifestApplications.set(id, updated);
     return updated;
   }
 
@@ -2344,8 +2344,8 @@ export class FileBackedDb extends InMemoryDb {
       (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
     );
     this.pluginDens = new Map((parsed.pluginDens ?? []).map((row) => [row.id, row]));
-    this.coalitionKitApplications = new Map(
-      (parsed.coalitionKitApplications ?? []).map((row) => [row.id, row]),
+    this.coalitionKitManifestApplications = new Map(
+      (parsed.coalitionKitManifestApplications ?? []).map((row) => [row.id, row]),
     );
     this.pluginReviews = new Map((parsed.pluginReviews ?? []).map((row) => [row.id, row]));
     this.pluginForks = new Map((parsed.pluginForks ?? []).map((row) => [row.id, row]));
@@ -2423,7 +2423,7 @@ export class FileBackedDb extends InMemoryDb {
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
-      coalitionKitApplications: [...this.coalitionKitApplications.values()],
+      coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
       pluginReviews: [...this.pluginReviews.values()],
       pluginForks: [...this.pluginForks.values()],
       pluginShowcases: [...this.pluginShowcases.values()],
@@ -3240,19 +3240,19 @@ export class FileBackedDb extends InMemoryDb {
     return created;
   }
 
-  override createCoalitionKitApplication(
-    input: Omit<CoalitionKitApplicationRecord, 'createdAt' | 'updatedAt'>,
-  ): CoalitionKitApplicationRecord {
-    const created = super.createCoalitionKitApplication(input);
+  override createCoalitionKitManifestApplication(
+    input: Omit<CoalitionKitManifestApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitManifestApplicationRecord {
+    const created = super.createCoalitionKitManifestApplication(input);
     this.persist();
     return created;
   }
 
-  override updateCoalitionKitApplication(
+  override updateCoalitionKitManifestApplication(
     id: string,
-    patch: Partial<Omit<CoalitionKitApplicationRecord, 'id' | 'createdAt'>>,
-  ): CoalitionKitApplicationRecord | undefined {
-    const updated = super.updateCoalitionKitApplication(id, patch);
+    patch: Partial<Omit<CoalitionKitManifestApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitManifestApplicationRecord | undefined {
+    const updated = super.updateCoalitionKitManifestApplication(id, patch);
     if (updated) this.persist();
     return updated;
   }
