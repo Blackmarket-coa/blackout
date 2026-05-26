@@ -8,7 +8,12 @@ import { isValidFeeBps } from './fees';
 
 export type CreatorListingStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
 
-export type CreatorArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+export type CreatorArtifactKind =
+    | 'theme'
+    | 'manifest_plugin'
+    | 'code_plugin'
+    | 'asset_bundle'
+    | 'coalition_kit';
 
 export interface CreatorListingDraft {
     artifactKind: CreatorArtifactKind;
@@ -82,6 +87,7 @@ const artifactKinds: CreatorArtifactKind[] = [
     'manifest_plugin',
     'code_plugin',
     'asset_bundle',
+    'coalition_kit',
 ];
 
 const listingStatuses: CreatorListingStatus[] = [

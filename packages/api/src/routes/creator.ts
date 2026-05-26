@@ -21,7 +21,7 @@ const creator = new Hono();
 
 const draftSchema = z.object({
     providerId: z.string().min(1),
-    artifactKind: z.enum(['theme', 'manifest_plugin', 'code_plugin', 'asset_bundle']),
+    artifactKind: z.enum(['theme', 'manifest_plugin', 'code_plugin', 'asset_bundle', 'coalition_kit']),
     category: z.enum([
         'emoji-sticker',
         'meme-asset',

@@ -730,6 +730,20 @@ export interface PluginDenRecord {
   createdAt: string;
 }
 
+export interface CoalitionKitApplicationRecord {
+  id: UUID;
+  coalitionId: string;
+  kitId: string;
+  appliedByUserId: string;
+  archetype: string;
+  customization: Record<string, unknown>;
+  denIds: string[];
+  bundledPluginIds: string[];
+  status: 'applied' | 'reverted';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {

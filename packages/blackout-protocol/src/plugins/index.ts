@@ -10,7 +10,12 @@ export const PLUGINS_PROTOCOL_VERSION = 2;
 
 export type PluginProtocolVersion = 1 | 2;
 
-export type PluginArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+export type PluginArtifactKind =
+    | 'theme'
+    | 'manifest_plugin'
+    | 'code_plugin'
+    | 'asset_bundle'
+    | 'coalition_kit';
 
 export type PluginCapability =
     | 'shell.panel.read'

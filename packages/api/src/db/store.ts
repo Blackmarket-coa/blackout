@@ -61,6 +61,7 @@ import type {
   CoalitionAidPostRecord,
   PluginInstallationRecord,
   PluginDenRecord,
+  CoalitionKitApplicationRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
@@ -131,6 +132,7 @@ type PersistedState = {
   coalitionAidPosts: CoalitionAidPostRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
+  coalitionKitApplications: CoalitionKitApplicationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
@@ -215,6 +217,8 @@ class InMemoryDb {
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Plugin-provisioned companion dens, keyed by linkage id. */
   pluginDens = new Map<string, PluginDenRecord>();
+  /** Coalition kit applications ledger, keyed by application id. */
+  coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
   /** Coliseum arguments, keyed by argument id. */
@@ -2017,6 +2021,48 @@ class InMemoryDb {
     return [...this.pluginDens.values()].filter((row) => row.pluginId === pluginId);
   }
 
+  // --- coalition kit applications (Phase 4) ---
+
+  createCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitApplicationRecord {
+    const now = nowIso();
+    const record: CoalitionKitApplicationRecord = { ...input, createdAt: now, updatedAt: now };
+    this.coalitionKitApplications.set(record.id, record);
+    return record;
+  }
+
+  /** Enforces the (coalitionId, kitId) uniqueness constraint. */
+  findCoalitionKitApplication(
+    coalitionId: string,
+    kitId: string,
+  ): CoalitionKitApplicationRecord | undefined {
+    return [...this.coalitionKitApplications.values()].find(
+      (row) => row.coalitionId === coalitionId && row.kitId === kitId,
+    );
+  }
+
+  listCoalitionKitApplications(coalitionId: string): CoalitionKitApplicationRecord[] {
+    return [...this.coalitionKitApplications.values()].filter(
+      (row) => row.coalitionId === coalitionId,
+    );
+  }
+
+  updateCoalitionKitApplication(
+    id: string,
+    patch: Partial<Omit<CoalitionKitApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitApplicationRecord | undefined {
+    const existing = this.coalitionKitApplications.get(id);
+    if (!existing) return undefined;
+    const updated: CoalitionKitApplicationRecord = {
+      ...existing,
+      ...patch,
+      updatedAt: nowIso(),
+    };
+    this.coalitionKitApplications.set(id, updated);
+    return updated;
+  }
+
   // --- Coliseum ---
 
   private static coliseumVoteKey(argumentId: string, voterId: string): string {
@@ -2220,6 +2266,9 @@ export class FileBackedDb extends InMemoryDb {
       (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
     );
     this.pluginDens = new Map((parsed.pluginDens ?? []).map((row) => [row.id, row]));
+    this.coalitionKitApplications = new Map(
+      (parsed.coalitionKitApplications ?? []).map((row) => [row.id, row]),
+    );
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
     }
@@ -2293,6 +2342,7 @@ export class FileBackedDb extends InMemoryDb {
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
+      coalitionKitApplications: [...this.coalitionKitApplications.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
@@ -3104,6 +3154,23 @@ export class FileBackedDb extends InMemoryDb {
     const created = super.createPluginDen(input);
     this.persist();
     return created;
+  }
+
+  override createCoalitionKitApplication(
+    input: Omit<CoalitionKitApplicationRecord, 'createdAt' | 'updatedAt'>,
+  ): CoalitionKitApplicationRecord {
+    const created = super.createCoalitionKitApplication(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionKitApplication(
+    id: string,
+    patch: Partial<Omit<CoalitionKitApplicationRecord, 'id' | 'createdAt'>>,
+  ): CoalitionKitApplicationRecord | undefined {
+    const updated = super.updateCoalitionKitApplication(id, patch);
+    if (updated) this.persist();
+    return updated;
   }
 
   override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
