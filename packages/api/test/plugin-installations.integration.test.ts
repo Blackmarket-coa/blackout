@@ -245,3 +245,81 @@ test('disable then delete an installation', async () => {
     });
     assert.equal(gone.status, 404);
 });
+
+test('AI gate is a no-op when BLACKOUT_PLUGIN_AI_CAPABILITY is off', async () => {
+    // Flag default-off: an ai.inference plugin installs anywhere (back-compat).
+    const res = await app.request('/v1/plugin-installations', {
+        method: 'POST',
+        headers: headers(COORDINATOR_ID),
+        body: JSON.stringify({
+            pluginId: 'ai-helper',
+            scope: userScope(COORDINATOR_ID),
+            artifactKind: 'code_plugin',
+            grantedCapabilities: ['ai.inference'],
+        }),
+    });
+    assert.equal(res.status, 201);
+});
+
+test('with AI flag on, AI plugins are confined to AI dens', async () => {
+    process.env.BLACKOUT_PLUGIN_AI_CAPABILITY = 'true';
+    try {
+        // Non-den scope is rejected.
+        const userScoped = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: userScope(COORDINATOR_ID),
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+            }),
+        });
+        assert.equal(userScoped.status, 403);
+        assert.equal(((await userScoped.json()) as { code: string }).code, 'ai_scope_forbidden');
+
+        // A den asserted as non-AI is rejected.
+        const publicDen = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: { type: 'den', id: 'den-public' },
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+                denType: 'public',
+            }),
+        });
+        assert.equal(publicDen.status, 403);
+        assert.equal(((await publicDen.json()) as { code: string }).code, 'ai_scope_forbidden');
+
+        // An AI den is allowed.
+        const aiDen = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'ai-helper',
+                scope: { type: 'den', id: 'den-ai' },
+                artifactKind: 'code_plugin',
+                grantedCapabilities: ['ai.inference'],
+                denType: 'ai',
+            }),
+        });
+        assert.equal(aiDen.status, 201);
+
+        // A non-AI plugin is unaffected by the gate.
+        const normal = await app.request('/v1/plugin-installations', {
+            method: 'POST',
+            headers: headers(COORDINATOR_ID),
+            body: JSON.stringify({
+                pluginId: 'plain-plugin',
+                scope: userScope(COORDINATOR_ID),
+                artifactKind: 'manifest_plugin',
+                grantedCapabilities: ['message.read'],
+            }),
+        });
+        assert.equal(normal.status, 201);
+    } finally {
+        process.env.BLACKOUT_PLUGIN_AI_CAPABILITY = '';
+    }
+});

@@ -18,7 +18,10 @@
 
 import crypto from 'node:crypto';
 import {
+    evaluateAiInstall,
     isActiveInstallStatus,
+    pluginUsesAi,
+    type DenType,
     type InstallScope,
     type InstallScopeType,
     type InstallStatus,
@@ -33,6 +36,11 @@ export function pluginInstallScopesEnabled(): boolean {
     return process.env.BLACKOUT_PLUGIN_INSTALL_SCOPES === 'true';
 }
 
+/** Default-off gate for AI-plugin install/runtime gating (Phase 2). */
+export function pluginAiCapabilityEnabled(): boolean {
+    return process.env.BLACKOUT_PLUGIN_AI_CAPABILITY === 'true';
+}
+
 const ENTITLEMENT_ACTIVE = new Set(['granted', 'pending']);
 
 export interface InstallAuthorization {
@@ -43,7 +51,8 @@ export interface InstallAuthorization {
         | 'scope_forbidden'
         | 'entitlement_required'
         | 'entitlement_not_owned'
-        | 'entitlement_inactive';
+        | 'entitlement_inactive'
+        | 'ai_scope_forbidden';
     message: string;
 }
 
@@ -99,6 +108,33 @@ export function authorizeScope(
         default:
             return { ok: false, code: 'scope_forbidden', message: 'Unknown scope type.' };
     }
+}
+
+/**
+ * AI gate (Phase 2): an AI plugin (granted `ai.inference` or `ai` domain) may
+ * only install at a `den` scope, and — when the caller asserts the den's type —
+ * that den must be an AI den. The server cannot read the den's Matrix
+ * classification itself, so an absent `denType` passes here; the sandbox
+ * runtime gate is the authoritative boundary. No-op when the flag is off.
+ */
+export function authorizeAiCapability(
+    capabilities: readonly string[],
+    domain: string | null | undefined,
+    scope: InstallScope,
+    denType?: DenType,
+): InstallAuthorization {
+    if (!pluginAiCapabilityEnabled()) return { ok: true, code: 'ok', message: '' };
+    const usesAi = pluginUsesAi(capabilities, domain === 'ai' ? 'ai' : undefined);
+    const gate = evaluateAiInstall(usesAi, scope.type, denType);
+    if (gate.allowed) return { ok: true, code: 'ok', message: '' };
+    return {
+        ok: false,
+        code: 'ai_scope_forbidden',
+        message:
+            gate.reason === 'ai_requires_den_scope'
+                ? 'AI plugins can only be installed in an AI den.'
+                : 'This den does not permit AI tooling.',
+    };
 }
 
 /** Ownership gate: a non-free install must reference an active entitlement the caller owns. */

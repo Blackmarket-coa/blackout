@@ -1,8 +1,15 @@
 import { Hono } from 'hono';
-import { isInstallScopeType, isInstallStatus, type InstallScope } from '@blackout/core';
+import {
+    isDenType,
+    isInstallScopeType,
+    isInstallStatus,
+    type DenType,
+    type InstallScope,
+} from '@blackout/core';
 import { requireUser } from '../middleware/require-user';
 import { db } from '../db/store';
 import {
+    authorizeAiCapability,
     authorizeEntitlement,
     authorizeScope,
     getInstallation,
@@ -94,16 +101,24 @@ pluginInstallations.post('/', async (c) => {
         return c.json({ code: entAuth.code, message: entAuth.message }, statusForAuthCode(entAuth.code));
     }
 
+    const domain = typeof body.domain === 'string' ? body.domain : null;
+    const grantedCapabilities = Array.isArray(body.grantedCapabilities)
+        ? body.grantedCapabilities.filter((x): x is string => typeof x === 'string')
+        : [];
+    const denType: DenType | undefined = isDenType(body.denType) ? body.denType : undefined;
+    const aiAuth = authorizeAiCapability(grantedCapabilities, domain, scope, denType);
+    if (!aiAuth.ok) {
+        return c.json({ code: aiAuth.code, message: aiAuth.message }, statusForAuthCode(aiAuth.code));
+    }
+
     const installation = installPluginAtScope({
         pluginId,
         scope,
         installedByUserId: user.sub,
         entitlementId,
         artifactKind,
-        domain: typeof body.domain === 'string' ? body.domain : null,
-        grantedCapabilities: Array.isArray(body.grantedCapabilities)
-            ? body.grantedCapabilities.filter((x): x is string => typeof x === 'string')
-            : [],
+        domain,
+        grantedCapabilities,
         config: isRecord(body.config) ? body.config : {},
         manifest: isRecord(body.manifest) ? body.manifest : {},
     });

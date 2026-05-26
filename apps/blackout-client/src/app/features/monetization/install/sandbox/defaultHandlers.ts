@@ -27,5 +27,6 @@ export function defaultHandlers(): Record<string, RpcHandler> {
         'http.fetch': notImplemented,
         'shell.panel.read': notImplemented,
         'shell.panel.write': notImplemented,
+        'ai.inference': notImplemented,
     };
 }

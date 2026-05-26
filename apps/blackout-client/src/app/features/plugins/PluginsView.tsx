@@ -39,6 +39,7 @@ const CAPABILITY_LABELS: Record<PluginCapability, string> = {
     'storage.read': 'Read local storage',
     'storage.write': 'Write local storage',
     'http.fetch': 'Make network requests',
+    'ai.inference': 'Run AI inference (AI dens only)',
 };
 
 const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
@@ -56,6 +57,8 @@ const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
         'Lets the plugin store data in your local browser. Data stays on this device.',
     'http.fetch':
         'Lets the plugin make outbound network requests. Use caution — the plugin can talk to any URL.',
+    'ai.inference':
+        'Lets the plugin run AI inference. Permitted only inside AI dens — the host blocks these calls everywhere else.',
 };
 
 const HIGH_RISK_CAPABILITIES = new Set<PluginCapability>([

@@ -19,7 +19,11 @@ export type PluginCapability =
     | 'message.compose'
     | 'storage.read'
     | 'storage.write'
-    | 'http.fetch';
+    | 'http.fetch'
+    // AI inference is confined to AI dens (see core `den/classification.ts`
+    // `aiToolsEnabled`). Granting it is necessary but not sufficient: the host
+    // sandbox hard-denies `ai.inference` RPCs outside an AI den at runtime.
+    | 'ai.inference';
 
 /**
  * Spatial declaration: pinned sidebar entry contributed by an installed

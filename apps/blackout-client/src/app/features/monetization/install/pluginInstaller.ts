@@ -35,6 +35,12 @@ export interface InstallContext {
      * install, which stays visible regardless of the shell's current scope.
      */
     scope?: InstallScope;
+    /**
+     * Whether the den this install is activating in permits AI tooling (Phase
+     * 2). Defaults to `false` (fail-closed): a code plugin's sandbox denies
+     * `ai.inference` at runtime unless this is `true` for an AI den.
+     */
+    aiAllowed?: boolean;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -147,7 +153,7 @@ export async function installEntitlement(
             registerDynamicFeaturePlugin(manifestPluginToFeatureModulePlugin(bundle.manifest));
             break;
         case 'code_plugin':
-            mountSandbox(bundle.manifest, bundleBytes, grantedCapabilities);
+            mountSandbox(bundle.manifest, bundleBytes, grantedCapabilities, ctx.aiAllowed ?? false);
             ctx.onCodePluginLoaded?.(bundle.manifest, bundleBytes);
             break;
         default:

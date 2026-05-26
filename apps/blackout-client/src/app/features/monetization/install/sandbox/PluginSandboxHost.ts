@@ -29,12 +29,23 @@ const REQUIRED_CAPABILITY: Record<string, PluginCapability> = {
     'http.fetch': 'http.fetch',
     'shell.panel.read': 'shell.panel.read',
     'shell.panel.write': 'shell.panel.write',
+    'ai.inference': 'ai.inference',
 };
+
+const AI_INFERENCE_METHOD = 'ai.inference';
 
 export interface PluginSandboxOptions {
     manifest: PluginManifest;
     bundleBytes: Uint8Array;
     handlers?: Record<string, RpcHandler>;
+    /**
+     * Whether the den this sandbox is mounted in permits AI tooling. Defaults
+     * to `false` (fail-closed): even a plugin granted `ai.inference` is denied
+     * at runtime unless it is running inside an AI den. This is the
+     * authoritative AI boundary — the install-time server check is advisory
+     * because a plugin can outlive the den it was installed in.
+     */
+    aiAllowed?: boolean;
 }
 
 export class PluginSandbox {
@@ -42,11 +53,13 @@ export class PluginSandbox {
     private readonly handlers: Map<string, RpcHandler>;
     private readonly listener: (event: MessageEvent) => void;
     private readonly capabilities: Set<PluginCapability>;
+    private readonly aiAllowed: boolean;
     private destroyed = false;
 
     constructor(private readonly options: PluginSandboxOptions) {
         this.handlers = new Map(Object.entries(options.handlers ?? {}));
         this.capabilities = new Set(options.manifest.capabilities);
+        this.aiAllowed = options.aiAllowed ?? false;
         this.iframe = this.buildIframe();
         this.listener = (event) => this.onMessage(event);
         window.addEventListener('message', this.listener);
@@ -108,6 +121,15 @@ export class PluginSandbox {
             this.respond({
                 id: request.id,
                 error: { code: 'capability-denied', message: `Missing capability: ${required}` },
+            });
+            return;
+        }
+        // Runtime AI boundary: even a granted `ai.inference` capability is
+        // hard-denied unless this sandbox is mounted in an AI den.
+        if (request.method === AI_INFERENCE_METHOD && !this.aiAllowed) {
+            this.respond({
+                id: request.id,
+                error: { code: 'ai-denied', message: 'AI inference is only available in AI dens.' },
             });
             return;
         }

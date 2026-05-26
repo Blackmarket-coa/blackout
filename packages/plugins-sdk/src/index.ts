@@ -104,3 +104,9 @@ export const panels = {
     read: <T = unknown>(params?: unknown) => call<T>('shell.panel.read', params),
     write: <T = unknown>(params?: unknown) => call<T>('shell.panel.write', params),
 };
+
+// Requires the `ai.inference` capability AND an AI den; the host sandbox
+// hard-denies this RPC with `{ code: 'ai-denied' }` anywhere else.
+export const ai = {
+    infer: <T = unknown>(params?: unknown) => call<T>('ai.inference', params),
+};
