@@ -4,6 +4,7 @@ import type {
     MarketplaceProviderId,
 } from './provider';
 import { isPluginDomain, type PluginDomain } from './domain';
+import { isValidFeeBps } from './fees';
 
 export type CreatorListingStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived';
 
@@ -19,6 +20,12 @@ export interface CreatorListingDraft {
     description: string;
     priceCents: number;
     currency: string;
+    /**
+     * Optional per-listing platform commission, in basis points (0..10000),
+     * overriding the provider's default rate (Phase 8). Only honored when the
+     * `creatorFeeOverride` flag is enabled server-side.
+     */
+    feeBpsOverride?: number;
     tags?: string[];
     mediaUrls?: string[];
     /**
@@ -49,6 +56,7 @@ export interface CreatorListing {
     priceCents: number;
     currency: string;
     status: CreatorListingStatus;
+    feeBpsOverride?: number;
     createdAt: string;
     updatedAt: string;
     publishedAt: string | null;
@@ -135,6 +143,13 @@ export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
     if (input.artifactPayload === undefined && !input.artifactUploadId) {
         throw new Error('artifactPayload or artifactUploadId is required');
     }
+    let feeBpsOverride: number | undefined;
+    if (input.feeBpsOverride !== undefined) {
+        if (typeof input.feeBpsOverride !== 'number' || !isValidFeeBps(input.feeBpsOverride)) {
+            throw new Error('feeBpsOverride must be an integer in 0..10000');
+        }
+        feeBpsOverride = input.feeBpsOverride;
+    }
     return {
         artifactKind,
         category,
@@ -144,6 +159,7 @@ export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
         description: requireString(input, 'description'),
         priceCents: priceRaw,
         currency: requireString(input, 'currency'),
+        feeBpsOverride,
         tags: Array.isArray(input.tags)
             ? input.tags.filter((t): t is string => typeof t === 'string')
             : undefined,
