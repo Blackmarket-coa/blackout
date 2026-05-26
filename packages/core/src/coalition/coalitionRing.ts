@@ -56,6 +56,25 @@ export function isRingRole(value: unknown): value is RingRole {
     return typeof value === 'string' && (RING_ROLES as readonly string[]).includes(value);
 }
 
+export const RING_INVITATION_STATUSES = ['pending', 'accepted', 'declined', 'revoked'] as const;
+export type RingInvitationStatus = (typeof RING_INVITATION_STATUSES)[number];
+
+/** An invitation into a ring (the way to join private rings). */
+export interface RingInvitation {
+    id: string;
+    ringId: string;
+    inviterId: string;
+    inviteeId: string;
+    status: RingInvitationStatus;
+}
+
+export function isRingInvitationStatus(value: unknown): value is RingInvitationStatus {
+    return (
+        typeof value === 'string' &&
+        (RING_INVITATION_STATUSES as readonly string[]).includes(value)
+    );
+}
+
 /** Active membership count — the metric that surfaces in place of followers. */
 export function countActiveMembers(memberships: readonly Pick<RingMembership, 'active'>[]): number {
     return memberships.reduce((total, m) => total + (m.active ? 1 : 0), 0);

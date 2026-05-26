@@ -5,6 +5,7 @@ import type {
   EventRsvp,
   RideClaim,
   RideOffer,
+  RingInvitation,
   RingMembership,
   SpatialFeedItem,
   VolunteerSignup,
@@ -927,6 +928,12 @@ export interface CoalitionRingRecord extends CoalitionRing {
 
 /** A ring membership. Keyed in-memory by `${ringId}::${userId}`. */
 export interface RingMembershipRecord extends RingMembership {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ring invitation. Keyed in-memory by `${ringId}::${inviteeId}`. */
+export interface RingInvitationRecord extends RingInvitation {
   createdAt: string;
   updatedAt: string;
 }

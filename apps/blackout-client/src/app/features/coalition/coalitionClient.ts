@@ -7,6 +7,7 @@ import type {
     CoalitionRing,
     CoalitionTabId,
     CoalitionTask,
+    RingInvitation,
     EventCategory,
     EventLocation,
     EventOccurrence,
@@ -400,6 +401,36 @@ export function joinRing(
 ): Promise<{ memberCount: number }> {
     return postJson<{ memberCount: number }>(
         `${COALITION_BASE}/rings/${encodeURIComponent(id)}/${leave ? 'leave' : 'join'}`,
+        {},
+        token,
+    );
+}
+
+export function inviteToRing(
+    ringId: string,
+    inviteeId: string,
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ invitation: RingInvitation }> {
+    return postJson<{ invitation: RingInvitation }>(
+        `${COALITION_BASE}/rings/${encodeURIComponent(ringId)}/invites`,
+        { inviteeId },
+        token,
+    );
+}
+
+export function fetchMyRingInvites(
+    token: string | null = readBlackoutApiToken(),
+): Promise<{ invitations: RingInvitation[] }> {
+    return getJson<{ invitations: RingInvitation[] }>(`${COALITION_BASE}/rings/invites/mine`, token);
+}
+
+export function respondToRingInvite(
+    ringId: string,
+    accept: boolean,
+    token: string | null = readBlackoutApiToken(),
+): Promise<unknown> {
+    return postJson(
+        `${COALITION_BASE}/rings/${encodeURIComponent(ringId)}/invites/${accept ? 'accept' : 'decline'}`,
         {},
         token,
     );

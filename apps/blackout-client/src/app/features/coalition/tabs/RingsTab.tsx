@@ -1,7 +1,7 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
 import { RING_KINDS, RING_VISIBILITY, type RingKind, type RingVisibility } from '@blackout/core';
-import { useCoalitionRings } from '../hooks/useCoalitionFeed';
-import { createRing, joinRing } from '../coalitionClient';
+import { useCoalitionRings, useMyRingInvites } from '../hooks/useCoalitionFeed';
+import { createRing, joinRing, respondToRingInvite } from '../coalitionClient';
 
 const containerStyle: CSSProperties = {
     display: 'flex',
@@ -44,6 +44,7 @@ const rowStyle: CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', ali
 
 export default function RingsTab(): React.ReactElement {
     const { data, loading, error, refetch } = useCoalitionRings();
+    const { data: invitesData, refetch: refetchInvites } = useMyRingInvites();
     const [showForm, setShowForm] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -73,7 +74,17 @@ export default function RingsTab(): React.ReactElement {
         [refetch],
     );
 
+    const respondInvite = useCallback(
+        async (ringId: string, accept: boolean) => {
+            await respondToRingInvite(ringId, accept);
+            refetchInvites();
+            refetch();
+        },
+        [refetch, refetchInvites],
+    );
+
     const rings = data?.rings ?? [];
+    const invites = invitesData?.invitations ?? [];
 
     return (
         <div style={containerStyle}>
@@ -127,6 +138,31 @@ export default function RingsTab(): React.ReactElement {
                             {busy ? 'Creating…' : 'Create ring'}
                         </button>
                     </div>
+                </div>
+            ) : null}
+
+            {invites.length > 0 ? (
+                <div style={cardStyle}>
+                    <span style={labelStyle}>Pending invitations</span>
+                    {invites.map((invite) => (
+                        <div key={invite.id} style={rowStyle}>
+                            <span style={{ flex: 1, fontSize: 14 }}>Invitation to a ring</span>
+                            <button
+                                type="button"
+                                style={buttonStyle}
+                                onClick={() => respondInvite(invite.ringId, true)}
+                            >
+                                Accept
+                            </button>
+                            <button
+                                type="button"
+                                style={ghostButtonStyle}
+                                onClick={() => respondInvite(invite.ringId, false)}
+                            >
+                                Decline
+                            </button>
+                        </div>
+                    ))}
                 </div>
             ) : null}
 

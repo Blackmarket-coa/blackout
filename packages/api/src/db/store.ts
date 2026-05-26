@@ -64,6 +64,7 @@ import type {
   RideClaimRecord,
   CoalitionRingRecord,
   RingMembershipRecord,
+  RingInvitationRecord,
   CoalitionKitApplicationRecord,
   PluginInstallationRecord,
   ColiseumTopicRecord,
@@ -144,6 +145,7 @@ type PersistedState = {
   eventRideClaims: RideClaimRecord[];
   coalitionRings: CoalitionRingRecord[];
   ringMemberships: RingMembershipRecord[];
+  ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
   pluginInstallations: PluginInstallationRecord[];
   coliseumTopics: ColiseumTopicRecord[];
@@ -242,6 +244,8 @@ class InMemoryDb {
   coalitionRings = new Map<string, CoalitionRingRecord>();
   /** Ring memberships, keyed by `${ringId}::${userId}`. */
   ringMemberships = new Map<string, RingMembershipRecord>();
+  /** Ring invitations, keyed by `${ringId}::${inviteeId}`. */
+  ringInvitations = new Map<string, RingInvitationRecord>();
   /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
   coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
   /** Plugin installations (activation-at-scope), keyed by installation id. */
@@ -2169,6 +2173,29 @@ class InMemoryDb {
     return record;
   }
 
+  listRingInvitations(filter: { ringId?: string; inviteeId?: string } = {}): RingInvitationRecord[] {
+    return [...this.ringInvitations.values()].filter((row) => {
+      if (filter.ringId && row.ringId !== filter.ringId) return false;
+      if (filter.inviteeId && row.inviteeId !== filter.inviteeId) return false;
+      return true;
+    });
+  }
+
+  upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const key = InMemoryDb.ringMembershipKey(input.ringId, input.inviteeId);
+    const existing = this.ringInvitations.get(key);
+    const now = nowIso();
+    const record: RingInvitationRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.ringInvitations.set(key, record);
+    return record;
+  }
+
   // --- coalition kit applications ---
 
   listCoalitionKitApplications(filter: { scopeType?: string; scopeId?: string } = {}): CoalitionKitApplicationRecord[] {
@@ -2477,6 +2504,11 @@ export class FileBackedDb extends InMemoryDb {
         parsed.ringMemberships.map((row) => [`${row.ringId}::${row.userId}`, row]),
       );
     }
+    if (parsed.ringInvitations) {
+      this.ringInvitations = new Map(
+        parsed.ringInvitations.map((row) => [`${row.ringId}::${row.inviteeId}`, row]),
+      );
+    }
     if (parsed.coalitionKitApplications) {
       this.coalitionKitApplications = new Map(
         parsed.coalitionKitApplications.map((row) => [row.id, row]),
@@ -2569,6 +2601,7 @@ export class FileBackedDb extends InMemoryDb {
       eventRideClaims: [...this.eventRideClaims.values()],
       coalitionRings: [...this.coalitionRings.values()],
       ringMemberships: [...this.ringMemberships.values()],
+      ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
@@ -3432,6 +3465,14 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<RingMembershipRecord, 'createdAt' | 'updatedAt'>,
   ): RingMembershipRecord {
     const created = super.upsertRingMembership(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertRingInvitation(
+    input: Omit<RingInvitationRecord, 'createdAt' | 'updatedAt'>,
+  ): RingInvitationRecord {
+    const created = super.upsertRingInvitation(input);
     this.persist();
     return created;
   }

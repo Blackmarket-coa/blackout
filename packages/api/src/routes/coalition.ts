@@ -44,12 +44,14 @@ import {
     listVolunteerSlots,
     getRing,
     listKitApplications,
+    listRingInvitations,
     listRingMemberships,
     listRings,
     newAidId,
     newEventId,
     newKitApplicationId,
     newMembershipId,
+    newRingInvitationId,
     newRideClaimId,
     newRideOfferId,
     newRingId,
@@ -62,6 +64,7 @@ import {
     saveRideOffer,
     recordKitApplication,
     saveRing,
+    saveRingInvitation,
     saveRingMembership,
     saveRsvp,
     saveVolunteerSignup,
@@ -724,6 +727,85 @@ coalition.patch('/rings/:id/members/:userId', async (c) => {
         active: true,
     });
     return c.json({ membership });
+});
+
+// --- ring invitations (the path into private rings) ---
+
+coalition.get('/rings/invites/mine', (c) => {
+    const user = requireUser(c, 'Sign in to view invitations');
+    if (user instanceof Response) return user;
+    const invitations = listRingInvitations({ inviteeId: user.sub }).filter(
+        (inv) => inv.status === 'pending',
+    );
+    return c.json({ invitations });
+});
+
+const inviteSchema = z.object({ inviteeId: z.string().min(1).max(255) });
+
+coalition.post('/rings/:id/invites', async (c) => {
+    const user = requireUser(c, 'Sign in to invite members');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (!canManageRing(listRingMemberships(ring.id), user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can invite' }, 403);
+    }
+    const parsed = await readJsonBody(c, inviteSchema);
+    if (parsed instanceof Response) return parsed;
+    const invitation = saveRingInvitation({
+        id: newRingInvitationId(),
+        ringId: ring.id,
+        inviterId: user.sub,
+        inviteeId: parsed.inviteeId,
+        status: 'pending',
+    });
+    return c.json({ invitation }, 201);
+});
+
+coalition.get('/rings/:id/invites', (c) => {
+    const user = requireUser(c, 'Sign in to view invitations');
+    if (user instanceof Response) return user;
+    const ring = getRing(c.req.param('id'));
+    if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
+    if (!canManageRing(listRingMemberships(ring.id), user.sub)) {
+        return c.json({ code: 'forbidden', message: 'Only owners/admins can view invitations' }, 403);
+    }
+    return c.json({ invitations: listRingInvitations({ ringId: ring.id }) });
+});
+
+coalition.post('/rings/:id/invites/accept', async (c) => {
+    const user = requireUser(c, 'Sign in to accept an invitation');
+    if (user instanceof Response) return user;
+    const ringId = c.req.param('id');
+    const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
+        (inv) => inv.status === 'pending',
+    );
+    if (!invite) {
+        return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
+    }
+    saveRingInvitation({ ...invite, status: 'accepted' });
+    const membership = saveRingMembership({
+        id: newMembershipId(),
+        ringId,
+        userId: user.sub,
+        role: 'member',
+        active: true,
+    });
+    return c.json({ membership, memberCount: memberCountFor(ringId) });
+});
+
+coalition.post('/rings/:id/invites/decline', async (c) => {
+    const user = requireUser(c, 'Sign in to decline an invitation');
+    if (user instanceof Response) return user;
+    const ringId = c.req.param('id');
+    const invite = listRingInvitations({ ringId, inviteeId: user.sub }).find(
+        (inv) => inv.status === 'pending',
+    );
+    if (!invite) {
+        return c.json({ code: 'not_found', message: 'No pending invitation' }, 404);
+    }
+    const invitation = saveRingInvitation({ ...invite, status: 'declined' });
+    return c.json({ invitation });
 });
 
 // --- Coalition kits (preconfigured community setup packs) ---

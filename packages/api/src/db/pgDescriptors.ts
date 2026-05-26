@@ -68,6 +68,10 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
     keyOf: (r) => `${r.ringId}::${r.userId}`,
     conflictColumns: ['ring_id', 'user_id'],
   },
+  ringInvitations: {
+    keyOf: (r) => `${r.ringId}::${r.inviteeId}`,
+    conflictColumns: ['ring_id', 'invitee_id'],
+  },
   // coalition_rings flattens the optional nested location into lat/lng/address.
   coalitionRings: {
     toRow: (r) => {
@@ -270,6 +274,7 @@ const ALL_MAP_NAMES = [
   'eventRideClaims',
   'coalitionRings',
   'ringMemberships',
+  'ringInvitations',
   'coalitionKitApplications',
   'canopyDirectoryEntries',
   'clips',
@@ -421,6 +426,7 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   upsertRideClaim: upsert('eventRideClaims'),
   upsertCoalitionRing: upsert('coalitionRings'),
   upsertRingMembership: upsert('ringMemberships'),
+  upsertRingInvitation: upsert('ringInvitations'),
   recordCoalitionKitApplication: upsert('coalitionKitApplications'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),

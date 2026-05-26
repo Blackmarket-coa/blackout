@@ -337,6 +337,15 @@ export function newRingId(): string {
 export function newMembershipId(): string {
     return `rmem_${rand()}`;
 }
+export function listRingInvitations(filter: { ringId?: string; inviteeId?: string } = {}) {
+    return db.listRingInvitations(filter);
+}
+export function saveRingInvitation(input: Parameters<typeof db.upsertRingInvitation>[0]) {
+    return db.upsertRingInvitation(input);
+}
+export function newRingInvitationId(): string {
+    return `rinv_${rand()}`;
+}
 
 // --- coalition kit applications ---
 

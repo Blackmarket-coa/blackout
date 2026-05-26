@@ -125,6 +125,56 @@ test('only owners/admins can change member roles', async () => {
     assert.equal(((await ok.json()) as { membership: { role: string } }).membership.role, 'admin');
 });
 
+test('private ring: invite → accept is the way in (direct join stays 403)', async () => {
+    const created = await createRing({ name: 'Cell A', kind: 'circle', visibility: 'private' });
+    const { ring } = (await created.json()) as { ring: { id: string } };
+
+    // a non-manager cannot invite
+    const cantInvite = await app.request(`/v1/coalition/rings/${ring.id}/invites`, {
+        method: 'POST',
+        headers: authHeader('rando'),
+        body: JSON.stringify({ inviteeId: 'invitee-1' }),
+    });
+    assert.equal(cantInvite.status, 403);
+
+    // owner invites
+    const invite = await app.request(`/v1/coalition/rings/${ring.id}/invites`, {
+        method: 'POST',
+        headers: authHeader('ring-owner'),
+        body: JSON.stringify({ inviteeId: 'invitee-1' }),
+    });
+    assert.equal(invite.status, 201);
+
+    // invitee sees it in their pending list
+    const mine = await app.request('/v1/coalition/rings/invites/mine', {
+        headers: authHeader('invitee-1'),
+    });
+    const mineBody = (await mine.json()) as { invitations: Array<{ ringId: string }> };
+    assert.ok(mineBody.invitations.some((i) => i.ringId === ring.id));
+
+    // direct join is still refused for a private ring
+    const join = await app.request(`/v1/coalition/rings/${ring.id}/join`, {
+        method: 'POST',
+        headers: authHeader('invitee-1'),
+    });
+    assert.equal(join.status, 403);
+
+    // accepting the invite makes them a member
+    const accept = await app.request(`/v1/coalition/rings/${ring.id}/invites/accept`, {
+        method: 'POST',
+        headers: authHeader('invitee-1'),
+    });
+    assert.equal(accept.status, 200);
+    assert.equal(((await accept.json()) as { memberCount: number }).memberCount, 2);
+
+    // accepting again with no pending invite → 404
+    const again = await app.request(`/v1/coalition/rings/${ring.id}/invites/accept`, {
+        method: 'POST',
+        headers: authHeader('invitee-1'),
+    });
+    assert.equal(again.status, 404);
+});
+
 test('public rings with a location surface on the communities map layer', async () => {
     const created = await createRing({
         name: 'Dockside Guild',

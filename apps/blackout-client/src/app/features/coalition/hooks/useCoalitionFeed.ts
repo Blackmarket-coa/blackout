@@ -6,6 +6,7 @@ import {
     fetchCoalitionTasks,
     fetchKits,
     fetchMutualAid,
+    fetchMyRingInvites,
     fetchRings,
     fetchSellerLocations,
     fetchSpatialFeed,
@@ -111,4 +112,8 @@ export function useCoalitionRings(memberId?: string) {
 
 export function useCoalitionKits() {
     return useAsync(() => fetchKits(), []);
+}
+
+export function useMyRingInvites() {
+    return useAsync(() => fetchMyRingInvites(), []);
 }
