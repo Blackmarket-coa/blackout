@@ -22,6 +22,12 @@ import {
     setInstallationStatus,
     uninstall,
 } from '../services/pluginInstallations';
+import {
+    listPluginDensForInstallation,
+    pluginDensEnabled,
+    provisionPluginDens,
+} from '../services/pluginDens';
+import type { PluginDenSpecInput } from '@blackout/core';
 
 const pluginInstallations = new Hono();
 
@@ -172,6 +178,62 @@ pluginInstallations.delete('/:id', (c) => {
     }
     uninstall(id);
     return c.json({ ok: true });
+});
+
+// --- Phase 5: plugin dens (den factory) ---
+
+function readDenSpecs(value: unknown): PluginDenSpecInput[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    return value.flatMap((entry) => {
+        if (!isRecord(entry) || typeof entry.purpose !== 'string') return [];
+        return [
+            {
+                purpose: entry.purpose,
+                denType: typeof entry.denType === 'string' ? entry.denType : undefined,
+                name: typeof entry.name === 'string' ? entry.name : undefined,
+            },
+        ];
+    });
+}
+
+pluginInstallations.get('/:id/dens', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (!pluginDensEnabled()) {
+        return c.json({ code: 'feature_disabled', message: 'Plugin dens are not enabled.' }, 404);
+    }
+    const existing = getInstallation(c.req.param('id'));
+    if (!existing) return c.json({ code: 'not_found', message: 'Installation not found.' }, 404);
+    return c.json({ dens: listPluginDensForInstallation(existing.id) });
+});
+
+pluginInstallations.post('/:id/dens', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (!pluginDensEnabled()) {
+        return c.json({ code: 'feature_disabled', message: 'Plugin dens are not enabled.' }, 404);
+    }
+    const existing = getInstallation(c.req.param('id'));
+    if (!existing) return c.json({ code: 'not_found', message: 'Installation not found.' }, 404);
+
+    const reputationTier = db.getUserById(user.sub)?.reputationTier ?? 'member';
+    const scopeAuth = authorizeScope(user.sub, reputationTier, existing.scope);
+    if (!scopeAuth.ok) {
+        return c.json({ code: scopeAuth.code, message: scopeAuth.message }, statusForAuthCode(scopeAuth.code));
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const manifest = isRecord(existing.manifest) ? existing.manifest : {};
+    const specs = readDenSpecs(body.specs) ?? readDenSpecs(manifest.pluginDens);
+    const pluginName = typeof manifest.name === 'string' ? manifest.name : existing.pluginId;
+
+    const result = await provisionPluginDens({
+        installationId: existing.id,
+        pluginId: existing.pluginId,
+        pluginName,
+        specs,
+    });
+    return c.json(result, result.failures.length > 0 ? 207 : 201);
 });
 
 export default pluginInstallations;

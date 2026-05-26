@@ -719,6 +719,17 @@ export interface PluginInstallationRecord {
   updatedAt: string;
 }
 
+export interface PluginDenRecord {
+  id: UUID;
+  installationId: UUID;
+  pluginId: string;
+  denId: string;
+  purpose: string;
+  denType: string;
+  name: string;
+  createdAt: string;
+}
+
 export type CreatorSubscriptionTierStatus = 'draft' | 'active' | 'archived';
 
 export interface CreatorSubscriptionTierRecord {

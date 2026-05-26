@@ -114,6 +114,14 @@ export interface PluginManifest {
         iconUrl?: string;
         order?: number;
     };
+    /**
+     * Optional companion dens (Matrix rooms) the plugin wants provisioned at
+     * install time (Phase 5 den factory). `purpose` is one of the core plugin
+     * den purposes (support/tutorial/collaboration/update) and `denType` is a
+     * den classification; both are validated server-side. Strings are kept
+     * loose here so the protocol stays free of a core dependency.
+     */
+    pluginDens?: Array<{ purpose: string; denType?: string; name?: string }>;
 }
 
 export interface PluginSignatureEnvelope {

@@ -60,6 +60,7 @@ import type {
   CoalitionSpatialItemRecord,
   CoalitionAidPostRecord,
   PluginInstallationRecord,
+  PluginDenRecord,
   ColiseumTopicRecord,
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
@@ -129,6 +130,7 @@ type PersistedState = {
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
   pluginInstallations: PluginInstallationRecord[];
+  pluginDens: PluginDenRecord[];
   coliseumTopics: ColiseumTopicRecord[];
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
@@ -211,6 +213,8 @@ class InMemoryDb {
   );
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
+  /** Plugin-provisioned companion dens, keyed by linkage id. */
+  pluginDens = new Map<string, PluginDenRecord>();
   /** Coliseum debate topics, keyed by topic id. */
   coliseumTopics = new Map<string, ColiseumTopicRecord>();
   /** Coliseum arguments, keyed by argument id. */
@@ -1990,6 +1994,29 @@ class InMemoryDb {
     return this.pluginInstallations.delete(id);
   }
 
+  // --- plugin dens (Phase 5 den factory) ---
+
+  createPluginDen(input: Omit<PluginDenRecord, 'createdAt'>): PluginDenRecord {
+    const record: PluginDenRecord = { ...input, createdAt: nowIso() };
+    this.pluginDens.set(record.id, record);
+    return record;
+  }
+
+  /** Enforces the (installationId, purpose) uniqueness constraint. */
+  findPluginDen(installationId: string, purpose: string): PluginDenRecord | undefined {
+    return [...this.pluginDens.values()].find(
+      (row) => row.installationId === installationId && row.purpose === purpose,
+    );
+  }
+
+  listPluginDensForInstallation(installationId: string): PluginDenRecord[] {
+    return [...this.pluginDens.values()].filter((row) => row.installationId === installationId);
+  }
+
+  listPluginDensForPlugin(pluginId: string): PluginDenRecord[] {
+    return [...this.pluginDens.values()].filter((row) => row.pluginId === pluginId);
+  }
+
   // --- Coliseum ---
 
   private static coliseumVoteKey(argumentId: string, voterId: string): string {
@@ -2192,6 +2219,7 @@ export class FileBackedDb extends InMemoryDb {
     this.pluginInstallations = new Map(
       (parsed.pluginInstallations ?? []).map((row) => [row.id, row]),
     );
+    this.pluginDens = new Map((parsed.pluginDens ?? []).map((row) => [row.id, row]));
     if (parsed.coliseumTopics) {
       this.coliseumTopics = new Map(parsed.coliseumTopics.map((row) => [row.id, row]));
     }
@@ -2264,6 +2292,7 @@ export class FileBackedDb extends InMemoryDb {
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
+      pluginDens: [...this.pluginDens.values()],
       coliseumTopics: [...this.coliseumTopics.values()],
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
@@ -3069,6 +3098,12 @@ export class FileBackedDb extends InMemoryDb {
     const removed = super.deletePluginInstallation(id);
     if (removed) this.persist();
     return removed;
+  }
+
+  override createPluginDen(input: Omit<PluginDenRecord, 'createdAt'>): PluginDenRecord {
+    const created = super.createPluginDen(input);
+    this.persist();
+    return created;
   }
 
   override upsertColiseumTopic(record: ColiseumTopicRecord): ColiseumTopicRecord {
