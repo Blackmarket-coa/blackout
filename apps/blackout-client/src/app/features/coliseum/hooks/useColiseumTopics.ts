@@ -4,12 +4,11 @@ import {
     fetchColiseumTopic,
     fetchColiseumTopics,
     fetchColiseumVerdict,
-    type ColiseumReelResponse,
+    type ColiseumReelItem,
     type ColiseumScopeQuery,
     type ColiseumTopicDetailResponse,
     type ColiseumTopicsResponse,
     type ColiseumVerdictResponse,
-    type FetchColiseumReelOptions,
     type FetchColiseumTopicsOptions,
 } from '../coliseumClient';
 
@@ -79,9 +78,63 @@ export function useColiseumVerdict(topicId: string | null) {
     );
 }
 
-export function useColiseumReel(options: FetchColiseumReelOptions = {}, enabled = true) {
-    return useAsync<ColiseumReelResponse | null>(
-        () => (enabled ? fetchColiseumReel(options) : Promise.resolve(null)),
-        [enabled, options.limit, options.offset]
-    );
+export interface UseColiseumReelResult {
+    items: ColiseumReelItem[];
+    loading: boolean;
+    error: string | null;
+    hasMore: boolean;
+    loadMore: () => void;
+}
+
+/**
+ * Paginating cross-topic reel: fetches the first page on mount and appends
+ * subsequent pages on demand (driven by the reel's near-bottom scroll). Items
+ * are de-duplicated by id so a re-rank between page fetches can't double-insert.
+ */
+export function useColiseumReel(pageSize = 20): UseColiseumReelResult {
+    const [items, setItems] = useState<ColiseumReelItem[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [nextOffset, setNextOffset] = useState<number | null>(0);
+    const nextOffsetRef = useRef<number | null>(0);
+    const inFlight = useRef(false);
+    const seen = useRef<Set<string>>(new Set());
+
+    const loadMore = useCallback(() => {
+        if (inFlight.current) return;
+        const offset = nextOffsetRef.current;
+        if (offset === null) return;
+        inFlight.current = true;
+        setLoading(true);
+        void fetchColiseumReel({ limit: pageSize, offset })
+            .then((res) => {
+                setItems((prev) => {
+                    const merged = [...prev];
+                    for (const item of res.items) {
+                        if (seen.current.has(item.id)) continue;
+                        seen.current.add(item.id);
+                        merged.push(item);
+                    }
+                    return merged;
+                });
+                nextOffsetRef.current = res.nextOffset;
+                setNextOffset(res.nextOffset);
+                setError(null);
+            })
+            .catch((err: unknown) => {
+                setError(err instanceof Error ? err.message : 'Failed to load reel');
+            })
+            .finally(() => {
+                inFlight.current = false;
+                setLoading(false);
+            });
+    }, [pageSize]);
+
+    useEffect(() => {
+        loadMore();
+        // Mount-only: subsequent pages are pulled via loadMore from the UI.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    return { items, loading, error, hasMore: nextOffset !== null, loadMore };
 }

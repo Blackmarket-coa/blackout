@@ -362,17 +362,29 @@ function TopicReel({ topicId, client }: { topicId: string; client: ReelTabClient
 function GlobalReel({ client }: { client: ReelTabClient }) {
     const [, setSelectedTopicId] = useAtom(selectedColiseumTopicIdAtom);
     const [, setTab] = useAtom(coliseumTabAtom);
-    const { data, loading, error, refetch } = useColiseumReel({ limit: 50 });
-    const { flashes, onVote } = useReelVote(client, refetch);
+    const { items, loading, error, hasMore, loadMore } = useColiseumReel(20);
+    // Votes here are fire-and-forget; don't refetch (it would reset pagination).
+    const { flashes, onVote } = useReelVote(client, () => {});
 
-    if (loading && !data) {
+    // Pull the next page when the user scrolls within ~2 cards of the end.
+    const onScroll = useCallback(
+        (event: React.UIEvent<HTMLDivElement>) => {
+            if (!hasMore) return;
+            const el = event.currentTarget;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 2) {
+                loadMore();
+            }
+        },
+        [hasMore, loadMore]
+    );
+
+    if (loading && items.length === 0) {
         return <div style={{ padding: 24 }}>Loading discourse reel...</div>;
     }
-    if (error) {
+    if (error && items.length === 0) {
         return <div style={{ padding: 24, color: 'var(--danger)' }}>Couldn't load: {error}</div>;
     }
 
-    const items = data?.items ?? [];
     if (items.length === 0) {
         return (
             <div style={{ padding: 24, color: 'var(--text-secondary)' }}>
@@ -397,7 +409,7 @@ function GlobalReel({ client }: { client: ReelTabClient }) {
     }
 
     return (
-        <div style={reelContainerStyle} data-testid="coliseum-reel-global">
+        <div style={reelContainerStyle} data-testid="coliseum-reel-global" onScroll={onScroll}>
             {items.map((item) => (
                 <ReelCard
                     key={item.id}

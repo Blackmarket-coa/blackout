@@ -1,5 +1,11 @@
 # The Coliseum
 
+> **Two things share this name.** This document describes the **launch-day
+> Coliseum** — a specific *Coalition* seeded for the V1 Test Flight. The
+> standalone **discourse feature** (vertical reel, structured debate, public
+> dens, live sessions, voting, reputation) is documented separately in
+> [`discourse.md`](./discourse.md).
+
 ## What it is
 
 The Coliseum is a **Coalition**, not a chat room.
