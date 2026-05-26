@@ -3,7 +3,7 @@
 // Most tables are regular: table name = snake_case(mapName), keyed by `id`,
 // reflection maps fields ↔ columns. The exceptions (composite/non-id keys, the
 // renamed webhook-audit table, and the nested coalition-aid location) are
-// declared explicitly. The MUTATOR_SPECS table says, for each of the 107
+// declared explicitly. The MUTATOR_SPECS table says, for each of the 123
 // InMemoryDb mutators, whether a write-through is a targeted upsert of the
 // returned record or a (rarer) resync of the affected map(s).
 
@@ -283,6 +283,7 @@ const ALL_MAP_NAMES = [
   'coliseumVotes',
   'coliseumLiveSessions',
   'pluginInstallations',
+  'reputationEvents',
 ] as const;
 
 export const TABLE_DESCRIPTORS: TableDescriptor[] = ALL_MAP_NAMES.map((mapName) => {
@@ -305,7 +306,7 @@ const upsert = (map: string): MutatorSpec => ({ kind: 'upsert', map });
 const resync = (...maps: string[]): MutatorSpec => ({ kind: 'resync', maps });
 
 /**
- * Maps each of the 107 InMemoryDb mutators to its write-through. `upsert`
+ * Maps each of the 123 InMemoryDb mutators to its write-through. `upsert`
  * persists the method's returned record; `resync` reconciles a map after a
  * delete / bulk-revoke / consume. The 6 `reset*ForTest` seams are intentionally
  * absent — postgres mode never calls them.
@@ -441,4 +442,5 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   createPluginInstallation: upsert('pluginInstallations'),
   updatePluginInstallation: upsert('pluginInstallations'),
   deletePluginInstallation: resync('pluginInstallations'),
+  addReputationEvent: upsert('reputationEvents'),
 };

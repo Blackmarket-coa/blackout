@@ -16,6 +16,8 @@ import type {
   ColiseumLiveSession,
   ColiseumTopic,
   ColiseumVote,
+  ReputationEventType,
+  ReputationSubject,
 } from '@blackout/core';
 
 export type UUID = string;
@@ -959,3 +961,18 @@ export type ColiseumTopicRecord = ColiseumTopic;
 export type ColiseumArgumentRecord = ColiseumArgument;
 export type ColiseumVoteRecord = ColiseumVote;
 export type ColiseumLiveSessionRecord = ColiseumLiveSession;
+
+/**
+ * A subject-scoped reputation award. Persisted so per-subject standing survives
+ * a restart; `dedupeKey` (when present) makes an award idempotent and the dedupe
+ * survives reloads too.
+ */
+export interface ReputationEventRecord {
+  id: UUID;
+  userId: UUID;
+  type: ReputationEventType;
+  subject?: ReputationSubject;
+  points?: number;
+  dedupeKey?: string;
+  createdAt: string;
+}

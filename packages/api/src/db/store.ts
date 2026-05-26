@@ -71,6 +71,7 @@ import type {
   ColiseumArgumentRecord,
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
+  ReputationEventRecord,
 } from './types';
 import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
 import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
@@ -152,6 +153,7 @@ type PersistedState = {
   coliseumArguments: ColiseumArgumentRecord[];
   coliseumVotes: ColiseumVoteRecord[];
   coliseumLiveSessions: ColiseumLiveSessionRecord[];
+  reputationEvents: ReputationEventRecord[];
 };
 
 class InMemoryDb {
@@ -258,6 +260,8 @@ class InMemoryDb {
   coliseumVotes = new Map<string, ColiseumVoteRecord>();
   /** Coliseum live debate sessions, keyed by session id. */
   coliseumLiveSessions = new Map<string, ColiseumLiveSessionRecord>();
+  /** Subject-scoped reputation awards, keyed by event id. */
+  reputationEvents = new Map<string, ReputationEventRecord>();
 
   constructor() {
     const explicitDemoPassword = process.env.BLACKOUT_DEMO_PASSWORD;
@@ -2344,6 +2348,29 @@ class InMemoryDb {
     this.coliseumLiveSessions.set(record.id, record);
     return record;
   }
+
+  // --- Reputation ---
+
+  listReputationEvents(): ReputationEventRecord[] {
+    return [...this.reputationEvents.values()];
+  }
+
+  /** True if an award with this dedupe key was already recorded. */
+  reputationDedupeKeyExists(dedupeKey: string): boolean {
+    for (const event of this.reputationEvents.values()) {
+      if (event.dedupeKey === dedupeKey) return true;
+    }
+    return false;
+  }
+
+  addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+    this.reputationEvents.set(record.id, record);
+    return record;
+  }
+
+  resetReputationEvents(): void {
+    this.reputationEvents.clear();
+  }
 }
 
 export class FileBackedDb extends InMemoryDb {
@@ -2552,6 +2579,9 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coliseumLiveSessions.map((row) => [row.id, row]),
       );
     }
+    if (parsed.reputationEvents) {
+      this.reputationEvents = new Map(parsed.reputationEvents.map((row) => [row.id, row]));
+    }
   }
 
   private snapshot(): PersistedState {
@@ -2622,6 +2652,7 @@ export class FileBackedDb extends InMemoryDb {
       coliseumArguments: [...this.coliseumArguments.values()],
       coliseumVotes: [...this.coliseumVotes.values()],
       coliseumLiveSessions: [...this.coliseumLiveSessions.values()],
+      reputationEvents: [...this.reputationEvents.values()],
     };
   }
 
@@ -3551,6 +3582,17 @@ export class FileBackedDb extends InMemoryDb {
     const saved = super.upsertColiseumLiveSession(record);
     this.persist();
     return saved;
+  }
+
+  override addReputationEvent(record: ReputationEventRecord): ReputationEventRecord {
+    const saved = super.addReputationEvent(record);
+    this.persist();
+    return saved;
+  }
+
+  override resetReputationEvents(): void {
+    super.resetReputationEvents();
+    this.persist();
   }
 }
 

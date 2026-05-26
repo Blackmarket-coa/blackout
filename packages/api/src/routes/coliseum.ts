@@ -221,6 +221,9 @@ coliseum.post('/arguments/:id/vote', voteRateLimit, async (c) => {
     const user = requireUser(c, 'Sign in to vote');
     if (user instanceof Response) return user;
     const argumentId = c.req.param('id');
+    if (!argumentId) {
+        return c.json({ code: 'not_found', message: 'Argument not found' }, 404);
+    }
     const argument = getArgument(argumentId);
     if (!argument) {
         return c.json({ code: 'not_found', message: 'Argument not found' }, 404);
