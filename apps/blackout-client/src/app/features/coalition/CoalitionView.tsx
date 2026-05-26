@@ -9,6 +9,7 @@ import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
 import EventsTab from './tabs/EventsTab';
 import RingsTab from './tabs/RingsTab';
+import KitsTab from './tabs/KitsTab';
 import ShopTab from './tabs/ShopTab';
 import TasksTab from './tabs/TasksTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
@@ -89,6 +90,7 @@ export function CoalitionView({
                 {activeTab === 'rings' ? <RingsTab /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
                 {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
+                {activeTab === 'kits' ? <KitsTab scope={scope} /> : null}
                 {activeTab === 'documents' && denId ? (
                     <DocumentsTab roomId={denId} />
                 ) : null}

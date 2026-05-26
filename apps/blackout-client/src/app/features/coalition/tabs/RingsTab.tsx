@@ -1,7 +1,7 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
 import { RING_KINDS, RING_VISIBILITY, type RingKind, type RingVisibility } from '@blackout/core';
 import { useCoalitionRings, useMyRingInvites } from '../hooks/useCoalitionFeed';
-import { createRing, joinRing, respondToRingInvite } from '../coalitionClient';
+import { createRing, inviteToRing, joinRing, respondToRingInvite } from '../coalitionClient';
 
 const containerStyle: CSSProperties = {
     display: 'flex',
@@ -41,6 +41,36 @@ const buttonStyle: CSSProperties = {
 const ghostButtonStyle: CSSProperties = { ...buttonStyle, background: 'transparent', color: 'var(--text-secondary)' };
 const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 };
 const rowStyle: CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' };
+
+/** Inline invite-by-id control on a ring card (owners/admins only; the API gates it). */
+function RingInvite({ ringId }: { ringId: string }): React.ReactElement {
+    const [inviteeId, setInviteeId] = useState('');
+    const [note, setNote] = useState<string | null>(null);
+    const submit = useCallback(async () => {
+        if (!inviteeId.trim()) return;
+        try {
+            await inviteToRing(ringId, inviteeId.trim());
+            setNote('Invited');
+            setInviteeId('');
+        } catch (err) {
+            setNote(err instanceof Error ? err.message : 'Could not invite');
+        }
+    }, [ringId, inviteeId]);
+    return (
+        <div style={rowStyle}>
+            <input
+                style={{ ...inputStyle, flex: 1, minWidth: 120 }}
+                placeholder="Invite by user id"
+                value={inviteeId}
+                onChange={(e) => setInviteeId(e.target.value)}
+            />
+            <button type="button" style={ghostButtonStyle} onClick={submit}>
+                Invite
+            </button>
+            {note ? <span style={labelStyle}>{note}</span> : null}
+        </div>
+    );
+}
 
 export default function RingsTab(): React.ReactElement {
     const { data, loading, error, refetch } = useCoalitionRings();
@@ -192,6 +222,7 @@ export default function RingsTab(): React.ReactElement {
                             Leave
                         </button>
                     </div>
+                    <RingInvite ringId={ring.id} />
                 </div>
             ))}
         </div>
