@@ -19,6 +19,30 @@ export type RoomNavArgs = {
 };
 
 /**
+ * Resolve a den's parent canopy id from the space hierarchy. Returns `null`
+ * for orphan dens / direct messages (no parent canopy). Prefers the currently
+ * selected canopy when the den is reachable under it, otherwise picks the
+ * best-guess parent. Pure — no router/jotai context required, so it can drive
+ * both URL building (`roomNavPath`) and direct atom selection.
+ */
+export const resolveParentCanopyId = ({
+    mx,
+    roomToParents,
+    spaceSelectedId,
+    roomId,
+}: {
+    mx: MatrixClient;
+    roomToParents: RoomToParents;
+    spaceSelectedId: string | null;
+    roomId: string;
+}): string | null => {
+    const orphanParents = getOrphanParents(roomToParents, roomId);
+    if (orphanParents.length === 0) return null;
+    if (spaceSelectedId && orphanParents.includes(spaceSelectedId)) return spaceSelectedId;
+    return guessPerfectParent(mx, roomId, orphanParents) ?? orphanParents[0];
+};
+
+/**
  * Build the canonical `/communities/:canopyId/dens/:denId` URL for opening a
  * room (den). The parent canopy is resolved from the space hierarchy; rooms
  * with no parent (orphans, direct messages) use the `-` no-canopy sentinel.
@@ -34,19 +58,9 @@ export const roomNavPath = ({
     eventId,
 }: RoomNavArgs): string => {
     const openSpaceTimeline = developerTools && spaceSelectedId === roomId;
-
-    let canopyId: string | null = null;
-    if (openSpaceTimeline) {
-        canopyId = roomId;
-    } else {
-        const orphanParents = getOrphanParents(roomToParents, roomId);
-        if (orphanParents.length > 0) {
-            canopyId =
-                spaceSelectedId && orphanParents.includes(spaceSelectedId)
-                    ? spaceSelectedId
-                    : guessPerfectParent(mx, roomId, orphanParents) ?? orphanParents[0];
-        }
-    }
+    const canopyId = openSpaceTimeline
+        ? roomId
+        : resolveParentCanopyId({ mx, roomToParents, spaceSelectedId, roomId });
 
     return withEvent(buildCommunitiesPath(canopyId, roomId), eventId);
 };

@@ -101,10 +101,10 @@ describe('panelSlots threads slot (Workstream C — in-room thread panel wiring)
             activeThreadRootId: null,
         });
 
-        // Flat list does not render the ThreadPanel container.
+        // Root list does not render the ThreadPanel container.
         expect(container.querySelector('[data-testid="thread-panel"]')).toBeNull();
-        // Empty-state copy from the flat TimelineEventList comes through
-        // because the non-thread message is filtered out by getThreadEvents.
+        // Empty-state copy from the thread-root list comes through because the
+        // non-thread message contributes no thread root (getThreadRootIds).
         expect(container.textContent).toContain('No active threads yet.');
     });
 

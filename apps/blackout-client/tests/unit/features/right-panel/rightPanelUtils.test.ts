@@ -146,14 +146,61 @@ describe('rightPanelUtils', () => {
 
         const groups = buildSpaceGroups({
             selectedSpaceId: '!space-root:example.org',
-            selectedSpaceRooms: [generalRoom, nestedRoom],
             rooms: [selectedSpace, nestedSpace, generalRoom, nestedRoom],
+            roomToParents: new Map(),
+            mDirect: new Set(),
         });
 
         expect(groups[0].label).toBe('General');
         expect(groups[0].rooms.map((room) => room.roomId)).toEqual(['!room-general:example.org']);
         expect(groups[1].label).toBe('Sub');
         expect(groups[1].rooms.map((room) => room.roomId)).toEqual(['!room-nested:example.org']);
+    });
+
+    it('builds Home direct groups (DMs + orphan dens) when no canopy is selected', () => {
+        const dm = mockRoom({ roomId: '!dm:example.org', name: 'DM' });
+        const orphan = mockRoom({ roomId: '!orphan:example.org', name: 'Orphan' });
+        const parented = mockRoom({ roomId: '!child:example.org', name: 'Child' });
+        const roomToParents = new Map([
+            ['!child:example.org', new Set(['!space:example.org'])],
+        ]);
+
+        const groups = buildSpaceGroups({
+            selectedSpaceId: null,
+            rooms: [dm, orphan, parented],
+            roomToParents,
+            mDirect: new Set(['!dm:example.org']),
+        });
+
+        const byId = Object.fromEntries(
+            groups.map((group) => [group.id, group.rooms.map((room) => room.roomId)])
+        );
+        expect(byId.dms).toEqual(['!dm:example.org']);
+        // The parented den is scoped to its canopy, not surfaced under Direct.
+        expect(byId.direct).toEqual(['!orphan:example.org']);
+    });
+
+    it('scopes dens to a canopy via the parent index when child state is unloaded', () => {
+        const space = mockRoom({
+            roomId: '!space:example.org',
+            name: 'Space',
+            type: 'm.space',
+        });
+        const child = mockRoom({ roomId: '!child:example.org', name: 'Child' });
+        const unrelated = mockRoom({ roomId: '!other:example.org', name: 'Other' });
+        const roomToParents = new Map([
+            ['!child:example.org', new Set(['!space:example.org'])],
+        ]);
+
+        const groups = buildSpaceGroups({
+            selectedSpaceId: '!space:example.org',
+            rooms: [space, child, unrelated],
+            roomToParents,
+            mDirect: new Set(),
+        });
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].rooms.map((room) => room.roomId)).toEqual(['!child:example.org']);
     });
 
     it('uses read receipt marker when deriving unread anchor', () => {

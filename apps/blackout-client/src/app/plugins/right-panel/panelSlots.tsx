@@ -15,13 +15,15 @@ import { useUserRoles } from '../../features/roles/useRoles';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import type { RightPanelType } from '../../state/navigation';
 import {
+    findThreadRoot,
     getEventTimestamp,
     getMemberActivitySummary,
     getPinnedEvents,
-    getThreadEvents,
+    getThreadRootIds,
     getTimelineBody,
     getUserSharedRoomCount,
     groupMembersByPresence,
+    groupThreadReplies,
     searchEvents,
 } from '../../features/right-panel/rightPanelUtils';
 import { ThreadPanel } from '../../features/right-panel/ThreadPanel';
@@ -46,10 +48,14 @@ export type RightPanelSlotProps = {
     rolesEnabled: boolean;
     /**
      * Root event id of the currently focused thread, or `null` when the
-     * threads slot should render its flat starters list. Threaded by
+     * threads slot should render its list of thread roots. Threaded by
      * `RightPanelContent` from `activeThreadRootIdAtom`.
      */
     activeThreadRootId: string | null;
+    /** Drill into a thread root (sets `activeThreadRootIdAtom`). */
+    onSelectThread?: (rootEventId: string) => void;
+    /** Return from a thread to the list of roots (clears `activeThreadRootIdAtom`). */
+    onClearThread?: () => void;
 };
 
 export type RightPanelSlotName = Exclude<RightPanelType, null>;
@@ -365,6 +371,70 @@ const TimelineEventList = ({
     </div>
 );
 
+/**
+ * Lists the distinct thread roots in a den (one row per thread, not one per
+ * reply) with a reply count, so threads read as a navigable third tier rather
+ * than a flat dump of reply events. Selecting a row drills into the thread.
+ */
+const ThreadRootList = ({
+    events,
+    onSelectThread,
+    onJumpToEvent,
+    fallbackBody,
+}: {
+    events: MatrixEvent[];
+    onSelectThread?: (rootEventId: string) => void;
+    onJumpToEvent: (eventId: string) => void;
+    fallbackBody: string;
+}) => {
+    const rootIds = useMemo(() => getThreadRootIds(events), [events]);
+    const replies = useMemo(() => groupThreadReplies(events), [events]);
+
+    return (
+        <div
+            style={{
+                padding: 12,
+                overflowY: 'auto',
+                height: 'calc(100% - 44px)',
+                display: 'grid',
+                gap: 8,
+            }}
+        >
+            {rootIds.length === 0 ? (
+                <small style={{ color: 'var(--text-secondary)' }}>No active threads yet.</small>
+            ) : null}
+            {rootIds.map((rootId) => {
+                const root = findThreadRoot(events, rootId);
+                const replyCount = replies.get(rootId)?.length ?? 0;
+                return (
+                    <button
+                        key={rootId}
+                        type="button"
+                        data-testid={`thread-root-${rootId}`}
+                        style={{
+                            textAlign: 'left',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 8,
+                            background: 'var(--bg-input)',
+                            padding: 8,
+                            display: 'grid',
+                            gap: 4,
+                        }}
+                        onClick={() =>
+                            onSelectThread ? onSelectThread(rootId) : onJumpToEvent(rootId)
+                        }
+                    >
+                        <div>{(root ? getTimelineBody(root) : '') || fallbackBody}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                            {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
 const SearchPanel: RightPanelSlotRenderer = ({ events, onJumpToEvent }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const searchResults = useMemo(() => searchEvents(events, searchQuery), [events, searchQuery]);
@@ -448,31 +518,50 @@ const MonetizationPanel: RightPanelSlotRenderer = ({ room }) => {
 
 const baselineSlotRegistry: RightPanelSlotRegistry = {
     members: MembersPanel,
-    threads: ({ events, room, onJumpToEvent, activeThreadRootId }) => {
+    threads: ({ events, room, onJumpToEvent, activeThreadRootId, onSelectThread, onClearThread }) => {
         if (!activeThreadRootId) {
             return (
-                <TimelineEventList
-                    events={getThreadEvents(events)}
-                    emptyMessage="No active threads yet."
-                    fallbackBody="[thread message]"
+                <ThreadRootList
+                    events={events}
+                    onSelectThread={onSelectThread}
                     onJumpToEvent={onJumpToEvent}
+                    fallbackBody="[thread message]"
                 />
             );
         }
         return (
-            <ThreadPanel
-                events={events}
-                rootEventId={activeThreadRootId}
-                fallbackBody="[thread message]"
-                onJumpToEvent={onJumpToEvent}
-                renderComposer={(rootEventId) => (
-                    <MessageComposer
-                        roomId={room.roomId}
-                        target={{ mode: 'thread', rootEventId }}
-                        placeholder="Reply in thread"
-                    />
-                )}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                <button
+                    type="button"
+                    data-testid="thread-back-to-list"
+                    onClick={() => onClearThread?.()}
+                    style={{
+                        alignSelf: 'flex-start',
+                        margin: 8,
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 8,
+                        background: 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                    }}
+                >
+                    ← All threads
+                </button>
+                <ThreadPanel
+                    events={events}
+                    rootEventId={activeThreadRootId}
+                    fallbackBody="[thread message]"
+                    onJumpToEvent={onJumpToEvent}
+                    renderComposer={(rootEventId) => (
+                        <MessageComposer
+                            roomId={room.roomId}
+                            target={{ mode: 'thread', rootEventId }}
+                            placeholder="Reply in thread"
+                        />
+                    )}
+                />
+            </div>
         );
     },
     pins: ({ events, room, onJumpToEvent }) => (
