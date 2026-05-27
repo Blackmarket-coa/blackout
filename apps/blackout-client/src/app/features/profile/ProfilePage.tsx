@@ -2,6 +2,9 @@ import React, { type CSSProperties } from 'react';
 import { useAtomValue } from 'jotai';
 import { myProfileAtom } from './profileAtoms';
 import AvatarDecoration from './AvatarDecoration';
+import Nameplate from './Nameplate';
+import ProfileEffect from './ProfileEffect';
+import CosmeticBadges from './CosmeticBadge';
 import PinnedMediaShelf from './PinnedMediaShelf';
 import ProfileStatusBar from './ProfileStatusBar';
 import ProfileThemeScope from './ProfileThemeScope';
@@ -97,20 +100,28 @@ export function ProfilePage({ profile, viewerId, viewerIsFriend = false }: Profi
                 )}
 
                 <div style={headerRowStyle}>
-                    <AvatarDecoration
-                        avatarUrl={target.avatarUrl}
-                        displayName={target.displayName}
-                        decorationId={profileEvent.decoration}
-                        size={112}
-                    />
+                    <div style={{ position: 'relative', width: 112, height: 112 }}>
+                        <AvatarDecoration
+                            avatarUrl={target.avatarUrl}
+                            displayName={target.displayName}
+                            decorationId={profileEvent.decoration}
+                            size={112}
+                        />
+                        <ProfileEffect profileEffectId={profileEvent.profileEffectId} />
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
-                            {target.displayName}
+                        <h1 style={{ margin: 0 }}>
+                            <Nameplate
+                                displayName={target.displayName}
+                                nameplateId={profileEvent.nameplateId}
+                                fontSize={24}
+                            />
                         </h1>
                         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                             {target.userId}
                             {profileEvent.pronouns ? ` · ${profileEvent.pronouns}` : ''}
                         </div>
+                        <CosmeticBadges badgeIds={profileEvent.badgeIds} />
                         <ProfileStatusBar status={profileEvent.status} />
                     </div>
                 </div>

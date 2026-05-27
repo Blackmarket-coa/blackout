@@ -66,6 +66,12 @@ export interface BmcProfileEvent {
     pronouns?: string;
     connections?: ProfileConnection[];
     decoration?: string;
+    /** Equipped nameplate cosmetic id (see cosmeticsAtoms). */
+    nameplateId?: string;
+    /** Equipped profile-effect cosmetic id. */
+    profileEffectId?: string;
+    /** Equipped collectible badge cosmetic ids (capped). */
+    badgeIds?: string[];
     wall?: ProfileWallSettings;
     topFriends?: ProfileTopFriends;
     customTheme?: ProfileCustomTheme;
@@ -293,6 +299,13 @@ export const sanitizeProfileEvent = (input: unknown): BmcProfileEvent => {
         pronouns: isString(data.pronouns) ? data.pronouns.slice(0, 60) : '',
         connections,
         decoration: isString(data.decoration) ? data.decoration : undefined,
+        nameplateId: isString(data.nameplateId) ? data.nameplateId.slice(0, 64) : undefined,
+        profileEffectId: isString(data.profileEffectId)
+            ? data.profileEffectId.slice(0, 64)
+            : undefined,
+        badgeIds: Array.isArray(data.badgeIds)
+            ? data.badgeIds.filter(isString).map((id) => id.slice(0, 64)).slice(0, 6)
+            : undefined,
         wall: sanitizeWall(data.wall),
         topFriends: sanitizeTopFriends(data.topFriends),
         customTheme: sanitizeCustomTheme(data.customTheme),

@@ -2,6 +2,7 @@ import { atom } from 'jotai';
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { InstallScope } from '@blackout/core';
 import type { PluginCapability, PluginManifest } from '@blackout/sdk';
+import type { OwnedCosmetic } from '../../profile/cosmeticTypes';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -26,6 +27,12 @@ export interface InstalledPluginRecord {
      * behaving exactly as before.
      */
     scope?: InstallScope;
+    /**
+     * For `profile_cosmetic` entitlements: the decoded cosmetic definition. The
+     * owned-cosmetics catalog derives from these records, so cosmetics survive a
+     * reload and are pruned automatically when the entitlement is revoked.
+     */
+    cosmetic?: OwnedCosmetic;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';

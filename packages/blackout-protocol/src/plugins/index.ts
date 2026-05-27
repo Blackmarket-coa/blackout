@@ -16,6 +16,13 @@ export type PluginArtifactKind =
     | 'code_plugin'
     | 'asset_bundle'
     | 'coalition_kit'
+    | 'profile_cosmetic'
+    | 'sound_pack'
+    | 'community_template'
+    | 'stream_asset'
+    | 'vault_item'
+    | 'ai_persona'
+    | 'automation_recipe'
     // A Twitch extension run via the `Twitch.ext` SDK shim against a Blackout
     // livestream. Rendered in a visible sandboxed iframe (panel surface).
     | 'twitch_extension_compat';

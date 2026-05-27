@@ -14,6 +14,7 @@ import type {
 } from './installedPluginsAtom';
 import { mountSandbox, unmountSandbox } from './sandbox/sandboxRegistry';
 import { verifySignedBundle } from './pluginSignature';
+import { parseOwnedCosmetic, type OwnedCosmetic } from '../../profile/cosmeticTypes';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -48,6 +49,23 @@ function base64ToBytes(base64: string): Uint8Array {
     const out = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
     return out;
+}
+
+/**
+ * Decode a profile-cosmetic bundle's bytes into an OwnedCosmetic. The verified
+ * bundle is UTF-8 JSON; accept either `{ payload: {...} }` (the canonical
+ * envelope) or a bare cosmetic object, then sanitize via parseOwnedCosmetic.
+ */
+function decodeCosmetic(bundleBytes: Uint8Array): OwnedCosmetic | null {
+    try {
+        const text = new TextDecoder().decode(bundleBytes);
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        const candidate =
+            parsed && typeof parsed === 'object' && 'payload' in parsed ? parsed.payload : parsed;
+        return parseOwnedCosmetic(candidate);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -147,6 +165,19 @@ export async function installEntitlement(
     switch (bundle.manifest.artifactKind) {
         case 'theme':
         case 'asset_bundle':
+        // Data-delivery artifact kinds whose runtime is wired by their own
+        // feature surface (soundboard, stream overlays, templates, vault, AI).
+        // They cache the verified bundle here; the consuming feature reads it.
+        case 'sound_pack':
+        case 'community_template':
+        case 'stream_asset':
+        case 'vault_item':
+        case 'ai_persona':
+        case 'automation_recipe':
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'profile_cosmetic':
+            record.cosmetic = decodeCosmetic(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'manifest_plugin':
