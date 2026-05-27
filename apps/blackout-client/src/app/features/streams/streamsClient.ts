@@ -22,7 +22,23 @@ export interface StreamSummary {
      * set so viewers can talk while watching.
      */
     denId?: string;
+    /**
+     * Twitch-compat extension panels to render below the player. Populated by
+     * the API once an extension registry exists; absent/empty today so the
+     * viewer renders no extension surfaces by default.
+     */
+    extensions?: TwitchExtensionPanel[];
     updatedAt: string;
+}
+
+/** A Twitch-extension-compat panel surface attached to a stream. */
+export interface TwitchExtensionPanel {
+    id: string;
+    label: string;
+    /** URL the extension bundle JS is fetched from (same-origin or CORS-enabled). */
+    bundleUrl: string;
+    /** Granted `twitch.ext.*` capabilities for this panel. */
+    capabilities: string[];
 }
 
 export interface ListStreamsResponse {
@@ -116,6 +132,31 @@ export const fetchOwncastOrigin = (
     token: string | null = readBlackoutApiToken()
 ): Promise<OwncastOriginConfig> =>
     callJson<OwncastOriginConfig>('GET', `${STREAMING_BASE}/origin`, token);
+
+export interface ExtensionTokenResponse {
+    token: string;
+    channelId: string;
+    role: 'broadcaster' | 'moderator' | 'viewer';
+    opaqueUserId: string;
+    userId: string | null;
+    expiresAt: string;
+}
+
+/**
+ * Wraps `GET /v1/integrations/twitch/extensions/token` — mints the EBS JWT the
+ * `Twitch.ext` shim hands an extension bundle's `onAuthorized` callback.
+ */
+export const fetchExtensionToken = (
+    streamId: string,
+    options: { shareIdentity?: boolean } = {},
+    token: string | null = readBlackoutApiToken()
+): Promise<ExtensionTokenResponse> => {
+    const path = appendQuery('/v1/integrations/twitch/extensions/token', {
+        streamId,
+        shareIdentity: options.shareIdentity ? 'true' : undefined,
+    });
+    return callJson<ExtensionTokenResponse>('GET', path, token);
+};
 
 /**
  * Owncast HLS playlist URL convention: `<origin>/hls/stream.m3u8`.

@@ -15,7 +15,10 @@ export type PluginArtifactKind =
     | 'manifest_plugin'
     | 'code_plugin'
     | 'asset_bundle'
-    | 'coalition_kit';
+    | 'coalition_kit'
+    // A Twitch extension run via the `Twitch.ext` SDK shim against a Blackout
+    // livestream. Rendered in a visible sandboxed iframe (panel surface).
+    | 'twitch_extension_compat';
 
 export type PluginCapability =
     | 'shell.panel.read'
@@ -28,7 +31,12 @@ export type PluginCapability =
     // AI inference is confined to AI dens (see core `den/classification.ts`
     // `aiToolsEnabled`). Granting it is necessary but not sufficient: the host
     // sandbox hard-denies `ai.inference` RPCs outside an AI den at runtime.
-    | 'ai.inference';
+    | 'ai.inference'
+    // Twitch-extension-compat surfaces. `identityShare` lets the extension
+    // request the viewer's real Twitch id (gated by viewer consent);
+    // `subscriptionStatus` lets it read whether the viewer subscribes.
+    | 'twitch.ext.identityShare'
+    | 'twitch.ext.subscriptionStatus';
 
 /**
  * Spatial declaration: pinned sidebar entry contributed by an installed
