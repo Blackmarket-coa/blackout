@@ -23,6 +23,7 @@ import {
     type OwnedAutomationRecipe,
 } from '../../aiden/aiGoods';
 import { parseOwnedVaultGrant, type OwnedVaultGrant } from '../../vault/vaultGoods';
+import { parseOwnedSoundPack, type OwnedSoundPack } from '../../audio/soundPackGoods';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -91,6 +92,10 @@ function decodeAutomationRecipe(bundleBytes: Uint8Array): OwnedAutomationRecipe 
 
 function decodeVaultGrant(bundleBytes: Uint8Array): OwnedVaultGrant | null {
     return parseOwnedVaultGrant(decodeBundlePayload(bundleBytes));
+}
+
+function decodeSoundPack(bundleBytes: Uint8Array): OwnedSoundPack | null {
+    return parseOwnedSoundPack(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -190,11 +195,12 @@ export async function installEntitlement(
     switch (bundle.manifest.artifactKind) {
         case 'theme':
         case 'asset_bundle':
-        // Data-delivery artifact kinds whose runtime is wired by their own
-        // feature surface (soundboard, stream overlays).
-        // They cache the verified bundle here; the consuming feature reads it.
-        case 'sound_pack':
+        // Stream assets cache their verified bundle for the streaming surface.
         case 'stream_asset':
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'sound_pack':
+            record.soundPack = decodeSoundPack(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'vault_item':

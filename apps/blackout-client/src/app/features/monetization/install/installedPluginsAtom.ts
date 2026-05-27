@@ -6,6 +6,7 @@ import type { OwnedCosmetic } from '../../profile/cosmeticTypes';
 import type { OwnedTemplate } from '../../streaming/kits/communityTemplate';
 import type { OwnedAiPersona, OwnedAutomationRecipe } from '../../aiden/aiGoods';
 import type { OwnedVaultGrant } from '../../vault/vaultGoods';
+import type { OwnedSoundPack } from '../../audio/soundPackGoods';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -44,6 +45,8 @@ export interface InstalledPluginRecord {
     automationRecipe?: OwnedAutomationRecipe;
     /** For `vault_item` entitlements: the decoded, sanitized vault grant. */
     vaultGrant?: OwnedVaultGrant;
+    /** For `sound_pack` entitlements: the decoded, sanitized audio pack. */
+    soundPack?: OwnedSoundPack;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';
