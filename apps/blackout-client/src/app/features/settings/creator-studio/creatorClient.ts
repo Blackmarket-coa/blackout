@@ -8,7 +8,18 @@ export interface CreatorProviderSummary {
     capabilities: string[];
 }
 
-export type CreatorArtifactKind = 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+export type CreatorArtifactKind =
+    | 'theme'
+    | 'manifest_plugin'
+    | 'code_plugin'
+    | 'asset_bundle'
+    | 'profile_cosmetic'
+    | 'sound_pack'
+    | 'community_template'
+    | 'stream_asset'
+    | 'vault_item'
+    | 'ai_persona'
+    | 'automation_recipe';
 
 export type CreatorListingStatus =
     | 'draft'

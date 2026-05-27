@@ -378,6 +378,32 @@ export interface TwitchExtensionPanelRecord {
   updatedAt: string;
 }
 
+/**
+ * A creator's marketplace listing record (metadata mirror of the core
+ * `CreatorListing`). The artifact payload itself is not stored here — it is
+ * handed to the marketplace provider at create time; this table only tracks the
+ * sellable listing's lifecycle so it survives restarts.
+ */
+export interface CreatorListingRecord {
+  id: UUID;
+  providerId: string;
+  providerListingId: string | null;
+  sellerUserId: UUID;
+  artifactKind: string;
+  category: string;
+  entitlementKind: string;
+  title: string;
+  description: string;
+  priceCents: number;
+  currency: string;
+  status: string;
+  feeBpsOverride?: number;
+  publicSlug: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ObsWsPasswordRecord {
   id: UUID;
   blackoutUserId: UUID;
@@ -732,7 +758,12 @@ export type MarketplaceEntitlementKind =
   | 'post_unlock'
   | 'event_ticket'
   | 'role_grant'
-  | 'channel_access';
+  | 'channel_access'
+  | 'profile_cosmetic'
+  | 'sound_pack'
+  | 'community_template'
+  | 'stream_asset'
+  | 'vault_item';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;

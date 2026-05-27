@@ -53,6 +53,7 @@ import type {
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
   TwitchExtensionPanelRecord,
+  CreatorListingRecord,
   ChannelPointsRewardRecord,
   ChannelPointsLedgerRecord,
   ObsWsPasswordRecord,
@@ -154,6 +155,7 @@ type PersistedState = {
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
   twitchExtensionPanels: TwitchExtensionPanelRecord[];
+  creatorListings: CreatorListingRecord[];
   channelPointsRewards: ChannelPointsRewardRecord[];
   channelPointsLedger: ChannelPointsLedgerRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
@@ -251,6 +253,8 @@ class InMemoryDb {
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
   twitchExtensionPanels = new Map<string, TwitchExtensionPanelRecord>();
+  /** Keyed by listing id. */
+  creatorListings = new Map<string, CreatorListingRecord>();
   channelPointsRewards = new Map<string, ChannelPointsRewardRecord>();
   channelPointsLedger = new Map<string, ChannelPointsLedgerRecord>();
   /** Coalition spatial map pins, keyed by item id. */
@@ -1251,6 +1255,44 @@ class InMemoryDb {
 
   deleteTwitchExtensionPanel(id: string): boolean {
     return this.twitchExtensionPanels.delete(id);
+  }
+
+  // --- creator listings (marketplace seller catalog) ---
+
+  createCreatorListing(
+    input: Omit<CreatorListingRecord, 'createdAt' | 'updatedAt'>,
+  ): CreatorListingRecord {
+    const now = nowIso();
+    const record: CreatorListingRecord = { ...input, createdAt: now, updatedAt: now };
+    this.creatorListings.set(record.id, record);
+    return record;
+  }
+
+  getCreatorListing(id: string): CreatorListingRecord | undefined {
+    return this.creatorListings.get(id);
+  }
+
+  listCreatorListingsForSeller(sellerUserId: string): CreatorListingRecord[] {
+    return [...this.creatorListings.values()].filter(
+      (row) => row.sellerUserId === sellerUserId,
+    );
+  }
+
+  updateCreatorListing(
+    id: string,
+    patch: Partial<
+      Pick<CreatorListingRecord, 'status' | 'providerListingId' | 'publicSlug' | 'publishedAt'>
+    >,
+  ): CreatorListingRecord | undefined {
+    const existing = this.creatorListings.get(id);
+    if (!existing) return undefined;
+    const updated: CreatorListingRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.creatorListings.set(id, updated);
+    return updated;
+  }
+
+  deleteCreatorListing(id: string): boolean {
+    return this.creatorListings.delete(id);
   }
 
   // --- channel points (engagement economy) ---
@@ -2866,6 +2908,9 @@ export class FileBackedDb extends InMemoryDb {
     this.twitchExtensionPanels = new Map(
       (parsed.twitchExtensionPanels ?? []).map((row) => [row.id, row]),
     );
+    this.creatorListings = new Map(
+      (parsed.creatorListings ?? []).map((row) => [row.id, row]),
+    );
     this.channelPointsRewards = new Map(
       (parsed.channelPointsRewards ?? []).map((row) => [row.id, row]),
     );
@@ -3016,6 +3061,7 @@ export class FileBackedDb extends InMemoryDb {
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
       twitchExtensionPanels: [...this.twitchExtensionPanels.values()],
+      creatorListings: [...this.creatorListings.values()],
       channelPointsRewards: [...this.channelPointsRewards.values()],
       channelPointsLedger: [...this.channelPointsLedger.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],

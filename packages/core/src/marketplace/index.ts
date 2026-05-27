@@ -1,5 +1,6 @@
 export * from './provider';
 export * from './schema';
+export * from './categories';
 export * from './fees';
 export * from './domain';
 export * from './installation';
