@@ -34,7 +34,9 @@ if [[ "${missing}" -ne 0 ]]; then
 fi
 
 # Check that tracker docs still reference the upstream matrix and this validator.
-rg -n "blackout_upstream_feature_matrix" docs/project_completion_tracker.md >/dev/null
-rg -n "validate_tracker_evidence.sh" docs/project_completion_tracker.md docs/repo_remaining_work_ai_prompts.md >/dev/null
+# Use grep (not rg) so the gate doesn't depend on ripgrep being installed on
+# the CI runner.
+grep -qF "blackout_upstream_feature_matrix" docs/project_completion_tracker.md
+grep -qF "validate_tracker_evidence.sh" docs/project_completion_tracker.md docs/repo_remaining_work_ai_prompts.md
 
 echo "tracker evidence validation passed"
