@@ -155,6 +155,15 @@ export type DeliverOutcome =
   | { kind: 'empty_payload' }
   | { kind: 'matrix_failed'; status?: number; reason?: string };
 
+const formatEmbedColor = (color: number): string =>
+  `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
+
+const formatEmbedTimestamp = (timestamp: string): string => {
+  const ms = Date.parse(timestamp);
+  if (Number.isNaN(ms)) return '';
+  return new Date(ms).toUTCString();
+};
+
 const renderEmbedAsText = (
   embed: NonNullable<DiscordExecutePayload['embeds']>[number],
 ): string => {
@@ -168,7 +177,19 @@ const renderEmbedAsText = (
       if (f?.name && f?.value) parts.push(`${f.name}: ${f.value}`);
     }
   }
-  if (embed.footer?.text) parts.push(`— ${embed.footer.text}`);
+  // Footer, timestamp and color are the embed's metadata row. Matrix text has
+  // no native embed accent colour, so we surface it as a hex tag alongside the
+  // footer/timestamp rather than dropping it.
+  const meta: string[] = [];
+  if (embed.footer?.text) meta.push(embed.footer.text);
+  if (embed.timestamp) {
+    const ts = formatEmbedTimestamp(embed.timestamp);
+    if (ts) meta.push(ts);
+  }
+  if (typeof embed.color === 'number' && Number.isFinite(embed.color)) {
+    meta.push(formatEmbedColor(embed.color));
+  }
+  if (meta.length) parts.push(`— ${meta.join(' • ')}`);
   return parts.join('\n').trim();
 };
 
