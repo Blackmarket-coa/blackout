@@ -142,3 +142,111 @@ test('GET /v1/streaming/streams allows authenticated users via the minted stream
     });
     assert.equal(response.status, 200);
 });
+
+// ----------------------------- discovery / browse -----------------------------
+
+const seedWithCategory = (
+    id: string,
+    category: string,
+    opts: { title?: string; tags?: string[]; state?: 'live' | 'offline' } = {},
+) =>
+    db.upsertStream({
+        id,
+        creatorId: 'discovery-creator',
+        state: opts.state ?? 'live',
+        title: opts.title ?? `Stream ${id}`,
+        category,
+        tags: opts.tags ?? [],
+        visibility: 'public',
+        allowedSubscriberIds: [],
+        latencyProfile: 'normal',
+    });
+
+test('GET /v1/streaming/streams filters by category, tags, and search', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedWithCategory('disc-gaming-1', 'DiscGaming', { title: 'Speedrun marathon', tags: ['fps', 'co-op'] });
+    seedWithCategory('disc-gaming-2', 'DiscGaming', { title: 'Chill puzzle night', tags: ['puzzle'] });
+    seedWithCategory('disc-music-1', 'DiscMusic', { title: 'Live jazz set', tags: ['jazz'] });
+
+    const byCategory = await app.request('/v1/streaming/streams?category=DiscGaming', { headers });
+    const catIds = ((await byCategory.json()) as { items: { id: string }[] }).items.map((i) => i.id);
+    assert.ok(catIds.includes('disc-gaming-1') && catIds.includes('disc-gaming-2'));
+    assert.equal(catIds.includes('disc-music-1'), false);
+
+    const byTag = await app.request('/v1/streaming/streams?tags=puzzle', { headers });
+    const tagIds = ((await byTag.json()) as { items: { id: string }[] }).items.map((i) => i.id);
+    assert.deepEqual(tagIds.filter((id) => id.startsWith('disc-')), ['disc-gaming-2']);
+
+    const bySearch = await app.request('/v1/streaming/streams?search=jazz', { headers });
+    const searchIds = ((await bySearch.json()) as { items: { id: string }[] }).items.map((i) => i.id);
+    assert.deepEqual(searchIds.filter((id) => id.startsWith('disc-')), ['disc-music-1']);
+});
+
+test('GET /v1/streaming/streams?sort=title orders alphabetically', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedWithCategory('sort-z', 'SortCat', { title: 'Zebra stream' });
+    seedWithCategory('sort-a', 'SortCat', { title: 'Aardvark stream' });
+
+    const res = await app.request('/v1/streaming/streams?category=SortCat&sort=title', { headers });
+    const titles = ((await res.json()) as { items: { title: string }[] }).items.map((i) => i.title);
+    assert.deepEqual(titles, ['Aardvark stream', 'Zebra stream']);
+});
+
+test('GET /v1/streaming/categories reports distinct categories with live counts', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedWithCategory('cat-live-1', 'CatCountX', { state: 'live' });
+    seedWithCategory('cat-live-2', 'CatCountX', { state: 'live' });
+    seedWithCategory('cat-off-1', 'CatCountX', { state: 'offline' });
+
+    const res = await app.request('/v1/streaming/categories', { headers });
+    assert.equal(res.status, 200);
+    const cats = ((await res.json()) as { categories: { name: string; total: number; live: number }[] })
+        .categories;
+    const x = cats.find((cat) => cat.name === 'CatCountX');
+    assert.ok(x, 'CatCountX category present');
+    assert.equal(x?.total, 3);
+    assert.equal(x?.live, 2);
+});
+
+// ----------------------------- VODs (past broadcasts) -----------------------------
+
+test('GET /v1/streaming/streams/:id/vods lists replayable sessions newest-first', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedStream('vod-stream', { state: 'offline', visibility: 'public' });
+    // Older ended session with a replay.
+    db.createStreamSession({ id: 'vod-sess-old', streamId: 'vod-stream', startedAt: '2026-05-01T10:00:00Z' });
+    db.endStreamSession('vod-sess-old', 'mxc://vod/old');
+    // Newer ended session with a replay (duration 1h).
+    db.createStreamSession({ id: 'vod-sess-new', streamId: 'vod-stream', startedAt: '2026-05-10T12:00:00Z' });
+    db.endStreamSession('vod-sess-new', 'mxc://vod/new');
+    // A session with NO replay pointer — must be excluded.
+    db.createStreamSession({ id: 'vod-sess-none', streamId: 'vod-stream', startedAt: '2026-05-12T09:00:00Z' });
+
+    const res = await app.request('/v1/streaming/streams/vod-stream/vods', { headers });
+    assert.equal(res.status, 200);
+    const items = ((await res.json()) as { items: { id: string; replayPointer?: string }[] }).items;
+    const ids = items.map((i) => i.id);
+    // Newest-first, replay-only.
+    assert.deepEqual(ids, ['vod-sess-new', 'vod-sess-old']);
+    assert.equal(items[0].replayPointer, 'mxc://vod/new');
+});
+
+test('GET /v1/streaming/streams/:id/vods 404s for a private/missing stream', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedStream('vod-private', { state: 'offline', visibility: 'private' });
+    const priv = await app.request('/v1/streaming/streams/vod-private/vods', { headers });
+    assert.equal(priv.status, 404);
+
+    const missing = await app.request('/v1/streaming/streams/vod-nope/vods', { headers });
+    assert.equal(missing.status, 404);
+});

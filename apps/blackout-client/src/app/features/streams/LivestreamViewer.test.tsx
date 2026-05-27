@@ -13,6 +13,8 @@ vi.mock('./streamsClient', () => ({
     fetchStream: (...args: unknown[]) => fetchStreamMock(...args),
     fetchOwncastOrigin: (...args: unknown[]) => fetchOwncastOriginMock(...args),
     buildOwncastPlaylistUrl: (origin: string) => `${origin}/hls/stream.m3u8`,
+    // The viewer always mounts the lazy StreamVods panel, which calls this.
+    fetchStreamVods: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 vi.mock('../monetization/components/TipButton', () => ({

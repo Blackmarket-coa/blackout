@@ -97,21 +97,88 @@ const appendQuery = (path: string, params: Record<string, string | undefined>): 
     return qs ? `${path}?${qs}` : path;
 };
 
+export type StreamSort = 'live' | 'recent' | 'title';
+
+export interface ListStreamsOptions {
+    state?: StreamState;
+    creatorId?: string;
+    /** Exact category match. */
+    category?: string;
+    /** Match streams carrying ANY of these tags. */
+    tags?: string[];
+    /** Case-insensitive substring on title. */
+    search?: string;
+    /** Result ordering (default 'live': live-first then recency). */
+    sort?: StreamSort;
+    limit?: number;
+}
+
 /**
- * Wraps `GET /v1/streaming/streams` — list public streams. Default
- * sort is live-first then by recency. Capped server-side at 200.
+ * Wraps `GET /v1/streaming/streams` — list/browse public streams with
+ * optional category/tag/search filters and sort. Default sort is
+ * live-first then by recency. Capped server-side at 200.
  */
 export const listStreams = (
-    options: { state?: StreamState; creatorId?: string; limit?: number } = {},
+    options: ListStreamsOptions = {},
     token: string | null = readBlackoutApiToken()
 ): Promise<ListStreamsResponse> => {
     const path = appendQuery(`${STREAMING_BASE}/streams`, {
         state: options.state,
         creatorId: options.creatorId,
+        category: options.category,
+        tags: options.tags && options.tags.length > 0 ? options.tags.join(',') : undefined,
+        search: options.search,
+        sort: options.sort,
         limit: options.limit !== undefined ? String(options.limit) : undefined,
     });
     return callJson<ListStreamsResponse>('GET', path, token);
 };
+
+export interface StreamCategory {
+    name: string;
+    total: number;
+    live: number;
+}
+
+export interface ListCategoriesResponse {
+    categories: StreamCategory[];
+}
+
+/**
+ * Wraps `GET /v1/streaming/categories` — distinct public-stream
+ * categories with live counts, for the browse surface's category chips.
+ */
+export const fetchStreamCategories = (
+    token: string | null = readBlackoutApiToken()
+): Promise<ListCategoriesResponse> =>
+    callJson<ListCategoriesResponse>('GET', `${STREAMING_BASE}/categories`, token);
+
+export interface StreamVod {
+    id: string;
+    streamId: string;
+    startedAt: string;
+    endedAt?: string;
+    replayPointer?: string;
+    durationSeconds?: number;
+}
+
+export interface ListVodsResponse {
+    items: StreamVod[];
+}
+
+/**
+ * Wraps `GET /v1/streaming/streams/:streamId/vods` — past broadcast
+ * sessions for a stream that produced a replay, newest first.
+ */
+export const fetchStreamVods = (
+    streamId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ListVodsResponse> =>
+    callJson<ListVodsResponse>(
+        'GET',
+        `${STREAMING_BASE}/streams/${encodeURIComponent(streamId)}/vods`,
+        token
+    );
 
 /** Wraps `GET /v1/streaming/streams/:streamId`. */
 export const fetchStream = (

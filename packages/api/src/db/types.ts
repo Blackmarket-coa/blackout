@@ -318,6 +318,66 @@ export type OutboundEventType =
   | 'hypetrain.started'
   | 'hypetrain.ended';
 
+/**
+ * A creator-defined channel-points reward viewers redeem with points earned on
+ * that creator's channel (the Twitch channel-points equivalent, Blackout-native).
+ */
+export interface ChannelPointsRewardRecord {
+  id: UUID;
+  /** The creator/channel that owns the reward. */
+  creatorId: UUID;
+  title: string;
+  /** Points required to redeem. */
+  cost: number;
+  /** Optional prompt shown to the viewer (e.g. "name your song"). */
+  prompt?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Append-only channel-points ledger. A viewer's balance on a channel is the
+ * sum of `pointsDelta` over all rows for (channelId, userId) — earns are
+ * positive, redemptions negative, refunds positive. No denormalized balance
+ * table (mirrors the community-boost read-side aggregation pattern).
+ */
+export interface ChannelPointsLedgerRecord {
+  id: UUID;
+  /** The creator/channel the points belong to. */
+  channelId: UUID;
+  /** The viewer earning/spending. */
+  userId: UUID;
+  /** Signed: positive grant/refund, negative redemption. */
+  pointsDelta: number;
+  reason: 'grant' | 'redeem' | 'refund';
+  /** Set on redeem/refund entries. */
+  rewardId?: UUID;
+  /** Reward title snapshot for redemption display. */
+  rewardTitle?: string;
+  /** Viewer's free-text input supplied at redemption. */
+  userInput?: string;
+  createdAt: string;
+}
+
+/**
+ * A Twitch-extension-compat panel a creator has registered. Surfaces on all of
+ * the creator's streams via the stream response `extensions[]`, and is rendered
+ * in the livestream viewer's panel stack (see PR #756's ExtensionFrame).
+ * `bundleUrl` is the extension JS the client sandbox fetches; `capabilities`
+ * are the granted `twitch.ext.*` scopes.
+ */
+export interface TwitchExtensionPanelRecord {
+  id: UUID;
+  creatorId: UUID;
+  label: string;
+  bundleUrl: string;
+  capabilities: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ObsWsPasswordRecord {
   id: UUID;
   blackoutUserId: UUID;

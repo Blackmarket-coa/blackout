@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
-import type { ClipRecord } from '../db/types';
+import type { ClipRecord, StreamRecord, TwitchExtensionPanelRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
 import { clipWriteRateLimit } from '../middleware/rate-limit';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
@@ -83,6 +83,35 @@ const clipUpdateSchema = z
     durationSeconds: z.number().int().nonnegative().optional(),
     visibility: z.enum(['public', 'private', 'member_only']).optional(),
     tags: z.array(z.string()).optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+// Twitch-extension-compat registry. Capabilities are constrained to the
+// `twitch.ext.*` scopes the host sandbox understands (see blackout-protocol
+// PluginCapability + the client ExtensionFrame). bundleUrl must be https
+// because the client sandbox fetches it.
+const EXTENSION_CAPABILITIES = [
+  'twitch.ext.identityShare',
+  'twitch.ext.subscriptionStatus',
+] as const;
+const httpsBundleUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((u) => u.startsWith('https://'), { message: 'bundleUrl must be an https URL' });
+const extensionCreateSchema = z.object({
+  label: z.string().min(1).max(120),
+  bundleUrl: httpsBundleUrl,
+  capabilities: z.array(z.enum(EXTENSION_CAPABILITIES)).max(8).optional(),
+});
+const extensionUpdateSchema = z
+  .object({
+    label: z.string().min(1).max(120).optional(),
+    bundleUrl: httpsBundleUrl.optional(),
+    capabilities: z.array(z.enum(EXTENSION_CAPABILITIES)).max(8).optional(),
+    isActive: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: 'At least one field must be provided',
@@ -246,10 +275,62 @@ function createStreamingRouter() {
     return c.json(updated);
   });
 
-  // GET /v1/streaming/streams — list streams. Lightweight directory
-  // surface used by the AppShell `/live` route. Filters supported:
+  const streamToJson = (stream: StreamRecord) => ({
+    id: stream.id,
+    creatorId: stream.creatorId,
+    state: stream.state,
+    title: stream.title,
+    category: stream.category,
+    tags: stream.tags,
+    visibility: stream.visibility,
+    latencyProfile: stream.latencyProfile,
+    replayPointer: stream.replayPointer,
+    denId: stream.denId,
+    // Active Twitch-compat extension panels the creator has registered; the
+    // viewer renders these in its sandboxed panel stack.
+    extensions: db
+      .listTwitchExtensionPanelsForCreator(stream.creatorId)
+      .filter((panel) => panel.isActive)
+      .map((panel) => ({
+        id: panel.id,
+        label: panel.label,
+        bundleUrl: panel.bundleUrl,
+        capabilities: panel.capabilities,
+      })),
+    updatedAt: stream.updatedAt,
+  });
+
+  // GET /v1/streaming/categories — distinct categories across public
+  // streams with their live counts, for the browse surface's category
+  // chips. Sorted by live count (desc), then name.
+  streaming.get('/categories', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const counts = new Map<string, { total: number; live: number }>();
+    for (const stream of db.listAllStreams()) {
+      if (stream.visibility !== 'public') continue;
+      const name = stream.category?.trim();
+      if (!name) continue;
+      const entry = counts.get(name) ?? { total: 0, live: 0 };
+      entry.total += 1;
+      if (stream.state === 'live') entry.live += 1;
+      counts.set(name, entry);
+    }
+    const categories = [...counts.entries()]
+      .map(([name, { total, live }]) => ({ name, total, live }))
+      .sort((a, b) => (b.live !== a.live ? b.live - a.live : a.name.localeCompare(b.name)));
+    return c.json({ categories });
+  });
+
+  // GET /v1/streaming/streams — list streams. Directory + browse surface
+  // used by the AppShell `/live` and `/explore` routes. Filters supported:
   //   - state=live|offline (default: any)
   //   - creatorId (defaults to "any")
+  //   - category (exact category match)
+  //   - tags (comma-separated; matches streams carrying ANY of the tags)
+  //   - search (case-insensitive substring on title)
+  //   - sort=live|recent|title (default: live — live-first then recency)
   //   - limit (1..200, default 50)
   // Visibility-gated: only streams marked `public` are returned to
   // unauthenticated readers; non-public streams require the requester
@@ -262,6 +343,13 @@ function createStreamingRouter() {
 
     const stateParam = c.req.query('state');
     const creatorIdFilter = c.req.query('creatorId');
+    const categoryFilter = c.req.query('category')?.trim() || null;
+    const searchFilter = c.req.query('search')?.trim().toLowerCase() || null;
+    const sortParam = c.req.query('sort');
+    const tagFilters = (c.req.query('tags') ?? '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0);
     const limitRaw = c.req.query('limit');
     const limit = (() => {
       if (!limitRaw) return 50;
@@ -271,33 +359,32 @@ function createStreamingRouter() {
     })();
 
     const filterState = stateParam === 'live' || stateParam === 'offline' ? stateParam : null;
+    const sortMode = sortParam === 'recent' || sortParam === 'title' ? sortParam : 'live';
     const all = db.listAllStreams();
 
     const items = all
       .filter((stream) => stream.visibility === 'public')
       .filter((stream) => (filterState ? stream.state === filterState : true))
       .filter((stream) => (creatorIdFilter ? stream.creatorId === creatorIdFilter : true))
+      .filter((stream) => (categoryFilter ? stream.category === categoryFilter : true))
+      .filter((stream) =>
+        tagFilters.length === 0
+          ? true
+          : stream.tags.some((tag) => tagFilters.includes(tag.toLowerCase())),
+      )
+      .filter((stream) =>
+        searchFilter ? stream.title.toLowerCase().includes(searchFilter) : true,
+      )
       .sort((a, b) => {
+        if (sortMode === 'title') return a.title.localeCompare(b.title);
+        if (sortMode === 'recent') return b.updatedAt.localeCompare(a.updatedAt);
+        // 'live': live-first, then recency.
         if (a.state !== b.state) return a.state === 'live' ? -1 : 1;
         return b.updatedAt.localeCompare(a.updatedAt);
       })
       .slice(0, limit);
 
-    return c.json({
-      items: items.map((stream) => ({
-        id: stream.id,
-        creatorId: stream.creatorId,
-        state: stream.state,
-        title: stream.title,
-        category: stream.category,
-        tags: stream.tags,
-        visibility: stream.visibility,
-        latencyProfile: stream.latencyProfile,
-        replayPointer: stream.replayPointer,
-        denId: stream.denId,
-        updatedAt: stream.updatedAt,
-      })),
-    });
+    return c.json({ items: items.map(streamToJson) });
   });
 
   // GET /v1/streaming/streams/:streamId — single stream metadata
@@ -314,19 +401,115 @@ function createStreamingRouter() {
       return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
     }
 
+    return c.json(streamToJson(stream));
+  });
+
+  // GET /v1/streaming/streams/:streamId/vods — public VOD list for a stream:
+  // past broadcast sessions that produced a replay (replayPointer set),
+  // newest first. Distinct from the creator-private `/sessions` operational
+  // history; this is the viewer-facing "past broadcasts" surface and mirrors
+  // the single-stream visibility gating (404 on missing/private).
+  streaming.get('/streams/:streamId/vods', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const streamId = c.req.param('streamId');
+    const stream = db.getStream(streamId);
+    if (!stream || stream.visibility === 'private') {
+      return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
+    }
+
+    const vods = db
+      .listStreamSessions(streamId)
+      .filter((session) => Boolean(session.replayPointer))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .map((session) => {
+        const durationSeconds =
+          session.endedAt
+            ? Math.max(0, Math.round((Date.parse(session.endedAt) - Date.parse(session.startedAt)) / 1000))
+            : undefined;
+        return {
+          id: session.id,
+          streamId: session.streamId,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          replayPointer: session.replayPointer,
+          durationSeconds,
+        };
+      });
+    return c.json({ items: vods });
+  });
+
+  // --- Twitch extension registry (creator-owned) ---
+  // Panels a creator registers surface on all of their streams via the stream
+  // response `extensions[]`. Writes use the streaming.write capability and are
+  // scoped to the calling creator (a creator's id is their user id).
+
+  const panelToJson = (panel: TwitchExtensionPanelRecord) => ({
+    id: panel.id,
+    creatorId: panel.creatorId,
+    label: panel.label,
+    bundleUrl: panel.bundleUrl,
+    capabilities: panel.capabilities,
+    isActive: panel.isActive,
+    createdAt: panel.createdAt,
+    updatedAt: panel.updatedAt,
+  });
+
+  streaming.get('/extensions', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
     return c.json({
-      id: stream.id,
-      creatorId: stream.creatorId,
-      state: stream.state,
-      title: stream.title,
-      category: stream.category,
-      tags: stream.tags,
-      visibility: stream.visibility,
-      latencyProfile: stream.latencyProfile,
-      replayPointer: stream.replayPointer,
-      denId: stream.denId,
-      updatedAt: stream.updatedAt,
+      items: db.listTwitchExtensionPanelsForCreator(creatorId).map(panelToJson),
     });
+  });
+
+  streaming.post('/extensions', async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const parsed = await readJsonBody(c, extensionCreateSchema);
+    if (parsed instanceof Response) return parsed;
+    const panel = db.createTwitchExtensionPanel({
+      id: crypto.randomUUID(),
+      creatorId,
+      label: parsed.label,
+      bundleUrl: parsed.bundleUrl,
+      capabilities: parsed.capabilities ?? [],
+      isActive: true,
+    });
+    return c.json(panelToJson(panel), 201);
+  });
+
+  streaming.patch('/extensions/:panelId', async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const panelId = c.req.param('panelId');
+    const existing = db.getTwitchExtensionPanel(panelId);
+    if (!existing) return c.json({ code: 'not_found', message: 'Extension not found' }, 404);
+    if (existing.creatorId !== creatorId) return ownershipForbidden(c);
+    const parsed = await readJsonBody(c, extensionUpdateSchema);
+    if (parsed instanceof Response) return parsed;
+    const updated = db.updateTwitchExtensionPanel(panelId, parsed);
+    return c.json(panelToJson(updated!));
+  });
+
+  streaming.delete('/extensions/:panelId', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const panelId = c.req.param('panelId');
+    const existing = db.getTwitchExtensionPanel(panelId);
+    if (!existing) return c.json({ code: 'not_found', message: 'Extension not found' }, 404);
+    if (existing.creatorId !== creatorId) return ownershipForbidden(c);
+    db.deleteTwitchExtensionPanel(panelId);
+    return c.json({ ok: true });
   });
 
   const clipToJson = (clip: ClipRecord) => ({
