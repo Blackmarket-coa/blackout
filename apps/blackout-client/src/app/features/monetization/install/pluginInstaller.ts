@@ -16,6 +16,12 @@ import { mountSandbox, unmountSandbox } from './sandbox/sandboxRegistry';
 import { verifySignedBundle } from './pluginSignature';
 import { parseOwnedCosmetic, type OwnedCosmetic } from '../../profile/cosmeticTypes';
 import { parseOwnedTemplate, type OwnedTemplate } from '../../streaming/kits/communityTemplate';
+import {
+    parseOwnedAiPersona,
+    parseOwnedAutomationRecipe,
+    type OwnedAiPersona,
+    type OwnedAutomationRecipe,
+} from '../../aiden/aiGoods';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -72,6 +78,14 @@ function decodeCosmetic(bundleBytes: Uint8Array): OwnedCosmetic | null {
 
 function decodeTemplate(bundleBytes: Uint8Array): OwnedTemplate | null {
     return parseOwnedTemplate(decodeBundlePayload(bundleBytes));
+}
+
+function decodeAiPersona(bundleBytes: Uint8Array): OwnedAiPersona | null {
+    return parseOwnedAiPersona(decodeBundlePayload(bundleBytes));
+}
+
+function decodeAutomationRecipe(bundleBytes: Uint8Array): OwnedAutomationRecipe | null {
+    return parseOwnedAutomationRecipe(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -172,13 +186,11 @@ export async function installEntitlement(
         case 'theme':
         case 'asset_bundle':
         // Data-delivery artifact kinds whose runtime is wired by their own
-        // feature surface (soundboard, stream overlays, vault, AI).
+        // feature surface (soundboard, stream overlays, vault).
         // They cache the verified bundle here; the consuming feature reads it.
         case 'sound_pack':
         case 'stream_asset':
         case 'vault_item':
-        case 'ai_persona':
-        case 'automation_recipe':
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'profile_cosmetic':
@@ -187,6 +199,14 @@ export async function installEntitlement(
             break;
         case 'community_template':
             record.template = decodeTemplate(bundleBytes) ?? undefined;
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'ai_persona':
+            record.aiPersona = decodeAiPersona(bundleBytes) ?? undefined;
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'automation_recipe':
+            record.automationRecipe = decodeAutomationRecipe(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'manifest_plugin':

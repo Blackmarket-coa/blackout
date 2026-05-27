@@ -4,6 +4,7 @@ import type { InstallScope } from '@blackout/core';
 import type { PluginCapability, PluginManifest } from '@blackout/sdk';
 import type { OwnedCosmetic } from '../../profile/cosmeticTypes';
 import type { OwnedTemplate } from '../../streaming/kits/communityTemplate';
+import type { OwnedAiPersona, OwnedAutomationRecipe } from '../../aiden/aiGoods';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -36,6 +37,10 @@ export interface InstalledPluginRecord {
     cosmetic?: OwnedCosmetic;
     /** For `community_template` entitlements: the decoded, sanitized template. */
     template?: OwnedTemplate;
+    /** For `ai_persona` entitlements: the decoded, sanitized persona. */
+    aiPersona?: OwnedAiPersona;
+    /** For `automation_recipe` entitlements: the decoded, sanitized recipe. */
+    automationRecipe?: OwnedAutomationRecipe;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';
