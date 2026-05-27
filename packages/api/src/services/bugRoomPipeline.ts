@@ -327,13 +327,32 @@ const EMPTY_MATRIX_LEG: MatrixLeg = {
   error: null,
 };
 
+// The sentinel domain `readBugRoomConfig` falls back to when neither
+// MATRIX_HOMESERVER_DOMAIN nor an explicit BUG_REPORT_MATRIX_ROOM_ALIAS is set.
+const DEFAULT_HOMESERVER_DOMAIN = 'blackout.local';
+
+// When the alias is only on the `blackout.local` default (i.e. the operator
+// configured no real domain), derive the homeserver's actual server name from
+// the bot's MXID. Otherwise that default alias never resolves and every report
+// re-creates / fails against the wrong domain.
+const effectiveRoomAlias = async (mx: MatrixPoster, cfg: BugRoomConfig): Promise<string> => {
+  const colon = cfg.roomAlias.indexOf(':');
+  if (colon === -1) return cfg.roomAlias;
+  const domain = cfg.roomAlias.slice(colon + 1);
+  if (domain !== DEFAULT_HOMESERVER_DOMAIN) return cfg.roomAlias;
+  const botDomain = (await mx.botUserId())?.split(':')[1];
+  if (!botDomain) return cfg.roomAlias;
+  return `${cfg.roomAlias.slice(0, colon)}:${botDomain}`;
+};
+
 // Resolve the target room, self-healing a missing alias by creating #bugs.
 const resolveOrCreateRoom = async (
   mx: MatrixPoster,
   cfg: BugRoomConfig,
 ): Promise<{ roomId: string } | { devNoop: true } | { error: string }> => {
   if (cfg.roomId) return { roomId: cfg.roomId };
-  const resolved = await mx.resolveRoomAlias(cfg.roomAlias);
+  const alias = await effectiveRoomAlias(mx, cfg);
+  const resolved = await mx.resolveRoomAlias(alias);
   if (resolved.ok && resolved.roomId) return { roomId: resolved.roomId };
   if (resolved.reason === 'matrix_not_configured') {
     log.info('bug_room.noop', { reason: 'matrix_not_configured' });
@@ -341,7 +360,7 @@ const resolveOrCreateRoom = async (
   }
   if (resolved.reason === 'alias_not_found') {
     const created = await mx.createRoom({
-      aliasLocalpart: aliasLocalpart(cfg.roomAlias),
+      aliasLocalpart: aliasLocalpart(alias),
       name: 'Bugs',
       topic: 'User-reported bugs (auto-provisioned)',
     });

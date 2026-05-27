@@ -103,10 +103,38 @@ const resolveRoomSet = (): ContributorRoom[] => {
   );
 };
 
+export interface ProvisioningOptions {
+  /** Injected for tests; defaults to a real timer-backed sleep. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Total attempts (incl. the first) for a rate-limited call. */
+  maxAttempts?: number;
+}
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Synapse rate-limits bursts of room creates / state events with HTTP 429.
+ * Retry those with exponential backoff so a single run converges instead of
+ * leaving rooms half-provisioned. Non-429 failures return immediately.
+ */
+const withRetry = async <T extends { ok: boolean; status?: number }>(
+  op: () => Promise<T>,
+  sleep: (ms: number) => Promise<void>,
+  maxAttempts: number,
+): Promise<T> => {
+  let result = await op();
+  for (let attempt = 1; attempt < maxAttempts && !result.ok && result.status === 429; attempt += 1) {
+    await sleep(Math.min(500 * 2 ** (attempt - 1), 8000));
+    result = await op();
+  }
+  return result;
+};
+
 /**
  * (Re)stamp the den structure on an existing room: classification, the
  * space parent↔child link with the canopy, and an open (`invite: 0`) power
- * level. Returns false if any step fails (so the caller can count it).
+ * level. Returns false if any step fails (so the caller can count it). Each
+ * Matrix call is retried on 429.
  */
 const ensureDenStructure = async (
   client: ProvisioningClient,
@@ -114,18 +142,32 @@ const ensureDenStructure = async (
   canopyId: string | null,
   denType: DenType,
   via: string[],
+  sleep: (ms: number) => Promise<void>,
+  maxAttempts: number,
 ): Promise<boolean> => {
   let ok = true;
 
-  const classified = await client.sendStateEvent(roomId, DEN_CLASSIFICATION_STATE_EVENT_TYPE, { denType }, '');
+  const classified = await withRetry(
+    () => client.sendStateEvent(roomId, DEN_CLASSIFICATION_STATE_EVENT_TYPE, { denType }, ''),
+    sleep,
+    maxAttempts,
+  );
   if (!classified.ok) {
     ok = false;
     log.warn('provision_rooms.classify_failed', { roomId, status: classified.status });
   }
 
   if (canopyId) {
-    const parent = await client.sendStateEvent(roomId, SPACE_PARENT_EVENT, { canonical: true, via }, canopyId);
-    const child = await client.sendStateEvent(canopyId, SPACE_CHILD_EVENT, { suggested: false, via }, roomId);
+    const parent = await withRetry(
+      () => client.sendStateEvent(roomId, SPACE_PARENT_EVENT, { canonical: true, via }, canopyId),
+      sleep,
+      maxAttempts,
+    );
+    const child = await withRetry(
+      () => client.sendStateEvent(canopyId, SPACE_CHILD_EVENT, { suggested: false, via }, roomId),
+      sleep,
+      maxAttempts,
+    );
     if (!parent.ok || !child.ok) {
       ok = false;
       log.warn('provision_rooms.link_failed', { roomId, canopyId, parent: parent.status, child: child.status });
@@ -135,10 +177,14 @@ const ensureDenStructure = async (
   // Open invites to all members. We must read the existing power-levels event
   // and merge — writing a partial event would drop the creator's PL100 and
   // strand the room. If it can't be read, skip rather than clobber.
-  const power = await client.getStateEvent(roomId, POWER_LEVELS_EVENT, '');
+  const power = await withRetry(() => client.getStateEvent(roomId, POWER_LEVELS_EVENT, ''), sleep, maxAttempts);
   if (power.ok && power.content) {
     if (power.content.invite !== 0) {
-      const put = await client.sendStateEvent(roomId, POWER_LEVELS_EVENT, { ...power.content, invite: 0 }, '');
+      const put = await withRetry(
+        () => client.sendStateEvent(roomId, POWER_LEVELS_EVENT, { ...power.content, invite: 0 }, ''),
+        sleep,
+        maxAttempts,
+      );
       if (put.ok) {
         log.info('provision_rooms.invite_opened', { roomId });
       } else {
@@ -156,7 +202,10 @@ const ensureDenStructure = async (
 
 export const provisionContributorRooms = async (
   client: ProvisioningClient = matrixClient,
+  opts: ProvisioningOptions = {},
 ): Promise<number> => {
+  const sleep = opts.sleep ?? realSleep;
+  const maxAttempts = opts.maxAttempts ?? 5;
   const domain = await deriveDomain(client);
   if (!domain) {
     log.warn('provision_rooms.not_configured', { reason: 'no_homeserver_domain' });
@@ -176,15 +225,20 @@ export const provisionContributorRooms = async (
   if (canopyId) {
     log.info('provision_rooms.canopy_exists', { alias: canopyAlias, roomId: canopyId });
   } else {
-    const created = await client.createRoom({
-      aliasLocalpart: CANOPY.localpart,
-      name: CANOPY.name,
-      topic: CANOPY.topic,
-      visibility: 'public',
-      preset: 'public_chat',
-      creationContent: { type: 'm.space' },
-      powerLevelOverride: { events_default: 50 },
-    });
+    const created = await withRetry(
+      () =>
+        client.createRoom({
+          aliasLocalpart: CANOPY.localpart,
+          name: CANOPY.name,
+          topic: CANOPY.topic,
+          visibility: 'public',
+          preset: 'public_chat',
+          creationContent: { type: 'm.space' },
+          powerLevelOverride: { events_default: 50 },
+        }),
+      sleep,
+      maxAttempts,
+    );
     if (created.ok && created.roomId) {
       canopyId = created.roomId;
       log.info('provision_rooms.canopy_created', { alias: canopyAlias, roomId: canopyId });
@@ -207,13 +261,18 @@ export const provisionContributorRooms = async (
     if (roomId) {
       log.info('provision_rooms.exists', { alias, roomId });
     } else {
-      const created = await client.createRoom({
-        aliasLocalpart: room.localpart,
-        name: room.name,
-        topic: room.topic,
-        visibility: 'public',
-        preset: 'public_chat',
-      });
+      const created = await withRetry(
+        () =>
+          client.createRoom({
+            aliasLocalpart: room.localpart,
+            name: room.name,
+            topic: room.topic,
+            visibility: 'public',
+            preset: 'public_chat',
+          }),
+        sleep,
+        maxAttempts,
+      );
       if (created.ok && created.roomId) {
         roomId = created.roomId;
         log.info('provision_rooms.created', { alias, roomId });
@@ -224,7 +283,7 @@ export const provisionContributorRooms = async (
       }
     }
 
-    const structured = await ensureDenStructure(client, roomId, canopyId, room.denType, via);
+    const structured = await ensureDenStructure(client, roomId, canopyId, room.denType, via, sleep, maxAttempts);
     if (!structured) failures += 1;
   }
 
