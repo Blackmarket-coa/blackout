@@ -24,6 +24,8 @@ class FakeHomeserver {
   readonly created: Array<{ aliasLocalpart?: string; creationContent?: Record<string, unknown> }> = [];
   readonly sent: SentEvent[] = [];
   botId: string | undefined = BOT;
+  /** When > 0, the next createRoom calls return HTTP 429 (decrementing). */
+  create429Remaining = 0;
   private seq = 0;
 
   /** Pre-create a room (with a default power-levels event unless suppressed). */
@@ -45,6 +47,10 @@ class FakeHomeserver {
       return roomId ? { ok: true, roomId } : { ok: false, reason: 'alias_not_found' };
     },
     createRoom: async (input) => {
+      if (this.create429Remaining > 0) {
+        this.create429Remaining -= 1;
+        return { ok: false, status: 429 };
+      }
       this.created.push({ aliasLocalpart: input.aliasLocalpart, creationContent: input.creationContent });
       const roomId = `!room${(this.seq += 1)}:${DOMAIN}`;
       const state = new Map<string, Record<string, unknown>>();
@@ -161,6 +167,38 @@ test('returns failure when the homeserver domain cannot be determined', async ()
   const failures = await provisionContributorRooms(hs.client);
   assert.equal(failures, 1);
   assert.equal(hs.created.length, 0);
+});
+
+test('retries rate-limited (429) calls with exponential backoff until they succeed', async () => {
+  process.env.CONTRIBUTOR_ROOMS = 'bugs';
+  const hs = new FakeHomeserver();
+  hs.create429Remaining = 2; // canopy create is rejected twice, then succeeds
+  const sleeps: number[] = [];
+
+  const failures = await provisionContributorRooms(hs.client, {
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
+    maxAttempts: 5,
+  });
+
+  assert.equal(failures, 0);
+  assert.ok(hs.aliases.get(`#contributors:${DOMAIN}`), 'canopy is created after retries');
+  assert.deepEqual(sleeps, [500, 1000], 'backoff doubles between the two retries');
+});
+
+test('gives up after maxAttempts on persistent 429 without stranding the run', async () => {
+  process.env.CONTRIBUTOR_ROOMS = 'bugs';
+  const hs = new FakeHomeserver();
+  hs.create429Remaining = 99; // canopy create never recovers within the attempt budget
+
+  const failures = await provisionContributorRooms(hs.client, {
+    sleep: async () => {},
+    maxAttempts: 3,
+  });
+
+  assert.ok(failures >= 1);
+  assert.equal(hs.aliases.get(`#contributors:${DOMAIN}`), undefined, 'canopy not created');
 });
 
 test('default room set provisions all standing contributor rooms', async () => {

@@ -183,6 +183,22 @@ test('resolves the #bugs alias when no room id is configured', async () => {
   assert.equal(harness.created.length, 0);
 });
 
+test('derives the #bugs domain from the bot MXID when only the blackout.local default is set', async () => {
+  const harness = makeMatrix({ botUserId: async () => '@bot:real.example' });
+  // This is the config readBugRoomConfig produces when MATRIX_HOMESERVER_DOMAIN
+  // is unset — the alias would otherwise never resolve against the real server.
+  const cfg: BugRoomConfig = { ...baseConfig, roomId: null, roomAlias: '#bugs:blackout.local' };
+  const out = await run(baseInput, harness, { config: cfg });
+  assert.equal(out.roomId, '!resolved-#bugs:real.example');
+});
+
+test('keeps an explicitly-configured alias domain (no MXID override)', async () => {
+  const harness = makeMatrix({ botUserId: async () => '@bot:real.example' });
+  const cfg: BugRoomConfig = { ...baseConfig, roomId: null, roomAlias: '#bugs:configured.example' };
+  const out = await run(baseInput, harness, { config: cfg });
+  assert.equal(out.roomId, '!resolved-#bugs:configured.example');
+});
+
 test('self-heal: creates #bugs when the alias cannot be resolved, then posts there', async () => {
   const harness = makeMatrix({
     resolveRoomAlias: async () => ({ ok: false, status: 404, reason: 'alias_not_found' }),
