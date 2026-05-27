@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { useAtomValue } from 'jotai';
+import React, { useEffect, useMemo } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { joinedRoomsAtom } from '../../state/rooms';
+import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../state/navigation';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
@@ -9,16 +10,28 @@ import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 export const CommunitiesView = () => {
     const rooms = useAtomValue(joinedRoomsAtom);
     const { navigateRoom, navigateSpace } = useRoomNavigate();
+    const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
+    const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
+
+    // The selection atoms persist across the route swap into discovery. Clear
+    // any stale den on entry so opening a canopy from here can't carry a
+    // previously-open den forward and ping-pong the address bar.
+    useEffect(() => {
+        setSelectedRoomId(null);
+    }, [setSelectedRoomId]);
 
     const joinedSpaces = useMemo(
         () => rooms.filter((room) => room.getType() === 'm.space'),
         [rooms]
     );
 
-    // Open a den through the canopy-resolving navigator so it lands inside its
-    // parent canopy (`/communities/:canopyId/dens/:denId`) instead of as a bare,
-    // canopy-less den.
-    const openSpace = (spaceId: string) => navigateSpace(spaceId);
+    // Select the canopy and clear the den atomically before navigating, so no
+    // competing re-render observes a stale den while we land on the canopy.
+    const openSpace = (spaceId: string) => {
+        setSelectedSpaceId(spaceId);
+        setSelectedRoomId(null);
+        navigateSpace(spaceId);
+    };
     const openRoom = (roomId: string) => navigateRoom(roomId);
 
     return (
