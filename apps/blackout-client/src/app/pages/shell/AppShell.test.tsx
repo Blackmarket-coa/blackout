@@ -223,6 +223,9 @@ describe('AppShell', () => {
     }> = [
         { path: '/direct', mode: 'inbox' },
         { path: '/explore', mode: 'discovery' },
+        { path: '/streaming', mode: 'streaming' },
+        { path: '/coalition', mode: 'coalition' },
+        { path: '/coliseum', mode: 'coliseum' },
     ];
 
     for (const { path, mode } of MODE_RESOLUTION_CASES) {

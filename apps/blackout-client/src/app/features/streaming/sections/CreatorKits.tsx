@@ -1,6 +1,12 @@
 import React, { type CSSProperties, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CREATOR_KITS, type CreatorKit } from '../kits/kitCatalog';
+import {
+    applyCreatorKit,
+    kitAppliedStorageKey,
+    type ApplyStepResult,
+} from '../kits/applyKit';
+import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
 import { HubSection, hubCardStyle, hubGridStyle } from '../components/HubSection';
 
 const kitCardStyle = (active: boolean): CSSProperties => ({
@@ -49,6 +55,200 @@ const linkStyle: CSSProperties = {
     fontWeight: 600,
 };
 
+const applyPanelStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-surface, #0b1220)',
+};
+
+const applyButtonStyle: CSSProperties = {
+    alignSelf: 'flex-start',
+    padding: '8px 16px',
+    borderRadius: 999,
+    border: 'none',
+    background: 'var(--accent-primary, #2EF2C5)',
+    color: '#06231d',
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: 'pointer',
+};
+
+const secondaryButtonStyle: CSSProperties = {
+    padding: '8px 16px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'transparent',
+    color: 'var(--text-primary, #f8fafc)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+};
+
+const warnStyle: CSSProperties = {
+    margin: 0,
+    fontSize: 12,
+    color: 'var(--warning, #f6b73c)',
+};
+
+const statusGlyph: Record<ApplyStepResult['status'], string> = {
+    ok: '✓',
+    skipped: '–',
+    error: '✗',
+};
+
+/** Human-readable preview of what applying a kit will provision. */
+const describeApply = (kit: CreatorKit): string[] => {
+    const spec = kit.apply;
+    if (!spec) return [];
+    const lines: string[] = [];
+    if (spec.profile?.status) lines.push(`Set profile status to “${spec.profile.status.text}”`);
+    for (const den of spec.dens ?? []) lines.push(`Create ${den.kind ?? 'private'} den “${den.name}”`);
+    for (const tier of spec.tiers ?? [])
+        lines.push(`Create subscription tier “${tier.name}”`);
+    for (const pool of spec.aidPools ?? []) lines.push(`Create aid pool “${pool.title}”`);
+    return lines;
+};
+
+type ApplyPhase = 'idle' | 'confirm' | 'running' | 'done';
+
+/**
+ * One-click apply for a kit. Gated behind an explicit confirmation that lists
+ * exactly what will be created; re-applying is allowed but warns (it creates
+ * duplicates). Secret-minting stream tooling stays in the deep-links.
+ */
+const KitApplyPanel = ({ kit }: { kit: CreatorKit }): JSX.Element | null => {
+    const mx = useMatrixClientOrNull();
+    const userId = mx?.getSafeUserId() ?? null;
+    const [phase, setPhase] = useState<ApplyPhase>('idle');
+    const [results, setResults] = useState<ApplyStepResult[]>([]);
+    const [appliedBefore, setAppliedBefore] = useState(false);
+
+    if (!kit.apply) return null;
+    const actions = describeApply(kit);
+    if (actions.length === 0) return null;
+
+    const canApply = !!mx && !!userId;
+
+    const openConfirm = (): void => {
+        try {
+            setAppliedBefore(localStorage.getItem(kitAppliedStorageKey(kit.id)) !== null);
+        } catch {
+            setAppliedBefore(false);
+        }
+        setPhase('confirm');
+    };
+
+    const runApply = (): void => {
+        if (!mx || !userId) return;
+        setPhase('running');
+        applyCreatorKit(kit, { mx, userId })
+            .then((res) => {
+                setResults(res);
+                setPhase('done');
+                try {
+                    localStorage.setItem(kitAppliedStorageKey(kit.id), new Date().toISOString());
+                } catch {
+                    /* storage unavailable — non-fatal */
+                }
+            })
+            .catch((err: unknown) => {
+                setResults([
+                    {
+                        area: 'profile',
+                        label: 'Apply failed',
+                        status: 'error',
+                        detail: err instanceof Error ? err.message : undefined,
+                    },
+                ]);
+                setPhase('done');
+            });
+    };
+
+    return (
+        <div style={applyPanelStyle} data-testid="creator-kit-apply-panel">
+            {phase === 'idle' ? (
+                <>
+                    <button
+                        type="button"
+                        style={applyButtonStyle}
+                        onClick={openConfirm}
+                        disabled={!canApply}
+                        data-testid="creator-kit-apply"
+                    >
+                        Apply this kit
+                    </button>
+                    {!canApply ? (
+                        <p style={warnStyle}>Sign in to apply this kit to your account.</p>
+                    ) : null}
+                </>
+            ) : null}
+
+            {phase === 'confirm' ? (
+                <div data-testid="creator-kit-apply-confirm-panel">
+                    <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>
+                        Applying “{kit.name}” will:
+                    </p>
+                    <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                        {actions.map((line) => (
+                            <li key={line}>{line}</li>
+                        ))}
+                    </ul>
+                    {appliedBefore ? (
+                        <p style={warnStyle} data-testid="creator-kit-apply-reapply-warning">
+                            You applied this kit before — re-applying creates duplicates.
+                        </p>
+                    ) : null}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <button
+                            type="button"
+                            style={applyButtonStyle}
+                            onClick={runApply}
+                            data-testid="creator-kit-apply-confirm"
+                        >
+                            Confirm &amp; apply
+                        </button>
+                        <button
+                            type="button"
+                            style={secondaryButtonStyle}
+                            onClick={() => setPhase('idle')}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
+            {phase === 'running' ? <p style={{ margin: 0, fontSize: 13 }}>Applying…</p> : null}
+
+            {phase === 'done' ? (
+                <div data-testid="creator-kit-apply-results">
+                    <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 600 }}>Results</p>
+                    <ul style={{ margin: '0 0 10px', paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+                        {results.map((step) => (
+                            <li key={`${step.area}:${step.label}`} data-step-status={step.status}>
+                                {statusGlyph[step.status]} {step.label}
+                                {step.status === 'skipped' ? ' (not available on your account)' : ''}
+                                {step.status === 'error' && step.detail ? ` — ${step.detail}` : ''}
+                            </li>
+                        ))}
+                    </ul>
+                    <button
+                        type="button"
+                        style={secondaryButtonStyle}
+                        onClick={() => setPhase('idle')}
+                    >
+                        Done
+                    </button>
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
 const ConfigGroup = ({ title, items }: { title: string; items: string[] }): JSX.Element => (
     <div>
         <p style={groupTitleStyle}>{title}</p>
@@ -71,6 +271,7 @@ const KitDetail = ({ kit }: { kit: CreatorKit }): JSX.Element => (
             <ConfigGroup title="Monetization" items={kit.configures.monetization} />
             <ConfigGroup title="Stream tools" items={kit.configures.streamTools} />
         </div>
+        <KitApplyPanel kit={kit} />
         <div style={linkRowStyle}>
             {kit.deepLinks.map((link) => (
                 <Link

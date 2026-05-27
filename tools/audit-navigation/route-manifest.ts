@@ -26,6 +26,9 @@ export type WebRoute = {
         | 'livestream'
         | 'marketplace'
         | 'creator'
+        | 'streaming'
+        | 'coalition'
+        | 'coliseum'
         | 'inbox'
         | 'events'
         | 'other';
@@ -90,6 +93,12 @@ export const WEB_ROUTES: readonly WebRoute[] = [
     },
     { id: 'live', path: '/live', mode: 'livestream' },
     { id: 'live-stream', path: '/live/example-stream', mode: 'livestream' },
+    // Creator Hub (the `streaming` feature). `/creator-hub` is the rebranded
+    // alias that redirects to `/streaming`; visiting it asserts the redirect
+    // lands on a live, non-dead-end surface. Both resolve to shell mode
+    // `streaming` (see modeRouter.ts).
+    { id: 'creator-hub', path: '/streaming', mode: 'streaming' },
+    { id: 'creator-hub-alias', path: '/creator-hub', mode: 'streaming' },
     { id: 'creator-dashboard', path: '/creator', mode: 'creator' },
     { id: 'creator-listings', path: '/creator/listings', mode: 'creator' },
     {
@@ -103,6 +112,10 @@ export const WEB_ROUTES: readonly WebRoute[] = [
         path: `/events/${encodeURIComponent(SENTINEL_ROOM)}/example-event`,
         mode: 'events',
     },
+
+    // Primary destinations that each own a shell mode/root (see modeRouter.ts).
+    { id: 'coalition', path: '/coalition', mode: 'coalition' },
+    { id: 'coliseum', path: '/coliseum', mode: 'coliseum' },
 
     // Onboarding / federation / monetization.
     { id: 'onboarding-creator', path: '/onboarding/creator', mode: 'other' },
@@ -142,6 +155,9 @@ export const SHELL_ROOT_PATHS: readonly string[] = [
     '/live',
     '/market',
     '/creator',
+    '/streaming',
+    '/coalition',
+    '/coliseum',
     '/messages',
     '/inbox',
     '/direct',

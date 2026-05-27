@@ -17,6 +17,14 @@ export const resolveShellMode = (pathname: string): ShellMode => {
     if (pathname.startsWith('/communities')) return 'community';
     if (pathname.startsWith('/live')) return 'livestream';
     if (pathname.startsWith('/market')) return 'marketplace';
+    if (pathname.startsWith('/coalition')) return 'coalition';
+    if (pathname.startsWith('/coliseum')) return 'coliseum';
+    // Creator Hub lives at `/streaming`; the `/creator-hub` alias must be
+    // matched before the broader `/creator` prefix so it isn't misread as the
+    // creator-dashboard mode.
+    if (pathname.startsWith('/streaming') || pathname.startsWith('/creator-hub')) {
+        return 'streaming';
+    }
     if (pathname.startsWith('/creator')) return 'creator';
     if (
         pathname.startsWith('/messages') ||
@@ -49,6 +57,9 @@ const SHELL_ROOT_PATHS = new Set<string>([
     '/live',
     '/market',
     '/creator',
+    '/streaming',
+    '/coalition',
+    '/coliseum',
     '/messages',
     '/inbox',
     '/direct',
@@ -76,6 +87,9 @@ export const SHELL_MODE_TITLES: Record<ShellMode, string> = {
     livestream: 'Live',
     marketplace: 'Market',
     creator: 'Creator',
+    streaming: 'Creator Hub',
+    coalition: 'Coalition',
+    coliseum: 'Coliseum',
     inbox: 'Inbox',
     events: 'Events',
     other: '',

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isShellPathActive, resolveShellMode, SHELL_MODE_TITLES } from './modeRouter';
+import {
+    isShellModeRoot,
+    isShellPathActive,
+    resolveShellMode,
+    SHELL_MODE_TITLES,
+} from './modeRouter';
 
 describe('resolveShellMode', () => {
     it('maps root and /home onto discovery mode', () => {
@@ -27,10 +32,35 @@ describe('resolveShellMode', () => {
         expect(resolveShellMode('/events')).toBe('events');
     });
 
+    it('maps the primary destinations onto their own modes', () => {
+        expect(resolveShellMode('/streaming')).toBe('streaming');
+        expect(resolveShellMode('/coalition')).toBe('coalition');
+        expect(resolveShellMode('/coliseum')).toBe('coliseum');
+    });
+
+    it('maps the /creator-hub alias to streaming, not the creator dashboard', () => {
+        expect(resolveShellMode('/creator-hub')).toBe('streaming');
+        // The broader /creator prefix still resolves the dashboard.
+        expect(resolveShellMode('/creator')).toBe('creator');
+    });
+
     it('returns "other" for unrecognized routes', () => {
         expect(resolveShellMode('/moderation/draupnir')).toBe('other');
         expect(resolveShellMode('/governance')).toBe('other');
         expect(resolveShellMode('/some-feature')).toBe('other');
+    });
+});
+
+describe('isShellModeRoot', () => {
+    it('treats the primary destinations as roots (no back affordance)', () => {
+        expect(isShellModeRoot('/streaming')).toBe(true);
+        expect(isShellModeRoot('/coalition')).toBe(true);
+        expect(isShellModeRoot('/coliseum/')).toBe(true);
+    });
+
+    it('treats leaf views as non-roots', () => {
+        expect(isShellModeRoot('/coliseum/some-topic')).toBe(false);
+        expect(isShellModeRoot('/streaming/clips')).toBe(false);
     });
 });
 

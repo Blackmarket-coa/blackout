@@ -1,5 +1,7 @@
 import React, { type CSSProperties, useEffect, useState } from 'react';
 import { listClips, type ClipSummary } from '../../streams';
+import { useMatrixClientOrNull } from '../../../hooks/useMatrixClient';
+import { mxcUrlToHttp } from '../../../utils/matrix';
 import {
     HubSection,
     hubCardMetaStyle,
@@ -8,6 +10,23 @@ import {
     hubGridStyle,
 } from '../components/HubSection';
 import ClipViewer from './ClipViewer';
+
+/**
+ * Resolves a clip media/thumbnail pointer to a displayable URL. `mxc://`
+ * pointers go through the Matrix client (when available); anything else is
+ * treated as a direct http(s) URL. Mirrors `ClipViewer`'s resolver so the
+ * grid and the reel show the same media.
+ */
+const resolvePointer = (
+    pointer: string | undefined,
+    mx: ReturnType<typeof useMatrixClientOrNull>
+): string | null => {
+    if (!pointer) return null;
+    if (pointer.startsWith('mxc://')) {
+        return mx ? mxcUrlToHttp(mx, pointer, true) : null;
+    }
+    return pointer;
+};
 
 const clipCardStyle: CSSProperties = {
     display: 'flex',
@@ -54,6 +73,7 @@ const formatDuration = (seconds: number): string => {
  * isn't enabled on the account.
  */
 export const ClipsDirectory = (): JSX.Element => {
+    const mx = useMatrixClientOrNull();
     const [clips, setClips] = useState<ClipSummary[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [forbidden, setForbidden] = useState(false);
@@ -115,29 +135,31 @@ export const ClipsDirectory = (): JSX.Element => {
                 </p>
             ) : (
                 <div style={hubGridStyle} data-testid="clips-directory-grid">
-                    {clips.map((clip) => (
-                        <button
-                            key={clip.id}
-                            type="button"
-                            style={clipCardStyle}
-                            onClick={() => setOpenClipId(clip.id)}
-                            data-testid="clips-directory-card"
-                            data-clip-id={clip.id}
-                        >
-                            {clip.thumbnailPointer &&
-                            !clip.thumbnailPointer.startsWith('mxc://') ? (
-                                <img src={clip.thumbnailPointer} alt="" style={thumbStyle} />
-                            ) : (
-                                <div style={thumbStyle} />
-                            )}
-                            <div style={cardBodyStyle}>
-                                <span style={hubCardTitleStyle}>{clip.title}</span>
-                                <span style={hubCardMetaStyle}>
-                                    {clip.creatorId} · {formatDuration(clip.durationSeconds)}
-                                </span>
-                            </div>
-                        </button>
-                    ))}
+                    {clips.map((clip) => {
+                        const thumbSrc = resolvePointer(clip.thumbnailPointer, mx);
+                        return (
+                            <button
+                                key={clip.id}
+                                type="button"
+                                style={clipCardStyle}
+                                onClick={() => setOpenClipId(clip.id)}
+                                data-testid="clips-directory-card"
+                                data-clip-id={clip.id}
+                            >
+                                {thumbSrc ? (
+                                    <img src={thumbSrc} alt="" style={thumbStyle} />
+                                ) : (
+                                    <div style={thumbStyle} />
+                                )}
+                                <div style={cardBodyStyle}>
+                                    <span style={hubCardTitleStyle}>{clip.title}</span>
+                                    <span style={hubCardMetaStyle}>
+                                        {clip.creatorId} · {formatDuration(clip.durationSeconds)}
+                                    </span>
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
         </HubSection>
