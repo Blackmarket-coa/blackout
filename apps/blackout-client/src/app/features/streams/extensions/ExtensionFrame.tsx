@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { mediaClient } from '../../../sdk/client';
 import { fetchExtensionToken, type TwitchExtensionPanel } from '../streamsClient';
 import {
   REQUIRED_EXT_CAPABILITY,
@@ -41,7 +42,12 @@ export const ExtensionFrame = ({ streamId, panel }: ExtensionFrameProps): JSX.El
   useEffect(() => {
     let cancelled = false;
     granted.current = new Set(panel.capabilities);
-    Promise.all([fetchExtensionToken(streamId), fetch(panel.bundleUrl).then((r) => r.text())])
+    // Route the bundle fetch through the SDK media client (not a raw
+    // feature-layer fetch) so all network goes through @blackout/sdk.
+    Promise.all([
+      fetchExtensionToken(streamId),
+      mediaClient.fetchBlob(panel.bundleUrl).then((b) => b.text()),
+    ])
       .then(([tokenRes, bundleJs]) => {
         if (cancelled) return;
         const auth: ExtensionAuth = {
