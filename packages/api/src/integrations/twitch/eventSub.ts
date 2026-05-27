@@ -179,6 +179,57 @@ export type NormalizedTwitchEvent =
       fromChannelDisplayName?: string;
       toChannelId: string;
       viewers: number;
+    }
+  | {
+      kind: 'stream_online';
+      subscriptionType: 'stream.online';
+      twitchChannelId: string;
+      broadcasterLogin: string;
+      broadcasterDisplayName?: string;
+      streamType: string;
+      startedAt: string;
+    }
+  | {
+      kind: 'stream_offline';
+      subscriptionType: 'stream.offline';
+      twitchChannelId: string;
+      broadcasterLogin: string;
+      broadcasterDisplayName?: string;
+    }
+  | {
+      kind: 'channel_points_redemption';
+      subscriptionType: 'channel.channel_points_custom_reward_redemption.add';
+      twitchChannelId: string;
+      redemptionId: string;
+      userLogin: string;
+      userDisplayName?: string;
+      userTwitchId: string;
+      rewardId: string;
+      rewardTitle: string;
+      rewardCost: number;
+      userInput: string;
+      status: string;
+      redeemedAt: string;
+    }
+  | {
+      kind: 'hype_train_begin';
+      subscriptionType: 'channel.hype_train.begin';
+      twitchChannelId: string;
+      level: number;
+      total: number;
+      goal: number;
+      startedAt: string;
+      expiresAt: string;
+    }
+  | {
+      kind: 'hype_train_end';
+      subscriptionType: 'channel.hype_train.end';
+      twitchChannelId: string;
+      level: number;
+      total: number;
+      startedAt: string;
+      endedAt: string;
+      cooldownEndsAt: string;
     };
 
 const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
@@ -264,6 +315,64 @@ export const normalizeEventSub = (
         fromChannelDisplayName: asString(event.from_broadcaster_user_name),
         toChannelId: asString(event.to_broadcaster_user_id) ?? '',
         viewers: asInt(event.viewers),
+      };
+    case 'stream.online':
+      return {
+        kind: 'stream_online',
+        subscriptionType: 'stream.online',
+        twitchChannelId: asString(event.broadcaster_user_id) ?? '',
+        broadcasterLogin: asString(event.broadcaster_user_login) ?? '',
+        broadcasterDisplayName: asString(event.broadcaster_user_name),
+        streamType: asString(event.type) ?? 'live',
+        startedAt: asString(event.started_at) ?? '',
+      };
+    case 'stream.offline':
+      return {
+        kind: 'stream_offline',
+        subscriptionType: 'stream.offline',
+        twitchChannelId: asString(event.broadcaster_user_id) ?? '',
+        broadcasterLogin: asString(event.broadcaster_user_login) ?? '',
+        broadcasterDisplayName: asString(event.broadcaster_user_name),
+      };
+    case 'channel.channel_points_custom_reward_redemption.add': {
+      const reward = (event.reward as Record<string, unknown>) ?? {};
+      return {
+        kind: 'channel_points_redemption',
+        subscriptionType: 'channel.channel_points_custom_reward_redemption.add',
+        twitchChannelId: asString(event.broadcaster_user_id) ?? '',
+        redemptionId: asString(event.id) ?? '',
+        userLogin: asString(event.user_login) ?? '',
+        userDisplayName: asString(event.user_name),
+        userTwitchId: asString(event.user_id) ?? '',
+        rewardId: asString(reward.id) ?? '',
+        rewardTitle: asString(reward.title) ?? '',
+        rewardCost: asInt(reward.cost),
+        userInput: asString(event.user_input) ?? '',
+        status: asString(event.status) ?? '',
+        redeemedAt: asString(event.redeemed_at) ?? '',
+      };
+    }
+    case 'channel.hype_train.begin':
+      return {
+        kind: 'hype_train_begin',
+        subscriptionType: 'channel.hype_train.begin',
+        twitchChannelId: asString(event.broadcaster_user_id) ?? '',
+        level: asInt(event.level),
+        total: asInt(event.total),
+        goal: asInt(event.goal),
+        startedAt: asString(event.started_at) ?? '',
+        expiresAt: asString(event.expires_at) ?? '',
+      };
+    case 'channel.hype_train.end':
+      return {
+        kind: 'hype_train_end',
+        subscriptionType: 'channel.hype_train.end',
+        twitchChannelId: asString(event.broadcaster_user_id) ?? '',
+        level: asInt(event.level),
+        total: asInt(event.total),
+        startedAt: asString(event.started_at) ?? '',
+        endedAt: asString(event.ended_at) ?? '',
+        cooldownEndsAt: asString(event.cooldown_ends_at) ?? '',
       };
     default:
       return null;

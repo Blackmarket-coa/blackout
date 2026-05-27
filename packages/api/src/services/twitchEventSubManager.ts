@@ -62,6 +62,31 @@ export const DEFAULT_EVENTSUB_TYPES: readonly EventSubTypeConfig[] = [
     // Raid events use to_broadcaster_user_id for incoming raids.
     condition: (id) => ({ to_broadcaster_user_id: id }),
   },
+  {
+    type: 'stream.online',
+    version: '1',
+    condition: (id) => ({ broadcaster_user_id: id }),
+  },
+  {
+    type: 'stream.offline',
+    version: '1',
+    condition: (id) => ({ broadcaster_user_id: id }),
+  },
+  {
+    type: 'channel.channel_points_custom_reward_redemption.add',
+    version: '1',
+    condition: (id) => ({ broadcaster_user_id: id }),
+  },
+  {
+    type: 'channel.hype_train.begin',
+    version: '1',
+    condition: (id) => ({ broadcaster_user_id: id }),
+  },
+  {
+    type: 'channel.hype_train.end',
+    version: '1',
+    condition: (id) => ({ broadcaster_user_id: id }),
+  },
 ];
 
 export interface SubscribeOptions extends HelixDeps {

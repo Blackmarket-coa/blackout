@@ -277,9 +277,11 @@ test('manager.subscribeToBridgeEvents: creates one row per default type and pers
   }) as unknown as typeof fetch;
 
   const result = await manager.subscribeToBridgeEvents(bridge, { fetch: stubFetch });
-  // 5 default types: follow, subscribe, subscription.gift, cheer, raid.
-  assert.equal(createCalls, 5);
-  assert.equal(result.created.length, 5);
+  // 10 default types: follow, subscribe, subscription.gift, cheer, raid,
+  // stream.online, stream.offline, channel-points redemption, hype-train
+  // begin + end.
+  assert.equal(createCalls, 10);
+  assert.equal(result.created.length, 10);
   assert.equal(result.alreadyPresent.length, 0);
   assert.equal(result.failures.length, 0);
 
@@ -288,7 +290,18 @@ test('manager.subscribeToBridgeEvents: creates one row per default type and pers
   const types = new Set(persisted.map((r) => r.subscriptionType));
   assert.deepEqual(
     [...types].sort(),
-    ['channel.cheer', 'channel.follow', 'channel.raid', 'channel.subscribe', 'channel.subscription.gift'],
+    [
+      'channel.channel_points_custom_reward_redemption.add',
+      'channel.cheer',
+      'channel.follow',
+      'channel.hype_train.begin',
+      'channel.hype_train.end',
+      'channel.raid',
+      'channel.subscribe',
+      'channel.subscription.gift',
+      'stream.offline',
+      'stream.online',
+    ],
   );
 });
 
@@ -327,7 +340,7 @@ test('manager.subscribeToBridgeEvents: idempotent — does not re-create existin
   }) as unknown as typeof fetch;
 
   const result = await manager.subscribeToBridgeEvents(bridge, { fetch: stubFetch });
-  assert.equal(createCalls, 4, '5 types - 1 already-present');
+  assert.equal(createCalls, 9, '10 types - 1 already-present');
   assert.deepEqual(result.alreadyPresent, ['channel.follow']);
 });
 

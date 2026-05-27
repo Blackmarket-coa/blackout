@@ -36,6 +36,9 @@ const VALID_EVENT_TYPES: ReadonlySet<OutboundEventType> = new Set<OutboundEventT
   'cheer.received',
   'raid.received',
   'streamgoal.reached',
+  'channelpoints.redeemed',
+  'hypetrain.started',
+  'hypetrain.ended',
 ]);
 
 /**
@@ -210,6 +213,9 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'cheer.received': 'Cheer / Bits',
     'raid.received': 'Raid incoming',
     'streamgoal.reached': 'Stream goal reached',
+    'channelpoints.redeemed': 'Channel points redeemed',
+    'hypetrain.started': 'Hype Train started',
+    'hypetrain.ended': 'Hype Train ended',
   };
   const colorByType: Record<OutboundEventType, number> = {
     'tip.created': 0xf2c94c,
@@ -222,6 +228,9 @@ export const renderEvent = (event: BlackoutEvent): OutboundDeliveryPayload => {
     'cheer.received': 0x2d9cdb,
     'raid.received': 0xf2994a,
     'streamgoal.reached': 0x27ae60,
+    'channelpoints.redeemed': 0x9146ff,
+    'hypetrain.started': 0xff6905,
+    'hypetrain.ended': 0xb35704,
   };
   return {
     username: 'Blackout',

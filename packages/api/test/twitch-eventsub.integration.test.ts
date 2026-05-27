@@ -294,6 +294,150 @@ test('normalizeEventSub: channel.raid', async () => {
   }
 });
 
+test('normalizeEventSub: stream.online', async () => {
+  const { eventSub } = await loadModules();
+  const out = eventSub.normalizeEventSub({
+    subscription: {
+      id: 's',
+      type: 'stream.online',
+      version: '1',
+      status: 'enabled',
+      cost: 0,
+      condition: {},
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    event: {
+      id: 'stream-1',
+      broadcaster_user_id: '42',
+      broadcaster_user_login: 'streamer',
+      broadcaster_user_name: 'Streamer',
+      type: 'live',
+      started_at: '2026-05-01T12:00:00Z',
+    },
+  });
+  assert.deepEqual(out, {
+    kind: 'stream_online',
+    subscriptionType: 'stream.online',
+    twitchChannelId: '42',
+    broadcasterLogin: 'streamer',
+    broadcasterDisplayName: 'Streamer',
+    streamType: 'live',
+    startedAt: '2026-05-01T12:00:00Z',
+  });
+});
+
+test('normalizeEventSub: stream.offline', async () => {
+  const { eventSub } = await loadModules();
+  const out = eventSub.normalizeEventSub({
+    subscription: {
+      id: 's',
+      type: 'stream.offline',
+      version: '1',
+      status: 'enabled',
+      cost: 0,
+      condition: {},
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    event: {
+      broadcaster_user_id: '42',
+      broadcaster_user_login: 'streamer',
+      broadcaster_user_name: 'Streamer',
+    },
+  });
+  assert.equal(out?.kind, 'stream_offline');
+  if (out?.kind === 'stream_offline') {
+    assert.equal(out.twitchChannelId, '42');
+    assert.equal(out.broadcasterLogin, 'streamer');
+  }
+});
+
+test('normalizeEventSub: channel points redemption pulls nested reward fields', async () => {
+  const { eventSub } = await loadModules();
+  const out = eventSub.normalizeEventSub({
+    subscription: {
+      id: 's',
+      type: 'channel.channel_points_custom_reward_redemption.add',
+      version: '1',
+      status: 'enabled',
+      cost: 0,
+      condition: {},
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    event: {
+      id: 'redemption-1',
+      broadcaster_user_id: '42',
+      user_id: '8',
+      user_login: 'redeemer',
+      user_name: 'Redeemer',
+      user_input: 'play my song',
+      status: 'unfulfilled',
+      redeemed_at: '2026-05-01T12:30:00Z',
+      reward: { id: 'reward-9', title: 'Song Request', cost: 500, prompt: 'Pick a song' },
+    },
+  });
+  assert.equal(out?.kind, 'channel_points_redemption');
+  if (out?.kind === 'channel_points_redemption') {
+    assert.equal(out.rewardId, 'reward-9');
+    assert.equal(out.rewardTitle, 'Song Request');
+    assert.equal(out.rewardCost, 500);
+    assert.equal(out.userInput, 'play my song');
+    assert.equal(out.redemptionId, 'redemption-1');
+  }
+});
+
+test('normalizeEventSub: hype_train begin + end', async () => {
+  const { eventSub } = await loadModules();
+  const begin = eventSub.normalizeEventSub({
+    subscription: {
+      id: 's',
+      type: 'channel.hype_train.begin',
+      version: '1',
+      status: 'enabled',
+      cost: 0,
+      condition: {},
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    event: {
+      broadcaster_user_id: '42',
+      level: 2,
+      total: 1500,
+      goal: 2000,
+      started_at: '2026-05-01T13:00:00Z',
+      expires_at: '2026-05-01T13:05:00Z',
+    },
+  });
+  assert.equal(begin?.kind, 'hype_train_begin');
+  if (begin?.kind === 'hype_train_begin') {
+    assert.equal(begin.level, 2);
+    assert.equal(begin.goal, 2000);
+  }
+
+  const end = eventSub.normalizeEventSub({
+    subscription: {
+      id: 's',
+      type: 'channel.hype_train.end',
+      version: '1',
+      status: 'enabled',
+      cost: 0,
+      condition: {},
+      created_at: '2026-01-01T00:00:00Z',
+    },
+    event: {
+      broadcaster_user_id: '42',
+      level: 4,
+      total: 9000,
+      started_at: '2026-05-01T13:00:00Z',
+      ended_at: '2026-05-01T13:10:00Z',
+      cooldown_ends_at: '2026-05-01T14:10:00Z',
+    },
+  });
+  assert.equal(end?.kind, 'hype_train_end');
+  if (end?.kind === 'hype_train_end') {
+    assert.equal(end.level, 4);
+    assert.equal(end.cooldownEndsAt, '2026-05-01T14:10:00Z');
+  }
+});
+
 test('normalizeEventSub: returns null for unknown subscription types', async () => {
   const { eventSub } = await loadModules();
   const out = eventSub.normalizeEventSub({

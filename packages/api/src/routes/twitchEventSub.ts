@@ -90,6 +90,21 @@ const buildAlertContent = (event: NormalizedTwitchEvent): Record<string, unknown
     case 'raid':
       base.body = `[twitch] ${event.fromChannelDisplayName ?? event.fromChannelLogin} raided with ${event.viewers} viewer${event.viewers === 1 ? '' : 's'}.`;
       break;
+    case 'stream_online':
+      base.body = `[twitch] ${event.broadcasterDisplayName ?? event.broadcasterLogin} went live.`;
+      break;
+    case 'stream_offline':
+      base.body = `[twitch] ${event.broadcasterDisplayName ?? event.broadcasterLogin} went offline.`;
+      break;
+    case 'channel_points_redemption':
+      base.body = `[twitch] ${event.userDisplayName ?? event.userLogin} redeemed "${event.rewardTitle}" (${event.rewardCost} points)${event.userInput ? `: ${event.userInput}` : ''}.`;
+      break;
+    case 'hype_train_begin':
+      base.body = `[twitch] Hype Train started at level ${event.level}.`;
+      break;
+    case 'hype_train_end':
+      base.body = `[twitch] Hype Train ended at level ${event.level}.`;
+      break;
   }
   return base;
 };
@@ -200,6 +215,68 @@ export const buildDefaultEventForwarder = (
         fromChannelDisplayName: event.fromChannelDisplayName,
         viewers: event.viewers,
       });
+      break;
+    case 'stream_online':
+      dispatchOutbound(
+        'livestream.started',
+        {
+          twitchChannelId: event.twitchChannelId,
+          broadcasterLogin: event.broadcasterLogin,
+          broadcasterDisplayName: event.broadcasterDisplayName,
+          streamType: event.streamType,
+          startedAt: event.startedAt,
+        },
+        event.startedAt,
+      );
+      break;
+    case 'stream_offline':
+      dispatchOutbound('livestream.ended', {
+        twitchChannelId: event.twitchChannelId,
+        broadcasterLogin: event.broadcasterLogin,
+        broadcasterDisplayName: event.broadcasterDisplayName,
+      });
+      break;
+    case 'channel_points_redemption':
+      dispatchOutbound(
+        'channelpoints.redeemed',
+        {
+          twitchChannelId: event.twitchChannelId,
+          userLogin: event.userLogin,
+          userDisplayName: event.userDisplayName,
+          rewardId: event.rewardId,
+          rewardTitle: event.rewardTitle,
+          rewardCost: event.rewardCost,
+          userInput: event.userInput,
+          status: event.status,
+        },
+        event.redeemedAt,
+      );
+      break;
+    case 'hype_train_begin':
+      dispatchOutbound(
+        'hypetrain.started',
+        {
+          twitchChannelId: event.twitchChannelId,
+          level: event.level,
+          total: event.total,
+          goal: event.goal,
+          expiresAt: event.expiresAt,
+        },
+        event.startedAt,
+      );
+      break;
+    case 'hype_train_end':
+      dispatchOutbound(
+        'hypetrain.ended',
+        {
+          twitchChannelId: event.twitchChannelId,
+          level: event.level,
+          total: event.total,
+          endedAt: event.endedAt,
+          cooldownEndsAt: event.cooldownEndsAt,
+        },
+        event.endedAt,
+      );
       break;
   }
 

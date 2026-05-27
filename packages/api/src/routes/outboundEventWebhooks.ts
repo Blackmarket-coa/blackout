@@ -29,6 +29,9 @@ const eventTypeSchema = z.enum([
   'cheer.received',
   'raid.received',
   'streamgoal.reached',
+  'channelpoints.redeemed',
+  'hypetrain.started',
+  'hypetrain.ended',
 ] as const);
 
 const registerSchema = z.object({
