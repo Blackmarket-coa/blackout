@@ -53,6 +53,8 @@ import type {
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
   TwitchExtensionPanelRecord,
+  ChannelPointsRewardRecord,
+  ChannelPointsLedgerRecord,
   ObsWsPasswordRecord,
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
@@ -152,6 +154,8 @@ type PersistedState = {
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
   twitchExtensionPanels: TwitchExtensionPanelRecord[];
+  channelPointsRewards: ChannelPointsRewardRecord[];
+  channelPointsLedger: ChannelPointsLedgerRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
   coalitionEvents: CoalitionEventRecord[];
@@ -247,6 +251,8 @@ class InMemoryDb {
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
   twitchExtensionPanels = new Map<string, TwitchExtensionPanelRecord>();
+  channelPointsRewards = new Map<string, ChannelPointsRewardRecord>();
+  channelPointsLedger = new Map<string, ChannelPointsLedgerRecord>();
   /** Coalition spatial map pins, keyed by item id. */
   coalitionSpatialItems = new Map<string, CoalitionSpatialItemRecord>(
     COALITION_SPATIAL_SEED.map((row) => [row.id, row]),
@@ -1245,6 +1251,65 @@ class InMemoryDb {
 
   deleteTwitchExtensionPanel(id: string): boolean {
     return this.twitchExtensionPanels.delete(id);
+  }
+
+  // --- channel points (engagement economy) ---
+
+  createChannelPointsReward(
+    input: Omit<ChannelPointsRewardRecord, 'createdAt' | 'updatedAt'>,
+  ): ChannelPointsRewardRecord {
+    const now = nowIso();
+    const record: ChannelPointsRewardRecord = { ...input, createdAt: now, updatedAt: now };
+    this.channelPointsRewards.set(record.id, record);
+    return record;
+  }
+
+  getChannelPointsReward(id: string): ChannelPointsRewardRecord | undefined {
+    return this.channelPointsRewards.get(id);
+  }
+
+  listChannelPointsRewardsForCreator(creatorId: string): ChannelPointsRewardRecord[] {
+    return [...this.channelPointsRewards.values()].filter((r) => r.creatorId === creatorId);
+  }
+
+  updateChannelPointsReward(
+    id: string,
+    patch: Partial<Pick<ChannelPointsRewardRecord, 'title' | 'cost' | 'prompt' | 'isActive'>>,
+  ): ChannelPointsRewardRecord | undefined {
+    const existing = this.channelPointsRewards.get(id);
+    if (!existing) return undefined;
+    const updated: ChannelPointsRewardRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.channelPointsRewards.set(id, updated);
+    return updated;
+  }
+
+  deleteChannelPointsReward(id: string): boolean {
+    return this.channelPointsRewards.delete(id);
+  }
+
+  appendChannelPointsLedger(
+    input: Omit<ChannelPointsLedgerRecord, 'createdAt'>,
+  ): ChannelPointsLedgerRecord {
+    const record: ChannelPointsLedgerRecord = { ...input, createdAt: nowIso() };
+    this.channelPointsLedger.set(record.id, record);
+    return record;
+  }
+
+  /** Sum of ledger deltas for a (channel, viewer) pair = current balance. */
+  getChannelPointsBalance(channelId: string, userId: string): number {
+    let balance = 0;
+    for (const row of this.channelPointsLedger.values()) {
+      if (row.channelId === channelId && row.userId === userId) balance += row.pointsDelta;
+    }
+    return balance;
+  }
+
+  /** Redemption history for a channel (negative `redeem` entries), newest first. */
+  listChannelPointsRedemptions(channelId: string, limit = 100): ChannelPointsLedgerRecord[] {
+    return [...this.channelPointsLedger.values()]
+      .filter((row) => row.channelId === channelId && row.reason === 'redeem')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -2801,6 +2866,12 @@ export class FileBackedDb extends InMemoryDb {
     this.twitchExtensionPanels = new Map(
       (parsed.twitchExtensionPanels ?? []).map((row) => [row.id, row]),
     );
+    this.channelPointsRewards = new Map(
+      (parsed.channelPointsRewards ?? []).map((row) => [row.id, row]),
+    );
+    this.channelPointsLedger = new Map(
+      (parsed.channelPointsLedger ?? []).map((row) => [row.id, row]),
+    );
     if (parsed.coalitionSpatialItems) {
       this.coalitionSpatialItems = new Map(
         parsed.coalitionSpatialItems.map((row) => [row.id, row]),
@@ -2945,6 +3016,8 @@ export class FileBackedDb extends InMemoryDb {
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
       twitchExtensionPanels: [...this.twitchExtensionPanels.values()],
+      channelPointsRewards: [...this.channelPointsRewards.values()],
+      channelPointsLedger: [...this.channelPointsLedger.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       coalitionEvents: [...this.coalitionEvents.values()],

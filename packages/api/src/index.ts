@@ -47,6 +47,7 @@ import {
 import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
 import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
 import twitchHelixProxyRoutes from './routes/twitchHelixProxy';
+import channelPointsRoutes from './routes/channelPoints';
 import twitchExtensionRoutes from './routes/twitchExtensions';
 import obsWsPasswordRoutes from './routes/obsWsPasswords';
 import rtmpFanoutRoutes from './routes/rtmpFanout';
@@ -163,6 +164,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/subscriptions`, subscriptionRoutes);
   app.route(`${root}/tips`, tipRoutes);
   app.route(`${root}/creator-subs`, creatorSubRoutes);
+  app.route(`${root}/channel-points`, channelPointsRoutes);
   app.route(`${root}/gifts`, giftRoutes);
   app.route(`${root}/community-boosts`, communityBoostRoutes);
   app.route(`${root}/roles`, roleRoutes);
