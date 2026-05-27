@@ -1,5 +1,8 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import {
+    AID_POST_CATEGORIES,
+    AID_POST_TYPES,
+    AID_POST_URGENCY,
     SPATIAL_LAYER_DEFINITIONS,
     URGENCY_RANK,
     deriveSpatialEventStatus,
@@ -17,7 +20,7 @@ import {
     useSpatialFeed,
     type CoalitionScopeQuery,
 } from '../hooks/useCoalitionFeed';
-import type { NearbyQuery } from '../coalitionClient';
+import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
 
@@ -72,6 +75,187 @@ function passesTemporal(pin: PinDetails, mode: TemporalMode, nowMs: number): boo
     return pin.status === 'live' || (startMs >= startOfToday.getTime() && startMs <= horizon);
 }
 
+/**
+ * Compact mutual-aid composer surfaced from the map toolbar. Pre-fills the
+ * viewer's coordinates when "Near me" is active; posting requires sign-in (the
+ * API gates it) and errors are surfaced inline.
+ */
+function AidPostForm({
+    scope,
+    defaultLocation,
+    onPosted,
+    onClose,
+}: {
+    scope: CoalitionScopeQuery;
+    defaultLocation?: { lat: number; lng: number };
+    onPosted: () => void;
+    onClose: () => void;
+}): React.ReactElement {
+    const [type, setType] = useState<AidPost['type']>(AID_POST_TYPES[0]);
+    const [category, setCategory] = useState<AidPost['category']>(AID_POST_CATEGORIES[0]);
+    const [urgency, setUrgency] = useState<AidPost['urgency']>('medium');
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [latitude, setLatitude] = useState(defaultLocation ? String(defaultLocation.lat) : '');
+    const [longitude, setLongitude] = useState(defaultLocation ? String(defaultLocation.lng) : '');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fieldStyle: React.CSSProperties = {
+        padding: '6px 8px',
+        borderRadius: 8,
+        border: '1px solid var(--border-default)',
+        background: 'var(--bg-input)',
+        color: 'var(--text-primary)',
+        fontSize: 13,
+        width: '100%',
+    };
+
+    const submit = async () => {
+        const lat = Number.parseFloat(latitude);
+        const lng = Number.parseFloat(longitude);
+        if (!title.trim() || !description.trim()) {
+            setError('Title and description are required.');
+            return;
+        }
+        if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            setError('A valid latitude and longitude are required.');
+            return;
+        }
+        setBusy(true);
+        setError(null);
+        try {
+            await createCoalitionAidPost({
+                type,
+                category,
+                urgency,
+                title: title.trim(),
+                description: description.trim(),
+                location: { latitude: lat, longitude: lng },
+                denId: scope.denId,
+            });
+            onPosted();
+            onClose();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not post aid.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div
+            data-testid="coalition-aid-form"
+            style={{
+                position: 'absolute',
+                top: 84,
+                left: 12,
+                zIndex: 4,
+                width: 280,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                padding: 12,
+                borderRadius: 10,
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-surface)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong style={{ flex: 1, fontSize: 14 }}>Post mutual aid</strong>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    style={{ ...fieldStyle, width: 'auto', cursor: 'pointer' }}
+                >
+                    ✕
+                </button>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+                <select
+                    style={fieldStyle}
+                    value={type}
+                    onChange={(e) => setType(e.target.value as AidPost['type'])}
+                >
+                    {AID_POST_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                            {t}
+                        </option>
+                    ))}
+                </select>
+                <select
+                    style={fieldStyle}
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as AidPost['category'])}
+                >
+                    {AID_POST_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                            {cat}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <select
+                style={fieldStyle}
+                value={urgency}
+                onChange={(e) => setUrgency(e.target.value as AidPost['urgency'])}
+            >
+                {AID_POST_URGENCY.map((u) => (
+                    <option key={u} value={u}>
+                        urgency: {u}
+                    </option>
+                ))}
+            </select>
+            <input
+                style={fieldStyle}
+                placeholder="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+            />
+            <textarea
+                style={{ ...fieldStyle, minHeight: 48 }}
+                placeholder="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                    style={fieldStyle}
+                    placeholder="Latitude"
+                    inputMode="decimal"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                />
+                <input
+                    style={fieldStyle}
+                    placeholder="Longitude"
+                    inputMode="decimal"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                />
+            </div>
+            {error ? (
+                <span style={{ color: 'var(--danger, #e74c3c)', fontSize: 12 }}>{error}</span>
+            ) : null}
+            <button
+                type="button"
+                onClick={submit}
+                disabled={busy}
+                style={{
+                    ...fieldStyle,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    background: 'var(--accent-primary, #1ABC9C)',
+                    color: '#04201b',
+                }}
+            >
+                {busy ? 'Posting…' : 'Post aid'}
+            </button>
+        </div>
+    );
+}
+
 export function MapTab({ scope }: MapTabProps) {
     const [activeLayers, setActiveLayers] = useState<Set<SpatialLayerKey>>(
         () => new Set(SPATIAL_LAYER_DEFINITIONS.map((definition) => definition.key))
@@ -82,6 +266,7 @@ export function MapTab({ scope }: MapTabProps) {
     const [temporalMode, setTemporalMode] = useState<TemporalMode>('all');
     const [radiusKm, setRadiusKm] = useState<number>(5);
     const [showHeat, setShowHeat] = useState(false);
+    const [showAidForm, setShowAidForm] = useState(false);
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
@@ -312,7 +497,36 @@ export function MapTab({ scope }: MapTabProps) {
                             {nearbyError}
                         </span>
                     ) : null}
+                    <button
+                        type="button"
+                        onClick={() => setShowAidForm((v) => !v)}
+                        aria-pressed={showAidForm}
+                        data-testid="coalition-map-post-aid"
+                        title="Post a mutual-aid request or offer"
+                        style={{
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            background: showAidForm
+                                ? 'var(--accent-primary, #1ABC9C)'
+                                : 'var(--bg-surface)',
+                            color: showAidForm ? '#0a1a0f' : 'var(--text-primary)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        ➕ Post aid
+                    </button>
                 </div>
+
+                {showAidForm ? (
+                    <AidPostForm
+                        scope={scope}
+                        defaultLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : undefined}
+                        onPosted={() => aidState.refetch()}
+                        onClose={() => setShowAidForm(false)}
+                    />
+                ) : null}
 
                 <div
                     style={{

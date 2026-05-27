@@ -16,6 +16,7 @@ import {
     createEventDen,
     fetchCoalitionEvent,
     rsvpToEvent,
+    updateCoalitionEvent,
     type CoalitionEventSummary,
     type EventDetailResponse,
 } from '../coalitionClient';
@@ -79,6 +80,18 @@ function formatWhen(iso?: string): string {
     return Number.isNaN(ms) ? 'TBD' : new Date(ms).toLocaleString();
 }
 
+/** ISO → value for a <input type="datetime-local"> (local time, no seconds). */
+function toLocalInput(iso?: string): string {
+    if (!iso) return '';
+    const ms = Date.parse(iso);
+    if (Number.isNaN(ms)) return '';
+    const d = new Date(ms);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+        d.getHours()
+    )}:${pad(d.getMinutes())}`;
+}
+
 const EMPTY_FORM = {
     title: '',
     description: '',
@@ -115,7 +128,7 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
     const setField = useCallback(
         (key: keyof typeof EMPTY_FORM, value: string) =>
             setForm((prev) => ({ ...prev, [key]: value })),
-        [],
+        []
     );
 
     const submit = useCallback(async () => {
@@ -179,14 +192,16 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
             try {
                 const result = await rsvpToEvent(id, status);
                 setDetail((prev) =>
-                    prev && prev.event.id === id ? { ...prev, rsvpSummary: result.rsvpSummary } : prev,
+                    prev && prev.event.id === id
+                        ? { ...prev, rsvpSummary: result.rsvpSummary }
+                        : prev
                 );
                 refetch();
             } catch {
                 /* surfaced via refetch / no-op */
             }
         },
-        [refetch],
+        [refetch]
     );
 
     const attachDen = useCallback(
@@ -197,7 +212,7 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                     setDetail((prev) =>
                         prev && prev.event.id === id
                             ? { ...prev, event: { ...prev.event, denId: result.denId } }
-                            : prev,
+                            : prev
                     );
                     refetch();
                 }
@@ -205,14 +220,84 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                 /* no-op */
             }
         },
-        [refetch],
+        [refetch]
+    );
+
+    // --- organizer edit (the API gates non-organizers with a 403) ---
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState({
+        title: '',
+        description: '',
+        startsAt: '',
+        endsAt: '',
+        capacity: '',
+    });
+    const [editError, setEditError] = useState<string | null>(null);
+
+    const openEdit = useCallback((event: CoalitionEventSummary) => {
+        setEditError(null);
+        setEditForm({
+            title: event.title,
+            description: event.description,
+            startsAt: toLocalInput(event.startsAt),
+            endsAt: toLocalInput(event.endsAt),
+            capacity: event.capacity != null ? String(event.capacity) : '',
+        });
+        setEditingId(event.id);
+    }, []);
+
+    const saveEdit = useCallback(
+        async (id: string) => {
+            const startsAt = toIsoOrUndefined(editForm.startsAt);
+            if (!editForm.title.trim() || !editForm.description.trim() || !startsAt) {
+                setEditError('Title, description, and start time are required.');
+                return;
+            }
+            const capacity =
+                editForm.capacity.trim() === '' ? null : Number.parseInt(editForm.capacity, 10);
+            if (capacity != null && Number.isNaN(capacity)) {
+                setEditError('Capacity must be a number.');
+                return;
+            }
+            try {
+                await updateCoalitionEvent(id, {
+                    title: editForm.title.trim(),
+                    description: editForm.description.trim(),
+                    startsAt,
+                    endsAt: editForm.endsAt ? toIsoOrUndefined(editForm.endsAt) : null,
+                    capacity,
+                });
+                setEditingId(null);
+                refetch();
+            } catch (err) {
+                setEditError(err instanceof Error ? err.message : 'Could not save changes.');
+            }
+        },
+        [editForm, refetch]
+    );
+
+    const cancelEvent = useCallback(
+        async (id: string) => {
+            try {
+                await updateCoalitionEvent(id, { status: 'cancelled' });
+                setEditingId(null);
+                refetch();
+            } catch (err) {
+                setEditError(err instanceof Error ? err.message : 'Could not cancel event.');
+            }
+        },
+        [refetch]
     );
 
     return (
         <div style={containerStyle}>
             <div style={rowStyle}>
                 <strong style={{ fontSize: 18 }}>Events</strong>
-                <button type="button" style={ghostButtonStyle} onClick={() => setShowForm((v) => !v)}>
+                <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={() => setShowForm((v) => !v)}
+                >
                     {showForm ? 'Close' : 'New event'}
                 </button>
             </div>
@@ -335,10 +420,17 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                         ) : null}
                     </div>
                     {formError ? (
-                        <span style={{ color: 'var(--danger, #e74c3c)', fontSize: 13 }}>{formError}</span>
+                        <span style={{ color: 'var(--danger, #e74c3c)', fontSize: 13 }}>
+                            {formError}
+                        </span>
                     ) : null}
                     <div style={rowStyle}>
-                        <button type="button" style={buttonStyle} onClick={submit} disabled={submitting}>
+                        <button
+                            type="button"
+                            style={buttonStyle}
+                            onClick={submit}
+                            disabled={submitting}
+                        >
                             {submitting ? 'Creating…' : 'Create event'}
                         </button>
                     </div>
@@ -364,7 +456,9 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                                     cancelled
                                 </span>
                             ) : (
-                                <span style={labelStyle}>{event.nextOccurrence?.status ?? 'past'}</span>
+                                <span style={labelStyle}>
+                                    {event.nextOccurrence?.status ?? 'past'}
+                                </span>
                             )}
                         </div>
                         <span style={labelStyle}>{formatWhen(when)}</span>
@@ -375,7 +469,9 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                             <button
                                 type="button"
                                 style={ghostButtonStyle}
-                                onClick={() => (isOpen ? setSelectedId(null) : openDetail(event.id))}
+                                onClick={() =>
+                                    isOpen ? setSelectedId(null) : openDetail(event.id)
+                                }
                             >
                                 {isOpen ? 'Hide details' : 'Details'}
                             </button>
@@ -383,6 +479,117 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                         {isOpen ? (
                             <div style={{ ...cardStyle, background: 'var(--bg-input)' }}>
                                 <p style={{ margin: 0, fontSize: 14 }}>{event.description}</p>
+                                <div style={rowStyle}>
+                                    <button
+                                        type="button"
+                                        style={ghostButtonStyle}
+                                        onClick={() =>
+                                            editingId === event.id
+                                                ? setEditingId(null)
+                                                : openEdit(event)
+                                        }
+                                    >
+                                        {editingId === event.id ? 'Close edit' : 'Edit'}
+                                    </button>
+                                    {event.status !== 'cancelled' ? (
+                                        <button
+                                            type="button"
+                                            style={ghostButtonStyle}
+                                            onClick={() => cancelEvent(event.id)}
+                                        >
+                                            Cancel event
+                                        </button>
+                                    ) : null}
+                                </div>
+                                {editingId === event.id ? (
+                                    <div style={cardStyle}>
+                                        <label style={labelStyle}>Title</label>
+                                        <input
+                                            style={inputStyle}
+                                            value={editForm.title}
+                                            onChange={(e) =>
+                                                setEditForm((f) => ({
+                                                    ...f,
+                                                    title: e.target.value,
+                                                }))
+                                            }
+                                        />
+                                        <label style={labelStyle}>Description</label>
+                                        <textarea
+                                            style={{ ...inputStyle, minHeight: 56 }}
+                                            value={editForm.description}
+                                            onChange={(e) =>
+                                                setEditForm((f) => ({
+                                                    ...f,
+                                                    description: e.target.value,
+                                                }))
+                                            }
+                                        />
+                                        <div style={rowStyle}>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={labelStyle}>Starts</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    style={{ ...inputStyle, width: '100%' }}
+                                                    value={editForm.startsAt}
+                                                    onChange={(e) =>
+                                                        setEditForm((f) => ({
+                                                            ...f,
+                                                            startsAt: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={labelStyle}>Ends (optional)</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    style={{ ...inputStyle, width: '100%' }}
+                                                    value={editForm.endsAt}
+                                                    onChange={(e) =>
+                                                        setEditForm((f) => ({
+                                                            ...f,
+                                                            endsAt: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={labelStyle}>Capacity</label>
+                                                <input
+                                                    style={{ ...inputStyle, width: 90 }}
+                                                    value={editForm.capacity}
+                                                    inputMode="numeric"
+                                                    onChange={(e) =>
+                                                        setEditForm((f) => ({
+                                                            ...f,
+                                                            capacity: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                        {editError ? (
+                                            <span
+                                                style={{
+                                                    color: 'var(--danger, #e74c3c)',
+                                                    fontSize: 13,
+                                                }}
+                                            >
+                                                {editError}
+                                            </span>
+                                        ) : null}
+                                        <div style={rowStyle}>
+                                            <button
+                                                type="button"
+                                                style={buttonStyle}
+                                                onClick={() => saveEdit(event.id)}
+                                            >
+                                                Save changes
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
                                 <div style={rowStyle}>
                                     {RSVP_STATUSES.map((status) => (
                                         <button
@@ -409,7 +616,13 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                                 {detail && detail.event.id === event.id ? (
                                     <div>
                                         <span style={labelStyle}>Upcoming dates</span>
-                                        <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 13 }}>
+                                        <ul
+                                            style={{
+                                                margin: '4px 0 0',
+                                                paddingLeft: 18,
+                                                fontSize: 13,
+                                            }}
+                                        >
                                             {detail.occurrences.slice(0, 6).map((occ) => (
                                                 <li key={occ.index}>{formatWhen(occ.startsAt)}</li>
                                             ))}

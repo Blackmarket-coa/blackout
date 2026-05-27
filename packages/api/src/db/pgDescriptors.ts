@@ -162,6 +162,43 @@ const OVERRIDES: Record<string, DescriptorOverride> = {
       return rec;
     },
   },
+  // seller_locations flattens the nested SellerLocation.coordinates into lat/lng columns.
+  sellerLocations: {
+    toRow: (r) => {
+      const coords = (r.coordinates ?? {}) as { latitude?: number; longitude?: number };
+      return {
+        id: r.id,
+        seller_id: r.sellerId,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        address_line: r.addressLine,
+        city: r.city,
+        state: r.state,
+        zip: r.zip,
+        country: r.country,
+        display_radius_meters: r.displayRadiusMeters,
+        is_visible: r.isVisible,
+        location_type: r.locationType,
+        created_at: r.createdAt,
+        updated_at: r.updatedAt,
+      };
+    },
+    fromRow: (row) => ({
+      id: row.id,
+      sellerId: row.seller_id,
+      coordinates: { latitude: row.latitude, longitude: row.longitude },
+      addressLine: row.address_line,
+      city: row.city,
+      state: row.state,
+      zip: row.zip,
+      country: row.country,
+      displayRadiusMeters: row.display_radius_meters,
+      isVisible: row.is_visible,
+      locationType: row.location_type,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }),
+  },
   // coalition_aid_posts flattens the nested AidPost.location into lat/lng/address columns.
   coalitionAidPosts: {
     toRow: (r) => {
@@ -276,6 +313,9 @@ const ALL_MAP_NAMES = [
   'ringMemberships',
   'ringInvitations',
   'coalitionKitApplications',
+  'coalitionTasks',
+  'sellerLocations',
+  'coalitionFeedItems',
   'canopyDirectoryEntries',
   'clips',
   'coliseumTopics',
@@ -434,6 +474,10 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   upsertRingMembership: upsert('ringMemberships'),
   upsertRingInvitation: upsert('ringInvitations'),
   recordCoalitionKitApplication: upsert('coalitionKitApplications'),
+  createCoalitionTask: upsert('coalitionTasks'),
+  updateCoalitionTaskStatus: upsert('coalitionTasks'),
+  upsertSellerLocation: upsert('sellerLocations'),
+  upsertCoalitionFeedItem: upsert('coalitionFeedItems'),
   upsertCanopyDirectoryEntry: upsert('canopyDirectoryEntries'),
   upsertClip: upsert('clips'),
   updateClip: upsert('clips'),

@@ -1,12 +1,15 @@
 import type {
   AidPost,
   CoalitionEvent,
+  CoalitionFeedItem,
   CoalitionRing,
+  CoalitionTask,
   EventRsvp,
   RideClaim,
   RideOffer,
   RingInvitation,
   RingMembership,
+  SellerLocation,
   SpatialFeedItem,
   VolunteerSignup,
   VolunteerSlot,
@@ -1006,6 +1009,20 @@ export interface CoalitionKitApplicationRecord {
   scopeId: string;
   appliedByUserId: string;
   createdAt: string;
+}
+
+/** A Coalition den task. CoalitionTask already carries createdAt/updatedAt. */
+export type CoalitionTaskRecord = CoalitionTask;
+
+/** A seller's map location. Coordinates flatten to lat/lng columns in Postgres. */
+export interface SellerLocationRecord extends SellerLocation {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A ranked Coalition feed item (video/event/aid/listing/proposal). */
+export interface CoalitionFeedItemRecord extends CoalitionFeedItem {
+  updatedAt: string;
 }
 
 /**
