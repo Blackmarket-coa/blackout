@@ -295,10 +295,10 @@ export default function EventsTab({ scope }: EventsTabProps): React.ReactElement
                 <strong style={{ fontSize: 18 }}>Events</strong>
                 <button
                     type="button"
-                    style={ghostButtonStyle}
+                    style={showForm ? ghostButtonStyle : buttonStyle}
                     onClick={() => setShowForm((v) => !v)}
                 >
-                    {showForm ? 'Close' : 'New event'}
+                    {showForm ? 'Close' : '+ New event'}
                 </button>
             </div>
 
