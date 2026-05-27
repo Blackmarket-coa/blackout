@@ -1,15 +1,22 @@
 import { useMemo, useState } from 'react';
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { useLegacyRoomAdapter as useRoom } from '../../plugins/matrix-adapters/hooks/useLegacyRoomAdapter';
+import {
+    type ModActionEntry,
+    type ModSeverity,
+    classifyModSeverity,
+    dayBoundaryTs,
+    filterModActionEntries,
+} from './moderationLog';
 
-export interface ModActionEntry {
-    eventId: string;
-    action: string;
-    moderator: string;
-    target: string;
-    reason: string;
-    timestamp: number;
-}
+export type { ModActionEntry } from './moderationLog';
+
+const SEVERITY_COLOR: Record<ModSeverity, string> = {
+    info: 'var(--text-secondary)',
+    low: 'var(--accent-primary, #5865f2)',
+    medium: 'var(--color-warning, #f0b232)',
+    high: 'var(--color-danger, #e5484d)',
+};
 
 const parseEvent = (event: MatrixEvent): ModActionEntry | null => {
     const content = event.getContent<Record<string, unknown>>();
@@ -53,6 +60,8 @@ export const ModActionLog = ({ managementRoomId }: { managementRoomId: string })
     const [moderatorFilter, setModeratorFilter] = useState('');
     const [targetFilter, setTargetFilter] = useState('');
     const [query, setQuery] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
 
     const entries = useMemo(() => {
         const events = room.data?.getLiveTimeline().getEvents() ?? [];
@@ -67,23 +76,18 @@ export const ModActionLog = ({ managementRoomId }: { managementRoomId: string })
         [entries],
     );
 
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        return entries.filter((entry) => {
-            if (actionFilter !== 'all' && entry.action !== actionFilter) return false;
-            if (
-                moderatorFilter &&
-                !entry.moderator.toLowerCase().includes(moderatorFilter.toLowerCase())
-            )
-                return false;
-            if (targetFilter && !entry.target.toLowerCase().includes(targetFilter.toLowerCase()))
-                return false;
-            if (!q) return true;
-            return `${entry.action} ${entry.moderator} ${entry.target} ${entry.reason}`
-                .toLowerCase()
-                .includes(q);
-        });
-    }, [actionFilter, entries, moderatorFilter, query, targetFilter]);
+    const filtered = useMemo(
+        () =>
+            filterModActionEntries(entries, {
+                action: actionFilter,
+                moderator: moderatorFilter,
+                target: targetFilter,
+                query,
+                fromTs: dayBoundaryTs(fromDate, 'start'),
+                toTs: dayBoundaryTs(toDate, 'end'),
+            }),
+        [actionFilter, entries, fromDate, moderatorFilter, query, targetFilter, toDate]
+    );
 
     return (
         <section style={{ display: 'grid', gap: 10 }}>
@@ -138,6 +142,22 @@ export const ModActionLog = ({ managementRoomId }: { managementRoomId: string })
                         placeholder="reason or action"
                     />
                 </label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                    From
+                    <input
+                        type="date"
+                        value={fromDate}
+                        onChange={(event) => setFromDate(event.target.value)}
+                    />
+                </label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+                    To
+                    <input
+                        type="date"
+                        value={toDate}
+                        onChange={(event) => setToDate(event.target.value)}
+                    />
+                </label>
             </div>
 
             <div
@@ -166,7 +186,18 @@ export const ModActionLog = ({ managementRoomId }: { managementRoomId: string })
                             <div
                                 style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
                             >
-                                <strong>{entry.action}</strong>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span
+                                        aria-hidden
+                                        style={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: 999,
+                                            background: SEVERITY_COLOR[classifyModSeverity(entry.action)],
+                                        }}
+                                    />
+                                    <strong>{entry.action}</strong>
+                                </span>
                                 <time style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                     {new Date(entry.timestamp).toLocaleString()}
                                 </time>

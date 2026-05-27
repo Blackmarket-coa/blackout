@@ -11,6 +11,7 @@ import {
   RoomLocalAddresses,
   RoomPublishedAddresses,
   RoomPublish,
+  RoomSlowmode,
   RoomUpgrade,
 } from '../../common-settings/general';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
@@ -51,6 +52,7 @@ export function General({ requestClose }: GeneralProps) {
                 <RoomJoinRules permissions={permissions} />
                 <RoomHistoryVisibility permissions={permissions} />
                 <RoomEncryption permissions={permissions} />
+                <RoomSlowmode permissions={permissions} />
                 <RoomPublish permissions={permissions} />
               </Box>
               <Box direction="Column" gap="100">

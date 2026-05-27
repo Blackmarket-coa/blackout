@@ -10,8 +10,9 @@ const moderationActionSchema = z.object({
   communityId: z.string().min(1),
   actorId: z.string().min(1),
   targetId: z.string().min(1),
-  action: z.enum(['warn', 'mute', 'ban', 'remove_content']),
+  action: z.enum(['warn', 'mute', 'ban', 'remove_content', 'timeout', 'slowmode']),
   reason: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 function createModerationRouter() {
@@ -31,6 +32,7 @@ function createModerationRouter() {
       targetId: parsed.targetId,
       action: parsed.action,
       reason: parsed.reason,
+      ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
     });
 
     const event = emitDomainEvent({ module: 'moderation', type: 'moderation.action.taken', payload: { actionId: record.id, targetId: record.targetId, action: record.action } });
