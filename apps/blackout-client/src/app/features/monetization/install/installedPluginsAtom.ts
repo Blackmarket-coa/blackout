@@ -7,6 +7,7 @@ import type { OwnedTemplate } from '../../streaming/kits/communityTemplate';
 import type { OwnedAiPersona, OwnedAutomationRecipe } from '../../aiden/aiGoods';
 import type { OwnedVaultGrant } from '../../vault/vaultGoods';
 import type { OwnedSoundPack } from '../../audio/soundPackGoods';
+import type { OwnedStreamAsset } from '../../streaming/overlays/streamAssetGoods';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -47,6 +48,8 @@ export interface InstalledPluginRecord {
     vaultGrant?: OwnedVaultGrant;
     /** For `sound_pack` entitlements: the decoded, sanitized audio pack. */
     soundPack?: OwnedSoundPack;
+    /** For `stream_asset` entitlements: the decoded, sanitized creator/stream asset. */
+    streamAsset?: OwnedStreamAsset;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';

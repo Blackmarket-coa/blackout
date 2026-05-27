@@ -24,6 +24,10 @@ import {
 } from '../../aiden/aiGoods';
 import { parseOwnedVaultGrant, type OwnedVaultGrant } from '../../vault/vaultGoods';
 import { parseOwnedSoundPack, type OwnedSoundPack } from '../../audio/soundPackGoods';
+import {
+    parseOwnedStreamAsset,
+    type OwnedStreamAsset,
+} from '../../streaming/overlays/streamAssetGoods';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -96,6 +100,10 @@ function decodeVaultGrant(bundleBytes: Uint8Array): OwnedVaultGrant | null {
 
 function decodeSoundPack(bundleBytes: Uint8Array): OwnedSoundPack | null {
     return parseOwnedSoundPack(decodeBundlePayload(bundleBytes));
+}
+
+function decodeStreamAsset(bundleBytes: Uint8Array): OwnedStreamAsset | null {
+    return parseOwnedStreamAsset(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -195,8 +203,8 @@ export async function installEntitlement(
     switch (bundle.manifest.artifactKind) {
         case 'theme':
         case 'asset_bundle':
-        // Stream assets cache their verified bundle for the streaming surface.
         case 'stream_asset':
+            record.streamAsset = decodeStreamAsset(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'sound_pack':
