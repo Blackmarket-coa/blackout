@@ -618,6 +618,19 @@ test('IRC shim: bot PRIVMSG into a #yt: channel does NOT touch Twitch IRC (Matri
   }
 });
 
+test('IRC shim loop-prevention invariant: ingress never requests the echo-message cap', async () => {
+  // The shim mirrors a bot's PRIVMSG out to real Twitch IRC for #login
+  // channels. That is only safe while chat-ingress does NOT request
+  // `twitch.tv/echo-message` — otherwise Twitch echoes our own PRIVMSG
+  // back through ingress → hub → bot and loops forever. This guards the
+  // invariant the relay site in ircServer.ts depends on.
+  const chatIngress = await import('../src/integrations/twitch/chatIngress');
+  assert.ok(
+    !(chatIngress.REQUIRED_CAPS as readonly string[]).includes('twitch.tv/echo-message'),
+    'chat-ingress must not request echo-message or the outbound mirror loops',
+  );
+});
+
 test('listSessionsForUser: scopes to caller; reports nick + joined channels + token id; pre-auth sessions hidden', async () => {
   const { tokens, shim, db } = await loadModules();
   const alice = await seedUser(db);

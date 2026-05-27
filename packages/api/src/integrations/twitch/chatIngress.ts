@@ -27,7 +27,20 @@ const TWITCH_IRC_WSS = 'wss://irc-ws.chat.twitch.tv:443';
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_CAP_MS = 30_000;
 const MAX_RECONNECTS = 6;
-const REQUIRED_CAPS = ['twitch.tv/tags', 'twitch.tv/commands', 'twitch.tv/membership'] as const;
+/**
+ * Capabilities we request on the ingress connection. Deliberately does NOT
+ * include `twitch.tv/echo-message`: without it, Twitch does not echo our own
+ * outbound PRIVMSGs back to us. The twitch-compat IRC shim relies on this
+ * invariant to mirror a bot's PRIVMSG out to real Twitch without it looping
+ * back through this ingress → hub → bot. Adding `echo-message` here would
+ * reintroduce that loop, so the shim guards against it
+ * (see integrations/twitch-compat/ircServer.ts).
+ */
+export const REQUIRED_CAPS = [
+  'twitch.tv/tags',
+  'twitch.tv/commands',
+  'twitch.tv/membership',
+] as const;
 
 // ----------------------------- WebSocket abstraction -----------------------------
 

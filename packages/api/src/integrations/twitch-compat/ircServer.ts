@@ -26,7 +26,10 @@ import {
 } from '../../services/chatMessageHub';
 import { matrixClient as defaultMatrixClient } from '../matrix-client';
 import type { MatrixSendEventClient } from '../../services/twitchChatBridge';
-import { sendChatMessage as sendTwitchIrcChatMessage } from '../twitch/chatIngress';
+import {
+  REQUIRED_CAPS as TWITCH_INGRESS_CAPS,
+  sendChatMessage as sendTwitchIrcChatMessage,
+} from '../twitch/chatIngress';
 import { log } from '../../telemetry/logger';
 
 /**
@@ -40,11 +43,21 @@ import { log } from '../../telemetry/logger';
  *     this) is shipped to the bot as a Twitch-shape PRIVMSG.
  *   - The bot's outbound PRIVMSG is forwarded into the bridge's Matrix
  *     room with `m.blackout.origin = 'twitch_irc_compat_bot'`.
+ *   - For Twitch-shape (`#login`) channels ONLY, the bot's outbound
+ *     PRIVMSG is ALSO mirrored back out to real Twitch IRC via the
+ *     creator's authed chat-ingress connection, so a Twitch bot reaches
+ *     the real Twitch chat the same way it would natively.
  *
- * Read-only on Twitch's side: we do NOT relay the bot's PRIVMSG back
- * out to Twitch IRC. The bridge is for plumbing bot events into
- * Blackout, not for piping bot output back to Twitch — the creator's
- * Twitch account already serves that purpose.
+ * Loop prevention: the outbound mirror is safe only because the
+ * chat-ingress connection does NOT request the `twitch.tv/echo-message`
+ * capability (see REQUIRED_CAPS in integrations/twitch/chatIngress.ts), so
+ * Twitch never echoes our own PRIVMSG back into ingress → hub → bot. If
+ * that capability is ever added, this mirror would loop; the relay site
+ * below asserts the invariant to fail loudly instead.
+ *
+ * YouTube/Kick (`#yt:` / `#kick:`) channels stay Matrix-only: their
+ * outbound semantics differ (YT needs OAuth quota; Kick has no public
+ * outbound API).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -334,14 +347,19 @@ const handleEvent = (
 
       // For Twitch-shape channels (#login), ALSO mirror the bot's
       // message back out to real Twitch IRC via the creator's authed
-      // chat-ingress connection. Loop prevention: Twitch IRC doesn't
-      // echo our own outbound PRIVMSGs unless `echo-message` cap is
-      // requested (the chat-bridge does NOT request it), so this
-      // doesn't round-trip through twitchChatBridge → hub → bot.
+      // chat-ingress connection. This is safe only while ingress does not
+      // request the `echo-message` cap: otherwise our own PRIVMSG echoes
+      // back through twitchChatBridge → hub → bot and loops forever. Guard
+      // the invariant here so a future cap change fails loudly rather than
+      // silently looping.
       // YouTube and Kick #yt:/#kick: channels stay Matrix-only because
       // their outbound semantics are different (YT needs OAuth quota;
       // Kick has no public outbound API).
-      if (bridge.source === 'twitch' && evt.channel.startsWith('#')) {
+      if (
+        bridge.source === 'twitch' &&
+        evt.channel.startsWith('#') &&
+        !(TWITCH_INGRESS_CAPS as readonly string[]).includes('twitch.tv/echo-message')
+      ) {
         const twitchChannel = evt.channel.slice(1);
         try {
           const out = sendTwitchIrcChatMessage(
