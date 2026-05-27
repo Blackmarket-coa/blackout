@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
-import type { ClipRecord, StreamRecord } from '../db/types';
+import type { ClipRecord, StreamRecord, TwitchExtensionPanelRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
 import { clipWriteRateLimit } from '../middleware/rate-limit';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
@@ -83,6 +83,35 @@ const clipUpdateSchema = z
     durationSeconds: z.number().int().nonnegative().optional(),
     visibility: z.enum(['public', 'private', 'member_only']).optional(),
     tags: z.array(z.string()).optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+// Twitch-extension-compat registry. Capabilities are constrained to the
+// `twitch.ext.*` scopes the host sandbox understands (see blackout-protocol
+// PluginCapability + the client ExtensionFrame). bundleUrl must be https
+// because the client sandbox fetches it.
+const EXTENSION_CAPABILITIES = [
+  'twitch.ext.identityShare',
+  'twitch.ext.subscriptionStatus',
+] as const;
+const httpsBundleUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((u) => u.startsWith('https://'), { message: 'bundleUrl must be an https URL' });
+const extensionCreateSchema = z.object({
+  label: z.string().min(1).max(120),
+  bundleUrl: httpsBundleUrl,
+  capabilities: z.array(z.enum(EXTENSION_CAPABILITIES)).max(8).optional(),
+});
+const extensionUpdateSchema = z
+  .object({
+    label: z.string().min(1).max(120).optional(),
+    bundleUrl: httpsBundleUrl.optional(),
+    capabilities: z.array(z.enum(EXTENSION_CAPABILITIES)).max(8).optional(),
+    isActive: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, {
     message: 'At least one field must be provided',
@@ -257,6 +286,17 @@ function createStreamingRouter() {
     latencyProfile: stream.latencyProfile,
     replayPointer: stream.replayPointer,
     denId: stream.denId,
+    // Active Twitch-compat extension panels the creator has registered; the
+    // viewer renders these in its sandboxed panel stack.
+    extensions: db
+      .listTwitchExtensionPanelsForCreator(stream.creatorId)
+      .filter((panel) => panel.isActive)
+      .map((panel) => ({
+        id: panel.id,
+        label: panel.label,
+        bundleUrl: panel.bundleUrl,
+        capabilities: panel.capabilities,
+      })),
     updatedAt: stream.updatedAt,
   });
 
@@ -398,6 +438,78 @@ function createStreamingRouter() {
         };
       });
     return c.json({ items: vods });
+  });
+
+  // --- Twitch extension registry (creator-owned) ---
+  // Panels a creator registers surface on all of their streams via the stream
+  // response `extensions[]`. Writes use the streaming.write capability and are
+  // scoped to the calling creator (a creator's id is their user id).
+
+  const panelToJson = (panel: TwitchExtensionPanelRecord) => ({
+    id: panel.id,
+    creatorId: panel.creatorId,
+    label: panel.label,
+    bundleUrl: panel.bundleUrl,
+    capabilities: panel.capabilities,
+    isActive: panel.isActive,
+    createdAt: panel.createdAt,
+    updatedAt: panel.updatedAt,
+  });
+
+  streaming.get('/extensions', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    return c.json({
+      items: db.listTwitchExtensionPanelsForCreator(creatorId).map(panelToJson),
+    });
+  });
+
+  streaming.post('/extensions', async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const parsed = await readJsonBody(c, extensionCreateSchema);
+    if (parsed instanceof Response) return parsed;
+    const panel = db.createTwitchExtensionPanel({
+      id: crypto.randomUUID(),
+      creatorId,
+      label: parsed.label,
+      bundleUrl: parsed.bundleUrl,
+      capabilities: parsed.capabilities ?? [],
+      isActive: true,
+    });
+    return c.json(panelToJson(panel), 201);
+  });
+
+  streaming.patch('/extensions/:panelId', async (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const panelId = c.req.param('panelId');
+    const existing = db.getTwitchExtensionPanel(panelId);
+    if (!existing) return c.json({ code: 'not_found', message: 'Extension not found' }, 404);
+    if (existing.creatorId !== creatorId) return ownershipForbidden(c);
+    const parsed = await readJsonBody(c, extensionUpdateSchema);
+    if (parsed instanceof Response) return parsed;
+    const updated = db.updateTwitchExtensionPanel(panelId, parsed);
+    return c.json(panelToJson(updated!));
+  });
+
+  streaming.delete('/extensions/:panelId', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'write');
+    if (denied) return denied;
+    const creatorId = requireAuthenticatedUser(c);
+    if (!creatorId) return c.json({ code: 'unauthorized', message: 'Sign in required' }, 401);
+    const panelId = c.req.param('panelId');
+    const existing = db.getTwitchExtensionPanel(panelId);
+    if (!existing) return c.json({ code: 'not_found', message: 'Extension not found' }, 404);
+    if (existing.creatorId !== creatorId) return ownershipForbidden(c);
+    db.deleteTwitchExtensionPanel(panelId);
+    return c.json({ ok: true });
   });
 
   const clipToJson = (clip: ClipRecord) => ({

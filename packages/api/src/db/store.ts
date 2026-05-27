@@ -52,6 +52,7 @@ import type {
   DiscordCompatWebhookRecord,
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
+  TwitchExtensionPanelRecord,
   ObsWsPasswordRecord,
   SimulcastDestinationRecord,
   CoalitionSpatialItemRecord,
@@ -150,6 +151,7 @@ type PersistedState = {
   outboundEventWebhooks: OutboundEventWebhookRecord[];
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
+  twitchExtensionPanels: TwitchExtensionPanelRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
   coalitionAidPosts: CoalitionAidPostRecord[];
   coalitionEvents: CoalitionEventRecord[];
@@ -244,6 +246,7 @@ class InMemoryDb {
   twitchIrcBotTokens = new Map<string, TwitchIrcBotTokenRecord>();
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
+  twitchExtensionPanels = new Map<string, TwitchExtensionPanelRecord>();
   /** Coalition spatial map pins, keyed by item id. */
   coalitionSpatialItems = new Map<string, CoalitionSpatialItemRecord>(
     COALITION_SPATIAL_SEED.map((row) => [row.id, row]),
@@ -1206,6 +1209,42 @@ class InMemoryDb {
 
   deleteObsWsPassword(id: string): boolean {
     return this.obsWsPasswords.delete(id);
+  }
+
+  // --- twitch extension panels (extension registry) ---
+
+  createTwitchExtensionPanel(
+    input: Omit<TwitchExtensionPanelRecord, 'createdAt' | 'updatedAt'>,
+  ): TwitchExtensionPanelRecord {
+    const now = nowIso();
+    const record: TwitchExtensionPanelRecord = { ...input, createdAt: now, updatedAt: now };
+    this.twitchExtensionPanels.set(record.id, record);
+    return record;
+  }
+
+  getTwitchExtensionPanel(id: string): TwitchExtensionPanelRecord | undefined {
+    return this.twitchExtensionPanels.get(id);
+  }
+
+  listTwitchExtensionPanelsForCreator(creatorId: string): TwitchExtensionPanelRecord[] {
+    return [...this.twitchExtensionPanels.values()].filter(
+      (row) => row.creatorId === creatorId,
+    );
+  }
+
+  updateTwitchExtensionPanel(
+    id: string,
+    patch: Partial<Pick<TwitchExtensionPanelRecord, 'label' | 'bundleUrl' | 'capabilities' | 'isActive'>>,
+  ): TwitchExtensionPanelRecord | undefined {
+    const existing = this.twitchExtensionPanels.get(id);
+    if (!existing) return undefined;
+    const updated: TwitchExtensionPanelRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.twitchExtensionPanels.set(id, updated);
+    return updated;
+  }
+
+  deleteTwitchExtensionPanel(id: string): boolean {
+    return this.twitchExtensionPanels.delete(id);
   }
 
   // --- simulcast destinations (Phase 1 / Track A) ---
@@ -2759,6 +2798,9 @@ export class FileBackedDb extends InMemoryDb {
     this.obsWsPasswords = new Map(
       (parsed.obsWsPasswords ?? []).map((row) => [row.id, row]),
     );
+    this.twitchExtensionPanels = new Map(
+      (parsed.twitchExtensionPanels ?? []).map((row) => [row.id, row]),
+    );
     if (parsed.coalitionSpatialItems) {
       this.coalitionSpatialItems = new Map(
         parsed.coalitionSpatialItems.map((row) => [row.id, row]),
@@ -2902,6 +2944,7 @@ export class FileBackedDb extends InMemoryDb {
       outboundEventWebhooks: [...this.outboundEventWebhooks.values()],
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
+      twitchExtensionPanels: [...this.twitchExtensionPanels.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],
       coalitionAidPosts: [...this.coalitionAidPosts.values()],
       coalitionEvents: [...this.coalitionEvents.values()],

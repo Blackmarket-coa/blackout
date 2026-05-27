@@ -318,6 +318,24 @@ export type OutboundEventType =
   | 'hypetrain.started'
   | 'hypetrain.ended';
 
+/**
+ * A Twitch-extension-compat panel a creator has registered. Surfaces on all of
+ * the creator's streams via the stream response `extensions[]`, and is rendered
+ * in the livestream viewer's panel stack (see PR #756's ExtensionFrame).
+ * `bundleUrl` is the extension JS the client sandbox fetches; `capabilities`
+ * are the granted `twitch.ext.*` scopes.
+ */
+export interface TwitchExtensionPanelRecord {
+  id: UUID;
+  creatorId: UUID;
+  label: string;
+  bundleUrl: string;
+  capabilities: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ObsWsPasswordRecord {
   id: UUID;
   blackoutUserId: UUID;
