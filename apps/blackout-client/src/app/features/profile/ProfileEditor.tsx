@@ -4,6 +4,8 @@ import AvatarDecoration from './AvatarDecoration';
 import ProfileThemeEditor from './ProfileThemeEditor';
 import { availableDecorations, myProfileAtom } from './profileAtoms';
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
+import { syncStatusToPresence } from './customStatus';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
 import type {
     ConnectionType,
     ProfileConnection,
@@ -67,6 +69,7 @@ export interface ProfileEditorProps {
 }
 
 export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEditorProps = {}) => {
+    const mx = useMatrixClient();
     const [profile, setProfile] = useAtom(myProfileAtom);
     const [nextConnection, setNextConnection] = useState<ProfileConnection>(defaultConnection());
     const [bannerCrop, setBannerCrop] = useState(50);
@@ -89,12 +92,14 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                 isFriend: profile.isFriend,
                 profile: profile.profile,
             });
+            // Publish the status to presence so other clients can see it.
+            await syncStatusToPresence(mx, profile.profile.status);
             setSaveState('saved');
         } catch (error) {
             setSaveError(error instanceof Error ? error.message : 'Failed to save profile.');
             setSaveState('error');
         }
-    }, [profile, saveProfile]);
+    }, [mx, profile, saveProfile]);
 
     const onImageUpload = (field: 'banner' | 'avatarUrl', file?: File) => {
         if (!file) return;
