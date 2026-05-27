@@ -1,358 +1,319 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
-import { CREATOR_LISTINGS_PATH } from '../../pages/paths';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
+import { useOnboardingProgress } from '../onboarding/onboardingState';
 import {
-    fetchMyMigrationCredits,
-    issueMigrationCredit,
-    redeemMigrationCredit,
-    type MigrationCreditRecord,
-    type MigrationCreditSourceKind,
-} from '../growth';
-import { fetchCreatorProviders, startCreatorPayoutOnboarding } from '../creators/creatorClient';
+    CREATOR_ONBOARDING_STEP_SEQUENCE,
+    useCreatorOnboardingProgress,
+    type CreatorOnboardingProgress,
+    type CreatorOnboardingStepId,
+} from './creatorOnboardingState';
+import {
+    trackCreatorArchetypesSelected,
+    trackCreatorOnboardingCompleted,
+    trackCreatorOnboardingStarted,
+    trackCreatorStepCompleted,
+    trackCreatorStepViewed,
+} from './creatorOnboardingTelemetry';
+import {
+    accentButton,
+    bodyStyle,
+    ghostButton,
+    headerStyle,
+    layoutStyle,
+    stepDescStyle,
+    subStyle,
+    titleStyle,
+    type CreatorStepDraft,
+} from './creatorOnboardingStyles';
+import { ArchetypeStep } from './steps/ArchetypeStep';
+import { PlatformLinkingStep } from './steps/PlatformLinkingStep';
+import { HubSetupStep } from './steps/HubSetupStep';
+import { DensStep } from './steps/DensStep';
+import { CoalitionStep } from './steps/CoalitionStep';
+import { RewardEnrollStep } from './steps/RewardEnrollStep';
+import { KitInstallStep } from './steps/KitInstallStep';
+import { FirstActionStep, firstActionTarget } from './steps/FirstActionStep';
 
-const layoutStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100%',
-    width: '100%',
-    background: 'var(--bg-surface, #0f172a)',
-    color: 'var(--text-primary, #f8fafc)',
+const stepLabel: Record<CreatorOnboardingStepId, string> = {
+    identity: 'Identity',
+    platform_linking: 'Platform linking',
+    hub_setup: 'Creator hub',
+    dens: 'Dens',
+    coalition: 'Coalition',
+    rewards: 'Rewards',
+    kit: 'Creator kit',
+    first_action: 'First action',
 };
 
-const headerStyle: CSSProperties = {
-    padding: '20px 20px 8px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
+const buildDraft = (snapshot: CreatorOnboardingProgress): CreatorStepDraft => ({
+    selectedArchetypes: snapshot.selectedArchetypes,
+    linkedProviders: snapshot.linkedProviders,
+    selectedDenTypes: snapshot.selectedDenTypes,
+    coalitionOptIn: snapshot.coalitionOptIn,
+    enrolledRewardTier: snapshot.enrolledRewardTier,
+    installedKitId: snapshot.installedKitId,
+    firstActionId: snapshot.firstActionId,
+});
+
+const progressBarStyle: CSSProperties = {
+    height: 6,
+    borderRadius: 999,
+    background: 'var(--border-default, #374151)',
+    overflow: 'hidden',
+    margin: '8px 0 0',
 };
 
-const titleStyle: CSSProperties = { margin: 0, fontSize: 22, fontWeight: 700 };
-const subStyle: CSSProperties = {
-    margin: 0,
-    color: 'var(--text-muted, #9ca3af)',
-    fontSize: 13,
-};
-
-const stepperStyle: CSSProperties = {
+const footerStyle: CSSProperties = {
     display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    padding: '12px 16px 24px',
-};
-
-const stepCardStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
     gap: 8,
-    padding: '12px 14px',
-    border: '1px solid var(--border-default, #374151)',
-    borderRadius: 12,
-    background: 'var(--bg-input, #0f172a)',
+    alignItems: 'center',
+    padding: '12px 16px 20px',
+    borderTop: '1px solid var(--border-default, #374151)',
 };
-
-const stepLabelStyle: CSSProperties = {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    color: 'var(--text-muted, #9ca3af)',
-};
-
-const stepTitleStyle: CSSProperties = { fontSize: 15, fontWeight: 600 };
-const stepDescStyle: CSSProperties = {
-    fontSize: 13,
-    lineHeight: 1.45,
-    color: 'var(--text-muted, #9ca3af)',
-};
-
-const formRow: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' };
-const inputStyle: CSSProperties = {
-    flex: '1 1 200px',
-    padding: '8px 10px',
-    borderRadius: 8,
-    border: '1px solid var(--border-default, #374151)',
-    background: 'var(--bg-surface, #0f172a)',
-    color: 'inherit',
-    fontSize: 13,
-};
-
-const accentButton: CSSProperties = {
-    padding: '8px 14px',
-    borderRadius: 999,
-    border: '1px solid var(--accent-primary, #3b82f6)',
-    background: 'var(--accent-primary, #3b82f6)',
-    color: 'var(--text-primary, #f8fafc)',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-};
-
-const ghostButton: CSSProperties = {
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: '1px solid var(--border-default, #374151)',
-    background: 'transparent',
-    color: 'var(--text-primary, #f8fafc)',
-    fontSize: 12,
-    cursor: 'pointer',
-};
-
-const formatPrice = (priceCents: number, currency: string): string => {
-    try {
-        return new Intl.NumberFormat(undefined, {
-            style: 'currency',
-            currency,
-            minimumFractionDigits: 0,
-        }).format(priceCents / 100);
-    } catch {
-        return `${(priceCents / 100).toFixed(2)} ${currency}`;
-    }
-};
-
-const SOURCE_KINDS: { id: MigrationCreditSourceKind; label: string }[] = [
-    { id: 'discord_migration', label: 'Discord' },
-    { id: 'twitch_migration', label: 'Twitch' },
-    { id: 'creator_invite', label: 'Creator invite' },
-    { id: 'campaign', label: 'Campaign' },
-];
 
 /**
- * PR 7 minimum-viable creator-onboarding fork. Mounted at
- * `/onboarding/creator` and gated by `onboardingCreatorPath`. The
- * page is a stepper UI that explains the creator path + opens the
- * existing `startCreatorPayoutOnboarding` provider URL + lets the
- * creator import a migration credit (Discord/Twitch handle → FBM
- * coupon, deferred). A full Y-fork integration with the existing
- * `OnboardingFlow` state machine lands as a follow-up.
+ * Creator headquarters onboarding — an 8-step wizard mounted at
+ * `/onboarding/creator` and gated by `onboardingCreatorPath`. Steps reuse
+ * existing subsystems (linked accounts, dens, coalition, rewards, kits). State
+ * is account-scoped (`co.bmc.onboarding.creator.v1`) and resumes mid-wizard.
+ * On finish it marks the member onboarding snapshot complete when a `?from`
+ * space id is present, then lands the creator on their chosen first action.
  */
 export const CreatorOnboarding = (): JSX.Element => {
     const navigate = useNavigate();
-    const [providers, setProviders] = useState<{ id: string; displayName: string }[]>([]);
-    const [credits, setCredits] = useState<MigrationCreditRecord[]>([]);
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState<string | null>(null);
-    const [sourceKind, setSourceKind] = useState<MigrationCreditSourceKind>('discord_migration');
-    const [sourceHandle, setSourceHandle] = useState('');
+    const [searchParams] = useSearchParams();
+    const fromSpaceId = searchParams.get('from') ?? '';
+    const progress = useCreatorOnboardingProgress();
+    // Space-scoped member progress, used only to clear the creator handoff
+    // panel on completion. Bound to '' when there is no `?from` — its methods
+    // are never called in that case.
+    const memberProgress = useOnboardingProgress(fromSpaceId);
+
+    const platformLinkingEnabled = runtimeFeatureFlags.onboardingCreatorPlatformLinking;
+    const rewardsEnabled = runtimeFeatureFlags.onboardingCreatorRewards;
+    const kitsEnabled = runtimeFeatureFlags.onboardingCreatorKits;
+
+    const visibleSteps = useMemo<CreatorOnboardingStepId[]>(
+        () =>
+            CREATOR_ONBOARDING_STEP_SEQUENCE.filter((step) => {
+                if (step === 'platform_linking') return platformLinkingEnabled;
+                if (step === 'rewards') return rewardsEnabled;
+                if (step === 'kit') return kitsEnabled;
+                return true;
+            }),
+        [platformLinkingEnabled, rewardsEnabled, kitsEnabled]
+    );
+
+    const [loading, setLoading] = useState(true);
+    const [done, setDone] = useState(false);
+    const [startedAt, setStartedAt] = useState(Date.now());
+    const [stepIndex, setStepIndex] = useState(0);
+    const [draft, setDraft] = useState<CreatorStepDraft>(() =>
+        buildDraft({
+            creatorStepIndex: 0,
+            skipped: false,
+            creatorCompleted: false,
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+            selectedArchetypes: [],
+            linkedProviders: [],
+            selectedDenTypes: [],
+        })
+    );
+    const [restartKey, setRestartKey] = useState(0);
 
     useEffect(() => {
-        let cancelled = false;
-        fetchCreatorProviders()
-            .then((response) => {
-                if (cancelled) return;
-                setProviders(response.providers);
-            })
-            .catch(() => undefined);
-        fetchMyMigrationCredits()
-            .then((response) => {
-                if (cancelled) return;
-                setCredits(response.items);
-            })
-            .catch(() => undefined);
+        let mounted = true;
+        void progress.read().then((snapshot) => {
+            if (!mounted) return;
+            const maxIndex = Math.max(0, visibleSteps.length - 1);
+            const initialStep = snapshot.creatorCompleted
+                ? maxIndex
+                : Math.min(snapshot.creatorStepIndex, maxIndex);
+            setStartedAt(snapshot.startedAt);
+            setStepIndex(initialStep);
+            setDraft(buildDraft(snapshot));
+            setDone(snapshot.creatorCompleted);
+            setLoading(false);
+            trackCreatorOnboardingStarted(snapshot.startedAt);
+            const stepId = visibleSteps[initialStep];
+            if (stepId) trackCreatorStepViewed(stepId, initialStep, Date.now() - snapshot.startedAt);
+        });
         return () => {
-            cancelled = true;
+            mounted = false;
         };
-    }, []);
+    }, [progress, visibleSteps, restartKey]);
 
-    const handleProviderOnboarding = async (providerId: string) => {
-        setBusy(providerId);
-        try {
-            const handle = await startCreatorPayoutOnboarding(providerId, window.location.href);
-            if (typeof handle.redirectUrl === 'string') {
-                window.open(handle.redirectUrl, '_blank', 'noopener,noreferrer');
+    const patch = useCallback(
+        (partial: Partial<CreatorOnboardingProgress>) => {
+            setDraft((prev) => ({ ...prev, ...partial }));
+            void progress.savePatch(partial);
+        },
+        [progress]
+    );
+
+    const clampedIndex = Math.min(stepIndex, Math.max(0, visibleSteps.length - 1));
+    const currentStep = visibleSteps[clampedIndex];
+    const isLastStep = clampedIndex >= visibleSteps.length - 1;
+    const elapsedMs = Date.now() - startedAt;
+
+    const canContinue = currentStep !== 'identity' || draft.selectedArchetypes.length > 0;
+
+    const goToStep = useCallback(
+        (nextIndex: number) => {
+            const clamped = Math.max(0, Math.min(nextIndex, visibleSteps.length - 1));
+            setStepIndex(clamped);
+            void progress.savePatch({ creatorStepIndex: clamped });
+            const stepId = visibleSteps[clamped];
+            if (stepId) trackCreatorStepViewed(stepId, clamped, Date.now() - startedAt);
+        },
+        [progress, startedAt, visibleSteps]
+    );
+
+    const finish = useCallback(
+        async (skipped: boolean) => {
+            const completedAt = Date.now();
+            await progress.markCompleted(skipped);
+            if (fromSpaceId) {
+                await memberProgress.markCompleted(false);
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'onboarding failed');
-        } finally {
-            setBusy(null);
+            trackCreatorOnboardingCompleted(completedAt, completedAt - startedAt, skipped);
+            setDone(true);
+            if (!skipped) navigate(firstActionTarget(draft.firstActionId));
+        },
+        [draft.firstActionId, fromSpaceId, memberProgress, navigate, progress, startedAt]
+    );
+
+    const handleContinue = () => {
+        if (!canContinue) return;
+        if (currentStep) trackCreatorStepCompleted(currentStep, clampedIndex, elapsedMs);
+        if (currentStep === 'identity') {
+            trackCreatorArchetypesSelected(draft.selectedArchetypes);
         }
+        if (isLastStep) {
+            void finish(false);
+            return;
+        }
+        goToStep(clampedIndex + 1);
     };
 
-    const handleIssueCredit = async (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setBusy('issue-credit');
-        try {
-            const { credit } = await issueMigrationCredit({
-                sourceKind,
-                sourceHandle: sourceHandle.trim() || undefined,
-                valueCents: 1000, // Default $10 starter; campaigns can override later.
-            });
-            setCredits((prev) => [credit, ...prev.filter((c) => c.id !== credit.id)]);
-            setSourceHandle('');
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'credit issue failed');
-        } finally {
-            setBusy(null);
-        }
+    const restart = async () => {
+        await progress.reset();
+        setRestartKey((key) => key + 1);
+        setDone(false);
     };
 
-    const handleRedeemCredit = async (id: string) => {
-        setBusy(`redeem-${id}`);
-        try {
-            const { credit } = await redeemMigrationCredit(id);
-            setCredits((prev) => prev.map((c) => (c.id === credit.id ? credit : c)));
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'redeem failed');
-        } finally {
-            setBusy(null);
-        }
-    };
+    if (loading) {
+        return (
+            <section style={layoutStyle} data-shell-region="creator-onboarding">
+                <header style={headerStyle}>
+                    <h1 style={titleStyle}>Become a creator</h1>
+                    <p style={subStyle}>Loading your creator headquarters…</p>
+                </header>
+            </section>
+        );
+    }
 
-    const liveProvider = useMemo(() => providers[0] ?? null, [providers]);
+    if (done) {
+        return (
+            <section style={layoutStyle} data-shell-region="creator-onboarding">
+                <header style={headerStyle}>
+                    <h1 style={titleStyle}>Your creator headquarters is set up</h1>
+                    <p style={subStyle}>
+                        Everything’s ready. Jump into the Creator Hub, or restart the setup to make
+                        changes.
+                    </p>
+                </header>
+                <div style={bodyStyle}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                            type="button"
+                            style={accentButton}
+                            onClick={() => navigate(firstActionTarget(draft.firstActionId))}
+                            data-testid="creator-onboarding-go"
+                        >
+                            Go to my first action
+                        </button>
+                        <button
+                            type="button"
+                            style={ghostButton}
+                            onClick={() => void restart()}
+                            data-testid="creator-onboarding-restart"
+                        >
+                            Restart setup
+                        </button>
+                    </div>
+                </div>
+            </section>
+        );
+    }
+
+    const stepProps = { draft, patch };
+    const percent = Math.round(((clampedIndex + 1) / visibleSteps.length) * 100);
 
     return (
         <section style={layoutStyle} data-shell-region="creator-onboarding">
             <header style={headerStyle}>
-                <h1 style={titleStyle}>Become a creator</h1>
+                <h1 style={titleStyle}>Build your creator headquarters</h1>
                 <p style={subStyle}>
-                    Set up your storefront, payout provider, and migration credits.
+                    Step {clampedIndex + 1} of {visibleSteps.length} ·{' '}
+                    {currentStep ? stepLabel[currentStep] : ''}
                 </p>
+                <div style={progressBarStyle} aria-hidden="true">
+                    <div
+                        data-testid="creator-onboarding-progress-bar"
+                        style={{
+                            width: `${percent}%`,
+                            height: '100%',
+                            background: 'var(--accent-primary, #3b82f6)',
+                        }}
+                    />
+                </div>
+            </header>
+
+            <div style={bodyStyle}>
+                {currentStep === 'identity' ? <ArchetypeStep {...stepProps} /> : null}
+                {currentStep === 'platform_linking' ? <PlatformLinkingStep {...stepProps} /> : null}
+                {currentStep === 'hub_setup' ? <HubSetupStep {...stepProps} /> : null}
+                {currentStep === 'dens' ? <DensStep {...stepProps} /> : null}
+                {currentStep === 'coalition' ? <CoalitionStep {...stepProps} /> : null}
+                {currentStep === 'rewards' ? <RewardEnrollStep {...stepProps} /> : null}
+                {currentStep === 'kit' ? <KitInstallStep {...stepProps} /> : null}
+                {currentStep === 'first_action' ? <FirstActionStep {...stepProps} /> : null}
+                {currentStep === 'identity' && !canContinue ? (
+                    <p style={stepDescStyle}>Pick at least one archetype to continue.</p>
+                ) : null}
+            </div>
+
+            <div style={footerStyle}>
                 <button
                     type="button"
-                    onClick={() => navigate(-1)}
+                    style={ghostButton}
+                    disabled={clampedIndex === 0}
+                    onClick={() => goToStep(clampedIndex - 1)}
                     data-testid="creator-onboarding-back"
-                    style={{
-                        marginTop: 4,
-                        alignSelf: 'flex-start',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-muted, #9ca3af)',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        padding: 0,
-                        textDecoration: 'underline',
-                    }}
                 >
-                    ← Back to member onboarding
+                    Back
                 </button>
-            </header>
-            <div style={stepperStyle}>
-                {error ? (
-                    <p
-                        style={{ color: 'var(--text-danger, #f87171)', margin: 0, fontSize: 13 }}
-                        data-testid="creator-onboarding-error"
-                    >
-                        {error}
-                    </p>
-                ) : null}
-
-                <article style={stepCardStyle} data-testid="step-payout">
-                    <span style={stepLabelStyle}>Step 1 · Payout</span>
-                    <span style={stepTitleStyle}>Connect your seller account</span>
-                    <span style={stepDescStyle}>
-                        FreeBlackMarket handles checkout, payouts, and tax — no need to set up
-                        Stripe yourself.
-                    </span>
-                    {liveProvider ? (
-                        <button
-                            type="button"
-                            style={accentButton}
-                            disabled={busy === liveProvider.id}
-                            onClick={() => void handleProviderOnboarding(liveProvider.id)}
-                            data-testid="step-payout-cta"
-                        >
-                            {busy === liveProvider.id
-                                ? 'Opening…'
-                                : `Onboard with ${liveProvider.displayName}`}
-                        </button>
-                    ) : (
-                        <span style={stepDescStyle}>No payout providers available.</span>
-                    )}
-                </article>
-
-                <article style={stepCardStyle} data-testid="step-listing">
-                    <span style={stepLabelStyle}>Step 2 · First listing</span>
-                    <span style={stepTitleStyle}>Publish your first product</span>
-                    <span style={stepDescStyle}>
-                        Drafts live in the Creator Listings page — open it once your payout account
-                        is verified.
-                    </span>
-                    <Link
-                        to={CREATOR_LISTINGS_PATH}
-                        style={{ ...accentButton, textDecoration: 'none', textAlign: 'center' }}
-                    >
-                        Open Creator Listings
-                    </Link>
-                </article>
-
-                <article style={stepCardStyle} data-testid="step-migration">
-                    <span style={stepLabelStyle}>Step 3 · Migration credits</span>
-                    <span style={stepTitleStyle}>Bring your audience from Discord / Twitch</span>
-                    <span style={stepDescStyle}>
-                        Import a handle from another platform to grant your existing community a
-                        starter credit on FreeBlackMarket. The FBM coupon is settled in a follow-up
-                        — for now we record the credit in the ledger and surface it below.
-                    </span>
-                    <form onSubmit={handleIssueCredit} style={formRow}>
-                        <select
-                            value={sourceKind}
-                            onChange={(event) =>
-                                setSourceKind(event.target.value as MigrationCreditSourceKind)
-                            }
-                            style={inputStyle}
-                            aria-label="Source platform"
-                        >
-                            {SOURCE_KINDS.map((entry) => (
-                                <option key={entry.id} value={entry.id}>
-                                    {entry.label}
-                                </option>
-                            ))}
-                        </select>
-                        <input
-                            type="text"
-                            placeholder="@handle"
-                            value={sourceHandle}
-                            onChange={(event) => setSourceHandle(event.target.value)}
-                            style={inputStyle}
-                            data-testid="migration-handle-input"
-                        />
-                        <button
-                            type="submit"
-                            style={accentButton}
-                            disabled={busy === 'issue-credit'}
-                            data-testid="migration-issue-cta"
-                        >
-                            {busy === 'issue-credit' ? 'Issuing…' : 'Issue credit'}
-                        </button>
-                    </form>
-                </article>
-
-                {credits.length > 0 ? (
-                    <article style={stepCardStyle} data-testid="migration-credits-list">
-                        <span style={stepLabelStyle}>Your credits</span>
-                        {credits.map((credit) => (
-                            <div
-                                key={credit.id}
-                                style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-                                data-testid="migration-credit-row"
-                                data-credit-id={credit.id}
-                                data-credit-redeemed={credit.redeemedAt ? 'true' : 'false'}
-                            >
-                                <span style={{ flex: 1, fontSize: 13 }}>
-                                    {formatPrice(credit.valueCents, credit.currency)} ·{' '}
-                                    {credit.sourceKind}
-                                    {credit.sourceHandle ? ` · ${credit.sourceHandle}` : ''}
-                                </span>
-                                {credit.redeemedAt ? (
-                                    <span style={stepDescStyle}>Redeemed</span>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        style={ghostButton}
-                                        disabled={busy === `redeem-${credit.id}`}
-                                        onClick={() => void handleRedeemCredit(credit.id)}
-                                    >
-                                        Redeem
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </article>
-                ) : null}
-
-                <p style={stepDescStyle}>
-                    {BLACKOUT_TERMS.canopy.titlePlural} you create later inherit your creator
-                    profile automatically.
-                </p>
+                <span style={{ flex: 1 }} />
+                <button
+                    type="button"
+                    style={ghostButton}
+                    onClick={() => void finish(true)}
+                    data-testid="creator-onboarding-skip"
+                >
+                    Skip for now
+                </button>
+                <button
+                    type="button"
+                    style={accentButton}
+                    disabled={!canContinue}
+                    onClick={handleContinue}
+                    data-testid="creator-onboarding-continue"
+                >
+                    {isLastStep ? 'Finish' : 'Continue'}
+                </button>
             </div>
         </section>
     );

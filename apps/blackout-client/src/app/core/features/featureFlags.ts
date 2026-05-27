@@ -188,6 +188,24 @@ export type FeatureFlags = {
      */
     onboardingMigrationCredits: boolean;
     /**
+     * Platform-linking step of the creator wizard. When on, the creator
+     * onboarding flow includes a step that connects external platforms
+     * (Twitch/YouTube/Discord/Patreon/…) via the linked-accounts OAuth flow.
+     */
+    onboardingCreatorPlatformLinking: boolean;
+    /**
+     * Reward-enrollment step of the creator wizard. When on, the creator
+     * onboarding flow includes a step that enrolls the creator in the
+     * ambassador/reward program via `applyAsAmbassador`.
+     */
+    onboardingCreatorRewards: boolean;
+    /**
+     * Creator-kit step of the creator wizard. When on, the creator onboarding
+     * flow includes a step that installs a Creator Kit (one-click apply via
+     * `applyCreatorKit`).
+     */
+    onboardingCreatorKits: boolean;
+    /**
      * Beta-only "For developers & bug hunters" wizard step. When on,
      * the member onboarding flow shows an extra step that surfaces
      * Settings → Developer Tools, source-file references for testers,
@@ -299,6 +317,9 @@ export const defaultFeatureFlags: FeatureFlags = {
     eventsV1: false,
     onboardingCreatorPath: false,
     onboardingMigrationCredits: false,
+    onboardingCreatorPlatformLinking: false,
+    onboardingCreatorRewards: false,
+    onboardingCreatorKits: false,
     onboardingDeveloperStep: false,
     onboardingInterestPicker: false,
     // On by default: new (incl. invited) users get the Home tour. Env
@@ -649,6 +670,24 @@ export const resolveFeatureFlags = (
         if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
             nextFlags.onboardingMigrationCredits = false;
         }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PLATFORM_LINKING === 'true') {
+            nextFlags.onboardingCreatorPlatformLinking = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_PLATFORM_LINKING === 'false') {
+            nextFlags.onboardingCreatorPlatformLinking = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_REWARDS === 'true') {
+            nextFlags.onboardingCreatorRewards = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_REWARDS === 'false') {
+            nextFlags.onboardingCreatorRewards = false;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_KITS === 'true') {
+            nextFlags.onboardingCreatorKits = true;
+        }
+        if (env.BLACKOUT_ONBOARDING_CREATOR_KITS === 'false') {
+            nextFlags.onboardingCreatorKits = false;
+        }
         if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'true') {
             nextFlags.onboardingDeveloperStep = true;
         }
@@ -906,6 +945,24 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_ONBOARDING_MIGRATION_CREDITS === 'false') {
         nextFlags.onboardingMigrationCredits = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PLATFORM_LINKING === 'true') {
+        nextFlags.onboardingCreatorPlatformLinking = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_PLATFORM_LINKING === 'false') {
+        nextFlags.onboardingCreatorPlatformLinking = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_REWARDS === 'true') {
+        nextFlags.onboardingCreatorRewards = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_REWARDS === 'false') {
+        nextFlags.onboardingCreatorRewards = false;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_KITS === 'true') {
+        nextFlags.onboardingCreatorKits = true;
+    }
+    if (env.BLACKOUT_ONBOARDING_CREATOR_KITS === 'false') {
+        nextFlags.onboardingCreatorKits = false;
     }
     if (env.BLACKOUT_ONBOARDING_DEVELOPER_STEP === 'true') {
         nextFlags.onboardingDeveloperStep = true;
