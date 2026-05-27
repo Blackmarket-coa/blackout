@@ -46,6 +46,7 @@ import {
 } from './routes/discordCompatWebhooks';
 import outboundEventWebhookRoutes from './routes/outboundEventWebhooks';
 import twitchIrcBotTokenRoutes from './routes/twitchIrcBotTokens';
+import twitchHelixProxyRoutes from './routes/twitchHelixProxy';
 import obsWsPasswordRoutes from './routes/obsWsPasswords';
 import rtmpFanoutRoutes from './routes/rtmpFanout';
 import matrixAppserviceRoutes from './routes/matrixAppservice';
@@ -182,6 +183,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/integrations/discord-compat/webhooks`, discordCompatWebhookRoutes);
   app.route(`${root}/integrations/outbound-webhooks`, outboundEventWebhookRoutes);
   app.route(`${root}/integrations/twitch-compat/bot-tokens`, twitchIrcBotTokenRoutes);
+  app.route(`${root}/integrations/twitch/helix-proxy`, twitchHelixProxyRoutes);
   app.route(`${root}/integrations/obs-ws/passwords`, obsWsPasswordRoutes);
   app.route(`${root}/integrations/simulcast/fanout`, rtmpFanoutRoutes);
   app.route(`${root}/coalition`, coalitionRoutes);
