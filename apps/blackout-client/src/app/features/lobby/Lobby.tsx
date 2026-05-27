@@ -208,7 +208,9 @@ export function Lobby({ onOpenRoom }: LobbyProps = {}) {
   const virtualizer = useVirtualizer({
     count: hierarchy.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 1,
+    // Each item is a whole space-hierarchy section; measureElement corrects the
+    // exact height, but a realistic estimate avoids a startup scrollbar lurch.
+    estimateSize: () => 120,
     overscan: 2,
     paddingStart: heroSectionHeight ?? 258,
   });
