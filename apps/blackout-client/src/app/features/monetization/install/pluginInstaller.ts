@@ -15,6 +15,7 @@ import type {
 import { mountSandbox, unmountSandbox } from './sandbox/sandboxRegistry';
 import { verifySignedBundle } from './pluginSignature';
 import { parseOwnedCosmetic, type OwnedCosmetic } from '../../profile/cosmeticTypes';
+import { parseOwnedTemplate, type OwnedTemplate } from '../../streaming/kits/communityTemplate';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -52,20 +53,25 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 /**
- * Decode a profile-cosmetic bundle's bytes into an OwnedCosmetic. The verified
- * bundle is UTF-8 JSON; accept either `{ payload: {...} }` (the canonical
- * envelope) or a bare cosmetic object, then sanitize via parseOwnedCosmetic.
+ * Decode a verified bundle's bytes into its payload object. The bundle is UTF-8
+ * JSON; accept either `{ payload: {...} }` (the canonical envelope) or a bare
+ * object. Returns null on any decode failure.
  */
-function decodeCosmetic(bundleBytes: Uint8Array): OwnedCosmetic | null {
+function decodeBundlePayload(bundleBytes: Uint8Array): unknown {
     try {
-        const text = new TextDecoder().decode(bundleBytes);
-        const parsed = JSON.parse(text) as Record<string, unknown>;
-        const candidate =
-            parsed && typeof parsed === 'object' && 'payload' in parsed ? parsed.payload : parsed;
-        return parseOwnedCosmetic(candidate);
+        const parsed = JSON.parse(new TextDecoder().decode(bundleBytes)) as Record<string, unknown>;
+        return parsed && typeof parsed === 'object' && 'payload' in parsed ? parsed.payload : parsed;
     } catch {
         return null;
     }
+}
+
+function decodeCosmetic(bundleBytes: Uint8Array): OwnedCosmetic | null {
+    return parseOwnedCosmetic(decodeBundlePayload(bundleBytes));
+}
+
+function decodeTemplate(bundleBytes: Uint8Array): OwnedTemplate | null {
+    return parseOwnedTemplate(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -166,10 +172,9 @@ export async function installEntitlement(
         case 'theme':
         case 'asset_bundle':
         // Data-delivery artifact kinds whose runtime is wired by their own
-        // feature surface (soundboard, stream overlays, templates, vault, AI).
+        // feature surface (soundboard, stream overlays, vault, AI).
         // They cache the verified bundle here; the consuming feature reads it.
         case 'sound_pack':
-        case 'community_template':
         case 'stream_asset':
         case 'vault_item':
         case 'ai_persona':
@@ -178,6 +183,10 @@ export async function installEntitlement(
             break;
         case 'profile_cosmetic':
             record.cosmetic = decodeCosmetic(bundleBytes) ?? undefined;
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'community_template':
+            record.template = decodeTemplate(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'manifest_plugin':

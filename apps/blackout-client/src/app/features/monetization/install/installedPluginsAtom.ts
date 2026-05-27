@@ -3,6 +3,7 @@ import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { InstallScope } from '@blackout/core';
 import type { PluginCapability, PluginManifest } from '@blackout/sdk';
 import type { OwnedCosmetic } from '../../profile/cosmeticTypes';
+import type { OwnedTemplate } from '../../streaming/kits/communityTemplate';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -33,6 +34,8 @@ export interface InstalledPluginRecord {
      * reload and are pruned automatically when the entitlement is revoked.
      */
     cosmetic?: OwnedCosmetic;
+    /** For `community_template` entitlements: the decoded, sanitized template. */
+    template?: OwnedTemplate;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';
