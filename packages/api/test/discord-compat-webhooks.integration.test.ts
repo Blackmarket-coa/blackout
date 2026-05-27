@@ -165,6 +165,42 @@ test('deliverWebhookPayload: forwards content to matrix with origin extension fi
   assert.ok(updated!.lastUsedAt);
 });
 
+test('deliverWebhookPayload: renders embed timestamp and color into the matrix body', async () => {
+  const { service, db } = await loadModules();
+  const user = await seedUser(db);
+  const created = service.createWebhook({
+    blackoutUserId: user.id,
+    matrixRoomId: '!den:srv',
+    name: 'Grafana',
+  });
+  if (created.kind !== 'ok') return assert.fail();
+  const fake = buildFakeMatrix();
+
+  const out = await service.deliverWebhookPayload(
+    created.record.id,
+    created.token,
+    {
+      embeds: [
+        {
+          title: 'Alert firing',
+          footer: { text: 'Grafana' },
+          timestamp: '2026-05-27T12:00:00.000Z',
+          color: 0xff0000,
+        },
+      ],
+    },
+    { matrixClient: fake.matrixClient },
+  );
+  assert.equal(out.kind, 'ok');
+  assert.equal(fake.calls.length, 1);
+  const body = String(fake.calls[0].content.body);
+  assert.match(body, /Alert firing/);
+  // Footer, timestamp and color collapse onto one metadata row.
+  assert.match(body, /Grafana/);
+  assert.match(body, /27 May 2026/);
+  assert.match(body, /#ff0000/);
+});
+
 test('deleteWebhook: forbidden across users; not_found for unknown; ok then list empties', async () => {
   const { service, db } = await loadModules();
   const alice = await seedUser(db);
