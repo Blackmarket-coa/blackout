@@ -3,6 +3,8 @@ import { useAtom } from 'jotai';
 import { isValidColiseumTab, type ColiseumTabId } from '@blackout/core';
 import { coliseumTabAtom, COLISEUM_TAB_ORDER } from '../../state/coliseum';
 import ColiseumTabStrip from './ColiseumTabStrip';
+import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
+import { COLISEUM_TAB_GUIDES } from './coliseumTabGuides';
 import TopicsTab from './tabs/TopicsTab';
 import DebateTab from './tabs/DebateTab';
 import ReelTab from './tabs/ReelTab';
@@ -36,7 +38,7 @@ export function ColiseumView({
 
     const tabs = useMemo<ColiseumTabId[]>(
         () => (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COLISEUM_TAB_ORDER),
-        [enabledTabs],
+        [enabledTabs]
     );
 
     const activeTab = useMemo<ColiseumTabId>(() => {
@@ -49,7 +51,7 @@ export function ColiseumView({
             if (!tabs.includes(tab)) return;
             setTab(tab);
         },
-        [setTab, tabs],
+        [setTab, tabs]
     );
 
     const scope = useMemo(
@@ -57,12 +59,17 @@ export function ColiseumView({
             canopyId: canopyId ?? undefined,
             denId: denId ?? undefined,
         }),
-        [canopyId, denId],
+        [canopyId, denId]
     );
 
     return (
         <section
-            style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%', minHeight: 0 }}
+            style={{
+                display: 'grid',
+                gridTemplateRows: 'auto auto 1fr',
+                height: '100%',
+                minHeight: 0,
+            }}
             data-testid="coliseum-view"
         >
             <ColiseumTabStrip
@@ -72,6 +79,7 @@ export function ColiseumView({
                 onSearch={onSearch}
                 scopeLabel={scopeLabel}
             />
+            <FeatureGuide>{COLISEUM_TAB_GUIDES[activeTab]}</FeatureGuide>
             <div style={{ minHeight: 0, overflow: 'auto' }}>
                 {activeTab === 'topics' ? <TopicsTab scope={scope} /> : null}
                 {activeTab === 'debate' ? <DebateTab /> : null}

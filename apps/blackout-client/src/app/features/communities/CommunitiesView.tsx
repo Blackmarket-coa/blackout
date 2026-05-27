@@ -6,6 +6,7 @@ import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { GlossaryTerm } from '../../lib/GlossaryTerm';
 import { DiscoverySurface } from '../discovery/DiscoverySurface';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
+import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
 
 export const CommunitiesView = () => {
     const rooms = useAtomValue(joinedRoomsAtom);
@@ -75,7 +76,9 @@ export const CommunitiesView = () => {
                             }}
                         >
                             Browse joined{' '}
-                            <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.plural}</GlossaryTerm>{' '}
+                            <GlossaryTerm term="canopy">
+                                {BLACKOUT_TERMS.canopy.plural}
+                            </GlossaryTerm>{' '}
                             or discover new ones.
                         </p>
                     </div>
@@ -132,6 +135,13 @@ export const CommunitiesView = () => {
                     </small>
                 )}
             </header>
+
+            <FeatureGuide>
+                <GlossaryTerm term="canopy">{BLACKOUT_TERMS.canopy.titlePlural}</GlossaryTerm> are
+                communities — like servers — made of{' '}
+                <GlossaryTerm term="den">{BLACKOUT_TERMS.den.plural}</GlossaryTerm> (channels). Join
+                the ones you like, or discover new ones below.
+            </FeatureGuide>
 
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <DiscoverySurface onSelectRoom={openRoom} onSelectSpace={openSpace} />

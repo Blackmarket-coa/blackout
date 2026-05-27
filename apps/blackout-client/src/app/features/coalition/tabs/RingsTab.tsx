@@ -263,10 +263,10 @@ export default function RingsTab(): React.ReactElement {
                 <strong style={{ fontSize: 18 }}>Rings</strong>
                 <button
                     type="button"
-                    style={ghostButtonStyle}
+                    style={showForm ? ghostButtonStyle : buttonStyle}
                     onClick={() => setShowForm((v) => !v)}
                 >
-                    {showForm ? 'Close' : 'New ring'}
+                    {showForm ? 'Close' : '+ New ring'}
                 </button>
             </div>
 

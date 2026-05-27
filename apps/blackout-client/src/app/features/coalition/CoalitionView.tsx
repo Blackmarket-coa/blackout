@@ -4,6 +4,8 @@ import { aiToolsEnabled, isValidCoalitionTab, type CoalitionTabId } from '@black
 import { coalitionTabAtom, COALITION_TAB_ORDER } from '../../state/coalition';
 import { useDenType } from '../../hooks/useDenType';
 import CoalitionTabStrip from './CoalitionTabStrip';
+import { FeatureGuide } from '../../components/feature-guide/FeatureGuide';
+import { COALITION_TAB_GUIDES } from './coalitionTabGuides';
 import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
 import MapTab from './tabs/MapTab';
@@ -43,8 +45,9 @@ export function CoalitionView({
     const isAiDen = aiToolsEnabled(denType);
 
     const tabs = useMemo<CoalitionTabId[]>(() => {
-        const base = (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COALITION_TAB_ORDER)
-            .filter((tab) => tab !== 'ai');
+        const base = (
+            enabledTabs && enabledTabs.length > 0 ? enabledTabs : COALITION_TAB_ORDER
+        ).filter((tab) => tab !== 'ai');
         // The AI tab surfaces only inside AI dens.
         return isAiDen ? [...base, 'ai'] : base;
     }, [enabledTabs, isAiDen]);
@@ -59,7 +62,7 @@ export function CoalitionView({
             if (!tabs.includes(tab)) return;
             setTab(tab);
         },
-        [setTab, tabs],
+        [setTab, tabs]
     );
 
     const scope = useMemo(
@@ -67,12 +70,17 @@ export function CoalitionView({
             canopyId: canopyId ?? undefined,
             denId: denId ?? undefined,
         }),
-        [canopyId, denId],
+        [canopyId, denId]
     );
 
     return (
         <section
-            style={{ display: 'grid', gridTemplateRows: 'auto 1fr', height: '100%', minHeight: 0 }}
+            style={{
+                display: 'grid',
+                gridTemplateRows: 'auto auto 1fr',
+                height: '100%',
+                minHeight: 0,
+            }}
             data-testid="coalition-view"
         >
             <CoalitionTabStrip
@@ -82,6 +90,7 @@ export function CoalitionView({
                 onSearch={onSearch}
                 scopeLabel={scopeLabel}
             />
+            <FeatureGuide>{COALITION_TAB_GUIDES[activeTab]}</FeatureGuide>
             <div style={{ minHeight: 0, overflow: 'auto' }}>
                 {activeTab === 'chat' ? <ChatTab denId={denId ?? null} /> : null}
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
@@ -91,9 +100,7 @@ export function CoalitionView({
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}
                 {activeTab === 'tasks' ? <TasksTab scope={scope} /> : null}
                 {activeTab === 'kits' ? <KitsTab scope={scope} /> : null}
-                {activeTab === 'documents' && denId ? (
-                    <DocumentsTab roomId={denId} />
-                ) : null}
+                {activeTab === 'documents' && denId ? <DocumentsTab roomId={denId} /> : null}
                 {activeTab === 'ai' ? (
                     <AiDenPanel roomId={denId ?? null} denType={denType} />
                 ) : null}
