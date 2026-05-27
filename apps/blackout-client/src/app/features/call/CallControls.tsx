@@ -1,6 +1,11 @@
 import { type CSSProperties, useMemo } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { useCall } from './CallProvider';
 import { usePushToTalk } from './usePushToTalk';
+import {
+    selectedVoiceFilterIdAtom,
+    voiceFilterPresetsAtom,
+} from '../audio/audioGoodsAtoms';
 
 const controlButtonStyle: CSSProperties = {
     border: '1px solid var(--border-default)',
@@ -39,6 +44,9 @@ export const CallControls = ({
     } = useCall();
 
     usePushToTalk();
+
+    const voiceFilters = useAtomValue(voiceFilterPresetsAtom);
+    const [voiceFilterId, setVoiceFilterId] = useAtom(selectedVoiceFilterIdAtom);
 
     const audioOptions = useMemo(
         () =>
@@ -99,6 +107,22 @@ export const CallControls = ({
                     {audioOptions.map((device) => (
                         <option key={device.id} value={device.id}>
                             {device.label}
+                        </option>
+                    ))}
+                </select>
+            </label>
+
+            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                Voice
+                <select
+                    data-testid="call-voice-filter"
+                    value={voiceFilterId}
+                    onChange={(event) => setVoiceFilterId(event.target.value)}
+                    style={{ ...controlButtonStyle, padding: '4px 8px' }}
+                >
+                    {voiceFilters.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                            {preset.name}
                         </option>
                     ))}
                 </select>

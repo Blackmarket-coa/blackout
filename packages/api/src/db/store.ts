@@ -53,6 +53,8 @@ import type {
   OutboundEventWebhookRecord,
   TwitchIrcBotTokenRecord,
   TwitchExtensionPanelRecord,
+  CreatorListingRecord,
+  VaultItemRecord,
   ChannelPointsRewardRecord,
   ChannelPointsLedgerRecord,
   ObsWsPasswordRecord,
@@ -154,6 +156,8 @@ type PersistedState = {
   twitchIrcBotTokens: TwitchIrcBotTokenRecord[];
   obsWsPasswords: ObsWsPasswordRecord[];
   twitchExtensionPanels: TwitchExtensionPanelRecord[];
+  creatorListings: CreatorListingRecord[];
+  vaultItems: VaultItemRecord[];
   channelPointsRewards: ChannelPointsRewardRecord[];
   channelPointsLedger: ChannelPointsLedgerRecord[];
   coalitionSpatialItems: CoalitionSpatialItemRecord[];
@@ -251,6 +255,10 @@ class InMemoryDb {
   /** Keyed by password id (also the URL slug). */
   obsWsPasswords = new Map<string, ObsWsPasswordRecord>();
   twitchExtensionPanels = new Map<string, TwitchExtensionPanelRecord>();
+  /** Keyed by listing id. */
+  creatorListings = new Map<string, CreatorListingRecord>();
+  /** Keyed by vault item id. */
+  vaultItems = new Map<string, VaultItemRecord>();
   channelPointsRewards = new Map<string, ChannelPointsRewardRecord>();
   channelPointsLedger = new Map<string, ChannelPointsLedgerRecord>();
   /** Coalition spatial map pins, keyed by item id. */
@@ -1251,6 +1259,76 @@ class InMemoryDb {
 
   deleteTwitchExtensionPanel(id: string): boolean {
     return this.twitchExtensionPanels.delete(id);
+  }
+
+  // --- creator listings (marketplace seller catalog) ---
+
+  createCreatorListing(
+    input: Omit<CreatorListingRecord, 'createdAt' | 'updatedAt'>,
+  ): CreatorListingRecord {
+    const now = nowIso();
+    const record: CreatorListingRecord = { ...input, createdAt: now, updatedAt: now };
+    this.creatorListings.set(record.id, record);
+    return record;
+  }
+
+  getCreatorListing(id: string): CreatorListingRecord | undefined {
+    return this.creatorListings.get(id);
+  }
+
+  listCreatorListingsForSeller(sellerUserId: string): CreatorListingRecord[] {
+    return [...this.creatorListings.values()].filter(
+      (row) => row.sellerUserId === sellerUserId,
+    );
+  }
+
+  updateCreatorListing(
+    id: string,
+    patch: Partial<
+      Pick<CreatorListingRecord, 'status' | 'providerListingId' | 'publicSlug' | 'publishedAt'>
+    >,
+  ): CreatorListingRecord | undefined {
+    const existing = this.creatorListings.get(id);
+    if (!existing) return undefined;
+    const updated: CreatorListingRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.creatorListings.set(id, updated);
+    return updated;
+  }
+
+  deleteCreatorListing(id: string): boolean {
+    return this.creatorListings.delete(id);
+  }
+
+  // --- vault items (encrypted personal vault) ---
+
+  createVaultItem(input: Omit<VaultItemRecord, 'createdAt' | 'updatedAt'>): VaultItemRecord {
+    const now = nowIso();
+    const record: VaultItemRecord = { ...input, createdAt: now, updatedAt: now };
+    this.vaultItems.set(record.id, record);
+    return record;
+  }
+
+  getVaultItem(id: string): VaultItemRecord | undefined {
+    return this.vaultItems.get(id);
+  }
+
+  listVaultItemsForOwner(ownerUserId: string): VaultItemRecord[] {
+    return [...this.vaultItems.values()].filter((row) => row.ownerUserId === ownerUserId);
+  }
+
+  updateVaultItem(
+    id: string,
+    patch: Partial<Pick<VaultItemRecord, 'label' | 'ciphertext' | 'iv' | 'algo'>>,
+  ): VaultItemRecord | undefined {
+    const existing = this.vaultItems.get(id);
+    if (!existing) return undefined;
+    const updated: VaultItemRecord = { ...existing, ...patch, updatedAt: nowIso() };
+    this.vaultItems.set(id, updated);
+    return updated;
+  }
+
+  deleteVaultItem(id: string): boolean {
+    return this.vaultItems.delete(id);
   }
 
   // --- channel points (engagement economy) ---
@@ -2866,6 +2944,12 @@ export class FileBackedDb extends InMemoryDb {
     this.twitchExtensionPanels = new Map(
       (parsed.twitchExtensionPanels ?? []).map((row) => [row.id, row]),
     );
+    this.creatorListings = new Map(
+      (parsed.creatorListings ?? []).map((row) => [row.id, row]),
+    );
+    this.vaultItems = new Map(
+      (parsed.vaultItems ?? []).map((row) => [row.id, row]),
+    );
     this.channelPointsRewards = new Map(
       (parsed.channelPointsRewards ?? []).map((row) => [row.id, row]),
     );
@@ -3016,6 +3100,8 @@ export class FileBackedDb extends InMemoryDb {
       twitchIrcBotTokens: [...this.twitchIrcBotTokens.values()],
       obsWsPasswords: [...this.obsWsPasswords.values()],
       twitchExtensionPanels: [...this.twitchExtensionPanels.values()],
+      creatorListings: [...this.creatorListings.values()],
+      vaultItems: [...this.vaultItems.values()],
       channelPointsRewards: [...this.channelPointsRewards.values()],
       channelPointsLedger: [...this.channelPointsLedger.values()],
       coalitionSpatialItems: [...this.coalitionSpatialItems.values()],

@@ -1,5 +1,5 @@
 import { createElement, type ReactNode } from 'react';
-import type { NormalizedListing } from '@blackout/core';
+import { categoryLabel, type NormalizedListing } from '@blackout/core';
 import type { MarketplaceProviderSummary } from './marketplaceClient';
 import { resolveMarketplaceProvider } from './providerMetadata';
 
@@ -71,7 +71,7 @@ export function ListingCard({
             createElement(
                 'span',
                 { style: { fontSize: 11, color: 'var(--text-secondary)' } },
-                listing.category
+                categoryLabel(listing.category)
             )
         ),
         createElement('h3', { style: { margin: 0, fontSize: 16 } }, listing.title),

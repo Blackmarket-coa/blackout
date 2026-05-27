@@ -8,6 +8,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import { useAtomValue } from 'jotai';
 import type { MatrixClient, MatrixEvent, RoomState } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import {
@@ -16,6 +17,8 @@ import {
     type CallFocusResolution,
 } from './callHealth';
 import { clientQueries } from '../../sdk/client';
+import { selectedVoiceFilterAtom } from '../audio/audioGoodsAtoms';
+import { applyVoiceFilter, type VoiceFilterPreset } from '../audio/voiceFilter';
 
 const MSC3401_EVENT_TYPES = ['m.call.member', 'org.matrix.msc3401.call.member'];
 
@@ -191,6 +194,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const activeSessionRef = useRef<MatrixRtcSessionLike | null>(null);
     const activeDeviceStreamRef = useRef<MediaStream | null>(null);
     const activeDisplayStreamRef = useRef<MediaStream | null>(null);
+    // Voice-filter DSP: the selected preset and the disposer for the AudioContext
+    // currently filtering the mic. Re-acquiring the mic re-applies the filter.
+    const voiceFilter = useAtomValue(selectedVoiceFilterAtom);
+    const voiceFilterRef = useRef<VoiceFilterPreset>(voiceFilter);
+    useEffect(() => {
+        voiceFilterRef.current = voiceFilter;
+    }, [voiceFilter]);
+    const voiceFilterDisposeRef = useRef<(() => void) | null>(null);
     const pendingJoinRef = useRef<{ roomId: string; promise: Promise<void> } | null>(null);
     // Latest mute state read inside the (mute-independent) acquisition effect so a
     // freshly-acquired track inherits the current toggle without re-acquiring on mute.
@@ -244,10 +255,20 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             if (session?.setVideoInputDevice && preferredVideoDeviceId) {
                 await session.setVideoInputDevice(preferredVideoDeviceId);
             }
+            // Run the mic through the equipped voice-filter DSP graph (a
+            // no-op for the None preset), and publish the filtered stream. The
+            // original `stream` stays the device ref so mute + cleanup act on
+            // the real tracks (muting the source silences the filter output).
+            const { stream: publishStream, dispose } = applyVoiceFilter(
+                stream,
+                voiceFilterRef.current
+            );
+            voiceFilterDisposeRef.current = dispose;
+
             // Don't clobber an active screen-share: the display stream owns the
             // published media until the user stops sharing.
             if (session?.setLocalMediaStream && !activeDisplayStreamRef.current) {
-                await session.setLocalMediaStream(stream);
+                await session.setLocalMediaStream(publishStream);
             }
 
             activeDeviceStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -256,8 +277,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         return () => {
             cancelled = true;
+            voiceFilterDisposeRef.current?.();
+            voiceFilterDisposeRef.current = null;
         };
-    }, [joined, preferredAudioDeviceId, preferredVideoDeviceId, cameraEnabled]);
+    }, [joined, preferredAudioDeviceId, preferredVideoDeviceId, cameraEnabled, voiceFilter.id]);
 
     // Mute toggle: flip the local audio tracks' `enabled` flag in place so we
     // don't tear down and re-acquire the device stream just to (un)mute.

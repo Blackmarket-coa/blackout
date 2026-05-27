@@ -26,7 +26,13 @@ export type MarketplaceCategory =
     | 'meme-asset'
     | 'stego-software'
     | 'plugin-curated'
-    | 'subscription';
+    | 'subscription'
+    | 'profile-cosmetic'
+    | 'audio-pack'
+    | 'community-template'
+    | 'creator-asset'
+    | 'security-tool'
+    | 'ai-automation';
 
 export type EntitlementKind =
     | 'emoji_pack'
@@ -37,7 +43,12 @@ export type EntitlementKind =
     | 'post_unlock'
     | 'event_ticket'
     | 'role_grant'
-    | 'channel_access';
+    | 'channel_access'
+    | 'profile_cosmetic'
+    | 'sound_pack'
+    | 'community_template'
+    | 'stream_asset'
+    | 'vault_item';
 
 export type EntitlementStatus =
     | 'granted'
@@ -103,7 +114,18 @@ export interface MarketplaceProviderInfo {
 
 export interface CreatorListingDraftInput {
     sellerUserId: string;
-    artifactKind: 'theme' | 'manifest_plugin' | 'code_plugin' | 'asset_bundle';
+    artifactKind:
+        | 'theme'
+        | 'manifest_plugin'
+        | 'code_plugin'
+        | 'asset_bundle'
+        | 'profile_cosmetic'
+        | 'sound_pack'
+        | 'community_template'
+        | 'stream_asset'
+        | 'vault_item'
+        | 'ai_persona'
+        | 'automation_recipe';
     category: MarketplaceCategory;
     entitlementKind: EntitlementKind;
     title: string;

@@ -1,6 +1,13 @@
 import React, { useCallback, useState, type CSSProperties } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { aiToolsEnabled, type DenType } from '@blackout/core';
 import { echoAiProvider, type AiProvider, type AiProviderMessage } from './aiProvider';
+import {
+    equippedAiPersonaAtom,
+    equippedAiPersonaIdAtom,
+    ownedAiPersonasAtom,
+    ownedAutomationRecipesAtom,
+} from './aiGoodsAtoms';
 
 export interface AiDenPanelProps {
     /** The den (room) this panel is scoped to. */
@@ -52,6 +59,10 @@ export function AiDenPanel({ roomId, denType, provider = echoAiProvider }: AiDen
     const [messages, setMessages] = useState<AiProviderMessage[]>([]);
     const [draft, setDraft] = useState('');
     const [pending, setPending] = useState(false);
+    const ownedPersonas = useAtomValue(ownedAiPersonasAtom);
+    const ownedAutomations = useAtomValue(ownedAutomationRecipesAtom);
+    const equippedPersona = useAtomValue(equippedAiPersonaAtom);
+    const [equippedPersonaId, setEquippedPersonaId] = useAtom(equippedAiPersonaIdAtom);
 
     const onSubmit = useCallback(
         async (event: React.FormEvent<HTMLFormElement>) => {
@@ -63,13 +74,18 @@ export function AiDenPanel({ roomId, denType, provider = echoAiProvider }: AiDen
             setDraft('');
             setPending(true);
             try {
-                const reply = await provider.complete(next);
+                // Prepend the equipped persona's system prompt for this request
+                // without persisting it as a visible bubble.
+                const request: AiProviderMessage[] = equippedPersona
+                    ? [{ role: 'system', content: equippedPersona.systemPrompt }, ...next]
+                    : next;
+                const reply = await provider.complete(request);
                 setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
             } finally {
                 setPending(false);
             }
         },
-        [draft, messages, pending, provider],
+        [draft, equippedPersona, messages, pending, provider],
     );
 
     // AI tooling is confined to AI dens. This is defense-in-depth: the tab is
@@ -87,13 +103,69 @@ export function AiDenPanel({ roomId, denType, provider = echoAiProvider }: AiDen
 
     return (
         <div style={containerStyle} data-testid="ai-den-panel">
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Model: {provider.label}
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                }}
+            >
+                <span>Model: {provider.label}</span>
+                {ownedPersonas.length > 0 ? (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Persona
+                        <select
+                            data-testid="ai-den-persona"
+                            value={equippedPersonaId ?? ''}
+                            onChange={(event) =>
+                                setEquippedPersonaId(event.target.value || null)
+                            }
+                            style={{
+                                padding: '2px 6px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border-default)',
+                                background: 'var(--bg-input)',
+                                color: 'var(--text-primary)',
+                            }}
+                        >
+                            <option value="">None</option>
+                            {ownedPersonas.map((persona) => (
+                                <option key={persona.id} value={persona.id}>
+                                    {persona.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                ) : null}
             </div>
+            {ownedAutomations.length > 0 ? (
+                <details data-testid="ai-den-automations" style={{ fontSize: 12 }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                        Automations ({ownedAutomations.length})
+                    </summary>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                        {ownedAutomations.map((recipe) => (
+                            <li key={recipe.id} data-automation={recipe.id}>
+                                <strong>{recipe.name}</strong>
+                                {recipe.triggers.length > 0
+                                    ? ` — when ${recipe.triggers.join(', ')}`
+                                    : ''}
+                                {recipe.actions.length > 0
+                                    ? ` → ${recipe.actions.join(', ')}`
+                                    : ''}
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            ) : null}
             <div style={logStyle} data-testid="ai-den-log">
                 {messages.length === 0 ? (
                     <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-                        Ask the AI den for research, analysis, summarization, or brainstorming.
+                        {equippedPersona?.greeting ??
+                            'Ask the AI den for research, analysis, summarization, or brainstorming.'}
                     </p>
                 ) : (
                     messages.map((message, index) => (

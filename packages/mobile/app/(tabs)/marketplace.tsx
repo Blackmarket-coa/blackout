@@ -30,6 +30,12 @@ const categoryChoices: Array<{ id: string | 'all'; label: string }> = [
   { id: 'stego-software', label: 'Stego & Software' },
   { id: 'plugin-curated', label: 'Plugins' },
   { id: 'subscription', label: 'Subscriptions' },
+  { id: 'profile-cosmetic', label: 'Profile Cosmetics' },
+  { id: 'audio-pack', label: 'Audio Packs' },
+  { id: 'community-template', label: 'Community Templates' },
+  { id: 'creator-asset', label: 'Creator & Stream Assets' },
+  { id: 'security-tool', label: 'Security & Privacy' },
+  { id: 'ai-automation', label: 'AI & Automation' },
 ];
 
 function ownedKey(entitlement: NormalizedEntitlement): string {

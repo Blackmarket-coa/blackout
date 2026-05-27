@@ -52,6 +52,41 @@ const TABS: Array<{ id: TabId; label: string; description: string }> = [
         label: 'Asset bundle',
         description: 'Emoji, sticker, or meme assets exposed as an entitlement pack.',
     },
+    {
+        id: 'profile_cosmetic',
+        label: 'Profile cosmetic',
+        description: 'Avatar decoration, nameplate, profile effect, or collectible badge.',
+    },
+    {
+        id: 'sound_pack',
+        label: 'Sound pack',
+        description: 'Soundboard clips, notification sounds, or voice-filter presets.',
+    },
+    {
+        id: 'community_template',
+        label: 'Community template',
+        description: 'Den layout, role + permission bundle, or moderation rule pack.',
+    },
+    {
+        id: 'stream_asset',
+        label: 'Stream asset',
+        description: 'Overlay pack, alert pack, channel-point reward kit, or badge set.',
+    },
+    {
+        id: 'vault_item',
+        label: 'Security item',
+        description: 'Encrypted vault slot/template or privacy toolkit.',
+    },
+    {
+        id: 'ai_persona',
+        label: 'AI persona',
+        description: 'AI persona or prompt pack, confined to AI dens.',
+    },
+    {
+        id: 'automation_recipe',
+        label: 'Automation recipe',
+        description: 'Declarative trigger/action automation.',
+    },
     { id: 'listings', label: 'My listings', description: 'Manage your published artifacts.' },
     { id: 'payouts', label: 'Payouts', description: 'Connect your seller account for payouts.' },
 ];
@@ -65,6 +100,19 @@ function categoryFor(kind: CreatorArtifactKind): string {
             return 'plugin-curated';
         case 'asset_bundle':
             return 'emoji-sticker';
+        case 'profile_cosmetic':
+            return 'profile-cosmetic';
+        case 'sound_pack':
+            return 'audio-pack';
+        case 'community_template':
+            return 'community-template';
+        case 'stream_asset':
+            return 'creator-asset';
+        case 'vault_item':
+            return 'security-tool';
+        case 'ai_persona':
+        case 'automation_recipe':
+            return 'ai-automation';
     }
 }
 
@@ -77,6 +125,19 @@ function entitlementFor(kind: CreatorArtifactKind): string {
             return 'software_license';
         case 'asset_bundle':
             return 'asset_bundle';
+        case 'profile_cosmetic':
+            return 'profile_cosmetic';
+        case 'sound_pack':
+            return 'sound_pack';
+        case 'community_template':
+            return 'community_template';
+        case 'stream_asset':
+            return 'stream_asset';
+        case 'vault_item':
+            return 'vault_item';
+        case 'ai_persona':
+        case 'automation_recipe':
+            return 'plugin_flag';
     }
 }
 
@@ -337,6 +398,41 @@ export const CreatorStudio: React.FC = () => {
                 return renderDraftForm(
                     'asset_bundle',
                     'Object with { files: [{ name, mime, base64 }] }.'
+                );
+            case 'profile_cosmetic':
+                return renderDraftForm(
+                    'profile_cosmetic',
+                    'Object with { cosmeticType: avatar_decoration|nameplate|profile_effect|badge, ... }.'
+                );
+            case 'sound_pack':
+                return renderDraftForm(
+                    'sound_pack',
+                    'Object with { soundKind: soundboard|notification|voice_filter, ... }.'
+                );
+            case 'community_template':
+                return renderDraftForm(
+                    'community_template',
+                    'Object with { template: { dens, roles, moderation, onboarding } }.'
+                );
+            case 'stream_asset':
+                return renderDraftForm(
+                    'stream_asset',
+                    'Object with { assetType: overlay|alert|channel_point_kit|badge_set, ... }.'
+                );
+            case 'vault_item':
+                return renderDraftForm(
+                    'vault_item',
+                    'Object with { vaultKind: slot|template, ... }.'
+                );
+            case 'ai_persona':
+                return renderDraftForm(
+                    'ai_persona',
+                    'Object with { persona: { name, systemPrompt } }. AI-den only.'
+                );
+            case 'automation_recipe':
+                return renderDraftForm(
+                    'automation_recipe',
+                    'Object with { triggers: [...], actions: [...] }.'
                 );
             case 'listings':
                 return (

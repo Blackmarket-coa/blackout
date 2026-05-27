@@ -6,7 +6,7 @@
  */
 
 export interface AiProviderMessage {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
 }
 
@@ -22,8 +22,10 @@ export const echoAiProvider: AiProvider = {
     label: 'Echo (no model connected)',
     async complete(messages) {
         const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+        const system = messages.find((m) => m.role === 'system');
+        const prefix = system ? '[persona] ' : '';
         return lastUser
-            ? `Echo: ${lastUser.content}`
+            ? `${prefix}Echo: ${lastUser.content}`
             : 'No model is connected to this AI den yet.';
     },
 };
