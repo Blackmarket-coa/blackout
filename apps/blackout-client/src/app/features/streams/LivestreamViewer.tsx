@@ -35,6 +35,12 @@ const ExtensionPanelStackLazy = lazy(() =>
     }))
 );
 
+// Viewer-facing channel-points widget. Lazy; self-hides when the channel has
+// no rewards.
+const ChannelPointsWidgetLazy = lazy(() =>
+    import('./ChannelPointsWidget').then((mod) => ({ default: mod.ChannelPointsWidget }))
+);
+
 // Past-broadcast (VOD) list. Lazy; the component self-hides when the stream
 // has no replayable sessions.
 const StreamVodsLazy = lazy(() =>
@@ -300,6 +306,9 @@ export const LivestreamViewer = (): JSX.Element => {
                     <EmbeddedDenChatLazy denId={stream.denId} />
                 </Suspense>
             ) : null}
+            <Suspense fallback={null}>
+                <ChannelPointsWidgetLazy channelId={stream.creatorId} />
+            </Suspense>
             <Suspense fallback={null}>
                 <StreamVodsLazy streamId={stream.id} />
             </Suspense>

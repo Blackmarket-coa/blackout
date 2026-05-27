@@ -14,6 +14,7 @@ import { SimulcastDestinations } from '../settings/simulcast-destinations';
 import { ObsWsPasswords } from '../settings/obs-ws-passwords';
 import { TwitchIrcBotTokens } from '../settings/twitch-irc-bot-tokens';
 import { TwitchExtensions } from '../settings/twitch-extensions';
+import { ChannelPointsRewards } from '../settings/channel-points';
 import { WidgetAlertTokens } from '../settings/widget-alerts';
 import { TwitchChatBridges } from '../settings/twitch-chat-bridges';
 import { YoutubeChatBridges } from '../settings/youtube-chat-bridges';
@@ -107,10 +108,11 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                     </div>
                 ) : null}
                 {activeTab === 'rewards' ? (
-                    <div data-testid="streaming-tab-rewards">
+                    <div style={sectionStackStyle} data-testid="streaming-tab-rewards">
                         <Suspense fallback={null}>
                             <RewardsSection />
                         </Suspense>
+                        <ChannelPointsRewards />
                     </div>
                 ) : null}
                 {activeTab === 'broadcast' ? (
