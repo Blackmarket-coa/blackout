@@ -153,6 +153,10 @@ export const matrixClient = {
     topic?: string;
     visibility?: 'public' | 'private';
     preset?: 'public_chat' | 'private_chat' | 'trusted_private_chat';
+    /** `creation_content` for the m.room.create event (e.g. `{ type: 'm.space' }`). */
+    creationContent?: Record<string, unknown>;
+    /** `power_level_content_override` merged into the room's initial power levels. */
+    powerLevelOverride?: Record<string, unknown>;
   }) {
     const hs = homeserver();
     const token = botToken();
@@ -166,6 +170,8 @@ export const matrixClient = {
     if (input.aliasLocalpart) body.room_alias_name = input.aliasLocalpart;
     if (input.name) body.name = input.name;
     if (input.topic) body.topic = input.topic;
+    if (input.creationContent) body.creation_content = input.creationContent;
+    if (input.powerLevelOverride) body.power_level_content_override = input.powerLevelOverride;
 
     let response: Response;
     try {
@@ -657,6 +663,33 @@ export const matrixClient = {
    * `sendEvent` (timeline messages with a txn id) this targets the state
    * endpoint, used e.g. to stamp a den's `co.bmc.den.classification`.
    */
+  /**
+   * Read a single state event's content. Returns `{ ok: false }` (with the HTTP
+   * status, e.g. 404) when the event is absent so callers can default rather
+   * than throw.
+   */
+  async getStateEvent(roomId: string, eventType: string, stateKey = '') {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token || !roomId) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+    let response: Response;
+    try {
+      response = await fetch(
+        `${hs}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/${encodeURIComponent(eventType)}/${encodeURIComponent(stateKey)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+    if (!response.ok) {
+      return { ok: false as const, status: response.status };
+    }
+    const content = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    return { ok: true as const, status: response.status, content };
+  },
+
   async sendStateEvent(
     roomId: string,
     eventType: string,
