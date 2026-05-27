@@ -17,6 +17,14 @@ vi.mock('./streamsClient', () => ({
     fetchStreamVods: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
+// The viewer always mounts the lazy ChannelPointsWidget; stub its client so
+// the widget self-hides (no rewards) instead of hitting the network.
+vi.mock('./channelPointsClient', () => ({
+    listRewards: vi.fn().mockResolvedValue({ rewards: [] }),
+    fetchBalance: vi.fn().mockResolvedValue({ channelId: 'c', userId: 'u', balance: 0 }),
+    redeemReward: vi.fn(),
+}));
+
 vi.mock('../monetization/components/TipButton', () => ({
     TipButton: (props: { contextRef?: string }) => (
         <button data-testid="tip-button" data-context-ref={props.contextRef}>
