@@ -213,3 +213,40 @@ test('GET /v1/streaming/categories reports distinct categories with live counts'
     assert.equal(x?.total, 3);
     assert.equal(x?.live, 2);
 });
+
+// ----------------------------- VODs (past broadcasts) -----------------------------
+
+test('GET /v1/streaming/streams/:id/vods lists replayable sessions newest-first', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedStream('vod-stream', { state: 'offline', visibility: 'public' });
+    // Older ended session with a replay.
+    db.createStreamSession({ id: 'vod-sess-old', streamId: 'vod-stream', startedAt: '2026-05-01T10:00:00Z' });
+    db.endStreamSession('vod-sess-old', 'mxc://vod/old');
+    // Newer ended session with a replay (duration 1h).
+    db.createStreamSession({ id: 'vod-sess-new', streamId: 'vod-stream', startedAt: '2026-05-10T12:00:00Z' });
+    db.endStreamSession('vod-sess-new', 'mxc://vod/new');
+    // A session with NO replay pointer — must be excluded.
+    db.createStreamSession({ id: 'vod-sess-none', streamId: 'vod-stream', startedAt: '2026-05-12T09:00:00Z' });
+
+    const res = await app.request('/v1/streaming/streams/vod-stream/vods', { headers });
+    assert.equal(res.status, 200);
+    const items = ((await res.json()) as { items: { id: string; replayPointer?: string }[] }).items;
+    const ids = items.map((i) => i.id);
+    // Newest-first, replay-only.
+    assert.deepEqual(ids, ['vod-sess-new', 'vod-sess-old']);
+    assert.equal(items[0].replayPointer, 'mxc://vod/new');
+});
+
+test('GET /v1/streaming/streams/:id/vods 404s for a private/missing stream', async () => {
+    const token = await issueToken();
+    const headers = { authorization: `Bearer ${token}`, 'x-blackout-capabilities': 'streaming.read' };
+
+    seedStream('vod-private', { state: 'offline', visibility: 'private' });
+    const priv = await app.request('/v1/streaming/streams/vod-private/vods', { headers });
+    assert.equal(priv.status, 404);
+
+    const missing = await app.request('/v1/streaming/streams/vod-nope/vods', { headers });
+    assert.equal(missing.status, 404);
+});

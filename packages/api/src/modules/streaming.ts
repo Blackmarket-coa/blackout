@@ -364,6 +364,42 @@ function createStreamingRouter() {
     return c.json(streamToJson(stream));
   });
 
+  // GET /v1/streaming/streams/:streamId/vods — public VOD list for a stream:
+  // past broadcast sessions that produced a replay (replayPointer set),
+  // newest first. Distinct from the creator-private `/sessions` operational
+  // history; this is the viewer-facing "past broadcasts" surface and mirrors
+  // the single-stream visibility gating (404 on missing/private).
+  streaming.get('/streams/:streamId/vods', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const streamId = c.req.param('streamId');
+    const stream = db.getStream(streamId);
+    if (!stream || stream.visibility === 'private') {
+      return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
+    }
+
+    const vods = db
+      .listStreamSessions(streamId)
+      .filter((session) => Boolean(session.replayPointer))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .map((session) => {
+        const durationSeconds =
+          session.endedAt
+            ? Math.max(0, Math.round((Date.parse(session.endedAt) - Date.parse(session.startedAt)) / 1000))
+            : undefined;
+        return {
+          id: session.id,
+          streamId: session.streamId,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          replayPointer: session.replayPointer,
+          durationSeconds,
+        };
+      });
+    return c.json({ items: vods });
+  });
+
   const clipToJson = (clip: ClipRecord) => ({
     id: clip.id,
     creatorId: clip.creatorId,

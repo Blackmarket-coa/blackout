@@ -153,6 +153,33 @@ export const fetchStreamCategories = (
 ): Promise<ListCategoriesResponse> =>
     callJson<ListCategoriesResponse>('GET', `${STREAMING_BASE}/categories`, token);
 
+export interface StreamVod {
+    id: string;
+    streamId: string;
+    startedAt: string;
+    endedAt?: string;
+    replayPointer?: string;
+    durationSeconds?: number;
+}
+
+export interface ListVodsResponse {
+    items: StreamVod[];
+}
+
+/**
+ * Wraps `GET /v1/streaming/streams/:streamId/vods` — past broadcast
+ * sessions for a stream that produced a replay, newest first.
+ */
+export const fetchStreamVods = (
+    streamId: string,
+    token: string | null = readBlackoutApiToken()
+): Promise<ListVodsResponse> =>
+    callJson<ListVodsResponse>(
+        'GET',
+        `${STREAMING_BASE}/streams/${encodeURIComponent(streamId)}/vods`,
+        token
+    );
+
 /** Wraps `GET /v1/streaming/streams/:streamId`. */
 export const fetchStream = (
     streamId: string,

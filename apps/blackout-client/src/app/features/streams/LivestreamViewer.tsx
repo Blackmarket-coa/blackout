@@ -35,6 +35,12 @@ const ExtensionPanelStackLazy = lazy(() =>
     }))
 );
 
+// Past-broadcast (VOD) list. Lazy; the component self-hides when the stream
+// has no replayable sessions.
+const StreamVodsLazy = lazy(() =>
+    import('./StreamVods').then((mod) => ({ default: mod.StreamVods }))
+);
+
 const layoutStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -294,6 +300,9 @@ export const LivestreamViewer = (): JSX.Element => {
                     <EmbeddedDenChatLazy denId={stream.denId} />
                 </Suspense>
             ) : null}
+            <Suspense fallback={null}>
+                <StreamVodsLazy streamId={stream.id} />
+            </Suspense>
         </section>
     );
 };
