@@ -194,11 +194,12 @@ export const ClientLayout = () => {
     const inRouterContext = useInRouterContext();
     const location = useLocation();
     const navigate = useNavigate();
-    const {
-        canopyId: routeCanopyId,
-        denId: routeDenId,
-    } = useParams<{ canopyId?: string; denId?: string }>();
+    // Only the canopy segment is read here (for RoomInviteAcceptGate); the
+    // selection atoms are hydrated from the route by CommunitiesRoute.
+    const { canopyId: routeCanopyId } = useParams<{ canopyId?: string; denId?: string }>();
     const hasHydratedNavigationRef = useRef(false);
+    const lastSyncedUrlRef = useRef<string | null>(null);
+    const panelHydratedRef = useRef(false);
 
     const layout = settings.layout ?? { spaceColumnWidth: 64, roomColumnWidth: 260 };
     const spaces = useMemo(() => rooms.filter((room) => room.getType() === 'm.space'), [rooms]);
@@ -301,62 +302,29 @@ export const ClientLayout = () => {
         previousRoomIdRef.current = selectedRoomId;
     }, [selectedRoomId, setRightPanel]);
 
+    // Hydrate the right-panel slot from `?panel=`. Selection (canopy/den) is
+    // owned solely by CommunitiesRoute, which maps the route params into the
+    // selection atoms — keeping selection out of this effect means only one
+    // writer drives it, so the atom↔URL sync can't ping-pong. Validating
+    // against `rightPanels` (role-gated) keeps `roles` working here, where
+    // CommunitiesRoute can't see the flag.
     useEffect(() => {
-        const params = new URLSearchParams(location.search);
-        const nextPanelParam = params.get('panel');
-        const nextJumpTargetEventId = params.get('event');
+        const nextPanelParam = new URLSearchParams(location.search).get('panel');
+        // Don't clobber a panel opened imperatively before the URL has been
+        // read at least once; after that the URL's `?panel=` is authoritative,
+        // so Back/forward navigation keeps the panel in sync.
+        if (!nextPanelParam && !panelHydratedRef.current) {
+            panelHydratedRef.current = true;
+            return;
+        }
+        panelHydratedRef.current = true;
         const nextRightPanel = rightPanels.includes(nextPanelParam as Exclude<RightPanelType, null>)
             ? (nextPanelParam as RightPanelType)
             : null;
-        // Canopy/den come from the route params. Sentinel "-" denotes no
-        // parent canopy (direct rooms / home-roomed entities).
-        const decodedRouteCanopy = (() => {
-            if (!routeCanopyId) return null;
-            if (routeCanopyId === '-') return null;
-            try {
-                return decodeURIComponent(routeCanopyId);
-            } catch {
-                return routeCanopyId;
-            }
-        })();
-        const decodedRouteDen = (() => {
-            if (!routeDenId) return null;
-            try {
-                return decodeURIComponent(routeDenId);
-            } catch {
-                return routeDenId;
-            }
-        })();
-        const nextSpaceId = decodedRouteCanopy ?? params.get('space');
-        const effectiveRoomId = decodedRouteDen ?? null;
-        const hasUrlNavigationState = Boolean(
-            effectiveRoomId || nextSpaceId || nextPanelParam || nextJumpTargetEventId
-        );
-
-        if (!hasUrlNavigationState && !hasHydratedNavigationRef.current) {
-            hasHydratedNavigationRef.current = true;
-            return;
-        }
-
-        setSelectedRoomId(effectiveRoomId);
-        setSelectedSpaceId(nextSpaceId);
         setRightPanel(nextRightPanel);
-        setJumpTargetEventId(nextJumpTargetEventId);
-        hasHydratedNavigationRef.current = true;
-    }, [
-        location.search,
-        rightPanels,
-        routeCanopyId,
-        routeDenId,
-        setJumpTargetEventId,
-        setRightPanel,
-        setSelectedRoomId,
-        setSelectedSpaceId,
-    ]);
+    }, [location.search, rightPanels, setRightPanel]);
 
     useEffect(() => {
-        if (!hasHydratedNavigationRef.current) return;
-
         const params = new URLSearchParams();
         if (rightPanel) params.set('panel', rightPanel);
         if (jumpTargetEventId) params.set('event', jumpTargetEventId);
@@ -374,9 +342,30 @@ export const ClientLayout = () => {
         const search = params.toString();
         const nextUrl = `${pathname}${search ? `?${search}` : ''}`;
         const currentUrl = `${location.pathname}${location.search}`;
-        if (nextUrl === currentUrl) return;
 
-        void navigate({ pathname, search: search ? `?${search}` : '' });
+        // URL already matches the selection: either we hydrated from a deep
+        // link or our own navigate() round-tripped back through CommunitiesRoute.
+        // Mark navigation hydrated and remember the URL so the echo can't bounce
+        // us back out.
+        if (nextUrl === currentUrl) {
+            hasHydratedNavigationRef.current = true;
+            lastSyncedUrlRef.current = nextUrl;
+            return;
+        }
+
+        // Until the route params have hydrated the selection atoms at least
+        // once, don't push — a deep link mounts with empty atoms and we'd
+        // otherwise clobber it with a navigate to '/'.
+        if (!hasHydratedNavigationRef.current) return;
+
+        // Suppress the echo of a navigation we just issued, so the param→atom
+        // remap that follows it doesn't re-trigger us.
+        if (nextUrl === lastSyncedUrlRef.current) return;
+
+        // Replace (not push) so a transient selection flap can't spam history
+        // or poison the Back button.
+        lastSyncedUrlRef.current = nextUrl;
+        void navigate({ pathname, search: search ? `?${search}` : '' }, { replace: true });
     }, [
         jumpTargetEventId,
         location.pathname,

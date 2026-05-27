@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { DiscoveryItem, rankDiscoveryItems } from '../../../../src/app/features/discovery/model';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  DiscoveryItem,
+  performDiscoveryAction,
+  rankDiscoveryItems,
+} from '../../../../src/app/features/discovery/model';
 
 const makeItem = (overrides: Partial<DiscoveryItem>): DiscoveryItem => ({
   roomId: '!r:hs',
@@ -59,5 +63,56 @@ describe('discovery ranking and filters', () => {
     );
 
     expect(result.map((it) => it.roomId)).toEqual(['!2:hs', '!1:hs', '!3:hs']);
+  });
+});
+
+describe('performDiscoveryAction', () => {
+  const makeDeps = () => ({
+    joinRoom: vi.fn(async (roomIdOrAlias: string) => ({ roomId: roomIdOrAlias })),
+    openRoom: vi.fn(),
+    openSpace: vi.fn(),
+  });
+
+  it('joins a space then opens it as a canopy exactly once — never as a den', async () => {
+    const deps = makeDeps();
+    const item = makeItem({
+      roomId: '!space:hs',
+      roomIdOrAlias: '!space:hs',
+      roomType: 'm.space',
+      joined: false,
+    });
+
+    const action = await performDiscoveryAction(item, deps);
+
+    expect(action).toBe('join');
+    expect(deps.joinRoom).toHaveBeenCalledTimes(1);
+    expect(deps.openSpace).toHaveBeenCalledTimes(1);
+    expect(deps.openSpace).toHaveBeenCalledWith('!space:hs');
+    expect(deps.openRoom).not.toHaveBeenCalled();
+  });
+
+  it('opens an already-joined space without re-joining', async () => {
+    const deps = makeDeps();
+    const item = makeItem({ roomId: '!space:hs', roomType: 'm.space', joined: true });
+
+    const action = await performDiscoveryAction(item, deps);
+
+    expect(action).toBe('open');
+    expect(deps.joinRoom).not.toHaveBeenCalled();
+    expect(deps.openSpace).toHaveBeenCalledTimes(1);
+    expect(deps.openSpace).toHaveBeenCalledWith('!space:hs');
+    expect(deps.openRoom).not.toHaveBeenCalled();
+  });
+
+  it('joins a room then opens it as a den — never as a canopy', async () => {
+    const deps = makeDeps();
+    const item = makeItem({ roomId: '!den:hs', roomIdOrAlias: '!den:hs', joined: false });
+
+    const action = await performDiscoveryAction(item, deps);
+
+    expect(action).toBe('join');
+    expect(deps.openRoom).toHaveBeenCalledTimes(1);
+    expect(deps.openRoom).toHaveBeenCalledWith('!den:hs');
+    expect(deps.openSpace).not.toHaveBeenCalled();
   });
 });
