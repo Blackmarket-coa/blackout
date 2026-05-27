@@ -61,9 +61,11 @@ export const roomJumpTargetEventIdAtom = atom<string | null>(null);
 export const roomUnreadMarkerEventIdAtom = atom<string | null>(null);
 
 /**
- * Five canonical AppShell modes. The active mode is derived from the route,
- * not held in state — components that need to react to mode read this atom
- * which is updated by the AppShell on route change.
+ * Canonical AppShell modes. The active mode is derived from the route, not
+ * held in state — components that need to react to mode read this atom which
+ * is updated by the AppShell on route change. The four primary destinations
+ * (Creator Hub / Coalition / Coliseum, alongside Home/discovery) each own a
+ * mode so they read as first-class roots rather than collapsing to `other`.
  */
 export type ShellMode =
     | 'discovery'
@@ -71,6 +73,9 @@ export type ShellMode =
     | 'livestream'
     | 'marketplace'
     | 'creator'
+    | 'streaming'
+    | 'coalition'
+    | 'coliseum'
     | 'inbox'
     | 'events'
     | 'other';
