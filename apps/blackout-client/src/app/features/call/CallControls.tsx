@@ -1,5 +1,6 @@
 import { type CSSProperties, useMemo } from 'react';
 import { useCall } from './CallProvider';
+import { usePushToTalk } from './usePushToTalk';
 
 const controlButtonStyle: CSSProperties = {
     border: '1px solid var(--border-default)',
@@ -36,6 +37,8 @@ export const CallControls = ({
         setCameraEnabled,
         setScreenSharing,
     } = useCall();
+
+    usePushToTalk();
 
     const audioOptions = useMemo(
         () =>

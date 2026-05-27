@@ -66,6 +66,29 @@ const VoiceVideoSettings = () => {
                 </select>
             </label>
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                    type="checkbox"
+                    checked={settings.pushToTalk}
+                    onChange={(event) => update('pushToTalk', event.target.checked)}
+                />
+                Push to talk
+            </label>
+
+            {settings.pushToTalk ? (
+                <label>
+                    Push-to-talk key
+                    <input
+                        type="text"
+                        value={settings.pushToTalkKey}
+                        placeholder="e.g. space, v, `"
+                        onChange={(event) =>
+                            update('pushToTalkKey', event.target.value.trim() || 'space')
+                        }
+                    />
+                </label>
+            ) : null}
+
             {(['echoCancellation', 'autoGainControl', 'mirrorPreview'] as const).map((key) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <input
