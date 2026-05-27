@@ -13,6 +13,7 @@ import { LinkedAccounts } from '../settings/linked-accounts';
 import { SimulcastDestinations } from '../settings/simulcast-destinations';
 import { ObsWsPasswords } from '../settings/obs-ws-passwords';
 import { TwitchIrcBotTokens } from '../settings/twitch-irc-bot-tokens';
+import { TwitchExtensions } from '../settings/twitch-extensions';
 import { WidgetAlertTokens } from '../settings/widget-alerts';
 import { TwitchChatBridges } from '../settings/twitch-chat-bridges';
 import { YoutubeChatBridges } from '../settings/youtube-chat-bridges';
@@ -118,6 +119,7 @@ export function StreamingView({ initialTab }: StreamingViewProps) {
                             <SimulcastDestinations />
                             <ObsWsPasswords />
                             <TwitchIrcBotTokens />
+                            <TwitchExtensions />
                             <WidgetAlertTokens />
                         </StaggeredMount>
                     </div>
