@@ -27,6 +27,14 @@ const EmbeddedDenChatLazy = lazy(() =>
     }))
 );
 
+// Twitch-compat extension panels. Lazy so the (visible, sandboxed) iframe
+// machinery only loads for streams that actually declare extensions.
+const ExtensionPanelStackLazy = lazy(() =>
+    import('./extensions/ExtensionFrame').then((mod) => ({
+        default: mod.ExtensionPanelStack,
+    }))
+);
+
 const layoutStyle: CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -256,6 +264,11 @@ export const LivestreamViewer = (): JSX.Element => {
                 ) : null}
             </header>
             <PlayerPane stream={stream} origin={origin} />
+            {stream.extensions && stream.extensions.length > 0 ? (
+                <Suspense fallback={null}>
+                    <ExtensionPanelStackLazy streamId={stream.id} panels={stream.extensions} />
+                </Suspense>
+            ) : null}
             <div style={tipRowStyle} data-testid="livestream-tip-row">
                 {stream.denId ? (
                     <Link

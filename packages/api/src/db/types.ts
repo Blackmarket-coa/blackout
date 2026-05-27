@@ -313,7 +313,10 @@ export type OutboundEventType =
   | 'subscriber.gifted'
   | 'cheer.received'
   | 'raid.received'
-  | 'streamgoal.reached';
+  | 'streamgoal.reached'
+  | 'channelpoints.redeemed'
+  | 'hypetrain.started'
+  | 'hypetrain.ended';
 
 export interface ObsWsPasswordRecord {
   id: UUID;

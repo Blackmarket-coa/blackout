@@ -40,6 +40,8 @@ const CAPABILITY_LABELS: Record<PluginCapability, string> = {
     'storage.write': 'Write local storage',
     'http.fetch': 'Make network requests',
     'ai.inference': 'Run AI inference (AI dens only)',
+    'twitch.ext.identityShare': 'Request your Twitch identity',
+    'twitch.ext.subscriptionStatus': 'Read your subscription status',
 };
 
 const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
@@ -59,6 +61,10 @@ const CAPABILITY_DESCRIPTIONS: Record<PluginCapability, string> = {
         'Lets the plugin make outbound network requests. Use caution — the plugin can talk to any URL.',
     'ai.inference':
         'Lets the plugin run AI inference. Permitted only inside AI dens — the host blocks these calls everywhere else.',
+    'twitch.ext.identityShare':
+        'Lets a Twitch-compat extension request your real Twitch identity. Shared only after you opt in.',
+    'twitch.ext.subscriptionStatus':
+        'Lets a Twitch-compat extension read whether you subscribe to the channel.',
 };
 
 const HIGH_RISK_CAPABILITIES = new Set<PluginCapability>([

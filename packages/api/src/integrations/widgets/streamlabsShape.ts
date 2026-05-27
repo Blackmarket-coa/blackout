@@ -146,6 +146,15 @@ export const toWidgetAlert = (
         } satisfies StreamlabsRaid,
       ];
       break;
+    case 'stream_online':
+    case 'stream_offline':
+    case 'channel_points_redemption':
+    case 'hype_train_begin':
+    case 'hype_train_end':
+      // No Streamlabs Socket API equivalent. Blackout-native overlays can
+      // still consume these via the Matrix alert event / outbound webhooks;
+      // the Streamlabs-shaped widget feed simply skips them.
+      return null;
     default: {
       const exhaustive: never = event;
       void exhaustive;
@@ -274,6 +283,16 @@ const buildEventId = (event: NormalizedTwitchEvent, fallbackMs: number): string 
       return `tw_bits_${event.twitchChannelId}_${event.cheererTwitchId ?? 'anon'}_${event.bits}_${fallbackMs}`;
     case 'raid':
       return `tw_raid_${event.fromChannelId}_${event.toChannelId}_${event.viewers}`;
+    case 'stream_online':
+      return `tw_stream_online_${event.twitchChannelId}_${event.startedAt}`;
+    case 'stream_offline':
+      return `tw_stream_offline_${event.twitchChannelId}_${fallbackMs}`;
+    case 'channel_points_redemption':
+      return `tw_cpoints_${event.twitchChannelId}_${event.redemptionId}`;
+    case 'hype_train_begin':
+      return `tw_hype_begin_${event.twitchChannelId}_${event.startedAt}`;
+    case 'hype_train_end':
+      return `tw_hype_end_${event.twitchChannelId}_${event.endedAt}`;
   }
 };
 
