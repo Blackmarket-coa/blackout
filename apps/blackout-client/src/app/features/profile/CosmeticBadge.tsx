@@ -38,6 +38,11 @@ export const CosmeticBadges = ({ badgeIds }: CosmeticBadgesProps) => {
                 >
                     <span aria-hidden>{badge.glyph ?? '★'}</span>
                     {badge.label}
+                    {badge.verified ? (
+                        <span aria-label="verified" title="Verified" style={{ fontWeight: 700 }}>
+                            ✓
+                        </span>
+                    ) : null}
                 </span>
             ))}
         </div>

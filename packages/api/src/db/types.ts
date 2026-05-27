@@ -404,6 +404,22 @@ export interface CreatorListingRecord {
   updatedAt: string;
 }
 
+/**
+ * An entry in a user's encrypted personal vault. The server stores only opaque
+ * client-encrypted material (`ciphertext` + `iv`, base64) plus a plaintext
+ * `label`; it never holds the key or plaintext.
+ */
+export interface VaultItemRecord {
+  id: UUID;
+  ownerUserId: UUID;
+  label: string;
+  ciphertext: string;
+  iv: string;
+  algo: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ObsWsPasswordRecord {
   id: UUID;
   blackoutUserId: UUID;

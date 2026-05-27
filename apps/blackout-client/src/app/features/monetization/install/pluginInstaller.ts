@@ -22,6 +22,7 @@ import {
     type OwnedAiPersona,
     type OwnedAutomationRecipe,
 } from '../../aiden/aiGoods';
+import { parseOwnedVaultGrant, type OwnedVaultGrant } from '../../vault/vaultGoods';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -86,6 +87,10 @@ function decodeAiPersona(bundleBytes: Uint8Array): OwnedAiPersona | null {
 
 function decodeAutomationRecipe(bundleBytes: Uint8Array): OwnedAutomationRecipe | null {
     return parseOwnedAutomationRecipe(decodeBundlePayload(bundleBytes));
+}
+
+function decodeVaultGrant(bundleBytes: Uint8Array): OwnedVaultGrant | null {
+    return parseOwnedVaultGrant(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -186,11 +191,14 @@ export async function installEntitlement(
         case 'theme':
         case 'asset_bundle':
         // Data-delivery artifact kinds whose runtime is wired by their own
-        // feature surface (soundboard, stream overlays, vault).
+        // feature surface (soundboard, stream overlays).
         // They cache the verified bundle here; the consuming feature reads it.
         case 'sound_pack':
         case 'stream_asset':
+            ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
         case 'vault_item':
+            record.vaultGrant = decodeVaultGrant(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
             break;
         case 'profile_cosmetic':

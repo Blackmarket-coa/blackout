@@ -28,6 +28,8 @@ export interface OwnedCosmetic {
     glyph?: string;
     /** badge accent color. */
     color?: string;
+    /** badge is a trust/verification badge (rendered with a check marker). */
+    verified?: boolean;
 }
 
 const COSMETIC_TYPES: readonly CosmeticType[] = [
@@ -104,6 +106,7 @@ export function parseOwnedCosmetic(payload: unknown): OwnedCosmetic | null {
             cosmetic.glyph =
                 typeof data.glyph === 'string' ? data.glyph.trim().slice(0, 8) || '★' : '★';
             cosmetic.color = optionalCss(data, 'color');
+            cosmetic.verified = data.verified === true;
             break;
     }
     return cosmetic;
