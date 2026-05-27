@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
-import type { ClipRecord } from '../db/types';
+import type { ClipRecord, StreamRecord } from '../db/types';
 import { readJsonBody } from '../middleware/validate';
 import { clipWriteRateLimit } from '../middleware/rate-limit';
 import { generateManagedStreamKey, getOwncastOriginConfig } from '../integrations/owncast';
@@ -246,10 +246,51 @@ function createStreamingRouter() {
     return c.json(updated);
   });
 
-  // GET /v1/streaming/streams — list streams. Lightweight directory
-  // surface used by the AppShell `/live` route. Filters supported:
+  const streamToJson = (stream: StreamRecord) => ({
+    id: stream.id,
+    creatorId: stream.creatorId,
+    state: stream.state,
+    title: stream.title,
+    category: stream.category,
+    tags: stream.tags,
+    visibility: stream.visibility,
+    latencyProfile: stream.latencyProfile,
+    replayPointer: stream.replayPointer,
+    denId: stream.denId,
+    updatedAt: stream.updatedAt,
+  });
+
+  // GET /v1/streaming/categories — distinct categories across public
+  // streams with their live counts, for the browse surface's category
+  // chips. Sorted by live count (desc), then name.
+  streaming.get('/categories', (c) => {
+    const denied = requireDomainCapability(c, 'streaming', 'read');
+    if (denied) return denied;
+
+    const counts = new Map<string, { total: number; live: number }>();
+    for (const stream of db.listAllStreams()) {
+      if (stream.visibility !== 'public') continue;
+      const name = stream.category?.trim();
+      if (!name) continue;
+      const entry = counts.get(name) ?? { total: 0, live: 0 };
+      entry.total += 1;
+      if (stream.state === 'live') entry.live += 1;
+      counts.set(name, entry);
+    }
+    const categories = [...counts.entries()]
+      .map(([name, { total, live }]) => ({ name, total, live }))
+      .sort((a, b) => (b.live !== a.live ? b.live - a.live : a.name.localeCompare(b.name)));
+    return c.json({ categories });
+  });
+
+  // GET /v1/streaming/streams — list streams. Directory + browse surface
+  // used by the AppShell `/live` and `/explore` routes. Filters supported:
   //   - state=live|offline (default: any)
   //   - creatorId (defaults to "any")
+  //   - category (exact category match)
+  //   - tags (comma-separated; matches streams carrying ANY of the tags)
+  //   - search (case-insensitive substring on title)
+  //   - sort=live|recent|title (default: live — live-first then recency)
   //   - limit (1..200, default 50)
   // Visibility-gated: only streams marked `public` are returned to
   // unauthenticated readers; non-public streams require the requester
@@ -262,6 +303,13 @@ function createStreamingRouter() {
 
     const stateParam = c.req.query('state');
     const creatorIdFilter = c.req.query('creatorId');
+    const categoryFilter = c.req.query('category')?.trim() || null;
+    const searchFilter = c.req.query('search')?.trim().toLowerCase() || null;
+    const sortParam = c.req.query('sort');
+    const tagFilters = (c.req.query('tags') ?? '')
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0);
     const limitRaw = c.req.query('limit');
     const limit = (() => {
       if (!limitRaw) return 50;
@@ -271,33 +319,32 @@ function createStreamingRouter() {
     })();
 
     const filterState = stateParam === 'live' || stateParam === 'offline' ? stateParam : null;
+    const sortMode = sortParam === 'recent' || sortParam === 'title' ? sortParam : 'live';
     const all = db.listAllStreams();
 
     const items = all
       .filter((stream) => stream.visibility === 'public')
       .filter((stream) => (filterState ? stream.state === filterState : true))
       .filter((stream) => (creatorIdFilter ? stream.creatorId === creatorIdFilter : true))
+      .filter((stream) => (categoryFilter ? stream.category === categoryFilter : true))
+      .filter((stream) =>
+        tagFilters.length === 0
+          ? true
+          : stream.tags.some((tag) => tagFilters.includes(tag.toLowerCase())),
+      )
+      .filter((stream) =>
+        searchFilter ? stream.title.toLowerCase().includes(searchFilter) : true,
+      )
       .sort((a, b) => {
+        if (sortMode === 'title') return a.title.localeCompare(b.title);
+        if (sortMode === 'recent') return b.updatedAt.localeCompare(a.updatedAt);
+        // 'live': live-first, then recency.
         if (a.state !== b.state) return a.state === 'live' ? -1 : 1;
         return b.updatedAt.localeCompare(a.updatedAt);
       })
       .slice(0, limit);
 
-    return c.json({
-      items: items.map((stream) => ({
-        id: stream.id,
-        creatorId: stream.creatorId,
-        state: stream.state,
-        title: stream.title,
-        category: stream.category,
-        tags: stream.tags,
-        visibility: stream.visibility,
-        latencyProfile: stream.latencyProfile,
-        replayPointer: stream.replayPointer,
-        denId: stream.denId,
-        updatedAt: stream.updatedAt,
-      })),
-    });
+    return c.json({ items: items.map(streamToJson) });
   });
 
   // GET /v1/streaming/streams/:streamId — single stream metadata
@@ -314,19 +361,7 @@ function createStreamingRouter() {
       return c.json({ code: 'stream_not_found', message: 'Stream not found' }, 404);
     }
 
-    return c.json({
-      id: stream.id,
-      creatorId: stream.creatorId,
-      state: stream.state,
-      title: stream.title,
-      category: stream.category,
-      tags: stream.tags,
-      visibility: stream.visibility,
-      latencyProfile: stream.latencyProfile,
-      replayPointer: stream.replayPointer,
-      denId: stream.denId,
-      updatedAt: stream.updatedAt,
-    });
+    return c.json(streamToJson(stream));
   });
 
   const clipToJson = (clip: ClipRecord) => ({

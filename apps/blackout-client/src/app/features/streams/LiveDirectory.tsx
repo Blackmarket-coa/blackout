@@ -2,7 +2,13 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { BLACKOUT_TERMS } from '../../lib/blackoutTerminology';
 import { LIVE_PATH } from '../../pages/paths';
-import { listStreams, type StreamSummary } from './streamsClient';
+import {
+    fetchStreamCategories,
+    listStreams,
+    type StreamCategory,
+    type StreamSort,
+    type StreamSummary,
+} from './streamsClient';
 
 const layoutStyle: CSSProperties = {
     display: 'flex',
@@ -75,6 +81,52 @@ const emptyStyle: CSSProperties = {
     textAlign: 'center',
 };
 
+const controlsStyle: CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+    padding: '4px 16px 8px',
+};
+
+const inputStyle: CSSProperties = {
+    flex: '1 1 200px',
+    minWidth: 160,
+    padding: '8px 12px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-input, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+    fontSize: 13,
+};
+
+const selectStyle: CSSProperties = {
+    padding: '8px 12px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default, #374151)',
+    background: 'var(--bg-input, #0f172a)',
+    color: 'var(--text-primary, #f8fafc)',
+    fontSize: 13,
+};
+
+const chipRowStyle: CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    padding: '0 16px 8px',
+};
+
+const chip = (active: boolean): CSSProperties => ({
+    padding: '4px 10px',
+    borderRadius: 999,
+    border: `1px solid ${active ? 'var(--accent-primary, #1ABC9C)' : 'var(--border-default, #374151)'}`,
+    background: active ? 'var(--accent-primary, #1ABC9C)' : 'transparent',
+    color: active ? '#04121d' : 'var(--text-muted, #9ca3af)',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+});
+
 const StreamCard = ({ stream }: { stream: StreamSummary }): JSX.Element => (
     <Link
         to={`${LIVE_PATH}/${encodeURIComponent(stream.id)}`}
@@ -99,38 +151,79 @@ const StreamCard = ({ stream }: { stream: StreamSummary }): JSX.Element => (
 );
 
 /**
- * Live + recent-replays directory mounted at `/live`. Reads
- * `streamsClient.listStreams()` and groups by state — live first, then
- * recently-updated replays. Empty state copy reflects that the catalog
- * may simply be cold (no creators have gone live yet).
+ * Live + recent-replays directory and browse surface mounted at `/live`.
+ * Reads `streamsClient.listStreams()` with category/search/sort filters and
+ * `fetchStreamCategories()` for the category chips. Live-first by default.
+ * Empty state copy reflects that the catalog may simply be cold (no creators
+ * have gone live yet) or that the active filters matched nothing.
  */
 export const LiveDirectory = (): JSX.Element => {
     const [streams, setStreams] = useState<StreamSummary[]>([]);
+    const [categories, setCategories] = useState<StreamCategory[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [forbidden, setForbidden] = useState(false);
     const [loaded, setLoaded] = useState(false);
 
+    const [search, setSearch] = useState('');
+    const [category, setCategory] = useState<string | null>(null);
+    const [sort, setSort] = useState<StreamSort>('live');
+
+    // Categories are filter-independent; fetch once. A failure here is
+    // non-fatal — the chips just don't render.
     useEffect(() => {
         let cancelled = false;
-        listStreams({ limit: 60 })
-            .then((response) => {
-                if (cancelled) return;
-                setStreams(response.items);
-                setLoaded(true);
+        fetchStreamCategories()
+            .then((res) => {
+                if (!cancelled) setCategories(res.categories);
             })
-            .catch((err) => {
-                if (cancelled) return;
-                if ((err as { status?: number } | null)?.status === 403) {
-                    setForbidden(true);
-                } else {
-                    setError(err instanceof Error ? err.message : 'failed to load streams');
-                }
-                setLoaded(true);
+            .catch(() => {
+                /* non-fatal: no category chips */
             });
         return () => {
             cancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLoaded(false);
+        const run = () => {
+            listStreams({
+                limit: 60,
+                sort,
+                category: category ?? undefined,
+                search: search.trim() || undefined,
+            })
+                .then((response) => {
+                    if (cancelled) return;
+                    setStreams(response.items);
+                    setError(null);
+                    setForbidden(false);
+                    setLoaded(true);
+                })
+                .catch((err) => {
+                    if (cancelled) return;
+                    if ((err as { status?: number } | null)?.status === 403) {
+                        setForbidden(true);
+                    } else {
+                        setError(err instanceof Error ? err.message : 'failed to load streams');
+                    }
+                    setLoaded(true);
+                });
+        };
+        // Debounce only typed search; category/sort/initial load fetch at once.
+        if (search.trim()) {
+            const handle = setTimeout(run, 200);
+            return () => {
+                cancelled = true;
+                clearTimeout(handle);
+            };
+        }
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [search, category, sort]);
 
     return (
         <section style={layoutStyle} data-shell-region="live-directory">
@@ -140,6 +233,54 @@ export const LiveDirectory = (): JSX.Element => {
                     Streams from creators across {BLACKOUT_TERMS.canopy.plural} you can join.
                 </p>
             </header>
+            <div style={controlsStyle}>
+                <input
+                    style={inputStyle}
+                    type="search"
+                    placeholder="Search streams…"
+                    aria-label="Search streams"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    data-testid="live-directory-search"
+                />
+                <select
+                    style={selectStyle}
+                    aria-label="Sort streams"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as StreamSort)}
+                    data-testid="live-directory-sort"
+                >
+                    <option value="live">Live first</option>
+                    <option value="recent">Recently updated</option>
+                    <option value="title">Title (A–Z)</option>
+                </select>
+            </div>
+            {categories.length > 0 ? (
+                <div style={chipRowStyle} data-testid="live-directory-categories">
+                    <button
+                        type="button"
+                        style={chip(category === null)}
+                        onClick={() => setCategory(null)}
+                        data-testid="live-directory-category-all"
+                    >
+                        All
+                    </button>
+                    {categories.map((cat) => (
+                        <button
+                            key={cat.name}
+                            type="button"
+                            style={chip(category === cat.name)}
+                            onClick={() =>
+                                setCategory((prev) => (prev === cat.name ? null : cat.name))
+                            }
+                            data-testid="live-directory-category"
+                            data-category={cat.name}
+                        >
+                            {cat.name} ({cat.live})
+                        </button>
+                    ))}
+                </div>
+            ) : null}
             {forbidden ? (
                 <p style={emptyStyle} data-testid="live-directory-forbidden">
                     Streaming isn’t available on your account yet.
@@ -152,7 +293,9 @@ export const LiveDirectory = (): JSX.Element => {
                 <p style={emptyStyle}>Loading streams…</p>
             ) : streams.length === 0 ? (
                 <p style={emptyStyle} data-testid="live-directory-empty">
-                    No streams are live right now. Check back soon.
+                    {search.trim() || category
+                        ? 'No streams match your filters.'
+                        : 'No streams are live right now. Check back soon.'}
                 </p>
             ) : (
                 <div style={sectionStyle} data-testid="live-directory-grid">
