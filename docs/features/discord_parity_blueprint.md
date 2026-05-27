@@ -1,5 +1,10 @@
 # Discord parity blueprint for Blackout (Matrix-first)
 
+> **Status update (2026-05-27).** This is a paradigm/mapping reference, not a status report. Many
+> items below are now shipped (voice/video, forum channels, roles, moderation, onboarding). For the
+> code-verified parity matrix and gap list, see
+> [`../audits/discord-comparative-analysis-2026-05-27.md`](../audits/discord-comparative-analysis-2026-05-27.md).
+
 ## Executive summary
 
 This blueprint outlines how Blackout can replicate Discord-style UX while preserving Matrix interoperability and end-to-end encryption as strict defaults.

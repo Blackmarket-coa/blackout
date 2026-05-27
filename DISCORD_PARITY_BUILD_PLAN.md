@@ -1,5 +1,14 @@
 # Discord-Parity Blueprint for Blackout
 
+> **Verified Implementation Status (2026-05-27).** This document is a forward-looking roadmap and
+> under-reports what has since shipped. Several features marked Partial/Needs Build/Custom below are
+> now **Implemented** in code: group voice/video + screen share and Go-Live streaming
+> (`features/call/`, `features/streaming/`), forum channels (`features/forum/`), the role/permission
+> system (`features/roles/`), timeout + AutoMod moderation (`features/moderation/`), and member
+> onboarding + discovery (`features/onboarding/`, `features/discovery/`). For the code-verified
+> status, see [`docs/audits/discord-comparative-analysis-2026-05-27.md`](docs/audits/discord-comparative-analysis-2026-05-27.md).
+> The roadmap content below is retained for architectural rationale.
+
 ## 1. Executive Summary
 
 This document provides a comprehensive blueprint for replicating Discord's user-facing features within Blackout, the BMC ecosystem's encrypted communication platform. Blackout is built as a custom client on `matrix-js-sdk`, running against a Synapse homeserver with end-to-end encryption as a non-negotiable baseline.
