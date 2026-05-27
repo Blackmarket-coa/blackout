@@ -1,5 +1,10 @@
 # Blackout IA + Onboarding Blueprint
 
+> **Status update (2026-05-27).** Onboarding primitives referenced here now exist in code
+> (`features/onboarding/`, discovery, multi-use invites); this plan should be read as remaining
+> activation/UX work on top of them, not greenfield. See
+> [`audits/discord-comparative-analysis-2026-05-27.md`](audits/discord-comparative-analysis-2026-05-27.md).
+
 ## Objective
 Reduce **time-to-first-value (TTFV) to under 10 minutes** for first-time users by delivering a Discord-familiar core flow, while preserving governance/privacy sovereignty primitives behind progressive disclosure.
 
