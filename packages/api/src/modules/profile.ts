@@ -5,7 +5,7 @@ import { requireAuthenticatedUser, requireDomainCapability } from './authz';
 import { emitDomainEvent } from './domain-events';
 import {
     appendWallPost,
-    getProfile,
+    getProfileOrDefault,
     listWallPosts,
     upsertProfile,
 } from '../services/profileStore';
@@ -32,11 +32,7 @@ function createProfileRouter() {
         const denied = requireDomainCapability(c, 'profile', 'read');
         if (denied) return denied;
         const { userId } = c.req.param();
-        const member = getProfile(userId);
-        if (!member) {
-            return c.json({ code: 'profile_not_found', message: 'Profile not found' }, 404);
-        }
-        return c.json(member);
+        return c.json(getProfileOrDefault(userId));
     });
 
     profile.put('/:userId', async (c) => {

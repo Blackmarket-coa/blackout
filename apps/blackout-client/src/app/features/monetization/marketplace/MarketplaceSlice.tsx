@@ -13,6 +13,7 @@ import {
     type MarketplaceProviderSummary,
 } from './marketplaceClient';
 import { readBlackoutApiToken } from './useMarketplaceAuth';
+import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
 import { ListingCard } from './ListingCard';
 import { LibraryView } from './LibraryView';
 import { resolveMarketplaceProvider } from './providerMetadata';
@@ -73,8 +74,16 @@ export function MarketplaceSlice() {
     const token = useMemo(() => readBlackoutApiToken(), []);
 
     const refreshEntitlements = useCallback(async () => {
+        // Resolve a token (awaiting the Matrix→API exchange if it hasn't
+        // landed yet); skip the request entirely when signed out so we don't
+        // fire a guaranteed-401 at /v1/marketplace/entitlements.
+        const activeToken = token ?? (await ensureBlackoutApiToken());
+        if (!activeToken) {
+            setEntitlements([]);
+            return;
+        }
         try {
-            setEntitlements(await fetchEntitlements(token));
+            setEntitlements(await fetchEntitlements(activeToken));
         } catch (err) {
             console.warn('[marketplace] failed to load entitlements', err);
         }

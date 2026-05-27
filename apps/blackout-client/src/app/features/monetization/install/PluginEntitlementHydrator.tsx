@@ -8,6 +8,7 @@ import {
     fetchFulfillmentBundle,
 } from '../marketplace/marketplaceClient';
 import { readBlackoutApiToken } from '../marketplace/useMarketplaceAuth';
+import { ensureBlackoutApiToken } from '../../../../client/blackoutApiSession';
 import {
     installedPluginsAtom,
     type InstalledPluginRecord,
@@ -49,7 +50,12 @@ export const PluginEntitlementHydrator = (): null => {
         let cancelled = false;
 
         const run = async () => {
-            const token = readBlackoutApiToken();
+            // Resolve a token (awaiting the exchange if needed); bail when
+            // there's no API session yet so boot doesn't fire a 401 at
+            // /v1/marketplace/entitlements.
+            const token = readBlackoutApiToken() ?? (await ensureBlackoutApiToken());
+            if (cancelled) return;
+            if (!token) return;
             let entitlements: NormalizedEntitlement[] = [];
             try {
                 entitlements = await fetchEntitlements(token);

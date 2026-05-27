@@ -278,6 +278,24 @@ export function getProfile(userId: string): MemberProfile | null {
     return profiles.get(userId) ?? null;
 }
 
+/**
+ * Returns the stored profile, or a synthesized minimal profile for users who
+ * have never customized one (e.g. any Matrix user the store hasn't seen).
+ * Lets `GET /profile/:userId` always resolve a usable record instead of 404ing
+ * for un-seeded accounts.
+ */
+export function getProfileOrDefault(userId: string): MemberProfile {
+    return (
+        profiles.get(userId) ?? {
+            userId,
+            displayName: userId,
+            roleBadges: [],
+            mutualSpaces: [],
+            profile: {},
+        }
+    );
+}
+
 export interface UpsertProfileInput {
     displayName?: string;
     avatarUrl?: string;

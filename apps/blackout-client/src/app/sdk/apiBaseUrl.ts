@@ -11,19 +11,21 @@ const viteEnv =
     typeof import.meta !== 'undefined'
         ? (
               import.meta as {
-                  env?: { VITE_API_BASE_URL?: string; PROD?: boolean };
+                  env?: { VITE_API_BASE_URL?: string; PROD?: boolean; DEV?: boolean };
               }
           ).env
         : undefined;
 
-if (viteEnv?.PROD && !viteEnv.VITE_API_BASE_URL) {
-    // Warn (not error) so the e2e smoke gate — which fails on console.error
-    // — stays green when the bundle is built without a base URL (CI, local
-    // preview). Operators still see this in DevTools when they deploy a
-    // misconfigured bundle.
+if (viteEnv?.DEV && !viteEnv.VITE_API_BASE_URL) {
+    // Dev-only: same-origin requests hit the Vite dev server, which serves SPA
+    // HTML instead of JSON, so the var must be set locally. In production an
+    // empty value is correct — nginx proxies /v1/* to the API on the same
+    // origin (see infra/nginx/sites-available/theblackout.app.conf) — so we
+    // deliberately don't warn there. Warn (not error) to keep e2e smoke gates,
+    // which fail on console.error, green.
     // eslint-disable-next-line no-console
     console.warn(
-        '[blackout] VITE_API_BASE_URL is not set. The client will issue same-origin requests and likely receive SPA HTML instead of JSON. See apps/blackout-client/.env.example.',
+        '[blackout] VITE_API_BASE_URL is not set. In local dev the client will issue same-origin requests to the Vite server and receive SPA HTML instead of JSON. See apps/blackout-client/.env.example.',
     );
 }
 
