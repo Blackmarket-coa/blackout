@@ -159,7 +159,7 @@ describe('OnboardingFlow choose-role step', () => {
         // Member-flow completion stays in the hands of the creator wizard, so
         // the role-select hand-off must NOT call markCompleted.
         expect(markCompletedMock).not.toHaveBeenCalled();
-        expect(navigateMock).toHaveBeenCalledWith('/onboarding/creator');
+        expect(navigateMock).toHaveBeenCalledWith('/onboarding/creator?from=space-1');
     });
 
     it('mounting with a {role: creator, completed: false} snapshot renders the hand-off panel', async () => {

@@ -306,7 +306,9 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
                     <button
                         type="button"
                         data-testid="onboarding-creator-continue"
-                        onClick={() => navigate(ONBOARDING_CREATOR_PATH)}
+                        onClick={() =>
+                            navigate(`${ONBOARDING_CREATOR_PATH}?from=${encodeURIComponent(spaceId)}`)
+                        }
                     >
                         Continue creator setup
                     </button>
@@ -351,7 +353,7 @@ export const OnboardingFlow = ({ spaceId, onClose, onCompleted }: OnboardingFlow
             // handoff panel (role='creator' + completed=false) so the
             // user can resume or switch back.
             setCreatorHandoff(true);
-            navigate(ONBOARDING_CREATOR_PATH);
+            navigate(`${ONBOARDING_CREATOR_PATH}?from=${encodeURIComponent(spaceId)}`);
             return;
         }
 
