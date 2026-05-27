@@ -20,6 +20,7 @@ vi.mock('./creatorClient', () => ({
 }));
 
 import CreatorListings from './CreatorListings';
+import { ConfirmProvider } from '../../components/confirm-dialog';
 
 const flush = async () => {
     // Two ticks: the initial Promise.all + state-set re-render.
@@ -32,7 +33,13 @@ const mountPage = async () => {
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     await act(async () => {
-        root.render(<CreatorListings />);
+        // CreatorListings calls useConfirm(), which requires a ConfirmProvider
+        // ancestor.
+        root.render(
+            <ConfirmProvider>
+                <CreatorListings />
+            </ConfirmProvider>
+        );
         await flush();
     });
     return container;
