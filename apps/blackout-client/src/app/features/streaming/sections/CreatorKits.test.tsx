@@ -1,11 +1,30 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { act } from 'react-dom/test-utils';
 import ReactDOM from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+
+// Replace the orchestrator (which pulls in matrix-js-sdk + many clients) with
+// a controllable stub, and the Matrix-client hook so the panel's gating and
+// apply flow can be driven from the test.
+const applyCreatorKitMock = vi.fn();
+let matrixClientMock: { getSafeUserId: () => string } | null = null;
+vi.mock('../kits/applyKit', () => ({
+    applyCreatorKit: (...args: unknown[]) => applyCreatorKitMock(...args),
+    kitAppliedStorageKey: (id: string) => `bmc-creator-kit-applied:${id}`,
+}));
+vi.mock('../../../hooks/useMatrixClient', () => ({
+    useMatrixClientOrNull: () => matrixClientMock,
+}));
+
 import CreatorKits from './CreatorKits';
 import { CREATOR_KITS } from '../kits/kitCatalog';
+
+const flush = async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+};
 
 const mount = async () => {
     const container = document.createElement('div');
@@ -21,9 +40,24 @@ const mount = async () => {
     return { container };
 };
 
+const click = async (container: HTMLElement, selector: string) => {
+    const el = container.querySelector<HTMLElement>(selector);
+    await act(async () => {
+        el?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flush();
+    });
+};
+
 describe('CreatorKits', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
+        applyCreatorKitMock.mockReset();
+        matrixClientMock = null;
+        try {
+            localStorage.clear();
+        } catch {
+            /* ignore */
+        }
     });
 
     it('renders a card for every kit in the catalog', async () => {
@@ -54,5 +88,40 @@ describe('CreatorKits', () => {
         });
         const detail = container.querySelector('[data-testid="creator-kit-detail"]');
         expect(detail?.getAttribute('data-kit-id')).toBe(second.id);
+    });
+
+    it('disables apply when no Matrix client is available', async () => {
+        matrixClientMock = null;
+        const { container } = await mount();
+        const apply = container.querySelector<HTMLButtonElement>(
+            '[data-testid="creator-kit-apply"]'
+        );
+        expect(apply).not.toBeNull();
+        expect(apply?.disabled).toBe(true);
+    });
+
+    it('confirms then applies the kit and renders per-step results', async () => {
+        matrixClientMock = { getSafeUserId: () => '@me:server' };
+        applyCreatorKitMock.mockResolvedValue([
+            { area: 'den', label: 'Q&A', status: 'ok' },
+            { area: 'tier', label: 'Course access', status: 'skipped' },
+        ]);
+        const { container } = await mount();
+
+        await click(container, '[data-testid="creator-kit-apply"]');
+        expect(
+            container.querySelector('[data-testid="creator-kit-apply-confirm-panel"]')
+        ).not.toBeNull();
+
+        await click(container, '[data-testid="creator-kit-apply-confirm"]');
+
+        expect(applyCreatorKitMock).toHaveBeenCalledWith(
+            CREATOR_KITS[0],
+            expect.objectContaining({ userId: '@me:server' })
+        );
+        const results = container.querySelector('[data-testid="creator-kit-apply-results"]');
+        expect(results).not.toBeNull();
+        const rows = Array.from(results?.querySelectorAll('li') ?? []);
+        expect(rows.map((r) => r.getAttribute('data-step-status'))).toEqual(['ok', 'skipped']);
     });
 });

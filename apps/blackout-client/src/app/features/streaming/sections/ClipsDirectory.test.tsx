@@ -16,6 +16,17 @@ vi.mock('./ClipViewer', () => ({
         <div data-testid="stub-clip-viewer" data-initial-clip-id={initialClipId} />
     ),
 }));
+// The grid resolves `mxc://` thumbnails through the Matrix client; mock both
+// the hook and the resolver so the test controls availability without pulling
+// in the real matrix-js-sdk media stack.
+let matrixClientMock: object | null = null;
+vi.mock('../../../hooks/useMatrixClient', () => ({
+    useMatrixClientOrNull: () => matrixClientMock,
+}));
+vi.mock('../../../utils/matrix', () => ({
+    mxcUrlToHttp: (_mx: unknown, pointer: string) =>
+        `https://media.example/${pointer.replace('mxc://', '')}`,
+}));
 
 import ClipsDirectory from './ClipsDirectory';
 
@@ -52,6 +63,7 @@ describe('ClipsDirectory', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
         listClipsMock.mockReset();
+        matrixClientMock = null;
     });
 
     it('shows the empty state when no clips are returned', async () => {
@@ -80,6 +92,28 @@ describe('ClipsDirectory', () => {
         const viewer = container.querySelector('[data-testid="stub-clip-viewer"]');
         expect(viewer).not.toBeNull();
         expect(viewer?.getAttribute('data-initial-clip-id')).toBe('b');
+    });
+
+    it('resolves mxc:// thumbnails to an image when a Matrix client is available', async () => {
+        matrixClientMock = {};
+        listClipsMock.mockResolvedValue({
+            items: [clip('a', { thumbnailPointer: 'mxc://blackout/thumb-a' })],
+        });
+        const { container } = await mount();
+        const img = container.querySelector<HTMLImageElement>(
+            '[data-clip-id="a"] img'
+        );
+        expect(img).not.toBeNull();
+        expect(img?.getAttribute('src')).toBe('https://media.example/blackout/thumb-a');
+    });
+
+    it('falls back to a placeholder for mxc:// thumbnails with no Matrix client', async () => {
+        matrixClientMock = null;
+        listClipsMock.mockResolvedValue({
+            items: [clip('a', { thumbnailPointer: 'mxc://blackout/thumb-a' })],
+        });
+        const { container } = await mount();
+        expect(container.querySelector('[data-clip-id="a"] img')).toBeNull();
     });
 
     it('shows a graceful permission state on 403', async () => {

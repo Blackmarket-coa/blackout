@@ -90,6 +90,12 @@ export const WEB_ROUTES: readonly WebRoute[] = [
     },
     { id: 'live', path: '/live', mode: 'livestream' },
     { id: 'live-stream', path: '/live/example-stream', mode: 'livestream' },
+    // Creator Hub (the `streaming` feature). `/creator-hub` is the rebranded
+    // alias that redirects to `/streaming`; visiting it asserts the redirect
+    // lands on a live, non-dead-end surface. Both resolve to shell mode
+    // `other` (see modeRouter.ts).
+    { id: 'creator-hub', path: '/streaming', mode: 'other' },
+    { id: 'creator-hub-alias', path: '/creator-hub', mode: 'other' },
     { id: 'creator-dashboard', path: '/creator', mode: 'creator' },
     { id: 'creator-listings', path: '/creator/listings', mode: 'creator' },
     {
