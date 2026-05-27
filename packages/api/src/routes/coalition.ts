@@ -656,6 +656,8 @@ coalition.post('/rings', async (c) => {
 });
 
 coalition.get('/rings/:id', (c) => {
+    const user = requireUser(c, 'Sign in to view a ring');
+    if (user instanceof Response) return user;
     const ring = getRing(c.req.param('id'));
     if (!ring) return c.json({ code: 'not_found', message: 'Ring not found' }, 404);
     const members = listRingMemberships(ring.id).filter((m) => m.active);

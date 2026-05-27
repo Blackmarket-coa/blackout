@@ -66,6 +66,9 @@ import type {
   RingMembershipRecord,
   RingInvitationRecord,
   CoalitionKitApplicationRecord,
+  CoalitionTaskRecord,
+  SellerLocationRecord,
+  CoalitionFeedItemRecord,
   PluginInstallationRecord,
   PluginDenRecord,
   CoalitionKitManifestApplicationRecord,
@@ -78,7 +81,13 @@ import type {
   ColiseumLiveSessionRecord,
   ReputationEventRecord,
 } from './types';
-import { COALITION_SPATIAL_SEED, COALITION_AID_SEED } from './coalitionSeed';
+import {
+  COALITION_SPATIAL_SEED,
+  COALITION_AID_SEED,
+  COALITION_TASK_SEED,
+  COALITION_SELLER_SEED,
+  COALITION_FEED_SEED,
+} from './coalitionSeed';
 import { hydrateMap, introspectColumns, rowToRecord, type TablePlan } from './pgWriter';
 import { MUTATOR_SPECS, TABLE_DESCRIPTORS } from './pgDescriptors';
 import { WriteBehindQueue } from './writeBehindQueue';
@@ -153,6 +162,9 @@ type PersistedState = {
   ringMemberships: RingMembershipRecord[];
   ringInvitations: RingInvitationRecord[];
   coalitionKitApplications: CoalitionKitApplicationRecord[];
+  coalitionTasks: CoalitionTaskRecord[];
+  sellerLocations: SellerLocationRecord[];
+  coalitionFeedItems: CoalitionFeedItemRecord[];
   pluginInstallations: PluginInstallationRecord[];
   pluginDens: PluginDenRecord[];
   coalitionKitManifestApplications: CoalitionKitManifestApplicationRecord[];
@@ -260,6 +272,18 @@ class InMemoryDb {
   ringInvitations = new Map<string, RingInvitationRecord>();
   /** Records of Coalition Kits applied to a den/coalition, keyed by application id. */
   coalitionKitApplications = new Map<string, CoalitionKitApplicationRecord>();
+  /** Coalition den tasks, keyed by task id. */
+  coalitionTasks = new Map<string, CoalitionTaskRecord>(
+    COALITION_TASK_SEED.map((row) => [row.id, row]),
+  );
+  /** Seller map locations, keyed by location id. */
+  sellerLocations = new Map<string, SellerLocationRecord>(
+    COALITION_SELLER_SEED.map((row) => [row.id, row]),
+  );
+  /** Coalition feed items (video/event/aid/listing/proposal), keyed by item id. */
+  coalitionFeedItems = new Map<string, CoalitionFeedItemRecord>(
+    COALITION_FEED_SEED.map((row) => [row.id, row]),
+  );
   /** Plugin installations (activation-at-scope), keyed by installation id. */
   pluginInstallations = new Map<string, PluginInstallationRecord>();
   /** Plugin-provisioned companion dens, keyed by linkage id. */
@@ -2252,6 +2276,82 @@ class InMemoryDb {
     return record;
   }
 
+  // --- coalition den tasks ---
+
+  listCoalitionTasks(filter: { denId?: string } = {}): CoalitionTaskRecord[] {
+    return [...this.coalitionTasks.values()].filter((task) =>
+      filter.denId ? task.denId === filter.denId : true,
+    );
+  }
+
+  createCoalitionTask(
+    input: Omit<CoalitionTaskRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionTaskRecord {
+    const now = nowIso();
+    const record: CoalitionTaskRecord = {
+      ...input,
+      status: 'todo',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coalitionTasks.set(record.id, record);
+    return record;
+  }
+
+  updateCoalitionTaskStatus(
+    id: string,
+    status: CoalitionTaskRecord['status'],
+  ): CoalitionTaskRecord | undefined {
+    const existing = this.coalitionTasks.get(id);
+    if (!existing) return undefined;
+    const record: CoalitionTaskRecord = { ...existing, status, updatedAt: nowIso() };
+    this.coalitionTasks.set(id, record);
+    return record;
+  }
+
+  // --- seller map locations ---
+
+  listSellerLocations(filter: { onlyVisible?: boolean } = {}): SellerLocationRecord[] {
+    return [...this.sellerLocations.values()].filter((location) =>
+      filter.onlyVisible ? location.isVisible : true,
+    );
+  }
+
+  upsertSellerLocation(
+    input: Omit<SellerLocationRecord, 'createdAt' | 'updatedAt'>,
+  ): SellerLocationRecord {
+    const existing = this.sellerLocations.get(input.id);
+    const now = nowIso();
+    const record: SellerLocationRecord = {
+      ...input,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.sellerLocations.set(record.id, record);
+    return record;
+  }
+
+  // --- coalition feed items ---
+
+  listCoalitionFeedItems(
+    filter: { canopyId?: string; denId?: string; kind?: CoalitionFeedItemRecord['kind'] } = {},
+  ): CoalitionFeedItemRecord[] {
+    return [...this.coalitionFeedItems.values()].filter((item) => {
+      if (filter.canopyId && item.canopyId !== filter.canopyId) return false;
+      if (filter.denId && item.denId !== filter.denId) return false;
+      if (filter.kind && item.kind !== filter.kind) return false;
+      return true;
+    });
+  }
+
+  upsertCoalitionFeedItem(
+    input: Omit<CoalitionFeedItemRecord, 'updatedAt'>,
+  ): CoalitionFeedItemRecord {
+    const record: CoalitionFeedItemRecord = { ...input, updatedAt: nowIso() };
+    this.coalitionFeedItems.set(record.id, record);
+    return record;
+  }
+
   // --- plugin installations (activation-at-scope) ---
 
   createPluginInstallation(
@@ -2706,6 +2806,15 @@ export class FileBackedDb extends InMemoryDb {
         parsed.coalitionKitApplications.map((row) => [row.id, row]),
       );
     }
+    if (parsed.coalitionTasks) {
+      this.coalitionTasks = new Map(parsed.coalitionTasks.map((row) => [row.id, row]));
+    }
+    if (parsed.sellerLocations) {
+      this.sellerLocations = new Map(parsed.sellerLocations.map((row) => [row.id, row]));
+    }
+    if (parsed.coalitionFeedItems) {
+      this.coalitionFeedItems = new Map(parsed.coalitionFeedItems.map((row) => [row.id, row]));
+    }
     if (parsed.coalitionAidPosts) {
       this.coalitionAidPosts = new Map(
         parsed.coalitionAidPosts.map((row) => [row.id, row]),
@@ -2805,6 +2914,9 @@ export class FileBackedDb extends InMemoryDb {
       ringMemberships: [...this.ringMemberships.values()],
       ringInvitations: [...this.ringInvitations.values()],
       coalitionKitApplications: [...this.coalitionKitApplications.values()],
+      coalitionTasks: [...this.coalitionTasks.values()],
+      sellerLocations: [...this.sellerLocations.values()],
+      coalitionFeedItems: [...this.coalitionFeedItems.values()],
       pluginInstallations: [...this.pluginInstallations.values()],
       pluginDens: [...this.pluginDens.values()],
       coalitionKitManifestApplications: [...this.coalitionKitManifestApplications.values()],
@@ -3689,6 +3801,39 @@ export class FileBackedDb extends InMemoryDb {
     input: Omit<CoalitionKitApplicationRecord, 'createdAt'>,
   ): CoalitionKitApplicationRecord {
     const created = super.recordCoalitionKitApplication(input);
+    this.persist();
+    return created;
+  }
+
+  override createCoalitionTask(
+    input: Omit<CoalitionTaskRecord, 'status' | 'createdAt' | 'updatedAt'>,
+  ): CoalitionTaskRecord {
+    const created = super.createCoalitionTask(input);
+    this.persist();
+    return created;
+  }
+
+  override updateCoalitionTaskStatus(
+    id: string,
+    status: CoalitionTaskRecord['status'],
+  ): CoalitionTaskRecord | undefined {
+    const updated = super.updateCoalitionTaskStatus(id, status);
+    if (updated) this.persist();
+    return updated;
+  }
+
+  override upsertSellerLocation(
+    input: Omit<SellerLocationRecord, 'createdAt' | 'updatedAt'>,
+  ): SellerLocationRecord {
+    const created = super.upsertSellerLocation(input);
+    this.persist();
+    return created;
+  }
+
+  override upsertCoalitionFeedItem(
+    input: Omit<CoalitionFeedItemRecord, 'updatedAt'>,
+  ): CoalitionFeedItemRecord {
+    const created = super.upsertCoalitionFeedItem(input);
     this.persist();
     return created;
   }

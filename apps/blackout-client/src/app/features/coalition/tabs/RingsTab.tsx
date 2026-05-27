@@ -1,12 +1,24 @@
 import React, { useCallback, useEffect, useState, type CSSProperties } from 'react';
-import { RING_KINDS, RING_VISIBILITY, type RingKind, type RingVisibility } from '@blackout/core';
+import {
+    RING_KINDS,
+    RING_ROLES,
+    RING_VISIBILITY,
+    type RingInvitation,
+    type RingKind,
+    type RingRole,
+    type RingVisibility,
+} from '@blackout/core';
 import { useCoalitionRings, useMyRingInvites } from '../hooks/useCoalitionFeed';
 import {
     createRing,
+    fetchRing,
+    fetchRingInvites,
     inviteToRing,
     joinRing,
     respondToRingInvite,
     searchCoalitionUsers,
+    updateRingMember,
+    type RingDetailResponse,
     type UserSearchResult,
 } from '../coalitionClient';
 
@@ -45,7 +57,11 @@ const buttonStyle: CSSProperties = {
     fontWeight: 600,
     cursor: 'pointer',
 };
-const ghostButtonStyle: CSSProperties = { ...buttonStyle, background: 'transparent', color: 'var(--text-secondary)' };
+const ghostButtonStyle: CSSProperties = {
+    ...buttonStyle,
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+};
 const labelStyle: CSSProperties = { fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 };
 const rowStyle: CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' };
 
@@ -88,7 +104,7 @@ function RingInvite({ ringId }: { ringId: string }): React.ReactElement {
                 setNote(err instanceof Error ? err.message : 'Could not invite');
             }
         },
-        [ringId],
+        [ringId]
     );
 
     return (
@@ -114,6 +130,82 @@ function RingInvite({ ringId }: { ringId: string }): React.ReactElement {
     );
 }
 
+/**
+ * Roster + role management + pending-invites for a ring. Visible to anyone who
+ * expands it; the role/invite endpoints are owner/admin-gated server-side and
+ * errors are surfaced inline (mirroring RingInvite).
+ */
+function RingManage({ ringId }: { ringId: string }): React.ReactElement {
+    const [detail, setDetail] = useState<RingDetailResponse | null>(null);
+    const [invites, setInvites] = useState<RingInvitation[] | null>(null);
+    const [note, setNote] = useState<string | null>(null);
+
+    const load = useCallback(() => {
+        fetchRing(ringId)
+            .then(setDetail)
+            .catch((err) => setNote(err instanceof Error ? err.message : 'Could not load members'));
+        // Invites are manager-only; a 403 just means "not a manager" — stay quiet.
+        fetchRingInvites(ringId)
+            .then((res) => setInvites(res.invitations))
+            .catch(() => setInvites(null));
+    }, [ringId]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    const changeRole = useCallback(
+        async (userId: string, role: RingRole) => {
+            try {
+                await updateRingMember(ringId, userId, role);
+                setNote(null);
+                load();
+            } catch (err) {
+                setNote(err instanceof Error ? err.message : 'Could not update role');
+            }
+        },
+        [ringId, load]
+    );
+
+    const members = detail?.members ?? [];
+    const pending = (invites ?? []).filter((inv) => inv.status === 'pending');
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={labelStyle}>Members ({members.length})</span>
+            {members.map((member) => (
+                <div key={member.userId} style={rowStyle}>
+                    <span style={{ flex: 1, fontSize: 13 }}>{member.userId}</span>
+                    <select
+                        style={inputStyle}
+                        value={member.role}
+                        onChange={(e) => changeRole(member.userId, e.target.value as RingRole)}
+                    >
+                        {RING_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                                {role}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            ))}
+            {pending.length > 0 ? (
+                <>
+                    <span style={labelStyle}>Pending invites ({pending.length})</span>
+                    {pending.map((inv) => (
+                        <span key={inv.id} style={{ fontSize: 13 }}>
+                            {inv.inviteeId} — {inv.status}
+                        </span>
+                    ))}
+                </>
+            ) : null}
+            {note ? (
+                <span style={{ color: 'var(--danger, #e74c3c)', fontSize: 12 }}>{note}</span>
+            ) : null}
+        </div>
+    );
+}
+
 export default function RingsTab(): React.ReactElement {
     const { data, loading, error, refetch } = useCoalitionRings();
     const { data: invitesData, refetch: refetchInvites } = useMyRingInvites();
@@ -128,7 +220,12 @@ export default function RingsTab(): React.ReactElement {
         if (!name.trim()) return;
         setBusy(true);
         try {
-            await createRing({ name: name.trim(), description: description.trim(), kind, visibility });
+            await createRing({
+                name: name.trim(),
+                description: description.trim(),
+                kind,
+                visibility,
+            });
             setName('');
             setDescription('');
             setShowForm(false);
@@ -143,7 +240,7 @@ export default function RingsTab(): React.ReactElement {
             await joinRing(id, leave);
             refetch();
         },
-        [refetch],
+        [refetch]
     );
 
     const respondInvite = useCallback(
@@ -152,8 +249,10 @@ export default function RingsTab(): React.ReactElement {
             refetchInvites();
             refetch();
         },
-        [refetch, refetchInvites],
+        [refetch, refetchInvites]
     );
+
+    const [managingId, setManagingId] = useState<string | null>(null);
 
     const rings = data?.rings ?? [];
     const invites = invitesData?.invitations ?? [];
@@ -162,7 +261,11 @@ export default function RingsTab(): React.ReactElement {
         <div style={containerStyle}>
             <div style={rowStyle}>
                 <strong style={{ fontSize: 18 }}>Rings</strong>
-                <button type="button" style={ghostButtonStyle} onClick={() => setShowForm((v) => !v)}>
+                <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={() => setShowForm((v) => !v)}
+                >
                     {showForm ? 'Close' : 'New ring'}
                 </button>
             </div>
@@ -170,7 +273,11 @@ export default function RingsTab(): React.ReactElement {
             {showForm ? (
                 <div style={cardStyle}>
                     <label style={labelStyle}>Name</label>
-                    <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
+                    <input
+                        style={inputStyle}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                    />
                     <label style={labelStyle}>Description</label>
                     <textarea
                         style={{ ...inputStyle, minHeight: 56 }}
@@ -251,9 +358,15 @@ export default function RingsTab(): React.ReactElement {
                         <span style={labelStyle}>{ring.kind}</span>
                         <span style={{ fontSize: 13 }}>{ring.memberCount} member(s)</span>
                     </div>
-                    {ring.description ? <p style={{ margin: 0, fontSize: 14 }}>{ring.description}</p> : null}
+                    {ring.description ? (
+                        <p style={{ margin: 0, fontSize: 14 }}>{ring.description}</p>
+                    ) : null}
                     <div style={rowStyle}>
-                        <button type="button" style={buttonStyle} onClick={() => toggleMembership(ring.id, false)}>
+                        <button
+                            type="button"
+                            style={buttonStyle}
+                            onClick={() => toggleMembership(ring.id, false)}
+                        >
                             Join
                         </button>
                         <button
@@ -263,7 +376,15 @@ export default function RingsTab(): React.ReactElement {
                         >
                             Leave
                         </button>
+                        <button
+                            type="button"
+                            style={ghostButtonStyle}
+                            onClick={() => setManagingId((id) => (id === ring.id ? null : ring.id))}
+                        >
+                            {managingId === ring.id ? 'Hide members' : 'Manage'}
+                        </button>
                     </div>
+                    {managingId === ring.id ? <RingManage ringId={ring.id} /> : null}
                     <RingInvite ringId={ring.id} />
                 </div>
             ))}
