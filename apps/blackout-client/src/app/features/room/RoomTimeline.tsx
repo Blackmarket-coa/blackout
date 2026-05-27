@@ -659,6 +659,7 @@ export const RoomTimeline = ({
     const isAtBottomRef = useRef(true);
     const initialScrollDoneRef = useRef(false);
     const backPaginateAnchorRef = useRef<string | null>(null);
+    const isPaginatingRef = useRef(false);
     const [profileTarget, setProfileTarget] = useState<MemberProfile | null>(null);
     const buildProfile = useCallback(
         (userId: string): MemberProfile => ({
@@ -719,23 +720,31 @@ export const RoomTimeline = ({
         if (!el) return;
 
         const nearBottom = el.scrollHeight - (el.scrollTop + el.clientHeight) < 48;
-        isAtBottomRef.current = nearBottom;
-        setIsAtBottom(nearBottom);
+        if (isAtBottomRef.current !== nearBottom) {
+            isAtBottomRef.current = nearBottom;
+            setIsAtBottom(nearBottom);
+        }
 
-        if (el.scrollTop < 80 && hasMoreBackPagination) {
+        if (el.scrollTop < 80 && hasMoreBackPagination && !isPaginatingRef.current) {
+            isPaginatingRef.current = true;
             const firstVisible = virtualizer
                 .getVirtualItems()
                 .find((vItem) => items[vItem.index]?.kind === 'message');
             backPaginateAnchorRef.current = firstVisible
                 ? (items[firstVisible.index]?.id ?? null)
                 : null;
-            await loadMore(40);
+            try {
+                await loadMore(40);
+            } finally {
+                isPaginatingRef.current = false;
+            }
         }
     }, [hasMoreBackPagination, items, loadMore, virtualizer]);
 
     // Open the room at the newest message once items are available.
     useLayoutEffect(() => {
         initialScrollDoneRef.current = false;
+        isPaginatingRef.current = false;
     }, [roomId]);
 
     useLayoutEffect(() => {

@@ -122,7 +122,7 @@ export function MessageSearch({
     count: groups.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 40,
-    overscan: 1,
+    overscan: 5,
   });
   const vItems = virtualizer.getVirtualItems();
 
