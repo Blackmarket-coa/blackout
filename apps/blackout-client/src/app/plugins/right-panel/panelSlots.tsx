@@ -39,6 +39,8 @@ import {
     isLiveInteractionWidgetPanelId,
     LIVE_INTERACTION_WIDGET_PANEL_IDS,
 } from '../../features/call/liveInteractionBundle';
+import { SoundboardWidget } from '../../features/soundboard/SoundboardWidget';
+import { StageChannelWidget } from '../../features/stage-channels/StageChannelWidget';
 
 export type RightPanelSlotProps = {
     panel: Exclude<RightPanelType, null>;
@@ -646,6 +648,12 @@ const WidgetInventoryPanel = ({ panel, room }: RightPanelSlotProps) => {
     );
 };
 
+const widgetRendererFor = (inventoryId: WidgetPanelInventoryId): RightPanelSlotRenderer => {
+    if (inventoryId === 'soundboard') return ({ room }) => <SoundboardWidget room={room} />;
+    if (inventoryId === 'stage_channels') return ({ room }) => <StageChannelWidget room={room} />;
+    return WidgetInventoryPanel;
+};
+
 const buildWidgetSlots = (liveInteractionBundleEnabled: boolean): RightPanelSlotRegistry => {
     const allowedWidgetInventory = WIDGET_PANEL_INVENTORY_IDS.filter(
         (inventoryId) =>
@@ -653,7 +661,7 @@ const buildWidgetSlots = (liveInteractionBundleEnabled: boolean): RightPanelSlot
     );
 
     return Object.fromEntries(
-        allowedWidgetInventory.map((inventoryId) => [inventoryId, WidgetInventoryPanel])
+        allowedWidgetInventory.map((inventoryId) => [inventoryId, widgetRendererFor(inventoryId)])
     ) as RightPanelSlotRegistry;
 };
 
