@@ -600,8 +600,10 @@ export interface ModerationActionRecord {
   communityId: UUID;
   actorId: UUID;
   targetId: UUID;
-  action: 'warn' | 'mute' | 'ban' | 'remove_content';
+  action: 'warn' | 'mute' | 'ban' | 'remove_content' | 'timeout' | 'slowmode';
   reason: string;
+  /** Optional structured context (e.g. duration, device, failure reason). */
+  metadata?: Record<string, unknown>;
   createdAt: string;
 }
 

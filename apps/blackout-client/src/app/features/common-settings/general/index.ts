@@ -4,4 +4,5 @@ export * from './RoomHistoryVisibility';
 export * from './RoomJoinRules';
 export * from './RoomProfile';
 export * from './RoomPublish';
+export * from './RoomSlowmode';
 export * from './RoomUpgrade';

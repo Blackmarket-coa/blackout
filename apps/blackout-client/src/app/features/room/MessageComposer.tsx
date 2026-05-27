@@ -41,6 +41,11 @@ import { resetEditor } from '../../components/editor/utils';
 import { emojis } from '../../plugins/emoji';
 import { EmojiPicker } from './EmojiPicker';
 import { createScheduledMessage } from './scheduledMessagesClient';
+import {
+    SLOWMODE_STATE_EVENT_TYPE,
+    evaluateSlowmode,
+    parseSlowmodeConfig,
+} from './slowmode';
 
 const MAX_SUGGESTIONS = 8;
 const MAX_MESSAGE_LENGTH = 8000;
@@ -607,6 +612,8 @@ export const MessageComposer = ({
     const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
     const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+    const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
+    const lastSentTsRef = useRef<number | null>(null);
     const [commandPayload, setCommandPayload] = useAtom(composerCommandPayloadAtom);
 
     const menuRef = useRef<HTMLDivElement | null>(null);
@@ -883,6 +890,29 @@ export const MessageComposer = ({
         if (!plainBody && attachments.length === 0 && !voiceAttachment) return;
         if (plainBody.length > MAX_MESSAGE_LENGTH) return;
 
+        // Slow mode: throttle non-exempt senders per the room's co.bmc.slowmode
+        // config. Edits aren't new posts, so they're never throttled.
+        if (room && target?.mode !== 'edit') {
+            const slowmodeContent = room.currentState
+                .getStateEvents(SLOWMODE_STATE_EVENT_TYPE as never, '')
+                ?.getContent<Record<string, unknown>>();
+            const verdict = evaluateSlowmode({
+                config: parseSlowmodeConfig(slowmodeContent),
+                lastSentTs: lastSentTsRef.current,
+                now: Date.now(),
+                userPowerLevel:
+                    room.getMember(matrixClient.getUserId() ?? '')?.powerLevel ?? 0,
+            });
+            if (!verdict.allowed) {
+                setSlowmodeNotice(
+                    `Slow mode is on — wait ${Math.ceil(verdict.retryAfterMs / 1000)}s before sending again.`
+                );
+                return;
+            }
+            lastSentTsRef.current = Date.now();
+            setSlowmodeNotice(null);
+        }
+
         setSending(true);
         try {
             const htmlBody = toHtml(value);
@@ -1023,6 +1053,7 @@ export const MessageComposer = ({
         encryptionPresetEnabled,
         matrixClient,
         onSent,
+        room,
         roomId,
         scheduleDelayHours,
         scheduledEnabled,
@@ -1764,6 +1795,19 @@ export const MessageComposer = ({
                                 </button>
                             </span>
                         ) : null}
+                    </div>
+                ) : null}
+
+                {slowmodeNotice ? (
+                    <div
+                        role="status"
+                        style={{
+                            marginTop: 8,
+                            fontSize: 12,
+                            color: 'var(--color-danger, #e5484d)',
+                        }}
+                    >
+                        {slowmodeNotice}
                     </div>
                 ) : null}
 
