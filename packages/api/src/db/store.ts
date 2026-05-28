@@ -116,6 +116,7 @@ import { randomUUID } from 'node:crypto';
 const nowIso = () => new Date().toISOString();
 const DB_MODE = process.env.BLACKOUT_DB_MODE ?? 'file';
 const DB_FILE_PATH = resolve(process.cwd(), process.env.BLACKOUT_DB_FILE ?? '.blackout/data/store.json');
+const BASE_DATA_DIR = resolve(process.cwd(), '.blackout');
 
 type PersistedState = {
   users: UserRecord[];

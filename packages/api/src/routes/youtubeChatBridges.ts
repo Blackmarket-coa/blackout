@@ -159,7 +159,7 @@ bridges.post('/:id/sync', async (c) => {
       bridgeId: id,
       error: String(err),
     });
-    return c.json({ code: 'internal_error', message: (err as Error).message }, 500);
+    return c.json({ code: 'internal_error', message: 'An internal error occurred' }, 500);
   }
 });
 
@@ -225,7 +225,7 @@ bridges.post('/:id/say', async (c) => {
       bridgeId: id,
       error: String(err),
     });
-    return c.json({ code: 'internal_error', message: (err as Error).message }, 500);
+    return c.json({ code: 'internal_error', message: 'An internal error occurred' }, 500);
   }
 });
 

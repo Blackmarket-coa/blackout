@@ -7,7 +7,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { redactObject, type Hasher } from '@blackout/core/redaction';
+import { redactString, redactObject, type Hasher } from '@blackout/core/redaction';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -16,7 +16,13 @@ export interface LogFields {
 }
 
 const isProduction = () => process.env.NODE_ENV === 'production';
-const hashSalt = (): string => process.env.LOG_HASH_SALT ?? 'blackout-log-salt';
+const hashSalt = (): string => {
+  const salt = process.env.LOG_HASH_SALT;
+  if (!salt && isProduction()) {
+    throw new Error('LOG_HASH_SALT is required in production. Set it to a random string to pseudonymize log fields.');
+  }
+  return salt ?? 'blackout-log-salt';
+};
 
 const pseudonymize: Hasher = (value: string) =>
   `h:${createHash('sha256').update(hashSalt()).update(value).digest('base64url').slice(0, 16)}`;
@@ -33,13 +39,13 @@ const writers: Record<LogLevel, (line: string) => void> = {
 
 const emit = (level: LogLevel, msg: string, fields: LogFields = {}) => {
   const safe = redact(fields);
-  const line = JSON.stringify({
-    ts: new Date().toISOString(),
-    level,
-    msg,
-    ...safe,
-  });
-  writers[level](line);
+  const safeMsg = redactString(msg);
+  try {
+    const line = JSON.stringify({ ts: new Date().toISOString(), level, msg: safeMsg, ...safe });
+    writers[level](line);
+  } catch {
+    console.error(`[logger:unserializable] level=${level} msg=${msg}`);
+  }
 };
 
 export const log = {

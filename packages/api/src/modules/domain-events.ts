@@ -15,6 +15,7 @@ export interface DomainEvent<TPayload = unknown> {
   emittedAt: string;
 }
 
+const MAX_EVENTS = 10_000;
 const events: DomainEvent[] = [];
 
 export function emitDomainEvent<TPayload>(event: Omit<DomainEvent<TPayload>, 'id' | 'emittedAt'>): DomainEvent<TPayload> {
@@ -25,6 +26,7 @@ export function emitDomainEvent<TPayload>(event: Omit<DomainEvent<TPayload>, 'id
   };
 
   events.push(emitted);
+  while (events.length > MAX_EVENTS) events.shift();
   return emitted;
 }
 

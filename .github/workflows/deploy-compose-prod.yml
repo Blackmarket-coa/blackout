@@ -45,7 +45,13 @@ jobs:
           ssh "${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}" <<'EOSSH'
           set -euo pipefail
           cd "${{ secrets.PROD_STACK_DIR }}"
-          export APP_IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag || github.sha }}"
+          # Validate image_tag against allowed characters
+          if [[ ! "$IMAGE_TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "ERROR: image_tag contains invalid characters"
+            exit 1
+          fi
+          export APP_IMAGE_TAG="$IMAGE_TAG"
           export APP_CANARY_TAG="$APP_IMAGE_TAG"
           # Bring up the canary service alongside the stable fleet. The
           # production Caddyfile must include a `weighted_round_robin`

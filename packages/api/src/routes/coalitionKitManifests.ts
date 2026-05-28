@@ -57,7 +57,7 @@ coalitionKits.post('/:coalitionId/apply', async (c) => {
     try {
         manifest = parseCoalitionKitManifest(body.manifest);
     } catch (error) {
-        return c.json({ code: 'invalid_manifest', message: (error as Error).message }, 400);
+        return c.json({ code: 'invalid_manifest', message: 'Invalid manifest' }, 400);
     }
 
     const result = await applyCoalitionKitManifest({

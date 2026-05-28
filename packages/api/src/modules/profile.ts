@@ -94,7 +94,7 @@ function createProfileRouter() {
             return c.json({ ...post, event }, 201);
         } catch (error) {
             return c.json(
-                { code: 'invalid_request', message: (error as Error).message },
+                { code: 'invalid_request', message: 'Unable to process request' },
                 400,
             );
         }

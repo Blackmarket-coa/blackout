@@ -88,7 +88,13 @@ export class PgNotifyTransport implements StoreChangeTransport {
       const msg = arg as { payload?: string };
       if (!msg.payload || !this.changeHandler) return;
       try {
-        this.changeHandler(JSON.parse(msg.payload) as StoreChangePayload);
+        const raw = JSON.parse(msg.payload) as { m?: unknown; op?: unknown; kv?: unknown };
+        if (typeof raw.m !== 'string' || typeof raw.op !== 'string' || (raw.kv !== undefined && !Array.isArray(raw.kv))) {
+          log.warn('pg_notify_invalid_payload', { payload: msg.payload.slice(0, 128) });
+          return;
+        }
+        if (raw.op !== 'u' && raw.op !== 'r') return;
+        this.changeHandler(raw as unknown as StoreChangePayload);
       } catch (err) {
         log.warn('pg_notify_parse_failed', { error: err instanceof Error ? err.message : String(err) });
       }

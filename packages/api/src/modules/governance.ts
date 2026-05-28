@@ -207,7 +207,7 @@ function createGovernanceRouter() {
       });
       return c.json({ ...meeting, event });
     } catch (error) {
-      return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
+      return c.json({ code: 'invalid_request', message: 'Unable to process request' }, 400);
     }
   });
 
