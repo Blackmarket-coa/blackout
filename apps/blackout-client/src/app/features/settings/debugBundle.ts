@@ -1,3 +1,23 @@
+/**
+ * WHAT THIS FILE DOES
+ * Creates a downloadable JSON file for debugging (browser info, settings,
+ * localStorage contents). Used when users report bugs — they share the
+ * debug bundle with developers.
+ *
+ * WHAT WAS WRONG (TOKEN LEAKAGE)
+ * Before the fix, the debug bundle included EVERY localStorage key
+ * starting with 'blackout.' — including access tokens, refresh tokens,
+ * and Matrix session data. If a user shared their debug bundle in a
+ * public GitHub issue or support chat, anyone could read their tokens
+ * and take over their account.
+ *
+ * HOW IT WAS FIXED
+ * The `readLocalStorageKeys()` function now filters out keys containing
+ * 'access_token', 'refresh_token', 'matrix.sessions', or 'push.token'.
+ * The debug bundle still includes settings and feature flags but never
+ * credentials.
+ */
+
 export type DebugBundleSettingsSnapshot = {
     appearance: unknown;
     notifications: unknown;

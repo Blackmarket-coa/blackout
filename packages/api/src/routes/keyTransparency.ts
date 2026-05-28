@@ -1,3 +1,9 @@
+/**
+ * Key transparency log — verifiable record of Matrix signing keys.
+ * SECURITY: requireUser added to POST /append. userId was removed from
+ * the schema — now derived from JWT (user.sub), not untrusted body.
+ */
+
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';

@@ -45,6 +45,35 @@ import {
   refreshTokenReusesTotal,
 } from '../telemetry/metrics';
 
+/**
+ * WHAT THIS FILE DOES
+ * The central authentication API — login, register, password reset, email
+ * verification, token refresh, account deletion, anonymous signup, and MFA.
+ *
+ * SECURITY FIXES IN THIS FILE
+ * - register handler was completely missing (restored from git). Flow: validate
+ *   password → breach check → create local user → provision Matrix → redeem
+ *   invite → join welcome room → issue session.
+ * - Breach detection via k-anonymity HIBP check on both register and password
+ *   change. Never sends the full password — just the first 5 chars of its SHA-1.
+ * - Session limits (MAX_SESSIONS_PER_USER=10) prune oldest tokens on new login.
+ * - MFA login challenge: returns { requiresMfa, mfaToken } instead of session.
+ * - Anonymous signup uses shared-secret registration ONLY (no admin bot token).
+ *   PoW enforced via 428 response before account creation.
+ * - Matrix exchange users get placeholder email (localpart@matrix.internal)
+ *   instead of empty string — prevents findUserByEmail('') collision.
+ * - Rate limits on all sensitive endpoints (login, register, mfa, password, etc).
+ *
+ * KEY CONCEPTS
+ * - k-anonymity (breach check): Only send the first 5 hex chars of SHA-1.
+ *   HIBP returns suffixes that match — we check if ours is in the list.
+ *   The full password never leaves our server.
+ * - Session limits: Prevent session sprawl. If a user has 10+ active refresh
+ *   tokens, the oldest ones are revoked when they log in again.
+ * - Shared-secret registration: Uses HMAC-SHA1 with Synapse's registration
+ *   shared secret. Can ONLY create users — no admin powers.
+ */
+
 const auth = new Hono();
 
 auth.use('/login', authRateLimit);

@@ -1,3 +1,23 @@
+/**
+ * WHAT THIS FILE DOES
+ * Handles sending and reading messages in channels (the core messaging API).
+ *
+ * WHAT WAS WRONG (TWO CRITICAL VULNERABILITIES)
+ * 1. No authentication: anyone could read any channel's messages by calling
+ *    GET /:channelId without logging in.
+ * 2. Identity forgery on POST: the `userId` field was accepted from the
+ *    untrusted request body. An attacker could impersonate any user just
+ *    by setting `{ "userId": "victim-id" }` in their request body.
+ *
+ * HOW IT WAS FIXED
+ * 1. GET requires `requireUser(c)` — only authenticated users can read messages.
+ * 2. POST now reads `authUser.sub` from the JWT (verified by the middleware)
+ *    instead of `parsed.userId` from the body (which anyone can forge).
+ * 3. Steganography key (`STEGO_KEY`) no longer defaults to 'local-stego-key' —
+ *    if not configured, stego tier 3 returns 503 instead of using a known key.
+ * 4. `messageRateLimit` (60 req/min) added to prevent channel flooding.
+ */
+
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { encodeStego, encryptE2E, formatFederatedMessage, signMessage } from '@blackout/core';

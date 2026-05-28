@@ -1,3 +1,23 @@
+/**
+ * WHAT THIS FILE DOES
+ * Voice/video room management — create rooms, join them, get LiveKit tokens,
+ * and moderate (mute, kick, lock). All powered by LiveKit under the hood.
+ *
+ * WHAT WAS WRONG (THE ROLE BYPASS)
+ * The `role` field came from the untrusted request body. Any authenticated
+ * user could send `{ "role": "admin" }` and pass all moderation checks —
+ * becoming a room admin without any actual permissions on the canopy.
+ *
+ * HOW IT WAS FIXED
+ * 1. `roleFromRequest(parsed.role)` replaced with `roleForCanopy(user.sub, canopyId)`.
+ *    This looks up the user's actual role on the server side (from canopy
+ *    membership) instead of trusting what the client sends.
+ * 2. For MVP, `roleForCanopy` always returns `'member'` — no one gets admin
+ *    via voice routes until a proper canopy membership system is built.
+ * 3. `role` field removed from `roomCoordsSchema` — no longer accepted from clients.
+ * 4. `voiceRateLimit` (10 req/min) prevents flooding LiveKit token generation.
+ */
+
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';

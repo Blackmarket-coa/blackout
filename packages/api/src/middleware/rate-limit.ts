@@ -1,7 +1,32 @@
-import type { Context, Next } from 'hono';
-import { readRedisRuntimeConfig } from '../config/redis';
-import { log } from '../telemetry/logger';
 import { rateLimitFailOpenTotal, rateLimitHitsTotal } from '../telemetry/metrics';
+
+/**
+ * WHAT THIS FILE DOES
+ * Rate limiting — prevents any single IP or user from making too many
+ * requests too quickly. Works like a "token bucket": each user gets a
+ * certain number of tokens per minute. Each request spends one token.
+ * When tokens are gone, requests get 429 Too Many Requests.
+ *
+ * HOW IT IS ORGANIZED
+ * Each "bucket" has a name, a time window (default 60 seconds), and a
+ * max request count. For example, `authRateLimit` = 10 requests per
+ * minute per IP for auth endpoints.
+ *
+ * SECURITY FIXES IN THIS FILE
+ * - 11 buckets total (was 5). Added: mfa, message, write, coalition,
+ *   voice, admin-op. Each router now has its own bucket instead of
+ *   sharing — prevents one endpoint's traffic from blocking another.
+ * - fail-open metrics (`rateLimitFailOpenTotal` counter) so operators
+ *   can detect when Redis is unreachable and rate limiting is bypassed.
+ * - Per-bucket env var overrides (e.g., MFA_RATE_LIMIT_MAX=20) for
+ *   operators to tune without code changes.
+ *
+ * KEY CONCEPT — Token bucket
+ * Imagine a bucket that refills at a constant rate. Each request takes
+ * one token. If the bucket is empty, the request is rejected. The bucket
+ * refills over time, so brief bursts are allowed but sustained flooding
+ * is blocked. This is the standard pattern used by every major API.
+ */
 
 export interface RateLimitOptions {
   bucket: string;
@@ -13,7 +38,9 @@ export interface RateLimitOptions {
    * Optional per-request identity (e.g. the authenticated user id) to key the
    * limit on instead of the client IP. Falls back to the IP key when it returns
    * a falsy value, so anonymous traffic is still bucketed by address.
-   */
+ */
+
+import type { Context, Next } from 'hono';
   identify?: (c: Context) => string | null | undefined;
 }
 

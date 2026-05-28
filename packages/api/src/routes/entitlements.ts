@@ -1,3 +1,10 @@
+/**
+ * User entitlements (subscription tiers, feature access per tier).
+ * SECURITY: removed anonymous header bypass — `x-blackout-entitlement-payload`
+ * used to override entitlements for unauthenticated users. Both GET /me
+ * and GET /:family now require requireUser.
+ */
+
 import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
 import { DEAD_DROP_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload } from '@blackout/protocol';

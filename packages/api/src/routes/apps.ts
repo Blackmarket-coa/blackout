@@ -1,3 +1,9 @@
+/**
+ * Canopy app/directory management. SECURITY: requireUser added to all
+ * 3 POST endpoints (install, revoke, actions) — before this fix, anyone
+ * could install/revoke apps on any canopy without authentication.
+ */
+
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { appActions, appEvents } from '@blackout/core';

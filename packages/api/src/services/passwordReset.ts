@@ -1,3 +1,16 @@
+/**
+ * WHAT THIS FILE DOES
+ * Password reset flow — issues time-limited tokens (sent via email) and
+ * consumes them to set a new password. Tokens are SHA-256 hashed before
+ * storage (plaintext only exists in transit via email).
+ *
+ * WHAT WAS WRONG (MISSING BREACH CHECK)
+ * The reset flow checked password strength (length, character classes)
+ * but never called `isBreachedPassword`. A user resetting to a breached
+ * password would succeed here but fail during normal password change —
+ * an inconsistent security boundary. Now calls both checks in sequence.
+ */
+
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/store';
 import type { PasswordResetTokenRecord, UserRecord } from '../db/types';
