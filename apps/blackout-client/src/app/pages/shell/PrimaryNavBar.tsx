@@ -8,16 +8,17 @@ import { PROFILE_SELF_PATH } from '../paths';
 import { isShellPathActive } from './modeRouter';
 
 /**
- * The four primary destinations shown in the desktop top nav, by panel id.
+ * The primary destinations shown in the desktop top nav, by panel id.
  * Profile is intentionally excluded — it lives as the avatar on the right.
- * The source list (and ordering) is `shellDestinationPanels`, shared with
- * the mobile BottomTabBar, so both bars stay consistent.
+ * Ordering comes from each panel's `order` (Coliseum 40 → Community Market 45),
+ * shared with the mobile BottomTabBar so both bars stay consistent.
  */
 const PRIMARY_NAV_PANEL_IDS = new Set<string>([
     'shell.home',
     'shell.streams',
     'shell.coalition',
     'shell.coliseum',
+    'shell.market',
 ]);
 
 const BAR_STYLE: CSSProperties = {

@@ -13,6 +13,7 @@ const HomeStub = () => <div data-testid="home-body">home body</div>;
 const CommunitiesStub = () => <div data-testid="communities-body">communities body</div>;
 const CoalitionStub = () => <div data-testid="coalition-body">coalition body</div>;
 const ColiseumStub = () => <div data-testid="coliseum-body">coliseum body</div>;
+const MarketStub = () => <div data-testid="market-body">market body</div>;
 const StreamsStub = () => <div data-testid="streams-body">streams body</div>;
 const ProfileStub = () => <div data-testid="profile-body">profile body</div>;
 const InboxStub = () => <div data-testid="inbox-body">inbox body</div>;
@@ -47,6 +48,7 @@ const renderShell = (initialPath: string, options: RenderShellOptions = {}) => {
                     { path: '/communities', element: <CommunitiesStub /> },
                     { path: '/coalition', element: <CoalitionStub /> },
                     { path: '/coliseum', element: <ColiseumStub /> },
+                    { path: '/market', element: <MarketStub /> },
                     { path: '/streaming', element: <StreamsStub /> },
                     { path: '/profile/me', element: <ProfileStub /> },
                     { path: '/messages', element: <InboxStub /> },
@@ -126,7 +128,7 @@ describe('AppShell', () => {
         expect(shellRoot?.getAttribute('data-shell-mode')).toBe('community');
     });
 
-    it('renders the bottom-tab bar with the five canonical destinations on a mobile viewport', async () => {
+    it('renders the bottom-tab bar with the canonical destinations on a mobile viewport', async () => {
         const { router, container, root, store } = renderShell('/');
         await act(async () => {
             root.render(
@@ -149,6 +151,7 @@ describe('AppShell', () => {
             'shell.streams',
             'shell.coalition',
             'shell.coliseum',
+            'shell.market',
             'shell.profile',
         ]);
     });
@@ -187,6 +190,7 @@ describe('AppShell', () => {
         { name: 'Home', path: '/', panelId: 'shell.home' },
         { name: 'Coalition', path: '/coalition', panelId: 'shell.coalition' },
         { name: 'Coliseum', path: '/coliseum', panelId: 'shell.coliseum' },
+        { name: 'Market', path: '/market', panelId: 'shell.market' },
         { name: 'Streams', path: '/streaming', panelId: 'shell.streams' },
         { name: 'Profile', path: '/profile/me', panelId: 'shell.profile' },
     ];
