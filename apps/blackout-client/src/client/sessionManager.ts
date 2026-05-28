@@ -1,3 +1,25 @@
+/**
+ * WHAT THIS FILE DOES
+ * Manages user sessions — loading, saving, switching, and clearing.
+ * Before the security fix, sessions were stored as plaintext JSON in
+ * localStorage with access tokens fully exposed to any XSS.
+ *
+ * WHAT WAS WRONG (TOKEN EXPOSURE)
+ * Access tokens in localStorage are readable by ANY script on the page —
+ * malicious browser extensions, compromised dependencies, or XSS-injected
+ * code. One XSS = permanent account compromise.
+ *
+ * HOW IT WAS FIXED
+ * 1. Sessions are now encrypted with AES-256-GCM via sessionCrypto.ts
+ *    before being stored in localStorage. The blob in localStorage is
+ *    opaque ciphertext — useless without the decryption key.
+ * 2. The encryption key lives in IndexedDB (harder to exfiltrate than
+ *    localStorage since you need to know the database name and store).
+ * 3. initSessionManager() auto-migrates old unencrypted sessions.
+ * 4. Write queue prevents TOCTOU race conditions when saving ~at the
+ *    same time from two different event handlers.
+ */
+
 import {
     initSessionCrypto,
     securelyStoreSession,

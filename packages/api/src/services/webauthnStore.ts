@@ -1,10 +1,25 @@
 /**
  * Redis-backed WebAuthn store with in-memory fallback for single-process dev.
  *
- * When `BLACKOUT_WEBAUTHN_STORE=redis` and REDIS_URL is configured, challenges
- * and credentials are persisted in Redis with TTL-based expiry, enabling
- * multi-process deployments behind a load balancer. Otherwise uses the
- * existing in-memory Maps in db.store (backward compatible).
+ * WHAT THIS FILE DOES
+ * Stores WebAuthn credentials and challenges durably. In single-process
+ * deployments, falls back to the in-memory store. When Redis is configured
+ * (via BLACKOUT_WEBAUTHN_STORE=redis), credentials survive server restarts
+ * and challenges work across multiple replicas behind a load balancer.
+ *
+ * WHY IT EXISTS (THE MULTI-PROCESS PROBLEM)
+ * The in-memory WebAuthn store (`services/webauthn.ts`) uses JavaScript
+ * Maps — they exist only in one process's memory. In a multi-replica
+ * deployment behind a load balancer, a challenge issued on Replica A
+ * can't be consumed on Replica B (it doesn't exist there). This store
+ * solves that by persisting to Redis, which all replicas share.
+ *
+ * KEY CONCEPT — Atomic GET + DELETE
+ * The challenge consumption uses a Redis Lua EVAL script instead of
+ * separate GET + DEL calls. If two replicas both GET the same challenge
+ * before either DEL, both would think they consumed it (race condition).
+ * The Lua script runs atomically: "get the value, if it exists delete it,
+ * return it" — no other command can execute between the GET and DEL.
  */
 
 import { readRedisRuntimeConfig } from '../config/redis';

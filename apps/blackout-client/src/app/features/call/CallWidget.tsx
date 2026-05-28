@@ -1,3 +1,22 @@
+/**
+ * WHAT THIS FILE DOES
+ * Embeds the Element Call widget (voice/video calls) in an iframe.
+ *
+ * WHAT WAS WRONG (TWO ATTACK VECTORS)
+ * 1. No origin check on postMessage — any page could send forged audio
+ *    level events to corrupt the call UI, showing fake speaking indicators.
+ * 2. No sandbox attribute on the iframe — a malicious call widget URL
+ *    could execute arbitrary JavaScript and navigate the parent page.
+ *
+ * HOW IT WAS FIXED
+ * 1. The postMessage listener now validates `event.origin` against a
+ *    trusted origin allowlist (call.element.io, call.blackout.app).
+ * 2. The iframe gets `sandbox="allow-scripts allow-same-origin allow-forms"`
+ *    which restricts what the embedded page can do.
+ * 3. The widget URL is validated against trusted origins before being
+ *    used — rejecting arbitrary URLs from untrusted sources.
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCall } from './CallProvider';
 

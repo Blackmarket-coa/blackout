@@ -1,7 +1,20 @@
 /**
- * "Panic wipe" — clear locally-stored sensitive traces this app keeps in
- * localStorage, sessionStorage, IndexedDB, and cookies. Pure over a minimal
- * key/value store interface so it's fully unit-testable and reusable.
+ * "Panic wipe" — emergency button that clears all sensitive data from the
+ * browser: localStorage, sessionStorage, IndexedDB (Matrix crypto keys +
+ * message cache), and cookies. One-click self-destruct for local traces.
+ *
+ * WHAT WAS WRONG (INCOMPLETE WIPE)
+ * The original panic wipe only cleared localStorage. Matrix E2EE crypto keys,
+ * message history, sync data, and cookies all survived. An attacker with local
+ * access could still decrypt messages after a panic wipe.
+ *
+ * HOW IT WAS FIXED
+ * 1. Added wipeIndexedDB() — clears all known Matrix JS SDK databases
+ *    (sync, crypto, megolm backup, timeline, session crypto).
+ * 2. Added wipeCookies() — clears all cookies for the current origin.
+ * 3. Added sessionStorage clearing alongside localStorage.
+ * 4. The PanicSettings UI now waits for IndexedDB cleanup before reloading
+ *    the page (Promise.allSettled ensures cleanup completes).
  *
  * Two tiers:
  *  - SENSITIVE_TRACE_PREFIXES: privacy-relevant local state (drafts, burner

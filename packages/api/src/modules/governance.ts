@@ -1,3 +1,27 @@
+/**
+ * WHAT THIS FILE DOES
+ * Governance/voting system — users create proposals and cast votes.
+ * Behind the scenes, each vote is stored with a hash chain for
+ * tamper evidence, and the audit endpoint lets anyone verify that
+ * no votes were modified after the fact.
+ *
+ * WHY IT EXISTS (THE SECURITY PROBLEM)
+ * Three critical issues were in this file:
+ * 1. (IDOR) `userId` and `proposerId` came from the UNTRUSTED request
+ *    body — an attacker could vote or create proposals as ANY user
+ *    just by changing these fields in their request.
+ * 2. No vote expiry check — users could vote on proposals long after
+ *    the voting period ended.
+ * 3. Error messages leaked user activity — "You have already voted"
+ *    told an attacker which accounts had voted on which proposals.
+ *
+ * KEY CONCEPT — IDOR (Insecure Direct Object Reference)
+ * When a user supplies an ID (like userId) in their request body and
+ * the server trusts it without verifying against the authenticated
+ * session. Fixed by reading `userId` from the JWT (which we verified),
+ * not from the body (which anyone can forge).
+ */
+
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { tallyVotes } from '@blackout/core';

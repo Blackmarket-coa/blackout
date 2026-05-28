@@ -1,10 +1,37 @@
 /**
- * Burner identity reconciler — periodically retries deactivation of burner
- * accounts whose Matrix deactivation failed during the initial burn attempt.
+ * WHAT THIS FILE DOES
+ * A background task that runs every 15 minutes, retrying the
+ * deactivation of burner accounts where the initial "burn" attempt
+ * failed because the Matrix homeserver was unreachable.
  *
- * This ensures eventual consistency: even if the homeserver is temporarily
- * unreachable when a user burns their burner, the account will eventually
- * be deactivated on the next reconciliation pass.
+ * WHY IT EXISTS (THE SECURITY PROBLEM)
+ * When a user "burns" their burner identity, two things happen:
+ *   1. LOCAL: We mark it as burned and free up the user's burner slot.
+ *   2. REMOTE: We tell the Matrix homeserver to deactivate the account.
+ * If step 2 fails (network blip, homeserver restart), the burner
+ * account still exists on the homeserver — orphaned and un-managed.
+ *
+ * Without this reconciler, orphaned burner accounts would accumulate
+ * indefinitely, consuming homeserver resources and potentially
+ * violating data retention policies. The reconciler ensures eventual
+ * consistency: even if the initial deactivation fails, the account
+ * will be deactivated on the next 15-minute reconciliation pass.
+ *
+ * KEY CONCEPT — Eventual consistency
+ * A system design pattern where, if a write fails temporarily, a
+ * background process ensures it eventually succeeds. Contrast with
+ * "strong consistency" where every operation either succeeds
+ * immediately or the entire request fails. Eventual consistency is
+ * appropriate here because burner deactivation is not time-critical.
+ *
+ * HOW TO VERIFY
+ * 1. Create a burner identity.
+ * 2. Stop the Matrix homeserver (simulate network failure).
+ * 3. Burn the burner — it will be marked locally but deactivation
+ *    will fail, setting `deactivationPending: true`.
+ * 4. Restart the homeserver.
+ * 5. Wait up to 15 minutes (or the configured interval).
+ * 6. Check that the burner is fully deactivated on the homeserver.
  */
 
 import { db } from '../db/store';

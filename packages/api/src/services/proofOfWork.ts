@@ -1,14 +1,46 @@
 /**
- * Proof-of-work challenge for the account-number endpoint.
+ * WHAT THIS FILE DOES
+ * Creates and verifies "proof-of-work" challenges to prevent automated
+ * mass creation of accounts. Before creating an anonymous account, the
+ * client must solve a math puzzle that takes about 1-2 seconds of
+ * CPU time. This makes it expensive for attackers to create thousands
+ * of accounts, while remaining fast enough for legitimate users.
  *
- * Uses a hashcash-style scheme: the client must find a nonce such that
- * SHA-256(challenge + nonce) has at least DIFFICULTY_BITS leading zero bits.
- * Challenges are bound to the requester's identity via composite map key.
+ * WHY IT EXISTS (THE SECURITY PROBLEM)
+ * The anonymous account-number endpoint is intentionally unauthenticated
+ * (no login required — that's the whole point of anonymous signup).
+ * Without protection, an attacker could write a script that calls the
+ * endpoint thousands of times to farm accounts. Rate limiting helps
+ * but can be bypassed by rotating IP addresses. A proof-of-work
+ * challenge makes each account creation cost ~1-2 seconds of CPU time
+ * no matter how many IPs the attacker has.
  *
- * Challenges are stored in-memory with a 5-minute TTL. Each challenge is
- * single-use.
+ * HOW IT WORKS (HASHCASH / BITCOIN-STYLE)
+ * 1. Server creates a random challenge string and sends it to the client
+ *    with a difficulty level (e.g., "find a nonce where the SHA-256 hash
+ *    starts with 16 zero bits").
+ * 2. Client tries different nonces (n0, n1, n2...) computing SHA-256
+ *    of the challenge + nonce until it finds one with enough leading
+ *    zero bits. This takes ~65,000 attempts on average for difficulty 16.
+ * 3. Client sends the nonce back to the server.
+ * 4. Server verifies the hash once (cheap) and, if valid, allows the
+ *    account creation (expensive for Matrix provisioning — but the
+ *    attacker had to pay the PoW cost first).
+ * 5. The challenge is single-use (deleted on verification) and bound
+ *    to the requester's IP via the map key, preventing the same
+ *    solution from being reused by a different client.
  *
- * TODO: Redis backing for multi-process deployments.
+ * KEY CONCEPT — Proof of Work
+ * A problem that is HARD to solve but EASY to verify. Think of a
+ * jigsaw puzzle: putting it together takes an hour, but checking
+ * that it's complete takes 2 seconds. The asymmetry is what makes it
+ * useful — the attacker pays the high cost, the server pays the low cost.
+ *
+ * HOW TO VERIFY
+ * 1. Call POST /v1/auth/account-number/pow-challenge → get challenge.
+ * 2. Call POST /v1/auth/account-number WITHOUT solving → expect 428.
+ * 3. Solve the challenge, send powToken → account created (201).
+ * 4. Try the SAME powToken again → expect 428 (challenge already consumed).
  */
 
 import { createHash, randomBytes } from 'node:crypto';

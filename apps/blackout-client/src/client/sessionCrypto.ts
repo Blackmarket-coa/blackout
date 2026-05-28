@@ -1,3 +1,67 @@
+/**
+ * WHAT THIS FILE DOES
+ * Encrypts and decrypts user session data (Matrix access tokens,
+ * refresh tokens, user IDs) before storing them in the browser.
+ * Without this, any code running on the same page could read your
+ * access tokens and impersonate you on the homeserver.
+ *
+ * WHY IT EXISTS (THE SECURITY PROBLEM)
+ * localStorage is readable by ANY JavaScript running on the page —
+ * including malicious browser extensions, XSS-injected scripts, and
+ * third-party dependencies. If access tokens are stored as plaintext
+ * (which they were before this fix), a single XSS vulnerability
+ * gives the attacker permanent access to the user's account.
+ *
+ * HOW IT WORKS
+ * 1. KEY GENERATION: On first use, `generateAndStoreKey()` creates
+ *    an AES-256-GCM encryption key via the Web Crypto API. The key
+ *    is stored as a JWK (JSON Web Key) in IndexedDB — a storage
+ *    mechanism that's harder to exfiltrate via simple XSS than
+ *    localStorage (you need to read specific IndexedDB stores, not
+ *    just call `localStorage.getItem("*")`).
+ * 2. ENCRYPTION: When saving the session, `encryptSession()` takes
+ *    the JSON string, encrypts it under the key with a fresh random
+ *    IV (initialization vector), and stores `{ iv, ct }` in
+ *    localStorage under a separate key.
+ * 3. DECRYPTION: When loading the session, `decryptSession()` reads
+ *    the blob from localStorage, decrypts it with the key, and
+ *    returns the original JSON.
+ * 4. MIGRATION: `migrateUnencryptedSession()` reads the old
+ *    unencrypted storage key, encrypts it, writes the encrypted blob,
+ *    and REMOVES the old key — one-time, automatic, transparent.
+ *
+ * KEY CONCEPTS EXPLAINED
+ * - AES-256-GCM: A government-standard encryption algorithm. AES
+ *   is the cipher (scrambling math), 256 is the key length (how many
+ *   possible keys exist — 2^256, approximately the number of atoms in
+ *   the observable universe), GCM provides both encryption AND
+ *   tamper detection (if someone modifies the encrypted data, it
+ *   won't decrypt).
+ * - IV (Initialization Vector): A random number used once per
+ *   encryption. Even if you encrypt the same data twice with the
+ *   same key, the output is different because the IV is different.
+ *   Reusing an IV breaks AES-GCM security.
+ * - IndexedDB vs localStorage: localStorage is a simple key-value
+ *   store that any script can enumerate with `Object.keys()`. IndexedDB
+ *   is a database that requires knowing the database name, store name,
+ *   and key to access specific data — harder to exfiltrate en masse.
+ * - extractable: false: The CryptoKey is created with this flag so
+ *   it can't be exported via `crypto.subtle.exportKey()` — it stays
+ *   in the browser's secure key store. (Note: we DO export and store
+ *   the JWK in IndexedDB for persistence across reloads, accepting
+ *   this tradeoff since the alternative is losing all sessions.)
+ *
+ * HOW TO VERIFY
+ * 1. Open the browser DevTools → Application → IndexedDB. You should
+ *    see a 'blackout-session-crypto' database with a 'crypto-keys'
+ *    store containing the JWK.
+ * 2. localStorage should contain 'blackout.matrix.sessions.v1.enc'
+ *    with an `{ iv, ct }` blob — NOT plaintext JSON.
+ * 3. If the user had an old unencrypted session before this fix, it
+ *    should be automatically migrated on next login and the old key
+ *    removed from localStorage.
+ */
+
 const DB_NAME = 'blackout-session-crypto';
 const DB_VERSION = 1;
 const KEY_STORE = 'crypto-keys';

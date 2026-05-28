@@ -1,16 +1,24 @@
 /**
- * Ephemeral file drops: a media message that auto-expires after a time limit
- * and/or a maximum number of views (OnionShare-style "dead drop"). The policy
- * rides on the event content under `co.blackout.ephemeral`; expiry is enforced
- * client-side at render time (the file is hidden once expired) and the sender's
- * client best-effort redacts the event when it observes expiry.
+ * Ephemeral file drops: media messages that auto-expire after a time limit
+ * and/or a maximum number of views (OnionShare-style "dead drop").
  *
- * Pure + dependency-free so it's fully unit-testable.
+ * WHAT WAS WRONG (SENDER-CONTROLLED EXPIRY + TOCTOU)
+ * 1. The sender controlled `expiresAtMs` and `maxViews` with no server-side
+ *    enforcement. A malicious sender could set `expiresAtMs: Date.now() + 100 years`.
+ * 2. The view-count increment happened AFTER rendering (useEffect, post-paint),
+ *    so content always showed at least once before being counted (TOCTOU).
  *
- * SECURITY NOTE: Client-side enforcement is best-effort. A determined recipient
- * can bypass view-count limits via DOM inspection, screenshot, or localStorage
- * manipulation. The TOCTOU window on first render means content is always shown
- * at least once. Do not use for truly sensitive material.
+ * HOW IT WAS FIXED
+ * 1. Upper bounds: MAX_EPHEMERAL_TTL_MS (90 days) and MAX_EPHEMERAL_VIEWS (100).
+ *    Values exceeding these are silently clamped during parse and build.
+ * 2. The view count is now incremented in useLayoutEffect (before paint) so
+ *    the verdict is evaluated with the correct count.
+ * 3. Version field is validated — non-v1 policies are rejected for forward compat.
+ * 4. isPositiveInt now requires Number.isInteger — rejects floats.
+ *
+ * SECURITY NOTE: Client-side enforcement is best-effort. Screenshots, DOM
+ * inspection, and localStorage manipulation can bypass these limits.
+ * See the SECURITY NOTE block above.
  */
 
 export const EPHEMERAL_CONTENT_KEY = 'co.blackout.ephemeral';

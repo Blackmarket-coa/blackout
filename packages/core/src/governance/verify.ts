@@ -1,10 +1,24 @@
 /**
  * Vote audit trail verification — pure functions usable by both server and client.
  *
- * Each vote entry includes an `entryHash` (SHA-256 of the vote content + previous hash)
- * and a `previousHash` pointing to the prior entry in the chain. This creates a
- * tamper-evident linked list: changing any entry breaks the hash chain, and the
- * break point is detectable.
+ * WHAT THIS FILE DOES
+ * Each vote stores two hashes: `entryHash` (SHA-256 of the vote content +
+ * the previous vote's hash) and `previousHash` (pointer to the prior entry).
+ * This creates a tamper-evident linked list. `verifyAuditChain()` walks the
+ * chain recomputing every hash to confirm integrity. If any vote was modified
+ * after being cast, the hashes won't match and the break point is detectable.
+ *
+ * WHAT WAS WRONG (THE CRITICAL BUG)
+ * The original verifier checked that `entryHash` EXISTS and that `previousHash`
+ * points correctly — but NEVER RECOMPUTED the hash. An attacker could change
+ * a vote's choice, keep the old hash, and the chain would still pass verification.
+ * Now it recomputes SHA-256(voteId + userId + choice + previousHash) for every
+ * entry and compares against the stored hash.
+ *
+ * KEY CONCEPT — Hash chain
+ * Like a chain of custody log: each link proves the previous link hasn't been
+ * tampered with. Changing ANY link breaks every link after it, making the
+ * point of tampering immediately detectable.
  */
 
 export interface VoteEntryForAudit {

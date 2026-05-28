@@ -1,13 +1,33 @@
 /**
  * TOTP (RFC 6238) multi-factor authentication service.
  *
- * Secret generation: 32 random bytes, base32-encoded. QR-code URI format
- * matches the standard otpauth:// schema. Code verification uses the
- * standard 30-second window with ±1 window drift tolerance.
+ * WHAT THIS FILE DOES
+ * Implements the TOTP standard (RFC 6238) — the same 6-digit
+ * codes that change every 30 seconds. Users scan a QR code during
+ * setup, and then need their phone to log in.
  *
- * Recovery codes: 8 x 10-character alphanumeric codes stored as SHA-256
- * hashes. Each code is single-use. Presenting a valid recovery code
- * marks it consumed and revokes all other codes in that batch.
+ * WHAT WAS WRONG (THE TIMING ATTACK)
+ * Two timing side-channels were fixed:
+ * 1. TOTP code comparison used `===` which stops at the first wrong
+ *    character. An attacker measuring response times could brute-force
+ *    the 6-digit code faster by observing when the server takes slightly
+ *    longer (meaning the first N digits matched). Fixed with `timingSafeEqual`.
+ * 2. Recovery code lookup used `indexOf` which also short-circuits.
+ *    Fixed with a constant-time linear scan using `timingSafeEqual`.
+ *
+ * HOW IT WORKS
+ * - Secret generation: 32 random bytes, base32-encoded (same format
+ *   authenticator app QR codes expect).
+ * - Code verification: Run HMAC-SHA1 with the time window as counter.
+ *   Check ±1 window to account for clock drift (90 seconds total).
+ * - Recovery codes: 8 codes, 10 chars each, stored as SHA-256 hashes.
+ *   When the last code is used, MFA is auto-disabled so the user can
+ *   set up a new device.
+ *
+ * KEY CONCEPT — TOTP (Time-based One-Time Password)
+ * An algorithm where a shared secret plus the current time produces
+ * a 6-digit code. Both sides compute the same code independently
+ * every 30 seconds. No network needed after initial setup.
  */
 
 import { createHash, randomBytes, timingSafeEqual, createHmac } from 'node:crypto';

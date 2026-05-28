@@ -1,3 +1,29 @@
+/**
+ * WHAT THIS FILE DOES
+ * Authorization layer — checks "is this user allowed to do this action?"
+ * Works alongside authentication ("who are you?") by reading the JWT
+ * claims from the middleware context.
+ *
+ * WHY IT EXISTS (THE SECURITY PROBLEM)
+ * Two separate issues were fixed here:
+ * 1. (CRITICAL) The `x-blackout-capabilities` header was a backdoor:
+ *    in ANY non-production environment, anyone could send this header
+ *    with `admin.*` and gain full admin access. Now gated behind
+ *    explicit opt-in (`BLACKOUT_DEV_CAPABILITY_HEADER=1`) AND
+ *    `NODE_ENV !== 'production'` — double guard.
+ * 2. The `requireAuthenticatedUser` function was added as a central
+ *    place to extract the authenticated user's ID from the JWT. This
+ *    is used by governance routes to replace untrusted body fields
+ *    (e.g., `parsed.userId`) with the verified JWT identity.
+ *
+ * KEY CONCEPT — Authentication vs Authorization
+ * - Authentication: Who are you? (JWT validation, password check)
+ * - Authorization: What are you allowed to do? (capability checks)
+ * You need BOTH. The governance IDOR fix (see governance.ts) is an
+ * authorization failure — the user was authenticated but the code
+ * didn't check WHO they were acting as.
+ */
+
 import type { Context } from 'hono';
 
 type Claims = { sub?: string; capabilities?: string[] } | null;
