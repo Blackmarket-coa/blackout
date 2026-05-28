@@ -13,6 +13,7 @@ import federationRoutes from './routes/federation';
 import entitlementRoutes from './routes/entitlements';
 import marketplaceRoutes from './routes/marketplace';
 import threadRoutes from './routes/threads';
+import capabilityRoutes from './routes/capabilities';
 import pluginInstallationRoutes from './routes/pluginInstallations';
 import coalitionKitRoutes from './routes/coalitionKitManifests';
 import pluginSocialRoutes from './routes/pluginSocial';
@@ -158,6 +159,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/entitlements`, entitlementRoutes);
   app.route(`${root}/marketplace`, marketplaceRoutes);
   app.route(`${root}/threads`, threadRoutes);
+  app.route(`${root}/capabilities`, capabilityRoutes);
   app.route(`${root}/plugin-installations`, pluginInstallationRoutes);
   app.route(`${root}/coalition-kit-manifests`, coalitionKitRoutes);
   app.route(`${root}/plugin-social`, pluginSocialRoutes);
