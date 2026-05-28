@@ -1,6 +1,8 @@
-import React, { type CSSProperties, useState } from 'react';
+import React, { type CSSProperties, useMemo, useState } from 'react';
+import { useAtomValue } from 'jotai';
 import { Link } from 'react-router-dom';
 import { CREATOR_KITS, type CreatorKit } from '../kits/kitCatalog';
+import { ownedTemplateKitsAtom } from '../kits/ownedTemplatesAtom';
 import {
     applyCreatorKit,
     kitAppliedStorageKey,
@@ -294,8 +296,13 @@ const KitDetail = ({ kit }: { kit: CreatorKit }): JSX.Element => (
  * deferred — see kitCatalog.ts.
  */
 export const CreatorKits = (): JSX.Element => {
+    const ownedTemplateKits = useAtomValue(ownedTemplateKitsAtom);
+    const kits = useMemo(
+        () => [...CREATOR_KITS, ...ownedTemplateKits],
+        [ownedTemplateKits]
+    );
     const [selectedKitId, setSelectedKitId] = useState<string | null>(CREATOR_KITS[0]?.id ?? null);
-    const selectedKit = CREATOR_KITS.find((kit) => kit.id === selectedKitId) ?? null;
+    const selectedKit = kits.find((kit) => kit.id === selectedKitId) ?? null;
 
     return (
         <HubSection
@@ -305,7 +312,7 @@ export const CreatorKits = (): JSX.Element => {
             shellRegion="creator-kits"
         >
             <div style={hubGridStyle} data-testid="creator-kits-grid">
-                {CREATOR_KITS.map((kit) => (
+                {kits.map((kit) => (
                     <button
                         key={kit.id}
                         type="button"

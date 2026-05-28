@@ -1,9 +1,10 @@
 import { createElement, useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import type {
-    MarketplaceCategory,
-    MarketplaceProviderId,
-    NormalizedEntitlement,
-    NormalizedListing,
+import {
+    categoryLabel,
+    type MarketplaceCategory,
+    type MarketplaceProviderId,
+    type NormalizedEntitlement,
+    type NormalizedListing,
 } from '@blackout/core';
 import {
     fetchEntitlements,
@@ -26,13 +27,23 @@ interface CategoryTab {
     label: string;
 }
 
+const browseCategories: MarketplaceCategory[] = [
+    'emoji-sticker',
+    'meme-asset',
+    'stego-software',
+    'plugin-curated',
+    'subscription',
+    'profile-cosmetic',
+    'audio-pack',
+    'community-template',
+    'creator-asset',
+    'security-tool',
+    'ai-automation',
+];
+
 const categoryTabs: CategoryTab[] = [
     { id: 'all', label: 'All' },
-    { id: 'emoji-sticker', label: 'Emoji & Stickers' },
-    { id: 'meme-asset', label: 'Memes & Assets' },
-    { id: 'stego-software', label: 'Stego & Software' },
-    { id: 'plugin-curated', label: 'Plugins (Curated)' },
-    { id: 'subscription', label: 'Subscriptions' },
+    ...browseCategories.map((id) => ({ id, label: categoryLabel(id) })),
 ];
 
 const chipStyle = (active: boolean): Record<string, string | number> => ({

@@ -2,6 +2,12 @@ import { atom } from 'jotai';
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
 import type { InstallScope } from '@blackout/core';
 import type { PluginCapability, PluginManifest } from '@blackout/sdk';
+import type { OwnedCosmetic } from '../../profile/cosmeticTypes';
+import type { OwnedTemplate } from '../../streaming/kits/communityTemplate';
+import type { OwnedAiPersona, OwnedAutomationRecipe } from '../../aiden/aiGoods';
+import type { OwnedVaultGrant } from '../../vault/vaultGoods';
+import type { OwnedSoundPack } from '../../audio/soundPackGoods';
+import type { OwnedStreamAsset } from '../../streaming/overlays/streamAssetGoods';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -26,6 +32,24 @@ export interface InstalledPluginRecord {
      * behaving exactly as before.
      */
     scope?: InstallScope;
+    /**
+     * For `profile_cosmetic` entitlements: the decoded cosmetic definition. The
+     * owned-cosmetics catalog derives from these records, so cosmetics survive a
+     * reload and are pruned automatically when the entitlement is revoked.
+     */
+    cosmetic?: OwnedCosmetic;
+    /** For `community_template` entitlements: the decoded, sanitized template. */
+    template?: OwnedTemplate;
+    /** For `ai_persona` entitlements: the decoded, sanitized persona. */
+    aiPersona?: OwnedAiPersona;
+    /** For `automation_recipe` entitlements: the decoded, sanitized recipe. */
+    automationRecipe?: OwnedAutomationRecipe;
+    /** For `vault_item` entitlements: the decoded, sanitized vault grant. */
+    vaultGrant?: OwnedVaultGrant;
+    /** For `sound_pack` entitlements: the decoded, sanitized audio pack. */
+    soundPack?: OwnedSoundPack;
+    /** For `stream_asset` entitlements: the decoded, sanitized creator/stream asset. */
+    streamAsset?: OwnedStreamAsset;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';

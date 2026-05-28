@@ -11,6 +11,12 @@ const mocks = vi.hoisted(() => {
         color?: string;
         removed: boolean;
     }> = [];
+    const popupInstances: Array<{
+        lngLat?: [number, number];
+        content?: HTMLElement;
+        removed: boolean;
+        closeHandlers: Array<() => void>;
+    }> = [];
     const sources = new Map<string, { setData: (value: unknown) => void }>();
     const layers = new Set<string>();
     const mapInstance = {
@@ -40,7 +46,7 @@ const mocks = vi.hoisted(() => {
             layers.delete(id);
         }),
     };
-    return { markerInstances, mapInstance };
+    return { markerInstances, popupInstances, mapInstance };
 });
 
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
@@ -77,12 +83,39 @@ vi.mock('maplibre-gl', () => {
         }
     }
     class NavigationControl {}
+    class Popup {
+        lngLat?: [number, number];
+        content?: HTMLElement;
+        removed = false;
+        closeHandlers: Array<() => void> = [];
+        constructor() {
+            mocks.popupInstances.push(this);
+        }
+        setLngLat(coords: [number, number]) {
+            this.lngLat = coords;
+            return this;
+        }
+        setDOMContent(node: HTMLElement) {
+            this.content = node;
+            return this;
+        }
+        addTo() {
+            return this;
+        }
+        on(event: string, cb: () => void) {
+            if (event === 'close') this.closeHandlers.push(cb);
+            return this;
+        }
+        remove() {
+            this.removed = true;
+        }
+    }
     class Map {
         constructor() {
             return mocks.mapInstance as unknown as Map;
         }
     }
-    return { default: { Map, Marker, LngLatBounds, NavigationControl } };
+    return { default: { Map, Marker, LngLatBounds, NavigationControl, Popup } };
 });
 
 // eslint-disable-next-line import/first
@@ -109,6 +142,7 @@ afterEach(() => {
     });
     document.body.innerHTML = '';
     mocks.markerInstances.length = 0;
+    mocks.popupInstances.length = 0;
     vi.clearAllMocks();
 });
 
@@ -161,6 +195,34 @@ describe('CoalitionMap', () => {
         expect(mocks.mapInstance.flyTo).toHaveBeenCalledWith(
             expect.objectContaining({ center: [-74.3, 40.2] })
         );
+    });
+
+    it('opens a popup with details anchored to the focused geocoded pin', () => {
+        render(<CoalitionMap pins={pins} focusPinId="b" onSelectPin={vi.fn()} />);
+        expect(mocks.popupInstances).toHaveLength(1);
+        expect(mocks.popupInstances[0].lngLat).toEqual([-74.3, 40.2]);
+        expect(mocks.popupInstances[0].content?.textContent).toContain('Food drive');
+    });
+
+    it('does not open a popup for a focused pin without coordinates', () => {
+        render(<CoalitionMap pins={pins} focusPinId="c" onSelectPin={vi.fn()} />);
+        expect(mocks.popupInstances).toHaveLength(0);
+    });
+
+    it('clears the selection when the user closes the popup', () => {
+        const onDeselect = vi.fn();
+        render(
+            <CoalitionMap
+                pins={pins}
+                focusPinId="b"
+                onSelectPin={vi.fn()}
+                onDeselect={onDeselect}
+            />
+        );
+        act(() => {
+            mocks.popupInstances[0].closeHandlers.forEach((cb) => cb());
+        });
+        expect(onDeselect).toHaveBeenCalledTimes(1);
     });
 
     it('pulses live and high-heat pins but not quiet ones', () => {

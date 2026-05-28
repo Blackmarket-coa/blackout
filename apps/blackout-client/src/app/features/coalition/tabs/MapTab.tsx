@@ -23,6 +23,8 @@ import {
 import { createCoalitionAidPost, type NearbyQuery } from '../coalitionClient';
 import { MyceliumLayer, useMyceliumGraph } from './mycelium';
 import { buildCommunitiesPath } from '../../../pages/paths';
+import { useViewportWidth } from '../../../hooks/useViewportWidth';
+import { isMobileViewport } from '../../../pages/client/layoutMetrics';
 
 const CoalitionMap = React.lazy(() => import('./CoalitionMap'));
 
@@ -151,7 +153,7 @@ function AidPostForm({
                 top: 84,
                 left: 12,
                 zIndex: 4,
-                width: 280,
+                width: 'min(280px, calc(100vw - 24px))',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 6,
@@ -267,6 +269,12 @@ export function MapTab({ scope }: MapTabProps) {
     const [radiusKm, setRadiusKm] = useState<number>(5);
     const [showHeat, setShowHeat] = useState(false);
     const [showAidForm, setShowAidForm] = useState(false);
+    const viewportWidth = useViewportWidth();
+    const mobile = isMobileViewport(viewportWidth);
+    // Results list starts collapsed on phones, where it would otherwise cover the map.
+    const [listExpanded, setListExpanded] = useState<boolean>(
+        () => !isMobileViewport(typeof window === 'undefined' ? 1280 : window.innerWidth)
+    );
 
     const layersArray = useMemo(() => [...activeLayers], [activeLayers]);
     const spatialState = useSpatialFeed(scope, layersArray);
@@ -364,20 +372,14 @@ export function MapTab({ scope }: MapTabProps) {
     };
 
     return (
-        <div
-            style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 280px',
-                height: 'min(72vh, 820px)',
-            }}
-        >
+        <div style={{ height: mobile ? 'min(82vh, 820px)' : 'min(72vh, 820px)' }}>
             <section
                 style={{
                     position: 'relative',
+                    height: '100%',
                     background:
                         'radial-gradient(circle at 30% 30%, rgba(26,188,156,0.08), transparent 60%), var(--bg-input)',
                     overflow: 'hidden',
-                    borderRight: '1px solid var(--border-default)',
                 }}
                 data-testid="coalition-map-canvas"
             >
@@ -402,10 +404,12 @@ export function MapTab({ scope }: MapTabProps) {
                         viewerLocation={nearby ? { lat: nearby.lat, lng: nearby.lng } : null}
                         focusPinId={selectedPin?.id ?? null}
                         showHeat={showHeat}
+                        overlayInsets={{ top: 96, bottom: listExpanded ? 200 : 52 }}
                         onSelectPin={(id) => {
                             const pin = pins.find((candidate) => candidate.id === id);
                             if (pin) setSelectedPin(pin);
                         }}
+                        onDeselect={() => setSelectedPin(null)}
                     />
                 </Suspense>
 
@@ -414,10 +418,12 @@ export function MapTab({ scope }: MapTabProps) {
                         position: 'absolute',
                         top: 12,
                         left: 12,
+                        right: 12,
                         zIndex: 2,
                         display: 'flex',
                         gap: 6,
-                        flexWrap: 'wrap',
+                        flexWrap: mobile ? 'nowrap' : 'wrap',
+                        overflowX: mobile ? 'auto' : 'visible',
                     }}
                 >
                     {SPATIAL_LAYER_DEFINITIONS.map((definition) => {
@@ -533,10 +539,12 @@ export function MapTab({ scope }: MapTabProps) {
                         position: 'absolute',
                         top: 48,
                         left: 12,
+                        right: 12,
                         zIndex: 2,
                         display: 'flex',
                         gap: 6,
-                        flexWrap: 'wrap',
+                        flexWrap: mobile ? 'nowrap' : 'wrap',
+                        overflowX: mobile ? 'auto' : 'visible',
                     }}
                     data-testid="coalition-map-temporal"
                 >
@@ -626,94 +634,158 @@ export function MapTab({ scope }: MapTabProps) {
                 <div
                     style={{
                         position: 'absolute',
-                        bottom: 200,
-                        left: 12,
-                        zIndex: 2,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: 'var(--text-primary)',
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 999,
-                        padding: '4px 10px',
-                    }}
-                    data-testid="coalition-map-discovery-count"
-                >
-                    {nearby
-                        ? `${nearbyCount} happening within ${radiusKm}km`
-                        : `${pins.length} on the map`}
-                </div>
-
-                <ul
-                    style={{
-                        position: 'absolute',
                         bottom: 12,
                         left: 12,
-                        right: 12,
-                        listStyle: 'none',
-                        margin: 0,
-                        padding: 0,
-                        display: 'grid',
-                        gap: 4,
-                        maxHeight: 180,
-                        overflowY: 'auto',
+                        right: mobile ? 12 : 'auto',
+                        width: mobile ? undefined : 'min(360px, calc(100% - 24px))',
                         zIndex: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
                     }}
                 >
-                    {pins.map((pin) => (
-                        <li key={`${pin.layer}-${pin.id}`}>
-                            <button
-                                type="button"
-                                onClick={() => setSelectedPin(pin)}
-                                style={{
-                                    width: '100%',
-                                    textAlign: 'left',
-                                    border: '1px solid var(--border-default)',
-                                    borderRadius: 8,
-                                    background: 'var(--bg-surface)',
-                                    color: 'var(--text-primary)',
-                                    padding: '6px 8px',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                <strong style={{ fontSize: 12 }}>{pin.title}</strong>
-                                <span
+                    <button
+                        type="button"
+                        onClick={() => setListExpanded((value) => !value)}
+                        aria-expanded={listExpanded}
+                        data-testid="coalition-map-discovery-count"
+                        style={{
+                            alignSelf: 'flex-start',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 999,
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        <span>
+                            {nearby
+                                ? `${nearbyCount} happening within ${radiusKm}km`
+                                : `${pins.length} on the map`}
+                        </span>
+                        <span aria-hidden>{listExpanded ? '▾' : '▸'}</span>
+                    </button>
+                    {listExpanded ? (
+                        <ul
+                            style={{
+                                listStyle: 'none',
+                                margin: 0,
+                                padding: 0,
+                                display: 'grid',
+                                gap: 4,
+                                maxHeight: mobile ? 160 : 220,
+                                overflowY: 'auto',
+                            }}
+                        >
+                            {pins.map((pin) => {
+                                const active = selectedPin?.id === pin.id;
+                                return (
+                                    <li key={`${pin.layer}-${pin.id}`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPin(pin)}
+                                            aria-current={active}
+                                            style={{
+                                                width: '100%',
+                                                textAlign: 'left',
+                                                border: active
+                                                    ? '1px solid var(--accent-primary, #1ABC9C)'
+                                                    : '1px solid var(--border-default)',
+                                                borderRadius: 8,
+                                                background: active
+                                                    ? 'rgba(26,188,156,0.16)'
+                                                    : 'var(--bg-surface)',
+                                                color: 'var(--text-primary)',
+                                                padding: '6px 8px',
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            <strong style={{ fontSize: 12 }}>{pin.title}</strong>
+                                            <span
+                                                style={{
+                                                    marginLeft: 8,
+                                                    fontSize: 11,
+                                                    color: 'var(--text-secondary)',
+                                                }}
+                                            >
+                                                {pin.subtitle}
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    ) : null}
+                </div>
+
+                {selectedPin &&
+                !(
+                    Number.isFinite(selectedPin.latitude) && Number.isFinite(selectedPin.longitude)
+                ) ? (
+                    <div
+                        onClick={() => setSelectedPin(null)}
+                        style={{
+                            position: 'absolute',
+                            inset: 0,
+                            zIndex: 5,
+                            background: 'rgba(0,0,0,0.35)',
+                            display: 'grid',
+                            placeItems: 'center',
+                            padding: 16,
+                        }}
+                    >
+                        <div
+                            onClick={(event) => event.stopPropagation()}
+                            style={{
+                                width: 'min(280px, 100%)',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 12,
+                                padding: 16,
+                                display: 'grid',
+                                gap: 8,
+                                boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <strong style={{ flex: 1 }}>{selectedPin.title}</strong>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedPin(null)}
+                                    aria-label="Close details"
                                     style={{
-                                        marginLeft: 8,
-                                        fontSize: 11,
-                                        color: 'var(--text-secondary)',
+                                        border: '1px solid var(--border-default)',
+                                        borderRadius: 8,
+                                        background: 'var(--bg-input)',
+                                        color: 'var(--text-primary)',
+                                        cursor: 'pointer',
+                                        padding: '2px 8px',
                                     }}
                                 >
-                                    {pin.subtitle}
-                                </span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            </section>
-
-            <aside style={{ padding: 12, overflowY: 'auto' }}>
-                {selectedPin ? (
-                    <article style={{ display: 'grid', gap: 8 }}>
-                        <strong>{selectedPin.title}</strong>
-                        <small style={{ color: 'var(--text-secondary)' }}>
-                            {selectedPin.subtitle}
-                        </small>
-                        {selectedPin.denId ? (
-                            <a
-                                href={buildCommunitiesPath(null, selectedPin.denId)}
-                                style={{ color: 'var(--accent-primary, #1ABC9C)' }}
-                            >
-                                Open associated den →
-                            </a>
-                        ) : null}
-                    </article>
-                ) : (
-                    <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                        Tap a pin to see details, jump to the associated den, or coordinate aid.
+                                    ✕
+                                </button>
+                            </div>
+                            <small style={{ color: 'var(--text-secondary)' }}>
+                                {selectedPin.subtitle}
+                            </small>
+                            {selectedPin.denId ? (
+                                <a
+                                    href={buildCommunitiesPath(null, selectedPin.denId)}
+                                    style={{ color: 'var(--accent-primary, #1ABC9C)' }}
+                                >
+                                    Open associated den →
+                                </a>
+                            ) : null}
+                        </div>
                     </div>
-                )}
-            </aside>
+                ) : null}
+            </section>
         </div>
     );
 }

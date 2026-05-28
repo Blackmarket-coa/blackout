@@ -1,8 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import AvatarDecoration from './AvatarDecoration';
 import ProfileThemeEditor from './ProfileThemeEditor';
-import { availableDecorations, myProfileAtom } from './profileAtoms';
+import { myProfileAtom } from './profileAtoms';
+import {
+    avatarDecorationCatalogAtom,
+    badgeCatalogAtom,
+    nameplateCatalogAtom,
+    profileEffectCatalogAtom,
+} from './cosmeticsAtoms';
 import { saveProfile as saveProfileDefault, type SaveProfileInput } from './profileClient';
 import { syncStatusToPresence } from './customStatus';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -71,6 +77,10 @@ export interface ProfileEditorProps {
 export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEditorProps = {}) => {
     const mx = useMatrixClient();
     const [profile, setProfile] = useAtom(myProfileAtom);
+    const decorationCatalog = useAtomValue(avatarDecorationCatalogAtom);
+    const nameplateCatalog = useAtomValue(nameplateCatalogAtom);
+    const profileEffectCatalog = useAtomValue(profileEffectCatalogAtom);
+    const badgeCatalog = useAtomValue(badgeCatalogAtom);
     const [nextConnection, setNextConnection] = useState<ProfileConnection>(defaultConnection());
     const [bannerCrop, setBannerCrop] = useState(50);
     const [avatarCrop, setAvatarCrop] = useState(50);
@@ -594,7 +604,7 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                         gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
                     }}
                 >
-                    {availableDecorations.map((option) => {
+                    {decorationCatalog.map((option) => {
                         const selected = (profile.profile.decoration ?? 'none') === option.id;
                         return (
                             <button
@@ -637,6 +647,106 @@ export const ProfileEditor = ({ saveProfile = saveProfileDefault }: ProfileEdito
                             </button>
                         );
                     })}
+                </div>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Nameplate</h4>
+                <select
+                    data-testid="profile-editor-nameplate"
+                    value={profile.profile.nameplateId ?? 'nameplate-default'}
+                    onChange={(event) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: {
+                                ...prev.profile,
+                                nameplateId:
+                                    event.target.value === 'nameplate-default'
+                                        ? undefined
+                                        : event.target.value,
+                            },
+                        }))
+                    }
+                    style={{ width: '100%' }}
+                >
+                    {nameplateCatalog.map((option) => (
+                        <option key={option.id} value={option.id}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Profile effect</h4>
+                <select
+                    data-testid="profile-editor-effect"
+                    value={profile.profile.profileEffectId ?? 'effect-none'}
+                    onChange={(event) =>
+                        setProfile((prev) => ({
+                            ...prev,
+                            profile: {
+                                ...prev.profile,
+                                profileEffectId:
+                                    event.target.value === 'effect-none'
+                                        ? undefined
+                                        : event.target.value,
+                            },
+                        }))
+                    }
+                    style={{ width: '100%' }}
+                >
+                    {profileEffectCatalog.map((option) => (
+                        <option key={option.id} value={option.id}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            </section>
+
+            <section style={{ display: 'grid', gap: 8 }}>
+                <h4 style={{ margin: 0 }}>Badges (max 6)</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {badgeCatalog.map((badge) => {
+                        const equipped = (profile.profile.badgeIds ?? []).includes(badge.id);
+                        return (
+                            <button
+                                key={badge.id}
+                                type="button"
+                                onClick={() =>
+                                    setProfile((prev) => {
+                                        const current = prev.profile.badgeIds ?? [];
+                                        const next = current.includes(badge.id)
+                                            ? current.filter((id) => id !== badge.id)
+                                            : [...current, badge.id].slice(0, 6);
+                                        return {
+                                            ...prev,
+                                            profile: {
+                                                ...prev.profile,
+                                                badgeIds: next.length > 0 ? next : undefined,
+                                            },
+                                        };
+                                    })
+                                }
+                                style={{
+                                    border: equipped
+                                        ? '1px solid var(--accent-primary)'
+                                        : '1px solid var(--border-default)',
+                                    borderRadius: 999,
+                                    padding: '4px 10px',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <span aria-hidden style={{ marginRight: 4 }}>
+                                    {badge.glyph ?? '★'}
+                                </span>
+                                {badge.label}
+                            </button>
+                        );
+                    })}
+                    {badgeCatalog.length === 0 ? (
+                        <small style={{ opacity: 0.8 }}>No badges owned yet.</small>
+                    ) : null}
                 </div>
             </section>
         </div>

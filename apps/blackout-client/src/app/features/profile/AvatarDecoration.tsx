@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
-import { availableDecorations } from './profileAtoms';
+import { useAtomValue } from 'jotai';
+import { avatarDecorationCatalogAtom } from './cosmeticsAtoms';
 
 interface AvatarDecorationProps {
     avatarUrl?: string;
@@ -23,9 +24,8 @@ export const AvatarDecoration = ({
     decorationId,
     size = 88,
 }: AvatarDecorationProps) => {
-    const decoration = availableDecorations.find(
-        (item) => item.id === decorationId && item.id !== 'none',
-    );
+    const catalog = useAtomValue(avatarDecorationCatalogAtom);
+    const decoration = catalog.find((item) => item.id === decorationId && item.id !== 'none');
 
     // Old Discord default avatar colors (blurple shades)
     const discordAvatarColors = ['#7289DA', '#5865F2', '#57F287', '#FEE75C', '#EB459E'];

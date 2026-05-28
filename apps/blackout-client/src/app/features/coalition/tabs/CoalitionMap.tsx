@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl, { type LngLatLike, type StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { buildCommunitiesPath } from '../../../pages/paths';
 
 export interface CoalitionMapPin {
     id: string;
@@ -8,21 +9,37 @@ export interface CoalitionMapPin {
     layer: string;
     latitude: number;
     longitude: number;
+    /** Secondary line shown in the marker popup (e.g. "communities · live"). */
+    subtitle?: string;
+    /** Associated den, surfaced as a link in the popup when present. */
+    denId?: string;
     /** Drives the "alive" pulse — `live` pins glow. */
     status?: 'upcoming' | 'live' | 'past';
     /** Activity-heat weight (0..1); feeds the heat overlay and the pulse threshold. */
     heat?: number;
 }
 
+/** Map padding (px) reserved for the overlays floating above the canvas. */
+export interface MapOverlayInsets {
+    top: number;
+    bottom: number;
+}
+
+const DEFAULT_OVERLAY_INSETS: MapOverlayInsets = { top: 96, bottom: 56 };
+
 export interface CoalitionMapProps {
     pins: CoalitionMapPin[];
     /** Viewer position when the "Near me" filter is active; rendered as a distinct marker. */
     viewerLocation?: { lat: number; lng: number } | null;
-    /** Pin to fly to / highlight (e.g. the one selected in the side panel or list). */
+    /** Pin to fly to / highlight; opens a popup anchored to its marker. */
     focusPinId?: string | null;
     /** When true, render the activity-heat overlay weighted by each pin's `heat`. */
     showHeat?: boolean;
+    /** Padding kept clear of the floating toolbar (top) and results list (bottom). */
+    overlayInsets?: MapOverlayInsets;
     onSelectPin: (id: string) => void;
+    /** Called when the user dismisses the marker popup, so selection can clear. */
+    onDeselect?: () => void;
 }
 
 /** Per-layer marker colors, keyed by `SpatialLayerKey`. */
@@ -127,6 +144,33 @@ function buildMarkerElement(
     return el;
 }
 
+/**
+ * Build the popup body for a selected marker. Uses DOM nodes (not innerHTML) so
+ * user-authored titles/subtitles can't inject markup.
+ */
+function buildPopupContent(pin: CoalitionMapPin): HTMLElement {
+    const root = document.createElement('div');
+    root.style.cssText = 'display:grid;gap:4px;min-width:150px;max-width:240px';
+    const title = document.createElement('strong');
+    title.textContent = pin.title;
+    title.style.cssText = 'font-size:13px;color:#0a1a0f';
+    root.appendChild(title);
+    if (pin.subtitle) {
+        const subtitle = document.createElement('small');
+        subtitle.textContent = pin.subtitle;
+        subtitle.style.cssText = 'font-size:11px;color:#5a5a5a';
+        root.appendChild(subtitle);
+    }
+    if (pin.denId) {
+        const link = document.createElement('a');
+        link.href = buildCommunitiesPath(null, pin.denId);
+        link.textContent = 'Open associated den →';
+        link.style.cssText = 'font-size:12px;font-weight:600;color:#0a7d68';
+        root.appendChild(link);
+    }
+    return root;
+}
+
 /** A pin should glow when it is happening now or has high participation density. */
 function isPinPulsing(pin: CoalitionMapPin): boolean {
     return pin.status === 'live' || (pin.heat ?? 0) >= PULSE_HEAT_THRESHOLD;
@@ -154,16 +198,25 @@ export function CoalitionMap({
     viewerLocation,
     focusPinId,
     showHeat = false,
+    overlayInsets,
     onSelectPin,
+    onDeselect,
 }: CoalitionMapProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const readyRef = useRef(false);
     const markersRef = useRef<maplibregl.Marker[]>([]);
     const viewerMarkerRef = useRef<maplibregl.Marker | null>(null);
-    // Keep the latest callback without re-running the marker effect on every render.
+    const popupRef = useRef<maplibregl.Popup | null>(null);
+    // Distinguishes our own popup.remove() from a user-initiated close.
+    const popupClosingRef = useRef(false);
+    // Keep the latest callbacks/insets without re-running effects every render.
     const onSelectRef = useRef(onSelectPin);
     onSelectRef.current = onSelectPin;
+    const onDeselectRef = useRef(onDeselect);
+    onDeselectRef.current = onDeselect;
+    const insetsRef = useRef<MapOverlayInsets>(overlayInsets ?? DEFAULT_OVERLAY_INSETS);
+    insetsRef.current = overlayInsets ?? DEFAULT_OVERLAY_INSETS;
 
     useEffect(() => {
         if (!containerRef.current) return undefined;
@@ -216,10 +269,12 @@ export function CoalitionMap({
         }
 
         if (plotted === 0 && !viewerLocation) return;
+        const insets = insetsRef.current;
+        const padding = { top: insets.top, bottom: insets.bottom, left: 24, right: 24 };
         if (plotted === 1 && !viewerLocation) {
-            map.easeTo({ center: bounds.getCenter(), zoom: 12, duration: 400 });
+            map.easeTo({ center: bounds.getCenter(), zoom: 12, padding, duration: 400 });
         } else {
-            map.fitBounds(bounds, { padding: 56, maxZoom: 14, duration: 400 });
+            map.fitBounds(bounds, { padding, maxZoom: 14, duration: 400 });
         }
     }, [pins, viewerLocation]);
 
@@ -235,13 +290,45 @@ export function CoalitionMap({
             .addTo(map);
     }, [viewerLocation]);
 
-    // Fly to the focused pin (selected in the side panel / list).
+    // Fly to the focused pin and open a popup anchored to its marker.
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || !focusPinId) return;
-        const pin = pins.find((candidate) => candidate.id === focusPinId);
-        if (!pin || !Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) return;
-        map.flyTo({ center: [pin.longitude, pin.latitude], zoom: Math.max(map.getZoom(), 13) });
+        if (!map) return;
+
+        const closePopup = () => {
+            if (!popupRef.current) return;
+            popupClosingRef.current = true;
+            popupRef.current.remove();
+            popupClosingRef.current = false;
+            popupRef.current = null;
+        };
+
+        const pin = focusPinId ? pins.find((candidate) => candidate.id === focusPinId) : undefined;
+        if (!pin || !Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) {
+            closePopup();
+            return;
+        }
+
+        const insets = insetsRef.current;
+        map.flyTo({
+            center: [pin.longitude, pin.latitude],
+            zoom: Math.max(map.getZoom(), 13),
+            padding: { top: insets.top, bottom: insets.bottom, left: 24, right: 24 },
+        });
+
+        closePopup();
+        const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 16 })
+            .setLngLat([pin.longitude, pin.latitude])
+            .setDOMContent(buildPopupContent(pin))
+            .addTo(map);
+        popup.on('close', () => {
+            if (popupClosingRef.current) return;
+            popupRef.current = null;
+            onDeselectRef.current?.();
+        });
+        popupRef.current = popup;
+
+        return closePopup;
     }, [focusPinId, pins]);
 
     // Activity-heat overlay: a native MapLibre heatmap weighted by each pin's heat.

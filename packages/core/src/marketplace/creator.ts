@@ -13,7 +13,14 @@ export type CreatorArtifactKind =
     | 'manifest_plugin'
     | 'code_plugin'
     | 'asset_bundle'
-    | 'coalition_kit';
+    | 'coalition_kit'
+    | 'profile_cosmetic'
+    | 'sound_pack'
+    | 'community_template'
+    | 'stream_asset'
+    | 'vault_item'
+    | 'ai_persona'
+    | 'automation_recipe';
 
 export interface CreatorListingDraft {
     artifactKind: CreatorArtifactKind;
@@ -39,6 +46,13 @@ export interface CreatorListingDraft {
      * - manifest_plugin: a JSON-stringified FeatureCustomizationManifest
      * - code_plugin: { manifest, bundleBase64, sha256 }
      * - asset_bundle: { files: [{ name, mime, base64 }] }
+     * - profile_cosmetic: { cosmeticType: 'avatar_decoration'|'nameplate'|'profile_effect'|'badge', ... }
+     * - sound_pack: { soundKind: 'soundboard'|'notification'|'voice_filter', ... }
+     * - community_template: { template: {...} }
+     * - stream_asset: { assetType: 'overlay'|'alert'|'channel_point_kit'|'badge_set', ... }
+     * - vault_item: { vaultKind: 'slot'|'template', ... }
+     * - ai_persona: { persona: {...} }
+     * - automation_recipe: { triggers: [...], actions: [...] }
      */
     artifactPayload: unknown;
     /**
@@ -88,6 +102,13 @@ const artifactKinds: CreatorArtifactKind[] = [
     'code_plugin',
     'asset_bundle',
     'coalition_kit',
+    'profile_cosmetic',
+    'sound_pack',
+    'community_template',
+    'stream_asset',
+    'vault_item',
+    'ai_persona',
+    'automation_recipe',
 ];
 
 const listingStatuses: CreatorListingStatus[] = [
@@ -123,6 +144,12 @@ const categories: MarketplaceCategory[] = [
     'stego-software',
     'plugin-curated',
     'subscription',
+    'profile-cosmetic',
+    'audio-pack',
+    'community-template',
+    'creator-asset',
+    'security-tool',
+    'ai-automation',
 ];
 
 const entitlementKinds: EntitlementKind[] = [
@@ -135,7 +162,55 @@ const entitlementKinds: EntitlementKind[] = [
     'event_ticket',
     'role_grant',
     'channel_access',
+    'profile_cosmetic',
+    'sound_pack',
+    'community_template',
+    'stream_asset',
+    'vault_item',
 ];
+
+/**
+ * Light, discriminant-only validation for the newer artifact kinds. Throws only
+ * when a payload is present, is an object, declares its discriminant key, and
+ * that key holds an invalid value — so placeholder/upload-id flows stay
+ * permissive while clearly-malformed payloads are rejected early.
+ */
+const cosmeticTypes = ['avatar_decoration', 'nameplate', 'profile_effect', 'badge'] as const;
+const soundKinds = ['soundboard', 'notification', 'voice_filter'] as const;
+const streamAssetTypes = ['overlay', 'alert', 'channel_point_kit', 'badge_set'] as const;
+const vaultKinds = ['slot', 'template'] as const;
+
+function discriminant<T extends string>(
+    payload: Record<string, unknown>,
+    key: string,
+    allowed: readonly T[]
+): void {
+    const raw = payload[key];
+    if (raw === undefined) return;
+    if (typeof raw !== 'string' || !(allowed as readonly string[]).includes(raw)) {
+        throw new Error(`${key} must be one of ${allowed.join(', ')}`);
+    }
+}
+
+export function validateArtifactPayload(kind: CreatorArtifactKind, payload: unknown): void {
+    if (!isRecord(payload)) return;
+    switch (kind) {
+        case 'profile_cosmetic':
+            discriminant(payload, 'cosmeticType', cosmeticTypes);
+            break;
+        case 'sound_pack':
+            discriminant(payload, 'soundKind', soundKinds);
+            break;
+        case 'stream_asset':
+            discriminant(payload, 'assetType', streamAssetTypes);
+            break;
+        case 'vault_item':
+            discriminant(payload, 'vaultKind', vaultKinds);
+            break;
+        default:
+            break;
+    }
+}
 
 export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
     if (!isRecord(input)) throw new Error('draft must be an object');
@@ -156,6 +231,7 @@ export function parseCreatorListingDraft(input: unknown): CreatorListingDraft {
         }
         feeBpsOverride = input.feeBpsOverride;
     }
+    validateArtifactPayload(artifactKind, input.artifactPayload);
     return {
         artifactKind,
         category,

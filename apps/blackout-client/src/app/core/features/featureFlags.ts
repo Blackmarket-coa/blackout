@@ -306,7 +306,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     homeFeedSegments: false,
     homeStreak: false,
     seriesTag: false,
-    marketTab: false,
+    marketTab: true,
     productsAttachments: false,
     productsAttachComposer: false,
     creatorsListings: false,

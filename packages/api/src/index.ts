@@ -18,6 +18,7 @@ import coalitionKitRoutes from './routes/coalitionKitManifests';
 import pluginSocialRoutes from './routes/pluginSocial';
 import pluginDiscoveryRoutes from './routes/pluginDiscovery';
 import creatorRoutes from './routes/creator';
+import vaultRoutes from './routes/vault';
 import voiceRoutes from './routes/voice';
 import subscriptionRoutes from './routes/subscriptions';
 import tipRoutes from './routes/tips';
@@ -162,6 +163,7 @@ for (const root of legacyAliasEnabled ? [API_ROOTS.v1, API_ROOTS.legacyApiAlias]
   app.route(`${root}/plugin-social`, pluginSocialRoutes);
   app.route(`${root}/plugin-discovery`, pluginDiscoveryRoutes);
   app.route(`${root}/creator`, creatorRoutes);
+  app.route(`${root}/vault`, vaultRoutes);
   app.route(`${root}/voice`, voiceRoutes);
   app.route(`${root}/subscriptions`, subscriptionRoutes);
   app.route(`${root}/tips`, tipRoutes);

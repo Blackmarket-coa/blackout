@@ -5,14 +5,9 @@ import type {
     CreatorListingStatus,
     MarketplaceProviderId,
 } from '@blackout/core';
+import { db } from '../db/store';
+import type { CreatorListingRecord } from '../db/types';
 import { logEvent } from './marketplaceObservability';
-
-const listings = new Map<string, CreatorListing>();
-const byUser = new Map<string, Set<string>>();
-
-function nowIso(): string {
-    return new Date().toISOString();
-}
 
 export interface CreateCreatorListingInput {
     sellerUserId: string;
@@ -23,10 +18,31 @@ export interface CreateCreatorListingInput {
     status: CreatorListingStatus;
 }
 
+function toCreatorListing(record: CreatorListingRecord): CreatorListing {
+    return {
+        id: record.id,
+        providerId: record.providerId as MarketplaceProviderId,
+        providerListingId: record.providerListingId,
+        sellerUserId: record.sellerUserId,
+        artifactKind: record.artifactKind as CreatorListing['artifactKind'],
+        category: record.category as CreatorListing['category'],
+        entitlementKind: record.entitlementKind as CreatorListing['entitlementKind'],
+        title: record.title,
+        description: record.description,
+        priceCents: record.priceCents,
+        currency: record.currency,
+        status: record.status as CreatorListingStatus,
+        ...(record.feeBpsOverride !== undefined ? { feeBpsOverride: record.feeBpsOverride } : {}),
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        publishedAt: record.publishedAt,
+        publicSlug: record.publicSlug,
+    };
+}
+
 export function createCreatorListingRecord(input: CreateCreatorListingInput): CreatorListing {
     const id = crypto.randomUUID();
-    const now = nowIso();
-    const record: CreatorListing = {
+    const record = db.createCreatorListing({
         id,
         providerId: input.providerId,
         providerListingId: input.providerListingId,
@@ -39,18 +55,12 @@ export function createCreatorListingRecord(input: CreateCreatorListingInput): Cr
         priceCents: input.draft.priceCents,
         currency: input.draft.currency,
         status: input.status,
-        createdAt: now,
-        updatedAt: now,
-        publishedAt: input.status === 'published' ? now : null,
+        ...(input.draft.feeBpsOverride !== undefined
+            ? { feeBpsOverride: input.draft.feeBpsOverride }
+            : {}),
+        publishedAt: input.status === 'published' ? new Date().toISOString() : null,
         publicSlug: input.publicSlug,
-    };
-    listings.set(id, record);
-    let userSet = byUser.get(input.sellerUserId);
-    if (!userSet) {
-        userSet = new Set();
-        byUser.set(input.sellerUserId, userSet);
-    }
-    userSet.add(id);
+    });
     logEvent('creator.listing.created', {
         id,
         sellerUserId: input.sellerUserId,
@@ -58,19 +68,16 @@ export function createCreatorListingRecord(input: CreateCreatorListingInput): Cr
         artifactKind: input.draft.artifactKind,
         status: input.status,
     });
-    return record;
+    return toCreatorListing(record);
 }
 
 export function getCreatorListing(id: string): CreatorListing | undefined {
-    return listings.get(id);
+    const record = db.getCreatorListing(id);
+    return record ? toCreatorListing(record) : undefined;
 }
 
 export function listCreatorListingsForUser(sellerUserId: string): CreatorListing[] {
-    const ids = byUser.get(sellerUserId);
-    if (!ids) return [];
-    return [...ids]
-        .map((id) => listings.get(id))
-        .filter((record): record is CreatorListing => Boolean(record));
+    return db.listCreatorListingsForSeller(sellerUserId).map(toCreatorListing);
 }
 
 export function updateCreatorListingStatus(
@@ -81,35 +88,25 @@ export function updateCreatorListingStatus(
         publicSlug?: string | null;
     }
 ): CreatorListing | undefined {
-    const existing = listings.get(id);
+    const existing = db.getCreatorListing(id);
     if (!existing) return undefined;
-    const next: CreatorListing = {
-        ...existing,
-        status: update.status ?? existing.status,
-        providerListingId:
-            update.providerListingId !== undefined
-                ? update.providerListingId
-                : existing.providerListingId,
-        publicSlug: update.publicSlug !== undefined ? update.publicSlug : existing.publicSlug,
-        updatedAt: nowIso(),
-        publishedAt:
-            update.status === 'published' && !existing.publishedAt
-                ? nowIso()
-                : existing.publishedAt,
-    };
-    listings.set(id, next);
-    return next;
+    const patch: Partial<
+        Pick<CreatorListingRecord, 'status' | 'providerListingId' | 'publicSlug' | 'publishedAt'>
+    > = {};
+    if (update.status !== undefined) patch.status = update.status;
+    if (update.providerListingId !== undefined) patch.providerListingId = update.providerListingId;
+    if (update.publicSlug !== undefined) patch.publicSlug = update.publicSlug;
+    if (update.status === 'published' && !existing.publishedAt) {
+        patch.publishedAt = new Date().toISOString();
+    }
+    const updated = db.updateCreatorListing(id, patch);
+    return updated ? toCreatorListing(updated) : undefined;
 }
 
 export function deleteCreatorListing(id: string): boolean {
-    const existing = listings.get(id);
-    if (!existing) return false;
-    listings.delete(id);
-    byUser.get(existing.sellerUserId)?.delete(id);
-    return true;
+    return db.deleteCreatorListing(id);
 }
 
 export function _resetCreatorListingsForTest(): void {
-    listings.clear();
-    byUser.clear();
+    db.creatorListings.clear();
 }

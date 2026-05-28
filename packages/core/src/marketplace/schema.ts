@@ -21,6 +21,11 @@ const entitlementKinds: EntitlementKind[] = [
     'event_ticket',
     'role_grant',
     'channel_access',
+    'profile_cosmetic',
+    'sound_pack',
+    'community_template',
+    'stream_asset',
+    'vault_item',
 ];
 
 const entitlementStatuses: EntitlementStatus[] = [
@@ -38,6 +43,12 @@ const marketplaceCategories: MarketplaceCategory[] = [
     'stego-software',
     'plugin-curated',
     'subscription',
+    'profile-cosmetic',
+    'audio-pack',
+    'community-template',
+    'creator-asset',
+    'security-tool',
+    'ai-automation',
 ];
 
 const lifecycleEventTypes: LifecycleEventType[] = [

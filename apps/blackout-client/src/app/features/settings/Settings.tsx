@@ -67,6 +67,8 @@ import { DeveloperTools } from './developer-tools';
 
 import { About } from './about';
 
+import { MatrixServers } from './matrix-servers';
+
 import { AppearanceSettings } from './AppearanceSettings';
 
 import { StegoSettings } from '../steganography';
@@ -88,6 +90,8 @@ export enum SettingsPages {
   GeneralPage,
 
   AccountPage,
+
+  MatrixServersPage,
 
   NotificationPage,
 
@@ -146,6 +150,16 @@ const useSettingsMenuItems = (): SettingsMenuItem[] =>
         name: 'Account',
 
         icon: Icons.User,
+
+      },
+
+      {
+
+        page: SettingsPages.MatrixServersPage,
+
+        name: 'Matrix Servers',
+
+        icon: Icons.Server,
 
       },
 
@@ -492,6 +506,12 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
       {activePage === SettingsPages.AccountPage && (
 
         <Account requestClose={handlePageRequestClose} />
+
+      )}
+
+      {activePage === SettingsPages.MatrixServersPage && (
+
+        <MatrixServers requestClose={handlePageRequestClose} />
 
       )}
 
