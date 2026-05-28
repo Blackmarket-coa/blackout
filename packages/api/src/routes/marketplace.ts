@@ -86,42 +86,68 @@ marketplace.get('/listings', async (c) => {
     const providerIdRaw = c.req.query('providerId');
     const query = readQuery(c);
 
-    const targets = providerIdRaw
-        ? (isProviderId(providerIdRaw) ? [getMarketplaceProvider(providerIdRaw)] : []).filter(
-              (provider): provider is NonNullable<typeof provider> => Boolean(provider?.enabled)
-          )
-        : listEnabledProviders();
+    // Building the provider registry can throw (e.g. a provider factory that
+    // requires missing config). Guard it so the endpoint degrades to an empty
+    // catalog instead of a 500 that repeats on every request.
+    let targets: ReturnType<typeof listEnabledProviders>;
+    try {
+        targets = providerIdRaw
+            ? (isProviderId(providerIdRaw) ? [getMarketplaceProvider(providerIdRaw)] : []).filter(
+                  (provider): provider is NonNullable<typeof provider> => Boolean(provider?.enabled)
+              )
+            : listEnabledProviders();
+    } catch (error) {
+        logEvent('marketplace.catalog.registry_failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        incrementCounter('marketplace_catalog_fetch_failed_total', { providerId: 'registry' });
+        return c.json({ listings: [], providerIds: [] });
+    }
 
     const results = await Promise.all(
         targets.map(async (provider) => {
             const key = cacheKey(provider.id, query);
-            const cached = db.getMarketplaceListingsCache(key);
-            const cachedAge = cached ? Date.now() - Date.parse(cached.refreshedAt) : Infinity;
-            if (cached && cachedAge < LISTING_TTL_MS) {
-                return cached.listings as NormalizedListing[];
-            }
+            // Wrap the whole per-provider body (including the cache read) so a
+            // single provider's failure resolves to an empty list rather than
+            // rejecting `Promise.all` and 500ing the endpoint.
             try {
-                const listings = await provider.fetchCatalog(query);
-                db.upsertMarketplaceListingsCache({
-                    cacheKey: key,
-                    providerId: provider.id as MarketplaceProviderIdString,
-                    listings,
-                    refreshedAt: new Date().toISOString(),
-                });
-                incrementCounter('marketplace_catalog_fetch_total', { providerId: provider.id });
-                return listings;
+                const cached = db.getMarketplaceListingsCache(key);
+                const cachedAge = cached ? Date.now() - Date.parse(cached.refreshedAt) : Infinity;
+                if (cached && cachedAge < LISTING_TTL_MS) {
+                    return cached.listings as NormalizedListing[];
+                }
+                try {
+                    const listings = await provider.fetchCatalog(query);
+                    db.upsertMarketplaceListingsCache({
+                        cacheKey: key,
+                        providerId: provider.id as MarketplaceProviderIdString,
+                        listings,
+                        refreshedAt: new Date().toISOString(),
+                    });
+                    incrementCounter('marketplace_catalog_fetch_total', { providerId: provider.id });
+                    return listings;
+                } catch (error) {
+                    logEvent('marketplace.catalog.fetch_failed', {
+                        providerId: provider.id,
+                        error: error instanceof Error ? error.message : String(error),
+                        fellBackToStaleSnapshot: Boolean(cached),
+                    });
+                    incrementCounter('marketplace_catalog_fetch_failed_total', {
+                        providerId: provider.id,
+                    });
+                    if (cached) {
+                        return cached.listings as NormalizedListing[];
+                    }
+                    return [] as NormalizedListing[];
+                }
             } catch (error) {
-                logEvent('marketplace.catalog.fetch_failed', {
+                logEvent('marketplace.catalog.provider_failed', {
                     providerId: provider.id,
                     error: error instanceof Error ? error.message : String(error),
-                    fellBackToStaleSnapshot: Boolean(cached),
                 });
                 incrementCounter('marketplace_catalog_fetch_failed_total', {
                     providerId: provider.id,
                 });
-                if (cached) {
-                    return cached.listings as NormalizedListing[];
-                }
                 return [] as NormalizedListing[];
             }
         })

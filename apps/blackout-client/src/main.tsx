@@ -26,13 +26,15 @@ import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
 import { capabilityContextAtom } from './app/core/features/capabilityContext';
 import {
     buildCapabilityContextValue,
+    hydrateCapabilityContext,
     resolveDevCapabilitySeed,
 } from './app/core/features/capabilityHydration';
 import { runtimeFeatureFlags } from './app/core/features/featureFlags';
 import { buildRegistryRouteObjects } from './app/core/features/RegistryRouteList';
 import { RegistryFetcherProvider } from './app/core/features/RegistryFetcherProvider';
 import { buildRegistryFetchers } from './app/core/features/registryFetchers';
-import { createFetchApiClient } from '@blackout/sdk';
+import { createCapabilityActions } from '@blackout/sdk';
+import { createAuthorizedApiClient } from './app/sdk/client';
 import { useStore } from 'jotai';
 import './index.css';
 import './app/styles/theme.css.ts';
@@ -92,19 +94,15 @@ if ('serviceWorker' in navigator) {
 const queryClient = new QueryClient();
 
 /**
- * Production fetcher bag — built once at boot from the canonical
- * `ApiClient`. The base URL is read from `import.meta.env.VITE_API_BASE_URL`
- * when present; otherwise calls go through the page's relative URL
- * (matches the existing dev proxy setup). Hydration token wiring is
- * deferred to a future bootstrap pass; the headers slot is open for it.
+ * Production fetcher bag — built once at boot from the canonical authorized
+ * `ApiClient`, which lazily resolves the Matrix→Blackout JWT (and retries once
+ * on 401) so every registry `/v1/*` fetcher (thread activity, capability
+ * hydration, …) is authenticated instead of hitting the API anonymously. The
+ * base URL (same-origin in production) is owned by `app/sdk/client`.
  */
-const apiBaseUrl =
-    typeof import.meta !== 'undefined'
-        ? (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
-          undefined
-        : undefined;
-const apiClient = createFetchApiClient({ baseUrl: apiBaseUrl });
+const apiClient = createAuthorizedApiClient(null);
 const registryFetchers = buildRegistryFetchers(apiClient);
+const fetchCapabilities = createCapabilityActions(apiClient).fetchCapabilities;
 
 void initDesktopBridge();
 
@@ -137,6 +135,23 @@ const DevCapabilitySeeder = () => {
             flags: runtimeFeatureFlags,
         });
         store.set(capabilityContextAtom, next);
+    }, [store]);
+    return null;
+};
+
+// Boot-time capability hydration. Mounted only once the viewer is logged in (so
+// the Matrix→Blackout token exchange can resolve), this fetches the canonical
+// capability set from `GET /v1/capabilities` and writes it into
+// `capabilityContextAtom`. `BootstrapStatus` rebuilds the router whenever that
+// atom changes, so newly-granted registry surfaces (e.g. `/profile/me`) become
+// navigable without a reload.
+// eslint-disable-next-line react-refresh/only-export-components
+const CapabilityHydrator = () => {
+    const store = useStore();
+    React.useEffect(() => {
+        // The helper accepts any structural `{ get, set }` store; jotai's store
+        // has a stricter generic shape than that loose contract, so cast.
+        void hydrateCapabilityContext(store as never, fetchCapabilities);
     }, [store]);
     return null;
 };
@@ -247,6 +262,7 @@ const BootstrapStatus = () => {
         return (
             <>
                 <RoomsAtomBinder />
+                <CapabilityHydrator />
                 <PluginEntitlementHydrator />
                 <PendingInviteRedeemer />
                 <RouterProvider router={router} />
