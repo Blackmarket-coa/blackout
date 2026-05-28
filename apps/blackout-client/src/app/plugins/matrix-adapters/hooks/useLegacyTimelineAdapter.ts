@@ -3,6 +3,10 @@ import type { MatrixEvent, Room } from 'matrix-js-sdk';
 import { useLegacyMatrixClientAdapter as useMatrixClient } from './useLegacyMatrixClientAdapter';
 import { useLegacyRoomAdapter as useRoom } from './useLegacyRoomAdapter';
 import { uploadMedia } from '../../../features/media/utils/matrixMedia';
+import {
+    buildEphemeralContent,
+    type EphemeralPolicy,
+} from '../../../features/ephemeral/ephemeralPolicy';
 
 export interface HookResult<T> {
     data: T;
@@ -174,11 +178,14 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
     );
 
     const sendMedia = useCallback(
-        async (file: File) => {
+        async (file: File, options?: { ephemeral?: EphemeralPolicy | null }) => {
             setLoading(true);
             setError(null);
             try {
                 const url = await uploadMedia(client, file);
+                const ephemeralBlock = options?.ephemeral
+                    ? buildEphemeralContent(options.ephemeral)
+                    : null;
                 await sendEvent(roomId, 'm.room.message', {
                     msgtype: 'm.file',
                     body: file.name,
@@ -187,6 +194,7 @@ export const useLegacySendMessageAdapter = (roomId: string) => {
                         mimetype: file.type,
                         size: file.size,
                     },
+                    ...(ephemeralBlock ?? {}),
                 });
             } catch (err) {
                 setError(err instanceof Error ? err : new Error('Failed to send media.'));
