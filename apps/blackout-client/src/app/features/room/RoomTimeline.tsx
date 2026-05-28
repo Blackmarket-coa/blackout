@@ -12,9 +12,11 @@ import {
 import type { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
 import { ReceiptType } from 'matrix-js-sdk';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { VirtualTile } from '../../components/virtualizer';
 import { shouldSendReadReceipts } from '../metadata-privacy/outboundPrivacy';
+import { evaluateEphemeral, parseEphemeralPolicy } from '../ephemeral/ephemeralPolicy';
+import { ephemeralViewsAtom } from '../ephemeral/ephemeralViewsAtom';
 import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
@@ -490,6 +492,39 @@ const EditedIndicator = ({ event }: { event: MatrixEvent }) => {
     return <span style={styles.timestamp}>(edited)</span>;
 };
 
+/**
+ * Hides ephemeral media once it has expired (by time or local view count) and
+ * counts a view per mount for view-limited drops. Best-effort + per-device:
+ * there's no server counter, so this stops re-opening on this device.
+ */
+const EphemeralGate = memo(({ event, children }: { event: MatrixEvent; children: ReactNode }) => {
+    const [views, setViews] = useAtom(ephemeralViewsAtom);
+    const policy = parseEphemeralPolicy(event.getContent());
+    const eventId = event.getId() ?? '';
+    const seen = views[eventId] ?? 0;
+    const verdict = policy
+        ? evaluateEphemeral(policy, { now: Date.now(), views: seen })
+        : { expired: false, reason: null as null | 'time' | 'views' };
+
+    useEffect(() => {
+        if (policy && !verdict.expired && policy.maxViews !== undefined && eventId) {
+            setViews((prev) => ({ ...prev, [eventId]: (prev[eventId] ?? 0) + 1 }));
+        }
+        // Count once per mount; verdict/policy are derived from the stable event.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [eventId]);
+
+    if (policy && verdict.expired) {
+        return (
+            <div style={{ ...styles.pill, fontStyle: 'italic' }}>
+                ⌛ Ephemeral file expired
+                {verdict.reason === 'views' ? ' (view limit reached)' : ''}
+            </div>
+        );
+    }
+    return <>{children}</>;
+});
+
 const renderMessageType = (event: MatrixEvent): ReactNode => {
     if (event.isRedacted() || event.getType() === 'm.room.redaction') {
         return <div style={styles.notice}>[message deleted]</div>;
@@ -499,13 +534,29 @@ const renderMessageType = (event: MatrixEvent): ReactNode => {
 
     switch (getMsgType(event)) {
         case 'm.image':
-            return <TimelineImageMessage event={event} />;
+            return (
+                <EphemeralGate event={event}>
+                    <TimelineImageMessage event={event} />
+                </EphemeralGate>
+            );
         case 'm.video':
-            return <TimelineVideoMessage event={event} />;
+            return (
+                <EphemeralGate event={event}>
+                    <TimelineVideoMessage event={event} />
+                </EphemeralGate>
+            );
         case 'm.audio':
-            return <TimelineAudioMessage event={event} />;
+            return (
+                <EphemeralGate event={event}>
+                    <TimelineAudioMessage event={event} />
+                </EphemeralGate>
+            );
         case 'm.file':
-            return <TimelineFileMessage event={event} />;
+            return (
+                <EphemeralGate event={event}>
+                    <TimelineFileMessage event={event} />
+                </EphemeralGate>
+            );
         case 'm.notice':
             return <NoticeMessage event={event} />;
         case 'm.text':

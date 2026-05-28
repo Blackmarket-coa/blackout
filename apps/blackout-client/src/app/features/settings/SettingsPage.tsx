@@ -22,6 +22,7 @@ const NotificationSettings = lazy(() => import('./NotificationSettings'));
 const PrivacySettings = lazy(() => import('./PrivacySettings'));
 const PrivacyToolsSettings = lazy(() => import('../privacy-tools/PrivacyToolsSettings'));
 const DataTransparencySettings = lazy(() => import('../data-transparency/DataTransparencySettings'));
+const DataDeletionPanel = lazy(() => import('../data-deletion/DataDeletionPanel'));
 const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
 const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
@@ -29,6 +30,7 @@ const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
 const DeveloperSettings = lazy(() => import('./DeveloperSettings'));
 const AboutSettings = lazy(() => import('./AboutSettings'));
 const BugReportSettings = lazy(() => import('./BugReportSettings'));
+const PanicSettings = lazy(() => import('../panic/PanicSettings'));
 const CharacterSheetSection = lazy(() =>
     import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet })),
 );
@@ -60,12 +62,19 @@ const groups: SettingsGroup[] = [
     {
         id: 'privacy-notifications',
         label: 'Privacy & notifications',
-        sectionIds: ['privacy', 'privacy-tools', 'data-transparency', 'notifications', 'voice-video'],
+        sectionIds: [
+            'privacy',
+            'privacy-tools',
+            'data-transparency',
+            'data-deletion',
+            'notifications',
+            'voice-video',
+        ],
     },
     {
         id: 'help-advanced',
         label: 'Help & advanced',
-        sectionIds: ['developer', 'bug-report'],
+        sectionIds: ['developer', 'panic', 'bug-report'],
     },
 ];
 
@@ -107,6 +116,12 @@ const sections: SettingsSection[] = [
         component: DataTransparencySettings,
     },
     {
+        id: 'data-deletion',
+        label: 'Data broker deletion',
+        summary: 'Generate GDPR/CCPA deletion + access requests for data brokers',
+        component: DataDeletionPanel,
+    },
+    {
         id: 'identities',
         label: 'Burner identities',
         summary: 'Create disposable identities and burn them when done',
@@ -135,6 +150,12 @@ const sections: SettingsSection[] = [
         label: 'Developer',
         summary: 'Developer mode, diagnostics bundle export',
         component: DeveloperSettings,
+    },
+    {
+        id: 'panic',
+        label: 'Panic wipe',
+        summary: 'Clear sensitive local traces from this device',
+        component: PanicSettings,
     },
     {
         id: 'bug-report',

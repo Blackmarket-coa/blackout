@@ -623,6 +623,8 @@ export const MessageComposer = ({
     const [scheduledEnabled, setScheduledEnabled] = useState(false);
     const [scheduleDelayHours, setScheduleDelayHours] = useState(1);
     const [encryptionPresetEnabled, setEncryptionPresetEnabled] = useState(false);
+    // Ephemeral drops: attached media expires (view-once, 24h) for the recipient.
+    const [ephemeralEnabled, setEphemeralEnabled] = useState(false);
     const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [slowmodeNotice, setSlowmodeNotice] = useState<string | null>(null);
     const lastSentTsRef = useRef<number | null>(null);
@@ -1017,11 +1019,14 @@ export const MessageComposer = ({
                 await sendRichText(content);
             }
 
+            const ephemeralPolicy = ephemeralEnabled
+                ? { expiresAtMs: Date.now() + 24 * 60 * 60 * 1000, maxViews: 1 }
+                : null;
             for (const file of attachments) {
-                await sendMedia(file);
+                await sendMedia(file, { ephemeral: ephemeralPolicy });
             }
             if (voiceAttachment) {
-                await sendMedia(voiceAttachment);
+                await sendMedia(voiceAttachment, { ephemeral: ephemeralPolicy });
             }
 
             if (stegoAttachment) {
@@ -1057,6 +1062,7 @@ export const MessageComposer = ({
             setAttachments([]);
             setVoiceAttachment(null);
             setStegoAttachment(null);
+            setEphemeralEnabled(false);
             onSent?.();
             await sendTyping(false);
         } finally {
@@ -1068,6 +1074,7 @@ export const MessageComposer = ({
         commandEnabled,
         editMessage,
         encryptionPresetEnabled,
+        ephemeralEnabled,
         matrixClient,
         onSent,
         privacyToolsSettings.linkSanitizeEnabled,
@@ -1134,6 +1141,9 @@ export const MessageComposer = ({
             }
             if (actionLabel === 'Encryption preset') {
                 setEncryptionPresetEnabled((active) => !active);
+            }
+            if (actionLabel === 'Ephemeral drop') {
+                setEphemeralEnabled((active) => !active);
             }
         },
         [
@@ -1423,6 +1433,15 @@ export const MessageComposer = ({
                                     onClick={() => applyFeatureAction('Encryption preset')}
                                 >
                                     Encryption preset
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-pressed={ephemeralEnabled}
+                                    onClick={() => applyFeatureAction('Ephemeral drop')}
+                                >
+                                    {ephemeralEnabled
+                                        ? 'Ephemeral drop: on (view-once, 24h)'
+                                        : 'Ephemeral drop'}
                                 </button>
                             </div>
                             {recentActions.length > 0 ? (
