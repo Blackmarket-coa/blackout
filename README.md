@@ -519,11 +519,7 @@ Copyright (c) 2017 Vector Creations Ltd
 Copyright (c) 2017-2025 New Vector Ltd  
 Copyright (c) 2024-2026 Black Market Coalition
 
-Licensed under one of:
-
-1. GNU Affero General Public License v3 (or later) — see [`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0)
-2. GNU General Public License v3 (or later) — see [`LICENSE-GPL-3.0`](LICENSE-GPL-3.0)
-3. Blackout Commercial License (paid, by agreement) — see [`LICENSE-COMMERCIAL`](LICENSE-COMMERCIAL)
+Licensed under GNU Affero General Public License v3 (or later) — see [`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0).
 
 Upstream Element/Matrix copyrights are preserved per the project's AGPL/GPL
 inheritance.
