@@ -290,7 +290,11 @@ export const initMatrixFromStoredSession = async (
 };
 
 export const stopMatrixClient = (client: MatrixClient | null): void => {
-    client?.stopClient();
+    if (!client) return;
+    // Best-effort server-side token revocation: call logout before stopping
+    // the sync loop. Failure is non-fatal — local state cleanup continues.
+    client.logout().catch(() => { /* server unreachable or token already invalid */ });
+    client.stopClient();
 };
 
 /**

@@ -144,15 +144,13 @@ export interface InvitationTokenRecord {
  */
 export interface BurnerIdentityRecord {
   id: UUID;
-  /** Primary account that owns this burner (the only one allowed to burn it). */
   ownerUserId: string;
-  /** The throwaway Synapse mxid (`@burn-xxxx:domain`). */
   burnerUserId: string;
   label: string;
-  /** ISO 8601 timestamp after which the burner is considered expired. */
   expiresAt: string | null;
-  /** ISO 8601 timestamp the burner was deactivated; null while active. */
   burnedAt: string | null;
+  /** Set when Matrix deactivation failed; the reconciler will retry. */
+  deactivationPending: boolean;
   createdAt: string;
 }
 

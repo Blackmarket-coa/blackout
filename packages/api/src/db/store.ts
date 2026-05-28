@@ -243,6 +243,7 @@ class InMemoryDb {
   invitationRedemptions = new Map<string, InvitationRedemptionRecord>();
   /** Burner identities, keyed by row id. */
   burnerIdentities = new Map<string, BurnerIdentityRecord>();
+  burnerCounters = new Map<string, number>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
   mfaConfigs = new Map<string, MFAConfigRecord>();
@@ -636,6 +637,45 @@ class InMemoryDb {
     return updated;
   }
 
+  /** Atomic per-owner active burner counter. Returns the new count on increment. */
+  getBurnerCounter(ownerUserId: string): number {
+    return this.burnerCounters.get(ownerUserId) ?? 0;
+  }
+
+  incrementBurnerCounter(ownerUserId: string, cap: number): { ok: true; current: number } | { ok: false; current: number; cap: number } {
+    const current = this.getBurnerCounter(ownerUserId);
+    if (current >= cap) return { ok: false, current, cap };
+    this.burnerCounters.set(ownerUserId, current + 1);
+    return { ok: true, current: current + 1 };
+  }
+
+  decrementBurnerCounter(ownerUserId: string): void {
+    const current = this.getBurnerCounter(ownerUserId);
+    if (current > 0) this.burnerCounters.set(ownerUserId, current - 1);
+  }
+
+  /** List burners whose Matrix deactivation failed and need retry. */
+  listBurnerIdentitiesPendingDeactivation(): BurnerIdentityRecord[] {
+    return [...this.burnerIdentities.values()].filter((b) => b.deactivationPending && b.burnedAt);
+  }
+
+  /** Clear the pending flag after a successful deactivation retry. */
+  confirmBurnerDeactivation(id: string): BurnerIdentityRecord | undefined {
+    const existing = this.burnerIdentities.get(id);
+    if (!existing) return undefined;
+    const updated: BurnerIdentityRecord = { ...existing, deactivationPending: false };
+    this.burnerIdentities.set(id, updated);
+    return updated;
+  }
+
+  setBurnerDeactivationPending(id: string): BurnerIdentityRecord | undefined {
+    const existing = this.burnerIdentities.get(id);
+    if (!existing) return undefined;
+    const updated: BurnerIdentityRecord = { ...existing, deactivationPending: true };
+    this.burnerIdentities.set(id, updated);
+    return updated;
+  }
+
   listInvitationRedemptionsByToken(invitationTokenId: string): InvitationRedemptionRecord[] {
     return [...this.invitationRedemptions.values()]
       .filter((r) => r.invitationTokenId === invitationTokenId)
@@ -665,6 +705,24 @@ class InMemoryDb {
     }
     for (const [stateHash, record] of this.pendingOAuthLinks) {
       if (record.blackoutUserId === userId) this.pendingOAuthLinks.delete(stateHash);
+    }
+    // MFA configuration — TOTP secrets and recovery codes
+    if (this.mfaConfigs.has(userId)) this.mfaConfigs.delete(userId);
+    // WebAuthn credentials — passkeys bound to this user
+    const webauthnCreds = this.listWebAuthnCredentialsByUser(userId);
+    for (const cred of webauthnCreds) this.webAuthnCredentials.delete(cred.credentialId);
+    // WebAuthn challenges — purge any in-flight auth challenges
+    for (const [challenge, record] of this.webAuthnChallenges) {
+      if (record.userId === userId) this.webAuthnChallenges.delete(challenge);
+    }
+    // Burner identities — orphaned records for this owner
+    const burners = this.burnerIdentities ? [...this.burnerIdentities.values()] : [];
+    for (const burner of burners) {
+      if (burner.ownerUserId === userId) this.burnerIdentities!.delete(burner.id);
+    }
+    // Revoked sessions — stale denylist entries
+    for (const [jti, record] of this.revokedSessions) {
+      if (record.userId === userId) this.revokedSessions.delete(jti);
     }
   }
 

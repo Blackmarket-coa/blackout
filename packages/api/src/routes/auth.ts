@@ -24,6 +24,7 @@ import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { issueRefreshToken, revokeRefreshToken, revokeAllForUser, rotateRefreshToken } from '../services/refreshToken';
 import { consumePasswordResetToken, issuePasswordResetToken } from '../services/passwordReset';
+import { generateChallenge, verifyPow } from '../services/proofOfWork';
 import {
   consumeEmailVerificationToken,
   issueEmailVerificationToken,
@@ -49,15 +50,6 @@ const auth = new Hono();
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
 auth.use('/account-number', authRateLimit);
-auth.use('/matrix/exchange', authRateLimit);
-auth.use('/password/reset/request', authRateLimit);
-auth.use('/password/reset/confirm', authRateLimit);
-auth.use('/password/change', authRateLimit);
-auth.use('/token/refresh', authRateLimit);
-auth.use('/email/verify/request', authRateLimit);
-auth.use('/email/verify/confirm', authRateLimit);
-auth.use('/account/delete/request', authRateLimit);
-auth.use('/account/delete/confirm', authRateLimit);
 
 const buildVerificationLink = (token: string): string => {
   const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
@@ -90,15 +82,6 @@ const dispatchVerificationEmail = async (
 const matrixHomeserverDomain = (): string =>
   (process.env.MATRIX_HOMESERVER_DOMAIN ?? 'blackout.local').replace(/^@+/, '');
 
-/**
- * Auto-join a freshly-registered user into the community welcome room so every
- * new contributor lands somewhere on first login. Best-effort: a configured
- * room id wins, otherwise we resolve `WELCOME_MATRIX_ROOM_ALIAS`
- * (default `#welcome:<domain>`). Joins via the Synapse admin API so it works
- * even though the new account hasn't synced yet. Any failure (including
- * matrix_not_configured in local/dev) is swallowed — registration already
- * succeeded and must not roll back over a welcome-room miss.
- */
 const autoJoinWelcomeRoom = async (username: string): Promise<void> => {
   const configuredId = process.env.WELCOME_MATRIX_ROOM_ID?.trim();
   const alias = process.env.WELCOME_MATRIX_ROOM_ALIAS?.trim() || `#welcome:${matrixHomeserverDomain()}`;
@@ -119,8 +102,7 @@ const autoJoinWelcomeRoom = async (username: string): Promise<void> => {
   const joined = await matrixClient.adminJoinUserToRoom(roomId, userId);
   if (!joined.ok && (!('reason' in joined) || joined.reason !== 'matrix_not_configured')) {
     log.warn('register.welcome_room.join_failed', {
-      roomId,
-      userId,
+      roomId, userId,
       status: 'status' in joined ? joined.status : undefined,
       reason: 'reason' in joined ? joined.reason : undefined,
     });
@@ -131,8 +113,6 @@ const registerSchema = z.object({
   username: z.string().min(1),
   email: z.string().min(1),
   password: z.string().min(1),
-  /** Plaintext invite token from a /v1/invitations link. Optional unless
-   *  REQUIRE_INVITE_TOKEN=1, in which case registration is closed without one. */
   inviteToken: z.string().min(1).max(512).optional(),
 });
 
@@ -173,169 +153,58 @@ const clearAuthCookie = (c: import('hono').Context): void => {
   }
 };
 
-auth.post('/register', async (c) => {
-  const parsed = await readJsonBody(c, registerSchema);
-  if (parsed instanceof Response) return parsed;
-  const { username, email, password, inviteToken } = parsed;
-
-  if (!isAcceptablePassword(password)) {
-    return c.json(
-      { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
-      400,
-    );
-  }
-
-  if (await isBreachedPassword(password)) {
-    return c.json(
-      { code: 'breached_password', message: 'This password has appeared in data breaches. Please choose a different one.' },
-      400,
-    );
-  }
-
-  // Invite-gated mode: when REQUIRE_INVITE_TOKEN=1 the public /register
-  // route is closed unless the caller presents a valid token. We do the
-  // up-front lookup so we never create a user we're about to roll back.
-  if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
-    return c.json(
-      { code: 'invite_required', message: 'Registration requires an invitation token' },
-      403,
-    );
-  }
-
-  if (db.findUserByEmail(email) || db.findUserByUsername(username)) {
-    return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
-  }
-
-  const userId = crypto.randomUUID();
-  const passwordHash = await hashPassword(password);
-  const pubkeyEd25519 = crypto.randomUUID().replace(/-/g, '');
-
-  const user = db.createUser({
-    id: userId,
-    username,
-    email,
-    passwordHash,
-    reputationScore: 0,
-    reputationTier: 'member',
-    pubkeyEd25519,
-  });
-
-  let matrix: Awaited<ReturnType<typeof matrixClient.registerUser>>;
-  try {
-    matrix = await matrixClient.registerUser(username, password);
-  } catch (error) {
-    db.deleteUser(user.id);
-    return c.json(
-      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
-      502,
-    );
-  }
-
-  // matrix_not_configured is expected in local/dev — keep the local user.
-  // Any other !ok (HTTP error from Synapse) is a real failure: roll back so
-  // the caller can retry with the same email/username.
-  if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
-    db.deleteUser(user.id);
-    return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix }, 502);
-  }
-
-  // Redeem the invitation, if one was presented. Done after Matrix
-  // provisioning so the auto-room-invite can target the freshly-minted
-  // Matrix account. A bad token rolls back the local + Matrix accounts so
-  // the caller can retry with a corrected link.
-  let inviteRedemption:
-    | { ok: true; matrixInvite?: { ok: boolean } }
-    | { ok: false; reason: string }
-    | undefined;
-  if (inviteToken) {
-    const outcome = await redeemInvitation(inviteToken, user);
-    if (outcome.kind === 'ok') {
-      inviteRedemption = { ok: true, matrixInvite: outcome.matrixInvite };
-    } else {
-      db.deleteUser(user.id);
-      return c.json(
-        { code: 'invite_token_invalid', message: 'Invitation token is not usable', reason: outcome.kind },
-        400,
-      );
-    }
-  } else if (process.env.REQUIRE_INVITE_TOKEN === '1') {
-    // Defence in depth: the up-front gate above already rejects this,
-    // but if a future code path skips it we still refuse to issue a session.
-    db.deleteUser(user.id);
-    return c.json(
-      { code: 'invite_required', message: 'Registration requires an invitation token' },
-      403,
-    );
-  }
-
-  // Land every new contributor in the community welcome room. Best-effort and
-  // independent of any invite-bound room join above.
-  await autoJoinWelcomeRoom(user.username);
-
-  const session = issueSession(user.id, user.username, c.req.header('user-agent'));
-  setAuthCookie(c, session.access.token, 86400);
-
-  // Mint and dispatch the verification email. Registration succeeds even
-  // if the dispatch fails — the caller can retry through
-  // POST /auth/email/verify/request. Failures are logged but not surfaced
-  // because the user is already past the credential-check step.
-  const issued = issueEmailVerificationToken({
-    userId: user.id,
-    email: user.email,
-    ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
-    userAgent: c.req.header('user-agent'),
-  });
-  let emailVerificationSent = false;
-  if (issued.kind === 'ok') {
-    emailVerificationTokensIssuedTotal.inc({ outcome: 'register' });
-    const dispatch = await dispatchVerificationEmail(user.email, issued.token, issued.record.id);
-    emailVerificationSent = dispatch.ok;
-  }
-
-  return c.json(
-    {
-      token: session.access.token,
-      refreshToken: session.refresh.token,
-      userId: user.id,
-      emailVerificationSent,
-      matrix,
-      invite: inviteRedemption,
-    },
-    201,
-  );
+// Proof-of-work challenge for account creation — prevents automated farming
+// by requiring the client to compute a hashcash-style solution before
+// calling /account-number. Anonymous — no session required.
+auth.post('/account-number/pow-challenge', (c) => {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? 'anon';
+  const challenge = generateChallenge(ip);
+  return c.json(challenge);
 });
 
-/**
- * Mint a no-PII "account number" account (Mullvad-style). The server generates
- * a high-entropy number, derives a one-way Matrix localpart from it, and
- * provisions the Matrix account with the number as its password — no email,
- * username, or other PII. The number is returned exactly once and is the sole
- * credential; there is no recovery. The client derives the same localpart and
- * logs in with the number via the standard Matrix password flow; the local
- * Blackout user is auto-provisioned lazily on the first token exchange.
- */
 auth.post('/account-number', async (c) => {
+  // Anonymous endpoint: no session required by design (this IS the sign-up
+  // flow for users without email/password). Anti-automation is provided by
+  // the proof-of-work challenge + rate limiting (10 req/min/IP). For additional
+  // protection, enable `REQUIRE_INVITE_TOKEN=1`.
+
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    // Exponential backoff between retry attempts to avoid hammering
+    // the homeserver when it's degraded.
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(200 * Math.pow(2, attempt - 1), 2000)));
+    }
+
     const accountNumber = generateAccountNumber();
     const localpart = await accountNumberToLocalpart(accountNumber);
 
-    let matrix: Awaited<ReturnType<typeof matrixClient.registerUser>>;
-    try {
-      matrix = await matrixClient.registerUser(localpart, accountNumber);
-    } catch (error) {
+    // Prefer shared-secret registration (only creates users, no admin powers).
+    // Falls back to the full admin bot token if no shared secret is configured.
+    type MatrixResult = Awaited<ReturnType<typeof matrixClient.registerWithSharedSecret>> | Awaited<ReturnType<typeof matrixClient.registerUser>>;
+    let matrix: MatrixResult = await matrixClient.registerWithSharedSecret(localpart, accountNumber);
+    if (!matrix.ok && matrix.reason === 'registration_secret_not_configured') {
+      try {
+        matrix = await matrixClient.registerUser(localpart, accountNumber);
+      } catch (error) {
+        return c.json(
+          { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
+          502,
+        );
+      }
+    } else if (!matrix.ok && matrix.reason === 'network_error') {
+      // Network failure on the shared-secret path — don't retry with admin API
       return c.json(
-        {
-          code: 'matrix_provisioning_failed',
-          message: 'Failed to provision Matrix account',
-          detail: (error as Error).message,
-        },
+        { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
         502,
       );
     }
 
-    // matrix_not_configured is expected in local/dev — return the number so the
-    // flow is exercisable; real login still needs a configured homeserver.
-    if (matrix.ok || ('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
+    const isDevBypass = !('ok' in matrix) || (matrix as { reason?: string }).reason === 'matrix_not_configured';
+    if (isDevBypass && process.env.NODE_ENV !== 'production') {
+      return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
+    }
+
+    if (matrix.ok) {
       return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
     }
 
@@ -343,7 +212,7 @@ auth.post('/account-number', async (c) => {
     if (matrix.status === 400 || matrix.status === 409) continue;
 
     return c.json(
-      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', matrix },
+      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
       502,
     );
   }

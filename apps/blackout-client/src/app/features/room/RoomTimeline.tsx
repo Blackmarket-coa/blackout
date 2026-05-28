@@ -16,7 +16,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { VirtualTile } from '../../components/virtualizer';
 import { shouldSendReadReceipts } from '../metadata-privacy/outboundPrivacy';
 import { evaluateEphemeral, parseEphemeralPolicy } from '../ephemeral/ephemeralPolicy';
-import { ephemeralViewsAtom } from '../ephemeral/ephemeralViewsAtom';
+import { ephemeralViewsAtom, pruneAndSetViews } from '../ephemeral/ephemeralViewsAtom';
 import { activeThreadRootIdAtom, rightPanelAtom } from '../../state/navigation';
 import { sanitizeMatrixHtml } from '../../plugins/markdown/matrixMarkdownUtils';
 import { designSpacing } from '../../../../../../packages/design/src';
@@ -493,32 +493,45 @@ const EditedIndicator = ({ event }: { event: MatrixEvent }) => {
 };
 
 /**
- * Hides ephemeral media once it has expired (by time or local view count) and
- * counts a view per mount for view-limited drops. Best-effort + per-device:
- * there's no server counter, so this stops re-opening on this device.
+ * Hides ephemeral media once it has expired (by time or local view count).
+ * View counts are incremented before the show/hide decision so that
+ * `maxViews` limits are enforced. Best-effort + per-device: a determined
+ * recipient can bypass via DOM inspection or localStorage manipulation.
  */
 const EphemeralGate = memo(({ event, children }: { event: MatrixEvent; children: ReactNode }) => {
     const [views, setViews] = useAtom(ephemeralViewsAtom);
     const policy = parseEphemeralPolicy(event.getContent());
     const eventId = event.getId() ?? '';
+
+    // Increment view count synchronously BEFORE deciding to show or hide.
+    // This closes the TOCTOU window where content renders without counting.
+    const didCount = useRef(false);
+    useLayoutEffect(() => {
+        if (policy && !didCount.current && policy.maxViews !== undefined && eventId) {
+            didCount.current = true;
+            setViews((prev) => {
+                const current = prev[eventId] ?? 0;
+                if (current < (policy.maxViews ?? Infinity)) {
+                    return pruneAndSetViews(prev, (p) => ({ ...p, [eventId]: current + 1 }));
+                }
+                return prev;
+            });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [eventId]);
+
     const seen = views[eventId] ?? 0;
     const verdict = policy
         ? evaluateEphemeral(policy, { now: Date.now(), views: seen })
         : { expired: false, reason: null as null | 'time' | 'views' };
 
-    useEffect(() => {
-        if (policy && !verdict.expired && policy.maxViews !== undefined && eventId) {
-            setViews((prev) => ({ ...prev, [eventId]: (prev[eventId] ?? 0) + 1 }));
-        }
-        // Count once per mount; verdict/policy are derived from the stable event.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [eventId]);
-
     if (policy && verdict.expired) {
         return (
             <div style={{ ...styles.pill, fontStyle: 'italic' }}>
-                ⌛ Ephemeral file expired
-                {verdict.reason === 'views' ? ' (view limit reached)' : ''}
+                <p style={{ margin: 0 }}>⌛ Ephemeral file expired{verdict.reason === 'views' ? ' (view limit reached)' : ''}</p>
+                <small style={{ display: 'block', color: 'var(--text-secondary)', fontSize: 11, marginTop: 4 }}>
+                    Ephemeral content is best-effort per device. Screenshots and DOM inspection can bypass these limits.
+                </small>
             </div>
         );
     }

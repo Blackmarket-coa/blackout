@@ -42,6 +42,10 @@ paths-ignore:
   # names (generic-api-key, generic-password, etc.) that look like secrets
   # to a generic detector but are the scanner's own allowlist format.
   - ".gitleaksignore"
+  # Contributor example compose files — env var NAME references only
+  # (${VAR:?...}). No actual credentials are embedded. The keywords
+  # PASSWORD, PGPASSWORD, REDIS_PASSWORD are docker-compose key names.
+  - "apps/blackout-server/contrib/**"
 
 secret:
   ignored_paths:
@@ -84,3 +88,5 @@ secret:
     - "**/package-lock.json"
     # gitleaks ignore file — same rationale as the top-level paths-ignore entry.
     - ".gitleaksignore"
+    # Contributor example compose files — same rationale as the top-level entry.
+    - "apps/blackout-server/contrib/**"

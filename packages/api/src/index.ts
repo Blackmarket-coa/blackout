@@ -79,6 +79,7 @@ import { initTracing } from './telemetry/tracing';
 import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
 import { validateProdSecrets } from './config/secrets';
+import { startBurnerReconciler } from './services/burnerReconciler';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 import { matrixClient } from './integrations/matrix-client';
@@ -284,6 +285,9 @@ if (shouldListen && RUNTIME_DB_MODE === 'postgres') {
   }
   await initRuntimeStore(pool);
   log.info('postgres_store_hydrated');
+
+  startBurnerReconciler();
+  log.info('burner_reconciler_started');
 
   const drainOnExit = (signal: string) => {
     void (async () => {

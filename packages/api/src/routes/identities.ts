@@ -72,7 +72,6 @@ identities.post('/', async (c) => {
           message:
             'Could not provision a burner account. Check that MATRIX_HOMESERVER and MATRIX_BOT_TOKEN are configured and the bot has admin rights.',
           reason: outcome.reason,
-          detail: outcome.detail,
         },
         503,
       );
@@ -105,7 +104,6 @@ identities.post('/:burnerUserId/burn', async (c) => {
           code: 'matrix_unavailable',
           message: 'Could not deactivate the burner account on the homeserver.',
           reason: outcome.reason,
-          detail: outcome.detail,
         },
         503,
       );

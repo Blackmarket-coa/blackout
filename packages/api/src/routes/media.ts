@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
-import { authRateLimit } from '../middleware/rate-limit';
+import { perturbRateLimit } from '../middleware/rate-limit';
 import { MAX_PERTURBATION_BYTES, perturbationClient } from '../integrations/perturbation-client';
 
 const media = new Hono();
 
-// Perturbation is CPU/GPU-heavy on the sidecar; rate-limit it per user.
-media.use('/perturb', authRateLimit);
+// Perturbation is CPU/GPU-heavy on the sidecar; rate-limit it with its
+// own bucket so perturbation traffic doesn't exhaust the shared auth limiter.
+media.use('/perturb', perturbRateLimit);
 
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
 

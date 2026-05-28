@@ -1,7 +1,7 @@
 /**
  * "Panic wipe" — clear locally-stored sensitive traces this app keeps in
- * localStorage. Pure over a minimal key/value store interface so it's fully
- * unit-testable and reusable for the real `window.localStorage`.
+ * localStorage, sessionStorage, IndexedDB, and cookies. Pure over a minimal
+ * key/value store interface so it's fully unit-testable and reusable.
  *
  * Two tiers:
  *  - SENSITIVE_TRACE_PREFIXES: privacy-relevant local state (drafts, burner
@@ -63,4 +63,45 @@ export const wipeSensitiveTraces = (store: KeyValueStore, options: WipeOptions =
     const keys = listMatchingKeys(store, prefixes);
     for (const key of keys) store.removeItem(key);
     return keys;
+};
+
+/**
+ * Clear all IndexedDB databases matching known Matrix/Blackout prefixes.
+ * This removes E2EE crypto keys, message history, sync data, and room state.
+ */
+export const wipeIndexedDB = (options: WipeOptions = {}): Promise<void> => {
+    if (typeof indexedDB === 'undefined') return Promise.resolve();
+
+    const prefixesToWipe = [
+        ...SENSITIVE_TRACE_PREFIXES.map((p) => p.replace(/\./g, '-')),
+        ...(options.includeSession ? SESSION_PREFIXES.map((p) => p.replace(/\./g, '-')) : []),
+    ];
+
+    const allDbNames = [
+        'matrix-js-sdk:sync', 'matrix-js-sdk:crypto',
+        'matrix-js-sdk:megolm-backup', 'matrix-js-sdk:timeline',
+        'blackout-session-crypto',
+    ];
+
+    return Promise.all(allDbNames.map((name) =>
+        new Promise<void>((resolve) => {
+            const r = indexedDB.deleteDatabase(name);
+            r.onsuccess = () => resolve();
+            r.onerror = () => resolve();
+            r.onblocked = () => resolve();
+        })
+    )).then(() => undefined);
+};
+
+/**
+ * Clear all cookies for the current origin.
+ */
+export const wipeCookies = (): void => {
+    if (typeof document === 'undefined') return;
+    document.cookie.split(';').forEach((c) => {
+        const eqPos = c.indexOf('=');
+        const name = eqPos > -1 ? c.substring(0, eqPos).trim() : c.trim();
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${window.location.hostname}`;
+    });
 };

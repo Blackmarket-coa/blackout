@@ -10,9 +10,10 @@ import type { DataBroker, GeneratedRequest } from '@blackout/core';
  */
 export const buildMailto = (broker: DataBroker, request: GeneratedRequest): string | null => {
     if (broker.method !== 'email' || !broker.email) return null;
+    const email = encodeURIComponent(broker.email);
     const subject = encodeURIComponent(request.subject);
     const body = encodeURIComponent(request.body);
-    return `mailto:${broker.email}?subject=${subject}&body=${body}`;
+    return `mailto:${email}?subject=${subject}&body=${body}`;
 };
 
 /** The page the user should open for a form-channel broker. */

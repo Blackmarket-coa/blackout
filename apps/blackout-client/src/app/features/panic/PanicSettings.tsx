@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SENSITIVE_TRACE_PREFIXES, wipeSensitiveTraces } from './localTraces';
+import { SENSITIVE_TRACE_PREFIXES, wipeSensitiveTraces, wipeIndexedDB, wipeCookies } from './localTraces';
 
 const CLEARED_SUMMARY = [
     'Unsent message drafts',
@@ -8,6 +8,8 @@ const CLEARED_SUMMARY = [
     'Data-broker request details',
     'Ephemeral-drop view counts',
     'Per-room reading positions',
+    'Local message cache (IndexedDB)',
+    'Session cookies + sessionStorage',
 ];
 
 export function PanicSettings() {
@@ -17,11 +19,16 @@ export function PanicSettings() {
     const wipe = () => {
         try {
             wipeSensitiveTraces(window.localStorage, { includeSession });
-        } finally {
-            // Reload so in-memory state (jotai atoms) is rebuilt from the now-cleared
-            // storage; if the session was cleared this lands on the login screen.
-            window.location.reload();
+            wipeSensitiveTraces(window.sessionStorage, { includeSession });
+        } catch {
+            /* storage may be unavailable */
         }
+        Promise.allSettled([
+            wipeIndexedDB({ includeSession }),
+        ]).finally(() => {
+            try { wipeCookies(); } catch { /* best effort */ }
+            window.location.reload();
+        });
     };
 
     return (

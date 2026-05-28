@@ -39,36 +39,47 @@ export async function createBurnerForOwner(input: CreateBurnerInput): Promise<Cr
   const cap = input.advancedEntitled
     ? ADVANCED_TIER_ACTIVE_BURNER_CAP
     : FREE_TIER_ACTIVE_BURNER_CAP;
-  const active = db.listBurnerIdentitiesForOwner(input.ownerUserId);
-  if (active.length >= cap) {
-    return { kind: 'cap_reached', cap };
+
+  // Atomic cap enforcement: increment counter before provisioning.
+  // If the counter is at or above the cap, reject immediately.
+  const counterResult = db.incrementBurnerCounter(input.ownerUserId, cap);
+  if (!counterResult.ok) {
+    return { kind: 'cap_reached', cap: counterResult.cap };
   }
 
-  const label = (input.label ?? 'Burner').trim().slice(0, 80) || 'Burner';
-  const provisioned = await matrixClient.provisionBurner(label);
-  if (!provisioned.ok) {
-    return {
-      kind: 'matrix_unavailable',
-      reason: provisioned.reason,
-      detail: 'detail' in provisioned ? provisioned.detail : undefined,
-    };
+  try {
+    const label = (input.label ?? 'Burner').replace(/<[^>]*>/g, '').trim().slice(0, 80) || 'Burner';
+    const provisioned = await matrixClient.provisionBurner(label);
+    if (!provisioned.ok) {
+      // Roll back the counter increment on provisioning failure
+      db.decrementBurnerCounter(input.ownerUserId);
+      return {
+        kind: 'matrix_unavailable',
+        reason: provisioned.reason,
+      };
+    }
+
+    const ttlHours = Math.min(
+      Math.max(input.ttlHours ?? DEFAULT_BURNER_TTL_HOURS, 1),
+      MAX_BURNER_TTL_HOURS,
+    );
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+
+    const record = db.createBurnerIdentity({
+      id: randomUUID(),
+      ownerUserId: input.ownerUserId,
+      burnerUserId: provisioned.userId,
+      label,
+      expiresAt,
+      deactivationPending: false,
+    });
+
+    return { kind: 'ok', record, password: provisioned.password, baseUrl: publicBaseUrl() };
+  } catch {
+    // Roll back on any unexpected error
+    db.decrementBurnerCounter(input.ownerUserId);
+    return { kind: 'matrix_unavailable', reason: 'network_error' };
   }
-
-  const ttlHours = Math.min(
-    Math.max(input.ttlHours ?? DEFAULT_BURNER_TTL_HOURS, 1),
-    MAX_BURNER_TTL_HOURS,
-  );
-  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
-
-  const record = db.createBurnerIdentity({
-    id: randomUUID(),
-    ownerUserId: input.ownerUserId,
-    burnerUserId: provisioned.userId,
-    label,
-    expiresAt,
-  });
-
-  return { kind: 'ok', record, password: provisioned.password, baseUrl: publicBaseUrl() };
 }
 
 export function listBurnersForOwner(ownerUserId: string): BurnerIdentityRecord[] {
@@ -88,19 +99,25 @@ export async function burnBurner(input: {
   if (!existing) return { kind: 'not_found' };
   if (existing.burnedAt) return { kind: 'ok', record: existing };
 
+  // Mark as burned locally immediately (optimistic) to free the cap slot
+  const burned = db.markBurnerIdentityBurned(existing.id);
+  if (burned) db.decrementBurnerCounter(input.ownerUserId);
+
   const result = await matrixClient.deactivateUser(existing.burnerUserId, true);
   if (!result.ok) {
-    log.warn('burner.deactivate_failed', {
+    log.warn('burner.deactivate_pending', {
       burnerUserId: existing.burnerUserId,
       reason: result.reason,
     });
+    // Mark for reconciliation — the periodic reconciler will retry
+    if (burned) {
+      db.setBurnerDeactivationPending(burned.id);
+    }
     return {
       kind: 'matrix_unavailable',
       reason: result.reason,
-      detail: 'detail' in result ? result.detail : undefined,
     };
   }
 
-  const burned = db.markBurnerIdentityBurned(existing.id);
   return { kind: 'ok', record: burned ?? existing };
 }
