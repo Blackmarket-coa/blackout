@@ -61,9 +61,11 @@ export async function consumeChallenge(
   const redis = await getRedis();
   if (redis) {
     const key = redisKey('challenge', challenge);
-    const raw = await redis.get(key);
+    // Atomic GET+DEL via Lua script — prevents race condition where
+    // two consumers both read the same challenge before either deletes it.
+    const script = `local v = redis.call('GET', KEYS[1]); if v then redis.call('DEL', KEYS[1]); end; return v`;
+    const raw = await redis.eval(script, 1, key) as string | null;
     if (!raw) return null;
-    await redis.del(key);
     try {
       return JSON.parse(raw) as WebAuthnChallengeRecord;
     } catch {
@@ -92,6 +94,8 @@ export async function upsertCredential(record: WebAuthnCredentialRecord): Promis
     db.upsertWebAuthnCredential(record);
   }
 }
+
+export const storeCredential = upsertCredential;
 
 export async function findCredential(
   credentialId: string,

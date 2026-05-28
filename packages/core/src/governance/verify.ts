@@ -24,18 +24,47 @@ export interface ChainVerificationResult {
   firstBrokenLink?: { index: number; expected: string; actual: string };
 }
 
-export function verifyAuditChain(entries: VoteEntryForAudit[]): ChainVerificationResult {
+async function sha256Hex(input: string): Promise<string> {
+  const encoded = new TextEncoder().encode(input);
+  const buffer = await globalThis.crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function verifyAuditChain(entries: VoteEntryForAudit[]): Promise<ChainVerificationResult> {
   if (entries.length === 0) {
     return { valid: true, entryCount: 0 };
   }
 
-  const sorted = [...entries].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
+  const sorted = [...entries].sort((a, b) => {
+    const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.voteId.localeCompare(b.voteId);
+  });
 
   for (let i = 0; i < sorted.length; i += 1) {
     const entry = sorted[i];
 
+    // Recompute the hash from content and compare with stored entryHash
+    const hashInput = `${entry.voteId}:${entry.userId}:${entry.choice}:${entry.previousHash ?? ''}`;
+    const expectedHash = await sha256Hex(hashInput);
+
+    if (entry.entryHash !== expectedHash) {
+      return {
+        valid: false,
+        invalidAt: i,
+        entryCount: sorted.length,
+        lastHash: entry.entryHash,
+        firstBrokenLink: {
+          index: i,
+          expected: expectedHash,
+          actual: entry.entryHash ?? 'missing',
+        },
+      };
+    }
+
+    // Verify previousHash pointer to prior entry
     if (i > 0) {
       const expectedPrev = sorted[i - 1].entryHash;
       if (entry.previousHash !== expectedPrev) {
@@ -51,19 +80,6 @@ export function verifyAuditChain(entries: VoteEntryForAudit[]): ChainVerificatio
           },
         };
       }
-    }
-
-    if (!entry.entryHash) {
-      return {
-        valid: false,
-        invalidAt: i,
-        entryCount: sorted.length,
-        firstBrokenLink: {
-          index: i,
-          expected: 'present',
-          actual: 'missing',
-        },
-      };
     }
   }
 

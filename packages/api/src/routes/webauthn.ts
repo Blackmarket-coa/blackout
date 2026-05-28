@@ -1,19 +1,26 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
+import { requireUser } from '../middleware/require-user';
 import { authRateLimit } from '../middleware/rate-limit';
 import {
     issueChallenge,
     consumeChallenge,
     parseClientData,
     readWebAuthnConfig,
-    storeCredential,
-    listCredentialsByUser,
-    findCredential,
     verifyAttestation,
     verifyAssertion,
     purgeExpiredChallenges,
 } from '../services/webauthn';
+import {
+    storeCredential,
+    findCredential,
+    listCredentialsByUser,
+} from '../services/webauthnStore';
+import { signJwtWithMeta } from '../services/auth';
+import { issueRefreshToken } from '../services/refreshToken';
+import { readAuthRuntimeConfig } from '../services/auth';
+import { setCookie } from 'hono/cookie';
 import { log } from '../telemetry/logger';
 
 const router = new Hono();
@@ -29,21 +36,20 @@ const requireEnabled = () => {
     return { ok: true as const, cfg };
 };
 
-const registerBeginSchema = z.object({ userId: z.string().min(1) });
+const registerBeginSchema = z.object({});
 
 router.post('/register/begin', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
     const status = requireEnabled();
     if (!status.ok) return c.json({ code: 'webauthn_disabled' }, 503);
     purgeExpiredChallenges();
 
-    const parsed = await readJsonBody(c, registerBeginSchema);
-    if (parsed instanceof Response) return parsed;
-
-    const challenge = issueChallenge(parsed.userId, 'register');
+    const challenge = issueChallenge(user.sub, 'register');
     return c.json({
         challenge: challenge.challenge,
         rp: { id: status.cfg.rpId, name: status.cfg.rpName },
-        user: { id: parsed.userId, name: parsed.userId, displayName: parsed.userId },
+        user: { id: user.sub, name: user.username, displayName: user.username },
         pubKeyCredParams: [
             { type: 'public-key', alg: -7 }, // ES256
             { type: 'public-key', alg: -8 }, // EdDSA
@@ -59,7 +65,6 @@ router.post('/register/begin', async (c) => {
 });
 
 const registerFinishSchema = z.object({
-    userId: z.string().min(1),
     label: z.string().min(1).max(64),
     credential: z.object({
         id: z.string().min(1),
@@ -74,6 +79,8 @@ const registerFinishSchema = z.object({
 });
 
 router.post('/register/finish', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
     const status = requireEnabled();
     if (!status.ok) return c.json({ code: 'webauthn_disabled' }, 503);
 
@@ -83,52 +90,51 @@ router.post('/register/finish', async (c) => {
     const cd = parseClientData(parsed.credential.response.clientDataJSON);
     if (!cd) return c.json({ code: 'malformed_client_data' }, 400);
 
-    const challenge = consumeChallenge(cd.challenge, {
-        userId: parsed.userId,
+    const challengeRecord = consumeChallenge(cd.challenge, {
+        userId: user.sub,
         purpose: 'register',
     });
-    if (!challenge) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
+    if (!challengeRecord) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
 
     const result = await verifyAttestation({
         response: parsed.credential as Parameters<typeof verifyAttestation>[0]['response'],
-        expectedChallenge: challenge.challenge,
+        expectedChallenge: challengeRecord.challenge,
         config: status.cfg,
     });
 
     if (!result.ok) {
-        log.warn('webauthn attestation rejected', { code: result.code, user_id: parsed.userId });
+        log.warn('webauthn attestation rejected', { code: result.code, user_id: user.sub });
         return c.json({ code: result.code, detail: result.detail }, 400);
     }
 
-    storeCredential({
+    await storeCredential({
         credentialId: result.credentialId,
-        userId: parsed.userId,
+        userId: user.sub,
         publicKeyCose: result.publicKeyCose,
         signCount: result.signCount,
         transports: result.transports.length > 0
             ? result.transports
             : parsed.credential.response.transports ?? [],
-        createdAt: Date.now(),
+        createdAt: new Date().toISOString(),
         lastUsedAt: null,
         label: parsed.label,
     });
 
-    log.info('webauthn credential registered', { user_id: parsed.userId, credential_id: result.credentialId });
+    log.info('webauthn credential registered', { user_id: user.sub, credential_id: result.credentialId });
     return c.json({ ok: true, credentialId: result.credentialId });
 });
 
-const loginBeginSchema = z.object({ userId: z.string().min(1) });
+const loginBeginSchema = z.object({});
 
 router.post('/login/begin', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
     const status = requireEnabled();
     if (!status.ok) return c.json({ code: 'webauthn_disabled' }, 503);
     purgeExpiredChallenges();
 
-    const parsed = await readJsonBody(c, loginBeginSchema);
-    if (parsed instanceof Response) return parsed;
-
-    const challenge = issueChallenge(parsed.userId, 'login');
-    const allow = listCredentialsByUser(parsed.userId).map((c) => ({
+    const challenge = issueChallenge(user.sub, 'login');
+    const allow = (await listCredentialsByUser(user.sub)).map((c) => ({
         type: 'public-key' as const,
         id: c.credentialId,
         transports: c.transports,
@@ -144,7 +150,6 @@ router.post('/login/begin', async (c) => {
 });
 
 const loginFinishSchema = z.object({
-    userId: z.string().min(1),
     credential: z.object({
         id: z.string().min(1),
         rawId: z.string().min(1),
@@ -165,32 +170,52 @@ router.post('/login/finish', async (c) => {
     const parsed = await readJsonBody(c, loginFinishSchema);
     if (parsed instanceof Response) return parsed;
 
-    const stored = findCredential(parsed.credential.id);
-    if (!stored || stored.userId !== parsed.userId) {
+    const stored = await findCredential(parsed.credential.id);
+    if (!stored) {
         return c.json({ code: 'unknown_credential' }, 400);
     }
 
     const cd = parseClientData(parsed.credential.response.clientDataJSON);
     if (!cd) return c.json({ code: 'malformed_client_data' }, 400);
 
-    const challenge = consumeChallenge(cd.challenge, {
-        userId: parsed.userId,
+    const challengeRecord = consumeChallenge(cd.challenge, {
+        userId: stored.userId,
         purpose: 'login',
     });
-    if (!challenge) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
+    if (!challengeRecord) return c.json({ code: 'challenge_invalid_or_expired' }, 400);
 
     const result = await verifyAssertion({
         response: parsed.credential as Parameters<typeof verifyAssertion>[0]['response'],
-        expectedChallenge: challenge.challenge,
+        expectedChallenge: challengeRecord.challenge,
         config: status.cfg,
     });
 
     if (!result.ok) {
-        log.warn('webauthn assertion rejected', { code: result.code, user_id: parsed.userId });
+        log.warn('webauthn assertion rejected', { code: result.code, user_id: stored.userId });
         return c.json({ code: result.code, detail: result.detail }, 400);
     }
 
-    return c.json({ ok: true, credentialId: result.credentialId, signCount: result.signCount });
+    // Issue a session after successful WebAuthn login
+    const db = await import('../db/store').then((m) => m.db);
+    const userRecord = db.getUserById(stored.userId);
+    if (!userRecord) {
+        return c.json({ code: 'user_not_found' }, 404);
+    }
+
+    const access = signJwtWithMeta(stored.userId, userRecord.username);
+    const refresh = issueRefreshToken({ userId: stored.userId });
+    const config = readAuthRuntimeConfig();
+    if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
+        setCookie(c, config.cookieName!, access.token, {
+            httpOnly: true,
+            secure: config.cookieSecure,
+            sameSite: config.cookieSameSite,
+            path: '/',
+            maxAge: 86400,
+        });
+    }
+
+    return c.json({ token: access.token, refreshToken: refresh.token, userId: stored.userId, credentialId: result.credentialId, signCount: result.signCount });
 });
 
 export default router;

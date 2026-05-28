@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
+import { requireUser } from '../middleware/require-user';
 
 const federation = new Hono();
 
@@ -16,6 +17,8 @@ const createLinkSchema = z.object({
 });
 
 federation.post('/links', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
   const parsed = await readJsonBody(c, createLinkSchema);
   if (parsed instanceof Response) return parsed;
   const { sourceCommunityId, targetCommunityId, linkType = 'zone', matrixBridgeRoomId } = parsed;

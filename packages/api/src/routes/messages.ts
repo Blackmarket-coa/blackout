@@ -6,13 +6,15 @@ import type { VoteRecord } from '../db/types';
 import { matrixClient } from '../integrations/matrix-client';
 import { routeOutboundMatrixMessage } from '../services/outboundMessageRouter';
 import { readJsonBody } from '../middleware/validate';
+import { requireUser } from '../middleware/require-user';
+import { messageRateLimit } from '../middleware/rate-limit';
 import { log } from '../telemetry/logger';
 
 const messages = new Hono();
+messages.use('*', messageRateLimit);
 
 const sendMessageSchema = z.object({
   content: z.string().min(1),
-  userId: z.string().min(1),
   stegoTier: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   sign: z.boolean().optional(),
   matrixRoomId: z.string().optional(),
@@ -23,6 +25,8 @@ const sendMessageSchema = z.object({
 });
 
 messages.get('/:channelId', (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
   const { channelId } = c.req.param();
   const { limit = '50', before } = c.req.query();
   const parsedLimit = Number.parseInt(limit, 10);
@@ -31,10 +35,13 @@ messages.get('/:channelId', (c) => {
 });
 
 messages.post('/:channelId', async (c) => {
+  const authUser = requireUser(c);
+  if (authUser instanceof Response) return authUser;
   const { channelId } = c.req.param();
   const parsed = await readJsonBody(c, sendMessageSchema);
   if (parsed instanceof Response) return parsed;
-  const { content, stegoTier = 1, sign = false, userId, matrixRoomId, governance } = parsed;
+  const { content, stegoTier = 1, sign = false, matrixRoomId, governance } = parsed;
+  const userId = authUser.sub;
 
   const user = db.getUserById(userId);
   if (!user) {
@@ -45,7 +52,11 @@ messages.post('/:channelId', async (c) => {
   let encryptionAlgorithm: string | undefined;
 
   if (stegoTier === 3) {
-    transformedContent = encodeStego(content, process.env.STEGO_KEY ?? 'local-stego-key');
+    const stegoKey = process.env.STEGO_KEY;
+    if (!stegoKey) {
+      return c.json({ code: 'stego_unavailable', message: 'Steganography is not configured' }, 503);
+    }
+    transformedContent = encodeStego(content, stegoKey);
     encryptionAlgorithm = 'steganography';
   } else if (stegoTier === 2) {
     transformedContent = encryptE2E(content, user.pubkeyEd25519);

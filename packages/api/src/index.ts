@@ -71,6 +71,7 @@ import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
 import { securityHeaders } from './middleware/security-headers';
 import { recordLegacyApiAliasUsage, startLegacyApiAliasWeeklyReporter } from './telemetry/api-alias-usage';
+import { bodyLimit } from 'hono/body-limit';
 import { log } from './telemetry/logger';
 import { httpMetricsMiddleware } from './telemetry/http-metrics';
 import { registry as metricsRegistry } from './telemetry/metrics';
@@ -130,6 +131,7 @@ app.use(
 );
 app.use('*', httpMetricsMiddleware);
 app.use('*', rateLimit);
+app.use(`${API_ROOTS.v1}/*`, bodyLimit({ maxSize: 256 * 1024 })); // 256 KiB
 app.use(`${API_ROOTS.v1}/*`, authMiddleware);
 
 if (legacyAliasEnabled) {

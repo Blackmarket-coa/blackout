@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { writeRateLimit } from '../middleware/rate-limit';
 import {
     AID_POOL_LIMITS,
     AidPoolError,
@@ -15,6 +16,7 @@ import {
 } from '../services/aidPools';
 
 const aidPools = new Hono();
+aidPools.use('*', writeRateLimit);
 
 const createSchema = z.object({
     title: z.string().min(1).max(AID_POOL_LIMITS.maxTitleLength),

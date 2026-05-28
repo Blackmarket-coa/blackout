@@ -6,10 +6,10 @@ matrix:
 # Bot-user connection details
 matrix-bot:
   user_id: '@vertobot:matrix.org'
-  password: ''
+  password: ${VERTOBOT_PASSWORD}  # Must be set via environment variable
   domain: 'matrix.org"
   as_url: 'http://localhost:8009'
-  as_token: 'vertobot123'
+  as_token: ${VERTOBOT_AS_TOKEN}  # Must be set via environment variable. Generate with: openssl rand -hex 32
 
 verto-bot:
   host: webrtc.freeswitch.org

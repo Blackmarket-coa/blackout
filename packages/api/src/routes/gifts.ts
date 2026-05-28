@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { GIFT_SKUS } from '@blackout/core';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { writeRateLimit } from '../middleware/rate-limit';
 import { GiftError, listGiftCatalog, sendGift } from '../services/gifts';
 
 const gifts = new Hono();
+gifts.use('*', writeRateLimit);
 
 const sendSchema = z.object({
     recipientUserId: z.string().min(1),

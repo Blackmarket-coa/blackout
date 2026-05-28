@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
-import { authRateLimit } from '../middleware/rate-limit';
+import { mfaRateLimit } from '../middleware/rate-limit';
 import { db } from '../db/store';
 import {
   enableMFA,
@@ -13,7 +13,7 @@ import {
 
 const mfa = new Hono();
 
-mfa.use('*', authRateLimit);
+mfa.use('*', mfaRateLimit);
 
 mfa.get('/status', (c) => {
   const user = requireUser(c);
@@ -33,7 +33,7 @@ mfa.post('/totp/setup', (c) => {
   if (user instanceof Response) return user;
 
   const existing = db.getMFAConfig(user.sub);
-  if (existing?.enabled) {
+  if (existing?.verified) {
     return c.json({ code: 'mfa_already_enabled', message: 'MFA is already enabled. Disable it first.' }, 409);
   }
 
@@ -95,16 +95,20 @@ mfa.post('/recovery/use', async (c) => {
   if (parsed instanceof Response) return parsed;
 
   const outcome = verifyRecoveryCode(user.sub, parsed.code);
-  if (outcome.kind === 'invalid') {
-    return c.json({ code: 'invalid_code', message: 'Invalid recovery code' }, 400);
-  }
-  if (outcome.kind === 'already_used') {
-    return c.json({ code: 'code_already_used', message: 'This recovery code has already been used' }, 400);
+  if (outcome.kind !== 'ok') {
+    return c.json({ code: 'invalid_code', message: 'Invalid or already-used recovery code' }, 400);
   }
 
   const config = db.getMFAConfig(user.sub);
   const remainingCodes = (config?.recoveryCodeHashes?.length ?? 0) - (config?.usedRecoveryCodes?.length ?? 0);
-  return c.json({ ok: true, recoveryCodesRemaining: Math.max(0, remainingCodes) });
+
+  // When the last recovery code is used, disable MFA so the user can
+  // set up a new TOTP device without being locked out.
+  if (remainingCodes <= 0) {
+    db.disableMFA(user.sub);
+  }
+
+  return c.json({ ok: true, recoveryCodesRemaining: Math.max(0, remainingCodes), mfaDisabled: remainingCodes <= 0 ? true : undefined });
 });
 
 export default mfa;

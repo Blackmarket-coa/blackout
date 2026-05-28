@@ -82,6 +82,7 @@ export function listCreatorListingsForUser(sellerUserId: string): CreatorListing
 
 export function updateCreatorListingStatus(
     id: string,
+    sellerUserId: string,
     update: {
         status?: CreatorListingStatus;
         providerListingId?: string | null;
@@ -90,6 +91,7 @@ export function updateCreatorListingStatus(
 ): CreatorListing | undefined {
     const existing = db.getCreatorListing(id);
     if (!existing) return undefined;
+    if (existing.sellerUserId !== sellerUserId) return undefined;
     const patch: Partial<
         Pick<CreatorListingRecord, 'status' | 'providerListingId' | 'publicSlug' | 'publishedAt'>
     > = {};

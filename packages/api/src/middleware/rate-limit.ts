@@ -1,7 +1,7 @@
 import type { Context, Next } from 'hono';
 import { readRedisRuntimeConfig } from '../config/redis';
 import { log } from '../telemetry/logger';
-import { rateLimitHitsTotal } from '../telemetry/metrics';
+import { rateLimitFailOpenTotal, rateLimitHitsTotal } from '../telemetry/metrics';
 
 export interface RateLimitOptions {
   bucket: string;
@@ -123,8 +123,7 @@ export function createRateLimit(options: RateLimitOptions) {
     try {
       count = await store.hit(key, windowMs);
     } catch (err) {
-      // Fail-open with a warning rather than 500. The legacy behavior was effectively fail-open
-      // because the in-memory store could not error.
+      rateLimitFailOpenTotal.inc({ bucket });
       log.warn('rate-limit: store error, allowing request', { bucket, error: String(err) });
       return next();
     }
@@ -171,4 +170,46 @@ export const perturbRateLimit = createRateLimit({
   bucket: 'perturb',
   windowMs: 60_000,
   maxRequests: Number.isFinite(perturbMax) && perturbMax > 0 ? perturbMax : 10,
+});
+
+const mfaMax = Number.parseInt(process.env.MFA_RATE_LIMIT_MAX ?? '', 10);
+export const mfaRateLimit = createRateLimit({
+  bucket: 'mfa',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(mfaMax) && mfaMax > 0 ? mfaMax : 5,
+});
+
+const messageMax = Number.parseInt(process.env.MESSAGE_RATE_LIMIT_MAX ?? '', 10);
+export const messageRateLimit = createRateLimit({
+  bucket: 'message',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(messageMax) && messageMax > 0 ? messageMax : 60,
+});
+
+const writeMax = Number.parseInt(process.env.WRITE_RATE_LIMIT_MAX ?? '', 10);
+export const writeRateLimit = createRateLimit({
+  bucket: 'write',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(writeMax) && writeMax > 0 ? writeMax : 30,
+});
+
+const coalitionMax = Number.parseInt(process.env.COALITION_RATE_LIMIT_MAX ?? '', 10);
+export const coalitionRateLimit = createRateLimit({
+  bucket: 'coalition',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(coalitionMax) && coalitionMax > 0 ? coalitionMax : 20,
+});
+
+const voiceMax = Number.parseInt(process.env.VOICE_RATE_LIMIT_MAX ?? '', 10);
+export const voiceRateLimit = createRateLimit({
+  bucket: 'voice',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(voiceMax) && voiceMax > 0 ? voiceMax : 10,
+});
+
+const adminOpMax = Number.parseInt(process.env.ADMIN_RATE_LIMIT_MAX ?? '', 10);
+export const adminRateLimit = createRateLimit({
+  bucket: 'admin-op',
+  windowMs: 60_000,
+  maxRequests: Number.isFinite(adminOpMax) && adminOpMax > 0 ? adminOpMax : 10,
 });

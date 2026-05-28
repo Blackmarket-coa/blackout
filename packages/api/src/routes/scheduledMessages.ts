@@ -3,8 +3,10 @@ import { z } from 'zod';
 import { db } from '../db/store';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { writeRateLimit } from '../middleware/rate-limit';
 
 const scheduledMessages = new Hono();
+scheduledMessages.use('*', writeRateLimit);
 
 const createScheduledMessageSchema = z.object({
   matrixRoomId: z.string().trim().min(1),

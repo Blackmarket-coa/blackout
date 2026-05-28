@@ -103,16 +103,36 @@ const getSessionMap = (): SessionMap => {
     return cachedSessionMap;
 };
 
+let writePending: string | null = null;
+let writePromise: Promise<void> | null = null;
+
 const persistSessionMap = (sessionMap: SessionMap): void => {
     cachedSessionMap = sessionMap;
-    securelyStoreSession(JSON.stringify(sessionMap)).catch(() => {
-        // Fallback: write unencrypted so data is not lost on crypto failure
-        try {
-            window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionMap));
-        } catch {
-            // Best effort
-        }
-    });
+    const json = JSON.stringify(sessionMap);
+    writePending = json;
+
+    if (!writePromise) {
+        writePromise = securelyStoreSession(json)
+            .then(() => {
+                // If another write was queued while we were encrypting, flush it
+                if (writePending !== json && writePending) {
+                    const latest = writePending;
+                    writePending = null;
+                    return securelyStoreSession(latest);
+                }
+            })
+            .catch(() => {
+                try {
+                    window.localStorage.setItem(SESSION_STORAGE_KEY, writePending ?? json);
+                } catch {
+                    // Best effort
+                }
+            })
+            .finally(() => {
+                writePromise = null;
+                writePending = null;
+            });
+    }
 };
 
 export const loadSessionMap = (): SessionMap => getSessionMap();

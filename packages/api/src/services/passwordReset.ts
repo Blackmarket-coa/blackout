@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../db/store';
 import type { PasswordResetTokenRecord, UserRecord } from '../db/types';
-import { hashPassword, isAcceptablePassword } from './auth';
+import { hashPassword, isAcceptablePassword, isBreachedPassword } from './auth';
 import { revokeAllForUser } from './refreshToken';
 
 const RESET_TOKEN_BYTES = 32;
@@ -50,7 +50,8 @@ export type ConsumeOutcome =
   | { kind: 'invalid' }
   | { kind: 'expired' }
   | { kind: 'consumed' }
-  | { kind: 'weak_password' };
+  | { kind: 'weak_password' }
+  | { kind: 'breached_password' };
 
 export const consumePasswordResetToken = async (presentedToken: string, newPassword: string): Promise<ConsumeOutcome> => {
   const record = db.findPasswordResetTokenByHash(sha256(presentedToken));
@@ -58,6 +59,7 @@ export const consumePasswordResetToken = async (presentedToken: string, newPassw
   if (record.consumedAt) return { kind: 'consumed' };
   if (new Date(record.expiresAt).getTime() <= Date.now()) return { kind: 'expired' };
   if (!isAcceptablePassword(newPassword)) return { kind: 'weak_password' };
+  if (await isBreachedPassword(newPassword)) return { kind: 'breached_password' };
 
   const user = db.getUserById(record.userId);
   if (!user) return { kind: 'invalid' };

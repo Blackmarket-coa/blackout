@@ -73,11 +73,13 @@ import {
 import { createTask, listTasks, newTaskId, updateTaskStatus } from '../services/taskStore';
 import { authorizeScope, installPluginAtScope } from '../services/pluginInstallations';
 import { db } from '../db/store';
+import { coalitionRateLimit } from '../middleware/rate-limit';
 import { matrixClient } from '../integrations/matrix-client';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 
 const coalition = new Hono();
+coalition.use('*', coalitionRateLimit);
 
 const feedQuerySchema = z.object({
     canopyId: z.string().optional(),

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { writeRateLimit } from '../middleware/rate-limit';
 import { db } from '../db/store';
 import type { VaultItemRecord } from '../db/types';
 
@@ -12,6 +13,7 @@ import type { VaultItemRecord } from '../db/types';
  * route is strictly owner-scoped.
  */
 const vault = new Hono();
+vault.use('*', writeRateLimit);
 
 const MAX_BLOB = 64 * 1024; // 64 KiB of base64 ciphertext per item.
 
@@ -47,11 +49,18 @@ vault.get('/items', (c) => {
     return c.json({ items: db.listVaultItemsForOwner(user.sub).map(toView) });
 });
 
+const vaultMaxItems = Number.parseInt(process.env.VAULT_MAX_ITEMS_PER_USER ?? '', 10) || 50;
+
 vault.post('/items', async (c) => {
     const user = requireUser(c, 'Sign in to add a vault item');
     if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, createSchema);
     if (parsed instanceof Response) return parsed;
+
+    const existing = db.listVaultItemsForOwner(user.sub);
+    if (existing.length >= vaultMaxItems) {
+        return c.json({ code: 'vault_full', message: `Vault is full (${vaultMaxItems} items max)` }, 409);
+    }
     const record = db.createVaultItem({
         id: crypto.randomUUID(),
         ownerUserId: user.sub,

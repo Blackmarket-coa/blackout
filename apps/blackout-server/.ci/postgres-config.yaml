@@ -12,7 +12,7 @@ database:
   args:
     user: postgres
     host: localhost
-    password: postgres
+    password: ${CI_POSTGRES_PASSWORD:-postgres}  # CI-only: ephemeral Docker Postgres, never exposed to external network
     database: synapse
 
 # Suppress the key server warning.

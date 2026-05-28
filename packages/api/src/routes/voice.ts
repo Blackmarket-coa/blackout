@@ -6,16 +6,18 @@ import { readJsonBody } from '../middleware/validate';
 import { createLiveKitAccessToken, getLiveKitConfig, type VoiceRole } from '../services/livekit';
 import { hasPremiumCanopyEntitlement } from '../services/subscriptions';
 import { hasCanopy } from '../services/canopyDirectory';
+import { voiceRateLimit } from '../middleware/rate-limit';
 
-function roleFromRequest(input: unknown): VoiceRole {
-  if (input === 'admin' || input === 'moderator') return input;
+function roleForCanopy(_userId: string, _canopyId: string): VoiceRole {
+  // TODO: Look up canopy membership role from a canopy members table.
+  // For MVP, no user has admin/moderator privileges via voice routes —
+  // those roles must be assigned through a proper canopy membership system.
   return 'member';
 }
 
 const roomCoordsSchema = z.object({
   canopyId: z.string().trim().min(1),
   channelId: z.string().trim().min(1),
-  role: z.unknown().optional(),
 });
 
 const joinRoomSchema = roomCoordsSchema.extend({
@@ -43,6 +45,7 @@ function roomName(canopyId: string, channelId: string): string {
 }
 
 const voice = new Hono();
+voice.use('*', voiceRateLimit);
 
 voice.get('/config', (c) => {
   const config = getLiveKitConfig();
@@ -55,7 +58,7 @@ voice.post('/rooms/create', async (c) => {
   const parsed = await readJsonBody(c, roomCoordsSchema);
   if (parsed instanceof Response) return parsed;
   const { canopyId, channelId } = parsed;
-  const role = roleFromRequest(parsed.role);
+  const role = roleForCanopy(user.sub, canopyId);
 
   if (!hasCanopy(canopyId)) {
     return c.json({ code: 'unknown_canopy', message: 'Canopy is not registered', canopyId }, 404);
@@ -86,7 +89,7 @@ voice.post('/rooms/join', async (c) => {
   const parsed = await readJsonBody(c, joinRoomSchema);
   if (parsed instanceof Response) return parsed;
   const { canopyId, channelId } = parsed;
-  const role = roleFromRequest(parsed.role);
+  const role = roleForCanopy(user.sub, canopyId);
   const requestedCanPublish = parsed.canPublish ?? true;
   const requestedCanSubscribe = parsed.canSubscribe ?? true;
 
@@ -181,7 +184,7 @@ voice.post('/token', async (c) => {
   const parsed = await readJsonBody(c, tokenSchema);
   if (parsed instanceof Response) return parsed;
   const { canopyId, channelId } = parsed;
-  const role = roleFromRequest(parsed.role);
+  const role = roleForCanopy(user.sub, canopyId);
 
   const room = db.getVoiceRoom(canopyId, channelId);
   if (!room) return c.json({ code: 'room_not_found', message: 'Room not found' }, 404);
@@ -212,7 +215,7 @@ voice.post('/rooms/moderation/:action', async (c) => {
   if (parsed instanceof Response) return parsed;
   const { canopyId, channelId } = parsed;
   const targetUserId = parsed.targetUserId ?? '';
-  const role = roleFromRequest(parsed.role);
+  const role = roleForCanopy(user.sub, canopyId);
 
   if (!canModerate(role)) {
     return c.json({ code: 'forbidden', message: 'Only canopy admins/mods can perform voice moderation controls' }, 403);

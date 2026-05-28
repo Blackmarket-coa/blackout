@@ -9,6 +9,7 @@
  */
 
 const BATCH_SIZE = 10_000;
+const MAX_ATTEMPTS = 1_000_000;
 
 function countLeadingZeroBits(hex: string): number {
     let bits = 0;
@@ -37,7 +38,7 @@ async function sha256Hex(input: string): Promise<string> {
 
 export interface PowSolution {
     nonce: string;
-    token: string;
+    token: string; // userId:challenge:nonce
     attempts: number;
 }
 
@@ -49,25 +50,29 @@ export async function solvePow(
     let nonce = 0;
     let attempts = 0;
 
-    while (true) {
-        for (let i = 0; i < BATCH_SIZE; i += 1) {
+    while (attempts < MAX_ATTEMPTS) {
+        for (let i = 0; i < BATCH_SIZE && attempts < MAX_ATTEMPTS; i += 1) {
             const candidate = `n${nonce}`;
-            const hash = await sha256Hex(challenge + candidate);
+            const hash = await sha256Hex(`${challenge}:${candidate}`);
             const bits = countLeadingZeroBits(hash);
             attempts += 1;
 
             if (bits >= difficulty) {
-                return {
-                    nonce: candidate,
-                    token: `${challenge}:${candidate}`,
-                    attempts,
-                };
+    return {
+        nonce: candidate,
+        token: `${challenge}:${candidate}`,
+        attempts,
+    };
             }
             nonce += 1;
         }
+
+        if (attempts >= MAX_ATTEMPTS) break;
 
         // Yield to the event loop every batch to avoid UI jank
         onProgress?.(attempts);
         await new Promise((resolve) => setTimeout(resolve, 0));
     }
+
+    throw new Error(`PoW solver exceeded ${MAX_ATTEMPTS} attempts without finding a solution. Difficulty ${difficulty} may be too high.`);
 }

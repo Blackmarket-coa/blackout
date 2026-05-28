@@ -1,27 +1,35 @@
 import React from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
-interface SafeHtmlBoundaryProps {
+/**
+ * Crash-isolation wrapper for HTML content rendered via `dangerouslySetInnerHTML`.
+ *
+ * IMPORTANT: This component does NOT sanitize HTML. It only catches React
+ * rendering errors (e.g., malformed DOM from browser-specific DOMParser quirks).
+ * Always pass pre-sanitized HTML (via sanitize-html, DOMPurify, or equivalent).
+ */
+
+interface HtmlErrorBoundaryProps {
     html: string;
     className?: string;
     style?: React.CSSProperties;
     as?: 'div' | 'span' | 'p';
 }
 
-function FallbackText({ className, style, as: Tag = 'div' }: Omit<SafeHtmlBoundaryProps, 'html'>) {
+function FallbackText({ className, style, as: Tag = 'div' }: Omit<HtmlErrorBoundaryProps, 'html'>) {
     return React.createElement(Tag, { className, style }, '[Content unavailable]');
 }
 
-export function SafeHtmlBoundary({ html, ...rest }: SafeHtmlBoundaryProps) {
+export function HtmlErrorBoundary({ html, ...rest }: HtmlErrorBoundaryProps) {
     if (!html) return null;
     return (
         <ErrorBoundary FallbackComponent={(props) => <FallbackText {...rest} />}>
-            <SafeHtmlContent html={html} {...rest} />
+            <HtmlContent html={html} {...rest} />
         </ErrorBoundary>
     );
 }
 
-function SafeHtmlContent({ html, as: Tag = 'div', className, style }: SafeHtmlBoundaryProps) {
+function HtmlContent({ html, as: Tag = 'div', className, style }: HtmlErrorBoundaryProps) {
     return React.createElement(Tag, {
         className,
         style,
@@ -29,14 +37,14 @@ function SafeHtmlContent({ html, as: Tag = 'div', className, style }: SafeHtmlBo
     });
 }
 
-export const SafeHtmlDiv = React.memo((props: Omit<SafeHtmlBoundaryProps, 'as'>) => (
-    <SafeHtmlBoundary {...props} as="div" />
+export const HtmlErrorDiv = React.memo((props: Omit<HtmlErrorBoundaryProps, 'as'>) => (
+    <HtmlErrorBoundary {...props} as="div" />
 ));
 
-SafeHtmlDiv.displayName = 'SafeHtmlDiv';
+HtmlErrorDiv.displayName = 'HtmlErrorDiv';
 
-export const SafeHtmlSpan = React.memo((props: Omit<SafeHtmlBoundaryProps, 'as'>) => (
-    <SafeHtmlBoundary {...props} as="span" />
+export const HtmlErrorSpan = React.memo((props: Omit<HtmlErrorBoundaryProps, 'as'>) => (
+    <HtmlErrorBoundary {...props} as="span" />
 ));
 
-SafeHtmlSpan.displayName = 'SafeHtmlSpan';
+HtmlErrorSpan.displayName = 'HtmlErrorSpan';

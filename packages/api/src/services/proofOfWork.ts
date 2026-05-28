@@ -3,11 +3,12 @@
  *
  * Uses a hashcash-style scheme: the client must find a nonce such that
  * SHA-256(challenge + nonce) has at least DIFFICULTY_BITS leading zero bits.
- * This deters automated account creation at scale without requiring CAPTCHA
- * or third-party services.
+ * Challenges are bound to the requester's identity via composite map key.
  *
- * Challenges are stored in-memory with a 5-minute TTL (Redis-backed in
- * multi-process deployments). Each challenge is single-use.
+ * Challenges are stored in-memory with a 5-minute TTL. Each challenge is
+ * single-use.
+ *
+ * TODO: Redis backing for multi-process deployments.
  */
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -39,21 +40,23 @@ export function generateChallenge(userId: string, difficultyOverride?: number): 
     const expiresAt = Date.now() + CHALLENGE_TTL_MS;
     const record: PowChallenge = { challenge, difficulty, expiresAt };
 
-    challenges.set(challenge, record);
+    // Key by composite (userId, challenge) — binds the solution to the identity
+    challenges.set(`${userId}:${challenge}`, record);
     return { challenge, difficulty, expiresAt };
 }
 
-export function verifyPow(challenge: string, nonce: string, difficulty: number): boolean {
-    const record = challenges.get(challenge);
+export function verifyPow(userId: string, challenge: string, nonce: string, difficulty: number): boolean {
+    const key = `${userId}:${challenge}`;
+    const record = challenges.get(key);
     if (!record || record.difficulty !== difficulty || Date.now() > record.expiresAt) {
         return false;
     }
 
-    const hash = createHash('sha256').update(challenge + nonce).digest();
+    const hash = createHash('sha256').update(`${challenge}:${nonce}`).digest();
     const bits = countLeadingZeroBits(hash);
 
     if (bits >= difficulty) {
-        challenges.delete(challenge); // single-use
+        challenges.delete(key); // single-use
         return true;
     }
     return false;
@@ -65,7 +68,6 @@ function countLeadingZeroBits(bytes: Buffer): number {
         if (bytes[i] === 0) {
             bits += 8;
         } else {
-            // Count leading zero bits in this byte
             let byte = bytes[i];
             while ((byte & 0x80) === 0) {
                 bits += 1;

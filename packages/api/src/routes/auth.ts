@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { db } from '../db/store';
 import {
@@ -50,6 +50,11 @@ const auth = new Hono();
 auth.use('/login', authRateLimit);
 auth.use('/register', authRateLimit);
 auth.use('/account-number', authRateLimit);
+auth.use('/login/mfa', authRateLimit);
+auth.use('/password', authRateLimit);
+auth.use('/token/refresh', authRateLimit);
+auth.use('/matrix/exchange', authRateLimit);
+auth.use('/email/verify', authRateLimit);
 
 const buildVerificationLink = (token: string): string => {
   const base = (process.env.PUBLIC_APP_URL ?? 'http://localhost:8080').replace(/\/+$/, '');
@@ -116,6 +121,67 @@ const registerSchema = z.object({
   inviteToken: z.string().min(1).max(512).optional(),
 });
 
+auth.post('/register', async (c) => {
+  const parsed = await readJsonBody(c, registerSchema);
+  if (parsed instanceof Response) return parsed;
+  const { username, email, password, inviteToken } = parsed;
+
+  if (!isAcceptablePassword(password)) {
+    return c.json(
+      { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+      400,
+    );
+  }
+
+  if (await isBreachedPassword(password)) {
+    return c.json(
+      { code: 'breached_password', message: 'This password has appeared in data breaches. Please choose a different one.' },
+      400,
+    );
+  }
+
+  if (process.env.REQUIRE_INVITE_TOKEN === '1' && !inviteToken) {
+    return c.json({ code: 'invite_required', message: 'Registration requires an invitation token' }, 403);
+  }
+
+  if (db.findUserByEmail(email) || db.findUserByUsername(username)) {
+    return c.json({ code: 'user_exists', message: 'User already exists' }, 409);
+  }
+
+  const userId = crypto.randomUUID();
+  const passwordHash = await hashPassword(password);
+  const pubkeyEd25519 = crypto.randomUUID().replace(/-/g, '');
+
+  const user = db.createUser({
+    id: userId, username, email, passwordHash,
+    reputationScore: 0, reputationTier: 'member', pubkeyEd25519,
+  });
+
+  const matrix = await matrixClient.registerUser(username, password);
+  if (!matrix.ok && !('reason' in matrix && matrix.reason === 'matrix_not_configured')) {
+    db.deleteUser(user.id);
+    return c.json({ code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' }, 502);
+  }
+
+  if (inviteToken) {
+    const outcome = await redeemInvitation(inviteToken, user);
+    if (outcome.kind !== 'ok') {
+      db.deleteUser(user.id);
+      return c.json({ code: 'invite_token_invalid', message: 'Invitation token is not usable', reason: outcome.kind }, 400);
+    }
+  }
+
+  void autoJoinWelcomeRoom(username);
+
+  if (process.env.REQUIRE_EMAIL_VERIFICATION === '1') {
+    return c.json({ ok: true, userId, emailVerificationRequired: true }, 201);
+  }
+
+  const session = issueSession(userId, username, c.req.header('user-agent'));
+  setAuthCookie(c, session.access.token, 86400);
+  return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId }, 201);
+});
+
 const loginSchema = z.object({
   email: z.string().min(1),
   password: z.string().min(1),
@@ -164,9 +230,25 @@ auth.post('/account-number/pow-challenge', (c) => {
 
 auth.post('/account-number', async (c) => {
   // Anonymous endpoint: no session required by design (this IS the sign-up
-  // flow for users without email/password). Anti-automation is provided by
-  // the proof-of-work challenge + rate limiting (10 req/min/IP). For additional
-  // protection, enable `REQUIRE_INVITE_TOKEN=1`.
+  // flow for users without email/password). Anti-automation is via
+  // proof-of-work challenge + rate limiting (10 req/min/IP).
+
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? 'anon';
+
+  // Validate PoW challenge — must be solved before account creation.
+  // Accept token from x-pow-token header (preferred) or JSON body.
+  let powToken = c.req.header('x-pow-token') ?? '';
+  if (!powToken) {
+    try { const body = await c.req.json(); powToken = (body as { powToken?: string })?.powToken ?? ''; } catch { /* body may be empty */ }
+  }
+  if (powToken) {
+    const [challenge, nonce] = powToken.includes(':') ? powToken.split(':') : ['', ''];
+    if (!verifyPow(ip, challenge, nonce, Number.parseInt(process.env.POW_DIFFICULTY_BITS ?? '') || 16)) {
+      return c.json({ code: 'pow_required', message: 'Invalid or expired proof-of-work. Request a new challenge from /account-number/pow-challenge.' }, 428);
+    }
+  } else {
+    return c.json({ code: 'pow_required', message: 'Proof-of-work required. POST to /account-number/pow-challenge first.' }, 428);
+  }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     // Exponential backoff between retry attempts to avoid hammering
@@ -178,43 +260,17 @@ auth.post('/account-number', async (c) => {
     const accountNumber = generateAccountNumber();
     const localpart = await accountNumberToLocalpart(accountNumber);
 
-    // Prefer shared-secret registration (only creates users, no admin powers).
-    // Falls back to the full admin bot token if no shared secret is configured.
-    type MatrixResult = Awaited<ReturnType<typeof matrixClient.registerWithSharedSecret>> | Awaited<ReturnType<typeof matrixClient.registerUser>>;
-    let matrix: MatrixResult = await matrixClient.registerWithSharedSecret(localpart, accountNumber);
-    if (!matrix.ok && matrix.reason === 'registration_secret_not_configured') {
-      try {
-        matrix = await matrixClient.registerUser(localpart, accountNumber);
-      } catch (error) {
-        return c.json(
-          { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
-          502,
-        );
-      }
-    } else if (!matrix.ok && matrix.reason === 'network_error') {
-      // Network failure on the shared-secret path — don't retry with admin API
+    const matrix = await matrixClient.registerWithSharedSecret(localpart, accountNumber);
+    if (!matrix.ok) {
+      // Collision / rejection → mint a fresh number and retry (Synapse 400/409).
+      if (matrix.status === 400 || matrix.status === 409) continue;
       return c.json(
-        { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
+        { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account. Ensure MATRIX_REGISTRATION_SHARED_SECRET is configured.' },
         502,
       );
     }
 
-    const isDevBypass = !('ok' in matrix) || (matrix as { reason?: string }).reason === 'matrix_not_configured';
-    if (isDevBypass && process.env.NODE_ENV !== 'production') {
-      return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
-    }
-
-    if (matrix.ok) {
-      return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
-    }
-
-    // Collision / rejection on this localpart → mint a fresh number and retry.
-    if (matrix.status === 400 || matrix.status === 409) continue;
-
-    return c.json(
-      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
-      502,
-    );
+    return c.json({ accountNumber: formatAccountNumber(accountNumber) }, 201);
   }
 
   return c.json(
@@ -400,7 +456,7 @@ auth.post('/matrix/exchange', async (c) => {
     user = db.createUser({
       id: crypto.randomUUID(),
       username: localpart,
-      email: '',
+      email: `${localpart}@matrix.internal`,
       passwordHash: '',
       reputationScore: 0,
       reputationTier: 'member',
@@ -566,6 +622,11 @@ auth.post('/password/reset/confirm', async (c) => {
     case 'weak_password':
       return c.json(
         { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+        400,
+      );
+    case 'breached_password':
+      return c.json(
+        { code: 'breached_password', message: 'This password has appeared in data breaches. Please choose a different one.' },
         400,
       );
     case 'expired':

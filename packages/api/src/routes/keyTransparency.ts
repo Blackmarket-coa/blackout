@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { readJsonBody } from '../middleware/validate';
+import { requireUser } from '../middleware/require-user';
 import {
     KeyTransparencyLog,
     ed25519Witness,
@@ -43,20 +44,21 @@ const ktLog = new KeyTransparencyLog({
 const router = new Hono();
 
 const appendSchema = z.object({
-    userId: z.string().min(1),
     masterKey: z.string().min(1),
 });
 
 router.post('/append', async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
     const parsed = await readJsonBody(c, appendSchema);
     if (parsed instanceof Response) return parsed;
 
     const result = ktLog.append({
-        userId: parsed.userId,
+        userId: user.sub,
         masterKey: parsed.masterKey,
         publishedAt: Date.now(),
     });
-    log.info('kt log append', { user_id: parsed.userId, leaf_index: result.leafIndex });
+    log.info('kt log append', { user_id: user.sub, leaf_index: result.leafIndex });
     return c.json({
         leafIndex: result.leafIndex,
         root: result.root,
