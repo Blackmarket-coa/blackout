@@ -20,7 +20,6 @@ import { MatrixBootstrapper } from './app/components/bmc/MatrixBootstrapper';
 import { PluginEntitlementHydrator } from './app/features/monetization/install/PluginEntitlementHydrator';
 import { useMatrixClient } from './app/hooks/useMatrixClient';
 import { useBindAllRoomsAtom } from './app/state/rooms';
-import { LoginPage } from './app/components/bmc/auth';
 import { RuntimeSettingsBridge } from './app/components/RuntimeSettingsBridge';
 import { authStateAtom, cryptoInitErrorAtom } from './app/state/auth';
 import { capabilityContextAtom } from './app/core/features/capabilityContext';
@@ -39,12 +38,16 @@ import { useStore } from 'jotai';
 import './index.css';
 import './app/styles/theme.css.ts';
 import './app/i18n';
-import ClientLayout from './app/pages/client/ClientLayout';
-import { AppShell } from './app/pages/shell/AppShell';
-import { OAuthCallback } from './app/features/settings/linked-accounts/OAuthCallback';
-import { InviteLandingPage, PendingInviteRedeemer } from './app/components/invite-landing';
-import { OnboardingPage } from './app/features/welcome/OnboardingPage';
-import { PublicDirectory } from './app/features/discovery/PublicDirectory';
+// Lazy-loaded to avoid pulling matrix-js-sdk's top-level WASM await
+// into the main module graph. The bypass mode never needs these.
+const ClientLayout = React.lazy(() => import('./app/pages/client/ClientLayout'));
+const AppShellLazy = React.lazy(() => import('./app/pages/shell/AppShell').then(m => ({ default: m.AppShell })));
+const LoginPageLazy = React.lazy(() => import('./app/components/bmc/auth').then(m => ({ default: m.LoginPage })));
+const OAuthCallbackLazy = React.lazy(() => import('./app/features/settings/linked-accounts/OAuthCallback').then(m => ({ default: m.OAuthCallback })));
+const InviteLandingPageLazy = React.lazy(() => import('./app/components/invite-landing').then(m => ({ default: m.InviteLandingPage })));
+const PendingInviteRedeemerLazy = React.lazy(() => import('./app/components/invite-landing').then(m => ({ default: m.PendingInviteRedeemer })));
+const OnboardingPageLazy = React.lazy(() => import('./app/features/welcome/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
+const PublicDirectoryLazy = React.lazy(() => import('./app/features/discovery/PublicDirectory').then(m => ({ default: m.PublicDirectory })));
 import { ONBOARDING_PATH } from './app/pages/paths';
 import { trimTrailingSlash } from './app/utils/common';
 
@@ -211,11 +214,11 @@ const buildAppRouter = (capabilityContext: {
         // already-signed-in recipient gets the auto-redeem flow. The
         // logged-out case is intercepted in BootstrapStatus before this
         // router ever mounts (see below).
-        { path: '/invite/:token', element: <InviteLandingPage /> },
+        { path: '/invite/:token', element: <React.Suspense fallback={null}><InviteLandingPageLazy /></React.Suspense> },
         // Full-page onboarding host. Invite acceptance routes brand-new users
         // here (with the invited room as `?room=`) before dropping them into
         // the room; otherwise the wizard only ever shows as a ClientLayout modal.
-        { path: ONBOARDING_PATH, element: <OnboardingPage /> },
+        { path: ONBOARDING_PATH, element: <React.Suspense fallback={null}><OnboardingPageLazy /></React.Suspense> },
         ...authRedirectRoutes,
         ...registryRoutes,
     ];
@@ -227,9 +230,9 @@ const buildAppRouter = (capabilityContext: {
                 // OAuth popup landing page. Mounted OUTSIDE the AppShell so
                 // a popup window doesn't render the full app chrome before
                 // it auto-closes itself.
-                { path: '/oauth/:provider/callback', element: <OAuthCallback /> },
+                { path: '/oauth/:provider/callback', element: <React.Suspense fallback={null}><OAuthCallbackLazy /></React.Suspense> },
                 ...(shellEnabled
-                    ? [{ element: <AppShell />, children: destinationRoutes }]
+                    ? [{ element: <React.Suspense fallback={null}><AppShellLazy /></React.Suspense>, children: destinationRoutes }]
                     : destinationRoutes),
             ],
         },
@@ -264,7 +267,7 @@ const BootstrapStatus = () => {
                 <RoomsAtomBinder />
                 <CapabilityHydrator />
                 <PluginEntitlementHydrator />
-                <PendingInviteRedeemer />
+                <React.Suspense fallback={null}><PendingInviteRedeemerLazy /></React.Suspense>
                 <RouterProvider router={router} />
             </>
         );
@@ -282,7 +285,7 @@ const BootstrapStatus = () => {
         authState !== 'crypto_initializing' &&
         authState !== 'crypto_failed'
     ) {
-        return <InviteLandingPage />;
+        return <React.Suspense fallback={null}><InviteLandingPageLazy /></React.Suspense>;
     }
 
     // Public room directory is browsable without an account. The full router
@@ -294,7 +297,7 @@ const BootstrapStatus = () => {
         window.location.pathname.startsWith('/explore') &&
         authState === 'logged_out'
     ) {
-        return <PublicDirectory />;
+        return <React.Suspense fallback={null}><PublicDirectoryLazy /></React.Suspense>;
     }
 
     const title =
@@ -341,7 +344,7 @@ const BootstrapStatus = () => {
             >
                 <h1 style={{ margin: 0, fontSize: 20 }}>{title}</h1>
                 <p style={{ margin: 0, opacity: 0.9 }}>{details}</p>
-                {authState === 'logged_out' ? <LoginPage /> : null}
+                {authState === 'logged_out' ? <React.Suspense fallback={null}><LoginPageLazy /></React.Suspense> : null}
                 {authState === 'crypto_failed' ? (
                     <button
                         type="button"

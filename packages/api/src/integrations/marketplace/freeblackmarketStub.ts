@@ -335,8 +335,8 @@ export function shouldUseFreeblackmarketStub(env = process.env): boolean {
 }
 
 export function createFreeblackmarketStubProvider(): MarketplaceProvider {
-    const baseUrl = process.env.FREEBLACKMARKET_BASE_URL ?? 'https://stub.freeblackmarket.local';
-    const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET ?? 'stub-webhook-secret';
+    const baseUrl = process.env.FREEBLACKMARKET_BASE_URL || 'https://stub.freeblackmarket.local';
+    const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET || 'stub-webhook-secret';
     const apiBaseUrl =
         process.env.BLACKOUT_PUBLIC_API_BASE_URL ?? process.env.PUBLIC_API_BASE_URL ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);

@@ -11,6 +11,7 @@ export const featureModuleManifest = [
     'forum',
     'deaddrop',
     'deadman',
+    'piggpin',
     'moderation',
     'monetization',
     'platform-ops',

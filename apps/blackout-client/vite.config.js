@@ -1,15 +1,52 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { wasm } from '@rollup/plugin-wasm';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 import inject from '@rollup/plugin-inject';
-import topLevelAwait from 'vite-plugin-top-level-await';
 import { VitePWA } from 'vite-plugin-pwa';
-import fs from 'fs';
-import path from 'path';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
 import buildConfig from './build.config';
+
+const wasmPlugin = {
+  name: 'wasm-content-type',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url || !req.url.includes('.wasm')) {
+        return next();
+      }
+
+      const origSetHeader = res.setHeader;
+      res.setHeader = function (name, value) {
+        if (name.toLowerCase() === 'content-type') {
+          value = 'application/wasm';
+        }
+        return origSetHeader.call(this, name, value);
+      };
+
+      const origWriteHead = res.writeHead;
+      res.writeHead = function (statusCode, ...args) {
+        if (args.length === 1 && typeof args[0] === 'object') {
+          return origWriteHead.call(this, statusCode, {
+            ...args[0],
+            'Content-Type': 'application/wasm',
+          });
+        }
+        if (args.length >= 2 && typeof args[1] === 'object') {
+          return origWriteHead.call(this, statusCode, args[0], {
+            ...args[1],
+            'Content-Type': 'application/wasm',
+          });
+        }
+        res.setHeader('Content-Type', 'application/wasm');
+        return origWriteHead.call(this, statusCode, ...args);
+      };
+
+      next();
+    });
+  },
+};
 
 const copyFiles = {
   targets: [
@@ -17,10 +54,6 @@ const copyFiles = {
       src: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
       dest: '',
       rename: 'pdf.worker.min.js',
-    },
-    {
-      src: 'netlify.toml',
-      dest: '',
     },
     {
       src: 'config.json',
@@ -41,55 +74,24 @@ const copyFiles = {
   ],
 };
 
-function serverMatrixSdkCryptoWasm(wasmFilePath) {
-  return {
-    name: 'vite-plugin-serve-matrix-sdk-crypto-wasm',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url === wasmFilePath) {
-          const resolvedPath = path.join(path.resolve(), "/node_modules/@matrix-org/matrix-sdk-crypto-wasm/pkg/matrix_sdk_crypto_wasm_bg.wasm");
-
-          if (fs.existsSync(resolvedPath)) {
-            res.setHeader('Content-Type', 'application/wasm');
-            res.setHeader('Cache-Control', 'no-cache');
-
-            const fileStream = fs.createReadStream(resolvedPath);
-            fileStream.pipe(res);
-          } else {
-            res.writeHead(404);
-            res.end('File not found');
-          }
-        } else {
-          next();
-        }
-      });
-    },
-  };
-}
-
 export default defineConfig({
   appType: 'spa',
   publicDir: false,
   base: buildConfig.base,
+  assetsInclude: ['**/*.wasm'],
   server: {
     port: 8080,
     host: true,
     fs: {
-      // Allow serving files from one level up to the project root
-      allow: ['..'],
+      allow: ['../..'],
     },
   },
   plugins: [
-    serverMatrixSdkCryptoWasm('/node_modules/.vite/deps/pkg/matrix_sdk_crypto_wasm_bg.wasm'),
-    topLevelAwait({
-      // The export name of top-level await promise for each chunk module
-      promiseExportName: '__tla',
-      // The function to generate import names of top-level await promise in each chunk module
-      promiseImportName: (i) => `__tla_${i}`,
-    }),
-    viteStaticCopy(copyFiles),
-    vanillaExtractPlugin(),
     wasm(),
+    topLevelAwait(),
+    wasmPlugin,
+    vanillaExtractPlugin(),
+    viteStaticCopy(copyFiles),
     react(),
     VitePWA({
       srcDir: 'src',
@@ -107,12 +109,12 @@ export default defineConfig({
     }),
   ],
   optimizeDeps: {
+    exclude: ['@matrix-org/matrix-sdk-crypto-wasm'],
     esbuildOptions: {
       define: {
         global: 'globalThis',
       },
       plugins: [
-        // Enable esbuild polyfill plugins
         NodeGlobalsPolyfillPlugin({
           process: false,
           buffer: true,
@@ -124,16 +126,11 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     copyPublicDir: false,
-    // matrix-sdk (~1.1MB) and react-vendor (~210KB) are split out below for
-    // caching across deploys. The app's main bundle is what's needed for
-    // initial render after that split; gate the limit just above it to still
-    // catch unexpected growth.
     chunkSizeWarningLimit: 2900,
     rollupOptions: {
       plugins: [inject({ Buffer: ['buffer', 'Buffer'] })],
       output: {
         manualChunks: {
-          'matrix-sdk': ['matrix-js-sdk', '@matrix-org/matrix-sdk-crypto-wasm'],
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
         },
       },

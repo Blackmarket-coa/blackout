@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Blackout Hono API scaffold",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file .env src/index.ts",
+    "start": "tsx --env-file .env src/index.ts",
     "build": "node -e \"console.log('api build scaffold ok')\"",
     "lint": "node -e \"console.log('api lint scaffold ok')\"",
     "test": "node -e \"console.log('api test scaffold ok')\"",

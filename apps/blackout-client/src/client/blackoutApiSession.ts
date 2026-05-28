@@ -1,21 +1,16 @@
 import { createFetchApiClient } from '@blackout/sdk';
 import { API_BASE_URL } from '../app/sdk/apiBaseUrl';
 import { restoreActiveSession, type StoredSession } from './sessionManager';
-import { readBlackoutApiToken } from '../app/features/monetization/marketplace/useMarketplaceAuth';
+import { clearBlackoutApiToken as clearMarketAuthToken, setBlackoutApiToken } from '../app/features/monetization/marketplace/useMarketplaceAuth';
 
 /**
- * localStorage key the Blackout API JWT lives under. Kept in sync with the
- * reader in
- * `app/features/monetization/marketplace/useMarketplaceAuth.ts` —
- * `readBlackoutApiToken()` reads this exact key.
+ * HTTP-only cookie flag: set to true when the server is configured with
+ * AUTH_TOKEN_TRANSPORT=cookie or AUTH_TOKEN_TRANSPORT=both, which means
+ * the JWT is stored in a httpOnly cookie and sent automatically with
+ * credentials: 'include'. When false, fall back to the Authorization
+ * Bearer header from the exchange response.
  */
-export const BLACKOUT_API_TOKEN_KEY = 'blackout.api.token';
-
-interface MatrixExchangeResponse {
-    token: string;
-    refreshToken?: string;
-    userId: string;
-}
+const USE_COOKIE_TRANSPORT = false;
 
 /**
  * Dedupe slot for an in-flight exchange. Both the boot kick-off
@@ -25,29 +20,23 @@ interface MatrixExchangeResponse {
  */
 let inFlightExchange: Promise<string | null> | null = null;
 
-const writeToken = (token: string): void => {
-    try {
-        window.localStorage.setItem(BLACKOUT_API_TOKEN_KEY, token);
-    } catch {
-        // Storage can be unavailable (private mode / blocked); the API just
-        // stays unauthenticated until the next successful exchange.
-    }
-};
+let cachedBearer: string | null = null;
 
-export const clearBlackoutApiToken = (): void => {
-    inFlightExchange = null;
-    try {
-        window.localStorage.removeItem(BLACKOUT_API_TOKEN_KEY);
-    } catch {
-        // ignore — nothing else to clean up
-    }
-};
+interface MatrixExchangeResponse {
+    token: string;
+    refreshToken?: string;
+    userId: string;
+}
 
 /**
  * Perform the exchange against the API. The Matrix token is sent in
  * `x-matrix-access-token` (not `Authorization`) so it doesn't trip the JWT
  * bearer path in the API's authMiddleware. Resolves the minted JWT, or `null`
  * if the session has no token or the exchange fails.
+ *
+ * When cookie transport is active the server sets a httpOnly cookie and the
+ * returned JWT is only needed as a fallback; the cookie is sent automatically
+ * on subsequent requests with `credentials: 'include'`.
  */
 const runExchange = async (session: StoredSession): Promise<string | null> => {
     if (!session.accessToken) return null;
@@ -56,6 +45,7 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
         const client = createFetchApiClient({
             baseUrl: API_BASE_URL,
             defaultHeaders: { 'x-matrix-access-token': session.accessToken },
+            credentials: 'include',
             defaultRetry: { attempts: 2, backoffMs: 150 },
         });
         const result = (await client({
@@ -65,7 +55,8 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
         })) as MatrixExchangeResponse;
 
         if (result?.token) {
-            writeToken(result.token);
+            cachedBearer = result.token;
+            setBlackoutApiToken(result.token);
             return result.token;
         }
         return null;
@@ -86,11 +77,17 @@ const runExchange = async (session: StoredSession): Promise<string | null> => {
  * (boot, invite redeem, marketplace) share one round-trip. Resolves `null` if
  * there's no active Matrix session or the exchange fails — callers decide
  * whether to proceed unauthenticated.
+ *
+ * When cookie transport is active (USE_COOKIE_TRANSPORT), the JWT is stored
+ * in a httpOnly cookie so we skip the in-memory cache and return null to
+ * indicate "use credentials: 'include'" — the cookie is sent automatically.
  */
 export const ensureBlackoutApiToken = (
     session: StoredSession | null = restoreActiveSession(),
 ): Promise<string | null> => {
-    const existing = readBlackoutApiToken();
+    if (USE_COOKIE_TRANSPORT) return Promise.resolve(null);
+
+    const existing = cachedBearer;
     if (existing) return Promise.resolve(existing);
 
     if (!session) return Promise.resolve(null);
@@ -102,6 +99,14 @@ export const ensureBlackoutApiToken = (
     }
     return inFlightExchange;
 };
+
+export const clearBlackoutApiToken = (): void => {
+    inFlightExchange = null;
+    cachedBearer = null;
+    clearMarketAuthToken();
+};
+
+export const readBlackoutApiToken = (): string | null => cachedBearer;
 
 /**
  * Fire-and-forget boot kick-off: start the exchange early (right after sync

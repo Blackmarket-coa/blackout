@@ -5,6 +5,7 @@ import {
   MIN_PASSWORD_LENGTH,
   hashPassword,
   isAcceptablePassword,
+  readAuthRuntimeConfig,
   signJwt,
   signJwtWithMeta,
   verifyPasswordConstantTime,
@@ -143,6 +144,26 @@ const issueSession = (userId: string, username: string, userAgent?: string) => {
   return { access, refresh };
 };
 
+const setAuthCookie = (c: import('hono').Context, token: string, maxAgeSeconds: number): void => {
+  const config = readAuthRuntimeConfig();
+  if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
+    c.cookie(config.cookieName!, token, {
+      httpOnly: true,
+      secure: config.cookieSecure,
+      sameSite: config.cookieSameSite,
+      path: '/',
+      maxAge: maxAgeSeconds,
+    });
+  }
+};
+
+const clearAuthCookie = (c: import('hono').Context): void => {
+  const config = readAuthRuntimeConfig();
+  if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
+    c.cookie(config.cookieName!, '', { maxAge: 0, path: '/' });
+  }
+};
+
 auth.post('/register', async (c) => {
   const parsed = await readJsonBody(c, registerSchema);
   if (parsed instanceof Response) return parsed;
@@ -236,6 +257,7 @@ auth.post('/register', async (c) => {
   await autoJoinWelcomeRoom(user.username);
 
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+  setAuthCookie(c, session.access.token, 86400);
 
   // Mint and dispatch the verification email. Registration succeeds even
   // if the dispatch fails — the caller can retry through
@@ -407,6 +429,7 @@ auth.post('/login', async (c) => {
   }
 
   const session = issueSession(user!.id, user!.username, c.req.header('user-agent'));
+  setAuthCookie(c, session.access.token, 86400);
   return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user!.id });
 });
 
@@ -465,6 +488,7 @@ auth.post('/matrix/exchange', async (c) => {
   }
 
   const session = issueSession(user.id, user.username, c.req.header('user-agent'));
+  setAuthCookie(c, session.access.token, 86400);
   return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user.id });
 });
 
@@ -482,6 +506,7 @@ auth.post('/token/refresh', async (c) => {
         return c.json({ code: 'invalid_refresh_token', message: 'User no longer exists' }, 401);
       }
       const access = signJwtWithMeta(user.id, user.username);
+      setAuthCookie(c, access.token, 86400);
       return c.json({ token: access.token, refreshToken: outcome.rotated.token, userId: user.id });
     }
     case 'reuse_detected': {
@@ -525,6 +550,7 @@ auth.post('/logout', async (c) => {
       reason: 'logout',
     });
   }
+  clearAuthCookie(c);
   return c.json({ ok: true });
 });
 
@@ -707,4 +733,11 @@ auth.post('/account/delete/confirm', async (c) => {
 
 // Re-export the legacy `signJwt` for callers that imported it from this module.
 export { signJwt };
+
+auth.get('/session', (c) => {
+  const userOrResp = requireUser(c);
+  if (userOrResp instanceof Response) return userOrResp;
+  return c.json({ userId: userOrResp.sub, username: userOrResp.username });
+});
+
 export default auth;

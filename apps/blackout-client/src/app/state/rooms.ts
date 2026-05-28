@@ -1,8 +1,21 @@
 import { atom, useSetAtom } from 'jotai';
 import { atomFamily, selectAtom } from 'jotai/utils';
-import { ClientEvent, RoomEvent, SyncState, type MatrixClient, type Room } from 'matrix-js-sdk';
+import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { useEffect } from 'react';
 import { matrixClientAtom } from './auth';
+
+/**
+ * String constants matching matrix-js-sdk event names.
+ * Imported as runtime values to avoid creating a static dependency on
+ * `matrix-js-sdk` which has a top-level WASM await that blocks the
+ * entire module graph when imported statically.
+ */
+const CLIENT_EVENT_ROOM = 'Room';
+const CLIENT_EVENT_DELETE_ROOM = 'deleteRoom';
+const CLIENT_EVENT_SYNC = 'sync';
+const ROOM_EVENT_MY_MEMBERSHIP = 'RoomMember.myMembership';
+const SYNC_STATE_PREPARED = 'PREPARED';
+const SYNC_STATE_SYNCING = 'SYNCING';
 
 /**
  * Writable storage for the live `Room[]` snapshot. Bound to Matrix sync
@@ -75,26 +88,26 @@ export const useBindAllRoomsAtom = (mx: MatrixClient): void => {
         // already has rooms by the time we mount.
         snapshot();
 
-        const handleSync = (state: SyncState) => {
+        const handleSync = (state: string) => {
             // PREPARED fires when the first /sync response has been
             // processed -- this closes the cold-session race where
             // applyAuthAtoms set matrixClientAtom before any rooms
             // existed on the client.
-            if (state === SyncState.Prepared || state === SyncState.Syncing) {
+            if (state === SYNC_STATE_PREPARED || state === SYNC_STATE_SYNCING) {
                 snapshot();
             }
         };
 
-        mx.on(ClientEvent.Room, snapshot);
-        mx.on(ClientEvent.DeleteRoom, snapshot);
-        mx.on(RoomEvent.MyMembership, snapshot);
-        mx.on(ClientEvent.Sync, handleSync);
+        mx.on(CLIENT_EVENT_ROOM, snapshot);
+        mx.on(CLIENT_EVENT_DELETE_ROOM, snapshot);
+        mx.on(ROOM_EVENT_MY_MEMBERSHIP, snapshot);
+        mx.on(CLIENT_EVENT_SYNC, handleSync);
 
         return () => {
-            mx.removeListener(ClientEvent.Room, snapshot);
-            mx.removeListener(ClientEvent.DeleteRoom, snapshot);
-            mx.removeListener(RoomEvent.MyMembership, snapshot);
-            mx.removeListener(ClientEvent.Sync, handleSync);
+            mx.removeListener(CLIENT_EVENT_ROOM, snapshot);
+            mx.removeListener(CLIENT_EVENT_DELETE_ROOM, snapshot);
+            mx.removeListener(ROOM_EVENT_MY_MEMBERSHIP, snapshot);
+            mx.removeListener(CLIENT_EVENT_SYNC, handleSync);
         };
     }, [mx, setAllRooms]);
 };

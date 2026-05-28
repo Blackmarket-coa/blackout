@@ -38,6 +38,7 @@ export type FeatureFlags = {
     liveInteractionBundle: boolean;
     coalition: boolean;
     coliseum: boolean;
+    piggpin: boolean;
     /**
      * Streaming hub flag. Owns the `/streaming` top-level destination — a
      * consolidated page (routed like coalition/coliseum) with tabs for the
@@ -290,6 +291,7 @@ export const defaultFeatureFlags: FeatureFlags = {
     liveInteractionBundle: true,
     coalition: true,
     coliseum: true,
+    piggpin: true,
     streaming: true,
     profile: true,
     home: true,
@@ -525,6 +527,12 @@ export const resolveFeatureFlags = (
         }
         if (env.BLACKOUT_COLISEUM === 'false') {
             nextFlags.coliseum = false;
+        }
+        if (env.BLACPIGGPIN === 'true') {
+            nextFlags.piggpin = true;
+        }
+        if (env.BLACPIGGPIN === 'false') {
+            nextFlags.piggpin = false;
         }
         if (env.BLACKOUT_STREAMING === 'true') {
             nextFlags.streaming = true;
@@ -807,6 +815,12 @@ export const resolveFeatureFlags = (
     }
     if (env.BLACKOUT_COLISEUM === 'false') {
         nextFlags.coliseum = false;
+    }
+    if (env.BLACPIGGPIN === 'true') {
+        nextFlags.piggpin = true;
+    }
+    if (env.BLACPIGGPIN === 'false') {
+        nextFlags.piggpin = false;
     }
     if (env.BLACKOUT_PROFILE === 'true') {
         nextFlags.profile = true;
