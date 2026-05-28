@@ -36,6 +36,7 @@ import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { nameInitials } from '../../../utils/common';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useFilePicker } from '../../../hooks/useFilePicker';
+import { useHardenAvatarImage } from '../../privacy-tools/useHardenAvatarImage';
 import { useObjectURL } from '../../../hooks/useObjectURL';
 import { stopPropagation } from '../../../utils/keyboard';
 import { ImageEditor } from '../../../components/image-editor';
@@ -67,7 +68,10 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
     return undefined;
   }, [imageFile]);
 
-  const pickFile = useFilePicker(setImageFile, false);
+  const hardenImage = useHardenAvatarImage();
+  const pickFile = useFilePicker((file) => {
+    void hardenImage(file).then(setImageFile);
+  }, false);
 
   const handleRemoveUpload = useCallback(() => {
     setImageFile(undefined);

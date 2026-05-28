@@ -17,6 +17,8 @@ export interface PrivacyToolsAdvancedOptions {
 export interface PrivacyToolsSettingsState {
     exifStripEnabled: boolean;
     linkSanitizeEnabled: boolean;
+    /** Anti-facial-recognition perturbation on avatar/image uploads (advanced). */
+    avatarPerturbationEnabled: boolean;
     advancedOptions: PrivacyToolsAdvancedOptions;
 }
 
@@ -25,6 +27,7 @@ export const privacyToolsSettingsAtom = atomWithStorage<PrivacyToolsSettingsStat
     {
         exifStripEnabled: true,
         linkSanitizeEnabled: true,
+        avatarPerturbationEnabled: false,
         advancedOptions: {
             nonStrippableWarning: false,
         },

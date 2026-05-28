@@ -53,6 +53,20 @@ export function PrivacyToolsSettings({ requestClose }: PrivacyToolsSettingsProps
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                     <input
                         type="checkbox"
+                        checked={settings.avatarPerturbationEnabled}
+                        disabled={!advancedEntitled}
+                        onChange={(event) =>
+                            setSettings((prev) => ({
+                                ...prev,
+                                avatarPerturbationEnabled: event.target.checked,
+                            }))
+                        }
+                    />
+                    Perturb avatars against facial recognition (Advanced, best-effort)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <input
+                        type="checkbox"
                         checked={settings.advancedOptions.nonStrippableWarning}
                         disabled={!advancedEntitled}
                         onChange={(event) =>
