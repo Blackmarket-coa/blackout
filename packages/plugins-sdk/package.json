@@ -4,6 +4,7 @@
   "private": true,
   "description": "Authoring SDK consumed by code-plugin bundles running inside the Blackout sandbox iframe",
   "type": "module",
+  "sideEffects": false,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
