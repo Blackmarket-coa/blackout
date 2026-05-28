@@ -107,6 +107,9 @@ type LinkElement = { type: 'link'; href: string; children: CustomText[] };
 
 type CustomElement = ParagraphElement | CodeBlockElement | MentionElement | LinkElement;
 
+// A block's children mix text leaves with inline element nodes (mentions, links).
+type InlineNode = CustomText | CustomElement;
+
 interface ComposerTarget {
     mode: 'new' | 'reply' | 'thread' | 'edit';
     eventId?: string;
@@ -182,29 +185,35 @@ const leafToHtml = (leaf: CustomText): string => {
     return chunk;
 };
 
-const toHtml = (value: CustomElement[]): string => {
+const inlineToHtml = (node: InlineNode): string => {
+    if (!('type' in node)) return leafToHtml(node);
+
+    if (node.type === 'mention') {
+        if (node.mentionKind === 'user' || node.mentionKind === 'room') {
+            const prefix = node.mentionKind === 'room' ? '#' : '';
+            return `<a href="https://matrix.to/#/${escapeHtml(node.id)}">${prefix}${escapeHtml(
+                node.label
+            )}</a>`;
+        }
+        return escapeHtml(node.label);
+    }
+
+    if (node.type === 'link') {
+        const text = (node.children as InlineNode[]).map(inlineToHtml).join('');
+        return `<a href="${escapeHtml(node.href)}">${text}</a>`;
+    }
+
+    return (node.children as InlineNode[]).map(inlineToHtml).join('');
+};
+
+export const toHtml = (value: CustomElement[]): string => {
     return value
         .map((element) => {
-            if (element.type === 'mention') {
-                if (element.mentionKind === 'user') {
-                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">${escapeHtml(
-                        element.label
-                    )}</a>`;
-                }
-                if (element.mentionKind === 'room') {
-                    return `<a href="https://matrix.to/#/${escapeHtml(element.id)}">#${escapeHtml(
-                        element.label
-                    )}</a>`;
-                }
-                return escapeHtml(element.label);
+            if (element.type === 'mention' || element.type === 'link') {
+                return inlineToHtml(element);
             }
 
-            if (element.type === 'link') {
-                const text = element.children.map(leafToHtml).join('');
-                return `<a href="${escapeHtml(element.href)}">${text}</a>`;
-            }
-
-            const body = element.children.map(leafToHtml).join('');
+            const body = (element.children as InlineNode[]).map(inlineToHtml).join('');
             if (element.type === 'code_block') return `<pre><code>${body}</code></pre>`;
             return `<p>${body || '<br />'}</p>`;
         })
