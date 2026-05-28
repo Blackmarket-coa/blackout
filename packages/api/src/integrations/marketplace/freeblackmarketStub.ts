@@ -252,6 +252,29 @@ const SEEDED_LISTINGS: StubListing[] = [
         status: 'published',
         createdAt: '2026-05-01T00:00:00.000Z',
     },
+    {
+        listing: {
+            providerId: PROVIDER_ID,
+            providerListingId: 'stub-privacy-tools-advanced',
+            category: 'security-tool',
+            title: 'Privacy Tools — Advanced',
+            description:
+                'Unlocks advanced EXIF stripping and link-sanitization options. Exercises the privacy_tool path.',
+            priceCents: 299,
+            currency: 'USD',
+            sellerId: 'stub-seller',
+            sellerDisplayName: 'Stub Seller',
+            mediaUrls: [],
+            entitlementKind: 'privacy_tool',
+            tags: ['security', 'privacy', 'obfuscation', 'demo'],
+        },
+        sellerUserId: null,
+        artifactKind: 'privacy_tool',
+        artifactPayload: { tier: 'advanced', features: ['exif_strip', 'link_sanitize'] },
+        publicSlug: 'privacy-tools-advanced',
+        status: 'published',
+        createdAt: '2026-05-01T00:00:00.000Z',
+    },
 ];
 
 function envBool(key: string, fallback: boolean, env = process.env): boolean {

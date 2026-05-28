@@ -779,7 +779,8 @@ export type MarketplaceEntitlementKind =
   | 'sound_pack'
   | 'community_template'
   | 'stream_asset'
-  | 'vault_item';
+  | 'vault_item'
+  | 'privacy_tool';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;

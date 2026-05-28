@@ -71,6 +71,8 @@ import { AppearanceSettings } from './AppearanceSettings';
 
 import { StegoSettings } from '../steganography';
 
+import { PrivacyToolsSettings } from '../privacy-tools/PrivacyToolsSettings';
+
 import { RegistrySettingsList } from '../../core/features/RegistrySettingsList';
 
 import { PluginSettings } from './PluginSettings';
@@ -98,6 +100,8 @@ export enum SettingsPages {
   AppearancePage,
 
   SteganographyPage,
+
+  PrivacyToolsPage,
 
   FeatureSettingsPage,
 
@@ -196,6 +200,16 @@ const useSettingsMenuItems = (): SettingsMenuItem[] =>
         name: 'Steganography',
 
         icon: Icons.Lock,
+
+      },
+
+      {
+
+        page: SettingsPages.PrivacyToolsPage,
+
+        name: 'Privacy Tools',
+
+        icon: Icons.ShieldUser,
 
       },
 
@@ -522,6 +536,12 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
       {activePage === SettingsPages.SteganographyPage && (
 
         <StegoSettings requestClose={handlePageRequestClose} />
+
+      )}
+
+      {activePage === SettingsPages.PrivacyToolsPage && (
+
+        <PrivacyToolsSettings requestClose={handlePageRequestClose} />
 
       )}
 
