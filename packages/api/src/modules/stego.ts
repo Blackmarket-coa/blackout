@@ -106,7 +106,7 @@ function createStegoRouter() {
                     409,
                 );
             }
-            return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
+            return c.json({ code: 'invalid_request', message: 'Unable to process request' }, 400);
         }
     });
 
@@ -151,7 +151,7 @@ function createStegoRouter() {
             if (error instanceof StegoChannelNotFoundError) {
                 return c.json({ code: 'channel_not_found', message: error.message }, 404);
             }
-            return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
+            return c.json({ code: 'invalid_request', message: 'Unable to process request' }, 400);
         }
     });
 
@@ -196,7 +196,7 @@ function createStegoRouter() {
             if (error instanceof StegoChannelNotFoundError) {
                 return c.json({ code: 'channel_not_found', message: error.message }, 404);
             }
-            return c.json({ code: 'invalid_request', message: (error as Error).message }, 400);
+            return c.json({ code: 'invalid_request', message: 'Unable to process request' }, 400);
         }
     });
 

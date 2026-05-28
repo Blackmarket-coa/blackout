@@ -21,7 +21,7 @@ export function canAccessDomain(c: Context, domain: 'governance' | 'forum' | 'de
   const capabilities = new Set(claimCapabilities);
 
   const devCapHeader = process.env.BLACKOUT_DEV_CAPABILITY_HEADER;
-  if (devCapHeader === '1' || devCapHeader === 'true') {
+  if (process.env.NODE_ENV !== 'production' && (devCapHeader === '1' || devCapHeader === 'true')) {
     const headerCapabilities = (c.req.header('x-blackout-capabilities') ?? '')
       .split(',')
       .map((cap) => cap.trim())

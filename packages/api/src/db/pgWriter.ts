@@ -121,6 +121,8 @@ export function rowToRecord(plan: TablePlan, row: Row): Record<string, unknown> 
 }
 
 export function buildUpsertSql(plan: TablePlan, columns: string[]): string {
+  const tableName = plan.descriptor.tableName;
+  if (!/^[a-z_][a-z0-9_]*$/.test(tableName)) throw new Error(`Invalid table name: ${tableName}`);
   const conflict = plan.descriptor.conflictColumns;
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
   const updates = columns

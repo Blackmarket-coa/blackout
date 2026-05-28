@@ -86,7 +86,7 @@ router.get('/consistency', (c) => {
     try {
         return c.json(ktLog.consistencyProof(from, to));
     } catch (error) {
-        return c.json({ code: 'bad_range', detail: (error as Error).message }, 400);
+        return c.json({ code: 'bad_range' }, 400);
     }
 });
 

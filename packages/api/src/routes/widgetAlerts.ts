@@ -38,6 +38,7 @@ const widgetAlerts = new Hono();
 widgetAlerts.use('/tokens', authRateLimit);
 widgetAlerts.use('/tokens/:id', authRateLimit);
 widgetAlerts.use('/test', authRateLimit);
+widgetAlerts.use('/stream', authRateLimit);
 
 const createTokenSchema = z.object({
   label: z.string().min(1).max(64).optional(),

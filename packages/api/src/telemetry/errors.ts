@@ -11,6 +11,7 @@
  */
 
 import { log } from './logger';
+import { SECRET_KEY_RE, redactString } from '@blackout/core/redaction';
 
 export interface ErrorReporter {
   capture(error: unknown, context?: Record<string, unknown>): void;
@@ -28,9 +29,6 @@ class NoopReporter implements ErrorReporter {
 
 let cached: ErrorReporter = new NoopReporter();
 let initPromise: Promise<void> | null = null;
-
-const SECRET_KEY_RE =
-  /\b(authorization|cookie|password|passphrase|recovery|jwt|token|api[_-]?key|secret|otp|totp|client[_-]?secret)\b/i;
 
 const sanitizeBreadcrumb = (breadcrumb: unknown): unknown => {
   if (!breadcrumb || typeof breadcrumb !== 'object') return breadcrumb;
@@ -63,12 +61,21 @@ const initSentry = async (): Promise<void> => {
       ...breadcrumb,
       data: sanitizeBreadcrumb(breadcrumb.data),
     }),
-    beforeSend: (event: { request?: { headers?: Record<string, string> } }) => {
+    beforeSend: (event: { request?: { headers?: Record<string, string>; url?: string; query_string?: string; data?: unknown; cookies?: unknown }; exception?: { values?: Array<{ value?: string; stacktrace?: unknown }> } }) => {
       if (event.request?.headers) {
         for (const key of Object.keys(event.request.headers)) {
           if (SECRET_KEY_RE.test(key)) {
             (event.request.headers as Record<string, string>)[key] = '[REDACTED]';
           }
+        }
+      }
+      if (event.request?.url) {
+        event.request.url = event.request.url.replace(/\?.*$/, '');
+        event.request.query_string = undefined;
+      }
+      if (event.exception?.values) {
+        for (const v of event.exception.values) {
+          if (v.value) v.value = redactString(v.value);
         }
       }
       return event;

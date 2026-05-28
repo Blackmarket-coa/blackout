@@ -1,4 +1,7 @@
 name: Build Debian package
+# NOTE: This workflow is inherited from upstream Element Web.
+# It will not execute in the Blackout repo.
+if: false
 on:
     release:
         types: [published]
