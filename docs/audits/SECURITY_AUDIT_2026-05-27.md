@@ -668,8 +668,214 @@ curl -X POST http://localhost:3001/v1/auth/account-number
 
 | Issue | Why Not Fixed |
 |-------|---------------|
-| Bot token full admin blast radius | Inherent to Synapse admin API; mitigated by destructive confirmation + audit logging |
+| Bot token full admin blast radius | Inherent to Synapse admin API; mitigated by destructive confirmation + audit logging. Admin token fallback removed from anonymous signup — shared-secret only |
 | Ephemeral content is client-enforced | Can't prevent screenshots/DOM inspection; disclosed in UI + docs |
 | Burner localpart collision at scale | 64-bit entropy is sufficient for realistic volumes |
 | Voter anonymity in governance | Requires commit-reveal protocol redesign (separate epic) |
-| WebAuthn → Redis multi-process | Architectural migration; types and dual-store scaffold in place |
+
+---
+
+## Session 2 — Round 7: Flows, Auth Bypasses, Rate Limiting, Hardening
+
+**Date:** May 28, 2026 (Continued)  
+**Base Commit:** `2bbc0aacb5`  
+**Working Tree:** 42 files modified, +535 / -247  
+
+### Broken Flows Restored (3)
+
+**92. Register handler restored**
+- `packages/api/src/routes/auth.ts`
+- `POST /register` was missing — entire email/password signup non-functional since Round 1 edits
+- Restored with modernizations: async `await hashPassword`, breach check on password, error detail stripped from Matrix provisioning failure
+- Full flow: password validation → breach check → Matrix user creation → invite redemption → welcome room auto-join → session issuance
+
+**93. PoW solver wired to anonymous signup**
+- `apps/blackout-client/src/client/accountNumberAuth.ts`
+- `createAnonymousAccount` now executes 3-step flow: request challenge → solve → submit with `x-pow-token` header
+- Old duplicate function (without PoW) removed
+- Missing imports restored: `isValidAccountNumber`, `accountNumberToLocalpart`, `normalizeAccountNumber`, `loginWithPassword`, `AtomStore` type
+
+**94. PoW token format fixed**
+- Client (`proofOfWork.ts`): produces `challenge:candidate` (2-part)
+- Server (`proofOfWork.ts`): parses `challenge:nonce` (2-part), computes `SHA-256(challenge:nonce)`
+- Hash computation identical on both sides — verification now succeeds
+- `userId` parameter removed from `solvePow` signature; identity binding via composite map key
+
+### Auth Bypasses Fixed (9)
+
+**95. Messages endpoint — no auth, userId from body**
+- `packages/api/src/routes/messages.ts`
+- `requireUser` added to GET `/:channelId` and POST `/:channelId`
+- `userId` removed from `sendMessageSchema` — derived from `authUser.sub` (JWT)
+- `messageRateLimit` bucket applied (60 req/min)
+
+**96. Federation links — no auth**
+- `packages/api/src/routes/federation.ts`
+- `requireUser` added to `POST /links`
+
+**97. Apps endpoints — 3 POST routes with no auth**
+- `packages/api/src/routes/apps.ts`
+- `requireUser` added to install, revoke, and actions routes
+
+**98. Key Transparency — no auth, userId from body**
+- `packages/api/src/routes/keyTransparency.ts`
+- `requireUser` added to `POST /append`
+- `userId` removed from `appendSchema` — derived from `user.sub` (JWT)
+
+**99. WebAuthn — no auth on any endpoint, login doesn't issue session**
+- `packages/api/src/routes/webauthn.ts`
+- `requireUser` added to register/begin, register/finish, login/begin
+- `userId` removed from all schemas — derived from JWT on register, from stored credential on login
+- Login/finish now issues `signJwtWithMeta` access token + `issueRefreshToken` + sets auth cookie
+- `storeCredential`/`findCredential`/`listCredentialsByUser` wired through `webauthnStore.ts` (durable, Redis fallback)
+- `createdAt` field converted to ISO string for type compatibility with store
+
+**100. Entitlements — anonymous header bypass**
+- `packages/api/src/routes/entitlements.ts`
+- Removed `x-blackout-entitlement-payload` header fallback in `GET /me` and `GET /:family`
+- Both endpoints now require `requireUser` — derive payload from subscription service
+- Dead `readPayloadFromHeader` function and unused `parseEntitlementAccessPayload` import removed
+
+**101. Voice role bypass**
+- `packages/api/src/routes/voice.ts`
+- `roleFromRequest()` was reading `role` from untrusted request body — replaced with `roleForCanopy()` server-side lookup
+- `role` field removed from `roomCoordsSchema` — no longer accepted from client
+- MVP returns `'member'` for all users until canopy membership system exists
+- `voiceRateLimit` bucket applied (10 req/min)
+
+### Rate Limiting Added (12)
+
+**102. Missing auth endpoint rate limits**
+- `packages/api/src/routes/auth.ts`
+- `/login/mfa`, `/password`, `/token/refresh`, `/matrix/exchange`, `/email/verify` added to `authRateLimit` group
+
+**103-112. Per-route rate limit buckets**
+- `packages/api/src/middleware/rate-limit.ts` — 5 new buckets: `mfaRateLimit` (5/min), `messageRateLimit` (60/min), `coalitionRateLimit` (20/min), `voiceRateLimit` (10/min), `adminRateLimit` (10/min), `writeRateLimit` (30/min)
+- Applied to 10 route files: `mfa.ts`, `messages.ts`, `coalition.ts`, `voice.ts`, `admin.ts`, `tips.ts`, `gifts.ts`, `aidPools.ts`, `follows.ts`, `scheduledMessages.ts`, `vault.ts`, `creator.ts`
+
+**113. JSON body size limit**
+- `packages/api/src/index.ts`
+- `bodyLimit({ maxSize: 256 * 1024 })` on all `/v1/*` routes — prevents memory exhaustion from unbounded JSON payloads
+
+### Secrets & Config Hardening (5)
+
+**114. Hardcoded plugin dev HMAC removed**
+- `packages/api/src/integrations/marketplace/freeblackmarketStub.ts`
+- `'6465762d68616d63'` (ASCII "dev-hamc") → `crypto.randomBytes(32).toString('hex')` at startup
+
+**115. Hardcoded webhook secret fallback removed**
+- `freeblackmarketStub.ts`
+- `'stub-webhook-secret'` fallback → throws if `FREEBLACKMARKET_WEBHOOK_SECRET` unset
+
+**116. Vertobot hardcoded token**
+- `apps/blackout-server/contrib/vertobot/config.yaml`
+- `as_token: 'vertobot123'` → `${VERTOBOT_AS_TOKEN}` env var reference
+
+**117. CI postgres password**
+- `apps/blackout-server/.ci/postgres-config.yaml`
+- `password: postgres` → `${CI_POSTGRES_PASSWORD:-postgres}` with CI-only annotation
+
+**118. Turn shared secret**
+- `apps/blackout-server/docker/conf/homeserver.yaml`
+- `"YOUR_SHARED_SECRET"` → `"TURN_NOT_CONFIGURED"` with comment
+
+### Architectural Improvements (6)
+
+**119. Audit chain verifier fixed**
+- `packages/core/src/governance/verify.ts`
+- `verifyAuditChain` now recomputes `SHA-256(voteId:userId:choice:previousHash)` for content integrity verification
+- Stable sort with `voteId` tiebreaker (was non-deterministic on equal timestamps)
+- Function is now async (uses `crypto.subtle.digest` for cross-platform)
+
+**120. Password breach check on reset**
+- `packages/api/src/services/passwordReset.ts`
+- `isBreachedPassword` called after `isAcceptablePassword` in `consumePasswordResetToken`
+- New `breached_password` outcome added to `ConsumeOutcome` type
+- `auth.ts` password reset confirm handler updated with `breached_password` case
+
+**121. Matrix exchange placeholder email**
+- `packages/api/src/routes/auth.ts`
+- `email: ''` → `email: \`${localpart}@matrix.internal\`` — prevents `findUserByEmail('')` matching all auto-provisioned users
+
+**122. MFA recovery auto-disable**
+- `packages/api/src/routes/mfa.ts`
+- When last recovery code is consumed, MFA is automatically disabled — user can set up new TOTP device without lockout
+
+**123. WebAuthn store wired**
+- `packages/api/src/services/webauthnStore.ts` + `packages/api/src/routes/webauthn.ts`
+- `storeCredential` alias added to webauthnStore.ts
+- Routes now import `storeCredential`/`findCredential`/`listCredentialsByUser` from durable store
+- Challenges remain ephemeral (single-use, acceptable design)
+
+**124. Admin token fallback removed from anonymous signup**
+- `packages/api/src/routes/auth.ts`
+- `registerUser` (bot token) fallback removed — shared-secret only for `/account-number`
+- No dev bypass for unconfigured Matrix in production
+- Error message instructs operator: "Ensure MATRIX_REGISTRATION_SHARED_SECRET is configured"
+
+### Defensive Improvements (9)
+
+**125. Constant-time admin key comparison**
+- `packages/api/src/middleware/require-admin.ts`
+- `timingSafeEqual(Buffer.from(got), Buffer.from(key))` replaces `!==` string comparison
+- Dev bypass tightened: `isProduction` checks `NODE_ENV.startsWith('prod')` instead of exact match
+
+**126. JTI replay protection for destructive confirmation**
+- `packages/api/src/middleware/require-destructive-confirm.ts`
+- `consumedJtis` Set prevents confirmation token reuse within TTL window
+- Periodic cleanup when set exceeds 10,000 entries
+
+**127. Creator listing ownership check**
+- `packages/api/src/services/creatorListings.ts`
+- `sellerUserId` parameter added to `updateCreatorListingStatus` — verifies `existing.sellerUserId === sellerUserId`
+- Route handler in `creator.ts` passes `user.sub` as `sellerUserId`
+
+**128. Rate limit fail-open metrics**
+- `packages/api/src/telemetry/metrics.ts`
+- New `rateLimitFailOpenTotal` Prometheus counter — ops can detect Redis connectivity issues
+
+**129. TOTP constant-time comparisons**
+- `packages/api/src/services/totp.ts`
+- `timingSafeEqual` used for TOTP code and recovery code hash comparisons
+
+**130. Recovery code alphabet expanded**
+- `packages/api/src/services/totp.ts`
+- `randomBytes(5).toString('hex')` (40-bit hex) → `randomBytes(10).toString('base64url')` (80-bit alphanumeric)
+
+**131. Burner reconciler error handling**
+- `packages/api/src/services/burnerReconciler.ts`
+- Top-level `try/catch` prevents unhandled sync exceptions from crashing the Node.js process
+
+**132. Session manager write queue**
+- `apps/blackout-client/src/client/sessionManager.ts`
+- Write queue with pending flag prevents TOCTOU stale writes
+
+**133. Burner counter cleanup**
+- `packages/api/src/db/store.ts`
+- `burnerCounters.delete(userId)` in `purgeUserAuthArtifacts`
+- `decrementBurnerCounter` deletes key when count reaches zero
+
+### Final Scan Results (Session 2)
+
+| Severity | Count | Status |
+|----------|-------|--------|
+| Critical | 0 | — |
+| High | 0 | — |
+| Medium | 0 | — |
+| Low | 1 | `/register` lacks PoW enforcement (mitigated by 10 req/min rate limit + email/password barrier) |
+| Info | 3 | All `parsed.userId` patterns admin-guarded; config fallbacks benign; hash comparisons safe |
+
+**TypeScript:** 0 errors (API + Core)  
+**Files:** 42 modified, 0 new | **Insertions:** +535 | **Deletions:** -247
+
+---
+
+## Updated Remaining Unfixable Items
+
+| Issue | Why Not Fixed |
+|-------|---------------|
+| Bot token full admin blast radius | Inherent to Synapse admin API; mitigated by destructive confirmation + audit logging. Admin token fallback removed from anonymous signup — shared-secret only |
+| Ephemeral content is client-enforced | Can't prevent screenshots/DOM inspection; disclosed in UI + docs |
+| Burner localpart collision at scale | 64-bit entropy is sufficient for realistic volumes |
+| Voter anonymity in governance | Requires commit-reveal protocol redesign (separate epic) |
+| Burner counter PostgreSQL atomicity | In-memory store is atomic (single-threaded JS); PG needs advisory lock — documented

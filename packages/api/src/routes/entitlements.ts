@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { EntitlementAccessPayload, EntitlementFamily, EntitlementMap, EntitlementReadResponse, EntitlementTier } from '@blackout/protocol';
-import { DEAD_DROP_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload, parseEntitlementAccessPayload } from '@blackout/protocol';
+import { DEAD_DROP_TIER_ENTITLEMENTS, buildFullyUnlockedEntitlementPayload } from '@blackout/protocol';
 import type { MarketplaceProviderId } from '@blackout/core';
 import { getSubscription } from '../services/subscriptions';
 import { requireUser } from '../middleware/require-user';
@@ -48,12 +48,6 @@ function defaultPayload(): EntitlementAccessPayload {
       isPaid: false,
     },
   };
-}
-
-function readPayloadFromHeader(rawHeader: string | undefined): EntitlementAccessPayload {
-  if (!rawHeader) return defaultPayload();
-  const parsed = JSON.parse(rawHeader) as unknown;
-  return parseEntitlementAccessPayload(parsed);
 }
 
 function canonicalPayloadFromSubscription(userId: string): EntitlementAccessPayload {
@@ -133,10 +127,9 @@ entitlements.get('/listings/:providerId/:providerListingId', (c) => {
 
 entitlements.get('/me', (c) => {
   try {
-    const user = c.get('user') as { sub?: string } | null;
-    const payload = user?.sub
-      ? canonicalPayloadFromSubscription(user.sub)
-      : readPayloadFromHeader(c.req.header('x-blackout-entitlement-payload'));
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const payload = canonicalPayloadFromSubscription(user.sub);
     return c.json(toResponse(payload, 'all'));
   } catch {
     return c.json({ code: 'invalid_entitlements_payload', message: 'Unable to parse entitlement payload.' }, 400);
@@ -150,10 +143,9 @@ entitlements.get('/:family', (c) => {
   }
 
   try {
-    const user = c.get('user') as { sub?: string } | null;
-    const payload = user?.sub
-      ? canonicalPayloadFromSubscription(user.sub)
-      : readPayloadFromHeader(c.req.header('x-blackout-entitlement-payload'));
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const payload = canonicalPayloadFromSubscription(user.sub);
     return c.json(toResponse(familyFilteredPayload(payload, family), family));
   } catch {
     return c.json({ code: 'invalid_entitlements_payload', message: 'Unable to parse entitlement payload.' }, 400);

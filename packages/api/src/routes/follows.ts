@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db/store';
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
+import { writeRateLimit } from '../middleware/rate-limit';
 import {
   followCounts,
   followUser,
@@ -14,6 +15,7 @@ import {
 } from '../services/follows';
 
 const follows = new Hono();
+follows.use('*', writeRateLimit);
 
 const followSchema = z.object({
   followeeId: z.string().min(1).max(255),

@@ -17,7 +17,7 @@ import { parseNormalizedLifecycleEvent } from '@blackout/core';
 
 const PROVIDER_ID = 'freeblackmarket' as const;
 const STUB_KEY_ID = 'fbm-dev-hmac';
-const DEFAULT_DEV_HMAC_HEX = '6465762d68616d63'; // ascii "dev-hamc"
+const DEFAULT_DEV_HMAC_HEX = crypto.randomBytes(32).toString('hex');
 
 interface StubListing {
     listing: NormalizedListing;
@@ -336,7 +336,10 @@ export function shouldUseFreeblackmarketStub(env = process.env): boolean {
 
 export function createFreeblackmarketStubProvider(): MarketplaceProvider {
     const baseUrl = process.env.FREEBLACKMARKET_BASE_URL || 'https://stub.freeblackmarket.local';
-    const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET || 'stub-webhook-secret';
+    const webhookSecret = process.env.FREEBLACKMARKET_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+        throw new Error('FREEBLACKMARKET_WEBHOOK_SECRET must be set when the FBM stub provider is enabled');
+    }
     const apiBaseUrl =
         process.env.BLACKOUT_PUBLIC_API_BASE_URL ?? process.env.PUBLIC_API_BASE_URL ?? '';
     const enabled = envBool('FREEBLACKMARKET_ENABLED', true);

@@ -237,6 +237,12 @@ export const rateLimitHitsTotal = new Counter(
   ['bucket'],
 );
 
+export const rateLimitFailOpenTotal = new Counter(
+  'rate_limit_fail_open_total',
+  'Requests allowed due to rate limiter store failure (fail-open)',
+  ['bucket'],
+);
+
 export const refreshTokenReusesTotal = new Counter(
   'refresh_token_reuses_total',
   'Refresh-token reuse detections (potential token theft)',

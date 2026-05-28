@@ -28,7 +28,7 @@ async function openDb(): Promise<IDBDatabase> {
 
 async function getStoredKey(): Promise<CryptoKey | null> {
     if (cachedKey) {
-        try { await crypto.subtle.encrypt({ name: 'AES-GCM', iv: new Uint8Array(12) }, cachedKey, new Uint8Array(1)); }
+        try { await crypto.subtle.exportKey('jwk', cachedKey); }
         catch { cachedKey = null; }
     }
     if (cachedKey) return cachedKey;

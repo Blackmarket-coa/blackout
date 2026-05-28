@@ -8,6 +8,7 @@ import {
 import { readJsonBody } from '../middleware/validate';
 import { requireUser } from '../middleware/require-user';
 import { getMarketplaceProvider, listEnabledProviders } from '../integrations/marketplace';
+import { writeRateLimit } from '../middleware/rate-limit';
 import {
     createCreatorListingRecord,
     deleteCreatorListing,
@@ -18,6 +19,7 @@ import {
 import { incrementCounter, logEvent } from '../services/marketplaceObservability';
 
 const creator = new Hono();
+creator.use('*', writeRateLimit);
 
 const draftSchema = z.object({
     providerId: z.string().min(1),
@@ -220,7 +222,7 @@ creator.post('/listings/:id/publish', async (c) => {
     }
     try {
         const result = await provider.publishCreatorListing(record.providerListingId);
-        const updated = updateCreatorListingStatus(record.id, {
+        const updated = updateCreatorListingStatus(record.id, user.sub, {
             status: result.status,
             publicSlug: result.publicSlug,
         });

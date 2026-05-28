@@ -5,6 +5,7 @@ import { matrixClient } from '../integrations/matrix-client';
 import { requireUser } from '../middleware/require-user';
 import { isAdminUser } from '../services/auth';
 import { requireDestructiveConfirm, type DestructiveAction } from '../middleware/require-destructive-confirm';
+import { adminRateLimit } from '../middleware/rate-limit';
 import { log } from '../telemetry/logger';
 
 /**
@@ -27,6 +28,7 @@ const readOptionalBody = async <T>(c: Context, schema: z.ZodType<T>): Promise<T 
 };
 
 const admin = new Hono();
+admin.use('*', adminRateLimit);
 
 /**
  * Server-side admin gate. The client `platform-ops.admin` capability controls

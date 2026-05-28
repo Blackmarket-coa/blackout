@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { appActions, appEvents } from '@blackout/core';
 import { readJsonBody } from '../middleware/validate';
+import { requireUser } from '../middleware/require-user';
 import {
   getIntegrationContract,
   getObservability,
@@ -41,6 +42,8 @@ apps.get('/directory', (c) => {
 });
 
 apps.post('/directory/:appId/install', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
   const appId = c.req.param('appId');
   const parsed = await readJsonBody(c, installAppSchema);
   if (parsed instanceof Response) return parsed;
@@ -54,6 +57,8 @@ apps.post('/directory/:appId/install', async (c) => {
 });
 
 apps.post('/directory/:appId/revoke', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
   const appId = c.req.param('appId');
   const parsed = await readJsonBody(c, revokeAppSchema);
   if (parsed instanceof Response) return parsed;
@@ -74,6 +79,8 @@ apps.get('/directory/:appId/observability', (c) => {
 });
 
 apps.post('/actions/:action', async (c) => {
+  const user = requireUser(c);
+  if (user instanceof Response) return user;
   const action = c.req.param('action');
   const parsed = await readJsonBody(c, recordActionSchema);
   if (parsed instanceof Response) return parsed;

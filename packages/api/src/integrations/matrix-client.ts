@@ -92,7 +92,8 @@ export const matrixClient = {
    * smaller blast radius than the full admin bot token. Preferred for
    * flows that only need to provision accounts (account-number signup).
    *
-   * Falls back to `registerUser` if no shared secret is configured.
+   * Requires MATRIX_REGISTRATION_SHARED_SECRET to be configured on both
+   * the API and the Synapse homeserver.
    */
   async registerWithSharedSecret(username: string, password: string) {
     const hs = homeserver();
@@ -481,16 +482,9 @@ export const matrixClient = {
         },
       );
     } catch (error) {
-      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+      return { ok: false as const, reason: 'network_error' as const };
     }
-    let detail: string | undefined;
-    if (!response.ok) {
-      try {
-        detail = await response.text();
-      } catch {
-        /* ignore body-read failure */
-      }
-    }
+    const detail = await readSafeErrorDetail(response);
     return { ok: response.ok, status: response.status, detail };
   },
 

@@ -152,7 +152,9 @@ turn_allow_guests: True
 # Synapse issues TURN credentials; media relay remains peer-to-peer unless TURN fallback is needed.
 {% else %}
 turn_uris: []
-turn_shared_secret: "YOUR_SHARED_SECRET"
+# No TURN servers configured. Replace with a real shared secret when TURN is enabled.
+# Synapse will accept this value on startup — ensure it's changed before enabling TURN.
+turn_shared_secret: "TURN_NOT_CONFIGURED"
 turn_user_lifetime: "1h"
 turn_allow_guests: True
 {% endif %}

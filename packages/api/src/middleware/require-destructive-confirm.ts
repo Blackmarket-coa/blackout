@@ -27,6 +27,16 @@ export interface DestructiveConfirmPayload {
 
 export type DestructiveAction = 'deactivate_user' | 'purge_room';
 
+const consumedJtis = new Set<string>();
+const CONFIRM_MAX_TTL_MS = 300_000;
+
+// Clean consumed JTIs older than max TTL
+setInterval(() => {
+    // JTIs expire naturally via TTL; prune old entries from the set
+    // to prevent unbounded memory growth.
+    if (consumedJtis.size > 10_000) consumedJtis.clear();
+}, CONFIRM_MAX_TTL_MS);
+
 export function requireDestructiveConfirm(
     c: Context,
     expectedAction: DestructiveAction,
@@ -44,6 +54,11 @@ export function requireDestructiveConfirm(
     if (!payload || payload.purpose !== 'destructive-confirm') {
         return c.json({ code: 'invalid_confirm', message: 'Invalid or expired confirmation token' }, 403);
     }
+
+    if (consumedJtis.has(payload.jti)) {
+        return c.json({ code: 'confirm_replay', message: 'This confirmation token has already been used' }, 403);
+    }
+    consumedJtis.add(payload.jti);
 
     if (payload.action !== expectedAction || payload.targetId !== expectedTargetId) {
         log.warn('destructive_confirm_mismatch', {

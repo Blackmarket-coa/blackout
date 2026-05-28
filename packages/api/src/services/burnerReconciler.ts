@@ -16,29 +16,35 @@ const RECONCILE_INTERVAL_MS = Number(process.env.BURNER_RECONCILE_INTERVAL_MS ||
 let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
 async function reconcilePendingBurners(): Promise<void> {
-    const pending = db.listBurnerIdentitiesPendingDeactivation();
-    if (pending.length === 0) return;
+    try {
+        const pending = db.listBurnerIdentitiesPendingDeactivation();
+        if (pending.length === 0) return;
 
-    log.info('burner.reconciler.run', { pendingCount: pending.length });
+        log.info('burner.reconciler.run', { pendingCount: pending.length });
 
-    for (const burner of pending) {
-        try {
-            const result = await matrixClient.deactivateUser(burner.burnerUserId, true);
-            if (result.ok) {
-                db.confirmBurnerDeactivation(burner.id);
-                log.info('burner.reconciler.deactivated', { burnerUserId: burner.burnerUserId });
-            } else {
-                log.warn('burner.reconciler.retry_failed', {
+        for (const burner of pending) {
+            try {
+                const result = await matrixClient.deactivateUser(burner.burnerUserId, true);
+                if (result.ok) {
+                    db.confirmBurnerDeactivation(burner.id);
+                    log.info('burner.reconciler.deactivated', { burnerUserId: burner.burnerUserId });
+                } else {
+                    log.warn('burner.reconciler.retry_failed', {
+                        burnerUserId: burner.burnerUserId,
+                        reason: result.reason,
+                    });
+                }
+            } catch (error) {
+                log.error('burner.reconciler.error', {
                     burnerUserId: burner.burnerUserId,
-                    reason: result.reason,
+                    error: error instanceof Error ? error.message : String(error),
                 });
             }
-        } catch (error) {
-            log.error('burner.reconciler.error', {
-                burnerUserId: burner.burnerUserId,
-                error: error instanceof Error ? error.message : String(error),
-            });
         }
+    } catch (error) {
+        log.error('burner.reconciler.fatal', {
+            error: error instanceof Error ? error.message : String(error),
+        });
     }
 }
 

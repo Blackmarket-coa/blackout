@@ -651,7 +651,11 @@ class InMemoryDb {
 
   decrementBurnerCounter(ownerUserId: string): void {
     const current = this.getBurnerCounter(ownerUserId);
-    if (current > 0) this.burnerCounters.set(ownerUserId, current - 1);
+    if (current > 1) {
+      this.burnerCounters.set(ownerUserId, current - 1);
+    } else {
+      this.burnerCounters.delete(ownerUserId);
+    }
   }
 
   /** List burners whose Matrix deactivation failed and need retry. */
@@ -715,10 +719,12 @@ class InMemoryDb {
     for (const [challenge, record] of this.webAuthnChallenges) {
       if (record.userId === userId) this.webAuthnChallenges.delete(challenge);
     }
+    // Burner counters — stale per-owner active-count entries
+    this.burnerCounters.delete(userId);
     // Burner identities — orphaned records for this owner
-    const burners = this.burnerIdentities ? [...this.burnerIdentities.values()] : [];
+    const burners = [...this.burnerIdentities.values()];
     for (const burner of burners) {
-      if (burner.ownerUserId === userId) this.burnerIdentities!.delete(burner.id);
+      if (burner.ownerUserId === userId) this.burnerIdentities.delete(burner.id);
     }
     // Revoked sessions — stale denylist entries
     for (const [jti, record] of this.revokedSessions) {

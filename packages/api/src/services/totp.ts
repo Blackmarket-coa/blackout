@@ -61,7 +61,7 @@ export function generateTOTPSecret(userId: string, issuer = 'Blackout'): TOTPSec
   const recoveryCodes: string[] = [];
   const hashedCodes: string[] = [];
   for (let i = 0; i < 8; i += 1) {
-    const code = randomBytes(5).toString('hex').slice(0, 10).toUpperCase();
+    const code = randomBytes(10).toString('base64url').slice(0, 10);
     recoveryCodes.push(code);
     hashedCodes.push(createHash('sha256').update(code).digest('hex'));
   }
@@ -92,7 +92,9 @@ export function verifyTOTPCode(secretBase32: string, code: string, now = Date.no
   const timeStep = BigInt(Math.floor(now / 1000 / WINDOW_SECONDS));
   for (let drift = -ALLOWED_DRIFT; drift <= ALLOWED_DRIFT; drift += 1) {
     const checkTime = timeStep + BigInt(drift);
-    if (generateHOTP(secret, checkTime) === code) {
+    const expected = Buffer.from(generateHOTP(secret, checkTime));
+    const provided = Buffer.from(code);
+    if (expected.length === provided.length && timingSafeEqual(expected, provided)) {
       return { ok: true };
     }
   }
@@ -131,11 +133,20 @@ export function verifyRecoveryCode(userId: string, code: string): RecoveryCodeRe
     return { kind: 'invalid' };
   }
   const hash = createHash('sha256').update(code.trim()).digest('hex');
-  const index = config.recoveryCodeHashes.indexOf(hash);
-  if (index === -1) return { kind: 'invalid' };
-  if (config.usedRecoveryCodes?.includes(index)) return { kind: 'already_used' };
+  const hashBuf = Buffer.from(hash, 'hex');
 
-  db.markRecoveryCodeUsed(userId, index);
+  let foundIndex = -1;
+  for (let i = 0; i < config.recoveryCodeHashes.length; i += 1) {
+    const target = Buffer.from(config.recoveryCodeHashes[i], 'hex');
+    if (target.length === hashBuf.length && timingSafeEqual(target, hashBuf)) {
+      foundIndex = i;
+      break;
+    }
+  }
+  if (foundIndex === -1) return { kind: 'invalid' };
+  if (config.usedRecoveryCodes?.includes(foundIndex)) return { kind: 'already_used' };
+
+  db.markRecoveryCodeUsed(userId, foundIndex);
   return { kind: 'ok' };
 }
 

@@ -161,14 +161,14 @@ function createGovernanceRouter() {
     return c.json({ ...vote, results: tallyVotes(db.getVoteEntries(proposalId)) });
   });
 
-  governance.get('/proposals/:proposalId/audit', (c) => {
+  governance.get('/proposals/:proposalId/audit', async (c) => {
     const denied = requireDomainCapability(c, 'governance', 'read');
     if (denied) return denied;
     const { proposalId } = c.req.param();
     const vote = db.getVote(proposalId);
     if (!vote) return c.json({ code: 'proposal_not_found', message: 'Proposal not found' }, 404);
     const entries = db.getVoteEntriesOrdered(proposalId);
-    const chain = verifyAuditChain(entries);
+    const chain = await verifyAuditChain(entries);
     return c.json({ proposalId, entries, chain });
   });
 

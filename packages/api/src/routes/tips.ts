@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAdmin } from '../middleware/require-admin';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
+import { writeRateLimit } from '../middleware/rate-limit';
 import {
     captureTip,
     createTip,
@@ -15,6 +16,7 @@ import {
 } from '../services/tips';
 
 const tips = new Hono();
+tips.use('*', writeRateLimit);
 
 const createTipSchema = z.object({
     recipientUserId: z.string().min(1),
