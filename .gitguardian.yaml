@@ -90,3 +90,9 @@ secret:
     - ".gitleaksignore"
     # Contributor example compose files — same rationale as the top-level entry.
     - "apps/blackout-server/contrib/**"
+    # CI postgres config — same rationale as the top-level entry.
+    - "apps/blackout-server/.ci/**"
+  # CI postgres config — Docker CI ephemeral database, env var values only. The
+  # "postgres" default password is the well-known superuser default shipped with
+  # the official Docker image and is never a real secret.
+  - "apps/blackout-server/.ci/**"

@@ -240,7 +240,7 @@ export type FeatureFlags = {
      * Federation / self-host wizard (PR 8). Owns the
      * `/federation/self-host` route — a docker-compose template
      * generator for canopy admins who want to host their own
-     * Synapse + media-repo + Owncast stack.
+     * Matrix homeserver + media-repo + Owncast stack.
      */
     federationSelfHost: boolean;
     /**

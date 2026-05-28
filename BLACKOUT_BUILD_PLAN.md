@@ -1045,8 +1045,8 @@ npm run test
 # 2. Build for production
 npm run build
 
-# 3. Deploy to Railway/Render
-railway deploy
+# 3. Deploy to Render
+render deploy
 
 # 4. Deploy web frontend to Vercel
 vercel deploy --prod

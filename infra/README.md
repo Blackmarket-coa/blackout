@@ -4,7 +4,6 @@ This folder is the canonical home for deployment configuration used by Blackout 
 
 - `docker/`: compose files, image notes, and local container runtime docs.
 - `cloudflare/`: tunnel/WAF/routing configuration and runbooks.
-- `railway/`: Railway project/service configuration.
 - `nginx/`: reverse-proxy examples and hardened templates.
 - `env/`: environment variable contracts and secrets handling notes.
 

@@ -2,7 +2,7 @@
 
 > **STATUS — 2026-05-10:** the deployment-checklist failures recorded later
 > in this document (TypeScript errors in `apps/blackout-client`, missing
-> `railway`/`vercel`/`eas` CLIs) are **stale**. Verified `pnpm install`
+> `vercel`/`eas` CLIs) are **stale**. Railway has been removed as a deploy target. Verified `pnpm install`
 > + `pnpm --filter @blackout/client build` and `pnpm --filter @blackout/client
 > typecheck` both pass cleanly; the original failure was caused by an empty
 > `node_modules` in the audit environment, not a code defect. The CLI gaps
@@ -62,8 +62,7 @@
 ## Deployment Checklist Execution (from BLACKOUT_BUILD_PLAN)
 1. `npm run test` → ❌ failed due pre-existing parse error in `apps/blackout-web/src/app.ts`.
 2. `npm run build` → ❌ failed due same pre-existing TypeScript syntax errors in `apps/blackout-web/src/app.ts`.
-3. `railway deploy` → ⚠️ unavailable (`railway` CLI missing).
-4. `vercel deploy --prod` → ⚠️ unavailable (`vercel` CLI missing).
+3. `vercel deploy --prod` → ⚠️ unavailable (`vercel` CLI missing).
 5. `eas build --platform ios --auto-submit` → ⚠️ unavailable (`eas` CLI missing).
 6. `eas build --platform android` → ⚠️ unavailable (`eas` CLI missing).
 7. Smoke tests / monitoring steps require deployable runtime + infra credentials and were not runnable in this container-only environment.
@@ -83,7 +82,6 @@
 ## Deployment Checklist Re-run
 1. `npm run test` → ✅ pass.
 2. `npm run build` → ❌ fails in `apps/blackout-client` due existing TypeScript errors unrelated to this pass.
-3. `railway deploy` → ⚠️ unavailable (`railway` CLI missing).
-4. `vercel deploy --prod` → ⚠️ unavailable (`vercel` CLI missing).
+3. `vercel deploy --prod` → ⚠️ unavailable (`vercel` CLI missing).
 5. `eas build --platform ios --auto-submit` → ⚠️ unavailable (`eas` CLI missing).
 6. `eas build --platform android` → ⚠️ unavailable (`eas` CLI missing).
