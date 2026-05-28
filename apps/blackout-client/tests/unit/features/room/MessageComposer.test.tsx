@@ -36,7 +36,7 @@ vi.mock('../../../../src/app/features/room/scheduledMessagesClient', () => ({
     createScheduledMessage: (...args: unknown[]) => createScheduledMessage(...args),
 }));
 
-import { MessageComposer } from '../../../../src/app/features/room/MessageComposer';
+import { MessageComposer, toHtml } from '../../../../src/app/features/room/MessageComposer';
 
 const mountComposer = async (props: { roomId?: string; initialMarkdown?: string } = {}) => {
     const container = document.createElement('div');
@@ -138,6 +138,53 @@ describe('MessageComposer', () => {
         expect(input.matrixRoomId).toBe('!room:test');
         expect(Date.parse(input.deliverAt)).toBeGreaterThan(Date.now());
         expect(sendRichText).not.toHaveBeenCalled();
+    });
+
+    // Mentions and links are inline element nodes nested inside a paragraph's
+    // children. Serializing them used to call the text-leaf path on those nodes,
+    // reading `.text` off undefined and throwing in escapeHtml — which crashed
+    // the send handler for any message containing an @mention or auto-linked URL.
+    it('serializes a mention nested inside a paragraph without throwing', () => {
+        const html = toHtml([
+            {
+                type: 'paragraph',
+                children: [
+                    { text: 'hey ' },
+                    {
+                        type: 'mention',
+                        mentionKind: 'user',
+                        id: '@bob:server',
+                        label: 'bob',
+                        children: [{ text: '' }],
+                    },
+                    { text: ' welcome' },
+                ],
+            },
+        ] as never);
+
+        expect(html).toBe(
+            '<p>hey <a href="https://matrix.to/#/@bob:server">bob</a> welcome</p>'
+        );
+    });
+
+    it('serializes a link nested inside a paragraph without throwing', () => {
+        const html = toHtml([
+            {
+                type: 'paragraph',
+                children: [
+                    { text: 'see ' },
+                    {
+                        type: 'link',
+                        href: 'https://example.com',
+                        children: [{ text: 'https://example.com' }],
+                    },
+                ],
+            },
+        ] as never);
+
+        expect(html).toBe(
+            '<p>see <a href="https://example.com">https://example.com</a></p>'
+        );
     });
 
     it('persists a draft to localStorage as the user composes', async () => {
