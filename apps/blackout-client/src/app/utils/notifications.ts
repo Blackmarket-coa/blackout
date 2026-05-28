@@ -1,4 +1,5 @@
 import { MatrixClient, ReceiptType } from 'matrix-js-sdk';
+import { shouldSendReadReceipts } from '../features/metadata-privacy/outboundPrivacy';
 
 export async function markAsRead(mx: MatrixClient, roomId: string, privateReceipt: boolean) {
   const room = mx.getRoom(roomId);
@@ -19,8 +20,11 @@ export async function markAsRead(mx: MatrixClient, roomId: string, privateReceip
   const latestEvent = getLatestValidEvent();
   if (latestEvent === null) return;
 
+  // Force a private receipt when the caller asked for one, or when the user has
+  // opted out of sending public read receipts (metadata minimization).
+  const usePrivate = privateReceipt || !shouldSendReadReceipts();
   await mx.sendReadReceipt(
     latestEvent,
-    privateReceipt ? ReceiptType.ReadPrivate : ReceiptType.Read
+    usePrivate ? ReceiptType.ReadPrivate : ReceiptType.Read
   );
 }

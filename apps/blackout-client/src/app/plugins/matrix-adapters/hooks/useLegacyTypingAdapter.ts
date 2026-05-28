@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { userIdAtom } from '../../../state/auth';
 import { useLegacyMatrixClientAdapter as useMatrixClient } from './useLegacyMatrixClientAdapter';
 import { useLegacyRoomAdapter as useRoom } from './useLegacyRoomAdapter';
+import { shouldSendTypingNotifications } from '../../../features/metadata-privacy/outboundPrivacy';
 
 export interface HookResult<T> {
     data: T;
@@ -63,6 +64,10 @@ export const useLegacySendTypingAdapter = (roomId: string) => {
 
     return useCallback(
         async (isTyping: boolean, timeoutMs = 10_000) => {
+            // Respect the outbound-privacy toggle: don't broadcast typing when
+            // the user has opted out (sending `true` is the leak; `false` would
+            // only ever clear our own state, so suppressing both is fine).
+            if (!shouldSendTypingNotifications()) return;
             await client.sendTyping(roomId, isTyping, timeoutMs);
         },
         [client, roomId]
