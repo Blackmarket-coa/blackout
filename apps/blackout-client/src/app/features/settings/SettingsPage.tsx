@@ -20,6 +20,9 @@ const AccountSettings = lazy(() => import('./AccountSettings'));
 const AppearanceSettings = lazy(() => import('./AppearanceSettings'));
 const NotificationSettings = lazy(() => import('./NotificationSettings'));
 const PrivacySettings = lazy(() => import('./PrivacySettings'));
+const PrivacyToolsSettings = lazy(() => import('../privacy-tools/PrivacyToolsSettings'));
+const DataTransparencySettings = lazy(() => import('../data-transparency/DataTransparencySettings'));
+const BurnerIdentitiesPanel = lazy(() => import('../burner-identity/BurnerIdentitiesPanel'));
 const VoiceVideoSettings = lazy(() => import('./VoiceVideoSettings'));
 const AccessibilitySettings = lazy(() => import('./AccessibilitySettings'));
 const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
@@ -47,7 +50,7 @@ const groups: SettingsGroup[] = [
     {
         id: 'identity',
         label: 'Account & identity',
-        sectionIds: ['account', 'character-sheet', 'about'],
+        sectionIds: ['account', 'identities', 'character-sheet', 'about'],
     },
     {
         id: 'look-feel',
@@ -57,7 +60,7 @@ const groups: SettingsGroup[] = [
     {
         id: 'privacy-notifications',
         label: 'Privacy & notifications',
-        sectionIds: ['privacy', 'notifications', 'voice-video'],
+        sectionIds: ['privacy', 'privacy-tools', 'data-transparency', 'notifications', 'voice-video'],
     },
     {
         id: 'help-advanced',
@@ -90,6 +93,24 @@ const sections: SettingsSection[] = [
         label: 'Privacy',
         summary: 'Blocked users, direct-message permissions, read receipts',
         component: PrivacySettings,
+    },
+    {
+        id: 'privacy-tools',
+        label: 'Privacy Tools',
+        summary: 'Metadata stripping and link sanitization for uploads & messages',
+        component: PrivacyToolsSettings,
+    },
+    {
+        id: 'data-transparency',
+        label: 'Your data',
+        summary: "What's stored about you on this homeserver",
+        component: DataTransparencySettings,
+    },
+    {
+        id: 'identities',
+        label: 'Burner identities',
+        summary: 'Create disposable identities and burn them when done',
+        component: BurnerIdentitiesPanel,
     },
     {
         id: 'voice-video',

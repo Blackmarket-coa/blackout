@@ -71,9 +71,6 @@ import { AppearanceSettings } from './AppearanceSettings';
 
 import { StegoSettings } from '../steganography';
 
-import { PrivacyToolsSettings } from '../privacy-tools/PrivacyToolsSettings';
-
-import { DataTransparencySettings } from '../data-transparency/DataTransparencySettings';
 
 import { RegistrySettingsList } from '../../core/features/RegistrySettingsList';
 
@@ -102,10 +99,6 @@ export enum SettingsPages {
   AppearancePage,
 
   SteganographyPage,
-
-  PrivacyToolsPage,
-
-  DataTransparencyPage,
 
   FeatureSettingsPage,
 
@@ -204,26 +197,6 @@ const useSettingsMenuItems = (): SettingsMenuItem[] =>
         name: 'Steganography',
 
         icon: Icons.Lock,
-
-      },
-
-      {
-
-        page: SettingsPages.PrivacyToolsPage,
-
-        name: 'Privacy Tools',
-
-        icon: Icons.ShieldUser,
-
-      },
-
-      {
-
-        page: SettingsPages.DataTransparencyPage,
-
-        name: 'Your Data',
-
-        icon: Icons.Eye,
 
       },
 
@@ -550,18 +523,6 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
       {activePage === SettingsPages.SteganographyPage && (
 
         <StegoSettings requestClose={handlePageRequestClose} />
-
-      )}
-
-      {activePage === SettingsPages.PrivacyToolsPage && (
-
-        <PrivacyToolsSettings requestClose={handlePageRequestClose} />
-
-      )}
-
-      {activePage === SettingsPages.DataTransparencyPage && (
-
-        <DataTransparencySettings requestClose={handlePageRequestClose} />
 
       )}
 

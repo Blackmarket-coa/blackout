@@ -287,6 +287,7 @@ const ALL_MAP_NAMES = [
   'accountDeletionTokens',
   'invitationTokens',
   'invitationRedemptions',
+  'burnerIdentities',
   'refreshTokens',
   'revokedSessions',
   'linkedAccounts',
@@ -380,6 +381,8 @@ export const MUTATOR_SPECS: Record<string, MutatorSpec> = {
   incrementInvitationTokenUseCount: upsert('invitationTokens'),
   revokeInvitationToken: upsert('invitationTokens'),
   createInvitationRedemption: upsert('invitationRedemptions'),
+  createBurnerIdentity: upsert('burnerIdentities'),
+  markBurnerIdentityBurned: upsert('burnerIdentities'),
   purgeUserAuthArtifacts: resync(
     'passwordResetTokens',
     'emailVerificationTokens',
