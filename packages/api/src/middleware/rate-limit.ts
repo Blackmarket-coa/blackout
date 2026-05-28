@@ -1,3 +1,7 @@
+import type { Context, Next } from 'hono';
+
+import { readRedisRuntimeConfig } from '../config/redis';
+import { log } from '../telemetry/logger';
 import { rateLimitFailOpenTotal, rateLimitHitsTotal } from '../telemetry/metrics';
 
 /**
@@ -39,8 +43,6 @@ export interface RateLimitOptions {
    * limit on instead of the client IP. Falls back to the IP key when it returns
    * a falsy value, so anonymous traffic is still bucketed by address.
  */
-
-import type { Context, Next } from 'hono';
   identify?: (c: Context) => string | null | undefined;
 }
 

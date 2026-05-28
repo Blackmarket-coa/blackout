@@ -387,7 +387,7 @@ Beyond the 3 deep-dives:
 
 The compat layer is far less work than it looks because most categories already
 have mature OSS we can fork, embed, or wrap. License compatibility checked
-against Blackout's existing AGPL-3.0 / GPL-3.0 dual-license posture.
+against Blackout's existing AGPL-3.0 license posture.
 
 | Gap | Project | License | Role |
 |---|---|---|---|
@@ -492,7 +492,7 @@ against Blackout's existing AGPL-3.0 / GPL-3.0 dual-license posture.
 
 ### License posture
 
-Blackout already ships dual AGPL-3.0 / commercial. All adopted projects in this
+Blackout is licensed under AGPL-3.0. All adopted projects in this
 list are MIT, Apache 2.0, or AGPL-3.0 — all compatible with our outbound
 license. AGPL'd embeds (Spacebar) require us to publish the modified shim
 source, which we already do. No commercial-license complications.

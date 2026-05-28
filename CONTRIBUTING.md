@@ -8,9 +8,7 @@ role taxonomy (Scout / Operator / Builder / Signal / Federation Team), see
 
 ## License and sign-off
 
-Blackout is dual-licensed under **AGPL-3.0** ([`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0))
-and **GPL-3.0** ([`LICENSE-GPL-3.0`](LICENSE-GPL-3.0)), with a separate
-commercial option available — see [`LICENSE-COMMERCIAL`](LICENSE-COMMERCIAL).
+Blackout is licensed under **AGPL-3.0** ([`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0)).
 
 Contributors certify the origin of their work using the **Developer Certificate
 of Origin** ([DCO](https://developercertificate.org/)) — we do not require a
