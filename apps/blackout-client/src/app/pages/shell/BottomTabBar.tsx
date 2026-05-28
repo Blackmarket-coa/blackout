@@ -7,6 +7,7 @@ const SHELL_DESTINATION_PANEL_IDS = new Set<string>([
     'shell.home',
     'shell.coalition',
     'shell.coliseum',
+    'shell.market',
     'shell.streams',
     'shell.profile',
 ]);

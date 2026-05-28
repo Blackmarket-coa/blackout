@@ -184,6 +184,7 @@ describe('RegistryRouteList + buildRegistryRouteObjects', () => {
                 coalition: false,
                 coliseum: false,
                 streaming: false,
+                marketTab: false,
             },
         });
         expect(objects).toEqual([]);
