@@ -7,6 +7,7 @@ import {
     errorTextStyle,
 } from './styles';
 import { loadClientConfig, resolveHomeserver } from './homeserver';
+import { readSavedHomeservers } from '../../../state/matrixServers';
 import type { ResolvedHomeserver } from './types';
 
 type ServerPickerProps = {
@@ -30,7 +31,9 @@ export const ServerPicker = ({ server, onChange }: ServerPickerProps) => {
         let cancelled = false;
         void loadClientConfig().then((cfg) => {
             if (cancelled) return;
-            setPresets(cfg.homeserverList ?? []);
+            const configHosts = cfg.homeserverList ?? [];
+            const savedHosts = readSavedHomeservers().map((server) => server.serverName);
+            setPresets([...new Set([...configHosts, ...savedHosts])]);
             setAllowCustom(cfg.allowCustomHomeservers !== false);
         });
         return () => {
