@@ -7,6 +7,7 @@ export type FetchApiClientOptions = {
     fetchFn?: typeof fetch;
     defaultHeaders?: HeadersInit;
     defaultRetry?: RetryPolicy;
+    credentials?: RequestCredentials;
     /**
      * Non-2xx statuses whose JSON body should be resolved to the caller
      * instead of throwing. Use for endpoints that report *expected* outcomes
@@ -28,6 +29,7 @@ export const createFetchApiClient = ({
     fetchFn = fetch,
     defaultHeaders,
     defaultRetry,
+    credentials,
     resolveOnStatuses,
 }: FetchApiClientOptions = {}): ApiClient => {
     const request = async <TResponse>({
@@ -48,6 +50,7 @@ export const createFetchApiClient = ({
                     },
                     body: body ? JSON.stringify(body) : undefined,
                     signal,
+                    ...(credentials ? { credentials } : {}),
                 }),
             retry ?? defaultRetry,
         );

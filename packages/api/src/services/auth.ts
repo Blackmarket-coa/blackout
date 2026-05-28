@@ -168,20 +168,23 @@ export const isAdminUser = (userId: string, username: string): boolean => {
 export function deriveUserCapabilities(): string[] {
   // Read access to every guarded feature domain is granted to all users.
   // Write is granted only where the module enforces per-resource ownership
-  // (streaming: per-creator; profile: subject === userId). Domains that gate
-  // mutations solely on the capability (governance, moderation, etc.) are
-  // intentionally read-only here to avoid universal write access.
+  // (streaming: per-creator; profile: subject === userId; discovery: the
+  // canopy-directory index endpoint verifies canopy ownership server-side).
+  // Domains that gate mutations solely on the capability (governance,
+  // moderation, etc.) are intentionally read-only here to avoid universal
+  // write access.
   return [
     'streaming.read',
     'streaming.write',
     'profile.read',
     'profile.write',
+    'discovery.read',
+    'discovery.write',
     'governance.read',
     'forum.read',
     'deaddrop.read',
     'deadman.read',
     'moderation.read',
-    'discovery.read',
     'stego.read',
     'growth.read',
   ];

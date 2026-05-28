@@ -231,7 +231,11 @@ const initClientForSession = async (session: StoredSession): Promise<MatrixClien
     });
 
     await syncStore.startup();
-    await client.initRustCrypto();
+    try {
+        await client.initRustCrypto();
+    } catch (err) {
+        console.warn('[blackout] initRustCrypto failed — E2EE unavailable. Error:', err);
+    }
     client.setMaxListeners(100);
 
     return client;

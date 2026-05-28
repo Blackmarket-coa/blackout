@@ -1,10 +1,19 @@
 import type { Context, Next } from 'hono';
 import { db } from '../db/store';
-import { verifyJwt } from '../services/auth';
+import { readAuthRuntimeConfig, verifyJwt } from '../services/auth';
 
 export async function authMiddleware(c: Context, next: Next) {
-  const authHeader = c.req.header('authorization') ?? '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const config = readAuthRuntimeConfig();
+  let token: string | null = null;
+
+  if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
+    token = c.req.cookie(config.cookieName!) ?? null;
+  }
+
+  if (!token) {
+    const authHeader = c.req.header('authorization') ?? '';
+    token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  }
 
   if (!token) {
     c.set('user', null);

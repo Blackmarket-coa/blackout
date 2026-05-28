@@ -8,6 +8,7 @@ import {
 } from '../../features/creators';
 import { deaddropFeature } from '../../features/deaddrop';
 import { deadmanFeature } from '../../features/deadman';
+import { piggpinFeature } from '../../features/piggpin';
 import { marketFeature } from '../../features/market';
 import { pluginsFeature } from '../../features/plugins';
 import { profileFeature } from '../../features/profile';
@@ -52,6 +53,10 @@ export const coreFeatureModules: FeatureModule[] = [
     {
         feature: deadmanFeature,
         flag: 'deadman',
+    },
+    {
+        feature: piggpinFeature,
+        flag: 'piggpin',
     },
     {
         feature: moderationFeature,

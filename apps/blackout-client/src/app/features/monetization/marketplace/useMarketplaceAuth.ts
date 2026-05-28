@@ -1,11 +1,13 @@
+let inMemoryToken: string | null = null;
+
 export function readBlackoutApiToken(): string | null {
-    try {
-        return (
-            window.localStorage.getItem('blackout.api.token') ??
-            window.localStorage.getItem('blackoutApiToken') ??
-            null
-        );
-    } catch {
-        return null;
-    }
+    return inMemoryToken;
+}
+
+export function setBlackoutApiToken(token: string): void {
+    inMemoryToken = token;
+}
+
+export function clearBlackoutApiToken(): void {
+    inMemoryToken = null;
 }

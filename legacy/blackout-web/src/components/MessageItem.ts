@@ -1,5 +1,6 @@
 import type { ChatMessage } from "../types";
 import { formatTime } from "../utils/format";
+import { escapeHtml } from "../utils/escapeHtml";
 
 interface MessageItemOptions {
   compact?: boolean;
@@ -69,7 +70,7 @@ export function renderMessageItem(message: ChatMessage, options: MessageItemOpti
       <div class="message-avatar" style="background: ${avatarColor};" aria-hidden="true">${initial}</div>
       <div class="message-body-wrap">
         <div class="message-meta">
-          <span class="message-author">${message.sender}</span>
+          <span class="message-author">${escapeHtml(message.sender)}</span>
           <time datetime="${message.timestamp}">${timeStr}</time>
           ${renderDeliveryStatus(deliveryStatus)}
         </div>
@@ -83,15 +84,15 @@ function renderMessageBody(body: string, options: MessageItemOptions): string {
   const emojiByAlias = options.customEmojiByAlias ?? {};
   const stickerByAlias = options.customStickerByAlias ?? {};
   const canAccess = options.canAccessMemberAssets ?? true;
-  return body
+  return escapeHtml(body)
     .replace(/:([a-z0-9_]+):/gi, (_whole, alias: string) => {
       const symbol = emojiByAlias[alias.toLowerCase()];
       if (!symbol) return `:${alias}:`;
-      return canAccess ? symbol : `:${alias}:`;
+      return canAccess ? escapeHtml(symbol) : `:${alias}:`;
     })
     .replace(/\[sticker:([a-z0-9_]+)\]/gi, (_whole, alias: string) => {
       const sticker = stickerByAlias[alias.toLowerCase()];
       if (!sticker) return `[sticker:${alias}]`;
-      return canAccess ? `<img src="${sticker}" alt="${alias}" class="inline-sticker" loading="lazy" />` : `[sticker:${alias}]`;
+      return canAccess ? `<img src="${escapeHtml(sticker)}" alt="${escapeHtml(alias)}" class="inline-sticker" loading="lazy" />` : `[sticker:${alias}]`;
     });
 }

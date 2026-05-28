@@ -46,7 +46,6 @@ function authHeaders(): Record<string, string> {
   const session = getSession();
   const headers: Record<string, string> = {
     'content-type': 'application/json',
-    'x-blackout-capabilities': 'governance.read,governance.write',
   };
 
   if (session.token) {

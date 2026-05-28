@@ -50,7 +50,7 @@ export const readCorsRuntimeConfig = (): CorsRuntimeConfig => {
       allowAny: false,
       credentials: false,
       allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Authorization', 'Content-Type'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'x-matrix-access-token'],
       exposeHeaders: [],
       maxAge: 600,
     };
@@ -101,7 +101,7 @@ export const readCorsRuntimeConfig = (): CorsRuntimeConfig => {
     allowAny,
     credentials,
     allowedMethods,
-    allowedHeaders: allowedHeaders.length > 0 ? allowedHeaders : ['Authorization', 'Content-Type'],
+    allowedHeaders: allowedHeaders.length > 0 ? allowedHeaders : ['Authorization', 'Content-Type', 'x-matrix-access-token'],
     exposeHeaders,
     maxAge,
   };

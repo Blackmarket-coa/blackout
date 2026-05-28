@@ -214,7 +214,7 @@ marketplace.get('/fulfillment/:entitlementId/asset', (c) => {
     const nonce = crypto.randomBytes(8).toString('hex');
     const expiresAt = Date.now() + 5 * 60 * 1_000;
     const payload = `${entitlement.id}:${nonce}:${expiresAt}`;
-    const signingSecret = process.env.MARKETPLACE_FULFILLMENT_SECRET ?? 'local-dev-fulfillment';
+    const signingSecret = process.env.MARKETPLACE_FULFILLMENT_SECRET || 'local-dev-fulfillment';
     const signature = crypto.createHmac('sha256', signingSecret).update(payload).digest('hex');
     const assetUrlTemplate = entitlement.metadata['assetUrl'];
 

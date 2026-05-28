@@ -26,9 +26,9 @@ export interface CanopyDirectoryEntry {
  *
  * Without this, a freshly created canopy is invisible to browse/search and —
  * because `hasCanopy` gates them server-side — its voice rooms and app installs
- * can't be created. The server requires the `discovery.write` capability,
- * asserted via the `x-blackout-capabilities` header (see
- * `packages/api/src/modules/authz.ts`).
+ * can't be created. The `discovery.write` capability is minted in the session
+ * JWT by `deriveUserCapabilities()` (see
+ * `packages/api/src/services/auth.ts`).
  *
  * Resolves the Blackout API JWT lazily via `ensureBlackoutApiToken()` so it
  * works even when called right after space creation (before a passed-in token
@@ -44,7 +44,6 @@ export const indexCanopy = async (
         baseUrl: API_BASE_URL,
         defaultHeaders: {
             ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-            'x-blackout-capabilities': 'discovery.write',
         },
         defaultRetry: { attempts: 3, backoffMs: 100 },
     })({ method: 'POST', path: CANOPY_INDEX_PATH, body: input }) as Promise<CanopyDirectoryEntry>;

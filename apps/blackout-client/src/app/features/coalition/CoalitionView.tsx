@@ -3,6 +3,7 @@ import { useAtom } from 'jotai';
 import { aiToolsEnabled, isValidCoalitionTab, type CoalitionTabId } from '@blackout/core';
 import { coalitionTabAtom, COALITION_TAB_ORDER } from '../../state/coalition';
 import { useDenType } from '../../hooks/useDenType';
+import { runtimeFeatureFlags } from '../../core/features/featureFlags';
 import CoalitionTabStrip from './CoalitionTabStrip';
 import ChatTab from './tabs/ChatTab';
 import VideoTab from './tabs/VideoTab';
@@ -14,6 +15,7 @@ import ShopTab from './tabs/ShopTab';
 import TasksTab from './tabs/TasksTab';
 import { DocumentsTab } from '../documents/DocumentsTab';
 import AiDenPanel from '../aiden/AiDenPanel';
+import { PiggPinView } from '../piggpin/PiggPinView';
 
 export interface CoalitionViewProps {
     /**
@@ -42,12 +44,22 @@ export function CoalitionView({
     const denType = useDenType(denId ?? null);
     const isAiDen = aiToolsEnabled(denType);
 
+    const piggpinEnabled = runtimeFeatureFlags.piggpin;
+
     const tabs = useMemo<CoalitionTabId[]>(() => {
         const base = (enabledTabs && enabledTabs.length > 0 ? enabledTabs : COALITION_TAB_ORDER)
             .filter((tab) => tab !== 'ai');
-        // The AI tab surfaces only inside AI dens.
-        return isAiDen ? [...base, 'ai'] : base;
-    }, [enabledTabs, isAiDen]);
+        let ordered: CoalitionTabId[] = isAiDen ? [...base, 'ai'] : base;
+        if (piggpinEnabled && !ordered.includes('piggpin')) {
+            const idx = ordered.indexOf('map');
+            ordered = [...ordered];
+            ordered.splice(idx >= 0 ? idx + 1 : ordered.length, 0, 'piggpin' as CoalitionTabId);
+        }
+        if (!piggpinEnabled) {
+            ordered = ordered.filter((t: CoalitionTabId) => t !== 'piggpin');
+        }
+        return ordered;
+    }, [enabledTabs, isAiDen, piggpinEnabled]);
 
     const activeTab = useMemo<CoalitionTabId>(() => {
         if (isValidCoalitionTab(storedTab) && tabs.includes(storedTab)) return storedTab;
@@ -86,6 +98,7 @@ export function CoalitionView({
                 {activeTab === 'chat' ? <ChatTab denId={denId ?? null} /> : null}
                 {activeTab === 'video' ? <VideoTab scope={scope} /> : null}
                 {activeTab === 'map' ? <MapTab scope={scope} /> : null}
+                {activeTab === 'piggpin' && piggpinEnabled ? <PiggPinView /> : null}
                 {activeTab === 'events' ? <EventsTab scope={scope} /> : null}
                 {activeTab === 'rings' ? <RingsTab /> : null}
                 {activeTab === 'shop' ? <ShopTab scope={scope} /> : null}

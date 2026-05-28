@@ -73,6 +73,7 @@ import { initErrorReporter } from './telemetry/errors';
 import { initTracing } from './telemetry/tracing';
 import { bootstrapMailer } from './services/mailer';
 import { runSecurityPreflight } from './config/security';
+import { validateProdSecrets } from './config/secrets';
 import { initMailerFromEnv } from './services/mailer';
 import { registerFeatureModules } from './modules';
 import { matrixClient } from './integrations/matrix-client';
@@ -81,6 +82,7 @@ import { migrateUp, MIGRATIONS_DIR } from './db/migrate';
 import { getSharedPgPool } from './config/postgres';
 
 const securityPreflight = runSecurityPreflight();
+validateProdSecrets();
 
 // Snapshot of the Matrix admin dependency, refreshed by the startup preflight
 // below. Surfaced in `/health` so a misconfigured homeserver/bot token (which

@@ -93,6 +93,15 @@ deploy/docker/production/.cloudflared/
 .pnpm-store
 apps/blackout-client/docs/release/staging-signoff.report.json
 
+# Local dev data (docker volumes)
+/dev
+
+# Deaddrop appservice local data
+/apps/deaddrop-appservice/.blackout
+
+# Tauri generated sources
+/blackout-desktop/src-tauri/gen
+
 # Playwright artifacts
 /playwright/html-report
 /playwright/test-results

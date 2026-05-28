@@ -1,0 +1,71 @@
+name: blackout-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: blackout-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapse
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: blackout-dev-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - dev_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  synapse:
+    image: ghcr.io/element-hq/synapse:v1.130.0
+    container_name: blackout-dev-synapse
+    restart: unless-stopped
+    environment:
+      UID: "0"
+      GID: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8008:8008"
+    volumes:
+      - dev_synapse_data:/data
+      - ./dev/synapse/homeserver.yaml:/config/homeserver.yaml:ro
+    command:
+      - run
+      - --config-path
+      - /config/homeserver.yaml
+      - --keys-directory
+      - /data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://127.0.0.1:8008/_matrix/client/versions || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  dev_postgres_data:
+  dev_redis_data:
+  dev_synapse_data:

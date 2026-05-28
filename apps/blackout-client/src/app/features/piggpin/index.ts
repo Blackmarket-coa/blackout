@@ -1,0 +1,1 @@
+export { piggpinFeature } from './manifest';

@@ -24,6 +24,7 @@ import { SessionStore } from "./session/store";
 import { renderBugReportFab } from "./components/BugReportFab";
 import { renderCommandPalette } from "./components/CommandPalette";
 import { renderWidgetPanelHost } from "./components/WidgetPanelHost";
+import { escapeHtml } from "./utils/escapeHtml";
 import {
   dispatchNativeBridgeEvent,
   extractRoomIdFromDeepLinkUrl,
@@ -343,9 +344,9 @@ export class BlackoutWebApp {
           ${!state.session ? `<button type="button" class="ghost-btn" data-action="open-command-palette" data-testid="open-command-palette">⌘K</button>` : ""}
         </div>
         ${this.settingsOpen ? this.renderSettingsWorkspace() : ""}
-        ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${this.featureActionResult}</p>` : ""}
+        ${this.featureActionResult ? `<p class="meta" data-testid="feature-action-result">${escapeHtml(this.featureActionResult)}</p>` : ""}
 
-        ${state.error ? `<p class="error" role="alert">${state.error}</p>` : ""}
+        ${state.error ? `<p class="error" role="alert">${escapeHtml(state.error)}</p>` : ""}
         ${loading.servers || loading.channels || loading.messages ? '<p class="loading">Syncing workspace…</p>' : ""}
 
         ${state.session ? this.renderWorkspace() : renderAuthView({ mode: state.authMode, busy: loading.auth, homeserverUrl: this.runtimeConfig.homeserverUrl })}
@@ -3470,7 +3471,7 @@ export class BlackoutWebApp {
     if (select) {
       const selected = select.value;
       const optionRows = this.stegoChannels
-        .map((channel) => `<option value="${channel.id}">${channel.name} · ${channel.audience}</option>`)
+        .map((channel) => `<option value="${escapeHtml(channel.id)}">${escapeHtml(channel.name)} · ${escapeHtml(channel.audience)}</option>`)
         .join("");
       select.innerHTML = `<option value="">No saved channel</option>${optionRows}`;
       if (selected && this.stegoChannels.some((channel) => channel.id === selected)) {
@@ -3489,8 +3490,8 @@ export class BlackoutWebApp {
         return `
           <li class="composer-channel-row">
             <div>
-              <strong>${channel.name}</strong>
-              <p class="meta">${channel.audience} · rotate every ${channel.rotationDays}d</p>
+              <strong>${escapeHtml(channel.name)}</strong>
+              <p class="meta">${escapeHtml(channel.audience)} · rotate every ${channel.rotationDays}d</p>
             </div>
             <div class="composer-popover-actions">
               <button type="button" data-action="composer-stego-channel-apply" data-channel-id="${channel.id}">Use</button>
@@ -3550,8 +3551,8 @@ export class BlackoutWebApp {
       .map((gif) => `
         <li class="composer-channel-row">
           <div>
-            <strong>${gif.label}</strong>
-            <p class="meta">${gif.url}</p>
+            <strong>${escapeHtml(gif.label)}</strong>
+            <p class="meta">${escapeHtml(gif.url)}</p>
           </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-gif-use" data-gif-id="${gif.id}">Use</button>
@@ -3606,7 +3607,7 @@ export class BlackoutWebApp {
       .map((emoji) => `
         <li class="composer-channel-row">
           <div>
-            <strong>${emoji.symbol} ${emoji.label}</strong>
+            <strong>${escapeHtml(emoji.symbol)} ${escapeHtml(emoji.label)}</strong>
           </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-emoji-use" data-emoji-id="${emoji.id}">Use</button>
@@ -3618,14 +3619,14 @@ export class BlackoutWebApp {
       .join("");
     const canopyRows = canopyEmoji.map((asset) => `
       <li class="composer-channel-row">
-        <div><strong>✨ :${asset.name}: </strong><p class="meta">aliases: ${asset.aliases.join(", ") || "none"}</p></div>
+        <div><strong>✨ ${escapeHtml(`:${asset.name}:`)} </strong><p class="meta">aliases: ${escapeHtml(asset.aliases.join(", ") || "none")}</p></div>
         <div class="composer-popover-actions"><button type="button" data-action="composer-canopy-emoji-use" data-asset-name="${asset.name}">Use</button></div>
       </li>
     `).join("");
     const stickerRows = canopyStickers.map((asset) => `
       <li class="composer-channel-row">
-        <div><strong>🧩 [sticker:${asset.name}]</strong><p class="meta">${asset.normalizedUrl}</p></div>
-        <div class="composer-popover-actions"><button type="button" data-action="composer-canopy-sticker-use" data-asset-name="${asset.name}">Use</button></div>
+        <div><strong>🧩 [sticker:${escapeHtml(asset.name)}]</strong><p class="meta">${escapeHtml(asset.normalizedUrl)}</p></div>
+        <div class="composer-popover-actions"><button type="button" data-action="composer-canopy-sticker-use" data-asset-name="${escapeHtml(asset.name)}">Use</button></div>
       </li>
     `).join("");
     list.innerHTML = `${baseRows}${canopyRows}${stickerRows}`;
@@ -3694,8 +3695,8 @@ export class BlackoutWebApp {
       .map((entry) => `
         <li class="composer-channel-row">
           <div>
-            <strong>${entry.label}</strong>
-            <p class="meta">${entry.type} · ${entry.url}</p>
+            <strong>${escapeHtml(entry.label)}</strong>
+            <p class="meta">${escapeHtml(entry.type)} · ${escapeHtml(entry.url)}</p>
           </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-attachment-edit" data-attachment-id="${entry.id}">Edit</button>
@@ -3775,14 +3776,14 @@ export class BlackoutWebApp {
     const mediaType = this.inferAttachmentMediaType(this.normalizeAttachmentType(parsed.attachment.type), parsed.attachment.url);
     const icon = mediaType === "image" ? "🖼️" : mediaType === "video" ? "🎬" : mediaType === "audio" ? "🎧" : "📎";
     const thumbnail = mediaType === "image"
-      ? `<img src="${parsed.attachment.url}" alt="${parsed.attachment.label}" class="composer-attachment-thumb" loading="lazy" />`
-      : `<span class="composer-attachment-icon" aria-hidden="true">${icon}</span>`;
+      ? `<img src="${escapeHtml(parsed.attachment.url)}" alt="${escapeHtml(parsed.attachment.label)}" class="composer-attachment-thumb" loading="lazy" />`
+      : `<span class="composer-attachment-icon" aria-hidden="true">${escapeHtml(icon)}</span>`;
     previewNode.innerHTML = `
       <div class="composer-attachment-preview-card">
         ${thumbnail}
         <div>
-          <strong>${parsed.attachment.label}</strong>
-          <p class="meta">${mediaType} · ${parsed.attachment.type}</p>
+          <strong>${escapeHtml(parsed.attachment.label)}</strong>
+          <p class="meta">${escapeHtml(mediaType)} · ${escapeHtml(parsed.attachment.type)}</p>
         </div>
       </div>
     `;
@@ -3815,8 +3816,8 @@ export class BlackoutWebApp {
       .map((template) => `
         <li class="composer-channel-row">
           <div>
-            <strong>${template.title}</strong>
-            <p class="meta">${template.type} · ${template.options.join(" / ")} · ${template.durationHours}h</p>
+            <strong>${escapeHtml(template.title)}</strong>
+            <p class="meta">${escapeHtml(template.type)} · ${escapeHtml(template.options.join(" / "))} · ${template.durationHours}h</p>
           </div>
           <div class="composer-popover-actions">
             <button type="button" data-action="composer-governance-template-use" data-template-id="${template.id}">Use</button>
@@ -3954,8 +3955,8 @@ export class BlackoutWebApp {
     return this.canopyAssets.map((asset) => `
       <li class="composer-channel-row">
         <div>
-          <strong>${asset.kind} · ${asset.name}</strong>
-          <p class="meta">${asset.mimeType} · ${Math.ceil(asset.sizeBytes / 1024)}KB · aliases: ${asset.aliases.join(", ") || "none"} · ${asset.status}</p>
+      <strong>${escapeHtml(asset.kind)} · ${escapeHtml(asset.name)}</strong>
+      <p class="meta">${escapeHtml(asset.mimeType)} · ${Math.ceil(asset.sizeBytes / 1024)}KB · aliases: ${escapeHtml(asset.aliases.join(", ") || "none")} · ${escapeHtml(asset.status)}</p>
         </div>
         <div class="composer-popover-actions">
           <button type="button" data-action="canopy-asset-rename" data-asset-id="${asset.id}">Rename</button>

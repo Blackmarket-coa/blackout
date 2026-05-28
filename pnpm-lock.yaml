@@ -30,6 +30,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      pnpm:
+        specifier: ^9.15.4
+        version: 9.15.9
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.3.9
@@ -74,8 +78,8 @@ importers:
         specifier: 4.5.14
         version: 4.5.14
       '@matrix-org/matrix-sdk-crypto-wasm':
-        specifier: ^18.0.0
-        version: 18.0.0
+        specifier: ^18.3.0
+        version: 18.3.0
       '@tanstack/react-query':
         specifier: 5.24.1
         version: 5.24.1(react@18.2.0)
@@ -2051,8 +2055,8 @@ packages:
     resolution: {integrity: sha512-yKPqBvKlHSqkt/UJh+Z+zLKQP8bd19OxokXYXh3VkKbW0+C44nPHsidSwd3SH+RxT+Ck2PDRwVcVXEnUft+/2g==}
     engines: {node: '>= 18'}
 
-  '@matrix-org/matrix-sdk-crypto-wasm@18.0.0':
-    resolution: {integrity: sha512-88+n+dvxLI1cjS10UIlKXVYK7TGWbpAnnaDC9fow7ch/hCvdu3dFhJ3tS3/13N9s9+1QFXB4FFuommj+tHJPhQ==}
+  '@matrix-org/matrix-sdk-crypto-wasm@18.3.0':
+    resolution: {integrity: sha512-9a4feyt8QLysARu7PHKaRWT+wcCd+IYH074LXp9QK5WqfN4zUXueRhiSSMNT18Bm+8q3sBR/4zxDxOSDR0M8Kg==}
     engines: {node: '>= 18'}
 
   '@msgpack/msgpack@2.8.0':
@@ -6018,6 +6022,11 @@ packages:
     resolution: {integrity: sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ==}
     engines: {node: '>=10.4.0'}
 
+  pnpm@9.15.9:
+    resolution: {integrity: sha512-aARhQYk8ZvrQHAeSMRKOmvuJ74fiaR1p5NQO7iKJiClf1GghgbrlW1hBjDolO95lpQXsfF+UA+zlzDzTfc8lMQ==}
+    engines: {node: '>=18.12'}
+    hasBin: true
+
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
@@ -8917,7 +8926,7 @@ snapshots:
 
   '@matrix-org/matrix-sdk-crypto-wasm@17.1.0': {}
 
-  '@matrix-org/matrix-sdk-crypto-wasm@18.0.0': {}
+  '@matrix-org/matrix-sdk-crypto-wasm@18.3.0': {}
 
   '@msgpack/msgpack@2.8.0': {}
 
@@ -13700,6 +13709,8 @@ snapshots:
       '@xmldom/xmldom': 0.8.13
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
+
+  pnpm@9.15.9: {}
 
   possible-typed-array-names@1.1.0: {}
 
