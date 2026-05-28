@@ -15,6 +15,7 @@ export type SettingsSectionId =
     | 'accessibility'
     | 'keybinds'
     | 'developer'
+    | 'panic'
     | 'about'
     | 'character-sheet'
     | 'bug-report';
