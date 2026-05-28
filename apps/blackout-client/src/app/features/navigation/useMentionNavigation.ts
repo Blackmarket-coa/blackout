@@ -65,11 +65,13 @@ export const useMentionNavigation = () => {
                 sendReadReceipt?: (event: unknown, receiptType?: ReceiptType) => Promise<unknown>;
             };
             if (receiptClient.sendReadReceipt) {
-                // Downgrade to a private receipt when the user opts out of public ones.
-                await receiptClient.sendReadReceipt(
-                    event,
-                    shouldSendReadReceipts() ? undefined : ReceiptType.ReadPrivate,
-                );
+                // Default (public) call shape preserved; downgrade to a private
+                // receipt only when the user opted out of public ones.
+                if (shouldSendReadReceipts()) {
+                    await receiptClient.sendReadReceipt(event);
+                } else {
+                    await receiptClient.sendReadReceipt(event, ReceiptType.ReadPrivate);
+                }
             }
         },
         [client, rooms],

@@ -839,9 +839,11 @@ export const RoomTimeline = ({
         const handle = window.setTimeout(() => {
             // When the user opts out of public read receipts, downgrade to a
             // private one: their unread state still syncs, but other users don't
-            // see that they read the message.
-            const receiptType = shouldSendReadReceipts() ? undefined : ReceiptType.ReadPrivate;
-            client.sendReadReceipt(latest, receiptType).catch(() => {
+            // see that they read the message. Default call shape is unchanged.
+            const receipt = shouldSendReadReceipts()
+                ? client.sendReadReceipt(latest)
+                : client.sendReadReceipt(latest, ReceiptType.ReadPrivate);
+            receipt.catch(() => {
                 lastReceiptRef.current = null;
             });
             lastReceiptRef.current = eventId;
