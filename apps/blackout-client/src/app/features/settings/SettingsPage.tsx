@@ -30,6 +30,7 @@ const KeybindsSettings = lazy(() => import('./KeybindsSettings'));
 const DeveloperSettings = lazy(() => import('./DeveloperSettings'));
 const AboutSettings = lazy(() => import('./AboutSettings'));
 const BugReportSettings = lazy(() => import('./BugReportSettings'));
+const PanicSettings = lazy(() => import('../panic/PanicSettings'));
 const CharacterSheetSection = lazy(() =>
     import('../character-sheet/CharacterSheet').then((m) => ({ default: m.CharacterSheet })),
 );
@@ -73,7 +74,7 @@ const groups: SettingsGroup[] = [
     {
         id: 'help-advanced',
         label: 'Help & advanced',
-        sectionIds: ['developer', 'bug-report'],
+        sectionIds: ['developer', 'panic', 'bug-report'],
     },
 ];
 
@@ -149,6 +150,12 @@ const sections: SettingsSection[] = [
         label: 'Developer',
         summary: 'Developer mode, diagnostics bundle export',
         component: DeveloperSettings,
+    },
+    {
+        id: 'panic',
+        label: 'Panic wipe',
+        summary: 'Clear sensitive local traces from this device',
+        component: PanicSettings,
     },
     {
         id: 'bug-report',
