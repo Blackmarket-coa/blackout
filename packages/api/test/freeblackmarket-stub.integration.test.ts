@@ -52,6 +52,7 @@ test('stub provider: catalog returns seeded listings', async () => {
     assert.ok(ids.includes('stub-theme-noir'));
     assert.ok(ids.includes('stub-stickers-cats'));
     assert.ok(ids.includes('stub-plugin-todo'));
+    assert.ok(ids.includes('stub-privacy-tools-advanced'));
 });
 
 test('stub provider: full checkout round-trip grants entitlement and serves signed bundle', async () => {

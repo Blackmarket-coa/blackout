@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 const homeserver = () =>
   process.env.MATRIX_HOMESERVER ?? process.env.MATRIX_HOMESERVER_URL;
 const botToken = () => process.env.MATRIX_BOT_TOKEN;
@@ -57,6 +59,51 @@ export const matrixClient = {
       ok: response.ok,
       status: response.status,
     };
+  },
+
+  /**
+   * Provision a throwaway "burner" account via the admin v2 PUT endpoint and
+   * return the random localpart-based mxid plus the random password it was
+   * created with. The caller (the client) logs in with that password through
+   * the normal `m.login.password` flow, which mints a real device + refresh
+   * token and is E2EE-capable — unlike the admin user-login puppet token,
+   * which has no device semantics. Public registration stays closed; only the
+   * bot admin token can create accounts this way.
+   */
+  async provisionBurner(label: string) {
+    const hs = homeserver();
+    const token = botToken();
+    if (!hs || !token) {
+      return { ok: false as const, reason: 'matrix_not_configured' as const };
+    }
+
+    const localpart = `burn-${randomBytes(5).toString('hex')}`;
+    const password = randomBytes(24).toString('base64url');
+    const userId = `@${localpart}:${homeserverDomain()}`;
+    const displayname = label.slice(0, 80) || 'Burner';
+
+    let response: Response;
+    try {
+      response = await fetch(`${hs}/_synapse/admin/v2/users/${encodeURIComponent(userId)}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, displayname }),
+      });
+    } catch (error) {
+      return { ok: false as const, reason: 'network_error' as const, detail: (error as Error).message };
+    }
+
+    if (!response.ok) {
+      let detail: string | undefined;
+      try {
+        detail = await response.text();
+      } catch {
+        /* ignore body-read failure */
+      }
+      return { ok: false as const, status: response.status, reason: 'synapse_rejected' as const, detail };
+    }
+
+    return { ok: true as const, status: response.status, userId, password, displayname };
   },
 
   /**

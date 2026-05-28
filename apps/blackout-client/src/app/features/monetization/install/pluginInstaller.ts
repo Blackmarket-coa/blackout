@@ -28,6 +28,7 @@ import {
     parseOwnedStreamAsset,
     type OwnedStreamAsset,
 } from '../../streaming/overlays/streamAssetGoods';
+import { parseOwnedPrivacyTier, type OwnedPrivacyTier } from '../../privacy-tools/privacyGoods';
 
 export interface InstallContext {
     fetchSignedBundle: (entitlementId: string) => Promise<SignedPluginBundle>;
@@ -104,6 +105,10 @@ function decodeSoundPack(bundleBytes: Uint8Array): OwnedSoundPack | null {
 
 function decodeStreamAsset(bundleBytes: Uint8Array): OwnedStreamAsset | null {
     return parseOwnedStreamAsset(decodeBundlePayload(bundleBytes));
+}
+
+function decodePrivacyTier(bundleBytes: Uint8Array): OwnedPrivacyTier | null {
+    return parseOwnedPrivacyTier(decodeBundlePayload(bundleBytes));
 }
 
 /**
@@ -230,6 +235,9 @@ export async function installEntitlement(
         case 'automation_recipe':
             record.automationRecipe = decodeAutomationRecipe(bundleBytes) ?? undefined;
             ctx.onAssetCached?.(bundle.manifest, bundleBytes);
+            break;
+        case 'privacy_tool':
+            record.privacyTier = decodePrivacyTier(bundleBytes) ?? undefined;
             break;
         case 'manifest_plugin':
             registerDynamicFeaturePlugin(manifestPluginToFeatureModulePlugin(bundle.manifest));

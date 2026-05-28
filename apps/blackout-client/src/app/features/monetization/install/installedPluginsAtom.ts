@@ -8,6 +8,7 @@ import type { OwnedAiPersona, OwnedAutomationRecipe } from '../../aiden/aiGoods'
 import type { OwnedVaultGrant } from '../../vault/vaultGoods';
 import type { OwnedSoundPack } from '../../audio/soundPackGoods';
 import type { OwnedStreamAsset } from '../../streaming/overlays/streamAssetGoods';
+import type { OwnedPrivacyTier } from '../../privacy-tools/privacyGoods';
 import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../../state/navigation';
 
 export type InstalledPluginStatus = 'enabled' | 'disabled' | 'pending' | 'error';
@@ -50,6 +51,8 @@ export interface InstalledPluginRecord {
     soundPack?: OwnedSoundPack;
     /** For `stream_asset` entitlements: the decoded, sanitized creator/stream asset. */
     streamAsset?: OwnedStreamAsset;
+    /** For `privacy_tool` entitlements: the decoded advanced-tier grant. */
+    privacyTier?: OwnedPrivacyTier;
 }
 
 const INSTALLED_PLUGINS_STORAGE_KEY = 'blackout.plugins.installed.v1';

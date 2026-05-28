@@ -34,6 +34,7 @@ const draftSchema = z.object({
         'vault_item',
         'ai_persona',
         'automation_recipe',
+        'privacy_tool',
     ]),
     category: z.enum([
         'emoji-sticker',
@@ -63,6 +64,7 @@ const draftSchema = z.object({
         'community_template',
         'stream_asset',
         'vault_item',
+        'privacy_tool',
     ]),
     title: z.string().min(1),
     description: z.string().min(1),

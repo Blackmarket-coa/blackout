@@ -73,6 +73,7 @@ import { AppearanceSettings } from './AppearanceSettings';
 
 import { StegoSettings } from '../steganography';
 
+
 import { RegistrySettingsList } from '../../core/features/RegistrySettingsList';
 
 import { PluginSettings } from './PluginSettings';

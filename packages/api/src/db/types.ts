@@ -137,6 +137,26 @@ export interface InvitationTokenRecord {
 }
 
 /**
+ * A disposable "burner" Matrix identity an owner provisioned and can later
+ * burn. The owner is the primary account that created it (the API JWT `sub`);
+ * `burnerUserId` is the throwaway Synapse mxid. `burnedAt` is set when the
+ * account is deactivated so the row remains as an audit trail.
+ */
+export interface BurnerIdentityRecord {
+  id: UUID;
+  /** Primary account that owns this burner (the only one allowed to burn it). */
+  ownerUserId: string;
+  /** The throwaway Synapse mxid (`@burn-xxxx:domain`). */
+  burnerUserId: string;
+  label: string;
+  /** ISO 8601 timestamp after which the burner is considered expired. */
+  expiresAt: string | null;
+  /** ISO 8601 timestamp the burner was deactivated; null while active. */
+  burnedAt: string | null;
+  createdAt: string;
+}
+
+/**
  * Audit row written each time an invitation is successfully redeemed. Lets
  * an inviter see who joined via each link and feeds the referral ledger.
  */
@@ -779,7 +799,8 @@ export type MarketplaceEntitlementKind =
   | 'sound_pack'
   | 'community_template'
   | 'stream_asset'
-  | 'vault_item';
+  | 'vault_item'
+  | 'privacy_tool';
 
 export interface MarketplaceEntitlementRecord {
   id: UUID;

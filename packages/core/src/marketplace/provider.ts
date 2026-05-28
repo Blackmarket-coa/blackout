@@ -48,7 +48,8 @@ export type EntitlementKind =
     | 'sound_pack'
     | 'community_template'
     | 'stream_asset'
-    | 'vault_item';
+    | 'vault_item'
+    | 'privacy_tool';
 
 export type EntitlementStatus =
     | 'granted'
@@ -125,7 +126,8 @@ export interface CreatorListingDraftInput {
         | 'stream_asset'
         | 'vault_item'
         | 'ai_persona'
-        | 'automation_recipe';
+        | 'automation_recipe'
+        | 'privacy_tool';
     category: MarketplaceCategory;
     entitlementKind: EntitlementKind;
     title: string;

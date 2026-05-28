@@ -9,6 +9,11 @@ import {
     type PasswordLoginIdentifier,
 } from '../../../../client/auth';
 import { MatrixInitError } from '../../../../client/initMatrix';
+import {
+    createAnonymousAccount,
+    loginWithAccountNumber,
+} from '../../../../client/accountNumberAuth';
+import { formatAccountNumber } from '@blackout/core';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../../utils/matrix';
 import { EMAIL_REGEX } from '../../../utils/regex';
 import {
@@ -86,6 +91,38 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
     const [flows, setFlows] = useState<LoginFlowsState | null>(null);
     const [flowsLoading, setFlowsLoading] = useState(true);
     const [tokenLoading, setTokenLoading] = useState(false);
+    // No-PII account-number signup/sign-in.
+    const [accountNumberInput, setAccountNumberInput] = useState('');
+    const [anonBusy, setAnonBusy] = useState(false);
+    const [createdNumber, setCreatedNumber] = useState<string | null>(null);
+
+    const handleCreateAnonymous = async () => {
+        setAnonBusy(true);
+        setError(null);
+        try {
+            setCreatedNumber(await createAnonymousAccount());
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not create an account.');
+        } finally {
+            setAnonBusy(false);
+        }
+    };
+
+    const handleAccountNumberLogin = async (number: string) => {
+        setAnonBusy(true);
+        setError(null);
+        try {
+            await loginWithAccountNumber(store, server.baseUrl, number);
+        } catch (e) {
+            setError(
+                e instanceof MatrixInitError || e instanceof Error
+                    ? e.message
+                    : 'Could not sign in with that account number.',
+            );
+        } finally {
+            setAnonBusy(false);
+        }
+    };
 
     // Load login flows from the homeserver whenever the server changes.
     useEffect(() => {
@@ -355,6 +392,78 @@ export const LoginForm = ({ server, canRegister, onSwitchTab }: LoginFormProps) 
                     )}
                 </div>
             ) : null}
+
+            <div style={dividerStyle}>
+                <span style={dividerLineStyle} />
+                <span>or use an account number</span>
+                <span style={dividerLineStyle} />
+            </div>
+
+            {createdNumber ? (
+                <div style={{ display: 'grid', gap: 10 }}>
+                    <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
+                        This is your account number — your <strong>only</strong> credential. There is
+                        no email and no recovery. Save it somewhere safe before continuing.
+                    </p>
+                    <code
+                        style={{
+                            display: 'block',
+                            padding: 10,
+                            borderRadius: 8,
+                            border: '1px solid var(--border-default, #334155)',
+                            fontSize: 16,
+                            letterSpacing: 1,
+                            wordBreak: 'break-all',
+                        }}
+                    >
+                        {formatAccountNumber(createdNumber)}
+                    </code>
+                    <button
+                        type="button"
+                        disabled={anonBusy}
+                        onClick={() => void handleAccountNumberLogin(createdNumber)}
+                        style={primaryButtonStyle}
+                    >
+                        {anonBusy ? 'Signing in…' : "I've saved it — sign in"}
+                    </button>
+                </div>
+            ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                    <button
+                        type="button"
+                        disabled={anonBusy}
+                        onClick={() => void handleCreateAnonymous()}
+                        style={secondaryButtonStyle}
+                    >
+                        {anonBusy ? 'Creating…' : 'Create an anonymous account (no email)'}
+                    </button>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            void handleAccountNumberLogin(accountNumberInput);
+                        }}
+                        style={{ display: 'grid', gap: 8 }}
+                        aria-label="Sign in with account number"
+                    >
+                        <input
+                            type="text"
+                            name="account-number"
+                            value={accountNumberInput}
+                            onChange={(e) => setAccountNumberInput(e.target.value)}
+                            autoComplete="off"
+                            placeholder="Account number"
+                            style={inputStyle}
+                        />
+                        <button
+                            type="submit"
+                            disabled={anonBusy || accountNumberInput.trim().length === 0}
+                            style={secondaryButtonStyle}
+                        >
+                            Sign in with account number
+                        </button>
+                    </form>
+                </div>
+            )}
 
             {canRegister ? (
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #94a3b8)' }}>
