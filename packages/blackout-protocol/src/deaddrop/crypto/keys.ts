@@ -66,7 +66,7 @@ export const generateEphemeralKeyPair = async (): Promise<{
 }> => {
     const pair = (await subtle().generateKey(
         { name: 'X25519' } as unknown as AlgorithmIdentifier,
-        true,
+        false,
         ['deriveBits']
     )) as CryptoKeyPair;
     const raw = new Uint8Array(await subtle().exportKey('raw', pair.publicKey));

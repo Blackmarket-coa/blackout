@@ -20,19 +20,23 @@ export function canAccessDomain(c: Context, domain: 'governance' | 'forum' | 'de
   const claimCapabilities = Array.isArray(claims?.capabilities) ? claims.capabilities : [];
   const capabilities = new Set(claimCapabilities);
 
-  if (process.env.NODE_ENV !== 'production') {
+  const devCapHeader = process.env.BLACKOUT_DEV_CAPABILITY_HEADER;
+  if (devCapHeader === '1' || devCapHeader === 'true') {
     const headerCapabilities = (c.req.header('x-blackout-capabilities') ?? '')
       .split(',')
       .map((cap) => cap.trim())
       .filter(Boolean);
-    for (const cap of headerCapabilities) capabilities.add(cap);
+    if (headerCapabilities.length > 0) {
+      for (const cap of headerCapabilities) capabilities.add(cap);
+    }
   }
 
   return capabilities.has(`${domain}.${action}`) || capabilities.has(`${domain}.*`) || capabilities.has('admin.*');
 }
 
 export function requireDomainCapability(c: Context, domain: 'governance' | 'forum' | 'deaddrop' | 'deadman' | 'moderation' | 'streaming' | 'discovery' | 'profile' | 'stego' | 'growth', action: 'read' | 'write'): Response | null {
-  if (!requireAuthenticatedUser(c)) {
+  const userId = requireAuthenticatedUser(c);
+  if (!userId) {
     return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
   }
 
@@ -41,4 +45,8 @@ export function requireDomainCapability(c: Context, domain: 'governance' | 'foru
   }
 
   return null;
+}
+
+export function getAuthenticatedUserId(c: Context): string | null {
+  return requireAuthenticatedUser(c);
 }

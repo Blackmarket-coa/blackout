@@ -44,7 +44,7 @@ export const toSummary = (record: SimulcastDestinationRecord): SimulcastDestinat
   updatedAt: record.updatedAt,
 });
 
-const RTMP_URL_RE = /^(rtmp|rtmps):\/\/[^\s]+$/i;
+const RTMP_URL_RE = /^(rtmp|rtmps):\/\/[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9](:[0-9]{1,5})?(\/[^\s]{0,1024})?$/i;
 const PROVIDER_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 export interface CreateInput {

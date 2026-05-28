@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
 export interface AuthTokenPayload {
   sub: string;
@@ -106,36 +106,111 @@ export const clearAuthRuntimeConfigCache = () => {
   cachedConfig = null;
 };
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
+
+const COMMON_PASSWORD_PATTERNS = [
+  /^[a-z]+$/i,                       // all letters
+  /^\d+$/,                            // all digits
+  /^(.)\1+$/,                         // repeated single character
+];
 
 export function isAcceptablePassword(password: unknown): password is string {
-  return typeof password === 'string' && password.length >= MIN_PASSWORD_LENGTH;
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) return false;
+
+  const lower = password.toLowerCase();
+  if (lower.includes('password') || lower.includes('blackout') || lower.includes('admin')) return false;
+
+  for (const pattern of COMMON_PASSWORD_PATTERNS) {
+    if (pattern.test(password)) return false;
+  }
+
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  const classCount = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+
+  return classCount >= 2;
 }
 
-export function hashPassword(password: string): string {
+export function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(password, salt, 64).toString('hex');
-  return `${salt}:${hash}`;
+  return new Promise<string>((resolve, reject) => {
+    scrypt(password, salt, 64, (err, hash) => {
+      if (err) return reject(err);
+      resolve(`${salt}:${hash.toString('hex')}`);
+    });
+  });
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, hashed] = stored.split(':');
-  if (!salt || !hashed) return false;
+  if (!salt || !hashed) return Promise.resolve(false);
 
-  const candidate = scryptSync(password, salt, 64);
-  const target = Buffer.from(hashed, 'hex');
-  return candidate.length === target.length && timingSafeEqual(candidate, target);
+  return new Promise<boolean>((resolve, reject) => {
+    scrypt(password, salt, 64, (err, candidate) => {
+      if (err) return reject(err);
+      const target = Buffer.from(hashed, 'hex');
+      resolve(candidate.length === target.length && timingSafeEqual(candidate, target));
+    });
+  });
 }
 
-// Precomputed so the "user not found" branch of login can spend the same
-// scrypt work as the "wrong password" branch, preventing email enumeration
-// via response-time measurement.
-const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(16).toString('hex'));
+// Lazy-initialized so the module load doesn't block.
+let _dummyPasswordHash: Promise<string> | null = null;
+const getDummyPasswordHash = (): Promise<string> => {
+  if (!_dummyPasswordHash) {
+    _dummyPasswordHash = hashPassword(randomBytes(16).toString('hex'));
+  }
+  return _dummyPasswordHash;
+};
 
-export function verifyPasswordConstantTime(password: string, stored: string | undefined | null): boolean {
-  const target = stored && stored.includes(':') ? stored : DUMMY_PASSWORD_HASH;
-  const ok = verifyPassword(password, target);
+export async function verifyPasswordConstantTime(password: string, stored: string | undefined | null): Promise<boolean> {
+  const target = stored && stored.includes(':') ? stored : await getDummyPasswordHash();
+  const ok = await verifyPassword(password, target);
   return Boolean(stored) && ok;
+}
+
+/**
+ * k-Anonymity password breach check via HaveIBeenPwned Pwned Passwords API.
+ * Only the first 5 hex chars of the SHA-1 are sent over the network; the
+ * password itself never leaves the server. Returns true if the password has
+ * appeared in known breaches.
+ */
+const BREACH_CHECK_CACHE = new Map<string, { breached: boolean; expiresAt: number }>();
+const BREACH_CACHE_TTL_MS = 10 * 60 * 1000;
+const BREACH_CHECK_TIMEOUT_MS = 2_000;
+
+export async function isBreachedPassword(password: string): Promise<boolean> {
+  if (process.env.DISABLE_BREACH_CHECK === '1') return false;
+
+  const hash = createHash('sha1').update(password).digest('hex').toUpperCase();
+  const prefix = hash.slice(0, 5);
+  const suffix = hash.slice(5);
+
+  const cached = BREACH_CHECK_CACHE.get(prefix);
+  if (cached && cached.expiresAt > Date.now()) return cached.breached;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), BREACH_CHECK_TIMEOUT_MS);
+
+    const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+      headers: { 'User-Agent': 'Blackout-Security/1.0' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return false;
+
+    const body = await res.text();
+    const breached = body.split('\n').some((line) => line.startsWith(suffix));
+
+    BREACH_CHECK_CACHE.set(prefix, { breached, expiresAt: Date.now() + BREACH_CACHE_TTL_MS });
+    return breached;
+  } catch {
+    return false;
+  }
 }
 
 /**

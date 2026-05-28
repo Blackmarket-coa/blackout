@@ -21,19 +21,34 @@ const ALLOWED_KEYS = new Set([
     'expiresAt',
 ]);
 
-const SUPPORTED_SUITES = new Set(['sealedbox-x25519-aes256gcm-v1']);
+const V2_ALLOWED_KEYS = new Set([...ALLOWED_KEYS, 'pqCt']);
+
+const SUPPORTED_SUITES = new Set([
+    'sealedbox-x25519-aes256gcm-v1',
+    'sealedbox-x25519-mlkem768-aes256gcm-v2',
+]);
+
+const SUITE_ALLOWED_KEYS = {
+    'sealedbox-x25519-aes256gcm-v1': ALLOWED_KEYS,
+    'sealedbox-x25519-mlkem768-aes256gcm-v2': V2_ALLOWED_KEYS,
+};
 
 export const isOpaqueEnvelope = (input) => {
     if (!input || typeof input !== 'object') return false;
-    for (const key of Object.keys(input)) {
-        if (!ALLOWED_KEYS.has(key)) return false;
-    }
-    if (input.v !== 1) return false;
     if (typeof input.suite !== 'string' || !SUPPORTED_SUITES.has(input.suite)) {
         return false;
     }
+    const allowedKeys = SUITE_ALLOWED_KEYS[input.suite];
+    for (const key of Object.keys(input)) {
+        if (!allowedKeys.has(key)) return false;
+    }
+    if (input.v !== 1 && input.v !== 2) return false;
     if (input.pad !== 'minimal' && input.pad !== 'bucket') return false;
-    for (const k of ['dropId', 'clue', 'ek', 'nonce', 'ct', 'expiresAt']) {
+    const requiredFields = ['dropId', 'clue', 'ek', 'nonce', 'ct', 'expiresAt'];
+    if (input.v === 2) {
+        if (typeof input.pqCt !== 'string' || input.pqCt.length === 0) return false;
+    }
+    for (const k of requiredFields) {
         if (typeof input[k] !== 'string' || input[k].length === 0) return false;
     }
     return true;

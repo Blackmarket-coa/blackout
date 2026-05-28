@@ -1,25 +1,38 @@
 version: "3.9"
 services:
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.8.2
+    restart: unless-stopped
     command: --config /etc/livekit.yaml
     ports:
       - "7880:7880"
       - "7881:7881/udp"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7880/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    network_mode: host
     command:
       - -n
       - --listening-port=3478
       - --fingerprint
       - --use-auth-secret
       - --realm=townhall.blackout.local
-    ports:
-      - "3478:3478"
-      - "5349:5349"
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "PING"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

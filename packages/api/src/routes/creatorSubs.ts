@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { requireAdmin } from '../middleware/require-admin';
 import { requireUser } from '../middleware/require-user';
 import { readJsonBody } from '../middleware/validate';
 import {
@@ -56,14 +57,7 @@ const ERROR_STATUS: Record<CreatorSubscriptionError['code'], number> = {
     provider_unsupported: 400,
 };
 
-function adminGate(c: import('hono').Context): true | Response {
-    const expected = process.env.BLACKOUT_ADMIN_API_KEY ?? 'dev-admin-key';
-    const got = c.req.header('x-admin-api-key');
-    if (!got || got !== expected) {
-        return c.json({ code: 'forbidden', message: 'Admin API key required' }, 403);
-    }
-    return true;
-}
+// Admin gate is provided by the shared middleware (packages/api/src/middleware/require-admin.ts).
 
 // Tier management — creator manages their own catalog of subscription tiers.
 
@@ -173,7 +167,7 @@ creatorSubs.post('/subscriptions/:id/cancel', (c) => {
 // Admin/webhook hooks (FBM dispatcher in production).
 
 creatorSubs.post('/subscriptions/:id/capture', async (c) => {
-    const guard = adminGate(c);
+    const guard = requireAdmin(c);
     if (guard !== true) return guard;
     const parsed = await readJsonBody(c, captureSchema);
     const detail = parsed instanceof Response ? {} : (parsed ?? {});
@@ -183,7 +177,7 @@ creatorSubs.post('/subscriptions/:id/capture', async (c) => {
 });
 
 creatorSubs.post('/subscriptions/:id/refund', (c) => {
-    const guard = adminGate(c);
+    const guard = requireAdmin(c);
     if (guard !== true) return guard;
     const sub = refundSubscription(c.req.param('id'));
     if (!sub) return c.json({ code: 'subscription_not_found', message: 'No such subscription' }, 404);

@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
+import { requireUser } from '../middleware/require-user';
 import { getUserReputation } from '../services/reputationStore';
 
 const reputation = new Hono();
 
 reputation.get('/:userId', (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
     const userId = c.req.param('userId');
     if (!userId) {
         return c.json({ code: 'invalid_request', message: 'userId is required' }, 400);

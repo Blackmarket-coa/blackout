@@ -10,6 +10,23 @@ import {
   type RefreshFlowDeps,
   type RefreshOutcome,
 } from '../_oauth/providerFlow';
+import { createPublicKey, createVerify } from 'node:crypto';
+
+function validateGoogleIdToken(idToken: string, clientId: string): string | null {
+  try {
+    const parts = idToken.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (typeof payload.sub !== 'string') return null;
+    if (typeof payload.aud !== 'string') return null;
+    if (typeof payload.exp !== 'number' || payload.exp * 1000 < Date.now()) return null;
+    if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') return null;
+    if (payload.aud !== clientId) return null;
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * YouTube Live OAuth via Google's OAuth2 server.
@@ -61,6 +78,13 @@ const YOUTUBE_SPEC: ProviderSpec = {
     const u = json as { sub?: string; name?: string; email?: string };
     if (!u?.sub) return null;
     return { providerUserId: u.sub, providerUsername: u.name || u.email || undefined };
+  },
+  validateTokenResponse: (tokens, config) => {
+    if (tokens.id_token) {
+      const sub = validateGoogleIdToken(tokens.id_token, config.clientId);
+      return sub !== null;
+    }
+    return true;
   },
 };
 

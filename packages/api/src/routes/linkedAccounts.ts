@@ -70,7 +70,7 @@ linkedAccounts.post('/:provider/connect', (c) => {
       userId: userOrResp.sub,
       provider,
     });
-    return c.json({ code: 'oauth_misconfigured', message: (err as Error).message }, 503);
+    return c.json({ code: 'oauth_misconfigured', message: 'OAuth client misconfigured' }, 503);
   }
 });
 

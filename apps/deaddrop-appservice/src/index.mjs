@@ -26,6 +26,7 @@
  */
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { isOpaqueEnvelope } from './envelope.mjs';
 import { DeadDropStore } from './storage.mjs';
 import { generateDecoy } from './decoys.mjs';
@@ -33,6 +34,8 @@ import { generateDecoy } from './decoys.mjs';
 const PORT = Number(process.env.PORT || 8787);
 const DEFAULT_DECOYS = Number(process.env.BLACKOUT_DEADDROP_DECOYS || 0);
 const SWEEP_INTERVAL_MS = Number(process.env.BLACKOUT_DEADDROP_SWEEP_MS || 60_000);
+const DEADDROP_API_TOKEN = process.env.BLACKOUT_DEADDROP_API_TOKEN || null;
+const MAX_BODY_BYTES = 1_048_576; // 1 MB
 
 const store = new DeadDropStore();
 
@@ -60,6 +63,17 @@ const sendJson = (res, code, payload) => {
     res.statusCode = code;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify(payload));
+};
+
+const v1ApiTokenAuth = (req) => {
+    if (!DEADDROP_API_TOKEN) return true;
+    const header = req.headers['authorization'] ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return false;
+    const expected = Buffer.from(DEADDROP_API_TOKEN);
+    const provided = Buffer.from(token);
+    if (expected.length !== provided.length) return false;
+    return crypto.timingSafeEqual(expected, provided);
 };
 
 /* ------------------------ Legacy queue helpers ------------------------ */
@@ -179,7 +193,8 @@ const handleFetch = async (body) => {
     // Shuffle so position doesn't reveal real-vs-decoy.
     const all = [...real, ...decoys];
     for (let i = all.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const randBytes = crypto.randomBytes(4);
+        const j = (randBytes.readUInt32BE(0) >>> 0) % (i + 1);
         [all[i], all[j]] = [all[j], all[i]];
     }
     return { code: 200, body: { envelopes: all, decoyCount: decoys.length } };
@@ -197,12 +212,21 @@ const handleOpen = async (body) => {
 /* ----------------------------- HTTP server ---------------------------- */
 
 const readBody = (req) =>
-    new Promise((resolve) => {
-        let data = '';
+    new Promise((resolve, reject) => {
+        let data = Buffer.alloc(0);
+        let bytesRead = 0;
         req.on('data', (chunk) => {
-            data += chunk.toString();
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            bytesRead += buf.length;
+            if (bytesRead > MAX_BODY_BYTES) {
+                req.destroy();
+                reject(new Error('payload too large'));
+                return;
+            }
+            data = Buffer.concat([data, buf]);
         });
-        req.on('end', () => resolve(data));
+        req.on('end', () => resolve(data.toString()));
+        req.on('error', reject);
     });
 
 const server = http.createServer(async (req, res) => {
@@ -212,10 +236,10 @@ const server = http.createServer(async (req, res) => {
     }
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
-    if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, ...store.snapshot(), legacyRooms: roomState.size });
-        return;
-    }
+  if (req.method === 'GET' && url.pathname === '/health') {
+    sendJson(res, 200, { ok: true });
+    return;
+  }
 
     if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'method not allowed' });
@@ -229,6 +253,13 @@ const server = http.createServer(async (req, res) => {
     } catch {
         sendJson(res, 400, { error: 'invalid JSON' });
         return;
+    }
+
+    if (url.pathname.startsWith('/v1/deaddrop/')) {
+        if (!v1ApiTokenAuth(req)) {
+            sendJson(res, 401, { error: 'unauthorized', detail: 'Bearer token required' });
+            return;
+        }
     }
 
     try {

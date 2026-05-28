@@ -16,7 +16,10 @@ const sendMessageSchema = z.object({
   stegoTier: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   sign: z.boolean().optional(),
   matrixRoomId: z.string().optional(),
-  governance: z.looseObject({ type: z.string() }).optional(),
+  governance: z.object({
+    type: z.enum(['poll', 'proposal', 'election']),
+    data: z.unknown().optional(),
+  }).optional(),
 });
 
 messages.get('/:channelId', (c) => {

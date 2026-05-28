@@ -84,10 +84,10 @@ export class StegoChannelExistsError extends Error {
     }
 }
 
-export function createChannel(
+export async function createChannel(
     subject: string,
     input: CreateStegoChannelInput,
-): { snapshot: StegoChannelSnapshot; materialFingerprint: string } {
+): Promise<{ snapshot: StegoChannelSnapshot; materialFingerprint: string }> {
     const bucket = getOrCreateBucket(subject);
     const channelId = normalizeStegoChannelId(input.name);
     if (!channelId) {
@@ -108,7 +108,7 @@ export function createChannel(
         createdAt,
         rotationIndex: 0,
     };
-    const passphraseHash = hashPassword(input.passphrase);
+    const passphraseHash = await hashPassword(input.passphrase);
     const materialFingerprint = fingerprintFor(input.passphrase, channelId);
     bucket.set(channelId, { snapshot, passphraseHash, materialFingerprint });
     return { snapshot, materialFingerprint };
@@ -121,11 +121,11 @@ export class StegoChannelNotFoundError extends Error {
     }
 }
 
-export function rotateChannel(
+export async function rotateChannel(
     subject: string,
     channelId: string,
     input: RotateStegoChannelInput,
-): { snapshot: StegoChannelSnapshot; materialFingerprint: string } {
+): Promise<{ snapshot: StegoChannelSnapshot; materialFingerprint: string }> {
     const bucket = subjects.get(subject);
     const record = bucket?.get(channelId);
     if (!record) throw new StegoChannelNotFoundError(channelId);
@@ -141,7 +141,7 @@ export function rotateChannel(
     const materialFingerprint = fingerprintFor(input.passphrase, `${channelId}:${nextSnapshot.rotationIndex}`);
     bucket!.set(channelId, {
         snapshot: nextSnapshot,
-        passphraseHash: hashPassword(input.passphrase),
+        passphraseHash: await hashPassword(input.passphrase),
         materialFingerprint,
     });
     return { snapshot: nextSnapshot, materialFingerprint };

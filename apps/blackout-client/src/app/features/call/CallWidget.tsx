@@ -14,6 +14,18 @@ declare global {
     }
 }
 
+const TRUSTED_CALL_ORIGINS = ['https://call.element.io', 'https://call.blackout.app'];
+const DEFAULT_CALL_URL = 'https://call.element.io';
+
+const isValidCallUrl = (url: string): boolean => {
+    try {
+        const parsed = new URL(url);
+        return TRUSTED_CALL_ORIGINS.includes(parsed.origin);
+    } catch {
+        return false;
+    }
+};
+
 const postToWidget = (targetWindow: Window, payload: Record<string, unknown>) => {
     targetWindow.postMessage(payload, '*');
 };
@@ -33,7 +45,7 @@ export const CallWidget = ({
     const { muted, cameraEnabled, updateAudioLevels } = useCall();
 
     const iframeSrc = useMemo(() => {
-        const base = widgetUrl ?? 'https://call.element.io';
+        const base = widgetUrl && isValidCallUrl(widgetUrl) ? widgetUrl : DEFAULT_CALL_URL;
         const url = new URL(base);
         url.searchParams.set('roomId', roomId);
         url.searchParams.set('mode', 'widget');
@@ -77,6 +89,8 @@ export const CallWidget = ({
 
     useEffect(() => {
         const onWidgetMessage = (event: MessageEvent) => {
+            const expectedOrigin = new URL(widgetUrl && isValidCallUrl(widgetUrl) ? widgetUrl : DEFAULT_CALL_URL).origin;
+            if (event.origin !== expectedOrigin) return;
             if (!event.data || typeof event.data !== 'object') return;
             const payload = event.data as Record<string, unknown>;
 
@@ -110,7 +124,7 @@ export const CallWidget = ({
 
         window.addEventListener('message', onWidgetMessage);
         return () => window.removeEventListener('message', onWidgetMessage);
-    }, [updateAudioLevels]);
+    }, [updateAudioLevels, widgetUrl]);
 
     if (mode === 'sdk') {
         return (
@@ -131,6 +145,7 @@ export const CallWidget = ({
                             borderRadius: 10,
                         }}
                         allow="camera; microphone; fullscreen; display-capture"
+                        sandbox="allow-scripts allow-same-origin allow-forms"
                     />
                 ) : null}
             </div>
@@ -149,6 +164,7 @@ export const CallWidget = ({
                 borderRadius: 10,
             }}
             allow="camera; microphone; fullscreen; display-capture"
+            sandbox="allow-scripts allow-same-origin allow-forms"
         />
     );
 };

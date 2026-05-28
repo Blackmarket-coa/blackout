@@ -1,6 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hashPassword } from '../services/auth';
+
+// Startup-only synchronous scrypt for demo seed user — acceptable to block
+// here since it only runs once at process start.
+import { createHash, randomBytes, scryptSync } from 'node:crypto';
+const hashPasswordSync = (password: string): string => {
+  const salt = randomBytes(16).toString('hex');
+  return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
+};
 import type {
   CanopyDirectoryEntryRecord,
   CanopyVoiceRoomRecord,
@@ -86,6 +94,9 @@ import type {
   ColiseumVoteRecord,
   ColiseumLiveSessionRecord,
   ReputationEventRecord,
+  MFAConfigRecord,
+  WebAuthnChallengeRecord,
+  WebAuthnCredentialRecord,
 } from './types';
 import {
   COALITION_SPATIAL_SEED,
@@ -234,6 +245,9 @@ class InMemoryDb {
   burnerIdentities = new Map<string, BurnerIdentityRecord>();
   refreshTokens = new Map<string, RefreshTokenRecord>();
   revokedSessions = new Map<string, RevokedSessionRecord>();
+  mfaConfigs = new Map<string, MFAConfigRecord>();
+  webAuthnChallenges = new Map<string, WebAuthnChallengeRecord>();
+  webAuthnCredentials = new Map<string, WebAuthnCredentialRecord>();
   /** Keyed by `${blackoutUserId}:${provider}` to enforce one link per (user, provider). */
   linkedAccounts = new Map<string, LinkedAccountRecord>();
   /** Keyed by stateHash. */
@@ -338,7 +352,7 @@ class InMemoryDb {
       id: 'demo-user',
       username: 'demo',
       email: 'demo@blackout.local',
-      passwordHash: hashPassword(demoPassword),
+      passwordHash: hashPasswordSync(demoPassword),
       reputationScore: 100,
       reputationTier: 'member',
       pubkeyEd25519: 'demo-pubkey',
@@ -698,6 +712,25 @@ class InMemoryDb {
     return revoked;
   }
 
+  countActiveRefreshTokensByUser(userId: string): number {
+    let count = 0;
+    for (const record of this.refreshTokens.values()) {
+      if (record.userId === userId && !record.revokedAt) count += 1;
+    }
+    return count;
+  }
+
+  pruneOldestRefreshTokensForUser(userId: string, retainCount: number): number {
+    const userTokens = [...this.refreshTokens.values()]
+      .filter((t) => t.userId === userId && !t.revokedAt)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const toDrop = userTokens.slice(0, Math.max(0, userTokens.length - retainCount));
+    for (const record of toDrop) {
+      this.refreshTokens.set(record.id, { ...record, revokedAt: nowIso(), revokedReason: 'session_limit_exceeded' });
+    }
+    return toDrop.length;
+  }
+
   // --- revoked sessions ---
 
   revokeSession(input: Omit<RevokedSessionRecord, 'revokedAt'>): RevokedSessionRecord {
@@ -721,6 +754,75 @@ class InMemoryDb {
       }
     }
     return removed;
+  }
+
+  // --- MFA configuration ---
+
+  getMFAConfig(userId: string): MFAConfigRecord | undefined {
+    return this.mfaConfigs.get(userId);
+  }
+
+  upsertMFAConfig(userId: string, config: Omit<MFAConfigRecord, 'userId' | 'createdAt' | 'updatedAt'>): MFAConfigRecord {
+    const record: MFAConfigRecord = { ...config, userId, createdAt: nowIso(), updatedAt: nowIso() };
+    this.mfaConfigs.set(userId, record);
+    return record;
+  }
+
+  enableMFA(userId: string): MFAConfigRecord | undefined {
+    const existing = this.mfaConfigs.get(userId);
+    if (!existing) return undefined;
+    const updated: MFAConfigRecord = { ...existing, enabled: true, verified: true, updatedAt: nowIso() };
+    this.mfaConfigs.set(userId, updated);
+    return updated;
+  }
+
+  disableMFA(userId: string): MFAConfigRecord | undefined {
+    const existing = this.mfaConfigs.get(userId);
+    if (!existing) return undefined;
+    const updated: MFAConfigRecord = { ...existing, enabled: false, verified: false, updatedAt: nowIso() };
+    this.mfaConfigs.set(userId, updated);
+    return updated;
+  }
+
+  markRecoveryCodeUsed(userId: string, index: number): MFAConfigRecord | undefined {
+    const existing = this.mfaConfigs.get(userId);
+    if (!existing) return undefined;
+    const used = [...(existing.usedRecoveryCodes ?? []), index];
+    const updated: MFAConfigRecord = { ...existing, usedRecoveryCodes: used, updatedAt: nowIso() };
+    this.mfaConfigs.set(userId, updated);
+    return updated;
+  }
+
+  // --- WebAuthn persistence ---
+
+  upsertWebAuthnChallenge(record: WebAuthnChallengeRecord): void {
+    this.webAuthnChallenges.set(record.challenge, record);
+  }
+
+  consumeWebAuthnChallenge(challenge: string): WebAuthnChallengeRecord | undefined {
+    const record = this.webAuthnChallenges.get(challenge);
+    if (record) this.webAuthnChallenges.delete(challenge);
+    return record;
+  }
+
+  purgeExpiredWebAuthnChallenges(now = Date.now()): void {
+    for (const [k, v] of this.webAuthnChallenges) {
+      if (now - new Date(v.issuedAt).getTime() > 5 * 60 * 1000) {
+        this.webAuthnChallenges.delete(k);
+      }
+    }
+  }
+
+  upsertWebAuthnCredential(record: WebAuthnCredentialRecord): void {
+    this.webAuthnCredentials.set(record.credentialId, record);
+  }
+
+  findWebAuthnCredential(credentialId: string): WebAuthnCredentialRecord | undefined {
+    return this.webAuthnCredentials.get(credentialId);
+  }
+
+  listWebAuthnCredentialsByUser(userId: string): WebAuthnCredentialRecord[] {
+    return [...this.webAuthnCredentials.values()].filter((c) => c.userId === userId);
   }
 
   // --- linked accounts (third-party OAuth identity links) ---
@@ -1602,19 +1704,39 @@ class InMemoryDb {
     return this.votes.get(voteId);
   }
 
-  castVote(input: Omit<VoteEntryRecord, 'createdAt'>): VoteEntryRecord {
-    const exists = [...this.voteEntries.values()].find((entry) => entry.voteId === input.voteId && entry.userId === input.userId);
-    if (exists) {
+  castVote(input: Omit<VoteEntryRecord, 'createdAt' | 'entryHash' | 'previousHash'>): VoteEntryRecord {
+    const key = `${input.voteId}::${input.userId}`;
+    const existing = this.voteEntries.get(key);
+    if (existing) {
       throw new Error('You have already voted');
     }
 
-    const entry: VoteEntryRecord = { ...input, createdAt: nowIso() };
-    this.voteEntries.set(entry.id, entry);
+    const previousEntries = [...this.voteEntries.values()]
+      .filter((e) => e.voteId === input.voteId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const previousHash = previousEntries.length > 0 ? previousEntries[0].entryHash ?? null : null;
+
+    const hashInput = `${input.voteId}:${input.userId}:${input.choice}:${previousHash ?? ''}`;
+    const entryHash = createHash('sha256').update(hashInput).digest('hex');
+
+    const entry: VoteEntryRecord = {
+      ...input,
+      entryHash,
+      previousHash: previousHash ?? undefined,
+      createdAt: nowIso(),
+    };
+    this.voteEntries.set(key, entry);
     return entry;
   }
 
   getVoteEntries(voteId: string): VoteEntryRecord[] {
     return [...this.voteEntries.values()].filter((entry) => entry.voteId === voteId);
+  }
+
+  getVoteEntriesOrdered(voteId: string): VoteEntryRecord[] {
+    return [...this.voteEntries.values()]
+      .filter((entry) => entry.voteId === voteId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }
 
   createFederationLink(input: Omit<FederationLinkRecord, 'createdAt'>): FederationLinkRecord {

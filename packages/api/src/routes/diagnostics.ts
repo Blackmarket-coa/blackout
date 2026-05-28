@@ -18,16 +18,35 @@ const issueReportSchema = z.object({
   featureFlags: z.record(z.string(), z.boolean()).optional(),
 });
 
-/**
- * POST /v1/diagnostics/issue-report
- *
- * Anonymous-allowed endpoint that accepts a user issue report. The body is
- * redacted server-side as defense-in-depth and emitted via the structured
- * logger so operators can pick it up via their existing log pipeline. We
- * intentionally do not persist reports in the application DB — the log line
- * is the canonical record.
- */
+const issueReportRateMap = new Map<string, { count: number; resetAt: number }>();
+const ISSUE_REPORT_MAX_PER_WINDOW = 10;
+const ISSUE_REPORT_WINDOW_MS = 60_000;
+
+function checkIssueReportRate(ip: string): boolean {
+  const now = Date.now();
+  const entry = issueReportRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    issueReportRateMap.set(ip, { count: 1, resetAt: now + ISSUE_REPORT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= ISSUE_REPORT_MAX_PER_WINDOW) return false;
+  entry.count += 1;
+  return true;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of issueReportRateMap) {
+    if (now > entry.resetAt) issueReportRateMap.delete(ip);
+  }
+}, 60_000);
+
 diagnostics.post('/issue-report', async (c) => {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip') ?? 'unknown';
+  if (!checkIssueReportRate(ip)) {
+    return c.json({ code: 'rate_limited', message: 'Too many issue reports. Please wait before submitting another.' }, 429);
+  }
+
   const parsed = await readJsonBody(c, issueReportSchema);
   if (parsed instanceof Response) return parsed;
 

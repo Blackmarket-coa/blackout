@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from 'jotai';
 import { authStateAtom, cryptoInitErrorAtom } from '../../state/auth';
 import { initMatrixFromStoredSession } from '../../../client/initMatrix';
+import { initSessionManager } from '../../../client/sessionManager';
 import { CryptoInitError, initCrypto } from '../../../client/crypto';
 
 export const MatrixBootstrapper = () => {
@@ -29,6 +30,7 @@ export const MatrixBootstrapper = () => {
             }
 
             try {
+                await initSessionManager();
                 await initMatrixFromStoredSession(store);
             } catch {
                 if (!cancelled) {

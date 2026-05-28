@@ -109,10 +109,12 @@ export function ServerChip({ server }: { server: string }) {
                 fill="None"
                 size="300"
                 radii="300"
-                onClick={() => {
-                  window.open(`https://${server}`, '_blank');
+              onClick={() => {
+                  if (server && /^[a-zA-Z0-9][-a-zA-Z0-9.]*[a-zA-Z0-9]$/.test(server)) {
+                    window.open(`https://${server}`, '_blank', 'noopener,noreferrer');
+                  }
                   close();
-                }}
+              }}
               >
                 <Text size="B300">Open in Browser</Text>
               </MenuItem>

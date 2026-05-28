@@ -78,7 +78,7 @@ function createStegoRouter() {
             );
         }
         try {
-            const { snapshot } = createChannel(subject, parsed);
+            const { snapshot } = await createChannel(subject, parsed);
             const envelope = makeEnvelope(
                 'blackout.stego.channel.created',
                 subject,
@@ -130,7 +130,7 @@ function createStegoRouter() {
         if (parsed instanceof Response) return parsed;
         const { channelId } = c.req.param();
         try {
-            const { snapshot, materialFingerprint } = rotateChannel(subject, channelId, parsed);
+            const { snapshot, materialFingerprint } = await rotateChannel(subject, channelId, parsed);
             const envelope = makeEnvelope(
                 'blackout.stego.channel.rotated',
                 subject,

@@ -1,13 +1,16 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { db } from '../db/store';
 import {
   MIN_PASSWORD_LENGTH,
   hashPassword,
   isAcceptablePassword,
+  isBreachedPassword,
   readAuthRuntimeConfig,
   signJwt,
   signJwtWithMeta,
+  verifyJwt,
   verifyPasswordConstantTime,
 } from '../services/auth';
 import { matrixClient } from '../integrations/matrix-client';
@@ -138,7 +141,13 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const MAX_SESSIONS_PER_USER = Number.parseInt(process.env.MAX_SESSIONS_PER_USER ?? '', 10) || 10;
+
 const issueSession = (userId: string, username: string, userAgent?: string) => {
+  const activeCount = db.countActiveRefreshTokensByUser(userId);
+  if (activeCount >= MAX_SESSIONS_PER_USER) {
+    db.pruneOldestRefreshTokensForUser(userId, MAX_SESSIONS_PER_USER - 1);
+  }
   const access = signJwtWithMeta(userId, username);
   const refresh = issueRefreshToken({ userId, userAgent });
   return { access, refresh };
@@ -147,7 +156,7 @@ const issueSession = (userId: string, username: string, userAgent?: string) => {
 const setAuthCookie = (c: import('hono').Context, token: string, maxAgeSeconds: number): void => {
   const config = readAuthRuntimeConfig();
   if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
-    c.cookie(config.cookieName!, token, {
+    setCookie(c, config.cookieName!, token, {
       httpOnly: true,
       secure: config.cookieSecure,
       sameSite: config.cookieSameSite,
@@ -160,7 +169,7 @@ const setAuthCookie = (c: import('hono').Context, token: string, maxAgeSeconds: 
 const clearAuthCookie = (c: import('hono').Context): void => {
   const config = readAuthRuntimeConfig();
   if (config.tokenTransport === 'cookie' || config.tokenTransport === 'both') {
-    c.cookie(config.cookieName!, '', { maxAge: 0, path: '/' });
+    deleteCookie(c, config.cookieName!, { path: '/' });
   }
 };
 
@@ -172,6 +181,13 @@ auth.post('/register', async (c) => {
   if (!isAcceptablePassword(password)) {
     return c.json(
       { code: 'weak_password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+      400,
+    );
+  }
+
+  if (await isBreachedPassword(password)) {
+    return c.json(
+      { code: 'breached_password', message: 'This password has appeared in data breaches. Please choose a different one.' },
       400,
     );
   }
@@ -191,7 +207,7 @@ auth.post('/register', async (c) => {
   }
 
   const userId = crypto.randomUUID();
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
   const pubkeyEd25519 = crypto.randomUUID().replace(/-/g, '');
 
   const user = db.createUser({
@@ -210,7 +226,7 @@ auth.post('/register', async (c) => {
   } catch (error) {
     db.deleteUser(user.id);
     return c.json(
-      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account', detail: (error as Error).message },
+      { code: 'matrix_provisioning_failed', message: 'Failed to provision Matrix account' },
       502,
     );
   }
@@ -421,16 +437,52 @@ auth.post('/login', async (c) => {
 
   const user = db.findUserByEmail(email);
 
-  // Run scrypt even when the user is missing so the two 401 branches have
-  // equivalent timing and cannot be used to enumerate registered emails.
-  if (!verifyPasswordConstantTime(password, user?.passwordHash)) {
+  if (!(await verifyPasswordConstantTime(password, user?.passwordHash))) {
     authFailuresTotal.inc({ reason: 'invalid_credentials' });
     return c.json({ code: 'invalid_credentials', message: 'Invalid credentials' }, 401);
+  }
+
+  const mfaConfig = db.getMFAConfig(user!.id);
+  if (mfaConfig?.enabled) {
+    const mfaToken = signJwtWithMeta(user!.id, user!.username, 300).token;
+    return c.json({ requiresMfa: true, mfaToken, methods: ['totp'] });
   }
 
   const session = issueSession(user!.id, user!.username, c.req.header('user-agent'));
   setAuthCookie(c, session.access.token, 86400);
   return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId: user!.id });
+});
+
+auth.post('/login/mfa', async (c) => {
+  const parsed = await readJsonBody(c, z.object({
+    mfaToken: z.string().min(1),
+    code: z.string().min(6).max(6),
+  }));
+  if (parsed instanceof Response) return parsed;
+
+  const payload = verifyJwt(parsed.mfaToken);
+  if (!payload) {
+    return c.json({ code: 'invalid_token', message: 'MFA token is invalid or expired' }, 401);
+  }
+
+  const userId = payload.sub;
+  const user = db.getUserById(userId);
+  if (!user) return c.json({ code: 'user_not_found', message: 'User not found' }, 404);
+
+  const mfaConfig = db.getMFAConfig(userId);
+  if (!mfaConfig?.enabled || !mfaConfig.secretBase32) {
+    return c.json({ code: 'mfa_not_setup', message: 'MFA is not configured' }, 400);
+  }
+
+  const { verifyTOTPCode } = await import('../services/totp');
+  const result = verifyTOTPCode(mfaConfig.secretBase32, parsed.code);
+  if (!result.ok) {
+    return c.json({ code: 'invalid_code', message: 'Invalid verification code' }, 401);
+  }
+
+  const session = issueSession(userId, user.username, c.req.header('user-agent'));
+  setAuthCookie(c, session.access.token, 86400);
+  return c.json({ token: session.access.token, refreshToken: session.refresh.token, userId });
 });
 
 // Matrix localpart per the spec's historical grammar: lowercase alnum plus
@@ -577,7 +629,7 @@ auth.post('/password/change', async (c) => {
   const record = db.getUserById(user.sub);
   if (!record) return c.json({ code: 'unauthorized', message: 'Unauthorized' }, 401);
 
-  if (!verifyPasswordConstantTime(parsed.currentPassword, record.passwordHash)) {
+  if (!(await verifyPasswordConstantTime(parsed.currentPassword, record.passwordHash))) {
     return c.json({ code: 'invalid_credentials', message: 'Current password is incorrect' }, 401);
   }
   if (!isAcceptablePassword(parsed.newPassword)) {
@@ -587,7 +639,14 @@ auth.post('/password/change', async (c) => {
     );
   }
 
-  db.updateUserPassword(record.id, hashPassword(parsed.newPassword));
+  if (await isBreachedPassword(parsed.newPassword)) {
+    return c.json(
+      { code: 'breached_password', message: 'This password has appeared in data breaches. Please choose a different one.' },
+      400,
+    );
+  }
+
+  db.updateUserPassword(record.id, await hashPassword(parsed.newPassword));
   // Force re-authentication on every other device.
   revokeAllForUser(record.id, 'password_change');
   return c.json({ ok: true });
@@ -631,7 +690,7 @@ auth.post('/password/reset/confirm', async (c) => {
   const parsed = await readJsonBody(c, passwordResetConfirmSchema);
   if (parsed instanceof Response) return parsed;
 
-  const outcome = consumePasswordResetToken(parsed.token, parsed.newPassword);
+  const outcome = await consumePasswordResetToken(parsed.token, parsed.newPassword);
   switch (outcome.kind) {
     case 'ok':
       return c.json({ ok: true });

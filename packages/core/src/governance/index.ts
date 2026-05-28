@@ -27,3 +27,6 @@ export function tallyVotes(entries: Array<{ choice: string }>) {
     percentage: total === 0 ? 0 : Math.round((votes / total) * 100),
   }));
 }
+
+export { verifyAuditChain } from './verify';
+export type { ChainVerificationResult } from './verify';

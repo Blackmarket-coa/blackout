@@ -1,3 +1,5 @@
+import sanitizeHtml from 'sanitize-html';
+
 const escapeHtml = (value: string): string =>
     value
         .replaceAll('&', '&amp;')
@@ -25,49 +27,22 @@ export const htmlToMd = (html: string): string => {
         .replace(/<[^>]+>/g, '');
 };
 
-export const sanitizeMatrixHtml = (html: string): string => {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const allowedTags = new Set([
-        'A',
-        'B',
-        'BLOCKQUOTE',
-        'BR',
-        'CODE',
-        'DEL',
-        'EM',
-        'I',
-        'LI',
-        'OL',
-        'P',
-        'PRE',
-        'SPAN',
-        'STRONG',
-        'U',
-        'UL',
-    ]);
-
-    doc.body.querySelectorAll('*').forEach((element) => {
-        if (!allowedTags.has(element.tagName)) {
-            element.replaceWith(...Array.from(element.childNodes));
-            return;
-        }
-
-        for (const attribute of Array.from(element.attributes)) {
-            const isSafeHref =
-                attribute.name === 'href' &&
-                (attribute.value.startsWith('https://') ||
-                    attribute.value.startsWith('http://') ||
-                    attribute.value.startsWith('mailto:') ||
-                    attribute.value.startsWith('mxc://'));
-
-            const isDataAttribute = attribute.name.startsWith('data-mx-');
-            if (attribute.name !== 'href' && !isDataAttribute) {
-                element.removeAttribute(attribute.name);
-            } else if (attribute.name === 'href' && !isSafeHref) {
-                element.removeAttribute(attribute.name);
-            }
-        }
+export const sanitizeMatrixHtml = (html: string): string =>
+    sanitizeHtml(html, {
+        allowedTags: [
+            'a', 'b', 'blockquote', 'br', 'code', 'del', 'em', 'i',
+            'li', 'ol', 'p', 'pre', 'span', 'strong', 'u', 'ul',
+        ],
+        allowedAttributes: {
+            a: ['href', 'name', 'target', 'data-md'],
+            span: ['data-mx-spoiler', 'data-mx-maths', 'data-mx-pill', 'data-mx-ping', 'data-md'],
+            div: ['data-mx-maths'],
+            ol: ['start', 'type', 'data-md'],
+            pre: ['data-md', 'class'],
+            code: ['class', 'data-md'],
+            li: [],
+        },
+        allowedSchemes: ['https', 'mailto', 'mxc'],
+        allowedSchemesAppliedToAttributes: ['href'],
+        allowProtocolRelative: false,
     });
-
-    return doc.body.innerHTML;
-};

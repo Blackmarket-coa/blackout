@@ -335,9 +335,9 @@ export const logout = async (store: AtomStore): Promise<void> => {
     }
 
     if (userId) {
-        clearSession(userId);
+        await clearSession(userId);
     } else {
-        clearSession();
+        await clearSession();
     }
 
     clearBlackoutApiToken();

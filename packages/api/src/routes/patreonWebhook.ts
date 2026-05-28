@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { db } from '../db/store';
+import { webhookRateLimit } from '../middleware/rate-limit';
 import {
   normalizePatreonWebhook,
   verifyPatreonWebhook,
@@ -106,6 +107,7 @@ export const buildPatreonWebhookRoute = (
   options: PatreonWebhookRouteOptions = {},
 ): Hono => {
   const router = new Hono();
+  router.use('*', webhookRateLimit);
   const secretResolver = options.secretResolver ?? defaultSecretResolver;
   const onEvent = options.onEvent ?? defaultPatreonForwarder;
 

@@ -35,9 +35,20 @@ spec:
           labelSelector:
             matchLabels:
               app: blackout-api
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: api
           image: ghcr.io/blackout/api:stable
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - containerPort: 3000
               name: http

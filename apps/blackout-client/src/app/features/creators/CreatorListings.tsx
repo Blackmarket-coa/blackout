@@ -183,7 +183,14 @@ export const CreatorListings = (): JSX.Element => {
         try {
             const handle = await startCreatorPayoutOnboarding(providerId, window.location.href);
             if (typeof handle.redirectUrl === 'string') {
-                window.open(handle.redirectUrl, '_blank', 'noopener,noreferrer');
+                try {
+                    const parsed = new URL(handle.redirectUrl);
+                    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+                        window.open(handle.redirectUrl, '_blank', 'noopener,noreferrer');
+                    }
+                } catch {
+                    setError('Invalid redirect URL from provider');
+                }
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'onboarding failed');

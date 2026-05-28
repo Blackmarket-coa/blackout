@@ -20,9 +20,9 @@ const DEFAULT_KEYS: PluginPublishingKey[] = [
         publicKey:
             typeof process !== 'undefined' && process.env?.BLACKOUT_PLUGIN_DEV_HMAC
                 ? `hmac:${process.env.BLACKOUT_PLUGIN_DEV_HMAC}`
-                : 'hmac:6465762d68616d63', // ascii "dev-hamc" — replaced at release.
+                : '',
     },
-];
+].filter((k) => k.publicKey.length > 0);
 
 let registeredKeys = [...DEFAULT_KEYS];
 

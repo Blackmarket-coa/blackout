@@ -73,7 +73,7 @@ streamlabs.post('/sync', async (c) => {
     }
   } catch (err) {
     log.error('streamlabs_sync_threw', { userId: userOrResp.sub, error: String(err) });
-    return c.json({ code: 'internal_error', message: (err as Error).message }, 500);
+    return c.json({ code: 'internal_error', message: 'An internal error occurred' }, 500);
   }
 });
 

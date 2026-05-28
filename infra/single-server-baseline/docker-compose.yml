@@ -225,11 +225,11 @@ services:
     image: redis:7.2-alpine
     container_name: blackout-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "$$(cat /run/secrets/cache_password)"]
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $$(cat /run/secrets/cache_password) ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 10
